@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flashcli"
+version = "0.1.0"
+description = "FlashRT distribution CLI — model bundles, inference, serve."
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+dependencies = [
+    "typer>=0.12",
+    "pyyaml>=6.0",
+    "packaging>=23.0",
+    "huggingface_hub>=0.23",
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+# Dev convenience only — production installs from runtime manifest / FlashRT pyproject.
+dev = ["flash-rt[torch,server]"]
+
+[project.scripts]
+flashcli = "flashcli.cli:app"
+flash = "flashcli.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+flashcli = ["py.typed"]
+
+[tool.setuptools.data-files]
+"share/flashcli" = [
+    "models/models.yaml",
+]

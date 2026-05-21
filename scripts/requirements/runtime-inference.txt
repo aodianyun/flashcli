@@ -1,0 +1,9 @@
+# FlashRT runtime inference stack (bundled into runtime manifest / flashcli pip install).
+# Used when cloned FlashRT repo does not yet ship requirements/runtime-inference.txt.
+numpy
+pyyaml
+safetensors
+sentencepiece
+ml_dtypes
+transformers<4.56
+pillow
