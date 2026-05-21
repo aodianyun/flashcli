@@ -1,18 +1,19 @@
 # flashcli
 
-[FlashRT](https://github.com/flashrt-ai/FlashRT) 的**分发 CLI**：一条命令拉取 Model Bundle、安装运行时依赖、下载权重并执行推理。
+<p align="right"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
 
-## 要求
+**Distribution CLI** for [FlashRT](https://github.com/flashrt-ai/FlashRT): one command to fetch a Model Bundle, install runtime dependencies, download weights, and run inference.
 
-- **Linux** + **NVIDIA GPU**（已验证：**SM89**，如 RTX 4090 / L40；bundle 元数据亦声明支持 SM120）
+## Requirements
+
+- **Linux** + **NVIDIA GPU** (verified on **SM89**, e.g. RTX 4090 / L40; bundle metadata also lists SM120)
 - **Python** 3.10–3.12
-- 网络：首次运行会从 CDN 拉取 runtime zip，从 Hugging Face 拉取模型权重；Pi0.5 还需 Google Storage（PaliGemma tokenizer）
+- Network: first run pulls a runtime zip from CDN and model weights from Hugging Face; Pi0.5 also needs Google Storage (PaliGemma tokenizer)
 
-## 快速开始
+## Quick start
 
 ```bash
-pip install flashcli
-# 开发：cd flashcli && pip install -e .
+pip install git+https://github.com/aodianyun/flashcli
 
 flashcli doctor
 flashcli models list
@@ -22,15 +23,15 @@ flashcli run pi05_libero \
   --image /path/to/base.jpg
 ```
 
-首次 `run` 会自动：安装 CLI 依赖 → 下载并解压 **runtime bundle**（zip）→ 按 `runtime/manifest.json` 安装 torch 等 → 下载 HF 权重 → `post_pull`（PaliGemma tokenizer）→ 加载 `partner.run.RunEngine` 推理。
+On first `run`, flashcli automatically: installs CLI deps → downloads and unpacks the **runtime bundle** (zip) → installs torch etc. per `runtime/manifest.json` → downloads HF weights → `post_pull` (PaliGemma tokenizer) → loads `partner.run.RunEngine` for inference.
 
-预拉权重（可选）：
+Pre-fetch weights (optional):
 
 ```bash
 flashcli pull pi05_libero
 ```
 
-调试本地已组装的 bundle：
+Debug a locally assembled bundle:
 
 ```bash
 flashcli run pi05_libero \
@@ -39,54 +40,56 @@ flashcli run pi05_libero \
   --image /path/to/base.jpg
 ```
 
-## 当前 catalog
+## Current catalog
 
-| Preset | 能力 | Runtime 来源 | 权重 |
-|--------|------|--------------|------|
-| `pi05_libero` | `run` | CDN zip（`models.yaml` → `bundle.zip`） | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) |
+| Preset | Capability | Runtime source | Weights |
+|--------|------------|----------------|---------|
+| `pi05_libero` | `run` | CDN zip (`models.yaml` → `bundle.zip`) | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) |
 
-`models.yaml` 只登记 **preset 名** 与 **bundle 源**；`weights`、`entry`、`defaults` 等见各包内的 [`flashcli-bundle.json`](docs/model_bundle_standard.md)。
+`models.yaml` only registers **preset names** and **bundle sources**; `weights`, `entry`, `defaults`, etc. live in each bundle’s [`flashcli-bundle.json`](docs/model_bundle_standard.md).
 
-## 本机缓存
+## Local cache
 
-| 路径 | 内容 |
-|------|------|
-| `~/.flashcli/bundles/<preset>/` | 已下载的 runtime zip 解压目录 |
-| `~/.flashcli/models/<preset>/checkpoint/` | Hugging Face 权重 |
-| `~/.cache/flash_rt/` | PaliGemma tokenizer（`post_pull`） |
+| Path | Contents |
+|------|----------|
+| `~/.flashcli/bundles/<preset>/` | Unpacked runtime zip |
+| `~/.flashcli/models/<preset>/checkpoint/` | Hugging Face weights |
+| `~/.cache/flash_rt/` | PaliGemma tokenizer (`post_pull`) |
 
-## 环境变量
+## Environment variables
 
-| 变量 | 说明 |
-|------|------|
-| `FLASHCLI_HOME` | 缓存根目录，默认 `~/.flashcli` |
-| `FLASHCLI_SKIP_AUTO_INSTALL=1` | 不自动 pip 安装 manifest 依赖 |
-| `FLASH_RT_PALIGEMMA_TOKENIZER` | 指定 PaliGemma tokenizer 文件路径 |
+| Variable | Description |
+|----------|-------------|
+| `FLASHCLI_HOME` | Cache root (default `~/.flashcli`) |
+| `FLASHCLI_SKIP_AUTO_INSTALL=1` | Skip automatic pip install of manifest deps |
+| `FLASH_RT_PALIGEMMA_TOKENIZER` | Path to PaliGemma tokenizer file |
 
-## 命令
+## Commands
 
-| 命令 | 说明 |
-|------|------|
-| `flashcli run <preset>` | VLA 等批推理（`pi05_libero` 使用此命令） |
-| `flashcli pull <preset>` | 仅预拉权重 |
-| `flashcli models list` | 查看 catalog |
-| `flashcli doctor` | 环境与 GPU 检查 |
-| `flashcli bundle validate PATH` | 校验本地 bundle 布局 |
-| `--bundle PATH` | 覆盖 catalog，使用本地 bundle 根目录 |
+| Command | Description |
+|---------|-------------|
+| `flashcli run <preset>` | Batch inference for VLA etc. (`pi05_libero` uses this) |
+| `flashcli pull <preset>` | Pre-fetch weights only |
+| `flashcli models list` | Show catalog |
+| `flashcli doctor` | Environment and GPU check |
+| `flashcli bundle validate PATH` | Validate local bundle layout |
+| `--bundle PATH` | Override catalog with local bundle root |
 
-`flashcli serve` 用于带 HTTP 的 LLM bundle；**`pi05_libero` 仅支持 `run`**。
+`flashcli serve` is for LLM bundles with HTTP; **`pi05_libero` supports `run` only**.
 
-`flash` 与 `flashcli` 为同一入口（`pyproject.toml` 中均注册）。
+`flash` and `flashcli` are the same entry point (both registered in `pyproject.toml`).
 
-## 文档
+## Documentation
 
-| 文档 | 读者 |
-|------|------|
-| [docs/model_bundle_standard.md](docs/model_bundle_standard.md) | Model Bundle 格式（扩展方 / 维护者） |
-| [docs/architecture.md](docs/architecture.md) | 模块划分与数据流 |
+Full index (with 简体中文): [docs/README.md](docs/README.md)
 
-推理内核与精度说明请参阅 [FlashRT](https://github.com/flashrt-ai/FlashRT) 仓库文档。
+| Doc | Audience |
+|-----|------------|
+| [docs/model_bundle_standard.md](docs/model_bundle_standard.md) | Model Bundle format (extend / maintain) |
+| [docs/architecture.md](docs/architecture.md) | Modules and data flow |
 
-## 许可证
+For inference kernels and precision details, see the [FlashRT](https://github.com/flashrt-ai/FlashRT) repository.
 
-Apache-2.0（见 `pyproject.toml`）。
+## License
+
+Apache-2.0 (see `pyproject.toml`).
