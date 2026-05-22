@@ -64,11 +64,21 @@ flashcli models envs pi05_libero
 
 ## 环境变量
 
+常用变量（完整说明见 **[docs/environment.zh-CN.md](docs/environment.zh-CN.md)**）：
+
 | 变量 | 说明 |
 |------|------|
 | `FLASHCLI_HOME` | 缓存根目录，默认 `~/.flashcli` |
-| `FLASHCLI_SKIP_AUTO_INSTALL=1` | 不自动 pip 安装 manifest 依赖 |
-| `FLASH_RT_PALIGEMMA_TOKENIZER` | 指定 PaliGemma tokenizer 文件路径 |
+| `FLASHCLI_BUNDLES_DIR` | 覆盖 bundle 缓存目录（默认 `$FLASHCLI_HOME/bundles`） |
+| `FLASHCLI_MODELS_DIR` | 覆盖 HF 权重缓存目录（默认 `$FLASHCLI_HOME/models`） |
+| `FLASHCLI_MODELS_YAML` | 覆盖 preset catalog 路径（默认包内 `flashcli/catalog/models.yaml`） |
+| `FLASHCLI_SKIP_AUTO_INSTALL=1` | 不自动 pip 安装 flashcli CLI 依赖（同 `--no-auto-install`） |
+| `FLASHCLI_SKIP_BUNDLE_ZIP=1` | 禁止下载 catalog 中的 `bundle.zip` |
+| `FLASHCLI_SKIP_BUNDLE_GIT=1` | 禁止 git 拉取 bundle |
+| `HF_ENDPOINT` | Hugging Face 镜像地址（如 `https://hf-mirror.com`） |
+| `HF_TOKEN` | Hugging Face 令牌（gated 模型；由 `huggingface_hub` 使用） |
+| `FLASH_RT_PALIGEMMA_TOKENIZER` | Pi0.5 PaliGemma tokenizer 文件路径 |
+| `FLASHRT_QWEN36_MTP_CKPT_DIR` | Qwen3.6 MTP 权重目录（或由 `--mtp-checkpoint` 设置） |
 
 ## 命令
 
@@ -93,6 +103,7 @@ flashcli models envs pi05_libero
 
 | 文档 | 读者 |
 |------|------|
+| [docs/environment.zh-CN.md](docs/environment.zh-CN.md) | 环境变量完整说明 |
 | [docs/model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md) | Model Bundle 格式（扩展方 / 维护者） |
 | [docs/architecture.zh-CN.md](docs/architecture.zh-CN.md) | 模块划分与数据流 |
 

@@ -4,6 +4,7 @@
 
 | Document | Audience |
 |----------|------------|
+| [environment.md](environment.md) | Environment variables (paths, catalog, HF, switches) |
 | [model_bundle_standard.md](model_bundle_standard.md) | Model Bundle format — extenders and maintainers |
 | [architecture.md](architecture.md) | Module layout and runtime data flow |
 | [../codeplan/DEVELOPER.md](../codeplan/DEVELOPER.md) | Maintainer guide (build, catalog, boundaries) |

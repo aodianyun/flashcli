@@ -29,9 +29,4 @@ flash = "flashcli.cli:app"
 where = ["src"]
 
 [tool.setuptools.package-data]
-flashcli = ["py.typed"]
-
-[tool.setuptools.data-files]
-"share/flashcli" = [
-    "models/models.yaml",
-]
+flashcli = ["py.typed", "catalog/models.yaml"]

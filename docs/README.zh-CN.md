@@ -4,6 +4,7 @@
 
 | 文档 | 读者 |
 |------|------|
+| [environment.zh-CN.md](environment.zh-CN.md) | 环境变量（路径、catalog、HF、开关） |
 | [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | Model Bundle 格式 — 扩展方与维护者 |
 | [architecture.zh-CN.md](architecture.zh-CN.md) | 模块划分与运行时数据流 |
 | [../codeplan/DEVELOPER.zh-CN.md](../codeplan/DEVELOPER.zh-CN.md) | 开发者指南（构建、catalog、边界） |

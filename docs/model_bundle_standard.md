@@ -4,7 +4,7 @@
 
 Third parties ship models as a **Model Bundle**: bundled **runtime**, **partner inference entry**, and weight metadata. flashcli **only** loads the bundle and calls `entry`; it does **not** implement Run/Serve logic in flashcli source.
 
-Maintainers: see [DEVELOPER.md](../codeplan/DEVELOPER.md). The **public catalog** is currently **[`pi05_libero`](../models/models.yaml) only**; other `bundles/` drafts must not be added to `models.yaml` until validated.
+Maintainers: see [DEVELOPER.md](../codeplan/DEVELOPER.md). The **public catalog** is currently **[`pi05_libero`](../src/flashcli/catalog/models.yaml) only**; other `bundles/` drafts must not be added to `models.yaml` until validated.
 
 Bundle sources are declared in **`models.yaml`**: single-env top-level **`bundle.zip` / `path` / `git`**, or multi-env **`bundle.variants.<sm*-cu*-os-arch>`**. Git repos or zip archives may also contain inner **`variants/<sm-cu-os-arch>/`** (one source, many envs — subfolder chosen by GPU after unpack/clone).
 
@@ -204,7 +204,7 @@ Ref priority: `--bundle-ref` > `bundle.git.ref` > `refs[].default` > `main`.
 
 Weights are separate: `~/.flashcli/models/<preset>/checkpoint/`.
 
-## `models/models.yaml`
+## `src/flashcli/catalog/models.yaml`
 
 **Only** preset names and bundle sources. Two layouts:
 
@@ -225,6 +225,8 @@ Per-machine `zip` / `path` / `git` under keys `sm{SM}-cu{CUDA_TAG}-{os}-{arch}`.
 | `bundle.refs` | Optional git ref allowlist |
 
 Bundle resolution: `--bundle` > **catalog source for GPU** > cache > zip or git > (single artifact) inner `variants/`.
+
+Environment variables (`FLASHCLI_MODELS_YAML`, `FLASHCLI_HOME`, `HF_ENDPOINT`, …): [environment.md](environment.md).
 
 ## Build scripts (FlashRT source tree, Linux GPU)
 

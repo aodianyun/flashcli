@@ -4,7 +4,7 @@
 
 第三方通过 **Model Bundle** 交付：一份 **`flashcli-bundle.json`**、**`entry` 推理模块**、可选 **FlashRT `.so` / `flash_rt` Python**。flashcli **仅**加载 bundle 并调用 `entry`，**不**在 flashcli 源码中实现具体 Run/Serve 逻辑。
 
-维护 flashcli 请参阅 [DEVELOPER.zh-CN.md](../codeplan/DEVELOPER.zh-CN.md)。**当前对外 catalog 仅 [`pi05_libero`](../models/models.yaml)**；其他 `bundles/` 草稿在验证前不得写入 `models.yaml`。
+维护 flashcli 请参阅 [DEVELOPER.zh-CN.md](../codeplan/DEVELOPER.zh-CN.md)。**当前对外 catalog 仅 [`pi05_libero`](../src/flashcli/catalog/models.yaml)**；其他 `bundles/` 草稿在验证前不得写入 `models.yaml`。
 
 Bundle 源在 **`models.yaml`** 中登记：单环境用顶层 **`bundle.zip` / `path` / `git`**；多环境用 **`bundle.variants.<sm*-cu*-os-arch>`** 各配独立源。Git 仓或 zip 包内也可含 **`variants/<sm-cu-os-arch>/`**（单源多环境，解压/clone 后按 GPU 选子目录）。
 
@@ -178,7 +178,7 @@ ref 优先级：`--bundle-ref` > `bundle.git.ref` > `refs[].default` > `main`。
 
 权重独立：`~/.flashcli/models/<preset>/checkpoint/`。
 
-## `models/models.yaml`
+## `src/flashcli/catalog/models.yaml`
 
 **仅** preset 名与 bundle 源。支持两种写法：
 
@@ -223,6 +223,8 @@ models:
 | `bundle.refs` | 可选 git ref 白名单 |
 
 Bundle 解析：`--bundle` > **catalog 按 GPU 选源** > 缓存 > zip 下载/解压 或 git clone >（单 zip/git 时）包内 `variants/` 子目录。
+
+环境变量（`FLASHCLI_MODELS_YAML`、`FLASHCLI_HOME`、`HF_ENDPOINT` 等）见 [environment.zh-CN.md](environment.zh-CN.md)。
 
 ## 构建脚本（FlashRT 源码树，Linux GPU）
 
