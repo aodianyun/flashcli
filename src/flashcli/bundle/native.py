@@ -19,8 +19,11 @@ from flashcli.bundle.native_naming import (
     bundle_native_lib_dir,
     bundle_uses_native_matrix,
     logical_native_module_name,
+    parse_native_tag_from_filename,
     pick_native_so,
     resolve_native_modules_for_host,
+    select_native_module_for_host,
+    select_native_module_ranked,
 )
 from flashcli.runtime.detect import GpuInfo, detect_gpu_or_raise
 
@@ -54,13 +57,29 @@ def _load_extension_from_path(path: Path, module_name: str) -> Any:
                 "      FLASHCLI_PYTHON=python3.10 flashcli run <preset>\n"
                 "  - Or install a bundle build that includes your -pyNNN artifact."
             ) from exc
-        if "libcudart" in msg or "libcuda" in msg or "cuda" in msg.lower():
+        if (
+            "libcublas" in msg
+            or "libcudart" in msg
+            or "libcuda" in msg
+            or "cuda" in msg.lower()
+        ):
             raise RuntimeError(
                 f"Failed to load native module {path.name}: {exc}\n"
-                "  The selected .so was built against a CUDA runtime not on LD_LIBRARY_PATH.\n"
-                "  Install matching CUDA user-space libraries or use a cu124/cu130 matching host."
+                "  The selected .so was built against a CUDA user-space runtime missing on this host.\n"
+                "  Fixes:\n"
+                "  - Install CUDA libs matching the artifact (cu124 → CUDA 12.x, cu130 → CUDA 13.x)\n"
+                "  - Or set FLASHCLI_CUDA_TAG=130 (or 124) to pick another lib/ artifact\n"
+                "  - Ensure LD_LIBRARY_PATH includes your CUDA lib64 directory"
             ) from exc
         raise
+
+
+def _cuda_runtime_load_error(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return any(
+        token in msg
+        for token in ("libcublas", "libcudart", "libcuda", "cannot open shared object")
+    )
 
 
 def _allowed_sm(bundle: BundleManifest) -> list[str] | None:
@@ -82,6 +101,62 @@ def _native_matrix_enabled(bundle: BundleManifest) -> bool:
     return False
 
 
+def _resolve_matrix_paths_loadable(
+    bundle: BundleManifest,
+    gpu: GpuInfo,
+) -> dict[str, Path]:
+    """Pick native modules; try ranked CUDA variants if libcublas load fails."""
+    lib = bundle_native_lib_dir(bundle.bundle_root, bundle_native_lib_rel(bundle))
+    allowed = _allowed_sm(bundle)
+    kernels_ranked = select_native_module_ranked(
+        lib, "flash_rt_kernels", gpu, allowed_sm=allowed
+    )
+    if not kernels_ranked:
+        return resolve_native_modules_for_host(
+            bundle.bundle_root,
+            gpu,
+            native_lib_rel=bundle_native_lib_rel(bundle),
+            allowed_sm=allowed,
+        )
+
+    kernels_path: Path | None = None
+    last_exc: BaseException | None = None
+    for candidate in kernels_ranked:
+        try:
+            _probe_so_file(candidate)
+            kernels_path = candidate
+            break
+        except (ImportError, RuntimeError) as exc:
+            last_exc = exc
+            if not _cuda_runtime_load_error(exc):
+                raise
+    if kernels_path is None:
+        assert last_exc is not None
+        raise last_exc
+
+    parsed = parse_native_tag_from_filename(kernels_path.name)
+    paths: dict[str, Path] = {"flash_rt_kernels": kernels_path}
+    fa2_ranked = select_native_module_ranked(
+        lib, "flash_rt_fa2", gpu, allowed_sm=allowed
+    )
+    if parsed is not None:
+        for fa2_path in fa2_ranked:
+            fa2_parsed = parse_native_tag_from_filename(fa2_path.name)
+            if (
+                fa2_parsed is not None
+                and fa2_parsed.cuda_tag == parsed.cuda_tag
+                and fa2_parsed.python_minor == parsed.python_minor
+                and fa2_parsed.sm == parsed.sm
+            ):
+                paths["flash_rt_fa2"] = fa2_path
+                break
+    if "flash_rt_fa2" not in paths:
+        paths["flash_rt_fa2"] = select_native_module_for_host(
+            lib, "flash_rt_fa2", gpu, allowed_sm=allowed
+        )
+    return paths
+
+
 def _resolve_host_native_paths(
     bundle: BundleManifest,
     gpu: GpuInfo | None = None,
@@ -89,12 +164,7 @@ def _resolve_host_native_paths(
     if not _native_matrix_enabled(bundle):
         return None
     gpu = gpu or detect_gpu_or_raise()
-    return resolve_native_modules_for_host(
-        bundle.bundle_root,
-        gpu,
-        native_lib_rel=bundle_native_lib_rel(bundle),
-        allowed_sm=_allowed_sm(bundle),
-    )
+    return _resolve_matrix_paths_loadable(bundle, gpu)
 
 
 def _register_from_paths(paths: dict[str, Path]) -> list[str]:
@@ -197,13 +267,12 @@ def _bundle_native_artifact_tag(bundle: BundleManifest) -> str | None:
 
 def probe_native_python_abi(bundle: BundleManifest, *, gpu: GpuInfo | None = None) -> None:
     """Load one required .so before heavy pip installs — fail fast on ABI mismatch."""
+    gpu = gpu or detect_gpu_or_raise()
     try:
         matrix_paths = _resolve_host_native_paths(bundle, gpu=gpu)
     except NativeEnvironmentNotSupportedError:
         raise
     if matrix_paths is not None:
-        path = matrix_paths.get("flash_rt_kernels") or next(iter(matrix_paths.values()))
-        _probe_so_file(path)
         return
 
     if not bundle_modules(bundle):

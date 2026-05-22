@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import os
 import platform
 import re
 import shutil
 import subprocess
 from dataclasses import dataclass
+
+
+def _cuda_tag_from_env() -> str | None:
+    raw = os.environ.get("FLASHCLI_CUDA_TAG", "").strip().lstrip("cCuU")
+    return raw or None
 
 
 @dataclass(frozen=True)
@@ -33,6 +39,35 @@ def torch_index_for_cuda_tag(cuda_tag: str) -> str:
     if cuda_tag in ("128", "130"):
         return "cu128"
     return "cu124"
+
+
+def detect_cuda_tag_from_nvidia_smi() -> str | None:
+    """Map driver-reported max CUDA (nvidia-smi banner) to runtime cuda_tag."""
+    if shutil.which("nvidia-smi") is None:
+        return None
+    try:
+        out = subprocess.run(
+            ["nvidia-smi"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    match = re.search(r"CUDA Version:\s*([0-9]+)\.([0-9]+)", out.stdout)
+    if not match:
+        return None
+    major, minor = int(match.group(1)), int(match.group(2))
+    if major >= 13:
+        return "130"
+    if major == 12:
+        if minor >= 8:
+            return "128"
+        if minor >= 4:
+            return "124"
+        return "120"
+    return None
 
 
 def detect_cuda_tag_from_nvcc() -> str | None:
@@ -91,7 +126,11 @@ def detect_gpu() -> GpuInfo | None:
     compute_cap = parts[1]
     driver = parts[2] if len(parts) > 2 else None
     sm = _parse_sm(compute_cap)
-    cuda_tag = detect_cuda_tag_from_nvcc()
+    cuda_tag = _cuda_tag_from_env()
+    if cuda_tag is None:
+        cuda_tag = detect_cuda_tag_from_nvcc()
+    if cuda_tag is None:
+        cuda_tag = detect_cuda_tag_from_nvidia_smi()
     if cuda_tag is None:
         cuda_tag = "128" if sm in ("120", "110") else "124"
     arch = platform.machine()

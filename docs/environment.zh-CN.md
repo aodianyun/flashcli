@@ -25,6 +25,15 @@ export FLASHCLI_MODELS_YAML=/etc/flashcli/models.yaml
 flashcli models list
 ```
 
+## GPU / CUDA 与 native 库
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `FLASHCLI_CUDA_TAG` | （自动） | 覆盖自动检测的 CUDA 用户态标签（`124` / `128` / `130`），用于从 bundle `lib/` 选择 `cu124` / `cu130` 等 `.so`。 |
+| （自动） | — | 无 `nvcc` 时从 `nvidia-smi` 横幅 `CUDA Version: 13.0` 推断 `130`；SM89 不再默认 `124`。 |
+
+`flashcli run` 会按 **sm + cuda + os + arch + Python** 在 bundle `lib/` 里自动选 `.so`；若 `libcublas.so.12` 缺失而驱动为 CUDA 13，请更新 flashcli 或设 `export FLASHCLI_CUDA_TAG=130`。
+
 ## 下载与 Hugging Face
 
 | 变量 | 默认值 | 说明 |

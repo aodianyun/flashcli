@@ -263,6 +263,25 @@ def select_native_module_for_host(
     return ranked[0][2]
 
 
+def select_native_module_ranked(
+    lib_dir: Path,
+    module_base: str,
+    gpu: GpuInfo,
+    *,
+    allowed_sm: list[str] | None = None,
+    python_minor: str | None = None,
+) -> list[Path]:
+    """All matching ``.so`` paths for this host, best-first."""
+    host = host_runtime_env_key(gpu, python_minor=python_minor or host_python_minor())
+    ranked: list[tuple[int, str, Path]] = []
+    for parsed, path in list_native_artifacts(lib_dir).get(module_base, []):
+        score = score_native_tag(parsed, host, allowed_sm=allowed_sm)
+        if score > 0:
+            ranked.append((score, parsed.catalog_key(), path))
+    ranked.sort(key=lambda x: (-x[0], x[1]))
+    return [path for _score, _key, path in ranked]
+
+
 def resolve_native_modules_for_host(
     bundle_root: Path,
     gpu: GpuInfo,
