@@ -29,6 +29,7 @@
     }
   },
   "python": ">=3.10,<3.13",
+  "python_abi": "310",
   "python_dependencies": {
     "torch": "torch",
     "pip": [

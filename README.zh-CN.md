@@ -7,13 +7,23 @@
 ## 要求
 
 - **Linux** + **NVIDIA GPU**（已验证：**SM89**，如 RTX 4090 / L40；bundle 元数据亦声明支持 SM120）
-- **Python** 3.10–3.12
-- 网络：首次运行会从 CDN 拉取 runtime zip，从 Hugging Face 拉取模型权重；Pi0.5 还需 Google Storage（PaliGemma tokenizer）
+- **Python ≥ 3.10**（见 [`pyproject.toml`](pyproject.toml)）；`install.sh` 会安装 **flashcli** 与 **`huggingface_hub`**（提供 `hf download` / `huggingface-cli download`）
+- **网络**：首次运行从 CDN 拉 runtime zip；权重经 Hub CLI 下载（与 `HF_ENDPOINT` + `hf download` 相同）。国内/内网建议 `export HF_ENDPOINT=https://hf-mirror.com`。Pi0.5 还需 Google Storage（PaliGemma tokenizer）
 
 ## 快速开始
 
+一键安装（检测 Linux / NVIDIA GPU / Python 3.10+ / git，再通过 pip 安装）：
+
 ```bash
-pip install git+https://github.com/aodianyun/flashcli
+curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
+```
+
+也可将 `install.sh` 托管为 `https://your-domain/install` 后执行 `curl -fsSL https://your-domain/install | sh`。脚本会**优先选用已带 pip 的 Python**；`run` 时按 GPU + **Python 3.10/3.11/3.12** 选择 runtime zip（见 [docs/runtime-matrix.zh-CN.md](docs/runtime-matrix.zh-CN.md)）（例如 Docker 里 `/usr/local/bin/python3.12`，而不是 Debian 的 PEP 668 `python3.13`），并处理 `ensurepip` / `get-pip.py` / `apt python3-pip` / 专用 venv。可选：`FLASHCLI_PYTHON=$(command -v python3)`、`FLASHCLI_USE_VENV=1`、`FLASHCLI_BREAK_SYSTEM_PACKAGES=1`、`FLASHCLI_AUTO_INSTALL_PYTHON=1`。**root** 默认系统级安装到 `/usr/local/bin`。
+
+或手动安装：
+
+```bash
+pip install git+https://github.com/aodianyun/flashcli.git
 # pip install --force-reinstall git+https://github.com/aodianyun/flashcli.git
 
 flashcli run pi05_libero \
@@ -73,7 +83,7 @@ flashcli models envs pi05_libero
 | `FLASHCLI_SKIP_AUTO_INSTALL=1` | 不自动 pip 安装 flashcli CLI 依赖（同 `--no-auto-install`） |
 | `FLASHCLI_SKIP_BUNDLE_ZIP=1` | 禁止下载 catalog 中的 `bundle.zip` |
 | `FLASHCLI_SKIP_BUNDLE_GIT=1` | 禁止 git 拉取 bundle |
-| `HF_ENDPOINT` | Hugging Face 镜像地址（如 `https://hf-mirror.com`）；未设置且官方 Hub 失败时会自动试镜像 |
+| `HF_ENDPOINT` | Hugging Face 镜像（如 `https://hf-mirror.com`）；未设置时默认先试官方 Hub，失败再试镜像 |
 | `HF_TOKEN` | Hugging Face 令牌（gated 模型；由 `huggingface_hub` 使用） |
 | `FLASH_RT_PALIGEMMA_TOKENIZER` | Pi0.5 PaliGemma tokenizer 文件路径 |
 | `FLASHRT_QWEN36_MTP_CKPT_DIR` | Qwen3.6 MTP 权重目录（或由 `--mtp-checkpoint` 设置） |

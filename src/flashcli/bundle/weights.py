@@ -10,7 +10,6 @@ from flashcli import config
 from flashcli.bundle.checkpoint import has_usable_checkpoint
 from flashcli.bundle.config import bundle_dict, bundle_list
 from flashcli.bundle.manifest import BundleManifest
-from flashcli.models.pull import _download_huggingface, _write_marker
 from flashcli.models.registry import Preset
 
 _SKIP_WEIGHT_NAMES = frozenset({".flashcli_model.json", ".gitkeep"})
@@ -108,6 +107,8 @@ def download_extra_weights(
         source = str(spec.get("source", "huggingface")).lower()
         if source != "huggingface":
             raise NotImplementedError(f"Unsupported extra weights source: {source!r}")
+        from flashcli.models.pull import _download_huggingface
+
         _download_huggingface(spec, dest, quiet=quiet)
 
 
@@ -124,6 +125,8 @@ def download_merged_weights(
     source = str(spec.get("source", "huggingface")).lower()
     dest.mkdir(parents=True, exist_ok=True)
     if source == "huggingface":
+        from flashcli.models.pull import _download_huggingface
+
         _download_huggingface(spec, dest, quiet=quiet)
         return
     if source == "url":
@@ -208,6 +211,8 @@ def ensure_checkpoint(
         print(f"Downloading weights for {bundle.name} -> {checkpoint_dir}")
     download_merged_weights(spec, checkpoint_dir, quiet=quiet)
     download_extra_weights(bundle, quiet=quiet)
+    from flashcli.models.pull import _write_marker
+
     _write_marker(cache_dir, preset.name, checkpoint_dir)
     apply_bundle_env(bundle)
     return checkpoint_dir

@@ -4,6 +4,7 @@
 
 | 文档 | 读者 |
 |------|------|
+| [runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md) | **紧急维护**：sm89 × cu124/130 × py310/311/312 矩阵与构建 zip |
 | [environment.zh-CN.md](environment.zh-CN.md) | 环境变量（路径、catalog、HF、开关） |
 | [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | Model Bundle 格式 — 扩展方与维护者 |
 | [architecture.zh-CN.md](architecture.zh-CN.md) | 模块划分与运行时数据流 |

@@ -28,10 +28,6 @@ class Preset:
         bundle = self.raw.get("bundle")
         if not isinstance(bundle, dict):
             return self.name
-        variants = bundle.get("variants")
-        if isinstance(variants, dict) and variants:
-            keys = ", ".join(sorted(str(k) for k in variants if str(k).strip()))
-            return f"bundle:variants({len(variants)} envs: {keys})"
         path = str(bundle.get("path", "")).strip()
         if path:
             return f"bundle:path={path}"

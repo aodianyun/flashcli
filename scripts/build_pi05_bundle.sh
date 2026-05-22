@@ -11,6 +11,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FLASHCLI_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# shellcheck source=lib/native_naming.sh
+source "${SCRIPT_DIR}/lib/native_naming.sh"
 GEN_MANIFEST="${SCRIPT_DIR}/generate_runtime_manifest.py"
 BUNDLED_REQUIREMENTS="${SCRIPT_DIR}/requirements/runtime-inference.txt"
 
@@ -33,6 +35,11 @@ BUILD_ID=""
 MIN_DRIVER=""
 CUTLASS_REF="v4.4.2"
 EMBED_CHECKPOINT=""
+PYTHON_BIN=""
+PYTHON_MINOR=""
+MERGE_NATIVE=0
+SKIP_MANIFEST=0
+FINALIZE_MATRIX_MANIFEST=0
 
 usage() {
   cat <<EOF
@@ -50,6 +57,10 @@ Options:
   --git-ref REF           Record in flashcli-bundle.json git_ref (default: main)
   --runtime-version VER   manifest runtime_version (default: 1.0.0)
   --gpu-arch ARCH         CMake -DGPU_ARCH= (default: auto SM)
+  --python-bin PATH       Python for pybind build + manifest (default: python3)
+  --python-minor NNN      Record python_abi 310/311/312 (default: from --python-bin)
+  --sm SM                 Target SM label e.g. 89 (default: auto nvidia-smi)
+  --cuda-tag TAG          Target cuda tag 124/130 (default: auto nvcc)
   --build-dir DIR         CMake build dir (default: <repo>/build)
   -j, --jobs N            Parallel cmake jobs
   --pack-only             Skip cmake; stage existing .so under flash_rt/ or build/
@@ -58,12 +69,37 @@ Options:
   --build-id ID           manifest build_id
   --min-driver VER        manifest min_driver_version
   --cutlass-branch REF    CUTLASS tag (default: v4.4.2)
+  --merge-native          Install .so under lib/ (accumulate matrix cells)
+  --skip-manifest         Skip flashcli-bundle.json manifest update
+  --finalize-matrix-manifest  Scan lib/ and write multi-env manifest (after full matrix)
   -h, --help
 EOF
 }
 
 log() { printf '[pi05-bundle] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
+
+# Copy a source tree into dst, honoring rsync-style exclude globs.
+sync_tree() {
+  local src="$1" dst="$2"
+  shift 2
+  local excludes=("$@")
+  mkdir -p "${dst}"
+  if command -v rsync >/dev/null 2>&1; then
+    local -a args=(-a)
+    local pat
+    for pat in "${excludes[@]}"; do
+      args+=(--exclude="${pat}")
+    done
+    rsync "${args[@]}" "${src}/" "${dst}/"
+    return 0
+  fi
+  local -a tar_args=(-C "${src}")
+  for pat in "${excludes[@]}"; do
+    tar_args+=(--exclude="${pat}")
+  done
+  tar "${tar_args[@]}" -cf - . | tar -C "${dst}" -xf -
+}
 
 is_flashrt_repo() {
   [[ -f "$1/CMakeLists.txt" && -d "$1/flash_rt" ]]
@@ -179,10 +215,12 @@ ensure_cutlass() {
 run_cmake_build() {
   ensure_cutlass
   BUILD_DIR="${BUILD_DIR:-${REPO_ROOT}/build}"
+  local py_bin="${PYTHON_BIN:-python3}"
   local -a cmake_args=(
     -B "${BUILD_DIR}"
     -S "${REPO_ROOT}"
     -DGPU_ARCH="${GPU_ARCH}"
+    -DPython3_EXECUTABLE="${py_bin}"
   )
   if [[ "${FA2_NATIVE_ONLY}" -eq 1 ]]; then
     cmake_args+=(-DFA2_ARCH_NATIVE_ONLY=ON)
@@ -213,7 +251,6 @@ normalize_lib() {
 stage_pi05_flash_rt_minimal() {
   local dst="$1"
   local src="${REPO_ROOT}/flash_rt"
-  command -v rsync >/dev/null 2>&1 || die "rsync required"
   rm -rf "${dst}"
   mkdir -p "${dst}"
 
@@ -228,7 +265,7 @@ stage_pi05_flash_rt_minimal() {
   done
 
   mkdir -p "${dst}/models/pi05"
-  rsync -a --exclude='pipeline_thor*' "${src}/models/pi05/" "${dst}/models/pi05/"
+  sync_tree "${src}/models/pi05" "${dst}/models/pi05" 'pipeline_thor*'
 
   for rel in \
     frontends/__init__.py \
@@ -259,10 +296,7 @@ __all__ = [
 PY
 
   mkdir -p "${dst}/core"
-  rsync -a \
-    --exclude='*.so' \
-    --exclude='rl/' \
-    "${src}/core/" "${dst}/core/"
+  sync_tree "${src}/core" "${dst}/core" '*.so' 'rl'
 
   mkdir -p "${dst}/executors"
   for rel in __init__.py torch_weights.py weight_loader.py; do
@@ -270,42 +304,110 @@ PY
   done
 
   mkdir -p "${dst}/utils"
-  rsync -a "${src}/utils/" "${dst}/utils/"
+  sync_tree "${src}/utils" "${dst}/utils"
 
   log "Staged minimal flash_rt/ for pi05_libero ($(find "${dst}" -type f | wc -l) files)"
 }
 
+finalize_matrix_manifest() {
+  local native_lib="${BUNDLE_DIR}/lib"
+  [[ -d "${native_lib}" ]] || die "Missing ${native_lib} for --finalize-matrix-manifest"
+  local py_bin="${PYTHON_BIN:-python3}"
+  log "Finalizing multi-env manifest from ${native_lib}"
+  "${py_bin}" "${GEN_MANIFEST}" \
+    --repo-root "${REPO_ROOT}" \
+    --bundle-json "${BUNDLE_DIR}/flashcli-bundle.json" \
+    --lib-dir "${native_lib}" \
+    --matrix-manifest \
+    --runtime-version "${RUNTIME_VERSION}" \
+    --flashrt-tag "${FLASHRT_TAG:-dev}" \
+    --git-commit "$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)" \
+    --build-id "${BUILD_ID:-matrix}" \
+    --git-ref "${GIT_REF}" \
+    --sm "${SM:-89}" \
+    --os-name "${OS_NAME:-linux}" \
+    --cpuarch "${CPU_ARCH:-x86_64}" \
+    --gpu-arch "${GPU_ARCH:-89}" \
+    --cuda-tag "${CUDA_TAG:-124}" \
+    --toolkit "12.4" \
+    --torch-index "cu124" \
+    --min-driver "525.60.13" \
+    --has-fa2 "1" \
+    --has-fp4 "0" \
+    --has-fmha "0" \
+    --python-minor "310" >/dev/null
+}
+
 stage_bundle_runtime() {
+  local native_lib="${BUNDLE_DIR}/lib"
   local lib_dir="${BUNDLE_DIR}"
+  if [[ "${MERGE_NATIVE}" -eq 1 ]]; then
+    lib_dir="${native_lib}"
+    mkdir -p "${native_lib}"
+  fi
   local py_dir="${BUNDLE_DIR}/flash_rt"
   local flash_rt_src="${REPO_ROOT}/flash_rt"
   local build_src="${BUILD_DIR:-${REPO_ROOT}/build}"
 
   rm -rf "${py_dir}" "${BUNDLE_DIR}/runtime"
-  rm -f "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so
+  if [[ "${MERGE_NATIVE}" -eq 1 ]]; then
+    rm -f "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so
+  else
+    rm -f "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so
+  fi
 
+  local py_bin="${PYTHON_BIN:-python3}"
+  if [[ -z "${PYTHON_MINOR}" ]]; then
+    PYTHON_MINOR="$("${py_bin}" -c 'import sys; print(f"{sys.version_info.major}{sys.version_info.minor:02d}")')"
+  fi
+
+  local git_commit flashrt_tag build_id torch_idx min_drv flashrt_abi native_tag
+  git_commit="$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)"
+  flashrt_tag="${FLASHRT_TAG:-$(git -C "${REPO_ROOT}" describe --tags --always 2>/dev/null || echo dev)}"
+  flashrt_abi="$(sanitize_flashrt_abi "${flashrt_tag}" "${git_commit}")"
+  native_tag="$(native_artifact_tag "${flashrt_abi}" "${SM}" "${CUDA_TAG}" "${OS_NAME}" "${CPU_ARCH}" "${PYTHON_MINOR}")"
+  local kernels_name fa2_name
+  kernels_name="$(native_so_filename flash_rt_kernels "${native_tag}")"
+  fa2_name="$(native_so_filename flash_rt_fa2 "${native_tag}")"
+  log "Native artifact tag: ${native_tag}"
+  log "  ${kernels_name}"
+  log "  ${fa2_name}"
+
+  local cache_dir="${FLASHCLI_ROOT}/.native-cache/${native_tag}"
   local has_kernels=0 has_fa2=0
+  rm -f "${lib_dir}/${kernels_name}" "${lib_dir}/${fa2_name}"
+  if [[ -f "${cache_dir}/${kernels_name}" && -f "${cache_dir}/${fa2_name}" ]]; then
+    log "Reusing cached native libs from ${cache_dir}"
+    cp -f "${cache_dir}/${kernels_name}" "${cache_dir}/${fa2_name}" "${lib_dir}/"
+    has_kernels=1
+    has_fa2=1
+  fi
   for src in "${build_src}" "${flash_rt_src}"; do
     [[ -d "${src}" ]] || continue
-    normalize_lib "${src}" "${lib_dir}" "flash_rt_kernels*.so" "flash_rt_kernels.so" && has_kernels=1
-    normalize_lib "${src}" "${lib_dir}" "flash_rt_fa2*.so" "flash_rt_fa2.so" && has_fa2=1
+    normalize_lib "${src}" "${lib_dir}" "flash_rt_kernels*.so" "${kernels_name}" && has_kernels=1
+    normalize_lib "${src}" "${lib_dir}" "flash_rt_fa2*.so" "${fa2_name}" && has_fa2=1
   done
 
-  [[ "${has_kernels}" -eq 1 ]] || die "flash_rt_kernels.so missing (build FlashRT or use --pack-only after cmake)"
-  [[ "${has_fa2}" -eq 1 ]] || die "flash_rt_fa2.so missing (required for Pi0.5 FA2 attention)"
+  [[ "${has_kernels}" -eq 1 ]] || die "${kernels_name} missing (build FlashRT or use --pack-only)"
+  [[ "${has_fa2}" -eq 1 ]] || die "${fa2_name} missing (required for Pi0.5 FA2 attention)"
 
   stage_pi05_flash_rt_minimal "${py_dir}"
   find "${py_dir}" -name '*.so' -type f -delete 2>/dev/null || true
 
-  local git_commit flashrt_tag build_id torch_idx min_drv
-  git_commit="$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)"
-  flashrt_tag="${FLASHRT_TAG:-$(git -C "${REPO_ROOT}" describe --tags --always 2>/dev/null || echo dev)}"
   build_id="${BUILD_ID:-$(date -u +%Y%m%d)-sm${SM}}"
   torch_idx="$(recommended_torch_index)"
   min_drv="${MIN_DRIVER:-$(default_min_driver)}"
 
-  log "Updating flashcli-bundle.json (v2)"
-  python3 "${GEN_MANIFEST}" \
+  if [[ "${SKIP_MANIFEST}" -eq 1 ]]; then
+    log "Skipping manifest update (--skip-manifest)"
+    mkdir -p "${FLASHCLI_ROOT}/.native-cache/${native_tag}"
+    cp -f "${lib_dir}/${kernels_name}" "${lib_dir}/${fa2_name}" \
+      "${FLASHCLI_ROOT}/.native-cache/${native_tag}/"
+    return 0
+  fi
+
+  log "Updating flashcli-bundle.json (v2) python_abi=${PYTHON_MINOR}"
+  "${py_bin}" "${GEN_MANIFEST}" \
     --repo-root "${REPO_ROOT}" \
     --bundle-json "${BUNDLE_DIR}/flashcli-bundle.json" \
     --lib-dir "${lib_dir}" \
@@ -324,7 +426,13 @@ stage_bundle_runtime() {
     --min-driver "${min_drv}" \
     --has-fa2 "${has_fa2}" \
     --has-fp4 "0" \
-    --has-fmha "0" >/dev/null
+    --has-fmha "0" \
+    --python-minor "${PYTHON_MINOR}" \
+    --native-artifact-tag "${native_tag}" >/dev/null
+  log "Cached native reuse dir: ${FLASHCLI_ROOT}/.native-cache/${native_tag}/"
+  mkdir -p "${FLASHCLI_ROOT}/.native-cache/${native_tag}"
+  cp -f "${lib_dir}/${kernels_name}" "${lib_dir}/${fa2_name}" \
+    "${FLASHCLI_ROOT}/.native-cache/${native_tag}/"
 }
 
 embed_checkpoint() {
@@ -343,7 +451,11 @@ embed_checkpoint() {
 
 maybe_write_tarball() {
   [[ -n "${OUTPUT_DIR}" ]] || return 0
-  local name="flashcli-bundle-pi05-${GIT_REF}-sm${SM}-cu${CUDA_TAG}-${OS_NAME}-${CPU_ARCH}"
+  local py_suffix=""
+  if [[ -n "${PYTHON_MINOR}" ]]; then
+    py_suffix="-py${PYTHON_MINOR}"
+  fi
+  local name="flashcli-bundle-pi05-${GIT_REF}-sm${SM}-cu${CUDA_TAG}-${OS_NAME}-${CPU_ARCH}${py_suffix}"
   local stage="${OUTPUT_DIR}/${name}"
   mkdir -p "${OUTPUT_DIR}"
   rm -rf "${stage}"
@@ -373,6 +485,13 @@ while [[ $# -gt 0 ]]; do
     --build-id) BUILD_ID="$2"; shift 2 ;;
     --min-driver) MIN_DRIVER="$2"; shift 2 ;;
     --cutlass-branch) CUTLASS_REF="$2"; shift 2 ;;
+    --python-bin) PYTHON_BIN="$2"; shift 2 ;;
+    --python-minor) PYTHON_MINOR="$2"; shift 2 ;;
+    --sm) SM="$2"; shift 2 ;;
+    --cuda-tag) CUDA_TAG="$2"; shift 2 ;;
+    --merge-native) MERGE_NATIVE=1; shift ;;
+    --skip-manifest) SKIP_MANIFEST=1; shift ;;
+    --finalize-matrix-manifest) FINALIZE_MATRIX_MANIFEST=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown option: $1" ;;
   esac
@@ -381,6 +500,15 @@ done
 [[ -n "${BUNDLE_DIR}" ]] || { usage; die "--bundle-dir is required"; }
 BUNDLE_DIR="$(cd "${BUNDLE_DIR}" && pwd)"
 [[ -f "${BUNDLE_DIR}/flashcli-bundle.json" ]] || die "Missing ${BUNDLE_DIR}/flashcli-bundle.json"
+
+if [[ "${FINALIZE_MATRIX_MANIFEST}" -eq 1 ]]; then
+  resolve_repo_root
+  detect_platform
+  [[ -n "${SM}" ]] || SM="89"
+  finalize_matrix_manifest
+  log "Matrix manifest ready: ${BUNDLE_DIR}/flashcli-bundle.json"
+  exit 0
+fi
 
 resolve_repo_root
 ensure_runtime_requirements_file
@@ -391,16 +519,18 @@ if [[ "${OS_NAME}" != "linux" && "${SKIP_BUILD}" -eq 0 ]]; then
 fi
 
 if [[ "${SKIP_BUILD}" -eq 0 ]]; then
-  detect_sm
-  detect_cuda_tag
+  [[ -n "${SM}" ]] || detect_sm
+  [[ -n "${CUDA_TAG}" ]] || detect_cuda_tag
   GPU_ARCH="${GPU_ARCH:-${SM}}"
+  PYTHON_BIN="${PYTHON_BIN:-python3}"
   command -v cmake >/dev/null 2>&1 || die "cmake not found"
   command -v nvcc >/dev/null 2>&1 || die "nvcc not found"
   run_cmake_build
 else
-  if [[ -z "${SM}" ]]; then detect_sm; fi
-  if [[ -z "${CUDA_TAG}" ]]; then detect_cuda_tag; fi
+  [[ -n "${SM}" ]] || detect_sm
+  [[ -n "${CUDA_TAG}" ]] || detect_cuda_tag
   GPU_ARCH="${GPU_ARCH:-${SM}}"
+  PYTHON_BIN="${PYTHON_BIN:-python3}"
   log "Skipping cmake (--pack-only)"
 fi
 

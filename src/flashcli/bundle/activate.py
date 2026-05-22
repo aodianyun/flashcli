@@ -11,10 +11,15 @@ from flashcli.bundle.manifest import (
     BundleManifest,
     bundle_cuda_config,
     bundle_python_root,
+    check_bundle_python_abi,
 )
 from flashcli.deps import Profile, ensure_runtime_python_stack, python_stack_satisfied
 from flashcli.runtime.detect import torch_index_for_cuda_tag
-from flashcli.bundle.native import ensure_bundle_importable, verify_native_modules
+from flashcli.bundle.native import (
+    ensure_bundle_importable,
+    probe_native_python_abi,
+    verify_native_modules,
+)
 
 ProfileArg = Literal["default", "serve"]
 
@@ -48,6 +53,13 @@ def activate_bundle(
 
     bundle_root = bundle.bundle_root.resolve()
 
+    from flashcli.runtime.detect import detect_gpu_or_raise
+
+    gpu = detect_gpu_or_raise()
+    verify_native_modules(bundle, gpu=gpu)
+    check_bundle_python_abi(bundle)
+    probe_native_python_abi(bundle, gpu=gpu)
+
     if install_python:
         cuda = bundle_cuda_config(bundle)
         cuda_tag = str(cuda.get("cuda_tag", ""))
@@ -71,8 +83,7 @@ def activate_bundle(
                 force=force_python,
             )
 
-    verify_native_modules(bundle)
-    ensure_bundle_importable(bundle)
+    ensure_bundle_importable(bundle, gpu=gpu)
 
     return bundle_root
 

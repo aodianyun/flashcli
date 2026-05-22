@@ -137,6 +137,21 @@ def main() -> int:
     parser.add_argument("--has-fp4", choices=("0", "1"), required=True)
     parser.add_argument("--has-fmha", choices=("0", "1"), required=True)
     parser.add_argument("--git-ref", default="main")
+    parser.add_argument(
+        "--python-minor",
+        required=True,
+        help="Native/Python ABI tag: 310, 311, 312 (Python 3.10/3.11/3.12)",
+    )
+    parser.add_argument(
+        "--native-artifact-tag",
+        default="",
+        help="Canonical tag: {flashrt_abi}-sm{SM}-cu{CUDA}-{os}-{arch}-py{PY}",
+    )
+    parser.add_argument(
+        "--matrix-manifest",
+        action="store_true",
+        help="Multi-env bundle: scan lib/, set native_layout=matrix",
+    )
     args = parser.parse_args()
 
     lib_dir = args.lib_dir.resolve()
@@ -145,22 +160,65 @@ def main() -> int:
 
     torch_spec, pip_packages, optional_groups = extract_runtime_packages(repo_root)
 
+    _src = Path(__file__).resolve().parents[1] / "src"
+    if str(_src) not in sys.path:
+        sys.path.insert(0, str(_src))
+
     modules = []
-    for so in sorted(lib_dir.glob("*.so")):
-        optional = so.name in ("flash_rt_fp4.so", "libfmha_fp16_strided.so")
-        modules.append(
-            {
-                "file": so.name,
-                "sha256": sha256_file(so),
-                "optional": optional,
-            }
-        )
+    native_matrix: list[str] = []
+    py_versions: list[tuple[int, int]] = []
+
+    if args.matrix_manifest:
+        from flashcli.bundle.native_naming import parse_native_tag_from_filename
+
+        for so in sorted(lib_dir.glob("*.so")):
+            parsed = parse_native_tag_from_filename(so.name)
+            if parsed and parsed.catalog_key() not in native_matrix:
+                native_matrix.append(parsed.catalog_key())
+            if parsed:
+                py_versions.append(
+                    (int(parsed.python_minor[0]), int(parsed.python_minor[1:]))
+                )
+            optional = so.name.startswith("flash_rt_fp4") or so.name.startswith(
+                "libfmha_fp16"
+            )
+            modules.append(
+                {
+                    "file": f"lib/{so.name}",
+                    "sha256": sha256_file(so),
+                    "optional": optional,
+                }
+            )
+    else:
+        for so in sorted(lib_dir.glob("*.so")):
+            optional = so.name in ("flash_rt_fp4.so", "libfmha_fp16_strided.so")
+            modules.append(
+                {
+                    "file": so.name,
+                    "sha256": sha256_file(so),
+                    "optional": optional,
+                }
+            )
 
     bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
     bundle["format_version"] = max(int(bundle.get("format_version", 1)), 2)
     bundle.pop("runtime_dir", None)
     bundle.pop("native_runtime", None)
-    bundle["python"] = ">=3.10,<3.13"
+    py_minor = str(args.python_minor).strip()
+    if not py_minor.isdigit() or len(py_minor) != 3:
+        raise SystemExit(f"--python-minor must be 310/311/312, got {py_minor!r}")
+    major = int(py_minor[0])
+    minor = int(py_minor[1:])
+    if args.matrix_manifest and py_versions:
+        lo = min(py_versions)
+        hi = max(py_versions)
+        bundle["python_abi"] = "multi"
+        bundle["python"] = f">={lo[0]}.{lo[1]},<{hi[0]}.{hi[1] + 1}"
+        bundle["native_layout"] = "matrix"
+        bundle["native_matrix"] = sorted(native_matrix)
+    else:
+        bundle["python_abi"] = py_minor
+        bundle["python"] = f">={major}.{minor},<{major}.{minor + 1}"
     bundle["python_dependencies"] = {
         "torch": torch_spec,
         "pip": pip_packages,
@@ -174,17 +232,35 @@ def main() -> int:
         "recommended_torch_index": args.torch_index,
     }
     bundle["modules"] = modules
+    native_tag = (args.native_artifact_tag or "").strip()
+    if not native_tag:
+        _src = Path(__file__).resolve().parents[1] / "src"
+        if str(_src) not in sys.path:
+            sys.path.insert(0, str(_src))
+        from flashcli.bundle.native_naming import native_artifact_tag, sanitize_flashrt_abi
+
+        abi = sanitize_flashrt_abi(args.flashrt_tag, git_commit=args.git_commit)
+        native_tag = native_artifact_tag(
+            flashrt_abi=abi,
+            sm=args.sm,
+            cuda_tag=args.cuda_tag,
+            os_name=args.os_name,
+            arch=args.cpuarch,
+            python_minor=py_minor,
+        )
     bundle["build"] = {
         "runtime_version": args.runtime_version,
         "flashrt_tag": args.flashrt_tag,
         "git_commit": args.git_commit,
         "git_ref": args.git_ref,
         "build_id": args.build_id,
+        "native_artifact_tag": native_tag,
         "target": {
             "sm": args.sm,
             "os": args.os_name,
             "arch": args.cpuarch,
             "gpu_arch_cmake": args.gpu_arch,
+            "python_abi": py_minor,
         },
         "features": {
             "fa2": args.has_fa2 == "1",

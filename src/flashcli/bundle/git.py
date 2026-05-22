@@ -141,58 +141,26 @@ def find_bundle_root_in_clone(
     *,
     bundle_cfg: dict[str, Any] | None = None,
 ) -> Path:
-    """``variants/<env>/`` is the bundle root at this git ref (flat layout)."""
-    cfg = bundle_cfg if bundle_cfg is not None else _bundle_cfg(preset, gpu=gpu)
-    variants_subdir = str(cfg.get("variants_dir", "variants")).strip() or "variants"
-    variants_root = repo_root / variants_subdir
-
-    if variants_root.is_dir():
-        exact = variants_root / variant_dir_name(gpu)
-        if is_bundle_root(exact):
-            return exact.resolve()
-
-        if exact.is_dir():
-            for child in exact.iterdir():
-                if child.is_dir() and is_bundle_root(child):
-                    raise FileNotFoundError(
-                        f"Legacy semver layout at {child}. "
-                        "Use git ref as version: tag/branch = one snapshot with "
-                        f"flat {exact.name}/flashcli-bundle.json "
-                        "(see docs/model_bundle_standard.md)."
-                    )
-
-        candidates: list[tuple[int, Path]] = []
-        for child in variants_root.iterdir():
-            if not child.is_dir() or not is_bundle_root(child):
-                continue
-            sm, cuda = _parse_variant_name(child.name)
-            allowed = _bundle_allowed_sms(child)
-            score = 0
-            if sm == gpu.sm:
-                score += 10
-            if cuda == gpu.cuda_tag:
-                score += 5
-            if allowed is not None and sm in allowed:
-                score += 1
-            candidates.append((score, child))
-
-        if candidates:
-            candidates.sort(key=lambda x: (-x[0], x[1].name))
-            if candidates[0][0] > 0:
-                return candidates[0][1].resolve()
-
-        names = ", ".join(sorted(p.name for p in variants_root.iterdir() if p.is_dir()))
-        raise FileNotFoundError(
-            f"No bundle under {variants_root} for {variant_dir_name(gpu)}. "
-            f"Available: {names or '(none)'}"
-        )
-
+    """Locate flat bundle root (``flashcli-bundle.json`` at repo root or below)."""
+    del preset, gpu, bundle_cfg  # single bundle per git ref; native match is at runtime
     if is_bundle_root(repo_root):
         return repo_root.resolve()
 
+    children = [
+        p
+        for p in repo_root.iterdir()
+        if p.is_dir() and p.name not in ("__MACOSX", ".git")
+    ]
+    if len(children) == 1 and is_bundle_root(children[0]):
+        return children[0].resolve()
+
+    for path in sorted(repo_root.rglob("flashcli-bundle.json")):
+        root = path.parent
+        if is_bundle_root(root):
+            return root.resolve()
+
     raise FileNotFoundError(
-        f"Git checkout at {repo_root} has no bundle at "
-        f"{variants_subdir}/<env>/flashcli-bundle.json"
+        f"Git checkout at {repo_root} has no flashcli-bundle.json"
     )
 
 
@@ -364,6 +332,5 @@ def find_variant_env_dir(
     preset: Preset,
     gpu: GpuInfo,
 ) -> Path:
-    """Parent of bundle root: ``variants/<env>/`` (flat layout)."""
-    root = find_bundle_root_in_clone(repo_root, preset, gpu)
-    return root.parent
+    """Backward-compatible alias: returns bundle root."""
+    return find_bundle_root_in_clone(repo_root, preset, gpu)

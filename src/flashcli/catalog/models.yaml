@@ -1,45 +1,15 @@
-# flashcli 模型目录 — 仅登记 preset 名与 bundle 源
+# flashcli 模型目录 — 每 preset 一个 bundle zip；运行时从 lib/*.so 按环境选择
 #
-# 权重、entry、defaults、post_pull 等均在各 bundle 的 flashcli-bundle.json 中配置。
-# 本地 path 相对 flashcli 包根目录；zip 为 URL 或本地 .zip；git 仓内可含 variants/<sm-cu-os-arch>/。
-#
-# bundle 源（二选一）：
-#   1) 单环境：顶层 zip / path / git（所有 GPU 共用；zip/git 包内可有 variants/ 子目录）
-#   2) 多环境：bundle.variants.<sm*-cu*-os-arch> 各配 zip / path / git
-#      - 多环境可指向同一 zip（复制 URL，或写别名见下）
-#      - 别名：sm120-cu128-linux-x86_64: sm89-cu124-linux-x86_64  （复用另一环境的源）
-#      - 未写精确 cu 时仅在同一 CUDA 大版本内模糊匹配（cu124 可匹配 cu128，不会匹配 cu130）
+# 构建：bash scripts/build_pi05_release_matrix.sh --cuda-tag 124
+# 文档：docs/runtime-matrix.zh-CN.md
 
-schema_version: 4
+schema_version: 6
 
 models:
 
   pi05_libero:
     description: Pi0.5 LIBERO — lerobot/pi05_libero_finetuned_v044 (SM89/SM120)
     bundle:
-      variants:
-        sm89-cu124-linux-x86_64:
-          zip: https://cdn.flashhub.top/repo/5/versions/6/flashcli-bundle-pi05-main-sm89-cu124-linux-x86_64.zip
-        sm89-cu130-linux-x86_64:
-          zip: https://cdn.flashhub.top/repo/5/versions/6/flashcli-bundle-pi05-main-sm89-cu130-linux-x86_64.zip
-        # SM120 与 SM89 共用同一 runtime zip（flashcli-bundle.json requires.sm 含 89/120）
-        sm120-cu128-linux-x86_64: sm89-cu124-linux-x86_64
-        sm120-cu130-linux-x86_64: sm89-cu130-linux-x86_64
-      # 若所有环境同一包，也可不写 variants，仅用顶层 zip:（见文档）
-      # zip: https://cdn.flashhub.top/repo/5/versions/6/flashcli-bundle-pi05-main-sm89-cu124-linux-x86_64.zip
-      # path: bundles/pi05_libero
-      # git: https://github.com/flashrt-ai/flashcli-bundle-pi05-libero.git
-
-  # qwen36-27b-nvfp4:
-  #   description: Qwen3.6-27B NVFP4 — FlashRT + MTP (SM120, local bundle)
-  #   bundle:
-  #     variants:
-  #       sm120-cu128-linux-x86_64:
-  #         path: bundles/qwen36_27b_nvfp4
-
-  # qwen3-8b-nvfp4:
-  #   description: Qwen3-8B NVFP4 (SM120 only, WIP)
-  #   bundle:
-  #     variants:
-  #       sm120-cu128-linux-x86_64:
-  #         path: bundles/qwen3_8b_nvfp4
+      zip: https://cdn.flashhub.top/repo/5/versions/6/flashcli-bundle-pi05-main-sm89-multi-linux-x86_64.zip
+      # path: bundles/pi05_libero   # 本地调试（须含 lib/*-{sm}-{cu}-...-pyNNN.so）
+      # git: xxx

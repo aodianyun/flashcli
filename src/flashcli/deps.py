@@ -22,7 +22,7 @@ FLASHCLI_PACKAGES = [
     "typer>=0.12",
     "pyyaml>=6.0",
     "packaging>=23.0",
-    "huggingface_hub>=0.23",
+    "huggingface_hub>=0.26",
 ]
 
 
@@ -32,6 +32,9 @@ def _module_available(name: str) -> bool:
 
 def _imports_ok(spec: str) -> bool:
     mod = import_name_for_requirement(spec)
+    # Avoid importing huggingface_hub here: it caches ENDPOINT at import time.
+    if mod == "huggingface_hub":
+        return _module_available(mod)
     try:
         __import__(mod)
         return True

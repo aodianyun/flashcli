@@ -30,8 +30,11 @@ flashcli models list
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `HF_ENDPOINT` | (official Hub) | Hugging Face Hub API base URL. Mirror example: `https://hf-mirror.com` ([HF-Mirror](https://hf-mirror.com)). Used by `snapshot_download`. |
-| (automatic) | — | If `HF_ENDPOINT` is **not** set in spec or env and the default Hub fails, flashcli **retries once** with `https://hf-mirror.com`. |
-| `HF_TOKEN` | (none) | Hugging Face access token; **not flashcli-specific** — read by `huggingface_hub`. Gated repos need `huggingface-cli login` or this variable. |
+| (automatic) | — | If `HF_ENDPOINT` is **not** set, flashcli tries official Hub first, then `https://hf-mirror.com` (via `hf download` / `huggingface-cli download`). |
+| `FLASHCLI_PREFER_HF_MIRROR` | `0` | When `1`, try mirror before official Hub. |
+| `HF_TOKEN` | (none) | Hugging Face token for gated repos (`hf auth login` or this variable). |
+| `HF_HUB_ETAG_TIMEOUT` | `5` | Hub CLI metadata/HEAD timeout (seconds); flashcli default 5 if unset. |
+| `HF_HUB_DOWNLOAD_TIMEOUT` | `5` | Hub CLI per-request timeout (seconds); flashcli default 5 if unset. |
 
 On download failure, the CLI suggests checking `HF_ENDPOINT` and `HF_TOKEN`.
 

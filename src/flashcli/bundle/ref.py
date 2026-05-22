@@ -6,22 +6,14 @@ import re
 from pathlib import Path
 from typing import Any
 
-from flashcli.bundle.catalog import (
-    effective_bundle_cfg_for_preset,
-    has_catalog_variants,
-    raw_bundle_cfg,
-)
+from flashcli.bundle.catalog import effective_bundle_cfg_for_preset, raw_bundle_cfg
 from flashcli.models.registry import Preset
-from flashcli.runtime.detect import GpuInfo, detect_gpu
+from flashcli.runtime.detect import GpuInfo
 
 _REF_SAFE_RE = re.compile(r"[^A-Za-z0-9._+-]+")
 
 
 def _bundle_cfg(preset: Preset, *, gpu: GpuInfo | None = None) -> dict[str, Any]:
-    if has_catalog_variants(preset):
-        gpu = gpu or detect_gpu()
-        if gpu is not None:
-            return effective_bundle_cfg_for_preset(preset, gpu=gpu)
     return effective_bundle_cfg_for_preset(preset, gpu=gpu)
 
 
@@ -81,7 +73,6 @@ def resolve_requested_git_ref(
     if pinned:
         return pinned
 
-    # Legacy: semver field doubled as ref name
     legacy = str(cfg.get("version", "")).strip()
     if legacy:
         return legacy

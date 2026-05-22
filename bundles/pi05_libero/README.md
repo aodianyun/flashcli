@@ -62,7 +62,7 @@ The release zip is runtime-only; ~7.5GB weights are fetched from the Hub. In K8s
 
 ```bash
 rm -rf ~/.flashcli/models/pi05_libero/checkpoint
-export HF_ENDPOINT=https://hf-mirror.com   # or: export FLASHCLI_PREFER_HF_MIRROR=1
+export HF_ENDPOINT=https://hf-mirror.com   # pin mirror only; default is official Hub then mirror fallback
 flashcli pull pi05_libero
 ```
 

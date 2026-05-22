@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from flashcli.bundle.runtime_env import host_python_minor
 
 BUNDLE_FORMAT = "flashcli-model-bundle"
 _LEGACY_MANIFEST = "manifest.json"
@@ -87,6 +90,11 @@ def bundle_modules(bundle: BundleManifest) -> list[dict[str, Any]]:
     if not isinstance(mods, list):
         return []
     return [m for m in mods if isinstance(m, dict)]
+
+
+def bundle_native_lib_rel(bundle: BundleManifest) -> str:
+    """Relative path to multi-artifact native dir (always ``lib/``)."""
+    return "lib"
 
 
 def bundle_cuda_config(bundle: BundleManifest) -> dict[str, Any]:
@@ -217,3 +225,35 @@ def validate_bundle_layout(bundle: BundleManifest) -> list[str]:
 
     errors.extend(validate_weights_spec(bundle))
     return errors
+
+
+def check_bundle_python_abi(bundle: BundleManifest) -> None:
+    """Raise if the running interpreter does not match bundle ``python`` / ``python_abi``."""
+    cfg = bundle_runtime_config(bundle)
+    host_py = host_python_minor()
+    abi = str(cfg.get("python_abi", "")).strip()
+    if abi and abi not in ("multi",) and abi != host_py:
+        raise RuntimeError(
+            f"Python ABI mismatch for bundle {bundle.name!r}: "
+            f"interpreter is 3.{host_py[1:] if len(host_py) >= 3 else host_py} "
+            f"({sys.executable}), but bundle python_abi={abi!r}. "
+            f"Use Python 3.{abi[1:]} or install the matching -py{abi} runtime zip."
+        )
+
+    req_py = str(cfg.get("python", "")).strip()
+    if not req_py:
+        return
+    try:
+        from packaging.specifiers import SpecifierSet
+        from packaging.version import Version
+    except ImportError:
+        return
+
+    ver = Version(
+        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    )
+    if ver not in SpecifierSet(req_py):
+        raise RuntimeError(
+            f"Python version {ver} does not satisfy bundle Requires-Python {req_py!r} "
+            f"({sys.executable})"
+        )

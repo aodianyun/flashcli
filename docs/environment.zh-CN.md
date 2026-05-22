@@ -29,11 +29,20 @@ flashcli models list
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `HF_ENDPOINT` | （官方 Hub） | Hugging Face Hub API 地址。国内镜像示例：`https://hf-mirror.com`（[HF-Mirror](https://hf-mirror.com)）。在 `snapshot_download` 时使用。 |
-| （自动） | — | 若**未**在 spec / 环境中设置 `HF_ENDPOINT`，且访问官方 Hub 失败，flashcli 会**自动**用 `https://hf-mirror.com` 再试一次。 |
-| `HF_TOKEN` | （无） | Hugging Face 访问令牌；**非 flashcli 专有**，由 `huggingface_hub` 读取。gated 模型需 `huggingface-cli login` 或设置此变量。 |
+| `HF_ENDPOINT` | （官方 Hub） | **官方镜像开关**（与 `hf download` / `huggingface-cli download` 相同）。例：`https://hf-mirror.com`。设置后 flashcli 只走该端点。 |
+| （自动） | — | 未设置 `HF_ENDPOINT` 时：先试官方 Hub，失败再试镜像（内部调用 `hf download`）。 |
+| `FLASHCLI_PREFER_HF_MIRROR` | `0` | 设为 `1` 时改为先镜像、再官方 Hub。 |
+| `HF_TOKEN` | （无） | Hugging Face 访问令牌；gated 模型需 `hf auth login` 或设置此变量。 |
+| `HF_HUB_ETAG_TIMEOUT` | `5` | Hub CLI：元数据/HEAD 超时（秒）；未设时 flashcli 默认 5。 |
+| `HF_HUB_DOWNLOAD_TIMEOUT` | `5` | Hub CLI：单次 HTTP 超时（秒）；未设时 flashcli 默认 5。 |
+| `FLASHCLI_HF_ETAG_TIMEOUT` | `5` | 仅当未设置 `HF_HUB_ETAG_TIMEOUT` 时生效。 |
+| `FLASHCLI_HF_DOWNLOAD_TIMEOUT` | `5` | 仅当未设置 `HF_HUB_DOWNLOAD_TIMEOUT` 时生效。 |
+| `FLASHCLI_HF_PROBE_TIMEOUT` | `3` | 探测官方 Hub 是否可达（秒）；不可达则跳过官方、直接镜像。 |
+| `FLASHCLI_SKIP_HF_PROBE` | `0` | 设为 `1` 时不做探测，仍先试官方（`hf` 内部会慢重试）。 |
 
-权重下载失败时，CLI 会提示检查 `HF_ENDPOINT` 与 `HF_TOKEN`。
+权重下载与 `hf download` 相同；失败时请先用相同 `HF_ENDPOINT` 手动试一次 CLI。
+
+`install.sh` / `pip install flashcli` 会安装 `huggingface_hub>=0.26`（提供 `hf` / `huggingface-cli`），安装后校验 Hub CLI；若脚本目录不在 PATH，flashcli 仍会回退到 `python -m huggingface_hub.cli.hf`。
 
 ## 行为开关
 

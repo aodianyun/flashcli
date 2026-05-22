@@ -7,10 +7,20 @@
 ## Requirements
 
 - **Linux** + **NVIDIA GPU** (verified on **SM89**, e.g. RTX 4090 / L40; bundle metadata also lists SM120)
-- **Python** 3.10–3.12
-- Network: first run pulls a runtime zip from CDN and model weights from Hugging Face; Pi0.5 also needs Google Storage (PaliGemma tokenizer)
+- **Python ≥ 3.10** (see [`pyproject.toml`](pyproject.toml)); `install.sh` installs **flashcli** and **`huggingface_hub`** (provides `hf download` / `huggingface-cli download`)
+- **Network**: first run pulls a runtime zip from CDN; weights download via Hub CLI (same as `HF_ENDPOINT` + `hf download`). For restricted networks: `export HF_ENDPOINT=https://hf-mirror.com`. Pi0.5 also needs Google Storage (PaliGemma tokenizer)
 
 ## Quick start
+
+One-line install (checks Linux, NVIDIA GPU, Python 3.10+, git; then pip installs flashcli):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
+```
+
+You can also host `install.sh` as `https://your-domain/install` and run `curl -fsSL https://your-domain/install | sh`. Optional: `FLASHCLI_INSTALL_REF` (branch/tag), `FLASHCLI_SKIP_GPU_CHECK=1`. As **root**, the installer uses a system-wide pip install (e.g. `/usr/local/bin`) so `flashcli` is on PATH without `~/.local/bin`.
+
+Or install manually:
 
 ```bash
 pip install git+https://github.com/aodianyun/flashcli
@@ -73,7 +83,7 @@ Common variables (full reference: **[docs/environment.md](docs/environment.md)**
 | `FLASHCLI_SKIP_AUTO_INSTALL=1` | Skip auto pip install of flashcli CLI deps (same as `--no-auto-install`) |
 | `FLASHCLI_SKIP_BUNDLE_ZIP=1` | Do not download `bundle.zip` from catalog |
 | `FLASHCLI_SKIP_BUNDLE_GIT=1` | Do not git-fetch bundles |
-| `HF_ENDPOINT` | Hugging Face Hub mirror (e.g. `https://hf-mirror.com`); auto-retries mirror if unset and Hub fails |
+| `HF_ENDPOINT` | Hugging Face Hub mirror (e.g. `https://hf-mirror.com`); default tries official Hub first, then mirror on failure |
 | `HF_TOKEN` | Hugging Face token for gated models (`huggingface_hub`) |
 | `FLASH_RT_PALIGEMMA_TOKENIZER` | Pi0.5 PaliGemma tokenizer file path |
 | `FLASHRT_QWEN36_MTP_CKPT_DIR` | Qwen3.6 MTP weights dir (or `--mtp-checkpoint`) |

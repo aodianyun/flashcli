@@ -1,27 +1,26 @@
-"""Unit tests for models.yaml bundle.variants resolution."""
+"""Unit tests for models.yaml bundle resolution (single source per preset)."""
 
 from __future__ import annotations
 
 import pytest
 
 from flashcli.bundle.catalog import (
-    BundleVariantNotFoundError,
-    catalog_variant_keys,
-    has_catalog_variants,
+    BundleCatalogError,
     resolve_effective_bundle_cfg,
     variant_dir_name,
 )
+from flashcli.bundle.runtime_env import host_python_minor
 from flashcli.models.registry import Preset
 from flashcli.runtime.detect import GpuInfo
 
 
-def _gpu(sm: str = "89", cuda: str = "130") -> GpuInfo:
+def _gpu(sm: str = "89", cuda: str = "124") -> GpuInfo:
     return GpuInfo(
         sm=sm,
         cuda_tag=cuda,
         os_name="linux",
         arch="x86_64",
-        recommended_torch_index="cu128",
+        recommended_torch_index="cu124",
         gpu_name="Test GPU",
     )
 
@@ -30,103 +29,20 @@ def _preset(raw: dict) -> Preset:
     return Preset(name="test", raw=raw)
 
 
-def test_legacy_single_zip():
-    p = _preset(
-        {
-            "bundle": {
-                "zip": "https://example.com/a.zip",
-            }
-        }
-    )
+def test_single_zip_cfg():
+    p = _preset({"bundle": {"zip": "https://example.com/bundle.zip"}})
     cfg, env = resolve_effective_bundle_cfg(p, gpu=_gpu(), require_gpu=False)
-    assert env == "sm89-cu130-linux-x86_64"
-    assert cfg["zip"] == "https://example.com/a.zip"
-    assert not has_catalog_variants(p)
+    assert cfg["zip"] == "https://example.com/bundle.zip"
+    assert env.endswith(f"-py{host_python_minor()}")
 
 
-def test_catalog_variant_exact_match():
-    p = _preset(
-        {
-            "bundle": {
-                "variants": {
-                    "sm89-cu130-linux-x86_64": {
-                        "zip": "https://example.com/sm89.zip",
-                    },
-                }
-            }
-        }
-    )
-    cfg, env = resolve_effective_bundle_cfg(p, gpu=_gpu())
-    assert env == "sm89-cu130-linux-x86_64"
-    assert cfg["zip"] == "https://example.com/sm89.zip"
-    assert catalog_variant_keys(p) == ["sm89-cu130-linux-x86_64"]
+def test_missing_source_raises():
+    p = _preset({"bundle": {"description": "x"}})
+    with pytest.raises(BundleCatalogError):
+        resolve_effective_bundle_cfg(p, require_gpu=False)
 
 
-def test_catalog_variant_missing_raises():
-    p = _preset(
-        {
-            "bundle": {
-                "variants": {
-                    "sm89-cu130-linux-x86_64": {"zip": "a.zip"},
-                }
-            }
-        }
-    )
-    with pytest.raises(BundleVariantNotFoundError) as exc:
-        resolve_effective_bundle_cfg(p, gpu=_gpu(sm="120", cuda="128"))
-    assert "sm120-cu128-linux-x86_64" in str(exc.value)
-    assert "sm89-cu130-linux-x86_64" in str(exc.value)
-
-
-def test_variant_dir_name():
-    assert variant_dir_name(_gpu()) == "sm89-cu130-linux-x86_64"
-
-
-def test_catalog_variant_fuzzy_cuda_within_family():
-    """cu124 host may use sm89-cu128 catalog entry (both CUDA 12.x)."""
-    p = _preset(
-        {
-            "bundle": {
-                "variants": {
-                    "sm89-cu128-linux-x86_64": {"zip": "https://example.com/sm89.zip"},
-                }
-            }
-        }
-    )
-    cfg, matched = resolve_effective_bundle_cfg(p, gpu=_gpu(sm="89", cuda="124"))
-    assert matched == "sm89-cu128-linux-x86_64"
-    assert cfg["zip"] == "https://example.com/sm89.zip"
-
-
-def test_catalog_variant_no_cross_cuda_major_families():
-    """cu124 must not auto-select sm89-cu130 (needs libcudart.so.13)."""
-    p = _preset(
-        {
-            "bundle": {
-                "variants": {
-                    "sm89-cu130-linux-x86_64": {"zip": "https://example.com/sm89.zip"},
-                }
-            }
-        }
-    )
-    with pytest.raises(BundleVariantNotFoundError) as exc:
-        resolve_effective_bundle_cfg(p, gpu=_gpu(sm="89", cuda="124"))
-    assert "sm89-cu124-linux-x86_64" in str(exc.value)
-    assert "libcudart" in str(exc.value) or "cu12" in str(exc.value).lower()
-
-
-def test_catalog_variant_alias():
-    url = "https://example.com/shared.zip"
-    p = _preset(
-        {
-            "bundle": {
-                "variants": {
-                    "sm89-cu130-linux-x86_64": {"zip": url},
-                    "sm120-cu128-linux-x86_64": "sm89-cu130-linux-x86_64",
-                }
-            }
-        }
-    )
-    cfg, env = resolve_effective_bundle_cfg(p, gpu=_gpu(sm="120", cuda="128"))
-    assert env == "sm120-cu128-linux-x86_64"
-    assert cfg["zip"] == url
+def test_runtime_env_includes_python():
+    p = _preset({"bundle": {"path": "bundles/pi05_libero"}})
+    _, env = resolve_effective_bundle_cfg(p, gpu=_gpu(sm="89", cuda="124"))
+    assert env == variant_dir_name(_gpu())

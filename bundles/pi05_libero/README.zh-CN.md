@@ -62,13 +62,18 @@ flashcli run pi05_libero --bundle "$(pwd)/bundles/pi05_libero" --image /path/to/
 
 bundle zip 只含 runtime；约 7.5GB 权重需从 Hub 拉取。K8s/内网若无法访问 `huggingface.co` 与 `hf-mirror.com`，会报此错误（多为网络/DNS/代理，而非仓库不存在）。
 
+flashcli 下载权重与官方 CLI 相同：设置 `HF_ENDPOINT` 后调用 `hf download`（或 `huggingface-cli download`）。**请先** `export HF_ENDPOINT=https://hf-mirror.com`，再执行 `flashcli pull/run`。
+
 ```bash
+# 诊断：用 GET（不要用 curl -I / HEAD，镜像可能对 HEAD 返回 308）
+curl -fsSL 'https://hf-mirror.com/api/models/lerobot/pi05_libero_finetuned_v044/revision/main' | head -c 80
+
 # 1) 清理不完整缓存后重试
 rm -rf ~/.flashcli/models/pi05_libero/checkpoint
 
-# 2) 优先走镜像（在 flashcli 之前 export）
+# 2) 与 hf download 相同：在启动 flashcli 之前 export
 export HF_ENDPOINT=https://hf-mirror.com
-# 或：export FLASHCLI_PREFER_HF_MIRROR=1
+# 未设置 HF_ENDPOINT 时默认先试官方 Hub，失败再试镜像；仅镜像优先：export FLASHCLI_PREFER_HF_MIRROR=1
 
 flashcli pull pi05_libero
 # 或带本地 bundle：

@@ -53,7 +53,6 @@ def doctor_main(
 
 @models_app.command("list")
 def models_list() -> None:
-    from flashcli.bundle.catalog import catalog_variant_keys, has_catalog_variants
     from flashcli.bundle.git import read_bundle_marker
     from flashcli.bundle.ref import resolve_requested_git_ref
     from flashcli.bundle.zip import is_preset_bundle_cached, zip_spec
@@ -79,9 +78,6 @@ def models_list() -> None:
                 want_ref = resolve_requested_git_ref(preset)
                 ref = marker.get("git_ref") or marker.get("version", want_ref)
                 bundle_state = f"bundle:cached ({variant} @{ref})"
-        elif has_catalog_variants(preset):
-            envs = ", ".join(catalog_variant_keys(preset))
-            bundle_state = f"bundle:missing (variants: {envs})"
         elif has_zip:
             bundle_state = "bundle:missing (want zip)"
         else:
@@ -97,12 +93,11 @@ def models_envs(
     ),
 ) -> None:
     """List bundle environments in models.yaml and the current machine match."""
-    from flashcli.bundle.catalog import (
-        catalog_variant_keys,
-        has_catalog_variants,
-        resolve_effective_bundle_cfg,
-        variant_dir_name,
-    )
+    from flashcli.bundle.catalog import resolve_effective_bundle_cfg, variant_dir_name
+    from flashcli.bundle.manifest import load_bundle_manifest
+    from flashcli.bundle.native_naming import list_native_artifacts
+    from flashcli.bundle.resolve import _local_bundle_ready
+    from flashcli.bundle.runtime_env import host_python_minor
     from flashcli.bundle.zip import zip_spec
     from flashcli.runtime.detect import detect_gpu
 
@@ -114,47 +109,64 @@ def models_envs(
     else:
         typer.echo(
             f"[i] This machine: {variant_dir_name(gpu)} "
-            f"({gpu.gpu_name or 'GPU'}, sm{gpu.sm}, cuda_tag={gpu.cuda_tag})"
+            f"({gpu.gpu_name or 'GPU'}, sm{gpu.sm}, cuda_tag={gpu.cuda_tag}, "
+            f"python={host_python_minor()})"
         )
     typer.echo("")
     for name in names:
         p = reg.get(name)
         typer.echo(f"{name}:")
-        if not has_catalog_variants(p):
-            typer.echo("  catalog: single bundle (zip/path/git at bundle top level)")
-            if gpu is not None:
-                try:
-                    cfg, env = resolve_effective_bundle_cfg(p, gpu=gpu, require_gpu=False)
-                    src = "zip" if cfg.get("zip") else "path" if cfg.get("path") else "git"
-                    typer.echo(f"  active: {env} -> {src}")
-                except Exception as exc:
-                    typer.echo(f"  active: error — {exc}")
-            continue
-        for env in catalog_variant_keys(p):
-            typer.echo(f"  - {env}")
-        if gpu is None:
-            continue
         try:
-            cfg, env = resolve_effective_bundle_cfg(p, gpu=gpu)
-            src = (
-                "zip"
-                if cfg.get("zip")
-                else "path"
-                if cfg.get("path")
-                else "git"
+            cfg, runtime_env = resolve_effective_bundle_cfg(
+                p, gpu=gpu, require_gpu=False
             )
-            spec = zip_spec(p) if src == "zip" else ""
-            detected = cfg.get("catalog_detected_env")
-            line = f"  -> match: {env} ({src}"
-            if detected and detected != env:
-                line += f", fuzzy from {detected}"
-            if spec:
-                label = spec if len(spec) <= 60 else spec[:57] + "..."
-                line += f": {label}"
-            line += ")"
-            typer.echo(line)
         except Exception as exc:
-            typer.echo(f"  -> no match: {exc}")
+            typer.echo(f"  catalog: error — {exc}")
+            continue
+        src = "zip" if cfg.get("zip") else "path" if cfg.get("path") else "git"
+        typer.echo(f"  catalog: single bundle ({src})")
+        if gpu is not None:
+            typer.echo(f"  runtime env: {runtime_env}")
+        path_str = str(cfg.get("path", "")).strip()
+        if path_str:
+            from pathlib import Path
+
+            root = Path(path_str).expanduser()
+            if not root.is_absolute():
+                root = (config.package_root().parent / root).resolve()
+            if _local_bundle_ready(root):
+                try:
+                    manifest = load_bundle_manifest(root)
+                    matrix = manifest.raw.get("native_matrix")
+                    if isinstance(matrix, list) and matrix:
+                        typer.echo(f"  lib/: {len(matrix)} native env(s) in bundle")
+                        for key in matrix[:8]:
+                            typer.echo(f"    - {key}")
+                        if len(matrix) > 8:
+                            typer.echo(f"    ... +{len(matrix) - 8} more")
+                    elif (root / "lib").is_dir():
+                        arts = list_native_artifacts(root / "lib")
+                        keys = sorted(
+                            {
+                                parsed.catalog_key()
+                                for items in arts.values()
+                                for parsed, _ in items
+                            }
+                        )
+                        if keys:
+                            typer.echo(f"  lib/: {len(keys)} native env(s)")
+                            for key in keys[:8]:
+                                typer.echo(f"    - {key}")
+                except Exception as exc:
+                    typer.echo(f"  lib/: (unreadable) {exc}")
+        if gpu is not None and cfg.get("zip"):
+            try:
+                spec = zip_spec(p)
+                if spec:
+                    label = spec if len(spec) <= 60 else spec[:57] + "..."
+                    typer.echo(f"  zip: {label}")
+            except Exception:
+                pass
 
 
 @models_app.command("refs")
@@ -211,7 +223,10 @@ def bundle_validate(
     from flashcli.bundle.native import verify_native_modules
 
     try:
-        verify_native_modules(bundle)
+        from flashcli.runtime.detect import detect_gpu
+
+        _gpu = detect_gpu()
+        verify_native_modules(bundle, gpu=_gpu)
     except RuntimeError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(1) from exc

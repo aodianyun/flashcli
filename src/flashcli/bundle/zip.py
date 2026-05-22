@@ -18,7 +18,6 @@ from flashcli.bundle.catalog import effective_bundle_cfg_for_preset
 from flashcli.bundle.git import (
     _write_marker,
     bundle_preset_cache,
-    find_bundle_root_in_clone,
     read_bundle_marker,
     variant_dir_name,
 )
@@ -94,15 +93,6 @@ def find_bundle_root_in_extracted(
     """Locate ``flashcli-bundle.json`` after extracting a zip."""
     if is_bundle_root(extract_root):
         return extract_root.resolve()
-
-    variants_root = extract_root / "variants"
-    if variants_root.is_dir():
-        if gpu is None:
-            gpu = detect_gpu_or_raise()
-        cfg = bundle_cfg or effective_bundle_cfg_for_preset(preset, gpu=gpu)
-        return find_bundle_root_in_clone(
-            extract_root, preset, gpu, bundle_cfg=cfg
-        )
 
     children = [
         p

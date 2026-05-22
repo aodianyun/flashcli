@@ -8,15 +8,9 @@ from pathlib import Path
 from flashcli import config
 from flashcli.bundle.catalog import (
     BundleCatalogError,
-    BundleVariantNotFoundError,
     effective_bundle_cfg_for_preset,
 )
-from flashcli.bundle.git import (
-    ensure_bundle_from_git,
-    find_bundle_root_in_clone,
-    resolve_cached_bundle_root,
-)
-from flashcli.runtime.detect import detect_gpu_or_raise
+from flashcli.bundle.git import ensure_bundle_from_git, resolve_cached_bundle_root
 from flashcli.bundle.manifest import (
     bundle_format_version,
     bundle_modules,
@@ -80,6 +74,10 @@ def _legacy_bundle_ready(root: Path, data: dict) -> bool:
 def _v2_bundle_ready(root: Path, data: dict) -> bool:
     if not isinstance(data.get("python_dependencies"), dict):
         return False
+    if data.get("native_layout") == "matrix" or data.get("native_matrix"):
+        native_lib = root / "lib"
+        if native_lib.is_dir() and any(native_lib.glob("flash_rt_kernels*.so")):
+            return _entry_files_present(root, data)
     try:
         bundle = load_bundle_manifest(root)
     except (FileNotFoundError, ValueError, json.JSONDecodeError):
@@ -130,7 +128,7 @@ def resolve_bundle_root(
 
     try:
         cfg = effective_bundle_cfg_for_preset(preset)
-    except (BundleCatalogError, BundleVariantNotFoundError):
+    except BundleCatalogError:
         raise
 
     if cfg.get("path"):
@@ -139,12 +137,6 @@ def resolve_bundle_root(
             raise FileNotFoundError(f"Bundle path not found: {root}")
         if _local_bundle_ready(root):
             return root
-        variants_subdir = str(cfg.get("variants_dir", "variants")).strip() or "variants"
-        if (root / variants_subdir).is_dir():
-            gpu = detect_gpu_or_raise()
-            return find_bundle_root_in_clone(
-                root, preset, gpu, bundle_cfg=cfg
-            )
         build_hint = root / "build.sh"
         hint = (
             f" Run: bash {build_hint}"
