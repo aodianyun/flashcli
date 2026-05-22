@@ -112,6 +112,20 @@ def find_bundle_root_in_extracted(
     )
 
 
+def _is_valid_zip_file(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        return path.stat().st_size > 0 and zipfile.is_zipfile(path)
+    except OSError:
+        return False
+
+
+def _remove_invalid_zip(path: Path) -> None:
+    if path.is_file() and not _is_valid_zip_file(path):
+        path.unlink(missing_ok=True)
+
+
 def _safe_extract(archive: Path, dest: Path) -> None:
     dest = dest.resolve()
     dest.mkdir(parents=True, exist_ok=True)
@@ -127,19 +141,35 @@ def _safe_extract(archive: Path, dest: Path) -> None:
 
 def _download_zip(url: str, dest: Path, *, quiet: bool) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    if dest.is_file() and dest.stat().st_size > 0:
+    if _is_valid_zip_file(dest):
         return
+    _remove_invalid_zip(dest)
+
+    partial = dest.with_name(f"{dest.name}.part")
+    partial.unlink(missing_ok=True)
     if not quiet:
-        print(f"Downloading bundle zip ...")
+        print("Downloading bundle zip ...")
     req = urllib.request.Request(  # noqa: S310
         url,
         headers={"User-Agent": f"flashcli/{config.__version__}"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=600) as resp, dest.open("wb") as out:
+        with urllib.request.urlopen(req, timeout=600) as resp, partial.open("wb") as out:
             shutil.copyfileobj(resp, out, length=1024 * 1024)
     except urllib.error.URLError as exc:
+        partial.unlink(missing_ok=True)
         raise RuntimeError(f"Failed to download bundle zip: {exc}") from exc
+    except BaseException:
+        partial.unlink(missing_ok=True)
+        raise
+
+    if not _is_valid_zip_file(partial):
+        partial.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"Downloaded bundle zip is incomplete or corrupt: {dest}. "
+            "Retry the command; if it persists, check network/CDN access."
+        )
+    partial.replace(dest)
 
 
 def _prepare_zip_archive(spec: str, work: Path, *, quiet: bool) -> Path:
@@ -148,10 +178,17 @@ def _prepare_zip_archive(spec: str, work: Path, *, quiet: bool) -> Path:
     parsed = urlparse(resolved)
     if parsed.scheme in ("http", "https"):
         _download_zip(resolved, archive, quiet=quiet)
+        if not _is_valid_zip_file(archive):
+            raise RuntimeError(
+                f"Bundle zip missing or corrupt at {archive}. "
+                f"Remove {work} and retry, or pass --bundle with a local zip."
+            )
         return archive
     local = Path(resolved)
     if not local.is_file():
         raise FileNotFoundError(f"Bundle zip not found: {local}")
+    if not _is_valid_zip_file(local):
+        raise RuntimeError(f"Local bundle zip is not a valid zip: {local}")
     if local.resolve() != archive.resolve():
         if archive.is_file():
             archive.unlink()
@@ -202,7 +239,19 @@ def ensure_bundle_from_zip(
         extract_dir.mkdir(parents=True, exist_ok=True)
         if not quiet:
             print(f"Extracting bundle zip -> {extract_dir} ...")
-        _safe_extract(archive, extract_dir)
+        try:
+            _safe_extract(archive, extract_dir)
+        except zipfile.BadZipFile:
+            archive.unlink(missing_ok=True)
+            if extract_dir.is_dir():
+                shutil.rmtree(extract_dir)
+            if not quiet:
+                print("Bundle zip was corrupt; re-downloading ...")
+            archive = _prepare_zip_archive(spec, work, quiet=quiet)
+            extract_dir.mkdir(parents=True, exist_ok=True)
+            if not quiet:
+                print(f"Extracting bundle zip -> {extract_dir} ...")
+            _safe_extract(archive, extract_dir)
 
     gpu = detect_gpu_or_raise()
     bundle_cfg = effective_bundle_cfg_for_preset(preset, gpu=gpu)

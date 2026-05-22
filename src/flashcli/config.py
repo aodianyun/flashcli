@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 
-__version__ = "0.1.0"
+from flashcli._version import __version__
 
 FLASHCLI_HOME = Path(
     os.environ.get("FLASHCLI_HOME", Path.home() / ".flashcli")

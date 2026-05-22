@@ -7,7 +7,7 @@ from typing import Optional
 
 import typer
 
-from flashcli import config
+from flashcli import __version__, config
 from flashcli.doctor import run_check, run_install
 from flashcli.env import ensure_environment
 from flashcli.models import cache as model_cache
@@ -24,6 +24,27 @@ bundle_app = typer.Typer(help="Model bundle utilities.")
 app.add_typer(doctor_app, name="doctor")
 app.add_typer(models_app, name="models")
 app.add_typer(bundle_app, name="bundle")
+
+
+def _version_callback(value: bool | None) -> None:
+    if value:
+        typer.echo(__version__)
+        raise typer.Exit()
+
+
+@app.callback()
+def _root(
+    version: bool | None = typer.Option(
+        None,
+        "--version",
+        "-V",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show version and exit.",
+    ),
+) -> None:
+    """FlashRT distribution CLI."""
+    del version
 
 
 def _auto_install_flag(no_auto_install: bool) -> bool:
