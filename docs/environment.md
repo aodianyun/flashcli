@@ -29,7 +29,8 @@ flashcli models list
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HF_ENDPOINT` | (official Hub) | Hugging Face Hub API base URL. Mirror example: `https://hf-mirror.com`. Used by `snapshot_download` in `models/pull.py`. |
+| `HF_ENDPOINT` | (official Hub) | Hugging Face Hub API base URL. Mirror example: `https://hf-mirror.com` ([HF-Mirror](https://hf-mirror.com)). Used by `snapshot_download`. |
+| (automatic) | — | If `HF_ENDPOINT` is **not** set in spec or env and the default Hub fails, flashcli **retries once** with `https://hf-mirror.com`. |
 | `HF_TOKEN` | (none) | Hugging Face access token; **not flashcli-specific** — read by `huggingface_hub`. Gated repos need `huggingface-cli login` or this variable. |
 
 On download failure, the CLI suggests checking `HF_ENDPOINT` and `HF_TOKEN`.

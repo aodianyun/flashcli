@@ -29,7 +29,8 @@ flashcli models list
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `HF_ENDPOINT` | （官方 Hub） | Hugging Face Hub API 地址。国内镜像示例：`https://hf-mirror.com`。在 `snapshot_download` 时使用（见 `models/pull.py`）。 |
+| `HF_ENDPOINT` | （官方 Hub） | Hugging Face Hub API 地址。国内镜像示例：`https://hf-mirror.com`（[HF-Mirror](https://hf-mirror.com)）。在 `snapshot_download` 时使用。 |
+| （自动） | — | 若**未**在 spec / 环境中设置 `HF_ENDPOINT`，且访问官方 Hub 失败，flashcli 会**自动**用 `https://hf-mirror.com` 再试一次。 |
 | `HF_TOKEN` | （无） | Hugging Face 访问令牌；**非 flashcli 专有**，由 `huggingface_hub` 读取。gated 模型需 `huggingface-cli login` 或设置此变量。 |
 
 权重下载失败时，CLI 会提示检查 `HF_ENDPOINT` 与 `HF_TOKEN`。

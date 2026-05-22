@@ -73,7 +73,7 @@ Common variables (full reference: **[docs/environment.md](docs/environment.md)**
 | `FLASHCLI_SKIP_AUTO_INSTALL=1` | Skip auto pip install of flashcli CLI deps (same as `--no-auto-install`) |
 | `FLASHCLI_SKIP_BUNDLE_ZIP=1` | Do not download `bundle.zip` from catalog |
 | `FLASHCLI_SKIP_BUNDLE_GIT=1` | Do not git-fetch bundles |
-| `HF_ENDPOINT` | Hugging Face Hub mirror (e.g. `https://hf-mirror.com`) |
+| `HF_ENDPOINT` | Hugging Face Hub mirror (e.g. `https://hf-mirror.com`); auto-retries mirror if unset and Hub fails |
 | `HF_TOKEN` | Hugging Face token for gated models (`huggingface_hub`) |
 | `FLASH_RT_PALIGEMMA_TOKENIZER` | Pi0.5 PaliGemma tokenizer file path |
 | `FLASHRT_QWEN36_MTP_CKPT_DIR` | Qwen3.6 MTP weights dir (or `--mtp-checkpoint`) |

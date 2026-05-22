@@ -10,6 +10,9 @@ from typing import Any
 from flashcli import config
 from flashcli.models.registry import Preset
 
+# Default China mirror when HF_ENDPOINT is unset and the official Hub fails.
+HF_MIRROR_ENDPOINT = "https://hf-mirror.com"
+
 
 def _format_env_value(value: str) -> str:
     return value.format(models_dir=str(config.MODELS_DIR))
@@ -25,23 +28,27 @@ def apply_preset_env(preset: Preset) -> None:
             os.environ[key] = _format_env_value(value)
 
 
-def _download_huggingface(
-    spec: dict[str, Any],
+def _hf_endpoint_configured(spec: dict[str, Any]) -> tuple[str, bool]:
+    """Return (endpoint URL, True if set in spec or HF_ENDPOINT env)."""
+    from_spec = str(spec.get("endpoint", "")).strip()
+    if from_spec:
+        return from_spec, True
+    from_env = os.environ.get("HF_ENDPOINT", "").strip()
+    if from_env:
+        return from_env, True
+    return "", False
+
+
+def _snapshot_download(
+    repo: str,
     dest: Path,
     *,
+    revision: Any,
+    endpoint: str,
     quiet: bool,
 ) -> None:
-    repo = str(spec.get("repo", "")).strip()
-    if not repo:
-        raise ValueError("HuggingFace weights spec requires non-empty 'repo'")
-
     from huggingface_hub import snapshot_download
 
-    dest.mkdir(parents=True, exist_ok=True)
-    revision = spec.get("revision")
-    endpoint = str(spec.get("endpoint", "")).strip() or os.environ.get(
-        "HF_ENDPOINT", ""
-    ).strip()
     kwargs: dict[str, Any] = {
         "repo_id": repo,
         "local_dir": str(dest),
@@ -53,26 +60,72 @@ def _download_huggingface(
         kwargs["endpoint"] = endpoint
     if quiet:
         os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+    snapshot_download(**kwargs)
+
+
+def _download_huggingface(
+    spec: dict[str, Any],
+    dest: Path,
+    *,
+    quiet: bool,
+) -> None:
+    repo = str(spec.get("repo", "")).strip()
+    if not repo:
+        raise ValueError("HuggingFace weights spec requires non-empty 'repo'")
+
+    dest.mkdir(parents=True, exist_ok=True)
+    revision = spec.get("revision")
+    endpoint, explicit = _hf_endpoint_configured(spec)
+
+    errors: list[tuple[str, Exception]] = []
 
     try:
-        snapshot_download(**kwargs)
-    except Exception as exc:
-        rev_note = f" revision={revision!r}" if revision else ""
-        mirror_note = (
-            f"\n  HF endpoint: {endpoint}"
-            if endpoint
-            else "\n  Tip (China/mirror): export HF_ENDPOINT=https://hf-mirror.com"
+        _snapshot_download(
+            repo, dest, revision=revision, endpoint=endpoint, quiet=quiet
         )
-        raise RuntimeError(
-            f"Failed to download HuggingFace repo {repo!r}{rev_note} -> {dest}\n"
-            "  Checks:\n"
-            "  - Network/VPN/proxy to huggingface.co (or your HF_ENDPOINT mirror)\n"
-            "  - Gated repo: run `huggingface-cli login` or set HF_TOKEN\n"
-            "  - Stale partial cache: rm -rf the destination dir and retry\n"
-            "  - Local weights: flashcli run <preset> --checkpoint /path/to/ckpt\n"
-            f"{mirror_note}\n"
-            f"  Original: {type(exc).__name__}: {exc}"
-        ) from exc
+        return
+    except Exception as exc:
+        errors.append((endpoint or "huggingface.co (default)", exc))
+
+    if not explicit:
+        if not quiet:
+            print(
+                f"HuggingFace download failed; retrying via mirror {HF_MIRROR_ENDPOINT} ..."
+            )
+        try:
+            _snapshot_download(
+                repo,
+                dest,
+                revision=revision,
+                endpoint=HF_MIRROR_ENDPOINT,
+                quiet=quiet,
+            )
+            if not quiet:
+                print(f"Download succeeded via {HF_MIRROR_ENDPOINT}")
+            return
+        except Exception as exc:
+            errors.append((HF_MIRROR_ENDPOINT, exc))
+
+    rev_note = f" revision={revision!r}" if revision else ""
+    attempts = "\n".join(
+        f"  - {ep}: {type(err).__name__}: {err}" for ep, err in errors
+    )
+    mirror_note = (
+        f"\n  HF endpoint was set to {endpoint!r} (no automatic mirror retry)."
+        if explicit
+        else f"\n  Automatic mirror retry used {HF_MIRROR_ENDPOINT!r} after default Hub failed."
+    )
+    raise RuntimeError(
+        f"Failed to download HuggingFace repo {repo!r}{rev_note} -> {dest}\n"
+        "  Attempts:\n"
+        f"{attempts}\n"
+        "  Checks:\n"
+        "  - Network/VPN/proxy to huggingface.co (or export HF_ENDPOINT=https://hf-mirror.com)\n"
+        "  - Gated repo: run `huggingface-cli login` or set HF_TOKEN\n"
+        "  - Stale partial cache: rm -rf the destination dir and retry\n"
+        "  - Local weights: flashcli run <preset> --checkpoint /path/to/ckpt"
+        f"{mirror_note}"
+    )
 
 
 def _run_post_pull(preset: Preset, checkpoint_dir: Path, *, quiet: bool) -> None:

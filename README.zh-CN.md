@@ -73,7 +73,7 @@ flashcli models envs pi05_libero
 | `FLASHCLI_SKIP_AUTO_INSTALL=1` | 不自动 pip 安装 flashcli CLI 依赖（同 `--no-auto-install`） |
 | `FLASHCLI_SKIP_BUNDLE_ZIP=1` | 禁止下载 catalog 中的 `bundle.zip` |
 | `FLASHCLI_SKIP_BUNDLE_GIT=1` | 禁止 git 拉取 bundle |
-| `HF_ENDPOINT` | Hugging Face 镜像地址（如 `https://hf-mirror.com`） |
+| `HF_ENDPOINT` | Hugging Face 镜像地址（如 `https://hf-mirror.com`）；未设置且官方 Hub 失败时会自动试镜像 |
 | `HF_TOKEN` | Hugging Face 令牌（gated 模型；由 `huggingface_hub` 使用） |
 | `FLASH_RT_PALIGEMMA_TOKENIZER` | Pi0.5 PaliGemma tokenizer 文件路径 |
 | `FLASHRT_QWEN36_MTP_CKPT_DIR` | Qwen3.6 MTP 权重目录（或由 `--mtp-checkpoint` 设置） |
