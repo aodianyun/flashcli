@@ -82,6 +82,23 @@ def test_variant_dir_name():
     assert variant_dir_name(_gpu()) == "sm89-cu130-linux-x86_64"
 
 
+def test_catalog_variant_fuzzy_cuda_tag():
+    """RTX 4060 Ti with nvcc cu124 can use sm89-cu130 catalog entry."""
+    p = _preset(
+        {
+            "bundle": {
+                "variants": {
+                    "sm89-cu130-linux-x86_64": {"zip": "https://example.com/sm89.zip"},
+                }
+            }
+        }
+    )
+    cfg, matched = resolve_effective_bundle_cfg(p, gpu=_gpu(sm="89", cuda="124"))
+    assert matched == "sm89-cu130-linux-x86_64"
+    assert cfg["zip"] == "https://example.com/sm89.zip"
+    assert cfg.get("catalog_detected_env") == "sm89-cu124-linux-x86_64"
+
+
 def test_catalog_variant_alias():
     url = "https://example.com/shared.zip"
     p = _preset(

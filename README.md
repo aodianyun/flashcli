@@ -14,9 +14,7 @@
 
 ```bash
 pip install git+https://github.com/aodianyun/flashcli
-
-flashcli doctor
-flashcli models list
+# pip install --force-reinstall git+https://github.com/aodianyun/flashcli.git
 
 flashcli run pi05_libero \
   --prompt "pick up the red block and place it in the tray" \

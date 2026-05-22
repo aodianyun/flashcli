@@ -8,6 +8,7 @@
 #   2) 多环境：bundle.variants.<sm*-cu*-os-arch> 各配 zip / path / git
 #      - 多环境可指向同一 zip（复制 URL，或写别名见下）
 #      - 别名：sm120-cu128-linux-x86_64: sm89-cu130-linux-x86_64  （复用另一环境的源）
+#      - 未写精确 cu 标签时按 SM/OS/arch 模糊匹配（如本机 cu124 可选用 sm89-cu130 条目）
 
 schema_version: 4
 
@@ -20,6 +21,7 @@ models:
         sm89-cu130-linux-x86_64:
           zip: https://cdn.flashhub.top/repo/5/versions/6/flashcli-bundle-pi05-main-sm89-cu130-linux-x86_64.zip
         # SM120 与 SM89 共用同一 runtime zip（flashcli-bundle.json requires.sm 含 89/120）
+        sm89-cu124-linux-x86_64: sm89-cu130-linux-x86_64
         sm120-cu128-linux-x86_64: sm89-cu130-linux-x86_64
       # 若所有环境同一包，也可不写 variants，仅用顶层 zip:（见文档）
       # zip: https://cdn.flashhub.top/repo/5/versions/6/flashcli-bundle-pi05-main-sm89-cu130-linux-x86_64.zip

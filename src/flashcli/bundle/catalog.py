@@ -11,6 +11,58 @@ from flashcli.runtime.detect import GpuInfo, detect_gpu, detect_gpu_or_raise
 def variant_dir_name(gpu: GpuInfo) -> str:
     return f"sm{gpu.sm}-cu{gpu.cuda_tag}-{gpu.os_name}-{gpu.arch}"
 
+
+def _parse_variant_key(name: str) -> tuple[str | None, str | None, str | None, str | None]:
+    """Parse ``sm89-cu130-linux-x86_64`` into (sm, cuda_tag, os, arch)."""
+    parts = name.split("-")
+    sm = cuda = None
+    os_name: str | None = None
+    arch: str | None = None
+    for part in parts:
+        if part.startswith("sm") and len(part) > 2:
+            sm = part[2:]
+        elif part.startswith("cu") and len(part) > 2:
+            cuda = part[2:]
+    if len(parts) >= 4 and parts[-2] and parts[-1]:
+        os_name = parts[-2]
+        arch = parts[-1]
+    return sm, cuda, os_name, arch
+
+
+def _score_variant_key(key: str, gpu: GpuInfo) -> int:
+    sm, cuda, os_name, arch = _parse_variant_key(key)
+    score = 0
+    if sm == gpu.sm:
+        score += 10
+    if cuda and cuda == gpu.cuda_tag:
+        score += 5
+    if os_name and os_name == gpu.os_name:
+        score += 2
+    if arch and arch == gpu.arch:
+        score += 2
+    return score
+
+
+def _pick_catalog_variant_key(variants: dict[str, Any], gpu: GpuInfo) -> str | None:
+    """Exact env key first, then best fuzzy match (SM required via score > 0)."""
+    exact = variant_dir_name(gpu)
+    if exact in variants:
+        return exact
+
+    candidates: list[tuple[int, str]] = []
+    for key in variants:
+        name = str(key).strip()
+        if not name:
+            continue
+        score = _score_variant_key(name, gpu)
+        if score > 0:
+            candidates.append((score, name))
+
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: (-x[0], x[1]))
+    return candidates[0][1]
+
 # Keys copied from the parent ``bundle`` block into each catalog variant entry.
 _SHARED_KEYS = frozenset({"refs", "versions", "variants_dir"})
 
@@ -145,8 +197,9 @@ def resolve_effective_bundle_cfg(
 ) -> tuple[dict[str, Any], str]:
     """Return (effective bundle cfg, environment key ``sm*-cu*-os-arch``).
 
-    When ``bundle.variants`` is set, the entry for the current machine must exist
-    (exact ``variant_dir_name`` match). Otherwise the top-level ``zip`` / ``path`` /
+    When ``bundle.variants`` is set, pick an entry by exact ``variant_dir_name`` or
+    fuzzy match (same SM / OS / arch; CUDA tag may differ, e.g. cu124 vs cu130).
+    Otherwise the top-level ``zip`` / ``path`` /
     ``git`` is used for all environments; zip/git trees may still contain inner
     ``variants/`` for artifact-level selection.
     """
@@ -173,24 +226,27 @@ def resolve_effective_bundle_cfg(
                 )
 
     assert gpu is not None
-    env_key = variant_dir_name(gpu)
-    entry_raw = variants.get(env_key)
-    if entry_raw is None:
+    detected_env = variant_dir_name(gpu)
+    matched_key = _pick_catalog_variant_key(variants, gpu)
+    if matched_key is None:
         raise BundleVariantNotFoundError(
             preset.name,
-            wanted=env_key,
+            wanted=detected_env,
             available=catalog_variant_keys(preset),
             gpu=gpu,
         )
 
-    entry = _resolve_variant_entry(variants, env_key, entry_raw)
+    entry_raw = variants[matched_key]
+    entry = _resolve_variant_entry(variants, matched_key, entry_raw)
     if not any(entry.get(k) for k in _SOURCE_KEYS):
         raise BundleCatalogError(
-            f"Preset {preset.name!r} bundle.variants[{env_key!r}] must set "
+            f"Preset {preset.name!r} bundle.variants[{matched_key!r}] must set "
             "one of: zip, path, git"
         )
 
-    return _merge_variant_cfg(raw, env_key, entry), env_key
+    merged = _merge_variant_cfg(raw, matched_key, entry)
+    merged["catalog_detected_env"] = detected_env
+    return merged, matched_key
 
 
 def effective_bundle_cfg_for_preset(

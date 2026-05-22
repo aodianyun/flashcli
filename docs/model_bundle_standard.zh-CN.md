@@ -201,6 +201,8 @@ models:
 
 **多环境共用同一 zip**（例如 SM89 包在 SM120 上可跑）：各环境键都要存在，可写相同 `zip`，或用**别名**指向另一环境键，或用 YAML anchor（`&id` / `*id`）。
 
+未配置精确 `sm*-cu*-os-arch` 时，flashcli 按 **SM / OS / arch** 模糊匹配 catalog 条目（CUDA 标签可不同，例如本机 `cu124` 可选用 `sm89-cu130` 的 zip）。
+
 ```yaml
 models:
   pi05_libero:

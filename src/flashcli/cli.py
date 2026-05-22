@@ -144,7 +144,10 @@ def models_envs(
                 else "git"
             )
             spec = zip_spec(p) if src == "zip" else ""
+            detected = cfg.get("catalog_detected_env")
             line = f"  -> match: {env} ({src}"
+            if detected and detected != env:
+                line += f", fuzzy from {detected}"
             if spec:
                 label = spec if len(spec) <= 60 else spec[:57] + "..."
                 line += f": {label}"
