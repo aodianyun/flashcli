@@ -29,6 +29,16 @@ def _parse_variant_key(name: str) -> tuple[str | None, str | None, str | None, s
     return sm, cuda, os_name, arch
 
 
+def _cuda_runtime_family(cuda_tag: str) -> str:
+    """Group CUDA tags for fuzzy catalog match (12.x vs 13.x runtime)."""
+    tag = cuda_tag.strip()
+    if tag.startswith("13") or tag in ("130",):
+        return "13"
+    if tag.startswith("12") or tag in ("124", "128", "120"):
+        return "12"
+    return tag[:2] if len(tag) >= 2 else tag
+
+
 def _score_variant_key(key: str, gpu: GpuInfo) -> int:
     sm, cuda, os_name, arch = _parse_variant_key(key)
     score = 0
@@ -36,6 +46,8 @@ def _score_variant_key(key: str, gpu: GpuInfo) -> int:
         score += 10
     if cuda and cuda == gpu.cuda_tag:
         score += 5
+    elif cuda and _cuda_runtime_family(cuda) == _cuda_runtime_family(gpu.cuda_tag):
+        score += 3
     if os_name and os_name == gpu.os_name:
         score += 2
     if arch and arch == gpu.arch:
@@ -44,15 +56,21 @@ def _score_variant_key(key: str, gpu: GpuInfo) -> int:
 
 
 def _pick_catalog_variant_key(variants: dict[str, Any], gpu: GpuInfo) -> str | None:
-    """Exact env key first, then best fuzzy match (SM required via score > 0)."""
+    """Exact env key first, then fuzzy match (same SM; CUDA 12.x↔12.x only, not 12→13)."""
     exact = variant_dir_name(gpu)
     if exact in variants:
         return exact
 
+    host_family = _cuda_runtime_family(gpu.cuda_tag)
     candidates: list[tuple[int, str]] = []
     for key in variants:
         name = str(key).strip()
         if not name:
+            continue
+        _sm, cuda, _os, _arch = _parse_variant_key(name)
+        if _sm != gpu.sm:
+            continue
+        if cuda and _cuda_runtime_family(cuda) != host_family:
             continue
         score = _score_variant_key(name, gpu)
         if score > 0:
@@ -96,9 +114,17 @@ class BundleVariantNotFoundError(BundleCatalogError):
                 f"\n  Detected GPU: {gpu.gpu_name or 'NVIDIA GPU'} "
                 f"(sm{gpu.sm}, cuda_tag={gpu.cuda_tag}, {gpu.os_name}-{gpu.arch})"
             )
+        cuda_hint = ""
+        if gpu is not None:
+            fam = _cuda_runtime_family(gpu.cuda_tag)
+            cuda_hint = (
+                f"\n  Note: CUDA {fam}.x runtime on host (cuda_tag={gpu.cuda_tag}); "
+                f"do not use a cu13x-built zip on cu12x without matching libcudart. "
+                f"Add a {wanted} entry or install the bundle's CUDA runtime libraries."
+            )
         super().__init__(
             f"No bundle configured in models.yaml for preset {preset_name!r} "
-            f"and environment {wanted!r}.{gpu_line}\n"
+            f"and environment {wanted!r}.{gpu_line}{cuda_hint}\n"
             f"  Add under bundle.variants:\n"
             f"    {wanted}:\n"
             f"      zip: ...   # or path: / git:\n"

@@ -23,9 +23,27 @@ def _load_extension_from_path(path: Path, module_name: str) -> Any:
     spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Cannot load native module from {path}")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    try:
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except ImportError as exc:
+        msg = str(exc)
+        if "libcudart" in msg or "libcuda" in msg or "cuda" in msg.lower():
+            raise RuntimeError(
+                f"Failed to load native module {path.name}: {exc}\n"
+                "  The bundle .so was built against a CUDA runtime that is not on "
+                "LD_LIBRARY_PATH in this environment.\n"
+                "  Examples:\n"
+                "  - cu130 bundles need libcudart.so.13 (CUDA 13.x user-space libs)\n"
+                "  - cu124 hosts need an sm*-cu124-* zip or matching runtime packages\n"
+                "  Fixes:\n"
+                "  - Install the bundle's CUDA runtime and export LD_LIBRARY_PATH, or\n"
+                "  - Add a catalog entry for your cuda_tag in "
+                "src/flashcli/catalog/models.yaml, or\n"
+                "  - flashcli run <preset> --bundle /path/to/matching/bundle"
+            ) from exc
+        raise
 
 
 def register_native_modules(bundle: BundleManifest) -> list[str]:

@@ -91,7 +91,7 @@ sequenceDiagram
 
 | Preset | capabilities | bundle 源 |
 |--------|--------------|---------|
-| `pi05_libero` | `run` | `bundle.variants`（当前 CDN：sm89-cu130-linux-x86_64） |
+| `pi05_libero` | `run` | `bundle.variants`（当前 CDN：sm89-cu124-linux-x86_64） |
 
 ## 相关文档
 

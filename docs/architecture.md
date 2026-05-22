@@ -91,7 +91,7 @@ Legacy `runtime/manifest.json` + `runtime/python/partner/` remain supported; see
 
 | Preset | capabilities | bundle source |
 |--------|--------------|---------------|
-| `pi05_libero` | `run` | `bundle.variants` (CDN: sm89-cu130-linux-x86_64 today) |
+| `pi05_libero` | `run` | `bundle.variants` (CDN: sm89-cu124-linux-x86_64 today) |
 
 ## Related docs
 

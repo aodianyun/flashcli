@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# Pack pi05_libero for CDN release — runtime files only (no README/build.sh/requirements-runtime.txt).
+#
+# Usage:
+#   bash pack.sh
+#   bash pack.sh --output /tmp/pi05_libero-sm89-cu124-linux-x86_64.zip
+#   bash pack.sh --sm 89 --cuda-tag 124
+#
+set -euo pipefail
+
+BUNDLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+OUTPUT=""
+SM=""
+CUDA_TAG=""
+OS_NAME="linux"
+ARCH="x86_64"
+GIT_REF="main"
+
+usage() {
+  cat <<EOF
+Create a release zip with only files required to run inference.
+
+Usage:
+  bash pack.sh [OPTIONS]
+
+Options:
+  --output PATH     Output .zip path (default: ./dist/flashcli-bundle-pi05-<ref>-sm<SM>-cu<CUDA>-<os>-<arch>.zip)
+  --sm SM           SM label in archive name (default: 89)
+  --cuda-tag TAG    CUDA tag without 'cu' prefix, e.g. 124 (default: auto from nvcc, else 124)
+  --git-ref REF     Git ref segment in archive name (default: main)
+  -h, --help
+EOF
+}
+
+log() { printf '[pi05-pack] %s\n' "$*" >&2; }
+die() { log "ERROR: $*"; exit 1; }
+
+detect_cuda_tag() {
+  if command -v nvcc >/dev/null 2>&1; then
+    local ver
+    ver="$(nvcc --version | sed -n 's/.*release \([0-9]*\.[0-9]*\).*/\1/p' | head -1)"
+    case "${ver}" in
+      12.4|12.5|12.6) CUDA_TAG="124" ;;
+      12.8|12.9) CUDA_TAG="128" ;;
+      13.*) CUDA_TAG="130" ;;
+      *)
+        CUDA_TAG="${ver//./}"
+        CUDA_TAG="${CUDA_TAG:0:3}"
+        ;;
+    esac
+    log "cuda_tag=${CUDA_TAG} (nvcc ${ver})"
+    return
+  fi
+  CUDA_TAG="124"
+  log "cuda_tag=${CUDA_TAG} (nvcc not found; default)"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output) OUTPUT="$2"; shift 2 ;;
+    --sm) SM="$2"; shift 2 ;;
+    --cuda-tag) CUDA_TAG="$2"; shift 2 ;;
+    --git-ref) GIT_REF="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) die "Unknown option: $1" ;;
+  esac
+done
+
+SM="${SM:-89}"
+if [[ -z "${CUDA_TAG}" ]]; then
+  detect_cuda_tag
+fi
+
+[[ -f "${BUNDLE_DIR}/flashcli-bundle.json" ]] || die "Missing flashcli-bundle.json"
+[[ -f "${BUNDLE_DIR}/run.py" ]] || die "Missing run.py"
+[[ -f "${BUNDLE_DIR}/_pi05_compat.py" ]] || die "Missing _pi05_compat.py"
+[[ -f "${BUNDLE_DIR}/flash_rt_kernels.so" ]] || die "Missing flash_rt_kernels.so (run build.sh first)"
+[[ -f "${BUNDLE_DIR}/flash_rt_fa2.so" ]] || die "Missing flash_rt_fa2.so (run build.sh first)"
+[[ -d "${BUNDLE_DIR}/flash_rt" ]] || die "Missing flash_rt/ (run build.sh first)"
+
+ARCHIVE_NAME="flashcli-bundle-pi05-${GIT_REF}-sm${SM}-cu${CUDA_TAG}-${OS_NAME}-${ARCH}"
+STAGE="$(mktemp -d)"
+trap 'rm -rf "${STAGE}"' EXIT
+
+STAGE_ROOT="${STAGE}/${ARCHIVE_NAME}"
+mkdir -p "${STAGE_ROOT}"
+
+cp -a "${BUNDLE_DIR}/flashcli-bundle.json" "${STAGE_ROOT}/"
+cp -a "${BUNDLE_DIR}/run.py" "${BUNDLE_DIR}/_pi05_compat.py" "${STAGE_ROOT}/"
+cp -a "${BUNDLE_DIR}/flash_rt_kernels.so" "${BUNDLE_DIR}/flash_rt_fa2.so" "${STAGE_ROOT}/"
+cp -a "${BUNDLE_DIR}/flash_rt" "${STAGE_ROOT}/"
+
+if [[ -z "${OUTPUT}" ]]; then
+  mkdir -p "${BUNDLE_DIR}/dist"
+  OUTPUT="${BUNDLE_DIR}/dist/${ARCHIVE_NAME}.zip"
+else
+  OUTPUT="$(cd "$(dirname "${OUTPUT}")" && pwd)/$(basename "${OUTPUT}")"
+  mkdir -p "$(dirname "${OUTPUT}")"
+fi
+
+rm -f "${OUTPUT}"
+(
+  cd "${STAGE}"
+  if command -v zip >/dev/null 2>&1; then
+    zip -rq "${OUTPUT}" "${ARCHIVE_NAME}"
+  else
+    die "zip command not found"
+  fi
+)
+
+log "Created ${OUTPUT}"
+log "Contents:"
+zipinfo -1 "${OUTPUT}" | sed 's/^/  /' >&2

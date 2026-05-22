@@ -82,8 +82,24 @@ def test_variant_dir_name():
     assert variant_dir_name(_gpu()) == "sm89-cu130-linux-x86_64"
 
 
-def test_catalog_variant_fuzzy_cuda_tag():
-    """RTX 4060 Ti with nvcc cu124 can use sm89-cu130 catalog entry."""
+def test_catalog_variant_fuzzy_cuda_within_family():
+    """cu124 host may use sm89-cu128 catalog entry (both CUDA 12.x)."""
+    p = _preset(
+        {
+            "bundle": {
+                "variants": {
+                    "sm89-cu128-linux-x86_64": {"zip": "https://example.com/sm89.zip"},
+                }
+            }
+        }
+    )
+    cfg, matched = resolve_effective_bundle_cfg(p, gpu=_gpu(sm="89", cuda="124"))
+    assert matched == "sm89-cu128-linux-x86_64"
+    assert cfg["zip"] == "https://example.com/sm89.zip"
+
+
+def test_catalog_variant_no_cross_cuda_major_families():
+    """cu124 must not auto-select sm89-cu130 (needs libcudart.so.13)."""
     p = _preset(
         {
             "bundle": {
@@ -93,10 +109,10 @@ def test_catalog_variant_fuzzy_cuda_tag():
             }
         }
     )
-    cfg, matched = resolve_effective_bundle_cfg(p, gpu=_gpu(sm="89", cuda="124"))
-    assert matched == "sm89-cu130-linux-x86_64"
-    assert cfg["zip"] == "https://example.com/sm89.zip"
-    assert cfg.get("catalog_detected_env") == "sm89-cu124-linux-x86_64"
+    with pytest.raises(BundleVariantNotFoundError) as exc:
+        resolve_effective_bundle_cfg(p, gpu=_gpu(sm="89", cuda="124"))
+    assert "sm89-cu124-linux-x86_64" in str(exc.value)
+    assert "libcudart" in str(exc.value) or "cu12" in str(exc.value).lower()
 
 
 def test_catalog_variant_alias():

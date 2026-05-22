@@ -201,16 +201,16 @@ models:
 
 **多环境共用同一 zip**（例如 SM89 包在 SM120 上可跑）：各环境键都要存在，可写相同 `zip`，或用**别名**指向另一环境键，或用 YAML anchor（`&id` / `*id`）。
 
-未配置精确 `sm*-cu*-os-arch` 时，flashcli 按 **SM / OS / arch** 模糊匹配 catalog 条目（CUDA 标签可不同，例如本机 `cu124` 可选用 `sm89-cu130` 的 zip）。
+未配置精确 `sm*-cu*-os-arch` 时，flashcli 按 **SM / OS / arch** 模糊匹配 catalog 条目；**CUDA 仅在同一运行时大版本内**模糊（如 `cu124`↔`cu128`，**不会**把 `cu124` 主机匹配到 `cu130` zip，避免缺少 `libcudart.so.13`）。
 
 ```yaml
 models:
   pi05_libero:
     bundle:
       variants:
-        sm89-cu130-linux-x86_64:
+        sm89-cu124-linux-x86_64:
           zip: https://cdn.example/.../sm89.zip
-        sm120-cu128-linux-x86_64: sm89-cu130-linux-x86_64   # 别名，共用上一项的 zip
+        sm120-cu128-linux-x86_64: sm89-cu124-linux-x86_64   # 别名，共用上一项的 zip
       refs: { "main": { default: true } }  # 可选，对各 variant 的 git 生效
 ```
 

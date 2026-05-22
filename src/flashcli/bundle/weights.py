@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from flashcli import config
+from flashcli.bundle.checkpoint import has_usable_checkpoint
 from flashcli.bundle.config import bundle_dict, bundle_list
 from flashcli.bundle.manifest import BundleManifest
 from flashcli.models.pull import _download_huggingface, _write_marker
@@ -23,10 +24,17 @@ def bundle_weights_dir(bundle: BundleManifest) -> Path:
 def has_local_weights(path: Path) -> bool:
     if not path.is_dir():
         return False
-    for entry in path.iterdir():
-        if entry.name in _SKIP_WEIGHT_NAMES:
-            continue
+    if has_usable_checkpoint(path):
         return True
+    for entry in path.iterdir():
+        if entry.name in _SKIP_WEIGHT_NAMES or entry.name.startswith("."):
+            continue
+        if entry.name == ".cache":
+            continue
+        if entry.is_file():
+            return True
+        if entry.is_dir() and has_usable_checkpoint(entry):
+            return True
     return False
 
 

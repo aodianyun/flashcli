@@ -214,7 +214,7 @@ Top-level `zip` / `path` / `git` for all environments. If the zip/git tree conta
 
 ### Multi-environment catalog (`bundle.variants`)
 
-Per-machine `zip` / `path` / `git` under keys `sm{SM}-cu{CUDA_TAG}-{os}-{arch}`. If the exact key is missing, flashcli fuzzy-matches by SM / OS / arch (CUDA tag may differ, e.g. host `cu124` → catalog `sm89-cu130`). Use `flashcli models envs [preset]`.
+Per-machine `zip` / `path` / `git` under keys `sm{SM}-cu{CUDA_TAG}-{os}-{arch}`. If the exact key is missing, flashcli fuzzy-matches within the same CUDA runtime family (e.g. `cu124`↔`cu128`, not `cu124`→`cu130`). Use `flashcli models envs [preset]`.
 
 | Field | Description |
 |-------|-------------|

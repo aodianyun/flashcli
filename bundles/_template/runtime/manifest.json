@@ -1,0 +1,21 @@
+{
+  "format": "flashrt-runtime-manifest",
+  "format_version": 1,
+  "runtime_version": "1.0.0",
+  "python": ">=3.10,<3.13",
+  "python_dependencies": [
+    "numpy",
+    "ml_dtypes",
+    "safetensors",
+    "transformers<4.56",
+    "pillow",
+    "sentencepiece"
+  ],
+  "optional_groups": {
+    "server": ["fastapi", "uvicorn"]
+  },
+  "cuda": {
+    "cuda_tag": "128",
+    "recommended_torch_index": "cu128"
+  }
+}

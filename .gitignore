@@ -5,5 +5,7 @@ __pycache__/
 *.zip
 *.DS_Store
 
-bundles/
+build/
 codeplan/
+bundles/qwen3_8b_nvfp4
+bundles/qwen36_27b_nvfp4
