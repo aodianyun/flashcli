@@ -65,9 +65,12 @@ def python_stack_satisfied(
     profile: Profile = "default",
     *,
     runtime_dir: Path | None = None,
+    bundle_root: Path | None = None,
 ) -> bool:
     try:
-        spec = resolve_runtime_requirements(runtime_dir)
+        spec = resolve_runtime_requirements(
+            runtime_dir, bundle_root=bundle_root or runtime_dir
+        )
     except RuntimeError:
         return False
     return runtime_python_stack_satisfied(spec, profile)
@@ -95,13 +98,16 @@ def ensure_flashcli_stack(*, quiet: bool = False, force: bool = False) -> None:
 def ensure_runtime_python_stack(
     *,
     runtime_dir: Path | None = None,
+    bundle_root: Path | None = None,
     torch_index: str = "cu124",
     profile: Profile = "default",
     quiet: bool = False,
     force: bool = False,
 ) -> None:
-    """pip install torch (CUDA index) + requirements from runtime bundle / FlashRT pyproject."""
-    spec = resolve_runtime_requirements(runtime_dir)
+    """pip install torch (CUDA index) + requirements from bundle json / FlashRT pyproject."""
+    spec = resolve_runtime_requirements(
+        runtime_dir, bundle_root=bundle_root or runtime_dir
+    )
 
     if not force and runtime_python_stack_satisfied(spec, profile):
         return
@@ -149,6 +155,7 @@ def ensure_runtime_python_stack(
 def ensure_python_stack(
     *,
     runtime_dir: Path | None = None,
+    bundle_root: Path | None = None,
     torch_index: str = "cu124",
     profile: Profile = "default",
     quiet: bool = False,
@@ -157,6 +164,7 @@ def ensure_python_stack(
     """Backward-compatible alias for ensure_runtime_python_stack."""
     ensure_runtime_python_stack(
         runtime_dir=runtime_dir,
+        bundle_root=bundle_root or runtime_dir,
         torch_index=torch_index,
         profile=profile,
         quiet=quiet,

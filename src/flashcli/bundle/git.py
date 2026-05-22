@@ -19,19 +19,19 @@ from flashcli.bundle.ref import (
     sanitize_git_ref,
     validate_ref_in_catalog,
 )
+from flashcli.bundle.catalog import effective_bundle_cfg_for_preset, variant_dir_name
 from flashcli.models.registry import Preset
 from flashcli.runtime.detect import GpuInfo, detect_gpu_or_raise
 
 _MARKER = ".flashcli_bundle.json"
 
 
-def _bundle_cfg(preset: Preset) -> dict[str, Any]:
-    raw = preset.raw.get("bundle") or {}
-    return dict(raw) if isinstance(raw, dict) else {}
+def _bundle_cfg(preset: Preset, *, gpu: GpuInfo | None = None) -> dict[str, Any]:
+    return effective_bundle_cfg_for_preset(preset, gpu=gpu)
 
 
-def _git_cfg(preset: Preset) -> dict[str, Any] | None:
-    cfg = _bundle_cfg(preset)
+def _git_cfg(preset: Preset, *, gpu: GpuInfo | None = None) -> dict[str, Any] | None:
+    cfg = _bundle_cfg(preset, gpu=gpu)
     git = cfg.get("git")
     if not isinstance(git, dict):
         return None
@@ -112,10 +112,6 @@ def is_bundle_cached(
     return root.is_dir() and is_bundle_root(root)
 
 
-def variant_dir_name(gpu: GpuInfo) -> str:
-    return f"sm{gpu.sm}-cu{gpu.cuda_tag}-{gpu.os_name}-{gpu.arch}"
-
-
 def _parse_variant_name(name: str) -> tuple[str | None, str | None]:
     parts = name.split("-")
     sm = cuda = None
@@ -142,9 +138,11 @@ def find_bundle_root_in_clone(
     repo_root: Path,
     preset: Preset,
     gpu: GpuInfo,
+    *,
+    bundle_cfg: dict[str, Any] | None = None,
 ) -> Path:
     """``variants/<env>/`` is the bundle root at this git ref (flat layout)."""
-    cfg = _bundle_cfg(preset)
+    cfg = bundle_cfg if bundle_cfg is not None else _bundle_cfg(preset, gpu=gpu)
     variants_subdir = str(cfg.get("variants_dir", "variants")).strip() or "variants"
     variants_root = repo_root / variants_subdir
 
@@ -255,10 +253,13 @@ def ensure_bundle_from_git(
     quiet: bool = False,
 ) -> Path:
     """Checkout ``git_ref`` and return bundle root for this GPU environment."""
-    git = _git_cfg(preset)
-    if git is None:
+    gpu = detect_gpu_or_raise()
+    bundle_cfg = _bundle_cfg(preset, gpu=gpu)
+    git = bundle_cfg.get("git")
+    if not isinstance(git, dict) or not str(git.get("repo", "")).strip():
         raise ValueError(
-            f"Preset {preset.name!r} has no bundle.git.repo in models.yaml"
+            f"Preset {preset.name!r} has no bundle.git.repo in models.yaml "
+            f"for environment {variant_dir_name(gpu)!r}"
         )
 
     override = git_ref or bundle_ref or bundle_version
@@ -282,12 +283,13 @@ def ensure_bundle_from_git(
             f"and no cached bundle for {preset.name!r} @ {requested_ref!r}"
         )
 
-    gpu = detect_gpu_or_raise()
     repo_url = str(git["repo"]).strip()
     clone_dir = repo_clone_dir(preset.name, requested_ref)
 
     _sync_repo(repo_url, requested_ref, clone_dir, quiet=quiet)
-    bundle_root = find_bundle_root_in_clone(clone_dir, preset, gpu)
+    bundle_root = find_bundle_root_in_clone(
+        clone_dir, preset, gpu, bundle_cfg=bundle_cfg
+    )
     commit = _git_head(clone_dir)
 
     bundle_ref_label = read_bundle_git_ref(bundle_root)

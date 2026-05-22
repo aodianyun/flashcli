@@ -30,8 +30,8 @@ def run_check(*, quiet: bool = False) -> int:
 
     b = active_bundle()
     if b is not None:
-        print(f"[ok] Active model bundle runtime: {b.runtime_dir}")
-        if python_stack_satisfied(runtime_dir=b.runtime_dir):
+        print(f"[ok] Active model bundle: {b.bundle_root}")
+        if python_stack_satisfied(bundle_root=b.bundle_root):
             print("[ok] Bundle runtime Python stack")
         else:
             print("[!] Bundle runtime Python stack incomplete.")

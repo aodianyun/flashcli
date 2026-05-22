@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from flashcli import config
+from flashcli.bundle.catalog import effective_bundle_cfg_for_preset
 from flashcli.bundle.git import (
     _write_marker,
     bundle_preset_cache,
@@ -27,14 +28,9 @@ from flashcli.models.registry import Preset
 from flashcli.runtime.detect import GpuInfo, detect_gpu_or_raise
 
 
-def _bundle_cfg(preset: Preset) -> dict[str, Any]:
-    raw = preset.raw.get("bundle") or {}
-    return dict(raw) if isinstance(raw, dict) else {}
-
-
 def zip_spec(preset: Preset) -> str | None:
     """``bundle.zip`` value from models.yaml (URL or path)."""
-    cfg = _bundle_cfg(preset)
+    cfg = effective_bundle_cfg_for_preset(preset)
     raw = cfg.get("zip")
     if isinstance(raw, str):
         spec = raw.strip()
@@ -92,6 +88,8 @@ def find_bundle_root_in_extracted(
     extract_root: Path,
     preset: Preset,
     gpu: GpuInfo | None,
+    *,
+    bundle_cfg: dict[str, Any] | None = None,
 ) -> Path:
     """Locate ``flashcli-bundle.json`` after extracting a zip."""
     if is_bundle_root(extract_root):
@@ -101,7 +99,10 @@ def find_bundle_root_in_extracted(
     if variants_root.is_dir():
         if gpu is None:
             gpu = detect_gpu_or_raise()
-        return find_bundle_root_in_clone(extract_root, preset, gpu)
+        cfg = bundle_cfg or effective_bundle_cfg_for_preset(preset, gpu=gpu)
+        return find_bundle_root_in_clone(
+            extract_root, preset, gpu, bundle_cfg=cfg
+        )
 
     children = [
         p
@@ -214,7 +215,10 @@ def ensure_bundle_from_zip(
         _safe_extract(archive, extract_dir)
 
     gpu = detect_gpu_or_raise()
-    bundle_root = find_bundle_root_in_extracted(extract_dir, preset, gpu)
+    bundle_cfg = effective_bundle_cfg_for_preset(preset, gpu=gpu)
+    bundle_root = find_bundle_root_in_extracted(
+        extract_dir, preset, gpu, bundle_cfg=bundle_cfg
+    )
 
     _write_marker(
         preset.name,
@@ -229,6 +233,7 @@ def ensure_bundle_from_zip(
         data = json.loads(marker_path.read_text(encoding="utf-8"))
         data["source"] = "zip"
         data["zip"] = resolved
+        data["catalog_variant"] = bundle_cfg.get("catalog_variant")
         data.pop("git", None)
         marker_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 

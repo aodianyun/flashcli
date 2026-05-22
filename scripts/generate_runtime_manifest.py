@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate runtime manifest.json + requirements-runtime.txt (no flashcli install needed)."""
+"""Merge runtime fields into flashcli-bundle.json (v2 flat bundle layout)."""
 
 from __future__ import annotations
 
@@ -72,6 +72,7 @@ def extract_runtime_packages(repo_root: Path) -> tuple[str, list[str], dict[str,
         print(f"Warning: {req_file} missing; falling back to pyproject.toml only", file=sys.stderr)
 
     pyproject = repo_root / "pyproject.toml"
+    optional: dict = {}
     if pyproject.is_file():
         data = _load_toml(pyproject)
         project = data.get("project", {})
@@ -92,13 +93,8 @@ def extract_runtime_packages(repo_root: Path) -> tuple[str, list[str], dict[str,
 
     optional_groups: dict[str, list[str]] = {}
     if pyproject.is_file():
-        data = _load_toml(pyproject)
         optional_groups = {
-            "server": list(
-                data.get("project", {})
-                .get("optional-dependencies", {})
-                .get("server", [])
-            ),
+            "server": list(optional.get("server", [])),
         }
 
     present = {_req_name(p) for p in pip_packages}
@@ -123,8 +119,8 @@ def sha256_file(path: Path) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path(os.environ.get("REPO_ROOT", ".")))
-    parser.add_argument("--stage-root", type=Path, required=True)
-    parser.add_argument("--lib-dir", type=Path, required=True)
+    parser.add_argument("--bundle-json", type=Path, required=True)
+    parser.add_argument("--lib-dir", type=Path, required=True, help="Directory containing *.so")
     parser.add_argument("--runtime-version", required=True)
     parser.add_argument("--flashrt-tag", required=True)
     parser.add_argument("--git-commit", required=True)
@@ -140,10 +136,11 @@ def main() -> int:
     parser.add_argument("--has-fa2", choices=("0", "1"), required=True)
     parser.add_argument("--has-fp4", choices=("0", "1"), required=True)
     parser.add_argument("--has-fmha", choices=("0", "1"), required=True)
+    parser.add_argument("--git-ref", default="main")
     args = parser.parse_args()
 
-    stage = args.stage_root.resolve()
     lib_dir = args.lib_dir.resolve()
+    bundle_path = args.bundle_json.resolve()
     repo_root = args.repo_root.resolve()
 
     torch_spec, pip_packages, optional_groups = extract_runtime_packages(repo_root)
@@ -153,18 +150,35 @@ def main() -> int:
         optional = so.name in ("flash_rt_fp4.so", "libfmha_fp16_strided.so")
         modules.append(
             {
-                "file": f"lib/{so.name}",
+                "file": so.name,
                 "sha256": sha256_file(so),
                 "optional": optional,
             }
         )
 
-    manifest = {
-        "format": "flashrt-runtime-manifest",
-        "format_version": 1,
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    bundle["format_version"] = max(int(bundle.get("format_version", 1)), 2)
+    bundle.pop("runtime_dir", None)
+    bundle.pop("native_runtime", None)
+    bundle["python"] = ">=3.10,<3.13"
+    bundle["python_dependencies"] = {
+        "torch": torch_spec,
+        "pip": pip_packages,
+        "optional_groups": optional_groups,
+    }
+    bundle["cuda"] = {
+        "cuda_tag": args.cuda_tag,
+        "build_toolkit": args.toolkit,
+        "min_driver_version": args.min_driver,
+        "min_cuda_runtime": args.toolkit,
+        "recommended_torch_index": args.torch_index,
+    }
+    bundle["modules"] = modules
+    bundle["build"] = {
         "runtime_version": args.runtime_version,
         "flashrt_tag": args.flashrt_tag,
         "git_commit": args.git_commit,
+        "git_ref": args.git_ref,
         "build_id": args.build_id,
         "target": {
             "sm": args.sm,
@@ -172,35 +186,21 @@ def main() -> int:
             "arch": args.cpuarch,
             "gpu_arch_cmake": args.gpu_arch,
         },
-        "cuda": {
-            "cuda_tag": args.cuda_tag,
-            "build_toolkit": args.toolkit,
-            "min_driver_version": args.min_driver,
-            "min_cuda_runtime": args.toolkit,
-            "recommended_torch_index": args.torch_index,
-        },
-        "python": ">=3.10,<3.13",
-        "python_dependencies": {
-            "torch": torch_spec,
-            "pip": pip_packages,
-            "optional_groups": optional_groups,
-        },
-        "layout": {"lib": "lib", "python": "python"},
-        "modules": modules,
         "features": {
             "fa2": args.has_fa2 == "1",
             "nvfp4": args.has_fp4 == "1",
             "fmha": args.has_fmha == "1",
         },
     }
+    bundle["native_libs"] = {
+        "flashrt_tag": args.flashrt_tag,
+        "build_id": args.build_id,
+        "git_commit": args.git_commit,
+        "modules": modules,
+    }
 
-    req_lines = "\n".join(pip_packages) + ("\n" if pip_packages else "")
-    (stage / "requirements-runtime.txt").write_text(req_lines, encoding="utf-8")
-    (stage / "manifest.json").write_text(
-        json.dumps(manifest, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    print(json.dumps(manifest, indent=2), file=sys.stderr)
+    bundle_path.write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(bundle, indent=2), file=sys.stderr)
     return 0
 
 

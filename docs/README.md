@@ -9,4 +9,6 @@
 | [../codeplan/DEVELOPER.md](../codeplan/DEVELOPER.md) | Maintainer guide (build, catalog, boundaries) |
 | [../README.md](../README.md) | User quick reference |
 
+**Common commands**: `flashcli models list` · `flashcli models envs [preset]` (GPU vs `models.yaml` environments) · `flashcli bundle sync <preset>`
+
 Inference kernels and precision specs live in the [FlashRT](https://github.com/flashrt-ai/FlashRT) repository.

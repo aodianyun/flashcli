@@ -9,4 +9,6 @@
 | [../codeplan/DEVELOPER.zh-CN.md](../codeplan/DEVELOPER.zh-CN.md) | 开发者指南（构建、catalog、边界） |
 | [../README.zh-CN.md](../README.zh-CN.md) | 用户速查 |
 
+**常用命令**：`flashcli models list` · `flashcli models envs [preset]`（查看本机 GPU 与 `models.yaml` 环境匹配）· `flashcli bundle sync <preset>`
+
 推理内核与精度说明请参阅 [FlashRT](https://github.com/flashrt-ai/FlashRT) 仓库。

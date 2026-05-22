@@ -6,18 +6,27 @@ import re
 from pathlib import Path
 from typing import Any
 
+from flashcli.bundle.catalog import (
+    effective_bundle_cfg_for_preset,
+    has_catalog_variants,
+    raw_bundle_cfg,
+)
 from flashcli.models.registry import Preset
+from flashcli.runtime.detect import GpuInfo, detect_gpu
 
 _REF_SAFE_RE = re.compile(r"[^A-Za-z0-9._+-]+")
 
 
-def _bundle_cfg(preset: Preset) -> dict[str, Any]:
-    raw = preset.raw.get("bundle") or {}
-    return dict(raw) if isinstance(raw, dict) else {}
+def _bundle_cfg(preset: Preset, *, gpu: GpuInfo | None = None) -> dict[str, Any]:
+    if has_catalog_variants(preset):
+        gpu = gpu or detect_gpu()
+        if gpu is not None:
+            return effective_bundle_cfg_for_preset(preset, gpu=gpu)
+    return effective_bundle_cfg_for_preset(preset, gpu=gpu)
 
 
-def _git_cfg(preset: Preset) -> dict[str, Any]:
-    cfg = _bundle_cfg(preset)
+def _git_cfg(preset: Preset, *, gpu: GpuInfo | None = None) -> dict[str, Any]:
+    cfg = _bundle_cfg(preset, gpu=gpu)
     git = cfg.get("git")
     return dict(git) if isinstance(git, dict) else {}
 
@@ -36,7 +45,7 @@ def sanitize_git_ref(ref: str) -> str:
 
 def list_catalog_refs(preset: Preset) -> dict[str, dict[str, Any]]:
     """Declared refs from ``bundle.refs`` (legacy alias: ``bundle.versions``)."""
-    cfg = _bundle_cfg(preset)
+    cfg = raw_bundle_cfg(preset)
     raw = cfg.get("refs") or cfg.get("versions") or {}
     if not isinstance(raw, dict):
         return {}

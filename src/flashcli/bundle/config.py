@@ -33,6 +33,10 @@ def bundle_allowed_sms(bundle: BundleManifest) -> set[str] | None:
 
 
 def bundle_native_runtime(bundle: BundleManifest) -> bool:
-    """Whether the bundle ships FlashRT CUDA kernels (default True)."""
+    """True when bundle declares native ``modules[]`` (legacy ``native_runtime`` ignored)."""
+    from flashcli.bundle.manifest import bundle_modules
+
+    if bundle_modules(bundle):
+        return True
     raw = bundle.raw.get("native_runtime", True)
     return raw is not False

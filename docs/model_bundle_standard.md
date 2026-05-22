@@ -6,7 +6,7 @@ Third parties ship models as a **Model Bundle**: bundled **runtime**, **partner 
 
 Maintainers: see [DEVELOPER.md](../codeplan/DEVELOPER.md). The **public catalog** is currently **[`pi05_libero`](../models/models.yaml) only**; other `bundles/` drafts must not be added to `models.yaml` until validated.
 
-Bundle sources may be **`bundle.zip` (CDN)**, local `bundle.path`, or Git `variants/<sm-cu-os-arch>/` (optional one-model-one-repo layout).
+Bundle sources are declared in **`models.yaml`**: single-env top-level **`bundle.zip` / `path` / `git`**, or multi-env **`bundle.variants.<sm*-cu*-os-arch>`**. Git repos or zip archives may also contain inner **`variants/<sm-cu-os-arch>/`** (one source, many envs — subfolder chosen by GPU after unpack/clone).
 
 ## Directory layout
 
@@ -119,7 +119,7 @@ Resolution order:
 }
 ```
 
-The catalog points at an assembled runtime via `models.yaml` `bundle.zip`; weights come from HF. Building from source: [bundles/pi05_libero/README.md](../bundles/pi05_libero/README.md).
+The catalog points at assembled runtimes via `models.yaml` `bundle.variants` (or top-level `bundle.zip`); weights come from HF. Building from source: [bundles/pi05_libero/README.md](../bundles/pi05_libero/README.md). Users can run `flashcli models envs <preset>` to see whether this machine matches a configured environment.
 
 ### Example: LLM + `serve` (internal draft, not published)
 
@@ -206,27 +206,25 @@ Weights are separate: `~/.flashcli/models/<preset>/checkpoint/`.
 
 ## `models/models.yaml`
 
-**Only** preset names and bundle sources:
+**Only** preset names and bundle sources. Two layouts:
 
-```yaml
-schema_version: 4
+### Single bundle (compatible)
 
-models:
-  pi05_libero:
-    description: Pi0.5 LIBERO (SM89/SM120)
-    bundle:
-      zip: https://cdn.example/.../1.0.0-sm89-cu130-linux-x86_64.zip
-      # maintainer local: path: bundles/pi05_libero
-```
+Top-level `zip` / `path` / `git` for all environments. If the zip/git tree contains `variants/<sm-cu-os-arch>/`, flashcli still picks the subfolder by GPU after unpack/clone.
+
+### Multi-environment catalog (`bundle.variants`)
+
+Per-machine `zip` / `path` / `git` under keys `sm{SM}-cu{CUDA_TAG}-{os}-{arch}`. Missing keys produce an error listing configured environments. Use `flashcli models envs [preset]`.
 
 | Field | Description |
 |-------|-------------|
-| `bundle.path` | Local bundle relative to flashcli package root |
+| `bundle.path` | Local bundle (may contain inner `variants/`) |
 | `bundle.git` | Remote repo + default ref |
-| `bundle.zip` | Remote URL or local `.zip` (cached under `~/.flashcli/bundles/<preset>/zip/`) |
-| `bundle.refs` | Optional ref allowlist |
+| `bundle.zip` | Remote URL or local `.zip` |
+| `bundle.variants` | Per-environment `zip` / `path` / `git` overrides |
+| `bundle.refs` | Optional git ref allowlist |
 
-Bundle resolution: `--bundle` > `bundle.path` > cache > **zip download/unpack** or **git clone** (variant chosen by GPU).
+Bundle resolution: `--bundle` > **catalog source for GPU** > cache > zip or git > (single artifact) inner `variants/`.
 
 ## Build scripts (FlashRT source tree, Linux GPU)
 

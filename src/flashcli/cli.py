@@ -53,29 +53,105 @@ def doctor_main(
 
 @models_app.command("list")
 def models_list() -> None:
+    from flashcli.bundle.catalog import catalog_variant_keys, has_catalog_variants
     from flashcli.bundle.git import read_bundle_marker
     from flashcli.bundle.ref import resolve_requested_git_ref
     from flashcli.bundle.zip import is_preset_bundle_cached, zip_spec
+    from flashcli.runtime.detect import detect_gpu
 
     reg = PresetRegistry()
+    gpu = detect_gpu()
     for name in reg.list_names():
         preset = reg.get(name)
         weights = "weights:cached" if model_cache.is_cached(name) else "weights:missing"
+        try:
+            has_zip = zip_spec(preset) is not None
+        except Exception as exc:
+            bundle_state = f"bundle:error ({exc})"
+            typer.echo(f"{name}: {preset.description} [{bundle_state}, {weights}]")
+            continue
         if is_preset_bundle_cached(preset):
             marker = read_bundle_marker(name) or {}
             variant = marker.get("variant", "?")
-            if zip_spec(preset):
+            if has_zip:
                 bundle_state = f"bundle:cached ({variant}, zip)"
             else:
                 want_ref = resolve_requested_git_ref(preset)
                 ref = marker.get("git_ref") or marker.get("version", want_ref)
                 bundle_state = f"bundle:cached ({variant} @{ref})"
-        elif zip_spec(preset):
+        elif has_catalog_variants(preset):
+            envs = ", ".join(catalog_variant_keys(preset))
+            bundle_state = f"bundle:missing (variants: {envs})"
+        elif has_zip:
             bundle_state = "bundle:missing (want zip)"
         else:
             want_ref = resolve_requested_git_ref(preset)
             bundle_state = f"bundle:missing (want @{want_ref})"
         typer.echo(f"{name}: {preset.description} [{bundle_state}, {weights}]")
+
+
+@models_app.command("envs")
+def models_envs(
+    preset: Optional[str] = typer.Argument(
+        None, help="Preset name (omit to show all presets)."
+    ),
+) -> None:
+    """List bundle environments in models.yaml and the current machine match."""
+    from flashcli.bundle.catalog import (
+        catalog_variant_keys,
+        has_catalog_variants,
+        resolve_effective_bundle_cfg,
+        variant_dir_name,
+    )
+    from flashcli.bundle.zip import zip_spec
+    from flashcli.runtime.detect import detect_gpu
+
+    reg = PresetRegistry()
+    names = [preset] if preset else reg.list_names()
+    gpu = detect_gpu()
+    if gpu is None:
+        typer.echo("[!] No NVIDIA GPU detected; cannot match an environment.")
+    else:
+        typer.echo(
+            f"[i] This machine: {variant_dir_name(gpu)} "
+            f"({gpu.gpu_name or 'GPU'}, sm{gpu.sm}, cuda_tag={gpu.cuda_tag})"
+        )
+    typer.echo("")
+    for name in names:
+        p = reg.get(name)
+        typer.echo(f"{name}:")
+        if not has_catalog_variants(p):
+            typer.echo("  catalog: single bundle (zip/path/git at bundle top level)")
+            if gpu is not None:
+                try:
+                    cfg, env = resolve_effective_bundle_cfg(p, gpu=gpu, require_gpu=False)
+                    src = "zip" if cfg.get("zip") else "path" if cfg.get("path") else "git"
+                    typer.echo(f"  active: {env} -> {src}")
+                except Exception as exc:
+                    typer.echo(f"  active: error — {exc}")
+            continue
+        for env in catalog_variant_keys(p):
+            typer.echo(f"  - {env}")
+        if gpu is None:
+            continue
+        try:
+            cfg, env = resolve_effective_bundle_cfg(p, gpu=gpu)
+            src = (
+                "zip"
+                if cfg.get("zip")
+                else "path"
+                if cfg.get("path")
+                else "git"
+            )
+            spec = zip_spec(p) if src == "zip" else ""
+            line = f"  -> match: {env} ({src}"
+            if spec:
+                label = spec if len(spec) <= 60 else spec[:57] + "..."
+                line += f": {label}"
+            line += ")"
+            typer.echo(line)
+        except Exception as exc:
+            typer.echo(f"  -> no match: {exc}")
 
 
 @models_app.command("refs")
@@ -129,14 +205,13 @@ def bundle_validate(
         for err in errors:
             typer.echo(f"ERROR: {err}", err=True)
         raise typer.Exit(1)
-    if bundle.raw.get("native_runtime", True) is not False:
-        from flashcli.bundle.native import verify_native_libs
+    from flashcli.bundle.native import verify_native_modules
 
-        try:
-            verify_native_libs(runtime_dir=bundle.runtime_dir)
-        except RuntimeError as exc:
-            typer.echo(f"ERROR: {exc}", err=True)
-            raise typer.Exit(1) from exc
+    try:
+        verify_native_modules(bundle)
+    except RuntimeError as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(1) from exc
     typer.echo(f"OK: bundle {bundle.name!r} at {bundle.bundle_root}")
 
 
@@ -147,7 +222,7 @@ def bundle_install(
     force: bool = typer.Option(False, "--force"),
     quiet: bool = typer.Option(False, "--quiet", "-q"),
 ) -> None:
-    """Install Python dependencies from bundle runtime/manifest.json."""
+    """Install Python dependencies from flashcli-bundle.json."""
     from flashcli.bundle.activate import activate_bundle
     from flashcli.bundle.manifest import load_bundle_manifest
 

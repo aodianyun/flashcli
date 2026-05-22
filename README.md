@@ -23,7 +23,7 @@ flashcli run pi05_libero \
   --image /path/to/base.jpg
 ```
 
-On first `run`, flashcli automatically: installs CLI deps → downloads and unpacks the **runtime bundle** (zip) → installs torch etc. per `runtime/manifest.json` → downloads HF weights → `post_pull` (PaliGemma tokenizer) → loads `partner.run.RunEngine` for inference.
+On first `run`, flashcli automatically: installs CLI deps → resolves the bundle source from `models.yaml` for this GPU → downloads and unpacks the **runtime bundle** → installs torch etc. per `flashcli-bundle.json` `python_dependencies` → downloads HF weights → `post_pull` (PaliGemma tokenizer) → loads bundle `entry` (e.g. `run.RunEngine`) for inference.
 
 Pre-fetch weights (optional):
 
@@ -44,9 +44,15 @@ flashcli run pi05_libero \
 
 | Preset | Capability | Runtime source | Weights |
 |--------|------------|----------------|---------|
-| `pi05_libero` | `run` | CDN zip (`models.yaml` → `bundle.zip`) | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) |
+| `pi05_libero` | `run` | CDN zip (`models.yaml` → `bundle.variants`, chosen by GPU) | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) |
 
-`models.yaml` only registers **preset names** and **bundle sources**; `weights`, `entry`, `defaults`, etc. live in each bundle’s [`flashcli-bundle.json`](docs/model_bundle_standard.md).
+`models.yaml` only registers **preset names** and **bundle sources** (single env: top-level `zip`/`path`/`git`; multi env: `bundle.variants.<sm*-cu*-os-arch>`). `weights`, `entry`, `defaults`, etc. live in each bundle’s [`flashcli-bundle.json`](docs/model_bundle_standard.md).
+
+Check which environment matches this machine:
+
+```bash
+flashcli models envs pi05_libero
+```
 
 ## Local cache
 
@@ -70,8 +76,10 @@ flashcli run pi05_libero \
 |---------|-------------|
 | `flashcli run <preset>` | Batch inference for VLA etc. (`pi05_libero` uses this) |
 | `flashcli pull <preset>` | Pre-fetch weights only |
-| `flashcli models list` | Show catalog |
+| `flashcli models list` | Show catalog and cache status |
+| `flashcli models envs [preset]` | List `models.yaml` environments and GPU match |
 | `flashcli doctor` | Environment and GPU check |
+| `flashcli bundle sync <preset>` | Pre-fetch or update runtime bundle |
 | `flashcli bundle validate PATH` | Validate local bundle layout |
 | `--bundle PATH` | Override catalog with local bundle root |
 

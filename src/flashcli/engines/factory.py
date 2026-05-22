@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from flashcli.bundle.activate import activate_bundle
+from flashcli.bundle.catalog import BundleCatalogError, BundleVariantNotFoundError
 from flashcli.bundle.manifest import BundleManifest, validate_bundle_layout
 from flashcli.bundle.resolve import load_preset_bundle
 from flashcli.engines.loader import load_run_engine, load_serve_engine
@@ -35,14 +36,17 @@ def activate_for_preset(
             "only model_bundle is supported."
         )
 
-    bundle = load_preset_bundle(
-        preset,
-        bundle_override=bundle_path,
-        bundle_ref=bundle_ref or bundle_version,
-        checkpoint=checkpoint,
-        fetch_git=bundle_path is None,
-        quiet=quiet,
-    )
+    try:
+        bundle = load_preset_bundle(
+            preset,
+            bundle_override=bundle_path,
+            bundle_ref=bundle_ref or bundle_version,
+            checkpoint=checkpoint,
+            fetch_git=bundle_path is None,
+            quiet=quiet,
+        )
+    except (BundleCatalogError, BundleVariantNotFoundError) as exc:
+        raise BundleNotReadyError(str(exc)) from exc
     errors = validate_bundle_layout(bundle)
     if errors:
         raise BundleNotReadyError(

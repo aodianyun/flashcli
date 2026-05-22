@@ -23,7 +23,7 @@ flashcli run pi05_libero \
   --image /path/to/base.jpg
 ```
 
-首次 `run` 会自动：安装 CLI 依赖 → 下载并解压 **runtime bundle**（zip）→ 按 `runtime/manifest.json` 安装 torch 等 → 下载 HF 权重 → `post_pull`（PaliGemma tokenizer）→ 加载 `partner.run.RunEngine` 推理。
+首次 `run` 会自动：安装 CLI 依赖 → 按本机 GPU 环境解析 `models.yaml` 中的 bundle 源并下载/解压 → 按 `flashcli-bundle.json` 的 `python_dependencies` 安装 torch 等 → 下载 HF 权重 → `post_pull`（PaliGemma tokenizer）→ 加载 bundle `entry`（如 `run.RunEngine`）推理。
 
 预拉权重（可选）：
 
@@ -44,9 +44,15 @@ flashcli run pi05_libero \
 
 | Preset | 能力 | Runtime 来源 | 权重 |
 |--------|------|--------------|------|
-| `pi05_libero` | `run` | CDN zip（`models.yaml` → `bundle.zip`） | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) |
+| `pi05_libero` | `run` | CDN zip（`models.yaml` → `bundle.variants`，按 GPU 环境选） | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) |
 
-`models.yaml` 只登记 **preset 名** 与 **bundle 源**；`weights`、`entry`、`defaults` 等见各包内的 [`flashcli-bundle.json`](docs/model_bundle_standard.zh-CN.md)。
+`models.yaml` 只登记 **preset 名** 与 **bundle 源**（单环境用顶层 `zip`/`path`/`git`，多环境用 `bundle.variants.<sm*-cu*-os-arch>`）；`weights`、`entry`、`defaults` 等见各包内的 [`flashcli-bundle.json`](docs/model_bundle_standard.zh-CN.md)。
+
+查看本机匹配的环境：
+
+```bash
+flashcli models envs pi05_libero
+```
 
 ## 本机缓存
 
@@ -70,8 +76,10 @@ flashcli run pi05_libero \
 |------|------|
 | `flashcli run <preset>` | VLA 等批推理（`pi05_libero` 使用此命令） |
 | `flashcli pull <preset>` | 仅预拉权重 |
-| `flashcli models list` | 查看 catalog |
+| `flashcli models list` | 查看 catalog 与缓存状态 |
+| `flashcli models envs [preset]` | 查看 `models.yaml` 中的环境与当前 GPU 匹配项 |
 | `flashcli doctor` | 环境与 GPU 检查 |
+| `flashcli bundle sync <preset>` | 预拉取/更新 runtime bundle |
 | `flashcli bundle validate PATH` | 校验本地 bundle 布局 |
 | `--bundle PATH` | 覆盖 catalog，使用本地 bundle 根目录 |
 

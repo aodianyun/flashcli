@@ -36,7 +36,7 @@ EMBED_CHECKPOINT=""
 
 usage() {
   cat <<EOF
-Assemble a Pi0.5 flashcli model bundle (runtime/lib + runtime/python/flash_rt).
+Assemble a Pi0.5 flashcli model bundle (flat layout: *.so + flash_rt/ + run.py at bundle root).
 
 Usage:
   bash flashcli/scripts/build_pi05_bundle.sh --bundle-dir DIR [OPTIONS]
@@ -209,66 +209,92 @@ normalize_lib() {
   cp -f "${matches[0]}" "${dst_lib}/${dest_name}"
 }
 
-stage_partner_python() {
-  local py_root="$1"
-  local partner_src="${BUNDLE_DIR}/partner"
-  [[ -d "${partner_src}" ]] || return 0
-  mkdir -p "${py_root}"
-  rsync -a "${partner_src}/" "${py_root}/partner/"
-  log "Staged partner/ -> ${py_root}/partner/"
-}
-
-stage_flash_rt_python() {
-  local py_dir="$1"
-  local flash_rt_src="${REPO_ROOT}/flash_rt"
+# Official pi05_libero bundle: minimal flash_rt tree (matches end-user zip contents).
+stage_pi05_flash_rt_minimal() {
+  local dst="$1"
+  local src="${REPO_ROOT}/flash_rt"
   command -v rsync >/dev/null 2>&1 || die "rsync required"
-  local -a excludes=(
-    --exclude='*.so'
-    --exclude='frontends/jax'
-    --exclude='serve'
-    --exclude='datasets'
-    --exclude='refs'
-    --exclude='executors/jax'
-    --exclude='configs'
-    --exclude='models/groot'
-    --exclude='models/groot_n17'
-    --exclude='models/pi0'
-    --exclude='models/pi0fast'
-    --exclude='models/qwen3'
-    --exclude='models/qwen36'
-    --exclude='frontends/torch/qwen3_rtx.py'
-    --exclude='frontends/torch/qwen36_rtx.py'
-    --exclude='hardware/thor'
-  )
-  mkdir -p "${py_dir}"
-  rsync -a "${excludes[@]}" "${flash_rt_src}/" "${py_dir}/"
+  rm -rf "${dst}"
+  mkdir -p "${dst}"
+
+  _cp_file() {
+    local rel="$1"
+    mkdir -p "${dst}/$(dirname "${rel}")"
+    cp -a "${src}/${rel}" "${dst}/${rel}"
+  }
+
+  for rel in __init__.py api.py models/__init__.py; do
+    _cp_file "${rel}"
+  done
+
+  mkdir -p "${dst}/models/pi05"
+  rsync -a --exclude='pipeline_thor*' "${src}/models/pi05/" "${dst}/models/pi05/"
+
+  for rel in \
+    frontends/__init__.py \
+    frontends/torch/__init__.py \
+    frontends/torch/pi05_rtx.py; do
+    _cp_file "${rel}"
+  done
+
+  _cp_file hardware/__init__.py
+  [[ -f "${src}/hardware/backend.py" ]] && _cp_file hardware/backend.py
+
+  mkdir -p "${dst}/hardware/rtx"
+  for rel in attn_backend.py attn_backend_batched_pi05.py; do
+    cp -a "${src}/hardware/rtx/${rel}" "${dst}/hardware/rtx/${rel}"
+  done
+  cat > "${dst}/hardware/rtx/__init__.py" <<'PY'
+"""RTX attention backends (pi05_libero bundle subset)."""
+from .attn_backend import AttnBackend, RtxFlashAttnBackend, TorchFlashAttnBackend
+from .attn_backend_batched_pi05 import PI05_BATCH_SIZE, RtxFlashAttnBatchedBackendPi05
+
+__all__ = [
+    "AttnBackend",
+    "RtxFlashAttnBackend",
+    "TorchFlashAttnBackend",
+    "PI05_BATCH_SIZE",
+    "RtxFlashAttnBatchedBackendPi05",
+]
+PY
+
+  mkdir -p "${dst}/core"
+  rsync -a \
+    --exclude='*.so' \
+    --exclude='rl/' \
+    "${src}/core/" "${dst}/core/"
+
+  mkdir -p "${dst}/executors"
+  for rel in __init__.py torch_weights.py weight_loader.py; do
+    [[ -f "${src}/executors/${rel}" ]] && cp -a "${src}/executors/${rel}" "${dst}/executors/${rel}"
+  done
+
+  mkdir -p "${dst}/utils"
+  rsync -a "${src}/utils/" "${dst}/utils/"
+
+  log "Staged minimal flash_rt/ for pi05_libero ($(find "${dst}" -type f | wc -l) files)"
 }
 
 stage_bundle_runtime() {
-  local runtime_dir="${BUNDLE_DIR}/runtime"
-  local lib_dir="${runtime_dir}/lib"
-  local py_dir="${runtime_dir}/python/flash_rt"
+  local lib_dir="${BUNDLE_DIR}"
+  local py_dir="${BUNDLE_DIR}/flash_rt"
   local flash_rt_src="${REPO_ROOT}/flash_rt"
   local build_src="${BUILD_DIR:-${REPO_ROOT}/build}"
 
-  rm -rf "${lib_dir}" "${py_dir}"
-  mkdir -p "${lib_dir}"
+  rm -rf "${py_dir}" "${BUNDLE_DIR}/runtime"
+  rm -f "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so
 
-  # Prefer cmake output over committed flash_rt/*.so (may be stale).
-  local has_kernels=0 has_fa2=0 has_fp4=0 has_fmha=0
+  local has_kernels=0 has_fa2=0
   for src in "${build_src}" "${flash_rt_src}"; do
     [[ -d "${src}" ]] || continue
     normalize_lib "${src}" "${lib_dir}" "flash_rt_kernels*.so" "flash_rt_kernels.so" && has_kernels=1
     normalize_lib "${src}" "${lib_dir}" "flash_rt_fa2*.so" "flash_rt_fa2.so" && has_fa2=1
-    normalize_lib "${src}" "${lib_dir}" "flash_rt_fp4*.so" "flash_rt_fp4.so" && has_fp4=1
-    normalize_lib "${src}" "${lib_dir}" "libfmha_fp16_strided*.so" "libfmha_fp16_strided.so" && has_fmha=1
-    normalize_lib "${src}" "${lib_dir}" "fmha_fp16_strided*.so" "libfmha_fp16_strided.so" && has_fmha=1
   done
 
   [[ "${has_kernels}" -eq 1 ]] || die "flash_rt_kernels.so missing (build FlashRT or use --pack-only after cmake)"
+  [[ "${has_fa2}" -eq 1 ]] || die "flash_rt_fa2.so missing (required for Pi0.5 FA2 attention)"
 
-  stage_flash_rt_python "${py_dir}"
-  stage_partner_python "$(dirname "${py_dir}")"
+  stage_pi05_flash_rt_minimal "${py_dir}"
   find "${py_dir}" -name '*.so' -type f -delete 2>/dev/null || true
 
   local git_commit flashrt_tag build_id torch_idx min_drv
@@ -278,15 +304,16 @@ stage_bundle_runtime() {
   torch_idx="$(recommended_torch_index)"
   min_drv="${MIN_DRIVER:-$(default_min_driver)}"
 
-  log "Writing runtime/manifest.json"
+  log "Updating flashcli-bundle.json (v2)"
   python3 "${GEN_MANIFEST}" \
     --repo-root "${REPO_ROOT}" \
-    --stage-root "${runtime_dir}" \
+    --bundle-json "${BUNDLE_DIR}/flashcli-bundle.json" \
     --lib-dir "${lib_dir}" \
     --runtime-version "${RUNTIME_VERSION}" \
     --flashrt-tag "${flashrt_tag}" \
     --git-commit "${git_commit}" \
     --build-id "${build_id}" \
+    --git-ref "${GIT_REF}" \
     --sm "${SM}" \
     --os-name "${OS_NAME}" \
     --cpuarch "${CPU_ARCH}" \
@@ -296,28 +323,8 @@ stage_bundle_runtime() {
     --torch-index "${torch_idx}" \
     --min-driver "${min_drv}" \
     --has-fa2 "${has_fa2}" \
-    --has-fp4 "${has_fp4}" \
-    --has-fmha "${has_fmha}" >/dev/null
-
-  python3 - "${BUNDLE_DIR}/flashcli-bundle.json" "${runtime_dir}/manifest.json" "${GIT_REF}" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-bundle_path = Path(sys.argv[1])
-manifest_path = Path(sys.argv[2])
-git_ref = sys.argv[3]
-bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
-manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-bundle["git_ref"] = git_ref
-bundle["native_libs"] = {
-    "flashrt_tag": manifest.get("flashrt_tag"),
-    "build_id": manifest.get("build_id"),
-    "git_commit": manifest.get("git_commit"),
-    "modules": manifest.get("modules", []),
-}
-bundle_path.write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")
-PY
+    --has-fp4 "0" \
+    --has-fmha "0" >/dev/null
 }
 
 embed_checkpoint() {

@@ -1,66 +1,86 @@
-"""Link bundle native libs into runtime/python for import."""
+"""Load bundle native extension modules declared in ``flashcli-bundle.json``."""
 
 from __future__ import annotations
 
+import importlib.util
 import sys
 from pathlib import Path
+from typing import Any
+
+from flashcli.bundle.manifest import bundle_modules, bundle_python_root, module_file_path
+from flashcli.bundle.manifest import BundleManifest
 
 
-def _kernels_so_path(runtime_dir: Path) -> Path | None:
-    for candidate in (
-        runtime_dir / "lib" / "flash_rt_kernels.so",
-        runtime_dir / "python" / "flash_rt" / "flash_rt_kernels.so",
-    ):
-        if candidate.is_file():
-            return candidate.resolve()
-    return None
+def _so_basename_to_module_name(filename: str) -> str:
+    stem = Path(filename).name
+    if stem.endswith(".so"):
+        return stem[: -len(".so")]
+    return stem
 
 
-def verify_native_libs(*, runtime_dir: Path) -> None:
-    """Ensure required ``.so`` files exist (no import — pybind11 must load once)."""
-    so = _kernels_so_path(runtime_dir)
-    if so is None or not so.is_file():
+def _load_extension_from_path(path: Path, module_name: str) -> Any:
+    path = path.resolve()
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Cannot load native module from {path}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def register_native_modules(bundle: BundleManifest) -> list[str]:
+    """Import ``modules[].file`` and register top-level + ``flash_rt.<name>`` aliases."""
+    py_root = bundle_python_root(bundle)
+    if (py_root / "flash_rt").is_dir():
+        import importlib
+
+        importlib.import_module("flash_rt")
+
+    loaded: list[str] = []
+    for entry in bundle_modules(bundle):
+        file_rel = str(entry.get("file", "")).strip()
+        if not file_rel or not file_rel.endswith(".so"):
+            continue
+        path = module_file_path(bundle, file_rel)
+        if not path.is_file():
+            if entry.get("optional"):
+                continue
+            raise FileNotFoundError(f"Native module file not found: {path}")
+        name = _so_basename_to_module_name(path.name)
+        mod = _load_extension_from_path(path, name)
+        sys.modules[name] = mod
+        loaded.append(name)
+        flash_rt_pkg = sys.modules.get("flash_rt")
+        if flash_rt_pkg is not None:
+            setattr(flash_rt_pkg, name, mod)
+            sys.modules[f"flash_rt.{name}"] = mod
+    return loaded
+
+
+def verify_native_modules(bundle: BundleManifest) -> None:
+    """Ensure required ``modules[]`` files exist (no import — pybind loads once at use)."""
+    missing: list[str] = []
+    for entry in bundle_modules(bundle):
+        if entry.get("optional"):
+            continue
+        file_rel = str(entry.get("file", "")).strip()
+        if not file_rel:
+            continue
+        path = module_file_path(bundle, file_rel)
+        if not path.is_file():
+            missing.append(str(path))
+    if missing:
         raise RuntimeError(
-            f"flash_rt_kernels.so not found under {runtime_dir}/lib/. "
-            "Run the bundle build.sh on Linux+GPU first."
+            "Bundle native modules missing:\n  "
+            + "\n  ".join(missing)
+            + "\nRebuild the bundle on Linux+GPU (build.sh)."
         )
 
 
-def _link_into(py_pkg: Path, lib_dir: Path) -> None:
-    py_pkg.mkdir(parents=True, exist_ok=True)
-    for so in lib_dir.glob("*.so"):
-        dest = py_pkg / so.name
-        if dest.exists() or dest.is_symlink():
-            if dest.is_symlink():
-                dest.unlink()
-            elif dest.samefile(so):
-                continue
-            else:
-                dest.unlink()
-        dest.symlink_to(so.resolve())
-
-
-def link_native_libs(runtime_dir: Path) -> None:
-    """Symlink ``runtime/lib/*.so`` into ``runtime/python/flash_rt`` and ``partner``."""
-    lib_dir = runtime_dir / "lib"
-    if not lib_dir.is_dir():
-        return
-    py_root = runtime_dir / "python"
-    if py_root.is_dir():
-        for stale in py_root.rglob("*.so"):
-            if stale.is_symlink():
-                stale.unlink()
-            elif stale.is_file():
-                stale.unlink()
-    for pkg_name in ("partner", "flash_rt"):
-        py_pkg = py_root / pkg_name
-        if py_pkg.is_dir():
-            _link_into(py_pkg, lib_dir)
-
-
-def ensure_runtime_importable(runtime_dir: Path) -> None:
-    """Link native libs and prepend ``runtime/python`` to ``sys.path``."""
-    link_native_libs(runtime_dir)
-    py_str = str((runtime_dir / "python").resolve())
+def ensure_bundle_importable(bundle: BundleManifest) -> None:
+    """Prepend bundle python root to ``sys.path`` and optionally preload ``modules``."""
+    py_str = str(bundle_python_root(bundle).resolve())
     if py_str not in sys.path:
         sys.path.insert(0, py_str)
+    if bundle_modules(bundle):
+        register_native_modules(bundle)
