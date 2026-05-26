@@ -61,17 +61,17 @@ sequenceDiagram
 └── models/<preset>/checkpoint/ # HF weights
 ```
 
-## Bundle layout (`format_version` ≥ 2)
+## Bundle layout
 
 ```text
 {bundle_root}/
 ├── flashcli-bundle.json
 ├── run.py                     # entry.run
-├── flash_rt_kernels.so        # modules[].file
+├── lib/                       # native matrix (*.so)
 └── flash_rt/                  # optional Python tree
 ```
 
-Legacy `runtime/manifest.json` + `runtime/python/partner/` remain supported; see [model_bundle_standard.md](model_bundle_standard.md).
+See [model_bundle_standard.md](model_bundle_standard.md).
 
 ## Module map
 

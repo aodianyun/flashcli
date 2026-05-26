@@ -61,17 +61,17 @@ sequenceDiagram
 └── models/<preset>/checkpoint/ # HF 权重
 ```
 
-## Bundle 布局（`format_version` ≥ 2）
+## Bundle 布局
 
 ```text
 {bundle_root}/
 ├── flashcli-bundle.json
 ├── run.py                     # entry.run
-├── flash_rt_kernels.so        # modules[].file
+├── lib/                       # 原生矩阵（*.so）
 └── flash_rt/                  # 可选 Python 树
 ```
 
-旧版 `runtime/manifest.json` + `runtime/python/partner/` 仍兼容，见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
+详见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
 
 ## 模块划分
 

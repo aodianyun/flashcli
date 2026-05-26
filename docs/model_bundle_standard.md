@@ -8,7 +8,7 @@ Maintainers: see [DEVELOPER.md](../codeplan/DEVELOPER.md). The **public catalog*
 
 Each preset has **one** bundle source in **`models.yaml`**: top-level **`bundle.zip` / `path` / `git`**. Multi-environment runtimes ship inside that artifact (recommended: **`lib/` native matrix** in a single zip). See [runtime-matrix.md](runtime-matrix.md) for `pi05_libero` release layout.
 
-## Directory layout (`format_version` ≥ 2)
+## Directory layout
 
 `{bundle_root}` is the bundle root (git checkout, `--bundle`, or `~/.flashcli/bundles/...` cache). **No fixed subdirectories** beyond `flashcli-bundle.json` and the Python modules referenced by `entry`.
 
@@ -37,10 +37,6 @@ lib/
 **Third-party bundles** may ship only `run.py` plus explicit `modules[].file` paths, or a full `lib/` matrix; publish each `.so` once and declare paths in the manifest.
 
 On activate, flashcli prepends **`bundle_root`** to `PYTHONPATH`, installs `python_dependencies`, and loads native code from `lib/` (matrix) or `modules[]` (flat paths).
-
-### Legacy layout (`format_version` 1, still supported)
-
-`runtime/manifest.json` + `runtime/python/partner/` + `runtime/lib/*.so` still work. New bundles should use v2.
 
 ## Weights
 
@@ -99,14 +95,14 @@ Resolution order:
 
 | Field | Description |
 |-------|-------------|
-| `format_version` | `2`: flat bundle root; `1`: legacy `runtime/` tree |
+| `format_version` | Must be `2` (flat bundle root) |
 | `capabilities` | `run`, `serve` |
 | `entry.run` / `entry.serve` | Module + class name relative to **bundle root** on `PYTHONPATH` |
-| `python_dependencies` | pip / torch (formerly only in `runtime/manifest.json`) |
+| `python_dependencies` | pip / torch |
 | `python` / `python_abi` | Interpreter constraints; mismatch fails fast at activate |
 | `cuda` | `cuda_tag`, `recommended_torch_index`, etc. |
 | `native_layout` / `native_matrix` | When `native_layout` is `matrix`, flashcli picks tagged `.so` under `lib/` for this host |
-| `modules` | Optional explicit `.so` paths (relative to bundle root in v2); used when there is no `lib/` matrix |
+| `modules` | Optional explicit `.so` paths relative to bundle root; used when there is no `lib/` matrix |
 | `weights` / `extra_weights` | Primary / additional weight downloads |
 | `defaults` / `serve` | Default args passed to engines (read by partner code) |
 | `post_pull` | Steps after weight pull (tokenizer, etc.) |
@@ -247,7 +243,7 @@ Internal Qwen drafts use `scripts/build_qwen_bundle.sh` (**SM120**); do not add 
 
 ## Minimum delivery checklist
 
-1. `flashcli-bundle.json` (`format_version` ≥ 2: `entry`, `python_dependencies`, optional `native_layout` / `modules` / `cuda`)
+1. `flashcli-bundle.json` (`format_version: 2`, with `entry`, `python_dependencies`, optional `native_layout` / `modules` / `cuda`)
 2. Python module(s) for `entry` (e.g. `run.py` + `RunEngine`)
 3. Optional: `lib/` tagged `.so` matrix **or** `modules[].file` list
 4. Optional: `flash_rt/` Python tree

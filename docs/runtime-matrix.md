@@ -11,7 +11,7 @@
 | OS / arch | **linux-x86_64** |
 | Python ABI | **3.10 / 3.11 / 3.12** (`-py310` / `-py311` / `-py312`) |
 
-## Recommended: one zip, many environments (`native_layout: matrix`)
+## One zip, many environments (`native_layout: matrix`)
 
 One **runtime zip per model**; all environment-specific `.so` files live under flat **`lib/`**:
 
@@ -28,22 +28,7 @@ pi05_libero/
 
 At **`flashcli run`**, flashcli picks the artifact matching **GPU + current Python** under `lib/`; no match → `NativeEnvironmentNotSupportedError`.
 
-**`models.yaml` no longer uses `bundle.variants`** — one `bundle.zip` per preset (`schema_version: 6`).
-
-Build cu124 × three Python ABIs into one zip:
-
-```bash
-bash scripts/build_pi05_release_matrix.sh --cuda-tag 124
-# → dist/flashcli-bundle-pi05-main-sm89-multi-linux-x86_64.zip
-```
-
-Catalog: [`src/flashcli/catalog/models.yaml`](../src/flashcli/catalog/models.yaml). Bundle format: [model_bundle_standard.md](model_bundle_standard.md).
-
----
-
-## Legacy: one zip per environment (still supported)
-
-**Six separate CDN zips** were used previously (one Python ABI per zip). The naming rules below still apply to artifacts inside `lib/` or standalone releases.
+Each preset has **one** `bundle.zip` in `models.yaml` (`schema_version: 6`).
 
 ### Native `.so` naming
 
@@ -52,6 +37,12 @@ Catalog: [`src/flashcli/catalog/models.yaml`](../src/flashcli/catalog/models.yam
 ```
 
 Example: `flash_rt_kernels-abc1234-sm89-cu124-linux-x86_64-py312.so`
+
+- **FlashRT_ABI**: sanitized `git describe` tag, or first 12 chars of commit when too long
+- Matching `.so` for the same tag are cached under `flashcli/.native-cache/<tag>/` for `--pack-only` reuse
+- Import names remain `flash_rt_kernels` / `flash_rt_fa2` regardless of filename tags
+
+Catalog: [`src/flashcli/catalog/models.yaml`](../src/flashcli/catalog/models.yaml). Bundle format: [model_bundle_standard.md](model_bundle_standard.md).
 
 ## What the matrix script does
 
@@ -62,16 +53,18 @@ Example: `flash_rt_kernels-abc1234-sm89-cu124-linux-x86_64-py312.so`
 | Switch CUDA toolkit | ✓ via `CUDA_HOME_CU124` / `CUDA_HOME_CU130` |
 | `--cuda-tag` | Verifies `nvcc` matches the tag; writes manifest / zip name |
 
-Each cell uses a **fresh build dir + full cmake** when building separate legacy zips.
+Each matrix cell uses a **fresh build dir + full cmake** (one native compile per Python/CUDA combination).
 
-## Fast path
+## Build
 
 ```bash
 export FLASHRT_REPO=/path/to/FlashRT
 export CUDA_HOME_CU124=/usr/local/cuda-12.4
 bash scripts/build_pi05_release_matrix.sh --check-only
 
+# cu124 × py310/311/312 → one multi-env zip:
 bash scripts/build_pi05_release_matrix.sh --cuda-tag 124
+# → dist/flashcli-bundle-pi05-main-sm89-multi-linux-x86_64.zip
 
 export CUDA_HOME_CU130=/usr/local/cuda-13.0
 bash scripts/build_pi05_release_matrix.sh --cuda-tag 130
@@ -79,7 +72,25 @@ bash scripts/build_pi05_release_matrix.sh --cuda-tag 130
 
 Upload `bundles/pi05_libero/dist/*.zip` to CDN and verify the URL in `models.yaml`.
 
+### Single cell (maintainer dev)
+
+```bash
+bash scripts/build_pi05_bundle.sh \
+  --bundle-dir bundles/pi05_libero \
+  --repo-root "$FLASHRT_REPO" \
+  --python-bin python3.12 \
+  --sm 89 \
+  --cuda-tag 124
+```
+
+Build `.so` with the **same Python** you use to run flashcli.
+
 ## Runtime selection
+
+| Stage | What gets installed |
+|-------|---------------------|
+| `install.sh` | flashcli CLI only (`pyproject.toml`) |
+| `flashcli run` | torch from bundle `python_dependencies` → pick matching `lib/*.so` |
 
 Host key example (RTX 4060 Ti + Python 3.12 + CUDA 12.4 userland):
 
@@ -98,5 +109,3 @@ flashcli run pi05_libero \
   --bundle "$(pwd)/bundles/pi05_libero" \
   --image /path/to.jpg
 ```
-
-Build `.so` with the **same Python** you use to run flashcli.

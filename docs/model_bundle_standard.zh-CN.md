@@ -8,7 +8,7 @@
 
 每个 preset 在 **`models.yaml`** 中仅登记 **一个** bundle 源：顶层 **`bundle.zip` / `path` / `git`**。多环境 runtime 打在同一制品内（推荐：**单 zip + `lib/` 原生矩阵**）。详见 [runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md)。
 
-## 目录布局（`format_version` ≥ 2）
+## 目录布局
 
 `{bundle_root}` 即运行时根（git checkout、`--bundle`、或 `~/.flashcli/bundles/...` 缓存）。除 `flashcli-bundle.json` 与 `entry` 指向的模块外，**无硬性子目录**。
 
@@ -37,10 +37,6 @@ lib/
 **第三方**：可仅 `run.py` + `modules[].file` 声明的 `.so`，或完整 `lib/` 矩阵；`.so` **只发布一份**，路径在 manifest 中声明即可。
 
 激活时 flashcli 将 **`bundle_root`** 加入 `PYTHONPATH`，安装 `python_dependencies`，并从 `lib/`（矩阵）或 `modules[]`（显式路径）加载原生扩展。
-
-### 旧版布局（`format_version` 1，仍兼容）
-
-`runtime/manifest.json` + `runtime/python/partner/` + `runtime/lib/*.so` 仍可使用；新包请用 v2。
 
 ## 权重
 
@@ -99,14 +95,14 @@ lib/
 
 | 字段 | 说明 |
 |------|------|
-| `format_version` | `2`：扁平 bundle 根；`1`：旧 `runtime/` 树 |
+| `format_version` | 必须为 `2`（扁平 bundle 根） |
 | `capabilities` | `run`、`serve` |
 | `entry.run` / `entry.serve` | 相对 **bundle 根** PYTHONPATH 的模块 + 类名 |
-| `python_dependencies` | pip / torch（原 `manifest.json` 内容） |
+| `python_dependencies` | pip / torch |
 | `python` / `python_abi` | 解释器约束；不匹配时在激活阶段快速失败 |
 | `cuda` | `cuda_tag`、`recommended_torch_index` 等 |
 | `native_layout` / `native_matrix` | `native_layout: matrix` 时从 `lib/` 按本机环境选带标签 `.so` |
-| `modules` | 可选显式 `.so` 路径（v2 相对 bundle 根）；无 `lib/` 矩阵时使用 |
+| `modules` | 可选显式 `.so` 路径（相对 bundle 根）；无 `lib/` 矩阵时使用 |
 | `weights` / `extra_weights` | 主/附加权重下载 |
 | `defaults` / `serve` | 传给引擎的默认参数 |
 | `post_pull` | 拉权重后步骤（tokenizer 等） |
@@ -247,7 +243,7 @@ bash scripts/build_pi05_bundle.sh \
 
 ## 最小交付清单
 
-1. `flashcli-bundle.json`（`format_version` ≥ 2：`entry`、`python_dependencies`、可选 `native_layout` / `modules` / `cuda`）
+1. `flashcli-bundle.json`（`format_version: 2`，含 `entry`、`python_dependencies`、可选 `native_layout` / `modules` / `cuda`）
 2. `entry` 指向的 Python 模块（如 `run.py` + `RunEngine`）
 3. 可选：`lib/` 带标签 `.so` 矩阵 **或** `modules[].file` 列表
 4. 可选：`flash_rt/` Python 树
