@@ -10,6 +10,6 @@ models:
   pi05_libero:
     description: Pi0.5 LIBERO — lerobot/pi05_libero_finetuned_v044 (SM89/SM120)
     bundle:
-      zip: https://cdn.flashhub.top/repo/5/versions/6/flashcli-bundle-pi05-main-sm89-multi-linux-x86_64.zip
+      zip: https://flashhub-cdn.aodianyun.com/repo/5/versions/6/flashcli-bundle-pi05-main-sm89-multi-linux-x86_64.zip
       # path: bundles/pi05_libero   # 本地调试（须含 lib/*-{sm}-{cu}-...-pyNNN.so）
       # git: xxx
