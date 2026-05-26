@@ -52,9 +52,9 @@ flashcli run pi05_libero \
 
 | Preset | Capability | Runtime source | Weights |
 |--------|------------|----------------|---------|
-| `pi05_libero` | `run` | CDN zip (`models.yaml` → `bundle.variants`, chosen by GPU) | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) |
+| `pi05_libero` | `run` | CDN zip (`models.yaml` → `bundle.zip`, native `lib/` matrix) | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) |
 
-`models.yaml` only registers **preset names** and **bundle sources** (single env: top-level `zip`/`path`/`git`; multi env: `bundle.variants.<sm*-cu*-os-arch>`). `weights`, `entry`, `defaults`, etc. live in each bundle’s [`flashcli-bundle.json`](docs/model_bundle_standard.md).
+`models.yaml` only registers **preset names** and **one bundle source per preset** (`zip`/`path`/`git`). Multi-env native runtimes ship inside that zip’s `lib/` matrix. `weights`, `entry`, `defaults`, etc. live in each bundle’s [`flashcli-bundle.json`](docs/model_bundle_standard.md).
 
 Check which environment matches this machine:
 

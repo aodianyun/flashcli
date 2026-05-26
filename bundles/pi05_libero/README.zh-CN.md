@@ -4,7 +4,7 @@
 
 Pi0.5 LIBERO VLA，权重 [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044)。
 
-**对外 preset**：`pi05_libero`（[`src/flashcli/catalog/models.yaml`](../../src/flashcli/catalog/models.yaml)）。用户端按 GPU 环境从 **`bundle.variants`** 拉取对应 CDN zip（当前已发布：`sm89-cu124-linux-x86_64`）。可用 `flashcli models envs pi05_libero` 查看本机是否匹配。
+**对外 preset**：`pi05_libero`（[`src/flashcli/catalog/models.yaml`](../../src/flashcli/catalog/models.yaml)）。用户端拉取**单个** CDN zip；flashcli 按本机 GPU + Python 在 `lib/` 中选匹配 `.so`。可用 `flashcli models envs pi05_libero` 查看本机环境键是否匹配。
 
 ## 运行所需文件（zip 根目录）
 
@@ -38,14 +38,14 @@ bash build.sh --repo-root /path/to/FlashRT
 bash pack.sh --sm 89                    # 仅打开发布 zip（cuda 标签由 nvcc 自动检测，通常为 cu124）
 ```
 
-发布后在 `src/flashcli/catalog/models.yaml` 中为对应环境键登记 zip URL，例如：
+发布后在 `src/flashcli/catalog/models.yaml` 登记矩阵 zip URL，例如：
 
 ```yaml
 bundle:
-  variants:
-    sm89-cu124-linux-x86_64:
-      zip: https://cdn.../flashcli-bundle-pi05-main-sm89-cu124-linux-x86_64.zip
+  zip: https://cdn.../flashcli-bundle-pi05-main-sm89-multi-linux-x86_64.zip
 ```
+
+构建多环境 `lib/` 见 [docs/runtime-matrix.zh-CN.md](../../docs/runtime-matrix.zh-CN.md)。
 
 `build.sh` 仅打入 Pi0.5 RTX 路径需要的 `flash_rt/` 子树，并只复制 `flash_rt_kernels.so`、`flash_rt_fa2.so`。
 

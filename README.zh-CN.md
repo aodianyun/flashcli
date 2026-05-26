@@ -52,9 +52,9 @@ flashcli run pi05_libero \
 
 | Preset | 能力 | Runtime 来源 | 权重 |
 |--------|------|--------------|------|
-| `pi05_libero` | `run` | CDN zip（`models.yaml` → `bundle.variants`，按 GPU 环境选） | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) |
+| `pi05_libero` | `run` | CDN zip（`models.yaml` → `bundle.zip`，`lib/` 原生矩阵） | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) |
 
-`models.yaml` 只登记 **preset 名** 与 **bundle 源**（单环境用顶层 `zip`/`path`/`git`，多环境用 `bundle.variants.<sm*-cu*-os-arch>`）；`weights`、`entry`、`defaults` 等见各包内的 [`flashcli-bundle.json`](docs/model_bundle_standard.zh-CN.md)。
+`models.yaml` 只登记 **preset 名** 与 **每个 preset 一个 bundle 源**（`zip`/`path`/`git`）；多环境原生库打进该 zip 的 `lib/` 矩阵。`weights`、`entry`、`defaults` 等见各包内的 [`flashcli-bundle.json`](docs/model_bundle_standard.zh-CN.md)。
 
 查看本机匹配的环境：
 

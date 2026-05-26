@@ -4,7 +4,7 @@
 
 Pi0.5 LIBERO VLA; weights [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044).
 
-**Public preset**: `pi05_libero` ([`src/flashcli/catalog/models.yaml`](../../src/flashcli/catalog/models.yaml)). End users pull the CDN zip for their GPU environment via **`bundle.variants`** (published today: `sm89-cu124-linux-x86_64`). Run `flashcli models envs pi05_libero` to check a match on this host.
+**Public preset**: `pi05_libero` ([`src/flashcli/catalog/models.yaml`](../../src/flashcli/catalog/models.yaml)). End users pull one CDN zip; flashcli selects the matching `lib/*.so` for this GPU + Python. Run `flashcli models envs pi05_libero` to check a match on this host.
 
 ## Files required to run inference (bundle root)
 
@@ -36,14 +36,14 @@ bash build.sh --repo-root /path/to/FlashRT
 bash pack.sh --sm 89                  # release zip (cuda tag auto from nvcc, typically cu124)
 ```
 
-Register the zip URL under the matching environment key in `src/flashcli/catalog/models.yaml`, e.g.:
+Register the matrix zip URL in `src/flashcli/catalog/models.yaml`, e.g.:
 
 ```yaml
 bundle:
-  variants:
-    sm89-cu124-linux-x86_64:
-      zip: https://cdn.../flashcli-bundle-pi05-main-sm89-cu124-linux-x86_64.zip
+  zip: https://cdn.../flashcli-bundle-pi05-main-sm89-multi-linux-x86_64.zip
 ```
+
+See [docs/runtime-matrix.md](../../docs/runtime-matrix.md) for building the multi-env `lib/` layout.
 
 `build.sh` stages only the Pi0.5 RTX `flash_rt/` subtree and copies `flash_rt_kernels.so` + `flash_rt_fa2.so` only.
 

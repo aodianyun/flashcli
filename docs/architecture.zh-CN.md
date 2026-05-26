@@ -9,8 +9,8 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、按 GPU 环�
 ## 核心原则
 
 1. **推理在 bundle 内** — `flashcli-bundle.json` 的 `entry` 指向模块；flashcli 只做 `importlib` 加载。
-2. **catalog 极简** — `models.yaml` 仅含 preset 名与 bundle 源（`zip` / `path` / `git`，或多环境 `bundle.variants`）。
-3. **按环境选源** — 检测 `sm{SM}-cu{CUDA}-os-arch`，从 catalog 或包内 `variants/` 选取匹配 bundle；无匹配项时给出已配置环境列表。
+2. **catalog 极简** — `models.yaml` 仅含 preset 名与每个 preset 一个 bundle 源（`zip` / `path` / `git`）。
+3. **按环境选 runtime** — 检测 `sm{SM}-cu{CUDA}-os-arch-py{PY}`，从 bundle `lib/` 矩阵选取匹配 `.so`；无匹配时明确报错。
 4. **一条命令** — `flashcli run <preset>` 串联：依赖 → bundle → 权重 → `post_pull` → 推理。
 5. **可选 HTTP** — `flashcli serve` 由 bundle 实现 `ServeEngine`；当前发布的 `pi05_libero` 仅 `run`。
 
@@ -51,7 +51,7 @@ sequenceDiagram
   Ldr->>U: actions
 ```
 
-**Bundle 解析顺序**：`--bundle` > **catalog 按 GPU 选源**（`bundle.variants` 或顶层单源）> 本地缓存 > zip 下载/解压 或 git clone >（单 zip/git 包时）包内 `variants/<env>/`。
+**Bundle 解析顺序**：`--bundle` > catalog 的 `zip` / `path` / `git` > 本地缓存 > 下载或 clone；原生 `.so` 在 bundle 内按本机 runtime 键选择。
 
 ## 本机目录
 
@@ -77,10 +77,10 @@ sequenceDiagram
 
 | 包 | 职责 |
 |----|------|
-| `bundle/catalog.py` | 读 `models.yaml`，按 GPU 解析 `bundle.variants` 或单源 |
+| `bundle/catalog.py` | 读 `models.yaml`；每 preset 一个源 |
 | `bundle/resolve.py` | `--bundle` > catalog 源 > path / zip / git 缓存 |
-| `bundle/zip.py` | CDN / 本地 zip；解压后可选包内 `variants/` |
-| `bundle/git.py` | clone；仓内 `variants/<env>/` 或扁平根 |
+| `bundle/zip.py` | CDN / 本地 zip；解压后定位 `flashcli-bundle.json` |
+| `bundle/git.py` | clone；定位扁平 bundle 根 |
 | `bundle/activate.py` | PYTHONPATH、装依赖、预加载 `.so` |
 | `models/registry.py` | 读 `models.yaml` |
 | `models/cache.py` | 权重 + `post_pull` |
@@ -91,7 +91,7 @@ sequenceDiagram
 
 | Preset | capabilities | bundle 源 |
 |--------|--------------|---------|
-| `pi05_libero` | `run` | `bundle.variants`（当前 CDN：sm89-cu124-linux-x86_64） |
+| `pi05_libero` | `run` | 单个 `bundle.zip`（CDN 矩阵 zip，含 `lib/*.so`） |
 
 ## 相关文档
 

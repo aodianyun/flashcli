@@ -9,8 +9,8 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 ## Core principles
 
 1. **Inference lives in the bundle** — `flashcli-bundle.json` `entry` points at modules; flashcli only `importlib`-loads them.
-2. **Minimal catalog** — `models.yaml` contains only preset names and bundle sources (`zip` / `path` / `git`, or multi-env `bundle.variants`).
-3. **Environment-aware sources** — detect `sm{SM}-cu{CUDA}-os-arch`, select from catalog or inner `variants/`; clear error if no match.
+2. **Minimal catalog** — `models.yaml` contains only preset names and one bundle source per preset (`zip` / `path` / `git`).
+3. **Environment-aware runtime** — detect `sm{SM}-cu{CUDA}-os-arch-py{PY}`, pick matching native `.so` from the bundle `lib/` matrix; clear error if no match.
 4. **One command** — `flashcli run <preset>` chains: deps → bundle → weights → `post_pull` → inference.
 5. **Optional HTTP** — `flashcli serve` is implemented by the bundle’s `ServeEngine`; the published `pi05_libero` preset supports **`run` only**.
 
@@ -51,7 +51,7 @@ sequenceDiagram
   Ldr->>U: actions
 ```
 
-**Resolution order**: `--bundle` > **catalog source for GPU** (`bundle.variants` or single top-level source) > local cache > zip or git fetch > (single artifact) inner `variants/<env>/`.
+**Resolution order**: `--bundle` > catalog `zip` / `path` / `git` > local cache > download or clone; native `.so` selection uses the host runtime key inside the bundle.
 
 ## Local directories
 
@@ -77,10 +77,10 @@ Legacy `runtime/manifest.json` + `runtime/python/partner/` remain supported; see
 
 | Package | Role |
 |---------|------|
-| `bundle/catalog.py` | Read `models.yaml`; resolve `bundle.variants` or single source by GPU |
+| `bundle/catalog.py` | Read `models.yaml`; one source per preset |
 | `bundle/resolve.py` | `--bundle` > catalog source > path / zip / git cache |
-| `bundle/zip.py` | CDN / local zip; optional inner `variants/` after unpack |
-| `bundle/git.py` | clone; repo `variants/<env>/` or flat root |
+| `bundle/zip.py` | CDN / local zip; locate `flashcli-bundle.json` after unpack |
+| `bundle/git.py` | clone; locate flat bundle root |
 | `bundle/activate.py` | PYTHONPATH, install deps, preload `.so` |
 | `models/registry.py` | Read `models.yaml` |
 | `models/cache.py` | Weights + `post_pull` |
@@ -91,7 +91,7 @@ Legacy `runtime/manifest.json` + `runtime/python/partner/` remain supported; see
 
 | Preset | capabilities | bundle source |
 |--------|--------------|---------------|
-| `pi05_libero` | `run` | `bundle.variants` (CDN: sm89-cu124-linux-x86_64 today) |
+| `pi05_libero` | `run` | single `bundle.zip` (CDN matrix zip with `lib/*.so`) |
 
 ## Related docs
 
