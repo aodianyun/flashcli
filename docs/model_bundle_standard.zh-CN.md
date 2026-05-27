@@ -143,9 +143,36 @@ lib/
 
 catalog 通过 `models.yaml` 的单个 `bundle.zip` 指向已组装制品；权重由 HF 拉取。维护者从源码构建见 [bundles/pi05_libero/README.zh-CN.md](../bundles/pi05_libero/README.zh-CN.md)。用户可用 `flashcli models envs pi05_libero` 查看本机环境键及 `lib/` 是否含匹配制品。
 
-### 示例：LLM + `serve`（内部草稿，未发布）
+### 示例：同类多模型 — 单 runtime + catalog 多 preset（Qwen NVFP4）
 
-Qwen NVFP4 等包使用 `capabilities: ["run", "serve"]` 与 `requires.sm: ["120"]`，需 `scripts/build_qwen_bundle.sh` 在 SM120 上构建。**验证通过前不要写入 catalog。**
+工业上**同类模型共用一个 runtime 制品**（一份 `.so` + `flash_rt/`），差异只在权重与默认超参：
+
+| 层 | 职责 |
+|----|------|
+| **bundle**（`flashcli-bundle.json`） | `variants.qwen3` / `variants.qwen36`：权重 repo、`weights_dir`、`serve` 默认、`env` |
+| **catalog**（`models.yaml`） | 多个 preset 指向**同一** `bundle.path` 或 `bundle.zip`，用 **`bundle_variant`** 选型 |
+| **CLI** | `--model` 仅覆盖 catalog（调试/临时切换） |
+
+```yaml
+# models.yaml — 两个产品 preset，一个 zip
+qwen3-8b-nvfp4:
+  bundle_variant: qwen3
+  bundle:
+    path: bundles/qwen_nvfp4   # 或 zip: https://.../flashcli-bundle-qwen-nvfp4-....zip
+
+qwen36-27b-nvfp4:
+  bundle_variant: qwen36
+  bundle:
+    path: bundles/qwen_nvfp4
+```
+
+```bash
+flashcli run qwen3-8b-nvfp4 --prompt "你好"      # 自动 variant=qwen3
+flashcli run qwen36-27b-nvfp4 --prompt "你好" --K 6
+flashcli run qwen3-8b-nvfp4 --model qwen36 ...  # 临时覆盖（不推荐常态）
+```
+
+构建：[`bundles/qwen_nvfp4/build.sh`](../bundles/qwen_nvfp4/build.sh)（`--variant all`）。**验证通过前**可将 `bundle.path` 换为 `bundle.zip` 发布；勿为每个模型单独打 runtime zip。
 
 ## `entry` 入口约定
 

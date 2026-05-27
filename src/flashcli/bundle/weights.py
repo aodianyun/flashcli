@@ -10,13 +10,28 @@ from flashcli import config
 from flashcli.bundle.checkpoint import has_usable_checkpoint
 from flashcli.bundle.config import bundle_dict, bundle_list
 from flashcli.bundle.manifest import BundleManifest
+from flashcli.bundle.variants import (
+    has_bundle_variants,
+    resolve_bundle_variant,
+    variant_extra_weights,
+    variant_weights_dir,
+    variant_weights_spec,
+)
 from flashcli.models.registry import Preset
 
 _SKIP_WEIGHT_NAMES = frozenset({".flashcli_model.json", ".gitkeep"})
 
 
-def bundle_weights_dir(bundle: BundleManifest) -> Path:
-    rel = str(bundle.raw.get("weights_dir", "checkpoint")).strip() or "checkpoint"
+def bundle_weights_dir(
+    bundle: BundleManifest,
+    *,
+    variant: str | None = None,
+) -> Path:
+    if has_bundle_variants(bundle):
+        key = resolve_bundle_variant(bundle, variant)
+        rel = variant_weights_dir(bundle, key)
+    else:
+        rel = str(bundle.raw.get("weights_dir", "checkpoint")).strip() or "checkpoint"
     return (bundle.bundle_root / rel).resolve()
 
 
@@ -37,13 +52,27 @@ def has_local_weights(path: Path) -> bool:
     return False
 
 
-def weights_spec(bundle: BundleManifest) -> dict[str, Any]:
-    """Weights download spec from ``flashcli-bundle.json``."""
+def weights_spec(
+    bundle: BundleManifest,
+    *,
+    variant: str | None = None,
+) -> dict[str, Any]:
+    """Weights download spec from ``flashcli-bundle.json`` (or ``variants.<name>``)."""
+    if has_bundle_variants(bundle):
+        key = resolve_bundle_variant(bundle, variant)
+        return variant_weights_spec(bundle, key)
     return bundle_dict(bundle, "weights")
 
 
-def extra_weights_spec(bundle: BundleManifest) -> dict[str, Any]:
+def extra_weights_spec(
+    bundle: BundleManifest,
+    *,
+    variant: str | None = None,
+) -> dict[str, Any]:
     """Extra weights from ``extra_weights`` (legacy alias: ``extra_pull``)."""
+    if has_bundle_variants(bundle):
+        key = resolve_bundle_variant(bundle, variant)
+        return variant_extra_weights(bundle, key)
     extra = bundle_dict(bundle, "extra_weights")
     if extra:
         return extra
@@ -61,11 +90,21 @@ def _format_bundle_env(value: str, bundle_root: Path) -> str:
     )
 
 
-def apply_bundle_env(bundle: BundleManifest) -> None:
-    """Apply ``env`` from ``flashcli-bundle.json``."""
+def apply_bundle_env(
+    bundle: BundleManifest,
+    *,
+    variant: str | None = None,
+) -> None:
+    """Apply ``env`` from ``flashcli-bundle.json`` (top-level or per-variant)."""
     import os
 
-    merged = bundle_dict(bundle, "env")
+    if has_bundle_variants(bundle):
+        from flashcli.bundle.variants import resolve_bundle_variant, variant_env
+
+        key = resolve_bundle_variant(bundle, variant)
+        merged = variant_env(bundle, key)
+    else:
+        merged = bundle_dict(bundle, "env")
     for key, value in merged.items():
         if isinstance(value, str):
             os.environ[key] = _format_bundle_env(value, bundle.bundle_root)
@@ -87,11 +126,12 @@ def _extra_dest(
 def download_extra_weights(
     bundle: BundleManifest | None,
     *,
+    variant: str | None = None,
     quiet: bool = False,
 ) -> None:
     if bundle is None:
         return
-    extra = extra_weights_spec(bundle)
+    extra = extra_weights_spec(bundle, variant=variant)
     for key, spec in extra.items():
         if not isinstance(spec, dict):
             continue
@@ -144,13 +184,14 @@ def resolve_checkpoint(
     bundle: BundleManifest | None = None,
     *,
     checkpoint_override: Path | None = None,
+    variant: str | None = None,
 ) -> Path | None:
     """Return checkpoint path without downloading."""
     if checkpoint_override is not None:
         path = checkpoint_override.expanduser().resolve()
         return path if path.exists() else None
     if bundle is not None:
-        local = bundle_weights_dir(bundle)
+        local = bundle_weights_dir(bundle, variant=variant)
         if has_local_weights(local):
             return local
     cache = config.MODELS_DIR / preset.name
@@ -174,6 +215,7 @@ def ensure_checkpoint(
     bundle: BundleManifest | None = None,
     *,
     checkpoint_override: Path | None = None,
+    variant: str | None = None,
     quiet: bool = False,
 ) -> Path:
     """Resolve checkpoint: override → bundle-local → cache → download."""
@@ -182,7 +224,7 @@ def ensure_checkpoint(
         if not path.exists():
             raise FileNotFoundError(f"Checkpoint not found: {path}")
         if bundle is not None:
-            apply_bundle_env(bundle)
+            apply_bundle_env(bundle, variant=variant)
         return path
 
     if bundle is None:
@@ -191,36 +233,54 @@ def ensure_checkpoint(
             "flashcli-bundle.json via a resolved model bundle."
         )
 
-    local = bundle_weights_dir(bundle)
+    local = bundle_weights_dir(bundle, variant=variant)
     if has_local_weights(local):
-        apply_bundle_env(bundle)
-        download_extra_weights(bundle, quiet=quiet)
+        apply_bundle_env(bundle, variant=variant)
+        download_extra_weights(bundle, variant=variant, quiet=quiet)
         return local
 
-    existing = resolve_checkpoint(preset, bundle=bundle)
+    existing = resolve_checkpoint(preset, bundle=bundle, variant=variant)
     if existing is not None:
-        apply_bundle_env(bundle)
-        download_extra_weights(bundle, quiet=quiet)
+        apply_bundle_env(bundle, variant=variant)
+        download_extra_weights(bundle, variant=variant, quiet=quiet)
         return existing
 
-    spec = weights_spec(bundle)
+    spec = weights_spec(bundle, variant=variant)
     cache_dir = config.MODELS_DIR / preset.name
     checkpoint_dir = cache_dir / "checkpoint"
     cache_dir.mkdir(parents=True, exist_ok=True)
     if not quiet:
         print(f"Downloading weights for {bundle.name} -> {checkpoint_dir}")
     download_merged_weights(spec, checkpoint_dir, quiet=quiet)
-    download_extra_weights(bundle, quiet=quiet)
+    download_extra_weights(bundle, variant=variant, quiet=quiet)
     from flashcli.models.pull import _write_marker
 
     _write_marker(cache_dir, preset.name, checkpoint_dir)
-    apply_bundle_env(bundle)
+    apply_bundle_env(bundle, variant=variant)
     return checkpoint_dir
 
 
 def validate_weights_spec(bundle: BundleManifest) -> list[str]:
     """Validate weights section of flashcli-bundle.json."""
     errors: list[str] = []
+    if has_bundle_variants(bundle):
+        from flashcli.bundle.variants import bundle_variants
+
+        for name in sorted(bundle_variants(bundle)):
+            local = bundle_weights_dir(bundle, variant=name)
+            if has_local_weights(local):
+                continue
+            spec = variant_weights_spec(bundle, name)
+            if not spec:
+                errors.append(
+                    f"variants.{name}: no local {local.name}/ and no weights spec"
+                )
+                continue
+            source = str(spec.get("source", "huggingface")).lower()
+            if source == "huggingface" and not str(spec.get("repo", "")).strip():
+                errors.append(f"variants.{name}.weights.repo is required")
+        return errors
+
     local = bundle_weights_dir(bundle)
     if has_local_weights(local):
         return errors

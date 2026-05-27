@@ -143,9 +143,9 @@ At `flashcli run`, the host key is **`sm{SM}-cu{CUDA}-{os}-{arch}-py{PY}`** (inc
 
 The catalog points at one assembled zip via `models.yaml` → `bundle.zip`; weights come from HF. Building from source: [bundles/pi05_libero/README.md](../bundles/pi05_libero/README.md). Run `flashcli models envs pi05_libero` to see this machine’s runtime key and whether `lib/` contains a matching artifact.
 
-### Example: LLM + `serve` (internal draft, not published)
+### Example: related models — one runtime, many catalog presets (Qwen NVFP4)
 
-Qwen NVFP4 bundles use `capabilities: ["run", "serve"]` and `requires.sm: ["120"]`; build with `scripts/build_qwen_bundle.sh` on SM120. **Do not add to catalog until validated.**
+Ship **one** runtime zip (`bundles/qwen_nvfp4/`) with `variants` in `flashcli-bundle.json`. Register **multiple** `models.yaml` presets that share `bundle.path` / `bundle.zip` and set **`bundle_variant`** (`qwen3`, `qwen36`). CLI `--model` overrides the catalog for debugging only. See [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) (Qwen section) and [bundles/qwen_nvfp4/README.md](../bundles/qwen_nvfp4/README.md). Build on SM120 with `scripts/build_qwen_bundle.sh --variant all`.
 
 ## `entry` contract
 

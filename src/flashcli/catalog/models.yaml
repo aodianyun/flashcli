@@ -13,3 +13,16 @@ models:
       zip: https://flashhub-cdn.aodianyun.com/repo/5/versions/6/flashcli-bundle-pi05-main-sm89-multi-linux-x86_64.zip
       # path: bundles/pi05_libero   # 本地调试（须含 lib/*-{sm}-{cu}-...-pyNNN.so）
       # git: xxx
+
+  # 草稿：共享同一 runtime bundle，用 bundle_variant 选权重（验证通过前勿改 zip 发布）
+  qwen3-8b-nvfp4:
+    description: Qwen3-8B Instruct NVFP4 (SM120)
+    bundle_variant: qwen3
+    bundle:
+      path: bundles/qwen_nvfp4
+
+  qwen36-27b-nvfp4:
+    description: Qwen3.6-27B NVFP4 + MTP speculative decode (SM120)
+    bundle_variant: qwen36
+    bundle:
+      path: bundles/qwen_nvfp4

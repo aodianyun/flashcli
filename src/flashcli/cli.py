@@ -83,12 +83,17 @@ def models_list() -> None:
     gpu = detect_gpu()
     for name in reg.list_names():
         preset = reg.get(name)
+        variant_tag = ""
+        if preset.bundle_variant:
+            variant_tag = f", variant={preset.bundle_variant}"
         weights = "weights:cached" if model_cache.is_cached(name) else "weights:missing"
         try:
             has_zip = zip_spec(preset) is not None
         except Exception as exc:
             bundle_state = f"bundle:error ({exc})"
-            typer.echo(f"{name}: {preset.description} [{bundle_state}, {weights}]")
+            typer.echo(
+                f"{name}: {preset.description} [{bundle_state}{variant_tag}, {weights}]"
+            )
             continue
         if is_preset_bundle_cached(preset):
             marker = read_bundle_marker(name) or {}
@@ -104,7 +109,7 @@ def models_list() -> None:
         else:
             want_ref = resolve_requested_git_ref(preset)
             bundle_state = f"bundle:missing (want @{want_ref})"
-        typer.echo(f"{name}: {preset.description} [{bundle_state}, {weights}]")
+        typer.echo(f"{name}: {preset.description} [{bundle_state}{variant_tag}, {weights}]")
 
 
 @models_app.command("envs")
@@ -393,6 +398,11 @@ def run(
         "--K",
         help="MTP speculative K for Qwen3.6 run.",
     ),
+    model: Optional[str] = typer.Option(
+        None,
+        "--model",
+        help="Override catalog bundle_variant (e.g. qwen3, qwen36).",
+    ),
     image: Optional[str] = typer.Option(
         None, "--image", help="Comma-separated image paths (one per view)."
     ),
@@ -417,6 +427,7 @@ def run(
     quiet: bool = typer.Option(False, "--quiet", "-q"),
 ) -> None:
     """Run inference using the preset's model bundle."""
+    from flashcli.bundle.variants import resolve_effective_model_variant
     from flashcli.engines.factory import BundleNotReadyError, activate_for_preset, create_run_engine
 
     p = PresetRegistry().get(preset)
@@ -437,6 +448,13 @@ def run(
         typer.echo(str(exc), err=True)
         raise typer.Exit(BundleNotReadyError.exit_code) from exc
 
+    from flashcli.bundle.activate import active_bundle
+
+    active = active_bundle()
+    effective_variant = resolve_effective_model_variant(
+        p, active, cli_override=model
+    )
+
     try:
         ckpt = model_cache.ensure_model_cached(
             preset,
@@ -444,6 +462,7 @@ def run(
             bundle_ref=bundle_ref,
             checkpoint_override=checkpoint,
             mtp_checkpoint_override=mtp_checkpoint,
+            model_variant=effective_variant,
             quiet=quiet,
         )
     except (NotImplementedError, FileNotFoundError, ValueError) as exc:
@@ -467,6 +486,8 @@ def run(
     }
     if K is not None:
         load_kw["K"] = K
+    if effective_variant:
+        load_kw["model"] = effective_variant
     run_engine.load(Path(ckpt), p, **{k: v for k, v in load_kw.items() if v is not None})
     try:
         actions = run_engine.predict(
@@ -528,11 +549,17 @@ def serve(
         help='Graph warmup shapes, e.g. "8:512".',
     ),
     K: Optional[int] = typer.Option(None, "--K", help="MTP speculative K (Qwen3.6)."),
+    model: Optional[str] = typer.Option(
+        None,
+        "--model",
+        help="Override catalog bundle_variant (e.g. qwen3, qwen36).",
+    ),
     model_name: Optional[str] = typer.Option(None, "--model-name"),
     no_auto_install: bool = typer.Option(False, "--no-auto-install"),
     quiet: bool = typer.Option(False, "--quiet", "-q"),
 ) -> None:
     """Serve unified OpenAI HTTP API via the preset model bundle."""
+    from flashcli.bundle.variants import resolve_effective_model_variant
     from flashcli.engines.factory import BundleNotReadyError, activate_for_preset, create_serve_engine
     from flashcli.serve.app import build_app
 
@@ -554,6 +581,13 @@ def serve(
         typer.echo(str(exc), err=True)
         raise typer.Exit(BundleNotReadyError.exit_code) from exc
 
+    from flashcli.bundle.activate import active_bundle
+
+    active = active_bundle()
+    effective_variant = resolve_effective_model_variant(
+        p, active, cli_override=model
+    )
+
     try:
         ckpt = model_cache.ensure_model_cached(
             preset,
@@ -561,6 +595,7 @@ def serve(
             bundle_ref=bundle_ref,
             checkpoint_override=checkpoint,
             mtp_checkpoint_override=mtp_checkpoint,
+            model_variant=effective_variant,
             quiet=quiet,
         )
     except (NotImplementedError, FileNotFoundError, ValueError) as exc:
@@ -587,7 +622,12 @@ def serve(
         bundle_ref=bundle_ref,
         checkpoint=Path(ckpt),
     )
-    opts: dict = {"model_name": model_name, "K": K, "warmup": warm_spec}
+    opts: dict = {
+        "model_name": model_name,
+        "K": K,
+        "warmup": warm_spec,
+        "model": effective_variant,
+    }
     opts = {k: v for k, v in opts.items() if v is not None}
     serve_engine.load(Path(ckpt), p, **opts)
     if warm_spec:

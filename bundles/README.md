@@ -14,7 +14,6 @@ End users who `pip install flashcli` **do not need** this directory; maintainers
 
 These directories are for monorepo development. They are **not** in `models.yaml` and runtimes are **not** validated for public use. Do not document them as available presets:
 
-- `qwen3_8b_nvfp4/` — Qwen3-8B NVFP4 (requires SM120)
-- `qwen36_27b_nvfp4/` — Qwen3.6-27B NVFP4 + MTP (requires SM120)
+- [`qwen_nvfp4/`](qwen_nvfp4/) — **Qwen3 + Qwen3.6 NVFP4** (one runtime; catalog presets + `bundle_variant`, SM120)
 
 For a new bundle, copy [`_template/`](_template/) and read [docs/model_bundle_standard.md](../docs/model_bundle_standard.md).

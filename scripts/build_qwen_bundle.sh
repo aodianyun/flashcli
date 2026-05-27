@@ -2,7 +2,7 @@
 # Build / stage a Qwen model bundle (flash_rt + CUDA kernels) for flashcli serve.
 #
 # Usage:
-#   bash flashcli/scripts/build_qwen_bundle.sh --bundle-dir flashcli/bundles/qwen3_8b_nvfp4
+#   bash flashcli/scripts/build_qwen_bundle.sh --bundle-dir flashcli/bundles/qwen_nvfp4
 #   bash flashcli/scripts/build_qwen_bundle.sh --bundle-dir ... --variant qwen3 --repo-root /app/FlashRT
 #   bash flashcli/scripts/build_qwen_bundle.sh --bundle-dir ... --pack-only
 #
@@ -10,6 +10,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FLASHCLI_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# shellcheck source=lib/native_naming.sh
+source "${SCRIPT_DIR}/lib/native_naming.sh"
 GEN_MANIFEST="${SCRIPT_DIR}/generate_runtime_manifest.py"
 BUNDLED_REQUIREMENTS="${SCRIPT_DIR}/requirements/runtime-inference.txt"
 
@@ -18,7 +20,7 @@ BUNDLE_DIR=""
 OUTPUT_DIR=""
 GIT_REF="main"
 RUNTIME_VERSION="1.0.0"
-VARIANT="qwen3"
+VARIANT="all"
 SM=""
 CUDA_TAG=""
 OS_NAME=""
@@ -33,10 +35,12 @@ BUILD_ID=""
 MIN_DRIVER=""
 CUTLASS_REF="v4.4.2"
 EMBED_CHECKPOINT=""
+PYTHON_BIN=""
+PYTHON_MINOR=""
 
 usage() {
   cat <<EOF
-Assemble a Qwen flashcli model bundle (runtime/lib + runtime/python/flash_rt).
+Assemble a Qwen flashcli model bundle (v2: flash_rt/ + tagged *.so at bundle root).
 
 Usage:
   bash flashcli/scripts/build_qwen_bundle.sh --bundle-dir DIR [OPTIONS]
@@ -45,7 +49,7 @@ Required:
   --bundle-dir DIR        Bundle root (must contain flashcli-bundle.json)
 
 Options:
-  --variant NAME          qwen3 | qwen36 | all (default: qwen3)
+  --variant NAME          qwen3 | qwen36 | all (default: all)
   --repo-root DIR         FlashRT source (default: auto-detect)
   --output-dir DIR        Also write tarball here (optional)
   --git-ref REF           Record in flashcli-bundle.json git_ref (default: main)
@@ -55,6 +59,8 @@ Options:
   -j, --jobs N            Parallel cmake jobs
   --pack-only             Skip cmake; stage existing .so
   --embed-checkpoint DIR  Copy weights into bundle checkpoint/
+  --python-bin BIN        Python for manifest ABI tag (default: python3)
+  --python-minor TAG      310 / 311 / 312 (default: from --python-bin)
   -h, --help
 
 Note: Qwen3-8B NVFP4 requires SM120 (has_nvfp4). Building on SM89 produces a
@@ -210,13 +216,16 @@ normalize_lib() {
   cp -f "${matches[0]}" "${dst_lib}/${dest_name}"
 }
 
-stage_partner_python() {
-  local py_root="$1"
+ensure_bundle_entry_modules() {
+  if [[ -f "${BUNDLE_DIR}/run.py" && -f "${BUNDLE_DIR}/serve.py" ]]; then
+    return 0
+  fi
   local partner_src="${BUNDLE_DIR}/partner"
-  [[ -d "${partner_src}" ]] || return 0
-  mkdir -p "${py_root}"
-  rsync -a "${partner_src}/" "${py_root}/partner/"
-  log "Staged partner/ -> ${py_root}/partner/"
+  if [[ -d "${partner_src}" ]]; then
+    touch "${partner_src}/__init__.py"
+    return 0
+  fi
+  die "Missing run.py+serve.py (v2 flat) or partner/ under ${BUNDLE_DIR}"
 }
 
 stage_flash_rt_python() {
@@ -278,49 +287,75 @@ stage_qwen_serve_modules() {
 }
 
 stage_bundle_runtime() {
-  local runtime_dir="${BUNDLE_DIR}/runtime"
-  local lib_dir="${runtime_dir}/lib"
-  local py_dir="${runtime_dir}/python/flash_rt"
+  local lib_dir="${BUNDLE_DIR}"
+  local py_dir="${BUNDLE_DIR}/flash_rt"
   local build_src="${BUILD_DIR:-${REPO_ROOT}/build}"
+  local py_bin="${PYTHON_BIN:-python3}"
 
-  rm -rf "${lib_dir}" "${py_dir}"
-  mkdir -p "${lib_dir}"
+  rm -rf "${py_dir}" "${BUNDLE_DIR}/runtime"
+  rm -f "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so
 
-  local has_kernels=0 has_fa2=0 has_fp4=0 has_fmha=0
-  for src in "${build_src}" "${REPO_ROOT}/flash_rt"; do
-    [[ -d "${src}" ]] || continue
-    normalize_lib "${src}" "${lib_dir}" "flash_rt_kernels*.so" "flash_rt_kernels.so" && has_kernels=1
-    normalize_lib "${src}" "${lib_dir}" "flash_rt_fa2*.so" "flash_rt_fa2.so" && has_fa2=1
-    normalize_lib "${src}" "${lib_dir}" "flash_rt_fp4*.so" "flash_rt_fp4.so" && has_fp4=1
-  done
-
-  [[ "${has_kernels}" -eq 1 ]] || die "flash_rt_kernels.so missing"
-
-  if [[ "${VARIANT}" == "qwen3" || "${VARIANT}" == "all" ]] && [[ "${SM}" != "120" ]]; then
-    log "WARNING: Qwen3 NVFP4 needs SM120; detected sm=${SM} — runtime will lack has_nvfp4()"
+  if [[ -z "${PYTHON_MINOR}" ]]; then
+    PYTHON_MINOR="$("${py_bin}" -c 'import sys; print(f"{sys.version_info.major}{sys.version_info.minor:02d}")')"
   fi
 
+  local git_commit flashrt_tag build_id torch_idx min_drv flashrt_abi native_tag
+  git_commit="$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)"
+  flashrt_tag="${FLASHRT_TAG:-$(git -C "${REPO_ROOT}" describe --tags --always 2>/dev/null || echo dev)}"
+  flashrt_abi="$(sanitize_flashrt_abi "${flashrt_tag}" "${git_commit}")"
+  native_tag="$(native_artifact_tag "${flashrt_abi}" "${SM}" "${CUDA_TAG}" "${OS_NAME}" "${CPU_ARCH}" "${PYTHON_MINOR}")"
+  local kernels_name fa2_name fp4_name
+  kernels_name="$(native_so_filename flash_rt_kernels "${native_tag}")"
+  fa2_name="$(native_so_filename flash_rt_fa2 "${native_tag}")"
+  fp4_name="$(native_so_filename flash_rt_fp4 "${native_tag}")"
+  log "Native artifact tag: ${native_tag}"
+  log "  ${kernels_name}"
+  log "  ${fa2_name}"
+  [[ "${VARIANT}" == "qwen36" || "${VARIANT}" == "all" ]] && log "  ${fp4_name} (optional)"
+
+  local cache_dir="${FLASHCLI_ROOT}/.native-cache/${native_tag}"
+  local has_kernels=0 has_fa2=0 has_fp4=0
+  rm -f "${lib_dir}/${kernels_name}" "${lib_dir}/${fa2_name}" "${lib_dir}/${fp4_name}"
+  if [[ -f "${cache_dir}/${kernels_name}" ]]; then
+    log "Reusing cached native libs from ${cache_dir}"
+    cp -f "${cache_dir}/${kernels_name}" "${lib_dir}/"
+    has_kernels=1
+    [[ -f "${cache_dir}/${fa2_name}" ]] && cp -f "${cache_dir}/${fa2_name}" "${lib_dir}/" && has_fa2=1
+    [[ -f "${cache_dir}/${fp4_name}" ]] && cp -f "${cache_dir}/${fp4_name}" "${lib_dir}/" && has_fp4=1
+  fi
+  for src in "${build_src}" "${REPO_ROOT}/flash_rt"; do
+    [[ -d "${src}" ]] || continue
+    normalize_lib "${src}" "${lib_dir}" "flash_rt_kernels*.so" "${kernels_name}" && has_kernels=1
+    normalize_lib "${src}" "${lib_dir}" "flash_rt_fa2*.so" "${fa2_name}" && has_fa2=1
+    normalize_lib "${src}" "${lib_dir}" "flash_rt_fp4*.so" "${fp4_name}" && has_fp4=1
+  done
+
+  [[ "${has_kernels}" -eq 1 ]] || die "${kernels_name} missing (build FlashRT or use --pack-only)"
+  [[ "${has_fa2}" -eq 1 ]] || die "${fa2_name} missing (required for Qwen FA2 attention)"
+
+  if [[ "${SM}" != "120" ]]; then
+    log "WARNING: Qwen NVFP4 needs SM120; detected sm=${SM} — NVFP4 kernels may be absent"
+  fi
+
+  ensure_bundle_entry_modules
   stage_flash_rt_python "${py_dir}"
-  stage_partner_python "$(dirname "${py_dir}")"
   stage_qwen_serve_modules "${py_dir}"
   find "${py_dir}" -name '*.so' -type f -delete 2>/dev/null || true
 
-  local git_commit flashrt_tag build_id torch_idx min_drv
-  git_commit="$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)"
-  flashrt_tag="${FLASHRT_TAG:-$(git -C "${REPO_ROOT}" describe --tags --always 2>/dev/null || echo dev)}"
   build_id="${BUILD_ID:-$(date -u +%Y%m%d)-sm${SM}}"
   torch_idx="$(recommended_torch_index)"
   min_drv="${MIN_DRIVER:-$(default_min_driver)}"
 
-  log "Writing runtime/manifest.json"
-  python3 "${GEN_MANIFEST}" \
+  log "Updating flashcli-bundle.json (v2) python_abi=${PYTHON_MINOR}"
+  "${py_bin}" "${GEN_MANIFEST}" \
     --repo-root "${REPO_ROOT}" \
-    --stage-root "${runtime_dir}" \
+    --bundle-json "${BUNDLE_DIR}/flashcli-bundle.json" \
     --lib-dir "${lib_dir}" \
     --runtime-version "${RUNTIME_VERSION}" \
     --flashrt-tag "${flashrt_tag}" \
     --git-commit "${git_commit}" \
     --build-id "${build_id}" \
+    --git-ref "${GIT_REF}" \
     --sm "${SM}" \
     --os-name "${OS_NAME}" \
     --cpuarch "${CPU_ARCH}" \
@@ -331,27 +366,14 @@ stage_bundle_runtime() {
     --min-driver "${min_drv}" \
     --has-fa2 "${has_fa2}" \
     --has-fp4 "${has_fp4}" \
-    --has-fmha "0" >/dev/null
+    --has-fmha "0" \
+    --python-minor "${PYTHON_MINOR}" \
+    --native-artifact-tag "${native_tag}" >/dev/null
 
-  python3 - "${BUNDLE_DIR}/flashcli-bundle.json" "${runtime_dir}/manifest.json" "${GIT_REF}" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-bundle_path = Path(sys.argv[1])
-manifest_path = Path(sys.argv[2])
-git_ref = sys.argv[3]
-bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
-manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-bundle["git_ref"] = git_ref
-bundle["native_libs"] = {
-    "flashrt_tag": manifest.get("flashrt_tag"),
-    "build_id": manifest.get("build_id"),
-    "git_commit": manifest.get("git_commit"),
-    "modules": manifest.get("modules", []),
-}
-bundle_path.write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")
-PY
+  mkdir -p "${cache_dir}"
+  cp -f "${lib_dir}/${kernels_name}" "${lib_dir}/${fa2_name}" "${cache_dir}/"
+  [[ "${has_fp4}" -eq 1 ]] && cp -f "${lib_dir}/${fp4_name}" "${cache_dir}/"
+  log "Cached native reuse dir: ${cache_dir}/"
 }
 
 embed_checkpoint() {
@@ -400,6 +422,8 @@ while [[ $# -gt 0 ]]; do
     --build-id) BUILD_ID="$2"; shift 2 ;;
     --min-driver) MIN_DRIVER="$2"; shift 2 ;;
     --cutlass-branch) CUTLASS_REF="$2"; shift 2 ;;
+    --python-bin) PYTHON_BIN="$2"; shift 2 ;;
+    --python-minor) PYTHON_MINOR="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown option: $1" ;;
   esac
@@ -416,6 +440,8 @@ detect_platform
 if [[ "${OS_NAME}" != "linux" && "${SKIP_BUILD}" -eq 0 ]]; then
   die "Full build requires Linux; use --pack-only on macOS"
 fi
+
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 if [[ "${SKIP_BUILD}" -eq 0 ]]; then
   detect_sm
@@ -441,5 +467,5 @@ maybe_write_tarball
 
 log "Bundle ready: ${BUNDLE_DIR}"
 log "  flashcli bundle validate ${BUNDLE_DIR}"
-log "  flash run qwen3-8b-nvfp4 --bundle ${BUNDLE_DIR} --prompt 'Hello'"
-log "  flash serve qwen3-8b-nvfp4 --bundle ${BUNDLE_DIR}"
+log "  flashcli run <preset> --bundle ${BUNDLE_DIR} --model qwen3 --prompt 'Hello'"
+log "  flashcli run <preset> --bundle ${BUNDLE_DIR} --model qwen36 --prompt 'Hello'"

@@ -98,6 +98,7 @@ def ensure_model_cached(
     bundle_version: str | None = None,
     checkpoint_override: Path | None = None,
     mtp_checkpoint_override: Path | None = None,
+    model_variant: str | None = None,
     quiet: bool = False,
 ) -> Path:
     """Return checkpoint directory, downloading from HF when missing."""
@@ -127,6 +128,7 @@ def ensure_model_cached(
         p,
         bundle,
         checkpoint_override=None,
+        variant=model_variant,
         quiet=quiet,
     )
     _apply_mtp_env(bundle, mtp_checkpoint_override=mtp_checkpoint_override)

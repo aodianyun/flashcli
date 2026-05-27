@@ -21,6 +21,15 @@ class Preset:
         return str(self.raw.get("engine", "model_bundle"))
 
     @property
+    def bundle_variant(self) -> str | None:
+        """Logical model key when several presets share one runtime bundle."""
+        for key in ("bundle_variant", "variant", "model_variant", "model"):
+            value = self.raw.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
+
+    @property
     def description(self) -> str:
         explicit = str(self.raw.get("description", "")).strip()
         if explicit:

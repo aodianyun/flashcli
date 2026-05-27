@@ -14,7 +14,6 @@
 
 以下目录供 monorepo 内开发，**未写入 `models.yaml`**，runtime **未做对外验证**，请勿当作产品文档中的可用 preset：
 
-- `qwen3_8b_nvfp4/` — Qwen3-8B NVFP4（需 SM120）
-- `qwen36_27b_nvfp4/` — Qwen3.6-27B NVFP4 + MTP（需 SM120）
+- [`qwen_nvfp4/`](qwen_nvfp4/) — **Qwen3 + Qwen3.6 NVFP4**（单 runtime；catalog preset + `bundle_variant`，需 SM120）
 
 新包请从 [`_template/`](_template/) 拷贝，并阅读 [docs/model_bundle_standard.zh-CN.md](../docs/model_bundle_standard.zh-CN.md)。

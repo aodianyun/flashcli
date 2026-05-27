@@ -1,0 +1,75 @@
+{
+  "format": "flashcli-model-bundle",
+  "format_version": 2,
+  "name": "qwen_nvfp4",
+  "description": "Qwen3-8B + Qwen3.6-27B NVFP4 (SM120) — single runtime, --model selects weights",
+  "default_variant": "qwen3",
+  "capabilities": ["run", "serve"],
+  "framework": "torch",
+  "requires": {
+    "sm": ["120"]
+  },
+  "entry": {
+    "run": {
+      "module": "run",
+      "attr": "RunEngine"
+    },
+    "serve": {
+      "module": "serve",
+      "attr": "ServeEngine"
+    }
+  },
+  "variants": {
+    "qwen3": {
+      "description": "Qwen3-8B NVFP4 — JunHowie/Qwen3-8B-Instruct-2512-SFT-NVFP4",
+      "weights_dir": "checkpoint/qwen3",
+      "weights": {
+        "source": "huggingface",
+        "repo": "JunHowie/Qwen3-8B-Instruct-2512-SFT-NVFP4",
+        "revision": "main"
+      },
+      "defaults": {
+        "max_seq": 2048,
+        "max_q_seq": 128
+      },
+      "serve": {
+        "device": "cuda:0",
+        "max_seq": 2048,
+        "max_q_seq": 128,
+        "warmup": "32:128,128:256",
+        "model_name": "qwen3-8b-nvfp4"
+      }
+    },
+    "qwen36": {
+      "description": "Qwen3.6-27B NVFP4 + MTP — prithivMLmods/Qwen3.6-27B-NVFP4",
+      "weights_dir": "checkpoint/qwen36",
+      "weights": {
+        "source": "huggingface",
+        "repo": "prithivMLmods/Qwen3.6-27B-NVFP4",
+        "revision": "main"
+      },
+      "extra_weights": {
+        "mtp_fp8": {
+          "source": "huggingface",
+          "repo": "Qwen/Qwen3.6-27B-FP8",
+          "revision": "main",
+          "relative_dir": "mtp_fp8"
+        }
+      },
+      "env": {
+        "FLASHRT_QWEN36_MTP_CKPT_DIR": "{bundle_root}/mtp_fp8"
+      },
+      "defaults": {
+        "max_seq": 2048,
+        "K": 6
+      },
+      "serve": {
+        "device": "cuda:0",
+        "max_seq": 2048,
+        "K": 6,
+        "warmup": "8:512",
+        "model_name": "qwen3.6-27b-nvfp4"
+      }
+    }
+  }
+}
