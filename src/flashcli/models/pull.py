@@ -18,6 +18,7 @@ from flashcli.models.hf_hub import (
     run_hf_cli_download,
 )
 from flashcli.models.registry import Preset
+from flashcli.util.hub_quiet import hf_download_verbose, suppress_hub_side_logs
 
 
 def _format_env_value(value: str) -> str:
@@ -102,29 +103,28 @@ def _download_huggingface(
         )
 
     errors: list[tuple[str, Exception]] = []
-    for idx, ep in enumerate(endpoints):
-        label = endpoint_label(ep)
-        try:
-            run_hf_cli_download(
-                repo,
-                dest,
-                revision=rev,
-                endpoint=ep,
-                allow_patterns=patterns,
-                quiet=quiet,
-            )
-            if ep == HF_MIRROR_ENDPOINT and not quiet:
-                print(f"Download succeeded via {HF_MIRROR_ENDPOINT}", file=sys.stderr)
-            return
-        except Exception as exc:
-            errors.append((label, exc))
-            if idx + 1 < len(endpoints) and not quiet:
-                next_label = endpoint_label(endpoints[idx + 1])
-                print(
-                    f"HuggingFace download failed ({label}); "
-                    f"retrying via {next_label} ...",
-                    file=sys.stderr,
+    with suppress_hub_side_logs():
+        for idx, ep in enumerate(endpoints):
+            label = endpoint_label(ep)
+            try:
+                run_hf_cli_download(
+                    repo,
+                    dest,
+                    revision=rev,
+                    endpoint=ep,
+                    allow_patterns=patterns,
+                    quiet=quiet,
                 )
+                return
+            except Exception as exc:
+                errors.append((label, exc))
+                if idx + 1 < len(endpoints) and not quiet and hf_download_verbose():
+                    next_label = endpoint_label(endpoints[idx + 1])
+                    print(
+                        f"HuggingFace download failed ({label}); "
+                        f"retrying via {next_label} ...",
+                        file=sys.stderr,
+                    )
 
     rev_note = f" revision={revision!r}" if revision else ""
     attempts = "\n".join(
@@ -180,8 +180,6 @@ def download_preset(preset: Preset, *, quiet: bool = False) -> Path:
     if source != "huggingface":
         raise NotImplementedError(f"Unsupported weights source: {source!r}")
 
-    if not quiet:
-        print(f"Downloading {preset.name} -> {checkpoint_dir}")
     _download_huggingface(weights, checkpoint_dir, quiet=quiet)
 
     extra_pull = preset.raw.get("extra_pull") or {}
@@ -196,8 +194,6 @@ def download_preset(preset: Preset, *, quiet: bool = False) -> Path:
                 continue
             cache_name = str(spec.get("cache_name", _key))
             extra_dir = config.MODELS_DIR / cache_name
-            if not quiet:
-                print(f"  extra_pull {cache_name} -> {extra_dir}")
             _download_huggingface(spec, extra_dir, quiet=quiet)
 
     _write_marker(cache_dir, preset.name, checkpoint_dir)

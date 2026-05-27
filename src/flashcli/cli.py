@@ -418,7 +418,11 @@ def run(
         None, "--autotune", help="CUDA graph autotune trials (0=off, 3=default)."
     ),
     benchmark: int = typer.Option(0, "--benchmark", help="Timed iterations after first predict."),
-    warmup: int = typer.Option(20, "--warmup", help="Warmup iterations before --benchmark."),
+    warmup: int = typer.Option(
+        0,
+        "--warmup",
+        help="Extra predict iterations before --benchmark (not CUDA graph warmup; graph warmup runs on load).",
+    ),
     no_auto_install: bool = typer.Option(
         False,
         "--no-auto-install",

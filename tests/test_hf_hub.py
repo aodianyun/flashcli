@@ -106,6 +106,7 @@ def test_run_hf_cli_download_streams_when_not_quiet(tmp_path: Path, monkeypatch)
     assert mock_run.call_args.kwargs.get("capture_output") is not True
     env = mock_run.call_args.kwargs["env"]
     assert "HF_HUB_DISABLE_PROGRESS_BARS" not in env
+    assert env.get("HF_HUB_VERBOSITY") == "error"
 
 
 def test_hf_cli_command_falls_back_to_python_module(tmp_path: Path) -> None:

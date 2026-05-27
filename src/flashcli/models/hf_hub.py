@@ -14,6 +14,12 @@ from pathlib import Path
 from typing import Iterator
 from urllib.parse import quote
 
+from flashcli.util.hub_quiet import (
+    apply_hub_quiet_env,
+    hf_download_verbose,
+    suppress_hub_side_logs,
+)
+
 HF_MIRROR_ENDPOINT = "https://hf-mirror.com"
 HF_OFFICIAL_ENDPOINT = "https://huggingface.co"
 
@@ -150,7 +156,7 @@ def filter_download_endpoints(
             continue
         if hub_reachable(HF_OFFICIAL_ENDPOINT, repo=repo, revision=revision):
             out.append(ep)
-        elif not quiet:
+        elif not quiet and hf_download_verbose():
             print(
                 f"Skipping {HF_OFFICIAL_ENDPOINT} (unreachable in "
                 f"{hub_probe_timeout():g}s); using mirror next ...",
@@ -254,7 +260,7 @@ def run_hf_cli_download(
             repo, dest, revision=revision, allow_patterns=allow_patterns
         )
         hub = os.environ.get("HF_ENDPOINT", HF_OFFICIAL_ENDPOINT).rstrip("/")
-        if not quiet:
+        if not quiet and hf_download_verbose():
             rev_note = f" (revision={revision})" if revision else ""
             print(
                 f"Downloading HuggingFace weights: {repo}{rev_note}\n"
@@ -275,20 +281,7 @@ def run_hf_cli_download(
         if quiet:
             env["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
         else:
-            env.pop("HF_HUB_DISABLE_PROGRESS_BARS", None)
-            if os.environ.get("HF_HUB_DISABLE_PROGRESS_BARS", "").strip().lower() in (
-                "1",
-                "true",
-                "yes",
-            ):
-                print(
-                    "  (overriding HF_HUB_DISABLE_PROGRESS_BARS for this download)",
-                    file=sys.stderr,
-                )
-            print(
-                "  (hf download progress streams below; large models may take several minutes)",
-                file=sys.stderr,
-            )
+            env = apply_hub_quiet_env(env)
         if quiet:
             result = subprocess.run(
                 cmd,
@@ -301,9 +294,12 @@ def run_hf_cli_download(
                 return
             detail = _stderr_tail(result.stderr)
         else:
-            # Do not capture — otherwise multi-GB downloads look hung with no tqdm output.
-            result = subprocess.run(cmd, env=env, check=False)
+            # Stream stderr so tqdm stays live; suppress flashcli + Hub INFO in parent.
+            with suppress_hub_side_logs():
+                result = subprocess.run(cmd, env=env, check=False)
             if result.returncode == 0:
+                if not quiet and not hf_download_verbose():
+                    print(f"Downloaded {repo} -> {dest}", file=sys.stderr)
                 return
             detail = f"exit code {result.returncode}"
         raise RuntimeError(

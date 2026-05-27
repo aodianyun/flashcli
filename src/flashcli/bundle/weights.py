@@ -141,8 +141,6 @@ def download_extra_weights(
                 print(f"  extra_weights {key!r}: repo not set, skipping")
             continue
         dest = _extra_dest(bundle, key, spec)
-        if not quiet:
-            print(f"  extra_weights {key!r} -> {dest}")
         dest.mkdir(parents=True, exist_ok=True)
         source = str(spec.get("source", "huggingface")).lower()
         if source != "huggingface":
@@ -253,8 +251,6 @@ def ensure_checkpoint(
     cache_dir = config.MODELS_DIR / preset.name
     checkpoint_dir = cache_dir / "checkpoint"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    if not quiet:
-        print(f"Downloading weights for {bundle.name} -> {checkpoint_dir}")
     download_merged_weights(spec, checkpoint_dir, quiet=quiet)
     download_extra_weights(bundle, variant=variant, quiet=quiet)
     from flashcli.models.pull import _write_marker
