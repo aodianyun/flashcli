@@ -276,6 +276,15 @@ def run_hf_cli_download(
             env["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
         else:
             env.pop("HF_HUB_DISABLE_PROGRESS_BARS", None)
+            if os.environ.get("HF_HUB_DISABLE_PROGRESS_BARS", "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+            ):
+                print(
+                    "  (overriding HF_HUB_DISABLE_PROGRESS_BARS for this download)",
+                    file=sys.stderr,
+                )
             print(
                 "  (hf download progress streams below; large models may take several minutes)",
                 file=sys.stderr,

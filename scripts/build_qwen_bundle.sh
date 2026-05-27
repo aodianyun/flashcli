@@ -319,13 +319,20 @@ stage_qwen_serve_modules() {
 }
 
 stage_bundle_runtime() {
-  local lib_dir="${BUNDLE_DIR}"
+  local lib_dir="${BUNDLE_DIR}/lib"
   local py_dir="${BUNDLE_DIR}/flash_rt"
   local build_src="${BUILD_DIR:-${REPO_ROOT}/build}"
   local py_bin="${PYTHON_BIN:-python3}"
 
+  mkdir -p "${lib_dir}"
   rm -rf "${py_dir}" "${BUNDLE_DIR}/runtime"
+  # v2 spec: native *.so live under lib/ only (not bundle root).
   rm -f "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so
+  for legacy_so in "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so; do
+    [[ -f "${legacy_so}" ]] || continue
+    log "Moving legacy $(basename "${legacy_so}") -> lib/"
+    mv -f "${legacy_so}" "${lib_dir}/"
+  done
 
   if [[ -z "${PYTHON_MINOR}" ]]; then
     PYTHON_MINOR="$("${py_bin}" -c 'import sys; print(f"{sys.version_info.major}{sys.version_info.minor:02d}")')"
@@ -378,11 +385,12 @@ stage_bundle_runtime() {
   torch_idx="$(recommended_torch_index)"
   min_drv="${MIN_DRIVER:-$(default_min_driver)}"
 
-  log "Updating flashcli-bundle.json (v2) python_abi=${PYTHON_MINOR}"
+  log "Updating flashcli-bundle.json (v2, lib/) python_abi=${PYTHON_MINOR}"
   "${py_bin}" "${GEN_MANIFEST}" \
     --repo-root "${REPO_ROOT}" \
     --bundle-json "${BUNDLE_DIR}/flashcli-bundle.json" \
     --lib-dir "${lib_dir}" \
+    --matrix-manifest \
     --runtime-version "${RUNTIME_VERSION}" \
     --flashrt-tag "${flashrt_tag}" \
     --git-commit "${git_commit}" \

@@ -320,26 +320,15 @@ def find_native_so_files(
     artifact_tag: str | None = None,
     native_lib_rel: str | None = None,
 ) -> list[Path]:
-    """Return matching ``.so`` paths (bundle ``lib/`` or legacy flat root)."""
-    root = bundle_root.resolve()
-    lib_dir = bundle_native_lib_dir(root, native_lib_rel)
-    if lib_dir.is_dir():
-        if artifact_tag:
-            exact = lib_dir / native_so_filename(module_base, artifact_tag)
-            if exact.is_file():
-                return [exact]
-        matches = sorted(lib_dir.glob(f"{module_base}-*.so"))
-        if matches:
-            return [p for p in matches if p.is_file()]
-
+    """Return matching ``.so`` paths under bundle ``lib/`` (v2 layout)."""
+    lib_dir = bundle_native_lib_dir(bundle_root, native_lib_rel)
+    if not lib_dir.is_dir():
+        return []
     if artifact_tag:
-        exact = root / native_so_filename(module_base, artifact_tag)
+        exact = lib_dir / native_so_filename(module_base, artifact_tag)
         if exact.is_file():
             return [exact]
-    matches = sorted(root.glob(f"{module_base}-*.so"))
-    legacy = root / f"{module_base}.so"
-    if legacy.is_file() and legacy not in matches:
-        matches.insert(0, legacy)
+    matches = sorted(lib_dir.glob(f"{module_base}-*.so"))
     return [p for p in matches if p.is_file()]
 
 

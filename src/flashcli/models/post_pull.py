@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import os
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Any
+
+from flashcli.util.download_progress import download_url_to_path
 
 PALIGEMMA_TOKENIZER_URL = (
     "https://storage.googleapis.com/big_vision/paligemma_tokenizer.model"
@@ -63,21 +63,18 @@ def ensure_paligemma_tokenizer(
             print(f"Re-downloading PaliGemma tokenizer (integrity check failed): {target}")
         target.unlink()
 
-    if not quiet:
-        print(
-            f"Downloading paligemma_tokenizer.model (~4.1 MiB)\n"
-            f"  from: {PALIGEMMA_TOKENIZER_URL}\n"
-            f"  to:   {target}"
-        )
-
     tmp = target.with_suffix(target.suffix + ".part")
     try:
-        try:
-            urllib.request.urlretrieve(PALIGEMMA_TOKENIZER_URL, tmp)  # noqa: S310
-        except urllib.error.URLError as exc:
-            raise RuntimeError(
-                f"Failed to download PaliGemma tokenizer from {PALIGEMMA_TOKENIZER_URL}: {exc}"
-            ) from exc
+        download_url_to_path(
+            PALIGEMMA_TOKENIZER_URL,
+            tmp,
+            quiet=quiet,
+            label=(
+                f"paligemma_tokenizer.model (~4.1 MiB) -> {target}\n"
+                f"  {PALIGEMMA_TOKENIZER_URL}"
+            ),
+            timeout=120,
+        )
         actual = _md5_file(tmp)
         if actual != PALIGEMMA_TOKENIZER_MD5:
             tmp.unlink(missing_ok=True)

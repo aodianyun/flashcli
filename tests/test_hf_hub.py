@@ -93,6 +93,7 @@ def test_run_hf_cli_download_quiet_captures_output(tmp_path: Path, monkeypatch) 
 
 def test_run_hf_cli_download_streams_when_not_quiet(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("HF_ENDPOINT", raising=False)
+    monkeypatch.setenv("HF_HUB_DISABLE_PROGRESS_BARS", "1")
     with patch("flashcli.models.hf_hub.shutil.which", return_value="/usr/bin/hf"):
         with patch("flashcli.models.hf_hub.subprocess.run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
@@ -103,6 +104,8 @@ def test_run_hf_cli_download_streams_when_not_quiet(tmp_path: Path, monkeypatch)
                 quiet=False,
             )
     assert mock_run.call_args.kwargs.get("capture_output") is not True
+    env = mock_run.call_args.kwargs["env"]
+    assert "HF_HUB_DISABLE_PROGRESS_BARS" not in env
 
 
 def test_hf_cli_command_falls_back_to_python_module(tmp_path: Path) -> None:

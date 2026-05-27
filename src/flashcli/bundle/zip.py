@@ -6,8 +6,6 @@ import hashlib
 import json
 import os
 import shutil
-import urllib.error
-import urllib.request
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -25,6 +23,7 @@ from flashcli.bundle.manifest import load_bundle_manifest
 from flashcli.bundle.ref import is_bundle_root
 from flashcli.models.registry import Preset
 from flashcli.runtime.detect import GpuInfo, detect_gpu_or_raise
+from flashcli.util.download_progress import download_url_to_path, format_bytes
 
 
 def zip_spec(preset: Preset) -> str | None:
@@ -126,50 +125,50 @@ def _remove_invalid_zip(path: Path) -> None:
         path.unlink(missing_ok=True)
 
 
-def _safe_extract(archive: Path, dest: Path) -> None:
+def _safe_extract(archive: Path, dest: Path, *, quiet: bool = False) -> None:
     dest = dest.resolve()
     dest.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(archive) as zf:
-        for member in zf.namelist():
-            if member.endswith("/"):
-                continue
+        members = [m for m in zf.namelist() if not m.endswith("/")]
+        for member in members:
             target = (dest / member).resolve()
             if not str(target).startswith(str(dest) + os.sep):
                 raise RuntimeError(f"Unsafe zip entry path: {member!r}")
-        zf.extractall(dest)
+
+        to_extract = members
+        if not quiet and members:
+            from tqdm import tqdm
+
+            to_extract = tqdm(members, desc="Extracting bundle", unit="file")
+
+        for member in to_extract:
+            zf.extract(member, dest)
 
 
 def _download_zip(url: str, dest: Path, *, quiet: bool) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     if _is_valid_zip_file(dest):
+        if not quiet:
+            size = dest.stat().st_size
+            print(f"Bundle zip already cached ({format_bytes(size)}): {dest}")
         return
     _remove_invalid_zip(dest)
 
-    partial = dest.with_name(f"{dest.name}.part")
-    partial.unlink(missing_ok=True)
-    if not quiet:
-        print("Downloading bundle zip ...")
-    req = urllib.request.Request(  # noqa: S310
+    download_url_to_path(
         url,
-        headers={"User-Agent": f"flashcli/{config.__version__}"},
+        dest,
+        quiet=quiet,
+        label=f"bundle zip ({url[:72]}{'…' if len(url) > 72 else ''})",
+        user_agent=f"flashcli/{config.__version__}",
+        timeout=600,
     )
-    try:
-        with urllib.request.urlopen(req, timeout=600) as resp, partial.open("wb") as out:
-            shutil.copyfileobj(resp, out, length=1024 * 1024)
-    except urllib.error.URLError as exc:
-        partial.unlink(missing_ok=True)
-        raise RuntimeError(f"Failed to download bundle zip: {exc}") from exc
-    except BaseException:
-        partial.unlink(missing_ok=True)
-        raise
 
-    if not _is_valid_zip_file(partial):
-        partial.unlink(missing_ok=True)
+    if not _is_valid_zip_file(dest):
+        dest.unlink(missing_ok=True)
         raise RuntimeError(
             f"Downloaded bundle zip is incomplete or corrupt: {dest}. "
             "Retry the command; if it persists, check network/CDN access."
         )
-    partial.replace(dest)
 
 
 def _prepare_zip_archive(spec: str, work: Path, *, quiet: bool) -> Path:
@@ -240,7 +239,7 @@ def ensure_bundle_from_zip(
         if not quiet:
             print(f"Extracting bundle zip -> {extract_dir} ...")
         try:
-            _safe_extract(archive, extract_dir)
+            _safe_extract(archive, extract_dir, quiet=quiet)
         except zipfile.BadZipFile:
             archive.unlink(missing_ok=True)
             if extract_dir.is_dir():
@@ -251,7 +250,7 @@ def ensure_bundle_from_zip(
             extract_dir.mkdir(parents=True, exist_ok=True)
             if not quiet:
                 print(f"Extracting bundle zip -> {extract_dir} ...")
-            _safe_extract(archive, extract_dir)
+            _safe_extract(archive, extract_dir, quiet=quiet)
 
     gpu = detect_gpu_or_raise()
     bundle_cfg = effective_bundle_cfg_for_preset(preset, gpu=gpu)

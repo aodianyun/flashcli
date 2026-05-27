@@ -75,6 +75,7 @@ def _load_bundle_for_preset(
     bundle_ref: str | None = None,
     bundle_version: str | None = None,
     checkpoint: Path | None = None,
+    quiet: bool = False,
 ) -> BundleManifest | None:
     if preset.engine != "model_bundle":
         return None
@@ -85,6 +86,7 @@ def _load_bundle_for_preset(
             bundle_ref=bundle_ref or bundle_version,
             checkpoint=checkpoint,
             fetch_git=bundle_path is None,
+            quiet=quiet,
         )
     except FileNotFoundError:
         return None
@@ -109,6 +111,7 @@ def ensure_model_cached(
         bundle_path=bundle_path,
         bundle_ref=bundle_ref or bundle_version,
         checkpoint=checkpoint_override,
+        quiet=quiet,
     )
 
     if checkpoint_override is not None:

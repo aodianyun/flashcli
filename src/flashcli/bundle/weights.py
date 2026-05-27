@@ -235,12 +235,16 @@ def ensure_checkpoint(
 
     local = bundle_weights_dir(bundle, variant=variant)
     if has_local_weights(local):
+        if not quiet:
+            print(f"Using bundle-local weights: {local}")
         apply_bundle_env(bundle, variant=variant)
         download_extra_weights(bundle, variant=variant, quiet=quiet)
         return local
 
     existing = resolve_checkpoint(preset, bundle=bundle, variant=variant)
     if existing is not None:
+        if not quiet:
+            print(f"Using cached weights: {existing}")
         apply_bundle_env(bundle, variant=variant)
         download_extra_weights(bundle, variant=variant, quiet=quiet)
         return existing

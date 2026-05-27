@@ -8,7 +8,9 @@
 #   4. Exit 1 with actionable errors if requirements still cannot be met
 #
 # Optional env:
-#   FLASHCLI_INSTALL_REPO / FLASHCLI_INSTALL_REF
+#   FLASHCLI_INSTALL_REPO / FLASHCLI_INSTALL_REF   (default: main @ GitHub)
+#   FLASHCLI_USE_MIRROR=1   Aliyun PyPI + hf-mirror for pip/HF (optional GitHub fetch proxy)
+#   FLASHCLI_GIT_PROXY=0|URL   disable or override default GitHub proxy when using --mirror
 #   FLASHCLI_PYTHON
 #   FLASHCLI_SKIP_GPU_CHECK=1
 #   FLASHCLI_SKIP_ENV_CHECK=1
@@ -18,12 +20,30 @@
 #   FLASHCLI_AUTO_INSTALL_PYTHON=1  (root) try apt/dnf/apk to install python3+pip+git
 #   FLASHCLI_BREAK_SYSTEM_PACKAGES=1  pass pip --break-system-packages (PEP 668 images)
 #   FLASHCLI_USE_VENV=1             install into ~/.flashcli/venv (bypass PEP 668)
+#
+# Examples:
+#   curl -fsSL …/install.sh | sh
+#   curl -fsSL …/install.sh | sh -s -- --ref feature/foo
+#   curl -fsSL …/install.sh | sh -s -- --mirror
+#   curl -fsSL …/install.sh | sh -s -- --repo https://gitee.com/org/flashcli.git --ref main
 
 set -eu
 
-REPO="${FLASHCLI_INSTALL_REPO:-https://github.com/aodianyun/flashcli.git}"
+DEFAULT_REPO="https://github.com/aodianyun/flashcli.git"
+REPO="${FLASHCLI_INSTALL_REPO:-$DEFAULT_REPO}"
 REF="${FLASHCLI_INSTALL_REF:-main}"
 QUIET="${FLASHCLI_QUIET:-0}"
+USE_MIRROR="${FLASHCLI_USE_MIRROR:-0}"
+REPO_FROM_USER=0
+if [ -n "${FLASHCLI_INSTALL_REPO:-}" ]; then
+  REPO_FROM_USER=1
+fi
+
+# Alternate endpoints when --mirror / FLASHCLI_USE_MIRROR=1
+MIRROR_PIP_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/"
+MIRROR_PIP_TRUSTED_HOST="mirrors.aliyun.com"
+MIRROR_HF_ENDPOINT="https://hf-mirror.com"
+DEFAULT_GIT_PROXY_PREFIX="https://mirror.ghproxy.com/"
 
 # ---------------------------------------------------------------------------
 # pyproject.toml [project] — keep in sync with repo pyproject.toml
@@ -42,6 +62,124 @@ PYTHON_CANDIDATES="python python3 \
 info() { [ "$QUIET" = "1" ] || printf '%s\n' "$*"; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+  cat <<'EOF'
+flashcli install.sh — install flashcli from git (default: main @ GitHub).
+
+Usage:
+  ./install.sh [OPTIONS]
+  curl -fsSL …/install.sh | sh -s -- [OPTIONS]
+
+Options:
+  -h, --help              Show this help
+  -q, --quiet             Less output
+  --ref REF, --branch REF   Git ref (branch/tag/commit). Default: main
+  --repo URL, --git-url URL Git remote for pip install (GitHub, Gitee, self-hosted, …)
+  --mirror                  Use alternate PyPI + Hugging Face Hub mirrors for install
+
+Environment (override flags):
+  FLASHCLI_INSTALL_REPO, FLASHCLI_INSTALL_REF
+  FLASHCLI_USE_MIRROR=1
+  FLASHCLI_GIT_PROXY=0      Disable GitHub fetch proxy when --mirror + default repo
+  PIP_INDEX_URL, HF_ENDPOINT  Override mirror defaults
+
+Examples:
+  ./install.sh
+  ./install.sh --ref develop
+  ./install.sh --mirror --ref v0.2.0
+  ./install.sh --repo https://gitee.com/your-org/flashcli.git --ref main
+  FLASHCLI_USE_MIRROR=1 ./install.sh --repo https://gitee.com/your-org/flashcli.git
+EOF
+}
+
+mirror_mode_enabled() {
+  case "${USE_MIRROR}" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Apply mirror endpoints unless the user already exported overrides.
+apply_mirror_endpoints() {
+  mirror_mode_enabled || return 0
+
+  if [ -z "${PIP_INDEX_URL:-}" ]; then
+    export PIP_INDEX_URL="$MIRROR_PIP_INDEX_URL"
+    export PIP_TRUSTED_HOST="$MIRROR_PIP_TRUSTED_HOST"
+  fi
+  if [ -z "${HF_ENDPOINT:-}" ]; then
+    export HF_ENDPOINT="$MIRROR_HF_ENDPOINT"
+  fi
+  if [ -z "${FLASHCLI_PREFER_HF_MIRROR:-}" ]; then
+    export FLASHCLI_PREFER_HF_MIRROR=1
+  fi
+
+  maybe_apply_default_git_proxy
+
+  info "[i] mirror: PIP_INDEX_URL=${PIP_INDEX_URL:-$MIRROR_PIP_INDEX_URL}"
+  info "[i] mirror: HF_ENDPOINT=${HF_ENDPOINT:-$MIRROR_HF_ENDPOINT}"
+}
+
+# When --mirror is on and repo is still the default GitHub URL, optionally prefix a fetch proxy.
+maybe_apply_default_git_proxy() {
+  mirror_mode_enabled || return 0
+  [ "$REPO_FROM_USER" -eq 1 ] && return 0
+  case "${FLASHCLI_GIT_PROXY:-auto}" in
+    0|false|no|off) return 0 ;;
+  esac
+  case "$REPO" in
+    https://github.com/*) ;;
+    *) return 0 ;;
+  esac
+  _proxy="${FLASHCLI_GIT_PROXY:-$DEFAULT_GIT_PROXY_PREFIX}"
+  case "$_proxy" in
+    auto) _proxy="$DEFAULT_GIT_PROXY_PREFIX" ;;
+  esac
+  _proxy="${_proxy%/}/"
+  REPO="${_proxy}${REPO}"
+  info "[i] mirror: git fetch via ${REPO}"
+}
+
+parse_args() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      -q|--quiet)
+        QUIET=1
+        shift
+        ;;
+      --ref|--branch)
+        [ $# -ge 2 ] || die "$1 requires a value"
+        REF="$2"
+        shift 2
+        ;;
+      --repo|--git-url)
+        [ $# -ge 2 ] || die "$1 requires a value"
+        REPO="$2"
+        REPO_FROM_USER=1
+        shift 2
+        ;;
+      --mirror)
+        USE_MIRROR=1
+        shift
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*)
+        die "unknown option: $1 (try --help)"
+        ;;
+      *)
+        die "unexpected argument: $1 (try --help)"
+        ;;
+    esac
+  done
+}
 
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 
@@ -909,15 +1047,37 @@ _link_hub_cli_from_dir() {
 
 persist_path_config() {
   cli_dir="$1"
-  path_has_dir "$cli_dir" && return 0
   if [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ] && [ -d /etc/profile.d ]; then
-    printf '%s\n' "export PATH=\"${cli_dir}:\$PATH\"" > /etc/profile.d/flashcli.sh
-    info "Wrote /etc/profile.d/flashcli.sh (adds ${cli_dir} for login shells)"
-  elif [ -n "${HOME:-}" ]; then
+    {
+      printf '%s\n' "export PATH=\"${cli_dir}:\$PATH\""
+      if mirror_mode_enabled; then
+        [ -n "${PIP_INDEX_URL:-}" ] && printf '%s\n' "export PIP_INDEX_URL=\"${PIP_INDEX_URL}\""
+        [ -n "${PIP_TRUSTED_HOST:-}" ] && printf '%s\n' "export PIP_TRUSTED_HOST=\"${PIP_TRUSTED_HOST}\""
+        [ -n "${HF_ENDPOINT:-}" ] && printf '%s\n' "export HF_ENDPOINT=\"${HF_ENDPOINT}\""
+        printf '%s\n' "export FLASHCLI_PREFER_HF_MIRROR=1"
+      fi
+    } > /etc/profile.d/flashcli.sh
+    info "Wrote /etc/profile.d/flashcli.sh (PATH + mirror env for login shells)"
+    return 0
+  fi
+  path_has_dir "$cli_dir" && ! mirror_mode_enabled && return 0
+  if [ -n "${HOME:-}" ]; then
     for rc in "${HOME}/.profile" "${HOME}/.bashrc"; do
-      if [ -f "$rc" ] && ! grep -Fq "$cli_dir" "$rc" 2>/dev/null; then
-        printf '\n# flashcli install.sh\nexport PATH="%s:$PATH"\n' "$cli_dir" >> "$rc"
-        info "Appended PATH to $rc"
+      if [ -f "$rc" ]; then
+        if ! path_has_dir "$cli_dir" && ! grep -Fq "$cli_dir" "$rc" 2>/dev/null; then
+          printf '\n# flashcli install.sh\nexport PATH="%s:$PATH"\n' "$cli_dir" >> "$rc"
+          info "Appended PATH to $rc"
+        fi
+        if mirror_mode_enabled && ! grep -Fq 'HF_ENDPOINT=' "$rc" 2>/dev/null; then
+          {
+            printf '\n# flashcli install.sh (mirror endpoints)\n'
+            [ -n "${PIP_INDEX_URL:-}" ] && printf 'export PIP_INDEX_URL="%s"\n' "$PIP_INDEX_URL"
+            [ -n "${PIP_TRUSTED_HOST:-}" ] && printf 'export PIP_TRUSTED_HOST="%s"\n' "$PIP_TRUSTED_HOST"
+            [ -n "${HF_ENDPOINT:-}" ] && printf 'export HF_ENDPOINT="%s"\n' "$HF_ENDPOINT"
+            printf '%s\n' 'export FLASHCLI_PREFER_HF_MIRROR=1'
+          } >> "$rc"
+          info "Appended mirror env to $rc"
+        fi
         return 0
       fi
     done
@@ -997,11 +1157,17 @@ verify_cli_usable() {
 print_success() {
   [ "$QUIET" = "1" ] && return 0
   printf '\n%s\n' 'flashcli installed successfully.'
+  if mirror_mode_enabled; then
+    printf '%s\n' "  (mirror endpoints: ref=${REF})"
+  fi
+  printf '%s\n' "  (source: ${REPO} @ ${REF})"
   printf '%s\n' '' 'Next steps:'
   printf '%s\n' '  flashcli doctor'
   printf '%s\n' '  flashcli models envs pi05_libero'
-  printf '%s\n' '  # 国内/内网建议先设置镜像再拉权重：'
-  printf '%s\n' '  export HF_ENDPOINT=https://hf-mirror.com'
+  if ! mirror_mode_enabled; then
+    printf '%s\n' '  # slow network: ./install.sh --mirror'
+    printf '%s\n' '  # alternate git:  ./install.sh --repo https://gitee.com/org/flashcli.git'
+  fi
   printf '%s\n' '  flashcli pull pi05_libero'
   printf '%s\n' '  flashcli run pi05_libero --image /path/to.jpg --prompt "pick up the block"'
   _fc="$(command -v flashcli 2>/dev/null || true)"
@@ -1023,9 +1189,12 @@ print_success() {
 }
 
 main() {
+  parse_args "$@"
+  apply_mirror_endpoints
   run_preflight
   export FLASHCLI_INSTALL_REPO="$REPO"
   export FLASHCLI_INSTALL_REF="$REF"
+  export FLASHCLI_USE_MIRROR="$USE_MIRROR"
   export FLASHCLI_REQUIRES_PYTHON_MIN="$REQUIRES_PYTHON_MIN"
   install_flashcli
   verify_and_repair_pyproject

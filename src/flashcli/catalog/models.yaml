@@ -16,7 +16,7 @@ models:
 
   # 草稿：共享同一 runtime bundle，用 bundle_variant 选权重（验证通过前勿改 zip 发布）
   qwen3-8b-nvfp4:
-    description: Qwen3-8B Instruct NVFP4 (SM120)
+    description: Qwen3-8B NVFP4 (SM120) — kaitchup/Qwen3-8B-NVFP4
     bundle_variant: qwen3
     bundle:
       path: bundles/qwen_nvfp4

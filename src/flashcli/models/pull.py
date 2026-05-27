@@ -85,6 +85,8 @@ def _download_huggingface(
     from flashcli.bundle.checkpoint import has_usable_checkpoint
 
     if has_usable_checkpoint(dest):
+        if not quiet:
+            print(f"Weights already cached: {dest}", file=sys.stderr)
         return
 
     _prepare_download_dest(dest, quiet=quiet)

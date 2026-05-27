@@ -17,6 +17,7 @@ from flashcli.bundle.manifest import (
     load_bundle_manifest,
     module_file_path,
 )
+from flashcli.bundle.assembly import format_bundle_not_ready_message
 from flashcli.bundle.zip import (
     ensure_bundle_from_zip,
     resolve_cached_zip_bundle_root,
@@ -71,13 +72,19 @@ def _legacy_bundle_ready(root: Path, data: dict) -> bool:
     return False
 
 
+def _lib_native_artifacts_ready(root: Path) -> bool:
+    """v2 bundles must ship tagged native modules under ``lib/`` (see model_bundle_standard)."""
+    native_lib = root / "lib"
+    return native_lib.is_dir() and any(native_lib.glob("flash_rt_kernels*.so"))
+
+
 def _v2_bundle_ready(root: Path, data: dict) -> bool:
     if not isinstance(data.get("python_dependencies"), dict):
         return False
-    if data.get("native_layout") == "matrix" or data.get("native_matrix"):
-        native_lib = root / "lib"
-        if native_lib.is_dir() and any(native_lib.glob("flash_rt_kernels*.so")):
-            return _entry_files_present(root, data)
+    if not _lib_native_artifacts_ready(root):
+        return False
+    if not _entry_files_present(root, data):
+        return False
     try:
         bundle = load_bundle_manifest(root)
     except (FileNotFoundError, ValueError, json.JSONDecodeError):
@@ -88,7 +95,9 @@ def _v2_bundle_ready(root: Path, data: dict) -> bool:
         file_rel = str(mod.get("file", "")).strip()
         if file_rel and not module_file_path(bundle, file_rel).is_file():
             return False
-    return _entry_files_present(root, data)
+        if file_rel.endswith(".so") and not file_rel.startswith("lib/"):
+            return False
+    return True
 
 
 def _local_bundle_ready(root: Path) -> bool:
@@ -137,17 +146,7 @@ def resolve_bundle_root(
             raise FileNotFoundError(f"Bundle path not found: {root}")
         if _local_bundle_ready(root):
             return root
-        build_hint = root / "build.sh"
-        hint = (
-            f" Run: bash {build_hint}"
-            if build_hint.is_file()
-            else " Run: bash flashcli/scripts/build_pi05_bundle.sh --bundle-dir <path>"
-        )
-        raise FileNotFoundError(
-            f"Bundle at {root} is not assembled yet "
-            f"(need flashcli-bundle.json with entry + python_dependencies, "
-            f"and built modules per modules[]).{hint}"
-        )
+        raise FileNotFoundError(format_bundle_not_ready_message(root))
 
     if zip_spec(preset) is not None:
         cached_zip = resolve_cached_zip_bundle_root(preset)

@@ -24,7 +24,16 @@
 
 权重缓存按 **preset 名** 分开：`~/.flashcli/models/qwen3-8b-nvfp4/checkpoint/` 与 `.../qwen36-27b-nvfp4/checkpoint/`。
 
-## 目录（v2 扁平，对齐 `pi05_libero`）
+### Hugging Face 权重（已核对存在、公开）
+
+| variant | 主权重 | MTP（仅 qwen36） |
+|---------|--------|------------------|
+| `qwen3` | [kaitchup/Qwen3-8B-NVFP4](https://huggingface.co/kaitchup/Qwen3-8B-NVFP4)（`compressed-tensors` NVFP4，基座 `Qwen/Qwen3-8B`） | — |
+| `qwen36` | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4)（FlashRT 文档对齐） | [Qwen/Qwen3.6-27B-FP8](https://huggingface.co/Qwen/Qwen3.6-27B-FP8) 中的 `mtp.safetensors` |
+
+旧配置 `JunHowie/Qwen3-8B-Instruct-2512-SFT-NVFP4` 在 HF 上已不可用，勿再使用。
+
+## 目录（v2，与 `pi05_libero` 一致：原生库在 `lib/`）
 
 ```text
 qwen_nvfp4/
@@ -32,17 +41,22 @@ qwen_nvfp4/
 ├── build.sh
 ├── run.py / serve.py
 ├── _qwen_util.py / _flashrt_serve.py
-├── flash_rt/                 # 构建产物
-├── flash_rt_kernels-*.so
+├── flash_rt/                 # Python runtime（构建产物）
+├── lib/                      # 必须：带环境标签的 *.so
+│   ├── flash_rt_kernels-*-sm120-cu130-…-py312.so
+│   ├── flash_rt_fa2-*.so
+│   └── flash_rt_fp4-*.so       # NVFP4（SM120）
 ├── checkpoint/qwen3/
 ├── checkpoint/qwen36/
 └── mtp_fp8/                  # 仅 qwen36
 ```
 
+**不要**把 `flash_rt_*.so` 放在 bundle 根目录；`build.sh` 会写入 `lib/` 并刷新 `modules[].file` 为 `lib/…`。
+
 ## 构建
 
 ```bash
-bash bundles/qwen_nvfp4/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
+flashcli bundle build bundles/qwen_nvfp4 --repo-root /path/to/FlashRT -j "$(nproc)"
 flashcli bundle validate bundles/qwen_nvfp4
 ```
 

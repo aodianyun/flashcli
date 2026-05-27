@@ -16,9 +16,13 @@
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
+# 受限网络（镜像 PyPI + HF）：
+# curl -fsSL …/install.sh | sh -s -- --mirror
+# 指定分支 / 源码地址（如 Gitee）：
+# curl -fsSL …/install.sh | sh -s -- --repo https://gitee.com/your-org/flashcli.git --ref main
 ```
 
-也可将 `install.sh` 托管为 `https://your-domain/install` 后执行 `curl -fsSL https://your-domain/install | sh`。脚本会**优先选用已带 pip 的 Python**；`run` 时按 GPU + **Python 3.10/3.11/3.12** 选择 runtime zip（见 [docs/runtime-matrix.zh-CN.md](docs/runtime-matrix.zh-CN.md)）（例如 Docker 里 `/usr/local/bin/python3.12`，而不是 Debian 的 PEP 668 `python3.13`），并处理 `ensurepip` / `get-pip.py` / `apt python3-pip` / 专用 venv。可选：`FLASHCLI_PYTHON=$(command -v python3)`、`FLASHCLI_USE_VENV=1`、`FLASHCLI_BREAK_SYSTEM_PACKAGES=1`、`FLASHCLI_AUTO_INSTALL_PYTHON=1`。**root** 默认系统级安装到 `/usr/local/bin`。
+也可将 `install.sh` 托管为 `https://your-domain/install` 后执行 `curl -fsSL https://your-domain/install | sh`。`--mirror` 使用备用 PyPI 与 Hub 镜像；`--repo` / `--git-url` 指定任意 Git 远程（GitHub、Gitee 等）；默认仍从 `main` @ GitHub 安装。脚本会**优先选用已带 pip 的 Python**；`run` 时按 GPU + **Python 3.10/3.11/3.12** 选择 runtime zip（见 [docs/runtime-matrix.zh-CN.md](docs/runtime-matrix.zh-CN.md)）（例如 Docker 里 `/usr/local/bin/python3.12`，而不是 Debian 的 PEP 668 `python3.13`），并处理 `ensurepip` / `get-pip.py` / `apt python3-pip` / 专用 venv。可选：`FLASHCLI_PYTHON=$(command -v python3)`、`FLASHCLI_USE_VENV=1`、`FLASHCLI_BREAK_SYSTEM_PACKAGES=1`、`FLASHCLI_AUTO_INSTALL_PYTHON=1`。**root** 默认系统级安装到 `/usr/local/bin`。
 
 或手动安装：
 

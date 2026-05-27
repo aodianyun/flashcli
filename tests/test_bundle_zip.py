@@ -35,11 +35,13 @@ def test_download_zip_redownloads_corrupt_cache(tmp_path: Path) -> None:
 
     def fake_urlopen(_req, timeout=600):
         class Resp:
+            headers = {"Content-Length": str(len(data))}
+
             def __init__(self) -> None:
                 self._buf = io.BytesIO(data)
 
             def read(self, n: int = -1) -> bytes:
-                return self._buf.read(n if n > 0 else -1)
+                return self._buf.read(n if n <= 0 else n)
 
             def __enter__(self):
                 return self
@@ -49,7 +51,7 @@ def test_download_zip_redownloads_corrupt_cache(tmp_path: Path) -> None:
 
         return Resp()
 
-    with patch("flashcli.bundle.zip.urllib.request.urlopen", fake_urlopen):
+    with patch("flashcli.util.download_progress.urlopen", fake_urlopen):
         _download_zip("https://cdn.example/bundle.zip", dest, quiet=True)
 
     assert _is_valid_zip_file(dest)

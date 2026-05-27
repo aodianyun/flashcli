@@ -164,24 +164,40 @@ def find_bundle_root_in_clone(
     )
 
 
-def _run_git(args: list[str], *, cwd: Path | None = None) -> str:
+def _run_git(
+    args: list[str],
+    *,
+    cwd: Path | None = None,
+    quiet: bool = True,
+) -> str:
     if shutil.which("git") is None:
         raise RuntimeError("git is required to fetch model bundles; install git and retry")
+    cmd = ["git", *args]
+    if quiet:
+        result = subprocess.run(
+            cmd,
+            cwd=str(cwd) if cwd else None,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            err = (result.stderr or result.stdout or "").strip()
+            raise RuntimeError(f"git {' '.join(args)} failed: {err}")
+        return (result.stdout or "").strip()
+
     result = subprocess.run(
-        ["git", *args],
+        cmd,
         cwd=str(cwd) if cwd else None,
-        capture_output=True,
-        text=True,
         check=False,
     )
     if result.returncode != 0:
-        err = (result.stderr or result.stdout or "").strip()
-        raise RuntimeError(f"git {' '.join(args)} failed: {err}")
-    return (result.stdout or "").strip()
+        raise RuntimeError(f"git {' '.join(args)} failed (exit {result.returncode})")
+    return ""
 
 
-def _git_head(repo_dir: Path) -> str:
-    return _run_git(["rev-parse", "HEAD"], cwd=repo_dir)
+def _git_head(repo_dir: Path, *, quiet: bool = True) -> str:
+    return _run_git(["rev-parse", "HEAD"], cwd=repo_dir, quiet=quiet)
 
 
 def _sync_repo(repo_url: str, ref: str, dest: Path, *, quiet: bool) -> None:
@@ -189,8 +205,12 @@ def _sync_repo(repo_url: str, ref: str, dest: Path, *, quiet: bool) -> None:
     if dest.exists() and (dest / ".git").is_dir():
         if not quiet:
             print(f"Updating bundle repo {repo_url} @ {ref} ...")
-        _run_git(["fetch", "--depth", "1", "origin", ref], cwd=dest)
-        _run_git(["checkout", "FETCH_HEAD"], cwd=dest)
+        _run_git(
+            ["fetch", "--progress", "--depth", "1", "origin", ref],
+            cwd=dest,
+            quiet=quiet,
+        )
+        _run_git(["checkout", "FETCH_HEAD"], cwd=dest, quiet=quiet)
         return
 
     if dest.exists():
@@ -198,17 +218,18 @@ def _sync_repo(repo_url: str, ref: str, dest: Path, *, quiet: bool) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     if not quiet:
         print(f"Cloning bundle repo {repo_url} @ {ref} ...")
-    _run_git(
-        [
-            "clone",
-            "--depth",
-            "1",
-            "--branch",
-            ref,
-            repo_url,
-            str(dest),
-        ]
-    )
+    clone_args = [
+        "clone",
+        "--depth",
+        "1",
+        "--branch",
+        ref,
+        repo_url,
+        str(dest),
+    ]
+    if not quiet:
+        clone_args.insert(1, "--progress")
+    _run_git(clone_args, quiet=quiet)
 
 
 def ensure_bundle_from_git(
@@ -258,7 +279,7 @@ def ensure_bundle_from_git(
     bundle_root = find_bundle_root_in_clone(
         clone_dir, preset, gpu, bundle_cfg=bundle_cfg
     )
-    commit = _git_head(clone_dir)
+    commit = _git_head(clone_dir, quiet=quiet)
 
     bundle_ref_label = read_bundle_git_ref(bundle_root)
     if bundle_ref_label and bundle_ref_label != requested_ref:
