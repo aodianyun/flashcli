@@ -72,6 +72,40 @@ EOF
 log() { printf '[qwen-bundle] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
 
+# Copy a source tree into dst, honoring exclude globs (rsync or tar fallback).
+sync_tree() {
+  local src="$1" dst="$2"
+  shift 2
+  local excludes=("$@")
+  mkdir -p "${dst}"
+  if command -v rsync >/dev/null 2>&1; then
+    local -a args=(-a)
+    local pat
+    for pat in "${excludes[@]}"; do
+      args+=(--exclude="${pat}")
+    done
+    rsync "${args[@]}" "${src}/" "${dst}/"
+    return 0
+  fi
+  log "rsync not found; using tar for ${src} -> ${dst}"
+  local -a tar_args=(-C "${src}")
+  local pat
+  for pat in "${excludes[@]}"; do
+    tar_args+=(--exclude="${pat}")
+  done
+  tar "${tar_args[@]}" -cf - . | tar -C "${dst}" -xf -
+}
+
+copy_dir() {
+  local src="$1" dst="$2"
+  mkdir -p "${dst}"
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a "${src}/" "${dst}/"
+  else
+    cp -a "${src}/." "${dst}/"
+  fi
+}
+
 is_flashrt_repo() {
   [[ -f "$1/CMakeLists.txt" && -d "$1/flash_rt" ]]
 }
@@ -231,39 +265,37 @@ ensure_bundle_entry_modules() {
 stage_flash_rt_python() {
   local py_dir="$1"
   local flash_rt_src="${REPO_ROOT}/flash_rt"
-  command -v rsync >/dev/null 2>&1 || die "rsync required"
   local -a excludes=(
-    --exclude='*.so'
-    --exclude='frontends/jax'
-    --exclude='datasets'
-    --exclude='refs'
-    --exclude='executors/jax'
-    --exclude='models/groot'
-    --exclude='models/groot_n17'
-    --exclude='models/pi0'
-    --exclude='models/pi0fast'
-    --exclude='models/motus'
-    --exclude='hardware/thor'
-    --exclude='frontends/torch/groot_thor.py'
-    --exclude='frontends/torch/groot_rtx.py'
-    --exclude='frontends/torch/pi05_thor.py'
-    --exclude='frontends/torch/pi05_thor_fp4.py'
-    --exclude='frontends/torch/motus'
+    '*.so'
+    'frontends/jax'
+    'datasets'
+    'refs'
+    'executors/jax'
+    'models/groot'
+    'models/groot_n17'
+    'models/pi0'
+    'models/pi0fast'
+    'models/motus'
+    'hardware/thor'
+    'frontends/torch/groot_thor.py'
+    'frontends/torch/groot_rtx.py'
+    'frontends/torch/pi05_thor.py'
+    'frontends/torch/pi05_thor_fp4.py'
+    'frontends/torch/motus'
   )
   case "${VARIANT}" in
     qwen3)
-      excludes+=(--exclude='models/qwen36')
-      excludes+=(--exclude='frontends/torch/qwen36_rtx.py')
+      excludes+=('models/qwen36')
+      excludes+=('frontends/torch/qwen36_rtx.py')
       ;;
     qwen36)
-      excludes+=(--exclude='models/qwen3')
-      excludes+=(--exclude='frontends/torch/qwen3_rtx.py')
+      excludes+=('models/qwen3')
+      excludes+=('frontends/torch/qwen3_rtx.py')
       ;;
     all) ;;
     *) die "Unknown --variant ${VARIANT} (use qwen3, qwen36, or all)" ;;
   esac
-  mkdir -p "${py_dir}"
-  rsync -a "${excludes[@]}" "${flash_rt_src}/" "${py_dir}/"
+  sync_tree "${flash_rt_src}" "${py_dir}" "${excludes[@]}"
 }
 
 stage_qwen_serve_modules() {
@@ -381,12 +413,7 @@ embed_checkpoint() {
   local dest="${BUNDLE_DIR}/checkpoint"
   [[ -d "${src}" ]] || die "Checkpoint not found: ${src}"
   rm -rf "${dest}"
-  mkdir -p "${dest}"
-  if command -v rsync >/dev/null 2>&1; then
-    rsync -a "${src}/" "${dest}/"
-  else
-    cp -a "${src}/." "${dest}/"
-  fi
+  copy_dir "${src}" "${dest}"
   log "Embedded checkpoint -> ${dest}"
 }
 
@@ -396,8 +423,7 @@ maybe_write_tarball() {
   local stage="${OUTPUT_DIR}/${name}"
   mkdir -p "${OUTPUT_DIR}"
   rm -rf "${stage}"
-  mkdir -p "${stage}"
-  rsync -a "${BUNDLE_DIR}/" "${stage}/"
+  copy_dir "${BUNDLE_DIR}" "${stage}"
   command -v zstd >/dev/null 2>&1 || die "zstd required for tarball"
   local archive="${OUTPUT_DIR}/${name}.tar.zst"
   log "Creating ${archive}"

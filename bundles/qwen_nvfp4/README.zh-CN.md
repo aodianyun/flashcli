@@ -46,6 +46,12 @@ bash bundles/qwen_nvfp4/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
 flashcli bundle validate bundles/qwen_nvfp4
 ```
 
+依赖：`cmake`、`nvcc`、`git`、`tar`（无 `rsync` 时用 tar 拷贝 `flash_rt/`）。CMake 已成功时可用 `--pack-only` 只打 stage：
+
+```bash
+bash bundles/qwen_nvfp4/build.sh --repo-root /app/FlashRT --pack-only
+```
+
 ## 运行（推荐：用 catalog preset，无需每次 `--model`）
 
 ```bash
