@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, AsyncIterator, Iterator
 
 from flashcli.bundle.activate import active_bundle
 from flashcli.engines.base import ChatChunk, ChatRequest, ChatResult
 from flashcli.models.registry import Preset
 
 from _qwen_util import (
-    chat_stream_sync,
     collect_qwen3_stream,
+    iter_qwen3_stream,
     merge_load_options,
     messages_from_request,
     parse_warmup_spec,
@@ -77,31 +77,40 @@ class ServeEngine:
         if shapes:
             self._engine.warmup(shapes)
 
+    async def chat_async(self, request: ChatRequest) -> ChatResult:
+        if self._engine is None:
+            raise RuntimeError("ServeEngine.load() not called")
+        if self._variant == "qwen36":
+            data = await self._engine.generate(
+                messages_from_request(request),
+                request.tools,
+                request.max_tokens,
+            )
+            return qwen36_result_to_chat(data)
+        return await collect_qwen3_stream(self._engine, request)
+
     def chat(self, request: ChatRequest) -> ChatResult:
+        return run_async(self.chat_async(request))
+
+    async def chat_stream_async(
+        self, request: ChatRequest
+    ) -> AsyncIterator[ChatChunk]:
         if self._engine is None:
             raise RuntimeError("ServeEngine.load() not called")
         if self._variant == "qwen36":
-
-            async def _go() -> ChatResult:
-                data = await self._engine.generate(
-                    messages_from_request(request),
-                    request.tools,
-                    request.max_tokens,
-                )
-                return qwen36_result_to_chat(data)
-
-            return run_async(_go())
-        return run_async(collect_qwen3_stream(self._engine, request))
-
-    def chat_stream(self, request: ChatRequest) -> Iterator[ChatChunk]:
-        if self._engine is None:
-            raise RuntimeError("ServeEngine.load() not called")
-        if self._variant == "qwen36":
-            result = self.chat(request)
+            result = await self.chat_async(request)
             if result.content:
                 yield ChatChunk(content_delta=result.content)
             if result.tool_calls:
                 yield ChatChunk(tool_calls=result.tool_calls)
             yield ChatChunk(finish_reason=result.finish_reason, usage=result.usage)
             return
-        yield from chat_stream_sync(self._engine, request)
+        async for chunk in iter_qwen3_stream(self._engine, request):
+            yield chunk
+
+    def chat_stream(self, request: ChatRequest) -> Iterator[ChatChunk]:
+        async def _collect() -> list[ChatChunk]:
+            return [c async for c in self.chat_stream_async(request)]
+
+        for chunk in run_async(_collect()):
+            yield chunk

@@ -65,7 +65,10 @@ def build_app(engine: ServeEngine):
         created = int(time.time())
 
         if not req.stream:
-            result = engine.chat(req)
+            if hasattr(engine, "chat_async"):
+                result = await engine.chat_async(req)
+            else:
+                result = engine.chat(req)
             msg: dict[str, Any] = {
                 "role": "assistant",
                 "content": result.content,
@@ -87,7 +90,7 @@ def build_app(engine: ServeEngine):
                 "usage": result.usage,
             }
 
-        def gen():
+        async def stream_chunks():
             first = {
                 "id": completion_id,
                 "object": "chat.completion.chunk",
@@ -102,7 +105,15 @@ def build_app(engine: ServeEngine):
                 ],
             }
             yield f"data: {json.dumps(first)}\n\n"
-            for chunk in engine.chat_stream(req):
+            if hasattr(engine, "chat_stream_async"):
+                chunk_iter = engine.chat_stream_async(req)
+            else:
+                async def _sync_bridge():
+                    for chunk in engine.chat_stream(req):
+                        yield chunk
+
+                chunk_iter = _sync_bridge()
+            async for chunk in chunk_iter:
                 if chunk.content_delta:
                     out = {
                         "id": completion_id,
@@ -153,6 +164,6 @@ def build_app(engine: ServeEngine):
                     yield "data: [DONE]\n\n"
                     return
 
-        return StreamingResponse(gen(), media_type="text/event-stream")
+        return StreamingResponse(stream_chunks(), media_type="text/event-stream")
 
     return app

@@ -58,15 +58,15 @@ def messages_from_request(req: ChatRequest) -> list[dict[str, Any]]:
 
 
 def run_async(coro: Any) -> Any:
+    """Run an async coroutine from sync code (``flashcli run``). No running loop."""
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
     except RuntimeError:
         return asyncio.run(coro)
-    if loop.is_running():
-        raise RuntimeError(
-            "Cannot run async Qwen engine from an active event loop; use serve mode."
-        )
-    return asyncio.run(coro)
+    raise RuntimeError(
+        "Cannot run async Qwen engine from an active event loop; "
+        "await chat_async() / chat_stream_async() instead."
+    )
 
 
 def qwen36_result_to_chat(data: dict[str, Any]) -> ChatResult:
@@ -141,18 +141,6 @@ async def iter_qwen3_stream(
         elif ev[0] == "finish":
             _, finish, usage = ev
             yield ChatChunk(finish_reason=finish, usage=usage)
-
-
-def chat_stream_sync(engine: Any, req: ChatRequest) -> Iterator[ChatChunk]:
-    async def _gen() -> AsyncIterator[ChatChunk]:
-        async for chunk in iter_qwen3_stream(engine, req):
-            yield chunk
-
-    async def _collect() -> list[ChatChunk]:
-        return [c async for c in _gen()]
-
-    for chunk in run_async(_collect()):
-        yield chunk
 
 
 def merge_load_options(
