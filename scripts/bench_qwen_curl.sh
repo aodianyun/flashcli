@@ -21,6 +21,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FLASHCLI_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MAKE_PAYLOAD="${SCRIPT_DIR}/bench_qwen_make_payload.py"
+STREAM_ONCE="${SCRIPT_DIR}/bench_qwen_curl_stream.py"
 
 HOST="${HOST:-127.0.0.1}"
 QWEN3_PORT="${QWEN3_PORT:-8000}"
@@ -50,6 +51,7 @@ ROUNDS="${BENCH_ROUNDS:-1}"
 SKIP_FIRST="${BENCH_SKIP_FIRST-}"
 LONG_PROMPT_STYLE="${LONG_PROMPT_STYLE:-repeat}"
 BENCH_PROFILE="${BENCH_PROFILE:-}"
+BENCH_STREAM="${BENCH_STREAM:-1}"
 WORKDIR="${WORKDIR:-/tmp/flashcli-bench-qwen-$$}"
 
 usage() {
@@ -74,11 +76,17 @@ Options:
   --skip-first K          Drop first K rounds before averaging (default: 1 if rounds>1)
   --long-prompt-style S   repeat | flashrt | doc (flashrt=FlashRT doc seed)
   --profile NAME          comparable (flashrt long + env hints) | stress (repeat fill)
+  --stream                Use stream=true payloads (default)
+  --no-stream             Use stream=false (legacy non-streaming)
   -h, --help
 
 Env: HOST, QWEN3_PORT, QWEN36_PORT, CKPT_QWEN3, CKPT_QWEN36, SHORT_PROMPT,
      QWEN3_MAX_Q_SEQ, QWEN36_MAX_SEQ, LONG_PROMPT_STYLE, BENCH_PROFILE,
-     BENCH_ROUNDS, BENCH_SKIP_FIRST
+     BENCH_ROUNDS, BENCH_SKIP_FIRST, BENCH_STREAM
+
+Stream: qwen3 has true token SSE (client_ttft_ms = first content chunk).
+qwen36 stream is pseudo (one chunk after full generate); use server ttft_ms
+until FlashRT adds real streaming.
 EOF
 }
 
@@ -114,10 +122,17 @@ while [[ $# -gt 0 ]]; do
       esac
       shift 2
       ;;
+    --stream) BENCH_STREAM=1; shift ;;
+    --no-stream) BENCH_STREAM=0; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown option: $1" ;;
   esac
 done
+
+case "${BENCH_STREAM}" in
+  0|false|no|off) BENCH_STREAM=0 ;;
+  *) BENCH_STREAM=1 ;;
+esac
 
 if [[ "${SKIP_QWEN3}" -eq 1 && "${SKIP_QWEN36}" -eq 1 ]]; then
   die "Cannot use both --qwen3-only and --qwen36-only"
@@ -166,6 +181,7 @@ command -v curl >/dev/null 2>&1 || die "curl not found"
 command -v jq >/dev/null 2>&1 || die "jq not found"
 command -v python3 >/dev/null 2>&1 || die "python3 not found"
 [[ -f "${MAKE_PAYLOAD}" ]] || die "Missing ${MAKE_PAYLOAD}"
+[[ -f "${STREAM_ONCE}" ]] || die "Missing ${STREAM_ONCE}"
 
 mkdir -p "${WORKDIR}"
 
@@ -176,16 +192,19 @@ health() {
 
 make_short_payload() {
   local model="$1" out="$2"
+  local stream_json=false
+  [[ "${BENCH_STREAM}" -eq 1 ]] && stream_json=true
   jq -n \
     --arg model "${model}" \
     --arg content "${SHORT_PROMPT}" \
     --argjson max_tokens "${SHORT_MAX_TOKENS}" \
+    --argjson stream "${stream_json}" \
     '{
       model: $model,
       messages: [{role: "user", content: $content}],
       max_tokens: $max_tokens,
       temperature: 0,
-      stream: false
+      stream: $stream
     }' >"${out}"
 }
 
@@ -193,6 +212,11 @@ make_long_payload() {
   local ckpt="$1" model="$2" target_tokens="$3" out="$4"
   local max_seq="${5:-}"
   local -a extra=(--long-prompt-style "${LONG_PROMPT_STYLE}")
+  if [[ "${BENCH_STREAM}" -eq 1 ]]; then
+    extra+=(--stream)
+  else
+    extra+=(--no-stream)
+  fi
   if [[ -n "${max_seq}" ]]; then
     extra+=(--max-seq "${max_seq}")
     extra+=(--seq-slack "${QWEN36_SEQ_SLACK:-32}")
@@ -221,23 +245,42 @@ print_qwen36_hints() {
 # One HTTP request; append one JSON line to metrics jsonl. Prints brief round log.
 run_curl_once() {
   local label="$1" port="$2" payload="$3" resp="$4" round="$5" jsonl="$6"
-  local t0 t1 wall_ms tag=""
+  local wall_ms tag="" use_stream=false
   if [[ "${round}" -le "${SKIP_FIRST}" ]]; then
     tag=" (warmup, excluded)"
   fi
-  t0="$(python3 -c 'import time; print(int(time.time()*1000))')"
-  if ! curl -sf "http://${HOST}:${port}/v1/chat/completions" \
-    -H "Content-Type: application/json" \
-    -d @"${payload}" \
-    -o "${resp}"; then
-    if [[ -s "${resp}" ]]; then
-      log "${label} round ${round}/${ROUNDS}: server response:"
-      jq -r '.' "${resp}" 2>/dev/null || cat "${resp}" >&2
-    fi
-    die "${label} round ${round}/${ROUNDS}: curl failed (is serve running on :${port}?)"
+  if [[ "$(jq -r '.stream // false' "${payload}")" == "true" ]]; then
+    use_stream=true
   fi
-  t1="$(python3 -c 'import time; print(int(time.time()*1000))')"
-  wall_ms=$((t1 - t0))
+  if [[ "${use_stream}" == "true" ]]; then
+    if ! python3 "${STREAM_ONCE}" \
+      --url "http://${HOST}:${port}/v1/chat/completions" \
+      --payload "${payload}" \
+      -o "${resp}" 2>"${resp}.stderr"; then
+      if [[ -s "${resp}.stderr" ]]; then
+        cat "${resp}.stderr" >&2
+      fi
+      if [[ -s "${resp}" ]]; then
+        jq -r '.' "${resp}" 2>/dev/null || cat "${resp}" >&2
+      fi
+      die "${label} round ${round}/${ROUNDS}: stream request failed"
+    fi
+  else
+    local t0 t1
+    t0="$(python3 -c 'import time; print(int(time.time()*1000))')"
+    if ! curl -sf "http://${HOST}:${port}/v1/chat/completions" \
+      -H "Content-Type: application/json" \
+      -d @"${payload}" \
+      -o "${resp}"; then
+      if [[ -s "${resp}" ]]; then
+        log "${label} round ${round}/${ROUNDS}: server response:"
+        jq -r '.' "${resp}" 2>/dev/null || cat "${resp}" >&2
+      fi
+      die "${label} round ${round}/${ROUNDS}: curl failed (is serve running on :${port}?)"
+    fi
+    t1="$(python3 -c 'import time; print(int(time.time()*1000))')"
+    wall_ms=$((t1 - t0))
+  fi
   if [[ ! -s "${resp}" ]]; then
     die "${label} round ${round}/${ROUNDS}: empty response"
   fi
@@ -245,15 +288,24 @@ run_curl_once() {
     jq -r '.error | tostring' "${resp}" >&2
     die "${label} round ${round}/${ROUNDS}: API error"
   fi
+  if [[ "${use_stream}" == "true" ]]; then
+    wall_ms="$(jq -r '.bench.wall_ms // 0' "${resp}")"
+  fi
   jq -cn \
     --argjson round "${round}" \
     --argjson wall_ms "${wall_ms}" \
     --argjson usage "$(jq '.usage // {}' "${resp}")" \
-    '{round: $round, wall_ms: $wall_ms, usage: $usage}' >>"${jsonl}"
-  local tps ttft
+    --argjson bench "$(jq '.bench // {}' "${resp}")" \
+    '{round: $round, wall_ms: $wall_ms, usage: $usage, bench: $bench}' >>"${jsonl}"
+  local tps ttft client_ttft
   tps="$(jq -r '.usage.tok_per_s // .usage.decode_tok_per_s // .usage.e2e_tok_per_s // "n/a"' "${resp}" 2>/dev/null)"
   ttft="$(jq -r '.usage.ttft_ms // .usage.prefill_ms // "n/a"' "${resp}" 2>/dev/null)"
-  log "  round ${round}/${ROUNDS}${tag}: curl_wall=${wall_ms}ms ttft_ms=${ttft} tok_per_s=${tps}"
+  client_ttft="$(jq -r '.bench.client_ttft_ms // empty' "${resp}" 2>/dev/null)"
+  if [[ -n "${client_ttft}" ]]; then
+    log "  round ${round}/${ROUNDS}${tag}: curl_wall=${wall_ms}ms client_ttft_ms=${client_ttft} server_ttft_ms=${ttft} tok_per_s=${tps}"
+  else
+    log "  round ${round}/${ROUNDS}${tag}: curl_wall=${wall_ms}ms server_ttft_ms=${ttft} tok_per_s=${tps}"
+  fi
 }
 
 summarize_rounds() {
@@ -289,8 +341,17 @@ def mean(key, nested="usage"):
             vals.append(float(v))
     return sum(vals) / len(vals) if vals else None
 
+def mean_nested(key, nested="bench"):
+    vals = []
+    for r in samples:
+        obj = r.get(nested) or {}
+        v = obj.get(key)
+        if v is not None:
+            vals.append(float(v))
+    return sum(vals) / len(vals) if vals else None
+
 def mean_ttft_ms():
-    """ttft_ms from engine; qwen36 non-stream falls back to prefill_ms."""
+    """Server-side ttft_ms (engine); non-stream qwen36 uses prefill_ms."""
     vals = []
     for r in samples:
         u = r.get("usage", {})
@@ -312,9 +373,12 @@ def fmt(key, nested="usage", digits=1):
     return f"{key}={m:.{digits}f}"
 
 parts = []
+client_ttft_m = mean_nested("client_ttft_ms", "bench")
+if client_ttft_m is not None:
+    parts.append(f"client_ttft_ms={client_ttft_m:.1f}")
 ttft_m = mean_ttft_ms()
 if ttft_m is not None:
-    parts.append(f"ttft_ms={ttft_m:.1f}")
+    parts.append(f"server_ttft_ms={ttft_m:.1f}")
 for k in (
     "prompt_tokens",
     "completion_tokens",
@@ -361,7 +425,10 @@ run_bench_case() {
   summarize_rounds "${label}" "${jsonl}" "${WORKDIR}/${stem}.r${ROUNDS}.out.json"
 }
 
-log "workdir=${WORKDIR}  rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${_SCORED_ROUNDS} long_prompt_style=${LONG_PROMPT_STYLE} profile=${BENCH_PROFILE:-none}"
+log "workdir=${WORKDIR}  rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${_SCORED_ROUNDS} stream=${BENCH_STREAM} long_prompt_style=${LONG_PROMPT_STYLE} profile=${BENCH_PROFILE:-none}"
+if [[ "${BENCH_STREAM}" -eq 1 ]]; then
+  log "stream=true: qwen3 client_ttft_ms is first SSE content; qwen36 is pseudo-stream (see server_ttft_ms)"
+fi
 print_qwen36_hints
 if [[ "${SKIP_QWEN3}" -eq 0 ]]; then
   log "qwen3 → http://${HOST}:${QWEN3_PORT}  ckpt=${CKPT_QWEN3}"

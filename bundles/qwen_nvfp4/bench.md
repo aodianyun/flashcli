@@ -22,7 +22,20 @@ workdir: `...-18101`
 
 ---
 
-## qwen36 comparable（推荐对标）
+## 本地真 TTFT（无 HTTP）
+
+`scripts/bench_qwen36_ttft_local.py` — 见 [`../../codeplan/test.md`](../../codeplan/test.md) 中「qwen36 本地真 TTFT」一节。
+
+---
+
+## Bench 默认 `stream=true`
+
+- **qwen3**：真 SSE，`client_ttft_ms` = 首个 content chunk（本地无网络时≈`server_ttft_ms`）
+- **qwen36**：伪流式（整段算完再一次吐），看 **`server_ttft_ms`**；`client_ttft_ms`≈整请求墙钟
+
+关闭流式：`bash scripts/bench_qwen_curl.sh --no-stream …`
+
+## qwen36 comparable（满 256K · 推荐对标）
 
 ```bash
 export FLASHRT_QWEN36_LONG_KV_CACHE=fp8
@@ -32,15 +45,21 @@ QWEN36_MAX_SEQ=262208 QWEN36_PORT=8000 bash scripts/bench_qwen_curl.sh --qwen36-
   --profile comparable --qwen36-long-tokens 262144 --rounds 12 --skip-first 2
 ```
 
-| 场景 | TTFT | curl | decode | route |
-|------|------|------|--------|-------|
-| 短 | 458 ms | 1.26 s | **83.8 tok/s** | short_spec |
-| 长 | **81.4 s** | 82.9 s | **79.4 tok/s** | fp8_spec |
+| 场景 | prompt | TTFT | curl | decode | route |
+|------|--------|------|------|--------|-------|
+| 短 | 19 | 457 ms | 1.26 s | **83.7 tok/s** | short_spec |
+| 长 | **262103** | **110.6 s** | 112.4 s | **69.2 tok/s** | fp8_spec |
 
-长测 rendered **218466** tokens（目标 262144，拟合预算内）。workdir: `...-20005`
+workdir: `...-21495`（2026-05-28）
+
+---
+
+## qwen36 comparable 旧（~218K，拟合未打满）
+
+长 rendered **218466** · TTFT 81.4 s · decode **79.4 tok/s** — workdir `...-20005`，仅作历史对比。
 
 ---
 
 ## qwen36 stress（旧，repeat 中文）
 
-长 262112 tokens · TTFT 110s · decode **63 tok/s** — 仅作压测参考，不宜对标 FlashRT 文档。
+长 262112 tokens · TTFT 110s · decode **63 tok/s** — 压测参考，不宜对标 FlashRT 文档。

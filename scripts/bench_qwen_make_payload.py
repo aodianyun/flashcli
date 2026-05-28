@@ -221,6 +221,12 @@ def main() -> int:
         default=32,
         help="Safety margin below max-seq (template/tokenizer drift)",
     )
+    p.add_argument(
+        "--stream",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Set stream on chat/completions JSON (default: true)",
+    )
     args = p.parse_args()
 
     ckpt = args.checkpoint.expanduser().resolve()
@@ -254,7 +260,7 @@ def main() -> int:
         "messages": [{"role": "user", "content": content}],
         "max_tokens": int(args.max_tokens),
         "temperature": float(args.temperature),
-        "stream": False,
+        "stream": bool(args.stream),
     }
     meta = {
         "long_prompt_style": args.long_prompt_style,
