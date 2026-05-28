@@ -12,6 +12,8 @@ BUNDLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FLASHCLI_ROOT="$(cd "${BUNDLE_DIR}/../.." && pwd)"
 # shellcheck source=../../scripts/lib/verify_native_matrix.sh
 source "${FLASHCLI_ROOT}/scripts/lib/verify_native_matrix.sh"
+# shellcheck source=../../scripts/lib/make_zip.sh
+source "${FLASHCLI_ROOT}/scripts/lib/make_zip.sh"
 
 OUTPUT=""
 SM="120"
@@ -108,12 +110,8 @@ else
 fi
 
 rm -f "${OUTPUT}"
-(
-  cd "${STAGE}"
-  command -v zip >/dev/null 2>&1 || die "zip command not found"
-  zip -rq "${OUTPUT}" "${ARCHIVE_NAME}"
-)
+make_zip_archive "${STAGE}" "${ARCHIVE_NAME}" "${OUTPUT}" || die "Failed to create zip (install zip or use python3)"
 
 log "Created ${OUTPUT}"
 log "Contents:"
-zipinfo -1 "${OUTPUT}" | sed 's/^/  /' >&2
+list_zip_archive "${OUTPUT}" | sed 's/^/  /' >&2 || true

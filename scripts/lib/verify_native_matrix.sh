@@ -3,13 +3,15 @@
 #   source "${FLASHCLI_ROOT}/scripts/lib/verify_native_matrix.sh"
 #
 #   verify_native_matrix_lib "${BUNDLE_DIR}/lib" 120 130 linux x86_64 "310 311 312" \
-#     flash_rt_kernels flash_rt_fa2 flash_rt_fp4
+#     flash_rt_kernels flash_rt_fa2
 
 verify_native_matrix_lib() {
   local lib_dir="$1" sm="$2" cuda_tag="$3" os_name="$4" arch="$5" py_minors_csv="$6"
   shift 6
   local -a modules=("$@")
-  local py minors=()
+  local -a py_minors=()
+  local py mod pattern
+  local -a matches=()
 
   [[ -d "${lib_dir}" ]] || {
     printf '[matrix-verify] ERROR: missing lib dir: %s\n' "${lib_dir}" >&2
@@ -19,7 +21,6 @@ verify_native_matrix_lib() {
   # shellcheck disable=SC2206
   py_minors=(${py_minors_csv})
 
-  local py mod pattern -a matches
   for py in "${py_minors[@]}"; do
     for mod in "${modules[@]}"; do
       pattern="${mod}*-sm${sm}-cu${cuda_tag}-${os_name}-${arch}-py${py}.so"

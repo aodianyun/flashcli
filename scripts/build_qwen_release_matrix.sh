@@ -38,7 +38,8 @@ usage() {
   cat <<'EOF'
 Build qwen_nvfp4 runtime zip: sm120 × cu130 × (py310, py311, py312).
 
-Requires Linux + NVIDIA SM120 (Blackwell) build host, cmake, zip, nvcc 13.x.
+Requires Linux + NVIDIA SM120 (Blackwell) build host, cmake, nvcc 13.x.
+  zip (or python3 for pack fallback).
 
   export FLASHRT_REPO=/path/to/FlashRT
   export CUDA_HOME_CU130=/usr/local/cuda-13.0
