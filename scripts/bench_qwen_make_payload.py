@@ -118,7 +118,8 @@ def fit_user_prompt_to_budget(
     tpr = _effective_tokens_per_repeat(tokenizer, seed, budget=budget)
     hi_reps = min(budget, (budget // tpr) + 128)
     if target_user_tokens > 0:
-        hi_reps = max(hi_reps, min(budget, (int(target_user_tokens) // tpr) + 128))
+        hi_reps = min(hi_reps, (int(target_user_tokens) // tpr) + 128)
+    want_fill_budget = target_user_tokens <= 0 or int(target_user_tokens) >= budget - 256
 
     _fit_log(
         f"fitting long prompt: rendered<={budget} "
@@ -154,7 +155,12 @@ def fit_user_prompt_to_budget(
     binsearch(0, hi_reps)
 
     # If we hit the ceiling below budget, raise using observed tokens/repeat.
-    while best[0] and best[2] < budget - 16 and hi_reps < budget:
+    while (
+        want_fill_budget
+        and best[0]
+        and best[2] < budget - 16
+        and hi_reps < budget
+    ):
         best_reps = len(best[0]) // max(1, len(seed))
         tpr_obs = max(1, best[1] // max(1, best_reps))
         bump = max(256, (budget - best[2]) // tpr_obs + 64)

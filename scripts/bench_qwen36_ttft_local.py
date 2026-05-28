@@ -4,21 +4,25 @@
 Does not modify FlashRT sources. Replays the frontend prefill path used by
 ``flashcli serve``, then stops before the speculative decode loop.
 
+Requires the same qwen_nvfp4 **bundle** as ``flashcli serve`` (native .so under
+``lib/``). Use ``--bundle-dir`` or ``FLASHCLI_BUNDLE`` if not the default path.
+
 Examples:
 
   export FLASHRT_QWEN36_MTP_CKPT_DIR=/path/to/fp8-mtp-ckpt
   export FLASHRT_QWEN36_LONG_KV_CACHE=fp8
   export FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ=512
 
-  # Short prompt (~19 tokens after template)
+  # Short prompt smoke (~19 rendered tokens; do not pass huge --max-seq for fit)
   python3 scripts/bench_qwen36_ttft_local.py \\
     --checkpoint ~/.flashcli/models/qwen36-27b-nvfp4/checkpoint \\
-    --max-seq 262208 --K 6 --target-prompt-tokens 64 \\
-    --long-prompt-style flashrt
+    --bundle-dir /path/to/qwen_nvfp4-runtime-bundle \\
+    --K 6 --target-prompt-tokens 64 --long-prompt-style flashrt
 
-  # Full ~256K comparable (prefill only, skip full generate for speed)
+  # 256K comparable (prefill only)
   python3 scripts/bench_qwen36_ttft_local.py \\
     --checkpoint ~/.flashcli/models/qwen36-27b-nvfp4/checkpoint \\
+    --bundle-dir /path/to/qwen_nvfp4-runtime-bundle \\
     --max-seq 262208 --K 6 --target-prompt-tokens 262144 \\
     --long-prompt-style flashrt --skip-full-generate
 """
@@ -28,13 +32,77 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
-import time
 from pathlib import Path
 
-_BUNDLE = Path(__file__).resolve().parents[1] / "bundles" / "qwen_nvfp4"
-if _BUNDLE.is_dir():
-    sys.path.insert(0, str(_BUNDLE))
+_FLASHCLI_ROOT = Path(__file__).resolve().parents[1]
+_FLASHCLI_SRC = _FLASHCLI_ROOT / "flashcli" / "src"
+if _FLASHCLI_SRC.is_dir():
+    sys.path.insert(0, str(_FLASHCLI_SRC))
+
+
+def _default_bundle_dirs() -> list[Path]:
+    roots = [_FLASHCLI_ROOT, _FLASHCLI_ROOT / "flashcli"]
+    out: list[Path] = []
+    for root in roots:
+        cand = root / "bundles" / "qwen_nvfp4"
+        if cand.is_dir():
+            out.append(cand)
+        # Installed / packed runtime (lib/*.so + flash_rt/)
+        for name in ("runtime", "."):
+            cand2 = root / "bundles" / "qwen_nvfp4" / name
+            if (cand2 / "flashcli-bundle.json").is_file():
+                out.append(cand2)
+            elif name == "." and (cand / "flashcli-bundle.json").is_file():
+                out.append(cand)
+    # flashcli serve install layout
+    home = Path(os.environ.get("HOME", ""))
+    if home:
+        for p in (
+            home / ".flashcli" / "bundles" / "qwen36-27b-nvfp4",
+            home / ".flashcli" / "bundles" / "qwen_nvfp4",
+        ):
+            if (p / "flashcli-bundle.json").is_file():
+                out.append(p)
+    return out
+
+
+def _resolve_bundle_dir(explicit: Path | None) -> Path:
+    if explicit is not None:
+        root = explicit.expanduser().resolve()
+        if not (root / "flashcli-bundle.json").is_file():
+            raise SystemExit(f"bundle missing flashcli-bundle.json: {root}")
+        return root
+    env = os.environ.get("FLASHCLI_BUNDLE") or os.environ.get("QWEN_NVFP4_BUNDLE")
+    if env:
+        root = Path(env).expanduser().resolve()
+        if not (root / "flashcli-bundle.json").is_file():
+            raise SystemExit(f"FLASHCLI_BUNDLE invalid: {root}")
+        return root
+    for cand in _default_bundle_dirs():
+        if (cand / "flashcli-bundle.json").is_file():
+            return cand.resolve()
+    raise SystemExit(
+        "Cannot find qwen_nvfp4 bundle (need lib/flash_rt_kernels*.so). "
+        "Set --bundle-dir or FLASHCLI_BUNDLE to the same runtime used by "
+        "'flashcli serve qwen36-27b-nvfp4'."
+    )
+
+
+def _activate_bundle(bundle_root: Path) -> None:
+    from flashcli.bundle.activate import activate_bundle
+    from flashcli.bundle.manifest import load_bundle_manifest
+
+    bundle = load_bundle_manifest(bundle_root)
+    activate_bundle(
+        bundle,
+        profile="serve",
+        install_python=False,
+        quiet=True,
+        force_python=False,
+    )
+    print(f"[ttft-local] bundle={bundle_root}", file=sys.stderr, flush=True)
 
 
 def _load_engine(ckpt: Path, *, max_seq: int, K: int, device: str):
@@ -56,18 +124,20 @@ def _build_messages(args: argparse.Namespace) -> list[dict]:
         return list(body["messages"])
 
     scripts = Path(__file__).resolve().parent
-    sys.path.insert(0, str(scripts))
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
     import bench_qwen_make_payload as bmp
 
     from transformers import AutoTokenizer
 
     tok = AutoTokenizer.from_pretrained(str(args.checkpoint), trust_remote_code=True)
     seed = bmp.resolve_long_prompt_seed(args.long_prompt_style, args.seed)
-    if args.max_seq > 0:
+    fit_max_seq = int(args.fit_max_seq or 0)
+    if fit_max_seq > 0:
         content, _actual, _rendered = bmp.fit_user_prompt_to_budget(
             tok,
             args.target_prompt_tokens,
-            args.max_seq,
+            fit_max_seq,
             args.max_tokens,
             seed,
             seq_slack=args.seq_slack,
@@ -80,6 +150,8 @@ def _build_messages(args: argparse.Namespace) -> list[dict]:
 
 
 async def _run_full_generate(engine, messages, max_tokens: int) -> dict:
+    import time
+
     t0 = time.perf_counter()
     data = await engine.generate(messages, None, max_tokens)
     wall_ms = (time.perf_counter() - t0) * 1000.0
@@ -97,7 +169,24 @@ async def _run_full_generate(engine, messages, max_tokens: int) -> dict:
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--checkpoint", type=Path, required=True)
-    p.add_argument("--max-seq", type=int, default=262208)
+    p.add_argument(
+        "--bundle-dir",
+        type=Path,
+        default=None,
+        help="qwen_nvfp4 bundle root (flashcli-bundle.json + lib/*.so)",
+    )
+    p.add_argument(
+        "--max-seq",
+        type=int,
+        default=262208,
+        help="Engine max_seq (not used for prompt fit unless --fit-max-seq)",
+    )
+    p.add_argument(
+        "--fit-max-seq",
+        type=int,
+        default=0,
+        help="If set, fit long prompt to this max_seq (use 262208 for 256K)",
+    )
     p.add_argument("--max-tokens", type=int, default=64)
     p.add_argument("--K", type=int, default=6)
     p.add_argument("--device", default="cuda:0")
@@ -105,7 +194,7 @@ def main() -> int:
         "--target-prompt-tokens",
         type=int,
         default=64,
-        help="User message token target (use 262144 for 256K comparable)",
+        help="User message token target (262144 for 256K comparable)",
     )
     p.add_argument(
         "--long-prompt-style",
@@ -131,11 +220,23 @@ def main() -> int:
     if not ckpt.is_dir():
         raise SystemExit(f"checkpoint not found: {ckpt}")
 
-    print("[ttft-local] loading engine …", file=sys.stderr, flush=True)
+    bundle_root = _resolve_bundle_dir(args.bundle_dir)
+    _activate_bundle(bundle_root)
+
+    # activate_bundle prepends bundle_root; ensure helpers import.
+    br = str(bundle_root)
+    if br not in sys.path:
+        sys.path.insert(0, br)
+
+    print("[ttft-local] building prompt …", file=sys.stderr, flush=True)
     messages = _build_messages(args)
+
+    print("[ttft-local] loading engine …", file=sys.stderr, flush=True)
     engine = _load_engine(ckpt, max_seq=args.max_seq, K=args.K, device=args.device)
 
     input_ids = engine.prepare_request(messages, None, args.max_tokens).cuda()
+    prompt_len = int(input_ids.shape[1])
+    print(f"[ttft-local] rendered prompt_tokens≈{prompt_len}", file=sys.stderr, flush=True)
 
     from _qwen36_ttft import measure_prefill_ttft
 
@@ -151,7 +252,7 @@ def main() -> int:
         K=args.K,
     )
 
-    out: dict = {"prefill_probe": probe}
+    out: dict = {"prefill_probe": probe, "bundle_dir": str(bundle_root)}
     if not args.skip_full_generate:
         print(
             "[ttft-local] full generate (compare usage.prefill_ms) …",
