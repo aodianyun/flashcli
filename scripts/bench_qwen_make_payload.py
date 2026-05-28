@@ -31,15 +31,24 @@ def _seed_token_len(tokenizer, seed: str) -> int:
     return len(tokenizer.encode(seed, add_special_tokens=False))
 
 
+def _effective_tokens_per_repeat(
+    tokenizer, seed: str, *, probe_repeats: int = 128
+) -> int:
+    """Tokens per seed repeat on long fills (BPE merges lower than single-seed len)."""
+    probe = max(1, probe_repeats)
+    n = len(tokenizer.encode(seed * probe, add_special_tokens=False))
+    return max(1, (n + probe - 1) // probe)
+
+
 def build_prompt_text(tokenizer, target_tokens: int, seed: str) -> tuple[str, int]:
     """Repeat *seed* text until encoded user length reaches *target_tokens*."""
     if target_tokens <= 0:
         return "", 0
-    seed_len = _seed_token_len(tokenizer, seed)
-    if seed_len == 0:
+    if _seed_token_len(tokenizer, seed) == 0:
         raise SystemExit("seed text tokenizes to empty sequence")
 
-    reps = max(1, (target_tokens + seed_len - 1) // seed_len)
+    tpr = _effective_tokens_per_repeat(tokenizer, seed)
+    reps = max(1, (target_tokens + tpr - 1) // tpr)
     lo, hi = max(1, reps - 4), reps + 4
     best_text, best_actual = seed * reps, 0
     while lo <= hi:
@@ -96,15 +105,17 @@ def fit_user_prompt_to_budget(
     if seed_len == 0:
         raise SystemExit("seed text tokenizes to empty sequence")
 
-    # Search repeats, not raw token targets — never explore 2×/4× overshoots.
-    hi_reps = (budget // seed_len) + 8
+    tpr = _effective_tokens_per_repeat(tokenizer, seed)
+    # Do not use seed_len alone: repeated BPE yields fewer tokens/repeat (~10 vs 12).
+    hi_reps = (budget // tpr) + 64
     if target_user_tokens > 0:
-        cap_reps = (int(target_user_tokens) + seed_len - 1) // seed_len + 4
-        hi_reps = min(hi_reps, cap_reps)
+        hi_reps = max(hi_reps, (int(target_user_tokens) // tpr) + 64)
+    hi_reps = min(hi_reps, budget)
 
     _fit_log(
         f"fitting long prompt: rendered<={budget} "
-        f"(max_seq={max_seq}, seed_tokens={seed_len}, max_repeats≈{hi_reps}) …"
+        f"(max_seq={max_seq}, seed_once={seed_len}, eff_tok/repeat≈{tpr}, "
+        f"max_repeats≈{hi_reps}) …"
     )
 
     lo_reps, hi = 0, hi_reps
