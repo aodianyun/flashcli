@@ -28,15 +28,31 @@ def resolve_long_prompt_seed(style: str, seed_arg: str | None) -> str:
 
 
 def build_prompt_text(tokenizer, target_tokens: int, seed: str) -> tuple[str, int]:
+    """Repeat *seed* text until encoded user length reaches *target_tokens*."""
+    if target_tokens <= 0:
+        return "", 0
     seed_ids = tokenizer.encode(seed, add_special_tokens=False)
     if not seed_ids:
         raise SystemExit("seed text tokenizes to empty sequence")
-    ids: list[int] = []
-    while len(ids) < target_tokens:
-        ids.extend(seed_ids)
-    ids = ids[:target_tokens]
-    text = tokenizer.decode(ids, skip_special_tokens=True)
-    actual = len(tokenizer.encode(text, add_special_tokens=False))
+
+    def encoded_len(repeats: int) -> int:
+        return len(tokenizer.encode(seed * repeats, add_special_tokens=False))
+
+    lo, hi = 1, max(2, (target_tokens // len(seed_ids)) + 2)
+    while encoded_len(hi) < target_tokens:
+        lo = hi
+        hi = min(hi * 2, hi + max(1024, target_tokens // len(seed_ids) + 1))
+        if hi == lo:
+            break
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if encoded_len(mid) <= target_tokens:
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    reps = max(1, hi)
+    text = seed * reps
+    actual = encoded_len(reps)
     return text, actual
 
 
@@ -66,28 +82,45 @@ def fit_user_prompt_to_budget(
     *,
     seq_slack: int = 32,
 ) -> tuple[str, int, int]:
-    """Binary-search user message length so rendered prompt + max_tokens <= max_seq."""
+    """Maximize user message length so rendered prompt + max_tokens <= max_seq."""
     budget = int(max_seq) - int(max_tokens) - int(seq_slack)
     if budget < 1:
         raise SystemExit(
             f"max_seq={max_seq} too small for max_tokens={max_tokens} "
             f"seq_slack={seq_slack}"
         )
-    text, user_n = build_prompt_text(tokenizer, target_user_tokens, seed)
-    rendered = rendered_prompt_tokens(tokenizer, text)
-    if rendered <= budget:
-        return text, user_n, rendered
-    lo, hi = 0, int(target_user_tokens)
-    best: tuple[str, int, int] = ("", 0, 0)
-    while lo <= hi:
-        mid = (lo + hi) // 2
-        text, user_n = build_prompt_text(tokenizer, mid, seed)
-        rendered = rendered_prompt_tokens(tokenizer, text)
+
+    def measure(target_n: int) -> tuple[int, str, int]:
+        if target_n <= 0:
+            return 0, "", 0
+        text, user_n = build_prompt_text(tokenizer, target_n, seed)
+        return rendered_prompt_tokens(tokenizer, text), text, user_n
+
+    # Grow the search upper bound until rendered exceeds budget (or hit cap).
+    hi = max(1, int(target_user_tokens))
+    rendered, text, user_n = measure(hi)
+    best = (text, user_n, rendered) if rendered <= budget else ("", 0, 0)
+    cap = max(hi * 4, hi + budget + 65536)
+    while rendered <= budget and hi < cap:
+        next_hi = min(max(hi + 1, hi * 2), cap)
+        hi = next_hi
+        rendered, text, user_n = measure(hi)
+        if rendered <= budget:
+            best = (text, user_n, rendered)
+
+    if rendered <= budget and best[0]:
+        return best
+
+    lo, hi_bs = 0, hi
+    best = ("", 0, 0)
+    while lo <= hi_bs:
+        mid = (lo + hi_bs) // 2
+        rendered, text, user_n = measure(mid)
         if rendered <= budget:
             best = (text, user_n, rendered)
             lo = mid + 1
         else:
-            hi = mid - 1
+            hi_bs = mid - 1
     if not best[0]:
         raise SystemExit(
             f"cannot fit prompt within max_seq={max_seq} max_tokens={max_tokens}"

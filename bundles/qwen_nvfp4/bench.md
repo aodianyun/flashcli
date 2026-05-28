@@ -1,9 +1,8 @@
-# Bench 原始日志摘要
+# Bench 日志摘要
 
-完整报告：[`../../codeplan/bench_report_qwen_nvfp4.md`](../../codeplan/bench_report_qwen_nvfp4.md)
+报告：[`../../codeplan/bench_report_qwen_nvfp4.md`](../../codeplan/bench_report_qwen_nvfp4.md)
 
-**GPU**：NVIDIA RTX PRO 5000（Blackwell / SM120）  
-规则：`--rounds 12 --skip-first 2`（后 10 轮均值）
+**GPU**：RTX PRO 5000 48GB · **12 轮 / skip 2**
 
 ---
 
@@ -14,29 +13,34 @@ QWEN3_MAX_Q_SEQ=0 bash scripts/bench_qwen_curl.sh --qwen3-only \
   --qwen3-long-tokens 1536 --rounds 12 --skip-first 2
 ```
 
-| 场景 | curl | decode tok/s | prefill |
-|------|------|--------------|---------|
-| 短 | 546 ms | **125.6** | 1.0 ms |
-| 长 1.5K | 644 ms | **114.0** | 41.1 ms |
+| 场景 | TTFT | curl | decode tok/s |
+|------|------|------|--------------|
+| 短 | 1 ms | 546 ms | 125.6 |
+| 长 1.5K | 41 ms | 644 ms | 114.0 |
 
-workdir: `/tmp/flashcli-bench-qwen-18101`
+workdir: `...-18101`
 
 ---
 
-## qwen36
+## qwen36 comparable（推荐对标）
 
 ```bash
-flashcli serve qwen36-27b-nvfp4 --port 8000 --K 6 --max-seq 262208 --warmup-preset auto
+export FLASHRT_QWEN36_LONG_KV_CACHE=fp8
+export FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ=512
 
 QWEN36_MAX_SEQ=262208 QWEN36_PORT=8000 bash scripts/bench_qwen_curl.sh --qwen36-only \
-  --qwen36-long-tokens 262144 --rounds 12 --skip-first 2
+  --profile comparable --qwen36-long-tokens 262144 --rounds 12 --skip-first 2
 ```
 
-| 场景 | curl | decode tok/s | prefill | prompt |
-|------|------|--------------|---------|--------|
-| 短 | 1.26 s | **83.9** | 457 ms | 19 |
-| 长 256K | **112.0 s** | **63.0** | **110.4 s** | 262112† |
+| 场景 | TTFT | curl | decode | route |
+|------|------|------|--------|-------|
+| 短 | 458 ms | 1.26 s | **83.8 tok/s** | short_spec |
+| 长 | **81.4 s** | 82.9 s | **79.4 tok/s** | fp8_spec |
 
-†拟合：`rendered=262112`，`seq_slack=32`，`max-seq=262208`
+长测 rendered **218466** tokens（目标 262144，拟合预算内）。workdir: `...-20005`
 
-workdir: `/tmp/flashcli-bench-qwen-19553`
+---
+
+## qwen36 stress（旧，repeat 中文）
+
+长 262112 tokens · TTFT 110s · decode **63 tok/s** — 仅作压测参考，不宜对标 FlashRT 文档。
