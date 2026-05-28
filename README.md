@@ -17,10 +17,12 @@ One-line install (checks Linux, NVIDIA GPU, Python 3.10+, git; then pip installs
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
 # Mirror endpoints: curl -fsSL …/install.sh | sh -s -- --mirror
+# Force official endpoints: curl -fsSL …/install.sh | sh -s -- --global
+# Use default Gitee repo: curl -fsSL …/install.sh | sh -s -- --gitee --ref main
 # Other git remote: curl -fsSL …/install.sh | sh -s -- --repo https://gitee.com/org/flashcli.git --ref main
 ```
 
-You can also host `install.sh` as `https://your-domain/install` and run `curl -fsSL https://your-domain/install | sh`. Options: `--mirror` (alternate PyPI + HF mirrors), `--ref` / `--branch`, `--repo` / `--git-url`. Env: `FLASHCLI_INSTALL_REPO`, `FLASHCLI_INSTALL_REF`, `FLASHCLI_USE_MIRROR=1`, `FLASHCLI_SKIP_GPU_CHECK=1`. Default install is **main** from GitHub. As **root**, the installer uses a system-wide pip install (e.g. `/usr/local/bin`) so `flashcli` is on PATH without `~/.local/bin`.
+You can also host `install.sh` as `https://your-domain/install` and run `curl -fsSL https://your-domain/install | sh`. Options: `--mirror`, `--global` / `--no-mirror`, `--ref` / `--branch`, `--repo` / `--git-url`, `--gitee`, `--github`. Env: `FLASHCLI_INSTALL_REPO`, `FLASHCLI_INSTALL_REF`, `FLASHCLI_USE_MIRROR=1`, `FLASHCLI_SKIP_GPU_CHECK=1`. Default install is **main** from GitHub. As **root**, the installer uses a system-wide pip install (e.g. `/usr/local/bin`) so `flashcli` is on PATH without `~/.local/bin`.
 
 Or install manually:
 

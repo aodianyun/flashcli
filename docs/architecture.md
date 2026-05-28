@@ -92,6 +92,8 @@ See [model_bundle_standard.md](model_bundle_standard.md).
 | Preset | capabilities | bundle source |
 |--------|--------------|---------------|
 | `pi05_libero` | `run` | single `bundle.zip` (CDN matrix zip with `lib/*.so`) |
+| `qwen3-8b-nvfp4` | `run`, `serve` | shares one `bundle.zip` with `qwen36-27b-nvfp4`, selected via `bundle_variant: qwen3` |
+| `qwen36-27b-nvfp4` | `run`, `serve` | shares one `bundle.zip` with `qwen3-8b-nvfp4`, selected via `bundle_variant: qwen36` |
 
 ## Related docs
 

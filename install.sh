@@ -29,7 +29,9 @@
 
 set -eu
 
-DEFAULT_REPO="https://github.com/aodianyun/flashcli.git"
+DEFAULT_REPO_GITHUB="https://github.com/aodianyun/flashcli.git"
+DEFAULT_REPO_GITEE="https://gitee.com/aodianyun/flashcli.git"
+DEFAULT_REPO="$DEFAULT_REPO_GITHUB"
 REPO="${FLASHCLI_INSTALL_REPO:-$DEFAULT_REPO}"
 REF="${FLASHCLI_INSTALL_REF:-main}"
 QUIET="${FLASHCLI_QUIET:-0}"
@@ -77,6 +79,9 @@ Options:
   --ref REF, --branch REF   Git ref (branch/tag/commit). Default: main
   --repo URL, --git-url URL Git remote for pip install (GitHub, Gitee, self-hosted, …)
   --mirror                  Use alternate PyPI + Hugging Face Hub mirrors for install
+  --global, --no-mirror     Disable mirror endpoints (force direct official endpoints)
+  --gitee                   Shortcut: --repo https://gitee.com/aodianyun/flashcli.git
+  --github                  Shortcut: --repo https://github.com/aodianyun/flashcli.git
 
 Environment (override flags):
   FLASHCLI_INSTALL_REPO, FLASHCLI_INSTALL_REF
@@ -86,8 +91,11 @@ Environment (override flags):
 
 Examples:
   ./install.sh
+  ./install.sh --mirror
+  ./install.sh --global
   ./install.sh --ref develop
   ./install.sh --mirror --ref v0.2.0
+  ./install.sh --gitee --ref main
   ./install.sh --repo https://gitee.com/your-org/flashcli.git --ref main
   FLASHCLI_USE_MIRROR=1 ./install.sh --repo https://gitee.com/your-org/flashcli.git
 EOF
@@ -165,6 +173,20 @@ parse_args() {
         ;;
       --mirror)
         USE_MIRROR=1
+        shift
+        ;;
+      --global|--no-mirror)
+        USE_MIRROR=0
+        shift
+        ;;
+      --gitee)
+        REPO="$DEFAULT_REPO_GITEE"
+        REPO_FROM_USER=1
+        shift
+        ;;
+      --github)
+        REPO="$DEFAULT_REPO_GITHUB"
+        REPO_FROM_USER=1
         shift
         ;;
       --)
@@ -652,11 +674,41 @@ check_network() {
   if ! have_cmd git; then
     return 0
   fi
-  if git ls-remote --heads "$REPO" "$REF" >/dev/null 2>&1; then
+  if git_ref_reachable "$REPO" "$REF"; then
     info "[ok] git remote reachable: $REPO ($REF)"
     return 0
   fi
   warn "cannot verify git remote (offline/firewall?) — pip clone may still fail"
+}
+
+git_ref_reachable() {
+  _repo="$1"
+  _ref="$2"
+  # branch
+  if git ls-remote --exit-code --heads "$_repo" "$_ref" >/dev/null 2>&1; then
+    return 0
+  fi
+  # tag
+  if git ls-remote --exit-code --tags "$_repo" "$_ref" >/dev/null 2>&1; then
+    return 0
+  fi
+  # commit sha (short/full): match object id at line start
+  case "$_ref" in
+    [0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]*)
+      git ls-remote "$_repo" 2>/dev/null | awk -v want="$_ref" '
+        BEGIN { ok=1 }
+        {
+          oid=$1
+          if (index(oid, want) == 1) {
+            ok=0
+            exit
+          }
+        }
+        END { exit ok }
+      ' >/dev/null 2>&1 && return 0
+      ;;
+  esac
+  return 1
 }
 
 check_install_target() {

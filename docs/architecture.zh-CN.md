@@ -92,6 +92,8 @@ sequenceDiagram
 | Preset | capabilities | bundle 源 |
 |--------|--------------|---------|
 | `pi05_libero` | `run` | 单个 `bundle.zip`（CDN 矩阵 zip，含 `lib/*.so`） |
+| `qwen3-8b-nvfp4` | `run`, `serve` | 与 `qwen36-27b-nvfp4` 共享 `bundle.zip`，通过 `bundle_variant: qwen3` 选型 |
+| `qwen36-27b-nvfp4` | `run`, `serve` | 与 `qwen3-8b-nvfp4` 共享 `bundle.zip`，通过 `bundle_variant: qwen36` 选型 |
 
 ## 相关文档
 

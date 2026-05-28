@@ -25,18 +25,33 @@ export FLASHCLI_MODELS_YAML=/etc/flashcli/models.yaml
 flashcli models list
 ```
 
+## GPU / CUDA and native libraries
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FLASHCLI_CUDA_TAG` | (auto-detect) | Override detected CUDA userland tag (`124` / `128` / `130`) used to select `lib/*.so` such as `cu124` / `cu130`. |
+| (automatic) | — | If `nvcc` is missing, flashcli infers from `nvidia-smi` banner (`CUDA Version: 13.0` → `130`); SM89 no longer hard-defaults to `124`. |
+
+`flashcli run` selects native `.so` by **sm + cuda + os + arch + Python**. If `libcublas.so.12` is missing on CUDA 13 hosts, update flashcli or set `export FLASHCLI_CUDA_TAG=130`.
+
 ## Downloads and Hugging Face
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HF_ENDPOINT` | (official Hub) | Hugging Face Hub API base URL. Mirror example: `https://hf-mirror.com` ([HF-Mirror](https://hf-mirror.com)). Used by `snapshot_download`. |
-| (automatic) | — | If `HF_ENDPOINT` is **not** set, flashcli tries official Hub first, then `https://hf-mirror.com` (via `hf download` / `huggingface-cli download`). |
+| `HF_ENDPOINT` | (official Hub) | Hub endpoint override. Mirror example: `https://hf-mirror.com`. When set, flashcli uses only that endpoint. |
+| (automatic) | — | If `HF_ENDPOINT` is **not** set, flashcli tries official Hub first, then mirror (internally via `hf download`). |
 | `FLASHCLI_PREFER_HF_MIRROR` | `0` | When `1`, try mirror before official Hub. |
 | `HF_TOKEN` | (none) | Hugging Face token for gated repos (`hf auth login` or this variable). |
 | `HF_HUB_ETAG_TIMEOUT` | `5` | Hub CLI metadata/HEAD timeout (seconds); flashcli default 5 if unset. |
 | `HF_HUB_DOWNLOAD_TIMEOUT` | `5` | Hub CLI per-request timeout (seconds); flashcli default 5 if unset. |
+| `FLASHCLI_HF_ETAG_TIMEOUT` | `5` | Used only when `HF_HUB_ETAG_TIMEOUT` is unset. |
+| `FLASHCLI_HF_DOWNLOAD_TIMEOUT` | `5` | Used only when `HF_HUB_DOWNLOAD_TIMEOUT` is unset. |
+| `FLASHCLI_HF_PROBE_TIMEOUT` | `3` | Timeout (seconds) for probing official Hub reachability before fallback. |
+| `FLASHCLI_SKIP_HF_PROBE` | `0` | When `1`, skip probe and still try official first (may be slower under blocked networks). |
 
-On download failure, the CLI suggests checking `HF_ENDPOINT` and `HF_TOKEN`.
+Weight download behavior matches `hf download`; on failures, test the same `HF_ENDPOINT` manually with Hub CLI.
+
+`install.sh` and `pip install flashcli` install `huggingface_hub>=0.26` (`hf` / `huggingface-cli`). Post-install verification also checks Hub CLI availability; if scripts dir is not on `PATH`, flashcli falls back to `python -m huggingface_hub.cli.hf`.
 
 ## Behavior switches
 
