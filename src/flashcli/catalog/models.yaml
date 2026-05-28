@@ -1,6 +1,7 @@
 # flashcli 模型目录 — 每 preset 一个 bundle zip；运行时从 lib/*.so 按环境选择
 #
-# 构建：bash scripts/build_pi05_release_matrix.sh --cuda-tag 124
+# 构建：pi05 → scripts/build_pi05_release_matrix.sh
+#        qwen → scripts/build_qwen_release_matrix.sh (SM120 × cu130)
 # 文档：docs/runtime-matrix.zh-CN.md
 
 schema_version: 6
@@ -14,15 +15,17 @@ models:
       # path: bundles/pi05_libero   # 本地调试（须含 lib/*-{sm}-{cu}-...-pyNNN.so）
       # git: xxx
 
-  # 草稿：共享同一 runtime bundle，用 bundle_variant 选权重（验证通过前勿改 zip 发布）
+  # 共享同一 runtime zip；bundle_variant 选权重（HF 按 preset 名缓存）
   qwen3-8b-nvfp4:
     description: Qwen3-8B NVFP4 (SM120) — kaitchup/Qwen3-8B-NVFP4
     bundle_variant: qwen3
     bundle:
-      path: bundles/qwen_nvfp4
+      zip: https://flashhub-cdn.aodianyun.com/repo/5/versions/6/flashcli-bundle-qwen_nvfp4-main-sm120-multi-linux-x86_64.zip
+      # path: bundles/qwen_nvfp4   # 本地调试（须含 lib/*-sm120-cu130-*-pyNNN.so）
 
   qwen36-27b-nvfp4:
     description: Qwen3.6-27B NVFP4 + MTP speculative decode (SM120)
     bundle_variant: qwen36
     bundle:
-      path: bundles/qwen_nvfp4
+      zip: https://flashhub-cdn.aodianyun.com/repo/5/versions/6/flashcli-bundle-qwen_nvfp4-main-sm120-multi-linux-x86_64.zip
+      # path: bundles/qwen_nvfp4

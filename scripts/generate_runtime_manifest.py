@@ -179,9 +179,12 @@ def main() -> int:
                 py_versions.append(
                     (int(parsed.python_minor[0]), int(parsed.python_minor[1:]))
                 )
-            optional = so.name.startswith("flash_rt_fp4") or so.name.startswith(
-                "libfmha_fp16"
-            )
+            if so.name.startswith("libfmha_fp16"):
+                optional = True
+            elif so.name.startswith("flash_rt_fp4"):
+                optional = args.has_fp4 != "1"
+            else:
+                optional = False
             modules.append(
                 {
                     "file": f"lib/{so.name}",

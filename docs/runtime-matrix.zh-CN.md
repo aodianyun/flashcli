@@ -138,3 +138,48 @@ flashcli run pi05_libero \
   --bundle "$(pwd)/bundles/pi05_libero" \
   --image /path/to.jpg
 ```
+
+---
+
+## qwen_nvfp4（SM120 × cu130）
+
+| 维度 | 取值 |
+|------|------|
+| SM | **120**（Blackwell NVFP4） |
+| CUDA 用户态 | **cu130** |
+| OS / arch | **linux-x86_64** |
+| Python ABI | **3.10 / 3.11 / 3.12** |
+| Native 模块 | `flash_rt_kernels`、`flash_rt_fa2`、`flash_rt_fp4` |
+
+一个 zip 服务两个 catalog preset（`qwen3-8b-nvfp4`、`qwen36-27b-nvfp4`），权重由 HF 拉取，**不在 zip 内**。
+
+### 发布构建
+
+```bash
+cd flashcli
+export FLASHRT_REPO=/path/to/FlashRT
+export CUDA_HOME_CU130=/usr/local/cuda-13.0
+
+bash scripts/build_qwen_release_matrix.sh --check-only
+bash scripts/build_qwen_release_matrix.sh
+```
+
+产物：
+
+```text
+bundles/qwen_nvfp4/dist/flashcli-bundle-qwen_nvfp4-main-sm120-multi-linux-x86_64.zip
+```
+
+上传 CDN 后更新 `models.yaml` 中两个 preset 的 `bundle.zip`（URL 相同）。
+
+单档开发：
+
+```bash
+bash bundles/qwen_nvfp4/build.sh --repo-root "$FLASHRT_REPO" -j "$(nproc)"
+```
+
+环境键示例：`sm120-cu130-linux-x86_64-py312`。查看匹配：
+
+```bash
+flashcli models envs qwen3-8b-nvfp4
+```

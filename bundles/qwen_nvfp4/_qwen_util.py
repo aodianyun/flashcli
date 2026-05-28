@@ -45,6 +45,96 @@ def parse_warmup_spec(spec: str | None) -> list[tuple[int, int]]:
     return shapes
 
 
+def dedupe_warmup_shapes(shapes: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    out: list[tuple[int, int]] = []
+    seen: set[tuple[int, int]] = set()
+    for shape in shapes:
+        if shape not in seen:
+            out.append(shape)
+            seen.add(shape)
+    return out
+
+
+def warmup_shapes_to_spec(shapes: list[tuple[int, int]]) -> str:
+    return ",".join(f"{p}:{n}" for p, n in shapes)
+
+
+def qwen36_warmup_preset_shapes(preset: str, max_seq: int) -> list[tuple[int, int]]:
+    """Match FlashRT ``examples/qwen36_openai_server.py`` warmup buckets."""
+    key = (preset or "auto").lower()
+    if key in ("none", "off", "false", "0"):
+        return []
+    if key not in ("auto", "short", "long", "all"):
+        raise ValueError(
+            f"invalid warmup-preset {preset!r}; expected auto, short, long, all, or none"
+        )
+    short = [(8, 64), (128, 64), (512, 64), (1024, 64)]
+    long = [
+        (2048, 64),
+        (4096, 64),
+        (8192, 64),
+        (16384, 64),
+        (32768, 64),
+        (65536, 64),
+        (131072, 64),
+        (204800, 64),
+        (262144, 16),
+    ]
+    if key == "short":
+        candidates = short
+    elif key == "long":
+        candidates = long
+    else:
+        candidates = short + long
+    cap = int(max_seq)
+    return [(p, n) for p, n in candidates if p + n <= cap]
+
+
+def qwen3_warmup_preset_shapes(
+    preset: str, max_seq: int, max_q_seq: int
+) -> list[tuple[int, int]]:
+    """Match FlashRT ``examples/qwen3_openai_server.py`` warmup buckets."""
+    key = (preset or "auto").lower()
+    if key in ("none", "off", "false", "0"):
+        return []
+    if key not in ("auto", "short", "all"):
+        raise ValueError(
+            f"invalid warmup-preset {preset!r}; expected auto, short, all, or none"
+        )
+    candidates = [
+        (32, 128),
+        (64, 128),
+        (128, 256),
+        (256, 256),
+        (512, 256),
+        (1024, 256),
+    ]
+    ms = int(max_seq)
+    mq = int(max_q_seq)
+    return [(p, n) for p, n in candidates if p <= mq and p + n <= ms]
+
+
+def resolve_serve_warmup_spec(
+    variant: str,
+    *,
+    preset: str | None,
+    max_seq: int,
+    max_q_seq: int,
+    extra_spec: str | None,
+    bundle_default: str | None,
+) -> str | None:
+    shapes: list[tuple[int, int]] = []
+    if preset:
+        if variant == "qwen36":
+            shapes.extend(qwen36_warmup_preset_shapes(preset, max_seq))
+        else:
+            shapes.extend(qwen3_warmup_preset_shapes(preset, max_seq, max_q_seq))
+    shapes.extend(parse_warmup_spec(extra_spec))
+    shapes.extend(parse_warmup_spec(bundle_default))
+    shapes = dedupe_warmup_shapes(shapes)
+    return warmup_shapes_to_spec(shapes) if shapes else None
+
+
 def messages_from_request(req: ChatRequest) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for m in req.messages:
@@ -157,4 +247,8 @@ def merge_load_options(
         merged.setdefault("K", int(merged.get("K", 6)))
         if options.get("K") is not None:
             merged["K"] = int(options["K"])
+    if options.get("max_seq") is not None:
+        merged["max_seq"] = int(options["max_seq"])
+    if options.get("max_q_seq") is not None:
+        merged["max_q_seq"] = int(options["max_q_seq"])
     return merged

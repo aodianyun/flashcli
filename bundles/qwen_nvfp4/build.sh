@@ -4,6 +4,9 @@
 #   bash build.sh --repo-root /app/FlashRT
 #   bash build.sh --pack-only
 #
+# Release zip (cu130 × py310/311/312):
+#   bash ../../scripts/build_qwen_release_matrix.sh
+#
 set -euo pipefail
 
 BUNDLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -4,7 +4,7 @@
 
 Third parties ship models as a **Model Bundle**: one **`flashcli-bundle.json`**, **`entry` inference modules**, and optional **FlashRT `.so` / `flash_rt` Python**. flashcli **only** loads the bundle and calls `entry`; it does **not** implement Run/Serve logic in flashcli source.
 
-Maintainers: see [DEVELOPER.md](../codeplan/DEVELOPER.md). The **public catalog** is currently **[`pi05_libero`](../src/flashcli/catalog/models.yaml) only**; other `bundles/` drafts must not be added to `models.yaml` until validated.
+Maintainers: see [DEVELOPER.md](../codeplan/DEVELOPER.md). Public catalog: [`models.yaml`](../src/flashcli/catalog/models.yaml) (`pi05_libero`, `qwen3-8b-nvfp4`, `qwen36-27b-nvfp4`).
 
 Each preset has **one** bundle source in **`models.yaml`**: top-level **`bundle.zip` / `path` / `git`**. Multi-environment runtimes ship inside that artifact (recommended: **`lib/` native matrix** in a single zip). See [runtime-matrix.md](runtime-matrix.md) for `pi05_libero` release layout.
 
@@ -145,7 +145,7 @@ The catalog points at one assembled zip via `models.yaml` → `bundle.zip`; weig
 
 ### Example: related models — one runtime, many catalog presets (Qwen NVFP4)
 
-Ship **one** runtime zip (`bundles/qwen_nvfp4/`) with `variants` in `flashcli-bundle.json`. Register **multiple** `models.yaml` presets that share `bundle.path` / `bundle.zip` and set **`bundle_variant`** (`qwen3`, `qwen36`). CLI `--model` overrides the catalog for debugging only. See [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) (Qwen section) and [bundles/qwen_nvfp4/README.md](../bundles/qwen_nvfp4/README.md). Build on SM120 with `scripts/build_qwen_bundle.sh --variant all`.
+Ship **one** multi-env runtime zip (`bundles/qwen_nvfp4/dist/`) with `variants` in `flashcli-bundle.json`. Register **multiple** `models.yaml` presets sharing `bundle.zip` and **`bundle_variant`** (`qwen3`, `qwen36`). Release: `scripts/build_qwen_release_matrix.sh` (SM120 × cu130 × py310/311/312). See [bundles/qwen_nvfp4/README.md](../bundles/qwen_nvfp4/README.md).
 
 ## `entry` contract
 
@@ -239,7 +239,7 @@ bash scripts/build_pi05_bundle.sh \
   --embed-checkpoint ~/.flashcli/models/pi05_libero/checkpoint
 ```
 
-Internal Qwen drafts use `scripts/build_qwen_bundle.sh` (**SM120**); do not add to catalog until validated. See [bundles/README.md](../bundles/README.md).
+Qwen NVFP4: `scripts/build_qwen_release_matrix.sh` → one multi-env zip. See [bundles/qwen_nvfp4/README.md](../bundles/qwen_nvfp4/README.md).
 
 ## Minimum delivery checklist
 

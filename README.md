@@ -52,9 +52,11 @@ flashcli run pi05_libero \
 
 ## Current catalog
 
-| Preset | Capability | Runtime source | Weights |
-|--------|------------|----------------|---------|
-| `pi05_libero` | `run` | CDN zip (`models.yaml` → `bundle.zip`, native `lib/` matrix) | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) |
+| Preset | Capability | Runtime | Weights |
+|--------|------------|---------|---------|
+| `pi05_libero` | `run` | CDN zip (SM89 × cu124/cu130 × py310/311/312) | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) |
+| `qwen3-8b-nvfp4` | `run`, `serve` | Same CDN zip as qwen36 (SM120 × cu130 × py310/311/312) | [kaitchup/Qwen3-8B-NVFP4](https://huggingface.co/kaitchup/Qwen3-8B-NVFP4) |
+| `qwen36-27b-nvfp4` | `run`, `serve` | Same zip | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4) + MTP |
 
 `models.yaml` only registers **preset names** and **one bundle source per preset** (`zip`/`path`/`git`). Multi-env native runtimes ship inside that zip’s `lib/` matrix. `weights`, `entry`, `defaults`, etc. live in each bundle’s [`flashcli-bundle.json`](docs/model_bundle_standard.md).
 
@@ -94,7 +96,8 @@ Common variables (full reference: **[docs/environment.md](docs/environment.md)**
 
 | Command | Description |
 |---------|-------------|
-| `flashcli run <preset>` | Batch inference for VLA etc. (`pi05_libero` uses this) |
+| `flashcli run <preset>` | Inference (Pi0.5 VLA, Qwen chat, etc.) |
+| `flashcli serve <preset>` | OpenAI-compatible HTTP (Qwen NVFP4) |
 | `flashcli pull <preset>` | Pre-fetch weights only |
 | `flashcli models list` | Show catalog and cache status |
 | `flashcli models envs [preset]` | List `models.yaml` environments and GPU match |
@@ -103,7 +106,7 @@ Common variables (full reference: **[docs/environment.md](docs/environment.md)**
 | `flashcli bundle validate PATH` | Validate local bundle layout |
 | `--bundle PATH` | Override catalog with local bundle root |
 
-`flashcli serve` is for LLM bundles with HTTP; **`pi05_libero` supports `run` only**.
+**`pi05_libero` supports `run` only**; Qwen presets support `run` and `serve`.
 
 `flash` and `flashcli` are the same entry point (both registered in `pyproject.toml`).
 

@@ -6,7 +6,7 @@
 
 ## 要求
 
-- **Linux** + **NVIDIA GPU**（已验证：**SM89**，如 RTX 4090 / L40；bundle 元数据亦声明支持 SM120）
+- **Linux** + **NVIDIA GPU**（**SM89**：Pi0.5；**SM120**：Qwen NVFP4，如 RTX PRO 5000 Blackwell）
 - **Python ≥ 3.10**（见 [`pyproject.toml`](pyproject.toml)）；`install.sh` 会安装 **flashcli** 与 **`huggingface_hub`**（提供 `hf download` / `huggingface-cli download`）
 - **网络**：首次运行从 CDN 拉 runtime zip；权重经 Hub CLI 下载（与 `HF_ENDPOINT` + `hf download` 相同）。国内/内网建议 `export HF_ENDPOINT=https://hf-mirror.com`。Pi0.5 还需 Google Storage（PaliGemma tokenizer）
 
@@ -54,11 +54,13 @@ flashcli run pi05_libero \
 
 ## 当前 catalog
 
-| Preset | 能力 | Runtime 来源 | 权重 |
-|--------|------|--------------|------|
-| `pi05_libero` | `run` | CDN zip（`models.yaml` → `bundle.zip`，`lib/` 原生矩阵） | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) |
+| Preset | 能力 | Runtime | 权重 |
+|--------|------|---------|------|
+| `pi05_libero` | `run` | CDN zip（SM89 × cu124/cu130 × py310/311/312） | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) |
+| `qwen3-8b-nvfp4` | `run`, `serve` | 与 qwen36 **同一** CDN zip（SM120 × cu130 × py310/311/312） | [kaitchup/Qwen3-8B-NVFP4](https://huggingface.co/kaitchup/Qwen3-8B-NVFP4) |
+| `qwen36-27b-nvfp4` | `run`, `serve` | 同上 | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4) + MTP |
 
-`models.yaml` 只登记 **preset 名** 与 **每个 preset 一个 bundle 源**（`zip`/`path`/`git`）；多环境原生库打进该 zip 的 `lib/` 矩阵。`weights`、`entry`、`defaults` 等见各包内的 [`flashcli-bundle.json`](docs/model_bundle_standard.zh-CN.md)。
+`models.yaml` 只登记 **preset** 与 **bundle 源**（`zip`/`path`）；`bundle_variant` 区分共享 runtime 下的权重。详见 [`flashcli-bundle.json`](docs/model_bundle_standard.zh-CN.md)。
 
 查看本机匹配的环境：
 
@@ -96,7 +98,8 @@ flashcli models envs pi05_libero
 
 | 命令 | 说明 |
 |------|------|
-| `flashcli run <preset>` | VLA 等批推理（`pi05_libero` 使用此命令） |
+| `flashcli run <preset>` | 推理（Pi0.5 VLA、Qwen 对话等） |
+| `flashcli serve <preset>` | OpenAI 兼容 HTTP（Qwen NVFP4） |
 | `flashcli pull <preset>` | 仅预拉权重 |
 | `flashcli models list` | 查看 catalog 与缓存状态 |
 | `flashcli models envs [preset]` | 查看 `models.yaml` 中的环境与当前 GPU 匹配项 |
@@ -105,7 +108,7 @@ flashcli models envs pi05_libero
 | `flashcli bundle validate PATH` | 校验本地 bundle 布局 |
 | `--bundle PATH` | 覆盖 catalog，使用本地 bundle 根目录 |
 
-`flashcli serve` 用于带 HTTP 的 LLM bundle；**`pi05_libero` 仅支持 `run`**。
+**`pi05_libero` 仅支持 `run`**；Qwen preset 支持 `run` 与 `serve`。
 
 `flash` 与 `flashcli` 为同一入口（`pyproject.toml` 中均注册）。
 

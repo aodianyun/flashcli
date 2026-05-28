@@ -109,3 +109,29 @@ flashcli run pi05_libero \
   --bundle "$(pwd)/bundles/pi05_libero" \
   --image /path/to.jpg
 ```
+
+---
+
+## qwen_nvfp4 (SM120 × cu130)
+
+| Dimension | Values |
+|-----------|--------|
+| SM | **120** (Blackwell NVFP4) |
+| CUDA userland | **cu130** |
+| OS / arch | **linux-x86_64** |
+| Python ABI | **3.10 / 3.11 / 3.12** |
+| Native modules | `flash_rt_kernels`, `flash_rt_fa2`, `flash_rt_fp4` |
+
+One zip serves two catalog presets; weights are fetched from Hugging Face (not in the zip).
+
+### Release build
+
+```bash
+export FLASHRT_REPO=/path/to/FlashRT
+export CUDA_HOME_CU130=/usr/local/cuda-13.0
+bash scripts/build_qwen_release_matrix.sh
+```
+
+Artifact: `bundles/qwen_nvfp4/dist/flashcli-bundle-qwen_nvfp4-main-sm120-multi-linux-x86_64.zip`
+
+Host key example: `sm120-cu130-linux-x86_64-py312`. Check: `flashcli models envs qwen3-8b-nvfp4`

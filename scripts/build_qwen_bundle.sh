@@ -29,6 +29,9 @@ GPU_ARCH=""
 BUILD_DIR=""
 JOBS="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 SKIP_BUILD=0
+MERGE_NATIVE=0
+SKIP_MANIFEST=0
+FINALIZE_MATRIX_MANIFEST=0
 FA2_NATIVE_ONLY=1
 FLASHRT_TAG=""
 BUILD_ID=""
@@ -40,7 +43,7 @@ PYTHON_MINOR=""
 
 usage() {
   cat <<EOF
-Assemble a Qwen flashcli model bundle (v2: flash_rt/ + tagged *.so at bundle root).
+Assemble a Qwen flashcli model bundle (v2: flash_rt/ + tagged *.so under lib/).
 
 Usage:
   bash flashcli/scripts/build_qwen_bundle.sh --bundle-dir DIR [OPTIONS]
@@ -61,11 +64,15 @@ Options:
   --embed-checkpoint DIR  Copy weights into bundle checkpoint/
   --python-bin BIN        Python for manifest ABI tag (default: python3)
   --python-minor TAG      310 / 311 / 312 (default: from --python-bin)
+  --sm SM                 SM label (default: auto from GPU; release matrix uses 120)
+  --cuda-tag TAG          CUDA tag 124 / 130 (default: from nvcc)
+  --merge-native          Stage .so into lib/ without replacing other matrix cells
+  --skip-manifest         Skip flashcli-bundle.json update (matrix intermediate cell)
+  --finalize-matrix-manifest  After full matrix, scan lib/ and write multi-env manifest
   -h, --help
 
-Note: Qwen3-8B NVFP4 requires SM120 (has_nvfp4). Building on SM89 produces a
-runtime that will not load the NVFP4 checkpoint — use preset qwen3-8b-instruct
-for RTX 4060 Ti instead.
+Note: Qwen NVFP4 requires SM120 + flash_rt_fp4. Release zip: see
+  scripts/build_qwen_release_matrix.sh (cu130 × py310/311/312).
 EOF
 }
 
@@ -233,7 +240,9 @@ run_cmake_build() {
   cmake --build "${BUILD_DIR}" -j"${JOBS}"
   shopt -s nullglob
   local so
-  for so in "${BUILD_DIR}"/flash_rt_kernels*.so "${BUILD_DIR}"/flash_rt_fa2*.so; do
+  for so in "${BUILD_DIR}"/flash_rt_kernels*.so "${BUILD_DIR}"/flash_rt_fa2*.so \
+    "${BUILD_DIR}"/flash_rt_fp4*.so; do
+    [[ -f "${so}" ]] || continue
     cp -f "${so}" "${REPO_ROOT}/flash_rt/"
   done
   shopt -u nullglob
@@ -318,14 +327,50 @@ stage_qwen_serve_modules() {
   log "Staged OpenAI server engines -> ${serve_dir}/"
 }
 
+finalize_matrix_manifest() {
+  local native_lib="${BUNDLE_DIR}/lib"
+  [[ -d "${native_lib}" ]] || die "Missing ${native_lib} for --finalize-matrix-manifest"
+  local py_bin="${PYTHON_BIN:-python3}"
+  log "Finalizing multi-env manifest from ${native_lib}"
+  "${py_bin}" "${GEN_MANIFEST}" \
+    --repo-root "${REPO_ROOT}" \
+    --bundle-json "${BUNDLE_DIR}/flashcli-bundle.json" \
+    --lib-dir "${native_lib}" \
+    --matrix-manifest \
+    --runtime-version "${RUNTIME_VERSION}" \
+    --flashrt-tag "${FLASHRT_TAG:-dev}" \
+    --git-commit "$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)" \
+    --build-id "${BUILD_ID:-matrix}" \
+    --git-ref "${GIT_REF}" \
+    --sm "${SM:-120}" \
+    --os-name "${OS_NAME:-linux}" \
+    --cpuarch "${CPU_ARCH:-x86_64}" \
+    --gpu-arch "${GPU_ARCH:-120}" \
+    --cuda-tag "${CUDA_TAG:-130}" \
+    --toolkit "13.0" \
+    --torch-index "cu128" \
+    --min-driver "550.54.14" \
+    --has-fa2 "1" \
+    --has-fp4 "1" \
+    --has-fmha "0" \
+    --python-minor "310" >/dev/null
+}
+
 stage_bundle_runtime() {
   local lib_dir="${BUNDLE_DIR}/lib"
   local py_dir="${BUNDLE_DIR}/flash_rt"
   local build_src="${BUILD_DIR:-${REPO_ROOT}/build}"
   local py_bin="${PYTHON_BIN:-python3}"
+  local skip_py_stage=0
 
   mkdir -p "${lib_dir}"
-  rm -rf "${py_dir}" "${BUNDLE_DIR}/runtime"
+  if [[ "${MERGE_NATIVE}" -eq 1 && -d "${py_dir}" && -f "${py_dir}/api.py" ]]; then
+    skip_py_stage=1
+    log "Keeping existing flash_rt/ (--merge-native)"
+  else
+    rm -rf "${py_dir}"
+  fi
+  rm -rf "${BUNDLE_DIR}/runtime"
   # v2 spec: native *.so live under lib/ only (not bundle root).
   rm -f "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so
   for legacy_so in "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so; do
@@ -371,19 +416,30 @@ stage_bundle_runtime() {
 
   [[ "${has_kernels}" -eq 1 ]] || die "${kernels_name} missing (build FlashRT or use --pack-only)"
   [[ "${has_fa2}" -eq 1 ]] || die "${fa2_name} missing (required for Qwen FA2 attention)"
+  [[ "${has_fp4}" -eq 1 ]] || die "${fp4_name} missing (required for Qwen NVFP4 on SM120)"
 
   if [[ "${SM}" != "120" ]]; then
-    log "WARNING: Qwen NVFP4 needs SM120; detected sm=${SM} — NVFP4 kernels may be absent"
+    log "WARNING: Qwen NVFP4 needs SM120; detected sm=${SM}"
   fi
 
   ensure_bundle_entry_modules
-  stage_flash_rt_python "${py_dir}"
-  stage_qwen_serve_modules "${py_dir}"
-  find "${py_dir}" -name '*.so' -type f -delete 2>/dev/null || true
+  if [[ "${skip_py_stage}" -eq 0 ]]; then
+    stage_flash_rt_python "${py_dir}"
+    stage_qwen_serve_modules "${py_dir}"
+    find "${py_dir}" -name '*.so' -type f -delete 2>/dev/null || true
+  fi
 
   build_id="${BUILD_ID:-$(date -u +%Y%m%d)-sm${SM}}"
   torch_idx="$(recommended_torch_index)"
   min_drv="${MIN_DRIVER:-$(default_min_driver)}"
+
+  if [[ "${SKIP_MANIFEST}" -eq 1 ]]; then
+    log "Skipping manifest update (--skip-manifest)"
+    mkdir -p "${cache_dir}"
+    cp -f "${lib_dir}/${kernels_name}" "${lib_dir}/${fa2_name}" "${cache_dir}/"
+    [[ "${has_fp4}" -eq 1 ]] && cp -f "${lib_dir}/${fp4_name}" "${cache_dir}/"
+    return 0
+  fi
 
   log "Updating flashcli-bundle.json (v2, lib/) python_abi=${PYTHON_MINOR}"
   "${py_bin}" "${GEN_MANIFEST}" \
@@ -458,6 +514,11 @@ while [[ $# -gt 0 ]]; do
     --cutlass-branch) CUTLASS_REF="$2"; shift 2 ;;
     --python-bin) PYTHON_BIN="$2"; shift 2 ;;
     --python-minor) PYTHON_MINOR="$2"; shift 2 ;;
+    --sm) SM="$2"; shift 2 ;;
+    --cuda-tag) CUDA_TAG="$2"; shift 2 ;;
+    --merge-native) MERGE_NATIVE=1; shift ;;
+    --skip-manifest) SKIP_MANIFEST=1; shift ;;
+    --finalize-matrix-manifest) FINALIZE_MATRIX_MANIFEST=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown option: $1" ;;
   esac
@@ -466,6 +527,15 @@ done
 [[ -n "${BUNDLE_DIR}" ]] || { usage; die "--bundle-dir is required"; }
 BUNDLE_DIR="$(cd "${BUNDLE_DIR}" && pwd)"
 [[ -f "${BUNDLE_DIR}/flashcli-bundle.json" ]] || die "Missing flashcli-bundle.json"
+
+if [[ "${FINALIZE_MATRIX_MANIFEST}" -eq 1 ]]; then
+  resolve_repo_root
+  detect_platform
+  SM="${SM:-120}"
+  finalize_matrix_manifest
+  log "Matrix manifest ready: ${BUNDLE_DIR}/flashcli-bundle.json"
+  exit 0
+fi
 
 resolve_repo_root
 ensure_runtime_requirements_file
@@ -478,8 +548,8 @@ fi
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 if [[ "${SKIP_BUILD}" -eq 0 ]]; then
-  detect_sm
-  detect_cuda_tag
+  [[ -n "${SM}" ]] || detect_sm
+  [[ -n "${CUDA_TAG}" ]] || detect_cuda_tag
   GPU_ARCH="${GPU_ARCH:-${SM}}"
   command -v cmake >/dev/null 2>&1 || die "cmake not found"
   command -v nvcc >/dev/null 2>&1 || die "nvcc not found"
@@ -501,5 +571,6 @@ maybe_write_tarball
 
 log "Bundle ready: ${BUNDLE_DIR}"
 log "  flashcli bundle validate ${BUNDLE_DIR}"
-log "  flashcli run <preset> --bundle ${BUNDLE_DIR} --model qwen3 --prompt 'Hello'"
-log "  flashcli run <preset> --bundle ${BUNDLE_DIR} --model qwen36 --prompt 'Hello'"
+log "  flashcli run qwen3-8b-nvfp4 --bundle ${BUNDLE_DIR} --prompt 'Hello'"
+log "  flashcli serve qwen3-8b-nvfp4 --bundle ${BUNDLE_DIR}"
+log "  Release matrix: bash scripts/build_qwen_release_matrix.sh"

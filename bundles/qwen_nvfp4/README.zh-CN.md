@@ -2,82 +2,92 @@
 
 <p align="right"><a href="README.md">English</a> · <strong>简体中文</strong></p>
 
-> **内部草稿。** 一个 SM120 runtime 制品；catalog 用多个 preset + `bundle_variant` 区分 Qwen3 / Qwen3.6。
+一个 **SM120 NVFP4** runtime zip；catalog 用多个 preset + `bundle_variant` 区分 Qwen3-8B / Qwen3.6-27B 权重。
 
-## 工业级分工
+## 分工
 
 ```text
 ┌─────────────────────────────────────────────────────────┐
-│  bundle.zip / bundles/qwen_nvfp4/   （一份 runtime）      │
+│  bundle.zip（multi-env：lib/*-sm120-cu130-*-py310|311|312）│
 │  flashcli-bundle.json → variants: { qwen3, qwen36 }      │
-│  flash_rt/ + flash_rt_kernels-*.so + run.py / serve.py   │
+│  flash_rt/ + lib/*.so + run.py / serve.py                │
 └─────────────────────────────────────────────────────────┘
           ▲                           ▲
-          │ bundle.path 相同            │ bundle_variant
+          │ 同一 bundle.zip             │ bundle_variant
 ┌─────────┴──────────┐       ┌─────────┴──────────┐
-│ preset             │       │ preset             │
 │ qwen3-8b-nvfp4     │       │ qwen36-27b-nvfp4   │
-│ bundle_variant:    │       │ bundle_variant:    │
-│   qwen3            │       │   qwen36           │
 └────────────────────┘       └────────────────────┘
 ```
 
-权重缓存按 **preset 名** 分开：`~/.flashcli/models/qwen3-8b-nvfp4/checkpoint/` 与 `.../qwen36-27b-nvfp4/checkpoint/`。
+权重按 **preset 名** 缓存：`~/.flashcli/models/qwen3-8b-nvfp4/checkpoint/` 等（不打进 zip）。
 
-### Hugging Face 权重（已核对存在、公开）
+### Hugging Face 权重
 
 | variant | 主权重 | MTP（仅 qwen36） |
 |---------|--------|------------------|
-| `qwen3` | [kaitchup/Qwen3-8B-NVFP4](https://huggingface.co/kaitchup/Qwen3-8B-NVFP4)（`compressed-tensors` NVFP4，基座 `Qwen/Qwen3-8B`） | — |
-| `qwen36` | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4)（FlashRT 文档对齐） | [Qwen/Qwen3.6-27B-FP8](https://huggingface.co/Qwen/Qwen3.6-27B-FP8) 中的 `mtp.safetensors` |
+| `qwen3` | [kaitchup/Qwen3-8B-NVFP4](https://huggingface.co/kaitchup/Qwen3-8B-NVFP4) | — |
+| `qwen36` | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4) | [Qwen/Qwen3.6-27B-FP8](https://huggingface.co/Qwen/Qwen3.6-27B-FP8) 的 `mtp.safetensors` |
 
-旧配置 `JunHowie/Qwen3-8B-Instruct-2512-SFT-NVFP4` 在 HF 上已不可用，勿再使用。
+`JunHowie/Qwen3-8B-Instruct-2512-SFT-NVFP4` 在 HF 上已不可用。
 
-## 目录（v2，与 `pi05_libero` 一致：原生库在 `lib/`）
+## 目录（v2，`lib/` 原生矩阵）
 
 ```text
 qwen_nvfp4/
-├── flashcli-bundle.json
-├── build.sh
-├── run.py / serve.py
-├── _qwen_util.py / _flashrt_serve.py
-├── flash_rt/                 # Python runtime（构建产物）
-├── lib/                      # 必须：带环境标签的 *.so
-│   ├── flash_rt_kernels-*-sm120-cu130-…-py312.so
-│   ├── flash_rt_fa2-*.so
-│   └── flash_rt_fp4-*.so       # NVFP4（SM120）
-├── checkpoint/qwen3/
-├── checkpoint/qwen36/
-└── mtp_fp8/                  # 仅 qwen36
+├── flashcli-bundle.json   # native_layout: matrix, native_matrix: [...]
+├── build.sh / pack.sh
+├── run.py / serve.py / _qwen_util.py / _flashrt_serve.py
+├── flash_rt/
+├── lib/
+│   ├── flash_rt_kernels-*-sm120-cu130-linux-x86_64-py310.so
+│   ├── flash_rt_fa2-*-py311.so
+│   ├── flash_rt_fp4-*-py312.so
+│   └── …（cu130 × py310/311/312，各 3 个模块）
+└── dist/
+    └── flashcli-bundle-qwen_nvfp4-main-sm120-multi-linux-x86_64.zip
 ```
 
-**不要**把 `flash_rt_*.so` 放在 bundle 根目录；`build.sh` 会写入 `lib/` 并刷新 `modules[].file` 为 `lib/…`。
+**不要**把 `flash_rt_*.so` 放在 bundle 根目录。
 
-## 构建
+## 发布构建（维护者）
+
+与 [`pi05_libero`](../pi05_libero/README.zh-CN.md) 相同模式：**一个 multi-env zip**，`lib/` 累积 cu130 × py310/311/312。
 
 ```bash
-flashcli bundle build bundles/qwen_nvfp4 --repo-root /path/to/FlashRT -j "$(nproc)"
+cd flashcli
+export FLASHRT_REPO=/path/to/FlashRT
+export CUDA_HOME_CU130=/usr/local/cuda-13.0   # nvcc 13.x
+
+bash scripts/build_qwen_release_matrix.sh --check-only
+bash scripts/build_qwen_release_matrix.sh -j "$(nproc)"
+
 flashcli bundle validate bundles/qwen_nvfp4
 ```
 
-依赖：`cmake`、`nvcc`、`git`、`tar`（无 `rsync` 时用 tar 拷贝 `flash_rt/`）。CMake 已成功时可用 `--pack-only` 只打 stage：
+产物：`bundles/qwen_nvfp4/dist/flashcli-bundle-qwen_nvfp4-main-sm120-multi-linux-x86_64.zip`
+
+上传 CDN 后核对 [`models.yaml`](../../src/flashcli/catalog/models.yaml) 中两个 preset 的 `bundle.zip` URL。
+
+单格本地开发（当前 Python 一档）：
 
 ```bash
-bash bundles/qwen_nvfp4/build.sh --repo-root /app/FlashRT --pack-only
+bash bundles/qwen_nvfp4/build.sh --repo-root "$FLASHRT_REPO" -j "$(nproc)"
+# 或仅 stage：--pack-only
 ```
 
-## 运行（推荐：用 catalog preset，无需每次 `--model`）
+详见 [docs/runtime-matrix.zh-CN.md](../../docs/runtime-matrix.zh-CN.md#qwen_nvfp4-sm120--cu130)。
+
+## 运行
 
 ```bash
+flashcli models envs qwen3-8b-nvfp4
 flashcli run qwen3-8b-nvfp4 --prompt "你好"
-flashcli run qwen36-27b-nvfp4 --prompt "解释量子纠缠" --K 6
-flashcli serve qwen36-27b-nvfp4 --port 8000
+flashcli serve qwen3-8b-nvfp4 --host 0.0.0.0 --port 8000
+flashcli run qwen36-27b-nvfp4 --prompt "你好" --K 6
 ```
 
-本地未写入 catalog 时：
+本地未用 CDN 时：
 
 ```bash
-flashcli run qwen_nvfp4 --bundle bundles/qwen_nvfp4 --model qwen3 --prompt "你好"
+flashcli run qwen3-8b-nvfp4 --bundle "$(pwd)/bundles/qwen_nvfp4" --prompt "你好"
 ```
-
-`--model` 仅用于覆盖 `models.yaml` 里的 `bundle_variant`（调试）。

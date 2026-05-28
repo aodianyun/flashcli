@@ -4,16 +4,15 @@
 
 ## Published
 
-| Directory | Preset | Status |
-|-----------|--------|--------|
-| [`pi05_libero/`](pi05_libero/) | `pi05_libero` | **Released** — runtime via `models.yaml` `bundle.zip`; weights from Hugging Face |
+| Directory | Presets | Notes |
+|-----------|---------|-------|
+| [`pi05_libero/`](pi05_libero/) | `pi05_libero` | Multi-env zip: SM89 × cu124/cu130 × py310/311/312 |
+| [`qwen_nvfp4/`](qwen_nvfp4/) | `qwen3-8b-nvfp4`, `qwen36-27b-nvfp4` | One zip; `bundle_variant` selects weights; SM120 × cu130 |
 
-End users who `pip install flashcli` **do not need** this directory; maintainers use `pi05_libero/` to build release zips from source.
+End users get runtimes via `models.yaml` `bundle.zip` — not from this source tree.
 
-## In-repo drafts (unpublished)
+## Other
 
-These directories are for monorepo development. They are **not** in `models.yaml` and runtimes are **not** validated for public use. Do not document them as available presets:
+- [`_template/`](_template/) — starting point for new bundles
 
-- [`qwen_nvfp4/`](qwen_nvfp4/) — **Qwen3 + Qwen3.6 NVFP4** (one runtime; catalog presets + `bundle_variant`, SM120)
-
-For a new bundle, copy [`_template/`](_template/) and read [docs/model_bundle_standard.md](../docs/model_bundle_standard.md).
+See [docs/model_bundle_standard.md](../docs/model_bundle_standard.md).

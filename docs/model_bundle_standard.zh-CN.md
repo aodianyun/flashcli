@@ -4,7 +4,7 @@
 
 第三方通过 **Model Bundle** 交付：一份 **`flashcli-bundle.json`**、**`entry` 推理模块**、可选 **FlashRT `.so` / `flash_rt` Python**。flashcli **仅**加载 bundle 并调用 `entry`，**不**在 flashcli 源码中实现具体 Run/Serve 逻辑。
 
-维护 flashcli 请参阅 [DEVELOPER.zh-CN.md](../codeplan/DEVELOPER.zh-CN.md)。**当前对外 catalog 仅 [`pi05_libero`](../src/flashcli/catalog/models.yaml)**；其他 `bundles/` 草稿在验证前不得写入 `models.yaml`。
+维护 flashcli 请参阅 [DEVELOPER.zh-CN.md](../codeplan/DEVELOPER.zh-CN.md)。对外 catalog 见 [`models.yaml`](../src/flashcli/catalog/models.yaml)（`pi05_libero`、`qwen3-8b-nvfp4`、`qwen36-27b-nvfp4`）。
 
 每个 preset 在 **`models.yaml`** 中仅登记 **一个** bundle 源：顶层 **`bundle.zip` / `path` / `git`**。多环境 runtime 打在同一制品内（推荐：**单 zip + `lib/` 原生矩阵**）。详见 [runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md)。
 
@@ -158,12 +158,13 @@ catalog 通过 `models.yaml` 的单个 `bundle.zip` 指向已组装制品；权�
 qwen3-8b-nvfp4:
   bundle_variant: qwen3
   bundle:
-    path: bundles/qwen_nvfp4   # 或 zip: https://.../flashcli-bundle-qwen-nvfp4-....zip
+    zip: https://.../flashcli-bundle-qwen_nvfp4-main-sm120-multi-linux-x86_64.zip
+    # path: bundles/qwen_nvfp4
 
 qwen36-27b-nvfp4:
   bundle_variant: qwen36
   bundle:
-    path: bundles/qwen_nvfp4
+    zip: https://.../flashcli-bundle-qwen_nvfp4-main-sm120-multi-linux-x86_64.zip
 ```
 
 ```bash
@@ -172,7 +173,7 @@ flashcli run qwen36-27b-nvfp4 --prompt "你好" --K 6
 flashcli run qwen3-8b-nvfp4 --model qwen36 ...  # 临时覆盖（不推荐常态）
 ```
 
-构建：[`bundles/qwen_nvfp4/build.sh`](../bundles/qwen_nvfp4/build.sh)（`--variant all`）。**验证通过前**可将 `bundle.path` 换为 `bundle.zip` 发布；勿为每个模型单独打 runtime zip。
+发布构建：`bash scripts/build_qwen_release_matrix.sh` → `bundles/qwen_nvfp4/dist/*.zip`（**一个** multi-env zip，勿按 preset 拆包）。本地单档：[`bundles/qwen_nvfp4/build.sh`](../bundles/qwen_nvfp4/build.sh)。
 
 ## `entry` 入口约定
 
@@ -266,7 +267,7 @@ bash scripts/build_pi05_bundle.sh \
   --embed-checkpoint ~/.flashcli/models/pi05_libero/checkpoint
 ```
 
-内部草稿 Qwen 包使用 `scripts/build_qwen_bundle.sh`（**SM120**）；验证通过前勿加入 catalog。见 [bundles/README.zh-CN.md](../bundles/README.zh-CN.md)。
+Qwen NVFP4 使用 `scripts/build_qwen_bundle.sh` / `scripts/build_qwen_release_matrix.sh`（**SM120** + `flash_rt_fp4`）。见 [bundles/qwen_nvfp4/README.zh-CN.md](../bundles/qwen_nvfp4/README.zh-CN.md)。
 
 ## 最小交付清单
 

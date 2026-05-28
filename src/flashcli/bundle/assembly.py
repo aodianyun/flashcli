@@ -38,11 +38,16 @@ def describe_bundle_assembly_gaps(root: Path) -> list[str]:
     elif not any(lib_dir.glob("flash_rt_kernels*.so")):
         gaps.append("no lib/flash_rt_kernels*-sm*-cu*-py*.so")
 
-    if lib_dir.is_dir() and not any(lib_dir.glob("flash_rt_fa2*.so")):
-        gaps.append("no lib/flash_rt_fa2*.so (required for Qwen attention)")
+    requires = data.get("requires") or {}
+    sm_req = requires.get("sm") if isinstance(requires, dict) else []
+    needs_fp4 = isinstance(sm_req, list) and any(str(s).strip() == "120" for s in sm_req)
+    caps = data.get("capabilities") if isinstance(data.get("capabilities"), list) else []
 
-    if lib_dir.is_dir() and not any(lib_dir.glob("flash_rt_fp4*.so")):
-        gaps.append("no lib/flash_rt_fp4*.so (NVFP4 on SM120 — required for qwen_nvfp4)")
+    if lib_dir.is_dir() and not any(lib_dir.glob("flash_rt_fa2*.so")):
+        gaps.append("no lib/flash_rt_fa2*.so (required for FlashRT attention)")
+
+    if lib_dir.is_dir() and needs_fp4 and not any(lib_dir.glob("flash_rt_fp4*.so")):
+        gaps.append("no lib/flash_rt_fp4*.so (NVFP4 on SM120)")
 
     stray = sorted(root.glob("flash_rt_*.so"))
     if stray:
@@ -55,9 +60,10 @@ def describe_bundle_assembly_gaps(root: Path) -> list[str]:
     if not (root / "flash_rt").is_dir():
         gaps.append("missing flash_rt/ Python tree")
 
-    for rel in ("run.py", "serve.py"):
-        if not (root / rel).is_file():
-            gaps.append(f"missing entry file {rel}")
+    if not (root / "run.py").is_file():
+        gaps.append("missing entry file run.py")
+    if "serve" in caps and not (root / "serve.py").is_file():
+        gaps.append("missing entry file serve.py")
 
     modules = data.get("modules")
     if isinstance(modules, list):

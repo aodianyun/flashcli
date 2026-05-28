@@ -550,7 +550,22 @@ def serve(
     warmup: Optional[str] = typer.Option(
         None,
         "--warmup",
-        help='Graph warmup shapes, e.g. "8:512".',
+        help='Extra graph warmup shapes, e.g. "32:128,128:256".',
+    ),
+    warmup_preset: Optional[str] = typer.Option(
+        None,
+        "--warmup-preset",
+        help="FlashRT warmup buckets: auto|short|long|all|none (qwen36 also supports long).",
+    ),
+    max_seq: Optional[int] = typer.Option(
+        None,
+        "--max-seq",
+        help="KV / context budget (qwen36 long ctx e.g. 262208).",
+    ),
+    max_q_seq: Optional[int] = typer.Option(
+        None,
+        "--max-q-seq",
+        help="Max prefill chunk (qwen3 only, default from bundle).",
     ),
     K: Optional[int] = typer.Option(None, "--K", help="MTP speculative K (Qwen3.6)."),
     model: Optional[str] = typer.Option(
@@ -606,10 +621,52 @@ def serve(
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
-    serve_cfg = p.raw.get("serve") or {}
-    warm_spec = warmup
-    if warm_spec is None and isinstance(serve_cfg, dict):
-        warm_spec = str(serve_cfg.get("warmup", "")) or None
+    from flashcli.bundle.manifest import variant_serve_cfg
+
+    bundle_serve = (
+        variant_serve_cfg(active, effective_variant)
+        if active is not None
+        else {}
+    )
+    load_max_seq = int(
+        max_seq
+        if max_seq is not None
+        else bundle_serve.get("max_seq", 2048)
+    )
+    load_max_q_seq = int(
+        max_q_seq
+        if max_q_seq is not None
+        else bundle_serve.get("max_q_seq", 128)
+    )
+    warm_spec: str | None = None
+    if warmup_preset or warmup or bundle_serve.get("warmup"):
+        import importlib.util
+
+        util_path = (active.bundle_root / "_qwen_util.py") if active else None
+        if util_path is None or not util_path.is_file():
+            typer.echo(
+                "--warmup-preset requires a Qwen bundle (qwen_nvfp4).",
+                err=True,
+            )
+            raise typer.Exit(1)
+        spec = importlib.util.spec_from_file_location(
+            "flashcli_bundle_qwen_util", util_path
+        )
+        if spec is None or spec.loader is None:
+            typer.echo(f"Cannot load {util_path}", err=True)
+            raise typer.Exit(1)
+        qwen_util = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(qwen_util)
+        warm_spec = qwen_util.resolve_serve_warmup_spec(
+            effective_variant,
+            preset=warmup_preset,
+            max_seq=load_max_seq,
+            max_q_seq=load_max_q_seq,
+            extra_spec=warmup,
+            bundle_default=str(bundle_serve.get("warmup", "")) or None
+            if warmup is None and warmup_preset is None
+            else None,
+        )
 
     try:
         import uvicorn
@@ -631,6 +688,8 @@ def serve(
         "K": K,
         "warmup": warm_spec,
         "model": effective_variant,
+        "max_seq": max_seq,
+        "max_q_seq": max_q_seq,
     }
     opts = {k: v for k, v in opts.items() if v is not None}
     serve_engine.load(Path(ckpt), p, **opts)
