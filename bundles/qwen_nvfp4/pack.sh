@@ -4,27 +4,42 @@
 # Usage:
 #   bash pack.sh
 #   bash pack.sh --git-ref main
+#   bash pack.sh --skip-matrix-verify   # partial lib/ (dev only)
 #
 set -euo pipefail
 
 BUNDLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FLASHCLI_ROOT="$(cd "${BUNDLE_DIR}/../.." && pwd)"
+# shellcheck source=../../scripts/lib/verify_native_matrix.sh
+source "${FLASHCLI_ROOT}/scripts/lib/verify_native_matrix.sh"
+
 OUTPUT=""
 SM="120"
+CUDA_TAG="130"
 GIT_REF="main"
 OS_NAME="linux"
 ARCH="x86_64"
+PY_MINORS="310 311 312"
+SKIP_MATRIX_VERIFY=0
 
 usage() {
   cat <<EOF
 Create a release zip with only files required to run Qwen NVFP4 inference.
 
+Expects lib/ from build_qwen_release_matrix.sh:
+  sm120 × cu130 × linux-x86_64 × (py310, py311, py312)
+  with flash_rt_kernels, flash_rt_fa2, flash_rt_fp4 per cell.
+
 Usage:
   bash pack.sh [OPTIONS]
 
 Options:
-  --output PATH     Output .zip (default: ./dist/flashcli-bundle-qwen_nvfp4-<ref>-sm120-multi-linux-x86_64.zip)
-  --sm SM           SM label (default: 120)
-  --git-ref REF     Git ref segment (default: main)
+  --output PATH           Output .zip (default: ./dist/flashcli-bundle-qwen_nvfp4-<ref>-sm120-multi-linux-x86_64.zip)
+  --sm SM                 SM label (default: 120)
+  --cuda-tag TAG          CUDA tag without cu prefix (default: 130)
+  --python-minors LIST    Space-separated ABI tags, e.g. "310 311 312" (default)
+  --git-ref REF           Git ref segment (default: main)
+  --skip-matrix-verify    Do not require full cu130 × py310/311/312 matrix (dev only)
   -h, --help
 EOF
 }
@@ -36,7 +51,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --output) OUTPUT="$2"; shift 2 ;;
     --sm) SM="$2"; shift 2 ;;
+    --cuda-tag) CUDA_TAG="$2"; shift 2 ;;
+    --python-minors) PY_MINORS="$2"; shift 2 ;;
     --git-ref) GIT_REF="$2"; shift 2 ;;
+    --skip-matrix-verify) SKIP_MATRIX_VERIFY=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown option: $1" ;;
   esac
@@ -58,6 +76,14 @@ shopt -u nullglob
 [[ ${#FA2_SO[@]} -ge 1 ]] || die "Missing lib/flash_rt_fa2*.so"
 [[ ${#FP4_SO[@]} -ge 1 ]] || die "Missing lib/flash_rt_fp4*.so (NVFP4 required)"
 [[ -d "${BUNDLE_DIR}/flash_rt" ]] || die "Missing flash_rt/"
+
+if [[ "${SKIP_MATRIX_VERIFY}" -eq 0 ]]; then
+  verify_native_matrix_lib "${NATIVE_LIB}" "${SM}" "${CUDA_TAG}" "${OS_NAME}" "${ARCH}" \
+    "${PY_MINORS}" flash_rt_kernels flash_rt_fa2 flash_rt_fp4 \
+    || die "lib/ matrix incomplete (run build_qwen_release_matrix.sh or use --skip-matrix-verify)"
+else
+  log "Skipping full matrix verify (--skip-matrix-verify)"
+fi
 
 ARCHIVE_NAME="flashcli-bundle-qwen_nvfp4-${GIT_REF}-sm${SM}-multi-${OS_NAME}-${ARCH}"
 STAGE="$(mktemp -d)"

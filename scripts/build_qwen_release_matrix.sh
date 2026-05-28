@@ -22,8 +22,10 @@ PY_MINORS="310 311 312"
 SM="120"
 GIT_REF="${GIT_REF:-main}"
 REPO_ROOT="${FLASHRT_REPO:-}"
+JOBS="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 DRY_RUN=0
 CHECK_ONLY=0
+PACK_ONLY=0
 INSTALL_PYTHON=0
 INSTALL_PYTHON_METHOD="${FLASHCLI_INSTALL_PYTHON_METHOD:-auto}"
 SKIP_CUDA_VERIFY=0
@@ -43,9 +45,11 @@ Requires Linux + NVIDIA SM120 (Blackwell) build host, cmake, zip, nvcc 13.x.
   bash scripts/build_qwen_release_matrix.sh
 
 Options:
-  --repo-root DIR       FlashRT source
+  --repo-root DIR       FlashRT source (or export FLASHRT_REPO)
   --python-minor NNN    Build one Python ABI only (310, 311, 312)
   --git-ref REF         Zip name segment (default: main)
+  -j, --jobs N          Parallel cmake jobs per cell (default: nproc)
+  --pack-only           Skip cmake; finalize manifest + pack existing lib/
   --install-python      Run scripts/install_python_for_matrix.sh
   --check-only          Verify python + nvcc; do not build
   --skip-cuda-verify    Do not require nvcc 13.x match (not for release)
@@ -59,6 +63,8 @@ while [[ $# -gt 0 ]]; do
     --repo-root) REPO_ROOT="$2"; shift 2 ;;
     --python-minor) ONLY_PY="$2"; shift 2 ;;
     --git-ref) GIT_REF="$2"; shift 2 ;;
+    -j|--jobs) JOBS="$2"; shift 2 ;;
+    --pack-only) PACK_ONLY=1; shift ;;
     --install-python) INSTALL_PYTHON=1; shift ;;
     --install-python-method) INSTALL_PYTHON_METHOD="$2"; shift 2 ;;
     --check-only) CHECK_ONLY=1; shift ;;
@@ -68,6 +74,35 @@ while [[ $# -gt 0 ]]; do
     *) die "Unknown option: $1" ;;
   esac
 done
+
+if [[ "$(uname -s)" != Linux ]]; then
+  die "Release matrix build requires Linux (got $(uname -s))"
+fi
+
+is_flashrt_repo() {
+  [[ -f "$1/CMakeLists.txt" && -d "$1/flash_rt" ]]
+}
+
+resolve_repo_root() {
+  if [[ -n "${REPO_ROOT}" ]]; then
+    REPO_ROOT="$(cd "${REPO_ROOT}" && pwd)"
+    is_flashrt_repo "${REPO_ROOT}" || die "Invalid FlashRT repo: ${REPO_ROOT}"
+    return
+  fi
+  local candidate
+  for candidate in \
+    "$(cd "${FLASHCLI_ROOT}/.." && pwd)" \
+    "$(cd "${FLASHCLI_ROOT}/../.." && pwd)"; do
+    if is_flashrt_repo "${candidate}"; then
+      REPO_ROOT="${candidate}"
+      log "FlashRT repo: ${REPO_ROOT} (auto-detected)"
+      return
+    fi
+  done
+  if [[ "${PACK_ONLY}" -eq 0 && "${CHECK_ONLY}" -eq 0 ]]; then
+    die "Set FLASHRT_REPO or pass --repo-root (FlashRT with CMakeLists.txt + flash_rt/)"
+  fi
+}
 
 [[ -f "${BUILD_SH}" ]] || die "Missing ${BUILD_SH}"
 [[ -f "${PACK_SH}" ]] || die "Missing ${PACK_SH}"
@@ -215,23 +250,41 @@ run_build() {
     --build-dir "${build_dir}"
     --merge-native
     --skip-manifest
+    -j "${JOBS}"
+    --repo-root "${REPO_ROOT}"
   )
-  [[ -n "${REPO_ROOT}" ]] && build_args+=(--repo-root "${REPO_ROOT}")
 
   bash "${BUILD_SH}" "${build_args[@]}"
 }
 
 pack_multi_zip() {
   log "Finalizing manifest + release zip"
-  local -a fin_args=(--bundle-dir "${BUNDLE_DIR}" --finalize-matrix-manifest --sm "${SM}" --cuda-tag 130)
-  [[ -n "${REPO_ROOT}" ]] && fin_args+=(--repo-root "${REPO_ROOT}")
+  local -a fin_args=(
+    --bundle-dir "${BUNDLE_DIR}"
+    --finalize-matrix-manifest
+    --sm "${SM}"
+    --cuda-tag 130
+    --repo-root "${REPO_ROOT}"
+  )
   bash "${BUILD_SH}" "${fin_args[@]}"
-  bash "${PACK_SH}" --sm "${SM}" --git-ref "${GIT_REF}"
+  bash "${PACK_SH}" --sm "${SM}" --cuda-tag 130 --git-ref "${GIT_REF}"
 }
+
+resolve_repo_root
 
 if [[ "${CHECK_ONLY}" -eq 1 ]]; then
   check_matrix_layout
   log "check-only passed"
+  exit 0
+fi
+
+if [[ "${PACK_ONLY}" -eq 1 ]]; then
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    log "DRY: pack_multi_zip (finalize manifest + pack.sh)"
+    exit 0
+  fi
+  pack_multi_zip
+  log "Done (pack-only). Artifact: ${BUNDLE_DIR}/dist/flashcli-bundle-qwen_nvfp4-${GIT_REF}-sm${SM}-multi-linux-x86_64.zip"
   exit 0
 fi
 

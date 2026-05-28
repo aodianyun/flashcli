@@ -59,9 +59,12 @@ export FLASHRT_REPO=/path/to/FlashRT
 export CUDA_HOME_CU130=/usr/local/cuda-13.0   # nvcc 13.x
 
 bash scripts/build_qwen_release_matrix.sh --check-only
-bash scripts/build_qwen_release_matrix.sh -j "$(nproc)"
+bash scripts/build_qwen_release_matrix.sh -j "$(nproc)"   # 或省略 -j（默认 nproc）
 
 flashcli bundle validate bundles/qwen_nvfp4
+
+# lib/ 已齐，仅重打 manifest + zip：
+bash scripts/build_qwen_release_matrix.sh --pack-only
 ```
 
 产物：`bundles/qwen_nvfp4/dist/flashcli-bundle-qwen_nvfp4-main-sm120-multi-linux-x86_64.zip`
