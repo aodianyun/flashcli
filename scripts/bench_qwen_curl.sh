@@ -196,6 +196,9 @@ make_long_payload() {
   if [[ -n "${max_seq}" ]]; then
     extra+=(--max-seq "${max_seq}")
     extra+=(--seq-slack "${QWEN36_SEQ_SLACK:-32}")
+    if [[ "${target_tokens}" -gt 8192 ]]; then
+      log "  building long payload (chat-template fit, typically 2–8 min for 256K) …"
+    fi
   fi
   python3 "${MAKE_PAYLOAD}" \
     --checkpoint "${ckpt}" \

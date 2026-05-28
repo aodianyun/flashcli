@@ -27,33 +27,31 @@ def resolve_long_prompt_seed(style: str, seed_arg: str | None) -> str:
     )
 
 
+def _seed_token_len(tokenizer, seed: str) -> int:
+    return len(tokenizer.encode(seed, add_special_tokens=False))
+
+
 def build_prompt_text(tokenizer, target_tokens: int, seed: str) -> tuple[str, int]:
     """Repeat *seed* text until encoded user length reaches *target_tokens*."""
     if target_tokens <= 0:
         return "", 0
-    seed_ids = tokenizer.encode(seed, add_special_tokens=False)
-    if not seed_ids:
+    seed_len = _seed_token_len(tokenizer, seed)
+    if seed_len == 0:
         raise SystemExit("seed text tokenizes to empty sequence")
 
-    def encoded_len(repeats: int) -> int:
-        return len(tokenizer.encode(seed * repeats, add_special_tokens=False))
-
-    lo, hi = 1, max(2, (target_tokens // len(seed_ids)) + 2)
-    while encoded_len(hi) < target_tokens:
-        lo = hi
-        hi = min(hi * 2, hi + max(1024, target_tokens // len(seed_ids) + 1))
-        if hi == lo:
-            break
+    reps = max(1, (target_tokens + seed_len - 1) // seed_len)
+    lo, hi = max(1, reps - 4), reps + 4
+    best_text, best_actual = seed * reps, 0
     while lo <= hi:
         mid = (lo + hi) // 2
-        if encoded_len(mid) <= target_tokens:
+        text = seed * mid
+        actual = len(tokenizer.encode(text, add_special_tokens=False))
+        if actual <= target_tokens:
+            best_text, best_actual = text, actual
             lo = mid + 1
         else:
             hi = mid - 1
-    reps = max(1, hi)
-    text = seed * reps
-    actual = encoded_len(reps)
-    return text, actual
+    return best_text, best_actual
 
 
 def rendered_prompt_tokens(tokenizer, user_content: str) -> int:
@@ -73,6 +71,10 @@ def rendered_prompt_tokens(tokenizer, user_content: str) -> int:
         return len(tokenizer.encode(user_content, add_special_tokens=False)) + 16
 
 
+def _fit_log(msg: str) -> None:
+    print(f"[bench-payload] {msg}", file=sys.stderr, flush=True)
+
+
 def fit_user_prompt_to_budget(
     tokenizer,
     target_user_tokens: int,
@@ -82,7 +84,7 @@ def fit_user_prompt_to_budget(
     *,
     seq_slack: int = 32,
 ) -> tuple[str, int, int]:
-    """Maximize user message length so rendered prompt + max_tokens <= max_seq."""
+    """Binary-search seed repeats so rendered chat prompt fits *max_seq*."""
     budget = int(max_seq) - int(max_tokens) - int(seq_slack)
     if budget < 1:
         raise SystemExit(
@@ -90,41 +92,49 @@ def fit_user_prompt_to_budget(
             f"seq_slack={seq_slack}"
         )
 
-    def measure(target_n: int) -> tuple[int, str, int]:
-        if target_n <= 0:
-            return 0, "", 0
-        text, user_n = build_prompt_text(tokenizer, target_n, seed)
-        return rendered_prompt_tokens(tokenizer, text), text, user_n
+    seed_len = _seed_token_len(tokenizer, seed)
+    if seed_len == 0:
+        raise SystemExit("seed text tokenizes to empty sequence")
 
-    # Grow the search upper bound until rendered exceeds budget (or hit cap).
-    hi = max(1, int(target_user_tokens))
-    rendered, text, user_n = measure(hi)
-    best = (text, user_n, rendered) if rendered <= budget else ("", 0, 0)
-    cap = max(hi * 4, hi + budget + 65536)
-    while rendered <= budget and hi < cap:
-        next_hi = min(max(hi + 1, hi * 2), cap)
-        hi = next_hi
-        rendered, text, user_n = measure(hi)
-        if rendered <= budget:
-            best = (text, user_n, rendered)
+    # Search repeats, not raw token targets — never explore 2×/4× overshoots.
+    hi_reps = (budget // seed_len) + 8
+    if target_user_tokens > 0:
+        cap_reps = (int(target_user_tokens) + seed_len - 1) // seed_len + 4
+        hi_reps = min(hi_reps, cap_reps)
 
-    if rendered <= budget and best[0]:
-        return best
+    _fit_log(
+        f"fitting long prompt: rendered<={budget} "
+        f"(max_seq={max_seq}, seed_tokens={seed_len}, max_repeats≈{hi_reps}) …"
+    )
 
-    lo, hi_bs = 0, hi
-    best = ("", 0, 0)
-    while lo <= hi_bs:
-        mid = (lo + hi_bs) // 2
-        rendered, text, user_n = measure(mid)
-        if rendered <= budget:
-            best = (text, user_n, rendered)
-            lo = mid + 1
+    lo_reps, hi = 0, hi_reps
+    best: tuple[str, int, int] = ("", 0, 0)
+    step = 0
+    while lo_reps <= hi:
+        mid = (lo_reps + hi) // 2
+        step += 1
+        if step == 1 or step % 4 == 0:
+            _fit_log(f"  probe repeats={mid} (search 0..{hi}) …")
+        if mid <= 0:
+            rendered, text, user_n = 0, "", 0
         else:
-            hi_bs = mid - 1
+            text = seed * mid
+            user_n = len(tokenizer.encode(text, add_special_tokens=False))
+            rendered = rendered_prompt_tokens(tokenizer, text)
+        if rendered <= budget:
+            best = (text, user_n, rendered)
+            lo_reps = mid + 1
+        else:
+            hi = mid - 1
+
     if not best[0]:
         raise SystemExit(
             f"cannot fit prompt within max_seq={max_seq} max_tokens={max_tokens}"
         )
+    _fit_log(
+        f"fit done: user_tokens={best[1]} rendered={best[2]} "
+        f"(budget={budget}, steps={step})"
+    )
     return best
 
 

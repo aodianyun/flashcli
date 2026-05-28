@@ -53,7 +53,7 @@ def test_fit_fills_rendered_budget_not_early_exit():
     budget = 1000 - 64 - 32
     _text, _actual, rendered = bmp.fit_user_prompt_to_budget(
         tok,
-        target_user_tokens=800,
+        target_user_tokens=10_000,
         max_seq=1000,
         max_tokens=64,
         seed="ab",
