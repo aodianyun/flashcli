@@ -23,17 +23,19 @@ def build_prompt_text(tokenizer, target_tokens: int, seed: str) -> tuple[str, in
 
 
 def rendered_prompt_tokens(tokenizer, user_content: str) -> int:
-    """Tokens after chat template + generation prompt (matches HTTP serve path)."""
+    """Match qwen36 ``_render_chat`` + ``tokenizer(prompt)`` (not tokenize=True)."""
     messages = [{"role": "user", "content": user_content}]
     try:
-        ids = tokenizer.apply_chat_template(
+        prompt = tokenizer.apply_chat_template(
             messages,
-            tokenize=True,
+            tools=None,
+            tokenize=False,
             add_generation_prompt=True,
+            enable_thinking=False,
         )
-        return len(ids)
+        input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+        return int(input_ids.shape[1])
     except Exception:
-        # Fallback if template unavailable.
         return len(tokenizer.encode(user_content, add_special_tokens=False)) + 16
 
 
@@ -43,12 +45,15 @@ def fit_user_prompt_to_budget(
     max_seq: int,
     max_tokens: int,
     seed: str,
+    *,
+    seq_slack: int = 32,
 ) -> tuple[str, int, int]:
     """Binary-search user message length so rendered prompt + max_tokens <= max_seq."""
-    budget = int(max_seq) - int(max_tokens)
+    budget = int(max_seq) - int(max_tokens) - int(seq_slack)
     if budget < 1:
         raise SystemExit(
-            f"max_seq={max_seq} too small for max_tokens={max_tokens}"
+            f"max_seq={max_seq} too small for max_tokens={max_tokens} "
+            f"seq_slack={seq_slack}"
         )
     text, user_n = build_prompt_text(tokenizer, target_user_tokens, seed)
     rendered = rendered_prompt_tokens(tokenizer, text)
@@ -101,6 +106,12 @@ def main() -> int:
         default=0,
         help="If set, shrink user content so chat-template prompt + max_tokens fits",
     )
+    p.add_argument(
+        "--seq-slack",
+        type=int,
+        default=32,
+        help="Safety margin below max-seq (template/tokenizer drift)",
+    )
     args = p.parse_args()
 
     ckpt = args.checkpoint.expanduser().resolve()
@@ -123,6 +134,7 @@ def main() -> int:
             max_seq,
             args.max_tokens,
             args.seed,
+            seq_slack=int(args.seq_slack),
         )
     else:
         content, actual = build_prompt_text(tok, args.target_prompt_tokens, args.seed)
@@ -141,6 +153,7 @@ def main() -> int:
         "max_tokens": payload["max_tokens"],
         "total_tokens_budget": rendered + int(args.max_tokens),
         "max_seq": max_seq if max_seq > 0 else None,
+        "seq_slack": int(args.seq_slack) if max_seq > 0 else None,
         "content_chars": len(content),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)

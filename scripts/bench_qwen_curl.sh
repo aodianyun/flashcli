@@ -177,6 +177,7 @@ make_long_payload() {
   local -a extra=()
   if [[ -n "${max_seq}" ]]; then
     extra+=(--max-seq "${max_seq}")
+    extra+=(--seq-slack "${QWEN36_SEQ_SLACK:-32}")
   fi
   python3 "${MAKE_PAYLOAD}" \
     --checkpoint "${ckpt}" \
