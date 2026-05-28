@@ -105,7 +105,7 @@ flashcli models envs pi05_libero
 | `flashcli models envs [preset]` | 查看 `models.yaml` 中的环境与当前 GPU 匹配项 |
 | `flashcli doctor` | 环境与 GPU 检查 |
 | `flashcli bundle sync <preset>` | 预拉取/更新 runtime bundle |
-| `flashcli bundle validate PATH` | 校验本地 bundle 布局 |
+| `flashcli bundle validate PATH` | 校验布局、`lib/` 矩阵是否齐全、各 `.so` 是否可用对应 `python3.x` 加载（`--skip-abi-probe` 仅查矩阵） |
 | `--bundle PATH` | 覆盖 catalog，使用本地 bundle 根目录 |
 
 **`pi05_libero` 仅支持 `run`**；Qwen preset 支持 `run` 与 `serve`。

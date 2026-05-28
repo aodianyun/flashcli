@@ -169,7 +169,11 @@ def _entry_module_path(bundle: BundleManifest, spec: EntrySpec) -> Path | None:
     return py_root.joinpath(*parts[:-1], f"{parts[-1]}.py")
 
 
-def validate_bundle_layout(bundle: BundleManifest) -> list[str]:
+def validate_bundle_layout(
+    bundle: BundleManifest,
+    *,
+    probe_abi: bool = False,
+) -> list[str]:
     """Return validation errors (empty if OK). Supports v2 flat and legacy trees."""
     errors: list[str] = []
     py_root = bundle_python_root(bundle)
@@ -221,8 +225,10 @@ def validate_bundle_layout(bundle: BundleManifest) -> list[str]:
         if not path.is_file():
             errors.append(f"required native module missing: {path}")
 
+    from flashcli.bundle.native_validate import validate_native_lib
     from flashcli.bundle.weights import validate_weights_spec
 
+    errors.extend(validate_native_lib(bundle, probe_abi=probe_abi))
     errors.extend(validate_weights_spec(bundle))
     return errors
 

@@ -236,12 +236,17 @@ def models_versions(
 @bundle_app.command("validate")
 def bundle_validate(
     path: Path = typer.Argument(..., exists=True, file_okay=False, dir_okay=True),
+    skip_abi_probe: bool = typer.Option(
+        False,
+        "--skip-abi-probe",
+        help="Skip loading each lib/*.so with its tagged Python (faster; matrix only).",
+    ),
 ) -> None:
-    """Validate a model bundle directory layout."""
+    """Validate bundle layout, lib/ matrix completeness, and native ABI vs filenames."""
     from flashcli.bundle.manifest import load_bundle_manifest, validate_bundle_layout
 
     bundle = load_bundle_manifest(path)
-    errors = validate_bundle_layout(bundle)
+    errors = validate_bundle_layout(bundle, probe_abi=not skip_abi_probe)
     if errors:
         for err in errors:
             typer.echo(f"ERROR: {err}", err=True)
@@ -256,7 +261,15 @@ def bundle_validate(
     except RuntimeError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(1) from exc
-    typer.echo(f"OK: bundle {bundle.name!r} at {bundle.bundle_root}")
+    nm = bundle.raw.get("native_matrix")
+    if isinstance(nm, list) and nm:
+        detail = "ABI probed" if not skip_abi_probe else "matrix only"
+        typer.echo(
+            f"OK: bundle {bundle.name!r} at {bundle.bundle_root} "
+            f"(lib/ matrix: {len(nm)} env(s), {detail})"
+        )
+    else:
+        typer.echo(f"OK: bundle {bundle.name!r} at {bundle.bundle_root}")
 
 
 @bundle_app.command("install")
