@@ -191,8 +191,16 @@ def usage_from_qwen36_engine(data: dict[str, Any]) -> dict[str, Any]:
     ):
         if data.get(key) is not None:
             usage[key] = data[key]
+    route = data.get("route")
+    if route is not None:
+        usage["route"] = route
     if tok is not None:
         usage["tok_per_s"] = tok
+    if data.get("ttft_ms") is not None:
+        usage["ttft_ms"] = data.get("ttft_ms")
+    elif data.get("prefill_ms") is not None:
+        # Non-stream generate: first token arrives after prefill.
+        usage["ttft_ms"] = data.get("prefill_ms")
     return usage
 
 

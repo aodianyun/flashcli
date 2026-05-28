@@ -8,6 +8,24 @@ import json
 import sys
 from pathlib import Path
 
+# FlashRT qwen36_nvfp4.md short standard prompt; repeated for long-ctx fills.
+FLASHRT_DOC_SEED = (
+    "Explain quantum entanglement in one short paragraph. "
+)
+
+
+def resolve_long_prompt_seed(style: str, seed_arg: str | None) -> str:
+    key = (style or "repeat").lower()
+    if seed_arg:
+        return seed_arg
+    if key in ("flashrt", "doc", "comparable"):
+        return FLASHRT_DOC_SEED
+    if key == "repeat":
+        return "请用一句话说明量子力学的一个要点。"
+    raise SystemExit(
+        f"unknown --long-prompt-style {style!r}; use repeat, flashrt, or doc"
+    )
+
 
 def build_prompt_text(tokenizer, target_tokens: int, seed: str) -> tuple[str, int]:
     seed_ids = tokenizer.encode(seed, add_special_tokens=False)
@@ -95,9 +113,15 @@ def main() -> int:
     p.add_argument("--max-tokens", type=int, default=64)
     p.add_argument("--temperature", type=float, default=0.0)
     p.add_argument(
+        "--long-prompt-style",
+        choices=("repeat", "flashrt", "doc"),
+        default="repeat",
+        help="repeat=user --seed; flashrt/doc=FlashRT doc paragraph (better for MTP)",
+    )
+    p.add_argument(
         "--seed",
-        default="请用一句话说明量子力学的一个要点。",
-        help="Repeated to fill long prompts",
+        default=None,
+        help="Repeated fill text (overrides --long-prompt-style default)",
     )
     p.add_argument("-o", "--output", type=Path, required=True)
     p.add_argument(
@@ -126,6 +150,7 @@ def main() -> int:
         ) from exc
 
     tok = AutoTokenizer.from_pretrained(str(ckpt), trust_remote_code=True)
+    seed = resolve_long_prompt_seed(args.long_prompt_style, args.seed)
     max_seq = int(args.max_seq or 0)
     if max_seq > 0:
         content, actual, rendered = fit_user_prompt_to_budget(
@@ -133,11 +158,11 @@ def main() -> int:
             args.target_prompt_tokens,
             max_seq,
             args.max_tokens,
-            args.seed,
+            seed,
             seq_slack=int(args.seq_slack),
         )
     else:
-        content, actual = build_prompt_text(tok, args.target_prompt_tokens, args.seed)
+        content, actual = build_prompt_text(tok, args.target_prompt_tokens, seed)
         rendered = rendered_prompt_tokens(tok, content)
     payload = {
         "model": args.model,
@@ -147,6 +172,7 @@ def main() -> int:
         "stream": False,
     }
     meta = {
+        "long_prompt_style": args.long_prompt_style,
         "target_prompt_tokens": args.target_prompt_tokens,
         "actual_prompt_tokens": actual,
         "rendered_prompt_tokens": rendered,

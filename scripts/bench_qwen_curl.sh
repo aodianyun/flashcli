@@ -48,6 +48,8 @@ SKIP_QWEN36_LONG=0
 SKIP_SHORT=0
 ROUNDS="${BENCH_ROUNDS:-1}"
 SKIP_FIRST="${BENCH_SKIP_FIRST-}"
+LONG_PROMPT_STYLE="${LONG_PROMPT_STYLE:-repeat}"
+BENCH_PROFILE="${BENCH_PROFILE:-}"
 WORKDIR="${WORKDIR:-/tmp/flashcli-bench-qwen-$$}"
 
 usage() {
@@ -70,11 +72,12 @@ Options:
   --skip-short            Skip short tests
   --rounds N              Repeat each case N times (default: ${ROUNDS})
   --skip-first K          Drop first K rounds before averaging (default: 1 if rounds>1)
+  --long-prompt-style S   repeat | flashrt | doc (flashrt=FlashRT doc seed)
+  --profile NAME          comparable (flashrt long + env hints) | stress (repeat fill)
   -h, --help
 
 Env: HOST, QWEN3_PORT, QWEN36_PORT, CKPT_QWEN3, CKPT_QWEN36, SHORT_PROMPT,
-     QWEN3_MAX_Q_SEQ (unset=assume 1024; 0|off|none=disable cap),
-     QWEN36_MAX_SEQ (pass to payload builder; fits chat template + max_tokens),
+     QWEN3_MAX_Q_SEQ, QWEN36_MAX_SEQ, LONG_PROMPT_STYLE, BENCH_PROFILE,
      BENCH_ROUNDS, BENCH_SKIP_FIRST
 EOF
 }
@@ -96,6 +99,21 @@ while [[ $# -gt 0 ]]; do
     --skip-short) SKIP_SHORT=1; shift ;;
     --rounds) ROUNDS="$2"; shift 2 ;;
     --skip-first) SKIP_FIRST="$2"; shift 2 ;;
+    --long-prompt-style) LONG_PROMPT_STYLE="$2"; shift 2 ;;
+    --profile)
+      BENCH_PROFILE="$2"
+      case "${BENCH_PROFILE}" in
+        comparable)
+          LONG_PROMPT_STYLE=flashrt
+          SHORT_PROMPT="${SHORT_PROMPT:-Explain quantum entanglement in one short paragraph.}"
+          ;;
+        stress)
+          LONG_PROMPT_STYLE=repeat
+          ;;
+        *) die "Unknown --profile ${BENCH_PROFILE} (use comparable or stress)" ;;
+      esac
+      shift 2
+      ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown option: $1" ;;
   esac
@@ -174,7 +192,7 @@ make_short_payload() {
 make_long_payload() {
   local ckpt="$1" model="$2" target_tokens="$3" out="$4"
   local max_seq="${5:-}"
-  local -a extra=()
+  local -a extra=(--long-prompt-style "${LONG_PROMPT_STYLE}")
   if [[ -n "${max_seq}" ]]; then
     extra+=(--max-seq "${max_seq}")
     extra+=(--seq-slack "${QWEN36_SEQ_SLACK:-32}")
@@ -186,6 +204,15 @@ make_long_payload() {
     --max-tokens "${LONG_MAX_TOKENS}" \
     --output "${out}" \
     "${extra[@]}"
+}
+
+print_qwen36_hints() {
+  [[ "${SKIP_QWEN36}" -eq 0 ]] || return 0
+  log "qwen36 hints (for decode comparable to FlashRT docs on 5090/PRO 5000):"
+  log "  export FLASHRT_QWEN36_LONG_KV_CACHE=fp8"
+  log "  export FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ=512"
+  log "  long prompt: --profile comparable  OR  --long-prompt-style flashrt"
+  log "  256K: QWEN36_MAX_SEQ=<serve --max-seq>  (repeat fill lowers MTP vs flashrt seed)"
 }
 
 # One HTTP request; append one JSON line to metrics jsonl. Prints brief round log.
@@ -220,9 +247,10 @@ run_curl_once() {
     --argjson wall_ms "${wall_ms}" \
     --argjson usage "$(jq '.usage // {}' "${resp}")" \
     '{round: $round, wall_ms: $wall_ms, usage: $usage}' >>"${jsonl}"
-  local tps
+  local tps ttft
   tps="$(jq -r '.usage.tok_per_s // .usage.decode_tok_per_s // .usage.e2e_tok_per_s // "n/a"' "${resp}" 2>/dev/null)"
-  log "  round ${round}/${ROUNDS}${tag}: curl_wall=${wall_ms}ms tok_per_s=${tps}"
+  ttft="$(jq -r '.usage.ttft_ms // .usage.prefill_ms // "n/a"' "${resp}" 2>/dev/null)"
+  log "  round ${round}/${ROUNDS}${tag}: curl_wall=${wall_ms}ms ttft_ms=${ttft} tok_per_s=${tps}"
 }
 
 summarize_rounds() {
@@ -258,6 +286,18 @@ def mean(key, nested="usage"):
             vals.append(float(v))
     return sum(vals) / len(vals) if vals else None
 
+def mean_ttft_ms():
+    """ttft_ms from engine; qwen36 non-stream falls back to prefill_ms."""
+    vals = []
+    for r in samples:
+        u = r.get("usage", {})
+        v = u.get("ttft_ms")
+        if v is None:
+            v = u.get("prefill_ms")
+        if v is not None:
+            vals.append(float(v))
+    return sum(vals) / len(vals) if vals else None
+
 def fmt(key, nested="usage", digits=1):
     m = mean(key, nested)
     if m is None:
@@ -269,6 +309,9 @@ def fmt(key, nested="usage", digits=1):
     return f"{key}={m:.{digits}f}"
 
 parts = []
+ttft_m = mean_ttft_ms()
+if ttft_m is not None:
+    parts.append(f"ttft_ms={ttft_m:.1f}")
 for k in (
     "prompt_tokens",
     "completion_tokens",
@@ -285,6 +328,13 @@ for k in (
 wall = fmt("wall_ms", nested="", digits=0)
 if wall:
     parts.insert(0, wall.replace("wall_ms=", "curl_wall_ms_mean="))
+routes = [
+    r.get("usage", {}).get("route")
+    for r in samples
+    if r.get("usage", {}).get("route") is not None
+]
+if routes:
+    parts.append(f"route={routes[-1]}")
 
 print(f"━━ {label} (mean of {scored_n} rounds, skipped first {skip}) ━━", file=sys.stderr)
 print("  usage (mean): " + " ".join(parts), file=sys.stderr)
@@ -308,7 +358,8 @@ run_bench_case() {
   summarize_rounds "${label}" "${jsonl}" "${WORKDIR}/${stem}.r${ROUNDS}.out.json"
 }
 
-log "workdir=${WORKDIR}  rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${_SCORED_ROUNDS}"
+log "workdir=${WORKDIR}  rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${_SCORED_ROUNDS} long_prompt_style=${LONG_PROMPT_STYLE} profile=${BENCH_PROFILE:-none}"
+print_qwen36_hints
 if [[ "${SKIP_QWEN3}" -eq 0 ]]; then
   log "qwen3 → http://${HOST}:${QWEN3_PORT}  ckpt=${CKPT_QWEN3}"
 fi
