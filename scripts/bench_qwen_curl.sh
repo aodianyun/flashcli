@@ -13,6 +13,7 @@
 #   export CKPT_QWEN3=~/.flashcli/models/qwen3-8b-nvfp4/checkpoint
 #   export CKPT_QWEN36=~/.flashcli/models/qwen36-27b-nvfp4/checkpoint
 #   bash scripts/bench_qwen_curl.sh
+#   bash scripts/bench_qwen_curl.sh --qwen3-only --rounds 5   # 5 runs, drop 1st, mean last 4
 #   bash scripts/bench_qwen_curl.sh --qwen36-long-tokens 131072 --qwen36-only
 #
 set -euo pipefail
@@ -32,7 +33,10 @@ CKPT_QWEN36="${CKPT_QWEN36:-${HOME}/.flashcli/models/qwen36-27b-nvfp4/checkpoint
 
 SHORT_PROMPT="${SHORT_PROMPT:-用一段话介绍量子纠缠。}"
 SHORT_MAX_TOKENS="${SHORT_MAX_TOKENS:-64}"
-# Qwen3 default serve max_seq≈2048; leave room for generation.
+# Qwen3 HTTP API: prompt_tokens must be <= serve --max-q-seq (not just max-seq).
+# Default 960 matches common serve --max-q-seq 1024 (+ 64 decode). For ~1536:
+#   serve --max-q-seq 1984  &&  --qwen3-long-tokens 1536
+# Cap long prompt to fit serve --max-q-seq. Unset → assume 1024. Set 0/off/none → no cap.
 QWEN3_LONG_PROMPT_TOKENS="${QWEN3_LONG_PROMPT_TOKENS:-1536}"
 QWEN36_LONG_PROMPT_TOKENS="${QWEN36_LONG_PROMPT_TOKENS:-32768}"
 LONG_MAX_TOKENS="${LONG_MAX_TOKENS:-64}"
@@ -42,6 +46,8 @@ SKIP_QWEN36=0
 SKIP_QWEN3_LONG=0
 SKIP_QWEN36_LONG=0
 SKIP_SHORT=0
+ROUNDS="${BENCH_ROUNDS:-1}"
+SKIP_FIRST="${BENCH_SKIP_FIRST-}"
 WORKDIR="${WORKDIR:-/tmp/flashcli-bench-qwen-$$}"
 
 usage() {
@@ -62,9 +68,13 @@ Options:
   --skip-qwen3-long       Skip qwen3 long (qwen3 is short-ctx only in FlashRT)
   --skip-qwen36-long      Skip qwen36 long prefill test
   --skip-short            Skip short tests
+  --rounds N              Repeat each case N times (default: ${ROUNDS})
+  --skip-first K          Drop first K rounds before averaging (default: 1 if rounds>1)
   -h, --help
 
-Env: HOST, QWEN3_PORT, QWEN36_PORT, CKPT_QWEN3, CKPT_QWEN36, SHORT_PROMPT
+Env: HOST, QWEN3_PORT, QWEN36_PORT, CKPT_QWEN3, CKPT_QWEN36, SHORT_PROMPT,
+     QWEN3_MAX_Q_SEQ (unset=assume 1024; 0|off|none=disable cap),
+     BENCH_ROUNDS, BENCH_SKIP_FIRST
 EOF
 }
 
@@ -83,6 +93,8 @@ while [[ $# -gt 0 ]]; do
     --skip-qwen3-long) SKIP_QWEN3_LONG=1; shift ;;
     --skip-qwen36-long) SKIP_QWEN36_LONG=1; shift ;;
     --skip-short) SKIP_SHORT=1; shift ;;
+    --rounds) ROUNDS="$2"; shift 2 ;;
+    --skip-first) SKIP_FIRST="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown option: $1" ;;
   esac
@@ -90,6 +102,45 @@ done
 
 if [[ "${SKIP_QWEN3}" -eq 1 && "${SKIP_QWEN36}" -eq 1 ]]; then
   die "Cannot use both --qwen3-only and --qwen36-only"
+fi
+
+if ! [[ "${ROUNDS}" =~ ^[0-9]+$ ]] || [[ "${ROUNDS}" -lt 1 ]]; then
+  die "--rounds must be a positive integer (got ${ROUNDS})"
+fi
+if [[ -z "${SKIP_FIRST}" ]]; then
+  if [[ "${ROUNDS}" -gt 1 ]]; then
+    SKIP_FIRST=1
+  else
+    SKIP_FIRST=0
+  fi
+fi
+if ! [[ "${SKIP_FIRST}" =~ ^[0-9]+$ ]]; then
+  die "--skip-first must be a non-negative integer (got ${SKIP_FIRST})"
+fi
+if [[ "${SKIP_FIRST}" -ge "${ROUNDS}" ]]; then
+  die "--skip-first (${SKIP_FIRST}) must be < --rounds (${ROUNDS})"
+fi
+_SCORED_ROUNDS=$((ROUNDS - SKIP_FIRST))
+
+# After CLI flags: cap qwen3 long prompt to fit assumed serve --max-q-seq.
+_qwen3_cap_max_q_seq=""
+if [[ -z "${QWEN3_MAX_Q_SEQ+x}" ]]; then
+  _qwen3_cap_max_q_seq=1024
+else
+  case "${QWEN3_MAX_Q_SEQ}" in
+    0|off|none|false|no|disable) _qwen3_cap_max_q_seq="" ;;
+    *) _qwen3_cap_max_q_seq="${QWEN3_MAX_Q_SEQ}" ;;
+  esac
+fi
+if [[ "${SKIP_QWEN3}" -eq 0 && "${SKIP_QWEN3_LONG}" -eq 0 && -n "${_qwen3_cap_max_q_seq}" ]]; then
+  _qwen3_max_prompt=$((_qwen3_cap_max_q_seq - LONG_MAX_TOKENS))
+  if [[ "${_qwen3_max_prompt}" -lt 1 ]]; then
+    die "QWEN3_MAX_Q_SEQ=${_qwen3_cap_max_q_seq} too small for long_max_tokens=${LONG_MAX_TOKENS}"
+  fi
+  if [[ "${QWEN3_LONG_PROMPT_TOKENS}" -gt "${_qwen3_max_prompt}" ]]; then
+    log "qwen3 long: capping ${QWEN3_LONG_PROMPT_TOKENS} → ${_qwen3_max_prompt} tokens (assume serve --max-q-seq=${_qwen3_cap_max_q_seq}; QWEN3_MAX_Q_SEQ=0 to disable)"
+    QWEN3_LONG_PROMPT_TOKENS="${_qwen3_max_prompt}"
+  fi
 fi
 
 command -v curl >/dev/null 2>&1 || die "curl not found"
@@ -129,55 +180,127 @@ make_long_payload() {
     --output "${out}"
 }
 
-# Print wall clock + usage fields (FlashRT + flashcli serve).
-summarize() {
-  local label="$1" resp="$2" wall_ms="$3"
-  log "━━ ${label} (curl wall ${wall_ms} ms) ━━"
+# One HTTP request; append one JSON line to metrics jsonl. Prints brief round log.
+run_curl_once() {
+  local label="$1" port="$2" payload="$3" resp="$4" round="$5" jsonl="$6"
+  local t0 t1 wall_ms tag=""
+  if [[ "${round}" -le "${SKIP_FIRST}" ]]; then
+    tag=" (warmup, excluded)"
+  fi
+  t0="$(python3 -c 'import time; print(int(time.time()*1000))')"
+  if ! curl -sf "http://${HOST}:${port}/v1/chat/completions" \
+    -H "Content-Type: application/json" \
+    -d @"${payload}" \
+    -o "${resp}"; then
+    if [[ -s "${resp}" ]]; then
+      log "${label} round ${round}/${ROUNDS}: server response:"
+      jq -r '.' "${resp}" 2>/dev/null || cat "${resp}" >&2
+    fi
+    die "${label} round ${round}/${ROUNDS}: curl failed (is serve running on :${port}?)"
+  fi
+  t1="$(python3 -c 'import time; print(int(time.time()*1000))')"
+  wall_ms=$((t1 - t0))
   if [[ ! -s "${resp}" ]]; then
-    log "  empty response"
-    return 1
+    die "${label} round ${round}/${ROUNDS}: empty response"
   fi
   if jq -e '.error' "${resp}" >/dev/null 2>&1; then
     jq -r '.error | tostring' "${resp}" >&2
-    return 1
+    die "${label} round ${round}/${ROUNDS}: API error"
   fi
-  jq -r '
-    .usage // {} |
-    "  usage: " + (
-      [
-        (if .prompt_tokens != null then "prompt_tokens=\(.prompt_tokens)" else empty end),
-        (if .completion_tokens != null then "completion_tokens=\(.completion_tokens)" else empty end),
-        (if .prefill_ms != null then "prefill_ms=\(.prefill_ms)" else empty end),
-        (if .decode_ms != null then "decode_ms=\(.decode_ms)" else empty end),
-        (if .wall_s != null then "wall_s=\(.wall_s)" else empty end),
-        (if .tok_per_s != null then "tok_per_s=\(.tok_per_s)" else empty end),
-        (if .decode_tok_per_s != null then "decode_tok_per_s=\(.decode_tok_per_s)" else empty end),
-        (if .e2e_tok_per_s != null then "e2e_tok_per_s=\(.e2e_tok_per_s)" else empty end)
-      ] | join(" ")
-    )
-  ' "${resp}" 2>/dev/null || cat "${resp}" >&2
+  jq -cn \
+    --argjson round "${round}" \
+    --argjson wall_ms "${wall_ms}" \
+    --argjson usage "$(jq '.usage // {}' "${resp}")" \
+    '{round: $round, wall_ms: $wall_ms, usage: $usage}' >>"${jsonl}"
+  local tps
+  tps="$(jq -r '.usage.tok_per_s // .usage.decode_tok_per_s // .usage.e2e_tok_per_s // "n/a"' "${resp}" 2>/dev/null)"
+  log "  round ${round}/${ROUNDS}${tag}: curl_wall=${wall_ms}ms tok_per_s=${tps}"
+}
+
+summarize_rounds() {
+  local label="$1" jsonl="$2" last_resp="$3"
+  python3 - "${label}" "${jsonl}" "${SKIP_FIRST}" "${ROUNDS}" "${_SCORED_ROUNDS}" <<'PY'
+import json
+import sys
+
+label, path, skip_s, rounds_s, scored_s = sys.argv[1:6]
+skip = int(skip_s)
+rounds = int(rounds_s)
+scored_n = int(scored_s)
+
+rows = []
+with open(path, encoding="utf-8") as f:
+    for line in f:
+        line = line.strip()
+        if line:
+            rows.append(json.loads(line))
+if len(rows) != rounds:
+    raise SystemExit(f"expected {rounds} metrics lines, got {len(rows)}")
+
+samples = rows[skip:]
+if not samples:
+    raise SystemExit("no samples after skip")
+
+def mean(key, nested="usage"):
+    vals = []
+    for r in samples:
+        obj = r[nested] if nested else r
+        v = obj.get(key)
+        if v is not None:
+            vals.append(float(v))
+    return sum(vals) / len(vals) if vals else None
+
+def fmt(key, nested="usage", digits=1):
+    m = mean(key, nested)
+    if m is None:
+        return None
+    if key in ("prompt_tokens", "completion_tokens"):
+        return f"{key}={int(round(m))}"
+    if nested == "":
+        return f"{key}={m:.0f}"
+    return f"{key}={m:.{digits}f}"
+
+parts = []
+for k in (
+    "prompt_tokens",
+    "completion_tokens",
+    "prefill_ms",
+    "decode_ms",
+    "wall_s",
+    "tok_per_s",
+    "decode_tok_per_s",
+    "e2e_tok_per_s",
+):
+    s = fmt(k)
+    if s:
+        parts.append(s)
+wall = fmt("wall_ms", nested="", digits=0)
+if wall:
+    parts.insert(0, wall.replace("wall_ms=", "curl_wall_ms_mean="))
+
+print(f"━━ {label} (mean of {scored_n} rounds, skipped first {skip}) ━━", file=sys.stderr)
+print("  usage (mean): " + " ".join(parts), file=sys.stderr)
+PY
   local preview
-  preview="$(jq -r '.choices[0].message.content // ""' "${resp}" 2>/dev/null | head -c 120)"
+  preview="$(jq -r '.choices[0].message.content // ""' "${last_resp}" 2>/dev/null | head -c 120)"
   if [[ -n "${preview}" ]]; then
-    log "  text[0:120]: ${preview}…"
+    log "  text[0:120] (last round): ${preview}…"
   fi
 }
 
-run_curl() {
-  local label="$1" port="$2" payload="$3" resp="$4"
-  local t0 t1 wall_ms
-  t0="$(python3 -c 'import time; print(int(time.time()*1000))')"
-  curl -sf "http://${HOST}:${port}/v1/chat/completions" \
-    -H "Content-Type: application/json" \
-    -d @"${payload}" \
-    -o "${resp}" \
-    || die "${label}: curl failed (is serve running on :${port}?)"
-  t1="$(python3 -c 'import time; print(int(time.time()*1000))')"
-  wall_ms=$((t1 - t0))
-  summarize "${label}" "${resp}" "${wall_ms}"
+run_bench_case() {
+  local label="$1" port="$2" payload="$3" stem="$4"
+  local jsonl="${WORKDIR}/${stem}.metrics.jsonl"
+  local r resp
+  : >"${jsonl}"
+  for ((r = 1; r <= ROUNDS; r++)); do
+    resp="${WORKDIR}/${stem}.r${r}.out.json"
+    run_curl_once "${label}" "${port}" "${payload}" "${resp}" "${r}" "${jsonl}"
+  done
+  summarize_rounds "${label}" "${jsonl}" "${WORKDIR}/${stem}.r${ROUNDS}.out.json"
 }
 
-log "workdir=${WORKDIR}"
+log "workdir=${WORKDIR}  rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${_SCORED_ROUNDS}"
 if [[ "${SKIP_QWEN3}" -eq 0 ]]; then
   log "qwen3 → http://${HOST}:${QWEN3_PORT}  ckpt=${CKPT_QWEN3}"
 fi
@@ -195,30 +318,31 @@ fi
 if [[ "${SKIP_SHORT}" -eq 0 ]]; then
   if [[ "${SKIP_QWEN3}" -eq 0 ]]; then
     make_short_payload "${QWEN3_MODEL}" "${WORKDIR}/qwen3_short.json"
-    run_curl "qwen3 short ctx" "${QWEN3_PORT}" \
-      "${WORKDIR}/qwen3_short.json" "${WORKDIR}/qwen3_short.out.json"
+    run_bench_case "qwen3 short ctx" "${QWEN3_PORT}" \
+      "${WORKDIR}/qwen3_short.json" "qwen3_short"
   fi
   if [[ "${SKIP_QWEN36}" -eq 0 ]]; then
     make_short_payload "${QWEN36_MODEL}" "${WORKDIR}/qwen36_short.json"
-    run_curl "qwen36 short ctx" "${QWEN36_PORT}" \
-      "${WORKDIR}/qwen36_short.json" "${WORKDIR}/qwen36_short.out.json"
+    run_bench_case "qwen36 short ctx" "${QWEN36_PORT}" \
+      "${WORKDIR}/qwen36_short.json" "qwen36_short"
   fi
 fi
 
 if [[ "${SKIP_QWEN3}" -eq 0 && "${SKIP_QWEN3_LONG}" -eq 0 ]]; then
-  log "qwen3 long: target prompt_tokens=${QWEN3_LONG_PROMPT_TOKENS} (within ~2048 max_seq)"
+  qwen3_long_tokens="${QWEN3_LONG_PROMPT_TOKENS}"
+  log "qwen3 long: target prompt_tokens=${qwen3_long_tokens} (serve --max-q-seq >= this; prompt+decode <= --max-seq)"
   make_long_payload "${CKPT_QWEN3}" "${QWEN3_MODEL}" \
-    "${QWEN3_LONG_PROMPT_TOKENS}" "${WORKDIR}/qwen3_long.json"
-  run_curl "qwen3 long ctx (prompt≈${QWEN3_LONG_PROMPT_TOKENS})" "${QWEN3_PORT}" \
-    "${WORKDIR}/qwen3_long.json" "${WORKDIR}/qwen3_long.out.json"
+    "${qwen3_long_tokens}" "${WORKDIR}/qwen3_long.json"
+  run_bench_case "qwen3 long ctx (prompt≈${qwen3_long_tokens})" "${QWEN3_PORT}" \
+    "${WORKDIR}/qwen3_long.json" "qwen3_long"
 fi
 
 if [[ "${SKIP_QWEN36}" -eq 0 && "${SKIP_QWEN36_LONG}" -eq 0 ]]; then
   log "qwen36 long: target prompt_tokens=${QWEN36_LONG_PROMPT_TOKENS} (prefill may take minutes)"
   make_long_payload "${CKPT_QWEN36}" "${QWEN36_MODEL}" \
     "${QWEN36_LONG_PROMPT_TOKENS}" "${WORKDIR}/qwen36_long.json"
-  run_curl "qwen36 long ctx (prompt≈${QWEN36_LONG_PROMPT_TOKENS})" "${QWEN36_PORT}" \
-    "${WORKDIR}/qwen36_long.json" "${WORKDIR}/qwen36_long.out.json"
+  run_bench_case "qwen36 long ctx (prompt≈${QWEN36_LONG_PROMPT_TOKENS})" "${QWEN36_PORT}" \
+    "${WORKDIR}/qwen36_long.json" "qwen36_long"
 fi
 
 log "Done. Payloads and responses in ${WORKDIR}"

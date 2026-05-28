@@ -11,7 +11,13 @@ from flashcli.bundle.activate import active_bundle
 from flashcli.engines.base import ChatMessage, ChatRequest
 from flashcli.models.registry import Preset
 
-from _qwen_util import collect_qwen3_stream, messages_from_request, run_async, serve_cfg
+from _qwen_util import (
+    collect_qwen3_stream,
+    messages_from_request,
+    run_async,
+    serve_cfg,
+    usage_from_qwen36_engine,
+)
 from serve import ServeEngine
 
 
@@ -72,12 +78,7 @@ class RunEngine:
                 return {
                     "text": data.get("text", ""),
                     "tool_calls": data.get("tool_calls", []),
-                    "usage": {
-                        "prompt_tokens": data.get("prompt_tokens", 0),
-                        "completion_tokens": data.get("completion_tokens", 0),
-                        "wall_s": data.get("wall_s"),
-                        "tok_per_s": data.get("tok_per_s"),
-                    },
+                    "usage": usage_from_qwen36_engine(data),
                     "finish_reason": "tool_calls"
                     if data.get("tool_calls")
                     else "stop",

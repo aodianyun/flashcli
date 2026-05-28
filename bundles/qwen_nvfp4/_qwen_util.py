@@ -159,20 +159,50 @@ def run_async(coro: Any) -> Any:
     )
 
 
+def usage_from_qwen36_engine(data: dict[str, Any]) -> dict[str, Any]:
+    """Map FlashRT qwen36 ``generate()`` stats into OpenAI-style ``usage``.
+
+    Qwen36 reports ``decode_tok_per_s`` / ``e2e_tok_per_s`` (not ``tok_per_s``).
+    We expose both and set ``tok_per_s`` for bench/clients that expect qwen3 fields.
+    """
+    pt = int(data.get("prompt_tokens", 0) or 0)
+    ct = int(data.get("completion_tokens", 0) or 0)
+    decode_tps = data.get("decode_tok_per_s")
+    e2e_tps = data.get("e2e_tok_per_s")
+    tok = data.get("tok_per_s")
+    if tok is None:
+        if decode_tps is not None and float(decode_tps) > 0:
+            tok = decode_tps
+        elif e2e_tps is not None:
+            tok = e2e_tps
+
+    usage: dict[str, Any] = {
+        "prompt_tokens": pt,
+        "completion_tokens": ct,
+        "total_tokens": pt + ct,
+    }
+    for key in (
+        "prefill_ms",
+        "decode_ms",
+        "wall_s",
+        "decode_tok_per_s",
+        "e2e_tok_per_s",
+        "route",
+    ):
+        if data.get(key) is not None:
+            usage[key] = data[key]
+    if tok is not None:
+        usage["tok_per_s"] = tok
+    return usage
+
+
 def qwen36_result_to_chat(data: dict[str, Any]) -> ChatResult:
     finish = "tool_calls" if data.get("tool_calls") else "stop"
     return ChatResult(
         content=data.get("text") or None,
         tool_calls=list(data.get("tool_calls") or []),
         finish_reason=finish,
-        usage={
-            "prompt_tokens": data.get("prompt_tokens", 0),
-            "completion_tokens": data.get("completion_tokens", 0),
-            "total_tokens": int(data.get("prompt_tokens", 0))
-            + int(data.get("completion_tokens", 0)),
-            "wall_s": data.get("wall_s"),
-            "tok_per_s": data.get("tok_per_s"),
-        },
+        usage=usage_from_qwen36_engine(data),
     )
 
 
