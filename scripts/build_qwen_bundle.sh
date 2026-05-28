@@ -227,15 +227,17 @@ ensure_cutlass() {
 run_cmake_build() {
   ensure_cutlass
   BUILD_DIR="${BUILD_DIR:-${REPO_ROOT}/build}"
+  local py_bin="${PYTHON_BIN:-python3}"
   local -a cmake_args=(
     -B "${BUILD_DIR}"
     -S "${REPO_ROOT}"
     -DGPU_ARCH="${GPU_ARCH}"
+    -DPython3_EXECUTABLE="${py_bin}"
   )
   if [[ "${FA2_NATIVE_ONLY}" -eq 1 ]]; then
     cmake_args+=(-DFA2_ARCH_NATIVE_ONLY=ON)
   fi
-  log "CMake configure GPU_ARCH=${GPU_ARCH}"
+  log "CMake configure GPU_ARCH=${GPU_ARCH} Python3_EXECUTABLE=${py_bin} ($("${py_bin}" --version 2>&1 | head -1))"
   cmake "${cmake_args[@]}"
   cmake --build "${BUILD_DIR}" -j"${JOBS}"
   shopt -s nullglob
