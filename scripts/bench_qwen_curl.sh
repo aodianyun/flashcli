@@ -74,6 +74,7 @@ Options:
 
 Env: HOST, QWEN3_PORT, QWEN36_PORT, CKPT_QWEN3, CKPT_QWEN36, SHORT_PROMPT,
      QWEN3_MAX_Q_SEQ (unset=assume 1024; 0|off|none=disable cap),
+     QWEN36_MAX_SEQ (pass to payload builder; fits chat template + max_tokens),
      BENCH_ROUNDS, BENCH_SKIP_FIRST
 EOF
 }
@@ -172,12 +173,18 @@ make_short_payload() {
 
 make_long_payload() {
   local ckpt="$1" model="$2" target_tokens="$3" out="$4"
+  local max_seq="${5:-}"
+  local -a extra=()
+  if [[ -n "${max_seq}" ]]; then
+    extra+=(--max-seq "${max_seq}")
+  fi
   python3 "${MAKE_PAYLOAD}" \
     --checkpoint "${ckpt}" \
     --model "${model}" \
     --target-prompt-tokens "${target_tokens}" \
     --max-tokens "${LONG_MAX_TOKENS}" \
-    --output "${out}"
+    --output "${out}" \
+    "${extra[@]}"
 }
 
 # One HTTP request; append one JSON line to metrics jsonl. Prints brief round log.
@@ -338,10 +345,15 @@ if [[ "${SKIP_QWEN3}" -eq 0 && "${SKIP_QWEN3_LONG}" -eq 0 ]]; then
 fi
 
 if [[ "${SKIP_QWEN36}" -eq 0 && "${SKIP_QWEN36_LONG}" -eq 0 ]]; then
-  log "qwen36 long: target prompt_tokens=${QWEN36_LONG_PROMPT_TOKENS} (prefill may take minutes)"
+  _qwen36_max_seq="${QWEN36_MAX_SEQ:-}"
+  if [[ -n "${_qwen36_max_seq}" ]]; then
+    log "qwen36 long: target user_tokens=${QWEN36_LONG_PROMPT_TOKENS}, fit to serve --max-seq=${_qwen36_max_seq} (+ chat template)"
+  else
+    log "qwen36 long: target user_tokens=${QWEN36_LONG_PROMPT_TOKENS} (set QWEN36_MAX_SEQ=<serve --max-seq> to auto-fit template overhead)"
+  fi
   make_long_payload "${CKPT_QWEN36}" "${QWEN36_MODEL}" \
-    "${QWEN36_LONG_PROMPT_TOKENS}" "${WORKDIR}/qwen36_long.json"
-  run_bench_case "qwen36 long ctx (prompt≈${QWEN36_LONG_PROMPT_TOKENS})" "${QWEN36_PORT}" \
+    "${QWEN36_LONG_PROMPT_TOKENS}" "${WORKDIR}/qwen36_long.json" "${_qwen36_max_seq}"
+  run_bench_case "qwen36 long ctx (user≈${QWEN36_LONG_PROMPT_TOKENS})" "${QWEN36_PORT}" \
     "${WORKDIR}/qwen36_long.json" "qwen36_long"
 fi
 
