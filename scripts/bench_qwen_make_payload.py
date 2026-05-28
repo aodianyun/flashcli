@@ -31,13 +31,23 @@ def _seed_token_len(tokenizer, seed: str) -> int:
     return len(tokenizer.encode(seed, add_special_tokens=False))
 
 
+def _tokens_per_repeat(tokenizer, seed: str, repeats: int) -> int:
+    p = max(1, repeats)
+    n = len(tokenizer.encode(seed * p, add_special_tokens=False))
+    return max(1, (n + p - 1) // p)
+
+
 def _effective_tokens_per_repeat(
-    tokenizer, seed: str, *, probe_repeats: int = 128
+    tokenizer, seed: str, *, budget: int = 0
 ) -> int:
-    """Tokens per seed repeat on long fills (BPE merges lower than single-seed len)."""
-    probe = max(1, probe_repeats)
-    n = len(tokenizer.encode(seed * probe, add_special_tokens=False))
-    return max(1, (n + probe - 1) // probe)
+    """Min tokens/repeat across short + long probes (BPE merges more at scale)."""
+    probes = [128, 2048, 8192]
+    if budget > 0:
+        seed_len = _seed_token_len(tokenizer, seed)
+        est = max(probes[-1], min(budget, (budget // max(1, seed_len)) // 2))
+        if est not in probes:
+            probes.append(est)
+    return min(_tokens_per_repeat(tokenizer, seed, p) for p in probes)
 
 
 def build_prompt_text(tokenizer, target_tokens: int, seed: str) -> tuple[str, int]:
@@ -47,7 +57,7 @@ def build_prompt_text(tokenizer, target_tokens: int, seed: str) -> tuple[str, in
     if _seed_token_len(tokenizer, seed) == 0:
         raise SystemExit("seed text tokenizes to empty sequence")
 
-    tpr = _effective_tokens_per_repeat(tokenizer, seed)
+    tpr = _effective_tokens_per_repeat(tokenizer, seed, budget=target_tokens)
     reps = max(1, (target_tokens + tpr - 1) // tpr)
     lo, hi = max(1, reps - 4), reps + 4
     best_text, best_actual = seed * reps, 0
@@ -105,12 +115,10 @@ def fit_user_prompt_to_budget(
     if seed_len == 0:
         raise SystemExit("seed text tokenizes to empty sequence")
 
-    tpr = _effective_tokens_per_repeat(tokenizer, seed)
-    # Do not use seed_len alone: repeated BPE yields fewer tokens/repeat (~10 vs 12).
-    hi_reps = (budget // tpr) + 64
+    tpr = _effective_tokens_per_repeat(tokenizer, seed, budget=budget)
+    hi_reps = min(budget, (budget // tpr) + 128)
     if target_user_tokens > 0:
-        hi_reps = max(hi_reps, (int(target_user_tokens) // tpr) + 64)
-    hi_reps = min(hi_reps, budget)
+        hi_reps = max(hi_reps, min(budget, (int(target_user_tokens) // tpr) + 128))
 
     _fit_log(
         f"fitting long prompt: rendered<={budget} "
@@ -118,25 +126,48 @@ def fit_user_prompt_to_budget(
         f"max_repeats≈{hi_reps}) …"
     )
 
-    lo_reps, hi = 0, hi_reps
+    def measure_reps(reps: int) -> tuple[int, str, int]:
+        if reps <= 0:
+            return 0, "", 0
+        text = seed * reps
+        user_n = len(tokenizer.encode(text, add_special_tokens=False))
+        return rendered_prompt_tokens(tokenizer, text), text, user_n
+
+    def binsearch(lo0: int, hi0: int) -> int:
+        nonlocal best, step
+        lo_reps, hi = lo0, hi0
+        while lo_reps <= hi:
+            mid = (lo_reps + hi) // 2
+            step += 1
+            if step == 1 or step % 4 == 0:
+                _fit_log(f"  probe repeats={mid} (search {lo0}..{hi0}) …")
+            rendered, text, user_n = measure_reps(mid)
+            if rendered <= budget:
+                best = (text, user_n, rendered)
+                lo_reps = mid + 1
+            else:
+                hi = mid - 1
+        return hi0
+
     best: tuple[str, int, int] = ("", 0, 0)
     step = 0
-    while lo_reps <= hi:
-        mid = (lo_reps + hi) // 2
-        step += 1
-        if step == 1 or step % 4 == 0:
-            _fit_log(f"  probe repeats={mid} (search 0..{hi}) …")
-        if mid <= 0:
-            rendered, text, user_n = 0, "", 0
-        else:
-            text = seed * mid
-            user_n = len(tokenizer.encode(text, add_special_tokens=False))
-            rendered = rendered_prompt_tokens(tokenizer, text)
-        if rendered <= budget:
-            best = (text, user_n, rendered)
-            lo_reps = mid + 1
-        else:
-            hi = mid - 1
+    binsearch(0, hi_reps)
+
+    # If we hit the ceiling below budget, raise using observed tokens/repeat.
+    while best[0] and best[2] < budget - 16 and hi_reps < budget:
+        best_reps = len(best[0]) // max(1, len(seed))
+        tpr_obs = max(1, best[1] // max(1, best_reps))
+        bump = max(256, (budget - best[2]) // tpr_obs + 64)
+        new_hi = min(budget, hi_reps + bump)
+        if new_hi <= hi_reps:
+            break
+        _fit_log(
+            f"  raising ceiling {hi_reps} → {new_hi} "
+            f"(rendered={best[2]} < budget, observed_tpr≈{tpr_obs}) …"
+        )
+        lo2 = hi_reps + 1
+        hi_reps = new_hi
+        binsearch(lo2, hi_reps)
 
     if not best[0]:
         raise SystemExit(
