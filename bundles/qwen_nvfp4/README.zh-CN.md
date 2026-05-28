@@ -41,8 +41,7 @@ qwen_nvfp4/
 ├── lib/
 │   ├── flash_rt_kernels-*-sm120-cu130-linux-x86_64-py310.so
 │   ├── flash_rt_fa2-*-py311.so
-│   ├── flash_rt_fp4-*-py312.so
-│   └── …（cu130 × py310/311/312，各 3 个模块）
+│   └── …（cu130 × py310/311/312，每档 **kernels + fa2**；NVFP4 在 kernels 内）
 └── dist/
     └── flashcli-bundle-qwen_nvfp4-main-sm120-multi-linux-x86_64.zip
 ```

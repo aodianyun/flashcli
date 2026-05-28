@@ -46,8 +46,13 @@ def describe_bundle_assembly_gaps(root: Path) -> list[str]:
     if lib_dir.is_dir() and not any(lib_dir.glob("flash_rt_fa2*.so")):
         gaps.append("no lib/flash_rt_fa2*.so (required for FlashRT attention)")
 
-    if lib_dir.is_dir() and needs_fp4 and not any(lib_dir.glob("flash_rt_fp4*.so")):
-        gaps.append("no lib/flash_rt_fp4*.so (NVFP4 on SM120)")
+    # SM120 Qwen NVFP4 is in flash_rt_kernels; flash_rt_fp4.so is Thor/SM100-only.
+    if (
+        lib_dir.is_dir()
+        and needs_fp4
+        and not any(lib_dir.glob("flash_rt_kernels*.so"))
+    ):
+        gaps.append("no lib/flash_rt_kernels*.so (NVFP4 paths live in kernels on SM120)")
 
     stray = sorted(root.glob("flash_rt_*.so"))
     if stray:

@@ -120,7 +120,7 @@ flashcli run pi05_libero \
 | CUDA userland | **cu130** |
 | OS / arch | **linux-x86_64** |
 | Python ABI | **3.10 / 3.11 / 3.12** |
-| Native modules | `flash_rt_kernels`, `flash_rt_fa2`, `flash_rt_fp4` |
+| Native modules | `flash_rt_kernels` (NVFP4 inside), `flash_rt_fa2` |
 
 One zip serves two catalog presets; weights are fetched from Hugging Face (not in the zip).
 

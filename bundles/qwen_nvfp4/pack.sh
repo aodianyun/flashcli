@@ -28,7 +28,7 @@ Create a release zip with only files required to run Qwen NVFP4 inference.
 
 Expects lib/ from build_qwen_release_matrix.sh:
   sm120 × cu130 × linux-x86_64 × (py310, py311, py312)
-  with flash_rt_kernels, flash_rt_fa2, flash_rt_fp4 per cell.
+  with flash_rt_kernels + flash_rt_fa2 per cell (NVFP4 is inside kernels on SM120).
 
 Usage:
   bash pack.sh [OPTIONS]
@@ -69,17 +69,15 @@ NATIVE_LIB="${BUNDLE_DIR}/lib"
 shopt -s nullglob
 KERNELS_SO=( "${NATIVE_LIB}"/flash_rt_kernels*.so )
 FA2_SO=( "${NATIVE_LIB}"/flash_rt_fa2*.so )
-FP4_SO=( "${NATIVE_LIB}"/flash_rt_fp4*.so )
 shopt -u nullglob
 
 [[ ${#KERNELS_SO[@]} -ge 1 ]] || die "Missing lib/flash_rt_kernels*.so"
 [[ ${#FA2_SO[@]} -ge 1 ]] || die "Missing lib/flash_rt_fa2*.so"
-[[ ${#FP4_SO[@]} -ge 1 ]] || die "Missing lib/flash_rt_fp4*.so (NVFP4 required)"
 [[ -d "${BUNDLE_DIR}/flash_rt" ]] || die "Missing flash_rt/"
 
 if [[ "${SKIP_MATRIX_VERIFY}" -eq 0 ]]; then
   verify_native_matrix_lib "${NATIVE_LIB}" "${SM}" "${CUDA_TAG}" "${OS_NAME}" "${ARCH}" \
-    "${PY_MINORS}" flash_rt_kernels flash_rt_fa2 flash_rt_fp4 \
+    "${PY_MINORS}" flash_rt_kernels flash_rt_fa2 \
     || die "lib/ matrix incomplete (run build_qwen_release_matrix.sh or use --skip-matrix-verify)"
 else
   log "Skipping full matrix verify (--skip-matrix-verify)"

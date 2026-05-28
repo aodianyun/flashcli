@@ -149,7 +149,7 @@ flashcli run pi05_libero \
 | CUDA 用户态 | **cu130** |
 | OS / arch | **linux-x86_64** |
 | Python ABI | **3.10 / 3.11 / 3.12** |
-| Native 模块 | `flash_rt_kernels`、`flash_rt_fa2`、`flash_rt_fp4` |
+| Native 模块 | `flash_rt_kernels`（含 NVFP4）、`flash_rt_fa2` |
 
 一个 zip 服务两个 catalog preset（`qwen3-8b-nvfp4`、`qwen36-27b-nvfp4`），权重由 HF 拉取，**不在 zip 内**。
 

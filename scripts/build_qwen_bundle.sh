@@ -418,7 +418,21 @@ stage_bundle_runtime() {
 
   [[ "${has_kernels}" -eq 1 ]] || die "${kernels_name} missing (build FlashRT or use --pack-only)"
   [[ "${has_fa2}" -eq 1 ]] || die "${fa2_name} missing (required for Qwen FA2 attention)"
-  [[ "${has_fp4}" -eq 1 ]] || die "${fp4_name} missing (required for Qwen NVFP4 on SM120)"
+  # SM120 Qwen NVFP4 is compiled into flash_rt_kernels (CUTLASS sm_120a).
+  # flash_rt_fp4.so is a separate Thor/SM100 add-on (CMake ENABLE_SM100_CUTLASS only).
+  if [[ "${has_fp4}" -eq 0 ]]; then
+    if [[ "${SM}" == "120" ]]; then
+      log "flash_rt_fp4.so not built (expected on SM120 — NVFP4 is in ${kernels_name})"
+    else
+      die "${fp4_name} missing (flash_rt_fp4 required when sm != 120)"
+    fi
+  fi
+  local nvfp4_feature=0
+  if [[ "${SM}" == "120" && "${has_kernels}" -eq 1 ]]; then
+    nvfp4_feature=1
+  elif [[ "${has_fp4}" -eq 1 ]]; then
+    nvfp4_feature=1
+  fi
 
   if [[ "${SM}" != "120" ]]; then
     log "WARNING: Qwen NVFP4 needs SM120; detected sm=${SM}"
@@ -463,7 +477,7 @@ stage_bundle_runtime() {
     --torch-index "${torch_idx}" \
     --min-driver "${min_drv}" \
     --has-fa2 "${has_fa2}" \
-    --has-fp4 "${has_fp4}" \
+    --has-fp4 "${nvfp4_feature}" \
     --has-fmha "0" \
     --python-minor "${PYTHON_MINOR}" \
     --native-artifact-tag "${native_tag}" >/dev/null
