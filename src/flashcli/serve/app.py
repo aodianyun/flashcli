@@ -280,6 +280,31 @@ def build_app(engine: ServeEngine) -> FastAPI:
 
         async def stream_chunks():
             main_loop = asyncio.get_running_loop()
+            end_logged = False
+            finish_label: str | None = None
+            usage_line = ""
+
+            def _log_chat_end(status: str, *, use_warning: bool = False) -> None:
+                nonlocal end_logged
+                if end_logged:
+                    return
+                end_logged = True
+                parts = [
+                    f"chat END | id={req_id}",
+                    f"from={client}",
+                    f"status={status}",
+                    f"{timer.elapsed_ms:.1f} ms",
+                ]
+                if finish_label:
+                    parts.append(f"finish={finish_label}")
+                if usage_line:
+                    parts.append(usage_line)
+                msg = " | ".join(parts)
+                if use_warning:
+                    log.warning(msg)
+                else:
+                    log.info(msg)
+
             try:
                 first = {
                     "id": completion_id,
@@ -331,6 +356,8 @@ def build_app(engine: ServeEngine) -> FastAPI:
                         }
                         yield f"data: {json.dumps(out)}\n\n"
                     if chunk.finish_reason:
+                        finish_label = chunk.finish_reason
+                        usage_line = usage_summary(chunk.usage)
                         last = {
                             "id": completion_id,
                             "object": "chat.completion.chunk",
@@ -348,25 +375,14 @@ def build_app(engine: ServeEngine) -> FastAPI:
                             last["usage"] = chunk.usage
                         yield f"data: {json.dumps(last)}\n\n"
                         yield "data: [DONE]\n\n"
-                        usage_line = usage_summary(chunk.usage)
-                        log.info(
-                            "chat END | id=%s | from=%s | status=200 stream | "
-                            "%.1f ms | finish=%s | %s",
-                            req_id,
-                            client,
-                            timer.elapsed_ms,
-                            chunk.finish_reason,
-                            usage_line,
-                        )
+                        _log_chat_end("200 stream")
                         return
-            except ValueError as exc:
-                log.warning(
-                    "chat END | id=%s | from=%s | status=400 stream | %.1f ms | %s",
-                    req_id,
-                    client,
-                    timer.elapsed_ms,
-                    exc,
+                _log_chat_end(
+                    "200 stream no_finish_chunk",
+                    use_warning=True,
                 )
+            except ValueError as exc:
+                _log_chat_end(f"400 stream | {exc}", use_warning=True)
                 err = {
                     "error": {
                         "message": str(exc),
@@ -377,8 +393,9 @@ def build_app(engine: ServeEngine) -> FastAPI:
                 yield f"data: {json.dumps(err)}\n\n"
                 yield "data: [DONE]\n\n"
             except Exception as exc:
+                _log_chat_end(f"500 stream | {exc}", use_warning=True)
                 log.exception(
-                    "chat END | id=%s | from=%s | status=500 stream | %.1f ms",
+                    "chat stream error | id=%s | from=%s | %.1f ms",
                     req_id,
                     client,
                     timer.elapsed_ms,
@@ -393,6 +410,12 @@ def build_app(engine: ServeEngine) -> FastAPI:
                 yield f"data: {json.dumps(err)}\n\n"
                 yield "data: [DONE]\n\n"
             finally:
+                if not end_logged:
+                    _log_chat_end(
+                        "stream closed before finish (client disconnect or "
+                        "proxy timeout)",
+                        use_warning=True,
+                    )
                 gate.release()
 
         return StreamingResponse(stream_chunks(), media_type="text/event-stream")
