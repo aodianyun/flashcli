@@ -239,28 +239,20 @@ run_cmake_build() {
   if [[ "${FA2_NATIVE_ONLY}" -eq 1 ]]; then
     cmake_args+=(-DFA2_ARCH_NATIVE_ONLY=ON)
   fi
+  # FlashRT writes pybind .so into ${REPO_ROOT}/flash_rt/ (shared). Clear stale ABIs.
+  clean_flashrt_shared_native_outputs "${REPO_ROOT}"
   log "CMake configure GPU_ARCH=${GPU_ARCH} Python3_EXECUTABLE=${py_bin} ($("${py_bin}" --version 2>&1 | head -1))"
   cmake "${cmake_args[@]}"
   cmake --build "${BUILD_DIR}" -j"${JOBS}"
+  snapshot_flashrt_native_to_build_dir "${REPO_ROOT}" "${BUILD_DIR}"
   shopt -s nullglob
   local so
-  for so in "${BUILD_DIR}"/flash_rt_kernels*.so "${BUILD_DIR}"/flash_rt_fa2*.so \
-    "${BUILD_DIR}"/flash_rt_fp4*.so; do
+  for so in "${BUILD_DIR}/native-out"/flash_rt_kernels*.so; do
     [[ -f "${so}" ]] || continue
-    cp -f "${so}" "${REPO_ROOT}/flash_rt/"
+    log "Built native: $(basename "${so}")"
+    break
   done
   shopt -u nullglob
-}
-
-normalize_lib() {
-  local src_dir="$1" dst_lib="$2" pattern="$3" dest_name="$4"
-  shopt -s nullglob
-  local matches=("${src_dir}"/${pattern})
-  shopt -u nullglob
-  if [[ ${#matches[@]} -eq 0 ]]; then
-    return 1
-  fi
-  cp -f "${matches[0]}" "${dst_lib}/${dest_name}"
 }
 
 ensure_bundle_entry_modules() {
@@ -363,7 +355,7 @@ finalize_matrix_manifest() {
 stage_bundle_runtime() {
   local lib_dir="${BUNDLE_DIR}/lib"
   local py_dir="${BUNDLE_DIR}/flash_rt"
-  local build_src="${BUILD_DIR:-${REPO_ROOT}/build}"
+  local build_src="${BUILD_DIR:-${REPO_ROOT}/build}/native-out"
   local py_bin="${PYTHON_BIN:-python3}"
   local skip_py_stage=0
 
@@ -411,12 +403,16 @@ stage_bundle_runtime() {
     [[ -f "${cache_dir}/${fa2_name}" ]] && cp -f "${cache_dir}/${fa2_name}" "${lib_dir}/" && has_fa2=1
     [[ -f "${cache_dir}/${fp4_name}" ]] && cp -f "${cache_dir}/${fp4_name}" "${lib_dir}/" && has_fp4=1
   fi
-  for src in "${build_src}" "${REPO_ROOT}/flash_rt"; do
-    [[ -d "${src}" ]] || continue
-    normalize_lib "${src}" "${lib_dir}" "flash_rt_kernels*.so" "${kernels_name}" && has_kernels=1
-    normalize_lib "${src}" "${lib_dir}" "flash_rt_fa2*.so" "${fa2_name}" && has_fa2=1
-    normalize_lib "${src}" "${lib_dir}" "flash_rt_fp4*.so" "${fp4_name}" && has_fp4=1
-  done
+  if [[ ! -d "${build_src}" ]] || ! compgen -G "${build_src}"/*.so >/dev/null; then
+    build_src="${REPO_ROOT}/flash_rt"
+    log "Using ${build_src} for native staging (--pack-only or missing native-out)"
+  fi
+  stage_native_module_to_lib "${build_src}" "${lib_dir}" flash_rt_kernels "${kernels_name}" \
+    "${PYTHON_MINOR}" && has_kernels=1
+  stage_native_module_to_lib "${build_src}" "${lib_dir}" flash_rt_fa2 "${fa2_name}" \
+    "${PYTHON_MINOR}" && has_fa2=1
+  stage_native_module_to_lib "${build_src}" "${lib_dir}" flash_rt_fp4 "${fp4_name}" \
+    "${PYTHON_MINOR}" && has_fp4=1
 
   [[ "${has_kernels}" -eq 1 ]] || die "${kernels_name} missing (build FlashRT or use --pack-only)"
   [[ "${has_fa2}" -eq 1 ]] || die "${fa2_name} missing (required for Qwen FA2 attention)"
