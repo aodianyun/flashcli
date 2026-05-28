@@ -699,15 +699,28 @@ def serve(
     if not quiet:
         typer.echo(
             f"Serving {serve_engine.model_id} on http://{host}:{port} "
-            f"(unified flashcli API)"
+            f"(unified flashcli API; logs=INFO, /health stays responsive)"
         )
+
+    import logging
+    import os
+
+    serve_log_level = os.environ.get("FLASHCLI_SERVE_LOG_LEVEL", "INFO").upper()
+    logging.basicConfig(
+        level=getattr(logging, serve_log_level, logging.INFO),
+        format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,
+    )
+    uvicorn_log = os.environ.get("FLASHCLI_UVICORN_LOG_LEVEL", "info").lower()
 
     try:
         uvicorn.run(
             build_app(serve_engine),
             host=host,
             port=port,
-            log_level="warning",
+            log_level=uvicorn_log,
+            access_log=True,
         )
     except Exception as exc:
         typer.echo(f"Serve failed: {exc}", err=True)
