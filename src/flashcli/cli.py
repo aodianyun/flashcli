@@ -621,7 +621,7 @@ def serve(
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
-    from flashcli.bundle.manifest import variant_serve_cfg
+    from flashcli.bundle.variants import variant_serve_cfg
 
     bundle_serve = (
         variant_serve_cfg(active, effective_variant)
