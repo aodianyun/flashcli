@@ -30,6 +30,9 @@ _ABI_MISMATCH_MARKERS = (
 _CUDA_LOAD_MARKERS = ("libcublas", "libcudart", "libcuda", "cannot open shared object")
 _ELF_BAD_MARKERS = ("invalid ELF", "not an ELF", "Exec format error")
 
+# Exit 0 = ABI OK (full import may fail on missing CUDA at validate time).
+# Exit 2 = Python ABI mismatch vs filename -pyNNN tag.
+# Other non-zero = corrupt / unreadable module.
 _PROBE_SCRIPT = """
 import importlib.util
 import sys
@@ -39,7 +42,15 @@ spec = importlib.util.spec_from_file_location("flashcli_native_probe", path)
 if spec is None or spec.loader is None:
     raise SystemExit("cannot create extension spec")
 mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
+try:
+    spec.loader.exec_module(mod)
+except ImportError as exc:
+    msg = str(exc)
+    if "Python version mismatch" in msg or "interpreter version is incompatible" in msg:
+        print(msg, file=sys.stderr)
+        raise SystemExit(2) from exc
+    # Extension init failed (CUDA libs, etc.) — not a wrong -pyNNN tag.
+    raise SystemExit(0) from exc
 """
 
 
@@ -182,13 +193,19 @@ def probe_native_so_abi(path: Path, *, python_minor: str) -> str | None:
         return f"cannot run {py}: {exc}"
     if proc.returncode == 0:
         return None
+    if proc.returncode == 2:
+        return (
+            f"{path.name}: Python ABI does not match filename tag -py{python_minor} "
+            f"(probe with {py}): {(proc.stderr or proc.stdout).strip()[:240]}"
+        )
     kind = _classify_probe_failure(proc.stderr, proc.stdout)
     if kind == "abi_mismatch":
         return (
             f"{path.name}: Python ABI does not match filename tag -py{python_minor} "
             f"(probe with {py}): {(proc.stderr or proc.stdout).strip()[:240]}"
         )
-    if kind == "cuda_runtime":
+    if kind in ("cuda_runtime", "load_failed"):
+        # load_failed after exec_module is usually missing CUDA on the validate host.
         return None
     detail = (proc.stderr or proc.stdout).strip().replace("\n", " ")[:240]
     return f"{path.name}: failed to load with {py} ({kind}): {detail}"

@@ -12,6 +12,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FLASHCLI_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=lib/native_naming.sh
 source "${SCRIPT_DIR}/lib/native_naming.sh"
+# shellcheck source=lib/probe_native_abi.sh
+source "${SCRIPT_DIR}/lib/probe_native_abi.sh"
 GEN_MANIFEST="${SCRIPT_DIR}/generate_runtime_manifest.py"
 BUNDLED_REQUIREMENTS="${SCRIPT_DIR}/requirements/runtime-inference.txt"
 
@@ -437,6 +439,28 @@ stage_bundle_runtime() {
   if [[ "${SM}" != "120" ]]; then
     log "WARNING: Qwen NVFP4 needs SM120; detected sm=${SM}"
   fi
+
+  _verify_staged_native_abi() {
+    local name="$1"
+    local so="${lib_dir}/${name}"
+    [[ -f "${so}" ]] || return 0
+    local rc=0
+    local err=""
+    err="$(probe_native_so_python_abi "${py_bin}" "${so}" 2>&1)" || rc=$?
+    if [[ "${rc}" -eq 2 ]]; then
+      die \
+        "${name}: Python ABI mismatch (expected -py${PYTHON_MINOR}, built with another Python). " \
+        "Use matching --python-bin, rm -rf '${BUILD_DIR:-${REPO_ROOT}/build}', rebuild. Detail: ${err}"
+    fi
+    if [[ "${rc}" -ne 0 ]]; then
+      log "WARN: ${name} did not fully import under ${py_bin} (rc=${rc}); continuing (often missing CUDA at build time)"
+    else
+      log "ABI OK: ${name} loads under ${py_bin}"
+    fi
+  }
+  _verify_staged_native_abi "${kernels_name}"
+  _verify_staged_native_abi "${fa2_name}"
+  [[ "${has_fp4}" -eq 1 ]] && _verify_staged_native_abi "${fp4_name}"
 
   ensure_bundle_entry_modules
   if [[ "${skip_py_stage}" -eq 0 ]]; then
