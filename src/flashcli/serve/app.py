@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import time
 import uuid
@@ -13,7 +12,7 @@ from fastapi.responses import StreamingResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from flashcli.engines.base import ChatMessage, ChatRequest, ServeEngine
-from flashcli.serve.inference import GpuBusyError, InferenceGate, iter_async_in_thread
+from flashcli.serve.inference import GpuBusyError, InferenceGate, iter_on_inference_loop
 from flashcli.serve.request_log import (
     RequestTimer,
     client_label,
@@ -279,7 +278,6 @@ def build_app(engine: ServeEngine) -> FastAPI:
             raise _gpu_busy_response(engine.model_id) from None
 
         async def stream_chunks():
-            main_loop = asyncio.get_running_loop()
             end_logged = False
             finish_label: str | None = None
             usage_line = ""
@@ -321,9 +319,8 @@ def build_app(engine: ServeEngine) -> FastAPI:
                 }
                 yield f"data: {json.dumps(first)}\n\n"
 
-                async for chunk in iter_async_in_thread(
+                async for chunk in iter_on_inference_loop(
                     lambda: _chunk_iter(req),
-                    main_loop=main_loop,
                 ):
                     if chunk.content_delta:
                         out = {
