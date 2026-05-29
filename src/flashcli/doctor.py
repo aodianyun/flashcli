@@ -7,6 +7,7 @@ from flashcli.deps import flashcli_stack_satisfied
 from flashcli.env import ensure_environment
 from flashcli.models.hf_hub import hub_cli_on_path
 from flashcli.runtime.detect import detect_gpu
+from flashcli.runtime.mirror import mirror_status_lines
 
 
 def run_check(*, quiet: bool = False) -> int:
@@ -51,6 +52,10 @@ def run_check(*, quiet: bool = False) -> int:
             "[i] HF_ENDPOINT not set — flashcli tries huggingface.co then hf-mirror.com. "
             "For restricted networks: export HF_ENDPOINT=https://hf-mirror.com"
         )
+
+    if not quiet:
+        for line in mirror_status_lines():
+            print(line)
 
     from flashcli.bundle.activate import active_bundle
     from flashcli.deps import python_stack_satisfied

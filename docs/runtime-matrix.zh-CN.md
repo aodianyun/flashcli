@@ -6,7 +6,7 @@
 
 | 维度 | 取值 |
 |------|------|
-| SM | **89**（SM120 在 `requires.sm` 允许时使用 SM89 制品） |
+| SM | **89**（制品标签）；**SM120** 在 `requires.sm` 允许时复用同 zip（FA2 须多架构构建） |
 | CUDA 用户态 | **cu124**、**cu130** |
 | OS / arch | **linux-x86_64** |
 | Python ABI | **3.10 / 3.11 / 3.12**（`-py310` / `-py311` / `-py312`） |
@@ -46,6 +46,10 @@ flash_rt_fa2-abc1234-sm89-cu124-linux-x86_64-py312.so
 - **FlashRT_ABI**：`git describe` 消毒后的标签，过长时用 `git commit` 前 12 位
 - 同 tag 的 `.so` 会缓存到 `flashcli/.native-cache/<tag>/`，可 `--pack-only` 复用
 - import 名仍为 `flash_rt_kernels` / `flash_rt_fa2`
+
+### FA2 与 SM120（pi05_libero）
+
+矩阵在 **SM89** 机器或 `GPU_ARCH=89` 上编译，但 `flashcli-bundle.json` 的 `requires.sm` 含 `120`。发布构建**不得**对 FA2 使用 `FA2_ARCH_NATIVE_ONLY`（`bundles/pi05_libero/_bundle_build.sh` 默认已关闭）；否则 Blackwell 运行时报 `no kernel image is available for execution on the device`。本地单卡加速可加 `build.sh --fa2-native-only`（仅开发，勿发布）。
 
 登记位置：[`src/flashcli/catalog/models.yaml`](../src/flashcli/catalog/models.yaml)。包格式：[model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
 

@@ -26,33 +26,52 @@ pip install flashcli
 flashcli run pi05_libero --prompt "..." --image /path/to/base.jpg
 ```
 
-## Maintainers: assemble bundle
+## Maintainers: release bundle
 
-**Linux + NVIDIA GPU** (SM89 or SM120):
+### FA2 and SM120
+
+Matrix artifacts are labeled **sm89**, but `requires.sm` includes **120** (Blackwell reuses the same zip). **Release builds default to multi-arch FA2** (`sm_80 + sm_120 + PTX`). Do not ship with `FA2_ARCH_NATIVE_ONLY` — SM120 will fail with `no kernel image is available for execution on the device`. Use `build.sh --fa2-native-only` for fast local SM89-only dev only.
+
+### One-command release (recommended)
+
+Linux host with **Docker + NVIDIA GPU**:
 
 ```bash
 cd flashcli/bundles/pi05_libero
-bash build.sh --repo-root /path/to/FlashRT
-bash pack.sh --sm 89                  # release zip (cuda tag auto from nvcc, typically cu124)
+bash release.sh --git-ref main --clean
 ```
 
-Register the matrix zip URL in `src/flashcli/catalog/models.yaml`, e.g.:
+`--clean` removes `lib/`, `dist/`, `.build-matrix/`, and `.native-cache/` (avoids reusing old single-arch FA2 caches).
 
-```yaml
-bundle:
-  zip: https://cdn.../flashcli-bundle-pi05-main-sm89-multi-linux-x86_64.zip
-```
+Output: `dist/flashcli-bundle-pi05-main-sm89-multi-linux-x86_64-*.zip`
 
-See [docs/runtime-matrix.md](../../docs/runtime-matrix.md) for building the multi-env `lib/` layout.
-
-`build.sh` stages only the Pi0.5 RTX `flash_rt/` subtree and copies `flash_rt_kernels.so` + `flash_rt_fa2.so` only.
-
-Do **not** ship `requirements-runtime.txt` in the release zip — dependencies live in `flashcli-bundle.json` → `python_dependencies`.
+### Step-by-step (host with cu124 + cu130)
 
 ```bash
-flashcli bundle validate "$(pwd)/bundles/pi05_libero"
-flashcli run pi05_libero --bundle "$(pwd)/bundles/pi05_libero" --image /path/to/base.jpg
+cd flashcli
+bash scripts/build_release_matrix.sh --bundle pi05_libero --check-only
+bash scripts/release_bundle.sh --bundle pi05_libero --clean --cuda-tag 124
+bash scripts/release_bundle.sh --bundle pi05_libero --cuda-tag 130
+flashcli bundle validate bundles/pi05_libero
 ```
+
+Use `--native` instead of Docker when both CUDA toolkits are on the host.
+
+### After release
+
+1. Smoke-test: `flashcli run pi05_libero --bundle bundles/pi05_libero --benchmark 5`
+2. Upload `dist/*.zip` to CDN
+3. Update `src/flashcli/catalog/models.yaml` → `pi05_libero.bundle.zip`
+4. Verify on SM120 (e.g. RTX PRO 5000)
+
+### Local single-env dev
+
+```bash
+bash build.sh --repo-root /path/to/FlashRT
+flashcli bundle validate .
+```
+
+See [docs/runtime-matrix.md](../../docs/runtime-matrix.md) for the full matrix layout.
 
 ## Troubleshooting
 
@@ -69,6 +88,10 @@ flashcli pull pi05_libero
 Pre-download on a reachable host, then `flashcli run pi05_libero --bundle bundles/pi05_libero --checkpoint ./checkpoint --image ...`.
 
 `--bundle` must be a directory containing `flashcli-bundle.json` (e.g. `bundles/pi05_libero` or an extracted `dist/flashcli-bundle-pi05-*` folder), not the `.zip` file.
+
+### `no kernel image is available for execution on the device` (FA2 / SM120)
+
+Usually an **old bundle** on **SM120**: `flash_rt_fa2` was built with `FA2_ARCH_NATIVE_ONLY` (sm_89 only). Rebuild with current `_bundle_build.sh` (multi-arch FA2 default).
 
 ### `'GemmRunner' object has no attribute 'fp8_nt_dev'`
 

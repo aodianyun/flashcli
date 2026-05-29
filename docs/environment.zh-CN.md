@@ -31,6 +31,9 @@ flashcli models list
 |------|--------|------|
 | `FLASHCLI_CUDA_TAG` | （自动） | 覆盖自动检测的 CUDA 用户态标签（`124` / `128` / `130`），用于从 bundle `lib/` 选择 `cu124` / `cu130` 等 `.so`。 |
 | （自动） | — | 无 `nvcc` 时从 `nvidia-smi` 横幅 `CUDA Version: 13.0` 推断 `130`；SM89 不再默认 `124`。 |
+| `FLASHCLI_USE_MIRROR` | `0` | `install.sh --mirror` 会写入 `~/.flashcli/mirror.env`；`flashcli run` 装 torch/transformers 时自动走阿里云 PyPI + PyTorch 镜像。 |
+| `FLASHCLI_NO_MIRROR` | `0` | 设为 `1` 时强制关闭镜像（即使存在 `mirror.env`）。 |
+| `PIP_INDEX_URL` / `PIP_TRUSTED_HOST` | （自动） | PyPI 镜像；`flashcli run` 安装 bundle 依赖时会传给 pip。 |
 
 `flashcli run` 会按 **sm + cuda + os + arch + Python** 在 bundle `lib/` 里自动选 `.so`；若 `libcublas.so.12` 缺失而驱动为 CUDA 13，请更新 flashcli 或设 `export FLASHCLI_CUDA_TAG=130`。
 

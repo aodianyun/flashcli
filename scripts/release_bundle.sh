@@ -74,7 +74,7 @@ Options:
   --image-cu130 IMAGE     Docker image for cu130 line
   --cuda-tag TAG          Build one CUDA line only (124 or 130)
   --native                Build on host (no Docker)
-  --clean                 Remove bundle lib/, dist/, .build-matrix/
+  --clean                 Remove bundle lib/, dist/, .build-matrix/, .native-cache/
   --skip-validate         Skip flashcli bundle validate
   -j, --jobs N            Parallel cmake jobs per cell
   --dry-run
@@ -260,8 +260,12 @@ maybe_validate() {
 }
 
 if [[ "${CLEAN}" -eq 1 ]]; then
-  log "Cleaning lib/, dist/, .build-matrix/"
-  rm -rf "${BUNDLE_DIR}/lib" "${BUNDLE_DIR}/dist" "${FLASHCLI_ROOT}/.build-matrix"
+  log "Cleaning lib/, dist/, .build-matrix/, .native-cache/"
+  rm -rf \
+    "${BUNDLE_DIR}/lib" \
+    "${BUNDLE_DIR}/dist" \
+    "${FLASHCLI_ROOT}/.build-matrix" \
+    "${FLASHCLI_ROOT}/.native-cache"
 fi
 
 BUILD_CUDA_TAGS="${CUDA_TAGS}"

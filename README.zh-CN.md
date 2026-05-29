@@ -6,7 +6,7 @@
 
 ## 要求
 
-- **Linux** + **NVIDIA GPU**（**SM89**：Pi0.5；**SM120**：Qwen NVFP4，如 RTX PRO 5000 Blackwell）
+- **Linux** + **NVIDIA GPU**（**SM89 / SM120**：Pi0.5；**SM120**：Qwen NVFP4，如 RTX PRO 5000 Blackwell）
 - **Python ≥ 3.10**（见 [`pyproject.toml`](pyproject.toml)）；`install.sh` 会安装 **flashcli** 与 **`huggingface_hub`**（提供 `hf download` / `huggingface-cli download`）
 - **网络**：首次运行从 CDN 拉 runtime zip；权重经 Hub CLI 下载（与 `HF_ENDPOINT` + `hf download` 相同）。国内/内网建议 `export HF_ENDPOINT=https://hf-mirror.com`。Pi0.5 还需 Google Storage（PaliGemma tokenizer）
 
@@ -26,7 +26,7 @@ curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh 
 # curl -fsSL …/install.sh | sh -s -- --repo https://gitee.com/your-org/flashcli.git --ref main
 ```
 
-也可将 `install.sh` 托管为 `https://your-domain/install` 后执行 `curl -fsSL https://your-domain/install | sh`。可选参数：`--mirror`、`--global` / `--no-mirror`、`--ref` / `--branch`、`--repo` / `--git-url`、`--gitee`、`--github`；默认仍从 `main` @ GitHub 安装。脚本会**优先选用已带 pip 的 Python**；`run` 时按 GPU + **Python 3.10/3.11/3.12** 选择 runtime zip（见 [docs/runtime-matrix.zh-CN.md](docs/runtime-matrix.zh-CN.md)）（例如 Docker 里 `/usr/local/bin/python3.12`，而不是 Debian 的 PEP 668 `python3.13`），并处理 `ensurepip` / `get-pip.py` / `apt python3-pip` / 专用 venv。可选环境变量：`FLASHCLI_INSTALL_REPO`、`FLASHCLI_INSTALL_REF`、`FLASHCLI_USE_MIRROR=1`、`FLASHCLI_SKIP_GPU_CHECK=1`、`FLASHCLI_PYTHON=$(command -v python3)`、`FLASHCLI_USE_VENV=1`、`FLASHCLI_BREAK_SYSTEM_PACKAGES=1`、`FLASHCLI_AUTO_INSTALL_PYTHON=1`。**root** 默认系统级安装到 `/usr/local/bin`。
+也可将 `install.sh` 托管为 `https://your-domain/install` 后执行 `curl -fsSL https://your-domain/install | sh`。可选参数：`--mirror`（国内镜像：pip / HF；官方仓库默认走 **Gitee** 克隆；**root** 时改写 apt/yum/dnf/apk 为阿里云）、`--global` / `--no-mirror`、`--gitee`、`--github`、`--ref` / `--branch`、`--repo` / `--git-url`。`--mirror` 时官方仓库自动切 Gitee，避免 `ghproxy` 卡死。脚本优先选用已带 pip 的 Python 3.10–3.12。环境变量：`FLASHCLI_USE_MIRROR=1`、`FLASHCLI_OS_MIRROR=0`、`FLASHCLI_GIT_PROXY`（显式 GitHub 代理）、`FLASHCLI_GIT_TIMEOUT=25`、`FLASHCLI_SKIP_GPU_CHECK=1`、`FLASHCLI_PYTHON`、`FLASHCLI_USE_VENV=1`、`FLASHCLI_BREAK_SYSTEM_PACKAGES=1`、`FLASHCLI_AUTO_INSTALL_PYTHON=1`。**root** 默认系统级安装到 `/usr/local/bin`。
 
 或手动安装：
 
@@ -60,7 +60,7 @@ flashcli run pi05_libero \
 
 | Preset | 能力 | Runtime | 权重 |
 |--------|------|---------|------|
-| `pi05_libero` | `run` | CDN zip（SM89 × cu124/cu130 × py310/311/312） | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) |
+| `pi05_libero` | `run` | CDN zip（SM89 制品 × cu124/cu130 × py310/311/312；SM120 可复用） | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) |
 | `qwen3-8b-nvfp4` | `run`, `serve` | 与 qwen36 **同一** CDN zip（SM120 × cu130 × py310/311/312） | [kaitchup/Qwen3-8B-NVFP4](https://huggingface.co/kaitchup/Qwen3-8B-NVFP4) |
 | `qwen36-27b-nvfp4` | `run`, `serve` | 同上 | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4) + MTP |
 

@@ -30,7 +30,9 @@ GPU_ARCH=""
 BUILD_DIR=""
 JOBS="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 SKIP_BUILD=0
-FA2_NATIVE_ONLY=1
+# Release default: multi-arch FA2 (sm_80 + sm_120 + PTX) so SM89-labeled artifacts
+# also run on SM120 (Blackwell). Use --fa2-native-only for faster local SM89-only dev.
+FA2_NATIVE_ONLY=0
 FLASHRT_TAG=""
 BUILD_ID=""
 MIN_DRIVER=""
@@ -71,6 +73,7 @@ Options:
   --min-driver VER        manifest min_driver_version
   --cutlass-branch REF    CUTLASS tag (default: v4.4.2)
   --merge-native          Install .so under lib/ (accumulate matrix cells)
+  --fa2-native-only       Fast dev: FA2 sm_\${GPU_ARCH} only (breaks SM120; not for release)
   --skip-manifest         Skip flashcli-bundle.json manifest update
   --finalize-matrix-manifest  Scan lib/ and write multi-env manifest (after full matrix)
   -h, --help
@@ -225,6 +228,9 @@ run_cmake_build() {
   )
   if [[ "${FA2_NATIVE_ONLY}" -eq 1 ]]; then
     cmake_args+=(-DFA2_ARCH_NATIVE_ONLY=ON)
+    log "FA2: sm_${GPU_ARCH} only (FA2_ARCH_NATIVE_ONLY=ON; SM120 unsupported)"
+  else
+    log "FA2: multi-arch sm_80 + sm_120 + PTX (release default; SM89 + SM120)"
   fi
   clean_flashrt_shared_native_outputs "${REPO_ROOT}"
   log "CMake configure GPU_ARCH=${GPU_ARCH} Python3_EXECUTABLE=${py_bin} ($("${py_bin}" --version 2>&1 | head -1))"
@@ -516,6 +522,7 @@ while [[ $# -gt 0 ]]; do
     --sm) SM="$2"; shift 2 ;;
     --cuda-tag) CUDA_TAG="$2"; shift 2 ;;
     --merge-native) MERGE_NATIVE=1; shift ;;
+    --fa2-native-only) FA2_NATIVE_ONLY=1; shift ;;
     --skip-manifest) SKIP_MANIFEST=1; shift ;;
     --finalize-matrix-manifest) FINALIZE_MATRIX_MANIFEST=1; shift ;;
     -h|--help) usage; exit 0 ;;

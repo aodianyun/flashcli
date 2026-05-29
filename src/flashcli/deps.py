@@ -8,7 +8,12 @@ import sys
 from pathlib import Path
 from typing import Literal
 
-from flashcli.runtime.detect import torch_index_url
+from flashcli.runtime.mirror import (
+    pip_index_url,
+    pip_install_extra_args,
+    pip_trusted_host,
+    resolve_torch_index_url,
+)
 from flashcli.runtime.requirements_spec import (
     RuntimeRequirementsSpec,
     import_name_for_requirement,
@@ -79,8 +84,11 @@ def python_stack_satisfied(
     return runtime_python_stack_satisfied(spec, profile)
 
 
-def _run_pip(args: list[str], *, quiet: bool) -> None:
-    cmd = [sys.executable, "-m", "pip", "install", *args]
+def _run_pip(args: list[str], *, quiet: bool, use_pypi_mirror: bool = True) -> None:
+    cmd = [sys.executable, "-m", "pip", "install"]
+    if use_pypi_mirror:
+        cmd.extend(pip_install_extra_args())
+    cmd.extend(args)
     if quiet:
         cmd.append("-q")
     subprocess.run(cmd, check=True)
@@ -119,14 +127,18 @@ def ensure_runtime_python_stack(
         print(f"Runtime Python requirements from: {spec.source}")
 
     if spec.torch_package.strip():
-        index_url = torch_index_url(torch_index)
+        index_url = resolve_torch_index_url(torch_index)
         if not _imports_ok(spec.torch_package) or force:
             if not quiet:
                 print(f"Installing {spec.torch_package} from {index_url} ...")
-            _run_pip(
-                [spec.torch_package, "--index-url", index_url],
-                quiet=quiet,
-            )
+            torch_args = [spec.torch_package, "--index-url", index_url]
+            pypi = pip_index_url()
+            if pypi:
+                torch_args.extend(["--extra-index-url", pypi])
+                host = pip_trusted_host()
+                if host:
+                    torch_args.extend(["--trusted-host", host])
+            _run_pip(torch_args, quiet=quiet, use_pypi_mirror=False)
 
     to_install = [
         p
