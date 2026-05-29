@@ -30,6 +30,8 @@ See [README.zh-CN.md](README.zh-CN.md) and [docs/runtime-matrix.md](../../docs/r
 
 ```bash
 flashcli run qwen3-8b-nvfp4 --prompt "Hello"
-flashcli serve qwen3-8b-nvfp4 --port 8000
+flashcli serve qwen3-8b-nvfp4 --host 0.0.0.0 --port 8000 --max-seq 2048 --max-q-seq 1024 --warmup-preset auto
 flashcli run qwen36-27b-nvfp4 --prompt "Hi" --K 6
+flashcli serve qwen36-27b-nvfp4 --port 8000 --K 6 --max-seq 262208 --warmup-preset auto
+
 ```

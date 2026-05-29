@@ -82,10 +82,10 @@ bash bundles/qwen_nvfp4/build.sh --repo-root "$FLASHRT_REPO" -j "$(nproc)"
 ## 运行
 
 ```bash
-flashcli models envs qwen3-8b-nvfp4
-flashcli run qwen3-8b-nvfp4 --prompt "你好"
-flashcli serve qwen3-8b-nvfp4 --host 0.0.0.0 --port 8000
-flashcli run qwen36-27b-nvfp4 --prompt "你好" --K 6
+flashcli run qwen3-8b-nvfp4 --prompt "Hello"
+flashcli serve qwen3-8b-nvfp4 --host 0.0.0.0 --port 8000 --max-seq 2048 --max-q-seq 1024 --warmup-preset auto
+flashcli run qwen36-27b-nvfp4 --prompt "Hi" --K 6
+flashcli serve qwen36-27b-nvfp4 --port 8000 --K 6 --max-seq 262208 --warmup-preset auto
 ```
 
 本地未用 CDN 时：
