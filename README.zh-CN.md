@@ -126,7 +126,7 @@ flashcli models envs pi05_libero
 | [docs/model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md) | Model Bundle 格式（扩展方 / 维护者） |
 | [docs/architecture.zh-CN.md](docs/architecture.zh-CN.md) | 模块划分与数据流 |
 
-推理内核与精度说明请参阅 [FlashRT](https://github.com/flashrt-ai/FlashRT) 仓库文档。
+推理内核与精度说明请参阅 [FlashRT](https://github.com/LiangSu8899/FlashRT) 仓库文档。
 
 ## 许可证
 

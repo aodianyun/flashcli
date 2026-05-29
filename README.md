@@ -122,7 +122,7 @@ Full index (with 简体中文): [docs/README.md](docs/README.md)
 | [docs/model_bundle_standard.md](docs/model_bundle_standard.md) | Model Bundle format (extend / maintain) |
 | [docs/architecture.md](docs/architecture.md) | Modules and data flow |
 
-For inference kernels and precision details, see the [FlashRT](https://github.com/flashrt-ai/FlashRT) repository.
+For inference kernels and precision details, see the [FlashRT](https://github.com/LiangSu8899/FlashRT) repository.
 
 ## License
 

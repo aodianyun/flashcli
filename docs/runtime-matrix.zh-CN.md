@@ -49,70 +49,54 @@ flash_rt_fa2-abc1234-sm89-cu124-linux-x86_64-py312.so
 
 登记位置：[`src/flashcli/catalog/models.yaml`](../src/flashcli/catalog/models.yaml)。包格式：[model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
 
-## 矩阵脚本行为
+## 矩阵构建（通用脚本）
 
-| 能力 | `build_pi05_release_matrix.sh` |
-|------|--------------------------------|
+配置在 `bundles/<name>/release-matrix.env`；bundle 实现标准 hook（见 `scripts/lib/bundle_hooks.sh`）。
+
+| 能力 | `release_bundle.sh` / `build_release_matrix.sh` |
+|------|--------------------------------------------------|
 | 双重循环 cu124/130 × py310/311/312 | ✅ |
-| 安装 Python 3.10/3.11/3.12 | ❌ 默认没有；可加 `--install-python`（apt） |
-| 切换 CUDA 工具链 | ✅ 通过 `CUDA_HOME_CU124` / `CUDA_HOME_CU130` |
-| `--cuda-tag` | 校验 `nvcc` 与标签一致，写入 manifest / zip 名 |
+| 自动 clone FlashRT | ✅（`release_bundle.sh` 默认） |
+| Docker 双镜像（cu124/cu130） | ✅（`release_bundle.sh` 默认） |
+| 安装 Python 3.10/3.11/3.12 | `--install-python` |
+| `--cuda-tag` | 只编一条 CUDA 线 |
 
-每一格：**换 Python 解释器 + 独立 build 目录 + 全量 cmake**（每个 Python/CUDA 组合各编译一次 native）。
+每一格：**换 Python + 独立 build 目录 + cmake**；`matrix_cell.sh` 只写本格 `lib/*.so`，不改 manifest。
 
 ## 构建
 
-**1）先检查环境（不编译）**
+**推荐：一键发布**
+
+```bash
+cd flashcli/bundles/pi05_libero
+bash release.sh --git-ref main --clean
+# 等价：bash scripts/release_bundle.sh --bundle pi05_libero --clean
+```
+
+**分步（宿主机 Linux，已有两套 CUDA）**
 
 ```bash
 cd flashcli
-export FLASHRT_REPO=/path/to/FlashRT
-export CUDA_HOME_CU124=/usr/local/cuda-12.4
-export CUDA_HOME_CU130=/usr/local/cuda-13.0   # 若没有 13，先只编 124
-
-bash scripts/build_pi05_release_matrix.sh --check-only
+bash scripts/build_release_matrix.sh --bundle pi05_libero --check-only
+bash scripts/build_release_matrix.sh --bundle pi05_libero --cuda-tag 124 --skip-pack
+bash scripts/build_release_matrix.sh --bundle pi05_libero --cuda-tag 130 --skip-pack
+bash scripts/build_release_matrix.sh --bundle pi05_libero --pack-only
 ```
 
-**2）缺 Python 时（Debian/Ubuntu）**
+只编某一格：
 
 ```bash
-sudo bash scripts/build_pi05_release_matrix.sh --install-python --check-only
+bash scripts/build_release_matrix.sh --bundle pi05_libero --cuda-tag 124 --python-minor 312
 ```
 
-**3）cu124 × 三档 Python → 一个多环境 zip**
+产物：`bundles/pi05_libero/dist/*.zip` → 上传 CDN → 更新 `models.yaml`。
+
+### 本地单环境开发
 
 ```bash
-bash scripts/build_pi05_release_matrix.sh --cuda-tag 124
-# → dist/flashcli-bundle-pi05-main-sm89-multi-linux-x86_64.zip
+cd bundles/pi05_libero
+bash build.sh --repo-root "$FLASHRT_REPO"
 ```
-
-**4）再上 cu130**
-
-```bash
-export CUDA_HOME_CU130=/usr/local/cuda-13.0
-bash scripts/build_pi05_release_matrix.sh --cuda-tag 130
-```
-
-只编某一格时：
-
-```bash
-bash scripts/build_pi05_release_matrix.sh --cuda-tag 124 --python-minor 312
-```
-
-产物：`bundles/pi05_libero/dist/*.zip` → 上传 CDN → 核对 `models.yaml` URL。
-
-### 单格手动流程（维护者本地）
-
-```bash
-bash scripts/build_pi05_bundle.sh \
-  --bundle-dir bundles/pi05_libero \
-  --repo-root "$FLASHRT_REPO" \
-  --python-bin python3.12 \
-  --sm 89 \
-  --cuda-tag 124
-```
-
-须用**与运行 flashcli 相同的 Python** 构建 `.so`。
 
 ## 运行时选择
 
@@ -141,12 +125,12 @@ flashcli run pi05_libero \
 
 ---
 
-## qwen_nvfp4（SM120 × cu130）
+## qwen_nvfp4（SM120 × cu124/cu130）
 
 | 维度 | 取值 |
 |------|------|
 | SM | **120**（Blackwell NVFP4） |
-| CUDA 用户态 | **cu130** |
+| CUDA 用户态 | **cu124**、**cu130** |
 | OS / arch | **linux-x86_64** |
 | Python ABI | **3.10 / 3.11 / 3.12** |
 | Native 模块 | `flash_rt_kernels`（含 NVFP4）、`flash_rt_fa2` |
@@ -156,12 +140,8 @@ flashcli run pi05_libero \
 ### 发布构建
 
 ```bash
-cd flashcli
-export FLASHRT_REPO=/path/to/FlashRT
-export CUDA_HOME_CU130=/usr/local/cuda-13.0
-
-bash scripts/build_qwen_release_matrix.sh --check-only
-bash scripts/build_qwen_release_matrix.sh
+cd flashcli/bundles/qwen_nvfp4
+bash release.sh --git-ref main --clean
 ```
 
 产物：

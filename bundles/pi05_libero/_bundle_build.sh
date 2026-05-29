@@ -1,23 +1,24 @@
 #!/usr/bin/env bash
-# Build / stage a Pi0.5 model bundle (flash_rt + CUDA kernels) for flashcli run.
+# Build / stage this bundle (bundles/pi05_libero/_bundle_build.sh).
 #
-# Usage:
-#   bash flashcli/scripts/build_pi05_bundle.sh --bundle-dir flashcli/bundles/pi05_libero
-#   bash flashcli/scripts/build_pi05_bundle.sh --bundle-dir ... --repo-root /app/FlashRT
-#   bash flashcli/scripts/build_pi05_bundle.sh --bundle-dir ... --pack-only
-#   bash flashcli/scripts/build_pi05_bundle.sh --bundle-dir ... --embed-checkpoint ~/.flashcli/models/pi05_libero/checkpoint
+#   bash build.sh
+#   bash build.sh --pack-only --repo-root /app/FlashRT
+#   bash matrix_cell.sh ...          # release matrix (via build_release_matrix.sh)
+#   bash finalize_manifest.sh ...    # after full matrix
 #
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FLASHCLI_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-# shellcheck source=lib/native_naming.sh
-source "${SCRIPT_DIR}/lib/native_naming.sh"
-GEN_MANIFEST="${SCRIPT_DIR}/generate_runtime_manifest.py"
-BUNDLED_REQUIREMENTS="${SCRIPT_DIR}/requirements/runtime-inference.txt"
+BUNDLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FLASHCLI_ROOT="$(cd "${BUNDLE_DIR}/../.." && pwd)"
+FLASHCLI_SCRIPTS="${FLASHCLI_ROOT}/scripts"
+# shellcheck source=../../scripts/lib/native_naming.sh
+source "${FLASHCLI_SCRIPTS}/lib/native_naming.sh"
+# shellcheck source=../../scripts/lib/probe_native_abi.sh
+source "${FLASHCLI_SCRIPTS}/lib/probe_native_abi.sh"
+GEN_MANIFEST="${FLASHCLI_SCRIPTS}/generate_runtime_manifest.py"
+BUNDLED_REQUIREMENTS="${FLASHCLI_SCRIPTS}/requirements/runtime-inference.txt"
 
 REPO_ROOT=""
-BUNDLE_DIR=""
 OUTPUT_DIR=""
 GIT_REF="main"
 RUNTIME_VERSION="1.0.0"
@@ -341,8 +342,15 @@ stage_bundle_runtime() {
   local py_dir="${BUNDLE_DIR}/flash_rt"
   local flash_rt_src="${REPO_ROOT}/flash_rt"
   local build_src="${BUILD_DIR:-${REPO_ROOT}/build}/native-out"
+  local skip_py_stage=0
 
-  rm -rf "${py_dir}" "${BUNDLE_DIR}/runtime"
+  if [[ "${MERGE_NATIVE}" -eq 1 && -d "${py_dir}" && -f "${py_dir}/api.py" ]]; then
+    skip_py_stage=1
+    log "Keeping existing flash_rt/ (--merge-native matrix cell)"
+  else
+    rm -rf "${py_dir}"
+  fi
+  rm -rf "${BUNDLE_DIR}/runtime"
   if [[ "${MERGE_NATIVE}" -eq 1 ]]; then
     rm -f "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so
   else
@@ -387,8 +395,30 @@ stage_bundle_runtime() {
   [[ "${has_kernels}" -eq 1 ]] || die "${kernels_name} missing (build FlashRT or use --pack-only)"
   [[ "${has_fa2}" -eq 1 ]] || die "${fa2_name} missing (required for Pi0.5 FA2 attention)"
 
-  stage_pi05_flash_rt_minimal "${py_dir}"
-  find "${py_dir}" -name '*.so' -type f -delete 2>/dev/null || true
+  _verify_staged_native_abi() {
+    local name="$1"
+    local so="${lib_dir}/${name}"
+    [[ -f "${so}" ]] || return 0
+    local rc=0 err=""
+    err="$(probe_native_so_python_abi "${py_bin}" "${so}" 2>&1)" || rc=$?
+    if [[ "${rc}" -eq 2 ]]; then
+      die \
+        "${name}: Python ABI mismatch (expected -py${PYTHON_MINOR}, built with another Python). " \
+        "Use matching --python-bin, rm -rf '${BUILD_DIR:-${REPO_ROOT}/build}', rebuild. Detail: ${err}"
+    fi
+    if [[ "${rc}" -ne 0 ]]; then
+      log "WARN: ${name} did not fully import under ${py_bin} (rc=${rc}); continuing (often missing CUDA at build time)"
+    else
+      log "ABI OK: ${name} loads under ${py_bin}"
+    fi
+  }
+  _verify_staged_native_abi "${kernels_name}"
+  _verify_staged_native_abi "${fa2_name}"
+
+  if [[ "${skip_py_stage}" -eq 0 ]]; then
+    stage_pi05_flash_rt_minimal "${py_dir}"
+    find "${py_dir}" -name '*.so' -type f -delete 2>/dev/null || true
+  fi
 
   build_id="${BUILD_ID:-$(date -u +%Y%m%d)-sm${SM}}"
   torch_idx="$(recommended_torch_index)"
@@ -493,8 +523,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -n "${BUNDLE_DIR}" ]] || { usage; die "--bundle-dir is required"; }
-BUNDLE_DIR="$(cd "${BUNDLE_DIR}" && pwd)"
 [[ -f "${BUNDLE_DIR}/flashcli-bundle.json" ]] || die "Missing ${BUNDLE_DIR}/flashcli-bundle.json"
 
 if [[ "${FINALIZE_MATRIX_MANIFEST}" -eq 1 ]]; then

@@ -14,7 +14,7 @@
 #
 # After install, source the env file before building:
 #   source ~/.flashcli/python-matrix.env
-#   bash scripts/build_pi05_release_matrix.sh --cuda-tag 124
+#   bash scripts/build_release_matrix.sh --bundle pi05_libero --cuda-tag 124
 #
 set -euo pipefail
 
@@ -45,7 +45,7 @@ die() { log "ERROR: $*"; exit 1; }
 
 usage() {
   cat <<EOF
-Install Python interpreters for build_pi05_release_matrix.sh.
+Install Python interpreters for build_release_matrix.sh / release_bundle.sh.
 
 Usage:
   sudo bash scripts/install_python_for_matrix.sh [OPTIONS]
@@ -256,7 +256,7 @@ main() {
 
   write_env_file
   log "Ready. One-shot cu124 matrix:"
-  log "  source ${ENV_FILE} && bash scripts/build_pi05_release_matrix.sh --cuda-tag 124"
+  log "  source ${ENV_FILE} && bash scripts/release_bundle.sh --bundle pi05_libero"
 }
 
 main "$@"

@@ -1,24 +1,23 @@
 #!/usr/bin/env bash
-# Build / stage a Qwen model bundle (flash_rt + CUDA kernels) for flashcli serve.
+# Build / stage this bundle (bundles/qwen_nvfp4/_bundle_build.sh).
 #
-# Usage:
-#   bash flashcli/scripts/build_qwen_bundle.sh --bundle-dir flashcli/bundles/qwen_nvfp4
-#   bash flashcli/scripts/build_qwen_bundle.sh --bundle-dir ... --variant qwen3 --repo-root /app/FlashRT
-#   bash flashcli/scripts/build_qwen_bundle.sh --bundle-dir ... --pack-only
+#   bash build.sh --repo-root /app/FlashRT
+#   bash matrix_cell.sh ...          # release matrix
+#   bash finalize_manifest.sh ...
 #
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FLASHCLI_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-# shellcheck source=lib/native_naming.sh
-source "${SCRIPT_DIR}/lib/native_naming.sh"
-# shellcheck source=lib/probe_native_abi.sh
-source "${SCRIPT_DIR}/lib/probe_native_abi.sh"
-GEN_MANIFEST="${SCRIPT_DIR}/generate_runtime_manifest.py"
-BUNDLED_REQUIREMENTS="${SCRIPT_DIR}/requirements/runtime-inference.txt"
+BUNDLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FLASHCLI_ROOT="$(cd "${BUNDLE_DIR}/../.." && pwd)"
+FLASHCLI_SCRIPTS="${FLASHCLI_ROOT}/scripts"
+# shellcheck source=../../scripts/lib/native_naming.sh
+source "${FLASHCLI_SCRIPTS}/lib/native_naming.sh"
+# shellcheck source=../../scripts/lib/probe_native_abi.sh
+source "${FLASHCLI_SCRIPTS}/lib/probe_native_abi.sh"
+GEN_MANIFEST="${FLASHCLI_SCRIPTS}/generate_runtime_manifest.py"
+BUNDLED_REQUIREMENTS="${FLASHCLI_SCRIPTS}/requirements/runtime-inference.txt"
 
 REPO_ROOT=""
-BUNDLE_DIR=""
 OUTPUT_DIR=""
 GIT_REF="main"
 RUNTIME_VERSION="1.0.0"
@@ -73,8 +72,7 @@ Options:
   --finalize-matrix-manifest  After full matrix, scan lib/ and write multi-env manifest
   -h, --help
 
-Note: Qwen NVFP4 requires SM120 + flash_rt_fp4. Release zip: see
-  scripts/build_qwen_release_matrix.sh (cu130 × py310/311/312).
+Note: Qwen NVFP4 requires SM120. Release: bash release.sh or scripts/release_bundle.sh --bundle qwen_nvfp4.
 EOF
 }
 
@@ -560,8 +558,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -n "${BUNDLE_DIR}" ]] || { usage; die "--bundle-dir is required"; }
-BUNDLE_DIR="$(cd "${BUNDLE_DIR}" && pwd)"
 [[ -f "${BUNDLE_DIR}/flashcli-bundle.json" ]] || die "Missing flashcli-bundle.json"
 
 if [[ "${FINALIZE_MATRIX_MANIFEST}" -eq 1 ]]; then
@@ -609,4 +605,4 @@ log "Bundle ready: ${BUNDLE_DIR}"
 log "  flashcli bundle validate ${BUNDLE_DIR}"
 log "  flashcli run qwen3-8b-nvfp4 --bundle ${BUNDLE_DIR} --prompt 'Hello'"
 log "  flashcli serve qwen3-8b-nvfp4 --bundle ${BUNDLE_DIR}"
-log "  Release matrix: bash scripts/build_qwen_release_matrix.sh"
+log "  Release: cd bundles/qwen_nvfp4 && bash release.sh"

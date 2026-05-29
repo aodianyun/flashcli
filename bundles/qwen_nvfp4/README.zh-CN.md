@@ -8,7 +8,7 @@
 
 ```text
 ┌─────────────────────────────────────────────────────────┐
-│  bundle.zip（multi-env：lib/*-sm120-cu130-*-py310|311|312）│
+│  bundle.zip（multi-env：lib/*-sm120-cu124|130-*-py310|311|312）│
 │  flashcli-bundle.json → variants: { qwen3, qwen36 }      │
 │  flash_rt/ + lib/*.so + run.py / serve.py                │
 └─────────────────────────────────────────────────────────┘
@@ -50,25 +50,16 @@ qwen_nvfp4/
 
 ## 发布构建（维护者）
 
-与 [`pi05_libero`](../pi05_libero/README.zh-CN.md) 相同模式：**一个 multi-env zip**，`lib/` 累积 cu130 × py310/311/312。
+与 [`pi05_libero`](../pi05_libero/README.zh-CN.md) 相同：**一个 multi-env zip**（sm120 × cu124/cu130 × py310/311/312）。
 
 ```bash
-cd flashcli
-export FLASHRT_REPO=/path/to/FlashRT
-export CUDA_HOME_CU130=/usr/local/cuda-13.0   # nvcc 13.x
-
-bash scripts/build_qwen_release_matrix.sh --check-only
-bash scripts/build_qwen_release_matrix.sh -j "$(nproc)"   # 或省略 -j（默认 nproc）
-
-flashcli bundle validate bundles/qwen_nvfp4
-
-# lib/ 已齐，仅重打 manifest + zip：
-bash scripts/build_qwen_release_matrix.sh --pack-only
+cd flashcli/bundles/qwen_nvfp4
+bash release.sh --git-ref main --clean
 ```
 
-产物：`bundles/qwen_nvfp4/dist/flashcli-bundle-qwen_nvfp4-main-sm120-multi-linux-x86_64.zip`
+预检（不编译）：`bash ../../scripts/build_release_matrix.sh --bundle qwen_nvfp4 --check-only`
 
-上传 CDN 后核对 [`models.yaml`](../../src/flashcli/catalog/models.yaml) 中两个 preset 的 `bundle.zip` URL。
+产物：`dist/flashcli-bundle-qwen_nvfp4-main-sm120-multi-linux-x86_64.zip` → 上传 CDN → 更新 `models.yaml` 中两个 preset 的 `bundle.zip`。
 
 单格本地开发（当前 Python 一档）：
 

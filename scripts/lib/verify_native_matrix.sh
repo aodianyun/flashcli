@@ -43,3 +43,19 @@ verify_native_matrix_lib() {
     "$(IFS=/; echo "${py_minors[*]}")" "${#modules[@]}" "${expected}" >&2
   return 0
 }
+
+# Verify multiple CUDA lines (e.g. pi05 sm89 × cu124 + cu130).
+verify_native_matrix_multi() {
+  local lib_dir="$1" sm="$2" cuda_tags_csv="$3" os_name="$4" arch="$5" py_minors_csv="$6"
+  shift 6
+  local -a modules=("$@")
+  local cuda
+  for cuda in ${cuda_tags_csv}; do
+    verify_native_matrix_lib "${lib_dir}" "${sm}" "${cuda}" "${os_name}" "${arch}" \
+      "${py_minors_csv}" "${modules[@]}" || return 1
+  done
+  printf '[matrix-verify] OK full matrix sm%s × (%s) × py%s\n' \
+    "${sm}" "$(echo "${cuda_tags_csv}" | tr ' ' /)" \
+    "$(echo "${py_minors_csv}" | tr ' ' /)" >&2
+  return 0
+}

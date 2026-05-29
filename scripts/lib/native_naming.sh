@@ -46,8 +46,9 @@ pick_built_native_so() {
     fi
   done
   if [[ ${#matches[@]} -eq 1 ]]; then
-    printf '%s\n' "${matches[0]}"
-    return 0
+    printf '[native-stage] ERROR: only one %s*.so in %s but ABI mismatch (need %s, got %s)\n' \
+      "${module_base}" "${src_dir}" "${needle}" "$(basename "${matches[0]}")" >&2
+    return 1
   fi
   printf '[native-stage] ERROR: %d %s*.so in %s, none match Python %s (%s)\n' \
     "${#matches[@]}" "${module_base}" "${src_dir}" "${py_minor}" "${needle}" >&2

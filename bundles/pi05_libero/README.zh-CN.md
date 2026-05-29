@@ -28,33 +28,25 @@ pip install flashcli
 flashcli run pi05_libero --prompt "..." --image /path/to/base.jpg
 ```
 
-## 维护者：组装 bundle
+## 维护者：发布 bundle
 
-**Linux + NVIDIA GPU**（SM89 或 SM120）：
+**推荐（一键，自动拉 FlashRT + 双 Docker 编矩阵 + 打包）：**
 
 ```bash
 cd flashcli/bundles/pi05_libero
-bash build.sh --repo-root /path/to/FlashRT
-bash pack.sh --sm 89                    # 仅打开发布 zip（cuda 标签由 nvcc 自动检测，通常为 cu124）
+bash release.sh --git-ref main --clean
 ```
 
-发布后在 `src/flashcli/catalog/models.yaml` 登记矩阵 zip URL，例如：
+产物：`dist/flashcli-bundle-pi05-main-sm89-multi-linux-x86_64.zip`
 
-```yaml
-bundle:
-  zip: https://cdn.../flashcli-bundle-pi05-main-sm89-multi-linux-x86_64.zip
-```
-
-构建多环境 `lib/` 见 [docs/runtime-matrix.zh-CN.md](../../docs/runtime-matrix.zh-CN.md)。
-
-`build.sh` 仅打入 Pi0.5 RTX 路径需要的 `flash_rt/` 子树，并只复制 `flash_rt_kernels.so`、`flash_rt_fa2.so`。
-
-**不需要** `requirements-runtime.txt`：pip 依赖已在 `flashcli-bundle.json` 的 `python_dependencies` 中，该 txt 仅为旧版冗余副本，发布 zip 请勿包含。
+**本地单环境开发**（不跑完整矩阵）：
 
 ```bash
-flashcli bundle validate "$(pwd)/bundles/pi05_libero"
-flashcli run pi05_libero --bundle "$(pwd)/bundles/pi05_libero" --image /path/to/base.jpg
+bash build.sh --repo-root /path/to/FlashRT
+flashcli bundle validate .
 ```
+
+矩阵维度见 `release-matrix.env`（sm89 × cu124/cu130 × py310/311/312）。细节：[docs/runtime-matrix.zh-CN.md](../../docs/runtime-matrix.zh-CN.md)、[scripts/lib/bundle_hooks.sh](../../scripts/lib/bundle_hooks.sh)。
 
 ## 排错
 

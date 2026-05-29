@@ -1,8 +1,7 @@
 # flashcli 模型目录 — 每 preset 一个 bundle zip；运行时从 lib/*.so 按环境选择
 #
-# 构建：pi05 → scripts/build_pi05_release_matrix.sh
-#        qwen → scripts/build_qwen_release_matrix.sh (SM120 × cu130)
-# 文档：docs/runtime-matrix.zh-CN.md
+# 构建：bash scripts/release_bundle.sh --bundle <name>  或  bundles/<name>/release.sh
+# 文档：docs/runtime-matrix.zh-CN.md、scripts/lib/bundle_hooks.sh
 
 schema_version: 6
 
