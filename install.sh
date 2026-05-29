@@ -18,6 +18,7 @@
 #   FLASHCLI_PIP_USER=auto|0|1
 #   FLASHCLI_QUIET=1
 #   FLASHCLI_NO_REPAIR=1          skip one automatic pip repair retry
+#   FLASHCLI_STRICT_PIP_CHECK=1   fail on any pip check conflict (default: flashcli-only)
 #   FLASHCLI_AUTO_INSTALL_PYTHON=1  (root) try apt/dnf/apk to install python3+pip+git
 #   FLASHCLI_BREAK_SYSTEM_PACKAGES=1  pass pip --break-system-packages (PEP 668 images)
 #   FLASHCLI_USE_VENV=1             install into ~/.flashcli/venv (bypass PEP 668)
@@ -998,6 +999,74 @@ def pip_install(*specs: str) -> bool:
     return True
 
 
+def nvidia_dali_installed() -> bool:
+    try:
+        from importlib.metadata import distributions
+    except ImportError:
+        return False
+    for dist in distributions():
+        name = (dist.metadata.get("Name") or dist.name or "").lower()
+        if name.startswith("nvidia-dali"):
+            return True
+    return False
+
+
+def packaging_spec_for_env() -> str:
+    """flashcli needs packaging>=23.0; NVIDIA DALI images often pin packaging<=25.0."""
+    if nvidia_dali_installed():
+        return "packaging>=23.0,<=25.0"
+    return "packaging>=23.0"
+
+
+def reconcile_packaging_with_nvidia_stack() -> None:
+    if not nvidia_dali_installed():
+        return
+    print(
+        "[info] NVIDIA DALI detected — aligning packaging with flashcli and DALI (>=23.0,<=25.0)",
+        file=sys.stderr,
+    )
+    pip_install(packaging_spec_for_env())
+
+
+def check_pip_conflicts() -> None:
+    chk = subprocess.run(
+        [sys.executable, "-m", "pip", "check"],
+        capture_output=True,
+        text=True,
+    )
+    if chk.returncode == 0:
+        print("[ok] pip check", file=sys.stderr)
+        return
+
+    text = ((chk.stdout or "") + (chk.stderr or "")).strip()
+    strict = os.environ.get("FLASHCLI_STRICT_PIP_CHECK", "0") == "1"
+    if strict:
+        err(f"pip check:\n{text}")
+        return
+
+    flashcli_issues: list[str] = []
+    other_issues: list[str] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        pkg = line.split()[0].lower().replace("_", "-") if line.split() else ""
+        if pkg == "flashcli":
+            flashcli_issues.append(line)
+        else:
+            other_issues.append(line)
+
+    if flashcli_issues:
+        err("pip check (flashcli):\n" + "\n".join(flashcli_issues))
+    if other_issues:
+        print(
+            "[warn] pip check: other packages in this environment (flashcli install is ok):",
+            file=sys.stderr,
+        )
+        for line in other_issues:
+            print(f"[warn]   {line}", file=sys.stderr)
+
+
 def check_import(name: str) -> None:
     mod = IMPORT_NAMES.get(name.lower(), name.lower().replace("-", "_"))
     try:
@@ -1074,9 +1143,8 @@ def collect_errors() -> list[str]:
     except Exception as exc:
         err(f"flashcli.cli import failed: {exc}")
 
-    chk = subprocess.run([sys.executable, "-m", "pip", "check"], capture_output=True, text=True)
-    if chk.returncode != 0:
-        err(f"pip check:\n{(chk.stdout or '') + (chk.stderr or '')}".strip())
+    reconcile_packaging_with_nvidia_stack()
+    check_pip_conflicts()
 
     import shutil as _shutil
 
@@ -1106,7 +1174,14 @@ def collect_errors() -> list[str]:
 
 def repair_once() -> None:
     # Re-install canonical [project] deps from embedded list + flashcli
-    specs = [s for s in CANONICAL_DEPS if s]
+    specs = []
+    for s in CANONICAL_DEPS:
+        if not s:
+            continue
+        if s.startswith("packaging"):
+            specs.append(packaging_spec_for_env())
+        else:
+            specs.append(s)
     if sys.version_info < (3, 11):
         specs.append("tomli>=2.0")
     repo = os.environ.get("FLASHCLI_INSTALL_REPO", "")
