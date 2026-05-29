@@ -3,6 +3,7 @@
 #
 # Goals:
 #   1. Pre-flight: make the host as ready as possible for pyproject.toml [project]
+#      (incl. zip/rsync for bundle zip workflows)
 #   2. Install flashcli (+ deps incl. huggingface_hub → hf CLI) for root/venv/user
 #   3. Post-flight: verify imports, flashcli/hf on PATH, pip check; auto-repair once
 #   4. Exit 1 with actionable errors if requirements still cannot be met
@@ -357,22 +358,22 @@ try_auto_install_python() {
     warn "FLASHCLI_AUTO_INSTALL_PYTHON=1 requires root; skipping OS package install"
     return 1
   fi
-  info "Attempting OS package install for python3 + pip + git (FLASHCLI_AUTO_INSTALL_PYTHON=1) ..."
+  info "Attempting OS package install for python3 + pip + git + zip + rsync (FLASHCLI_AUTO_INSTALL_PYTHON=1) ..."
   if have_cmd apt-get; then
-    apt-get update -qq && apt-get install -y python3 python3-pip python3-venv git \
+    apt-get update -qq && apt-get install -y python3 python3-pip python3-venv git zip rsync \
       && return 0
   fi
   if have_cmd dnf; then
-    dnf install -y python3 python3-pip git && return 0
+    dnf install -y python3 python3-pip git zip rsync && return 0
   fi
   if have_cmd yum; then
-    yum install -y python3 python3-pip git && return 0
+    yum install -y python3 python3-pip git zip rsync && return 0
   fi
   if have_cmd apk; then
-    apk add --no-cache python3 py3-pip git && return 0
+    apk add --no-cache python3 py3-pip git zip rsync && return 0
   fi
   if have_cmd zypper; then
-    zypper --non-interactive install python3 python3-pip git && return 0
+    zypper --non-interactive install python3 python3-pip git zip rsync && return 0
   fi
   return 1
 }
@@ -670,6 +671,88 @@ check_git() {
   info "[ok] git: $(git --version 2>/dev/null | head -n 1)"
 }
 
+# Install OS packages when running as root (best-effort across common distros).
+install_os_packages() {
+  [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ] || return 1
+  [ $# -gt 0 ] || return 1
+  if have_cmd apt-get; then
+    info "Installing OS packages via apt: $*"
+    apt-get update -qq && apt-get install -y "$@" && return 0
+  fi
+  if have_cmd dnf; then
+    info "Installing OS packages via dnf: $*"
+    dnf install -y "$@" && return 0
+  fi
+  if have_cmd yum; then
+    info "Installing OS packages via yum: $*"
+    yum install -y "$@" && return 0
+  fi
+  if have_cmd apk; then
+    info "Installing OS packages via apk: $*"
+    apk add --no-cache "$@" && return 0
+  fi
+  if have_cmd zypper; then
+    info "Installing OS packages via zypper: $*"
+    zypper --non-interactive install "$@" && return 0
+  fi
+  return 1
+}
+
+die_missing_host_tool() {
+  _cmd="$1"
+  _pkg="${2:-$_cmd}"
+  printf '%s\n' "error: ${_cmd} not found — required for flashcli bundle zip workflows." >&2
+  printf '%s\n' "error: Install ${_pkg}, then re-run. Examples:" >&2
+  printf '%s\n' "error:   Debian/Ubuntu: apt install -y ${_pkg}" >&2
+  printf '%s\n' "error:   RHEL/Fedora:   dnf install -y ${_pkg}" >&2
+  printf '%s\n' "error:   Alpine:        apk add ${_pkg}" >&2
+  if [ "$(id -u 2>/dev/null || echo 1)" -ne 0 ]; then
+    printf '%s\n' "error: Or re-run as root so install.sh can install OS packages automatically." >&2
+  fi
+  exit 1
+}
+
+# Ensure a host CLI exists; auto-install OS package when root.
+ensure_host_tool() {
+  _cmd="$1"
+  _pkg="${2:-$_cmd}"
+  if have_cmd "$_cmd"; then
+    case "$_cmd" in
+      zip)
+        info "[ok] zip: $(zip -v 2>/dev/null | head -n 1 || command -v zip)"
+        ;;
+      rsync)
+        info "[ok] rsync: $(rsync --version 2>/dev/null | head -n 1 || command -v rsync)"
+        ;;
+      *)
+        info "[ok] $_cmd: $(command -v "$_cmd")"
+        ;;
+    esac
+    return 0
+  fi
+  warn "$_cmd not found — attempting OS package install ($_pkg) ..."
+  if install_os_packages "$_pkg" && have_cmd "$_cmd"; then
+    case "$_cmd" in
+      zip)
+        info "[ok] zip: $(zip -v 2>/dev/null | head -n 1 || command -v zip) (installed)"
+        ;;
+      rsync)
+        info "[ok] rsync: $(rsync --version 2>/dev/null | head -n 1 || command -v rsync) (installed)"
+        ;;
+      *)
+        info "[ok] $_cmd: $(command -v "$_cmd") (installed)"
+        ;;
+    esac
+    return 0
+  fi
+  die_missing_host_tool "$_cmd" "$_pkg"
+}
+
+ensure_zip_rsync() {
+  ensure_host_tool zip zip
+  ensure_host_tool rsync rsync
+}
+
 check_network() {
   if ! have_cmd git; then
     return 0
@@ -831,6 +914,7 @@ run_preflight() {
   preflight_pyproject
   ensure_build_deps
   check_git
+  ensure_zip_rsync
   check_network
   check_install_target
 }
