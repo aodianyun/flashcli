@@ -8,53 +8,23 @@
 
 - **Linux** + **NVIDIA GPU**（**SM89 / SM120**：Pi0.5；**SM120**：Qwen NVFP4，如 RTX PRO 5000 Blackwell）
 - **Python ≥ 3.10**（见 [`pyproject.toml`](pyproject.toml)）；`install.sh` 会安装 **flashcli** 与 **`huggingface_hub`**（提供 `hf download` / `huggingface-cli download`）
-- **网络**：首次运行从 CDN 拉 runtime zip；权重经 Hub CLI 下载（与 `HF_ENDPOINT` + `hf download` 相同）。国内/内网建议 `export HF_ENDPOINT=https://hf-mirror.com`。Pi0.5 还需 Google Storage（PaliGemma tokenizer）
+- **网络**：首次运行从 CDN 拉 runtime zip；权重经 Hub CLI 下载。受限网络请用下方 **Gitee 安装脚本 + `--mirror`**，并 `export HF_ENDPOINT=https://hf-mirror.com`。Pi0.5 还需 Google Storage（PaliGemma tokenizer）
+- **容器**：需 NVIDIA CUDA 运行时镜像（如 `nvcr.io/nvidia/pytorch:24.05-py3`），勿用纯 `python:3.x` 镜像；`nvidia-smi` 正常不代表已有 `/usr/local/cuda`
 
 ## 快速开始
 
-一键安装（检测 Linux / NVIDIA GPU / Python 3.10+ / git，再通过 pip 安装）：
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
-# 受限网络（镜像 PyPI + HF）：
-# curl -fsSL …/install.sh | sh -s -- --mirror
-# 强制官方端点（不走镜像）：
-# curl -fsSL …/install.sh | sh -s -- --global
-# 快捷切到 Gitee 默认仓库：
-# curl -fsSL …/install.sh | sh -s -- --gitee --ref main
-# 指定分支 / 源码地址（如 Gitee）：
-# curl -fsSL …/install.sh | sh -s -- --repo https://gitee.com/your-org/flashcli.git --ref main
-```
 
-也可将 `install.sh` 托管为 `https://your-domain/install` 后执行 `curl -fsSL https://your-domain/install | sh`。可选参数：`--mirror`（国内镜像：pip / HF；官方仓库默认走 **Gitee** 克隆；**root** 时改写 apt/yum/dnf/apk 为阿里云）、`--global` / `--no-mirror`、`--gitee`、`--github`、`--ref` / `--branch`、`--repo` / `--git-url`。`--mirror` 时官方仓库自动切 Gitee，避免 `ghproxy` 卡死。脚本优先选用已带 pip 的 Python 3.10–3.12。环境变量：`FLASHCLI_USE_MIRROR=1`、`FLASHCLI_OS_MIRROR=0`、`FLASHCLI_GIT_PROXY`（显式 GitHub 代理）、`FLASHCLI_GIT_TIMEOUT=25`、`FLASHCLI_SKIP_GPU_CHECK=1`、`FLASHCLI_PYTHON`、`FLASHCLI_USE_VENV=1`、`FLASHCLI_BREAK_SYSTEM_PACKAGES=1`、`FLASHCLI_AUTO_INSTALL_PYTHON=1`。**root** 默认系统级安装到 `/usr/local/bin`。
-
-或手动安装：
-
-```bash
-pip install git+https://github.com/aodianyun/flashcli.git
-# pip install --force-reinstall git+https://github.com/aodianyun/flashcli.git
+# 受限网络**（Gitee 安装脚本 + pip/HF 镜像）：
+# curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
 
 flashcli run pi05_libero \
   --prompt "pick up the red block and place it in the tray" \
   --image /path/to/base.jpg
 ```
 
-首次 `run` 会自动：安装 CLI 依赖 → 按本机 GPU 环境解析 `models.yaml` 中的 bundle 源并下载/解压 → 按 `flashcli-bundle.json` 的 `python_dependencies` 安装 torch 等 → 下载 HF 权重 → `post_pull`（PaliGemma tokenizer）→ 加载 bundle `entry`（如 `run.RunEngine`）推理。
-
-预拉权重（可选）：
-
-```bash
-flashcli pull pi05_libero
-```
-
-调试本地已组装的 bundle：
-
-```bash
-flashcli run pi05_libero \
-  --bundle /path/to/bundle \
-  --checkpoint /path/to/ckpt \
-  --image /path/to/base.jpg
-```
+首次 `run` 会自动拉 bundle、安装依赖并下载权重。安装参数与环境变量见 [docs/environment.zh-CN.md](docs/environment.zh-CN.md)。
 
 ## 当前 catalog
 

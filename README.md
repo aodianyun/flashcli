@@ -8,49 +8,25 @@
 
 - **Linux** + **NVIDIA GPU** (verified on **SM89**, e.g. RTX 4090 / L40; bundle metadata also lists SM120)
 - **Python ≥ 3.10** (see [`pyproject.toml`](pyproject.toml)); `install.sh` installs **flashcli** and **`huggingface_hub`** (provides `hf download` / `huggingface-cli download`)
-- **Network**: first run pulls a runtime zip from CDN; weights download via Hub CLI (same as `HF_ENDPOINT` + `hf download`). For restricted networks: `export HF_ENDPOINT=https://hf-mirror.com`. Pi0.5 also needs Google Storage (PaliGemma tokenizer)
+- **Network**: first run pulls a runtime zip from CDN; weights download via Hub CLI. For restricted networks use the **Gitee install script + `--mirror`** below and `export HF_ENDPOINT=https://hf-mirror.com`. Pi0.5 also needs Google Storage (PaliGemma tokenizer)
+- **Containers**: use an NVIDIA CUDA runtime image (e.g. `nvcr.io/nvidia/pytorch:24.05-py3`), not plain `python:3.x`; `nvidia-smi` working does not imply `/usr/local/cuda` is present
 
 ## Quick start
 
-One-line install (checks Linux, NVIDIA GPU, Python 3.10+, git; then pip installs flashcli):
+**Restricted network** (Gitee install script + pip/HF mirrors):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
-# Mirror endpoints: curl -fsSL …/install.sh | sh -s -- --mirror
-# Force official endpoints: curl -fsSL …/install.sh | sh -s -- --global
-# Use default Gitee repo: curl -fsSL …/install.sh | sh -s -- --gitee --ref main
-# Other git remote: curl -fsSL …/install.sh | sh -s -- --repo https://gitee.com/org/flashcli.git --ref main
-```
 
-You can also host `install.sh` as `https://your-domain/install` and run `curl -fsSL https://your-domain/install | sh`. Options: `--mirror`, `--global` / `--no-mirror`, `--ref` / `--branch`, `--repo` / `--git-url`, `--gitee`, `--github`. Env: `FLASHCLI_INSTALL_REPO`, `FLASHCLI_INSTALL_REF`, `FLASHCLI_USE_MIRROR=1`, `FLASHCLI_SKIP_GPU_CHECK=1`. Default install is **main** from GitHub. As **root**, the installer uses a system-wide pip install (e.g. `/usr/local/bin`) so `flashcli` is on PATH without `~/.local/bin`.
-
-Or install manually:
-
-```bash
-pip install git+https://github.com/aodianyun/flashcli
-# pip install --force-reinstall git+https://github.com/aodianyun/flashcli.git
+# Restricted network** (Gitee install script + pip/HF mirrors):
+# curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
 
 flashcli run pi05_libero \
   --prompt "pick up the red block and place it in the tray" \
   --image /path/to/base.jpg
 ```
 
-On first `run`, flashcli automatically: installs CLI deps → resolves the bundle source from `models.yaml` for this GPU → downloads and unpacks the **runtime bundle** → installs torch etc. per `flashcli-bundle.json` `python_dependencies` → downloads HF weights → `post_pull` (PaliGemma tokenizer) → loads bundle `entry` (e.g. `run.RunEngine`) for inference.
-
-Pre-fetch weights (optional):
-
-```bash
-flashcli pull pi05_libero
-```
-
-Debug a locally assembled bundle:
-
-```bash
-flashcli run pi05_libero \
-  --bundle /path/to/bundle \
-  --checkpoint /path/to/ckpt \
-  --image /path/to/base.jpg
-```
+First `run` fetches the bundle, installs deps, and downloads weights. See [docs/environment.md](docs/environment.md) for install flags and env vars.
 
 ## Current catalog
 

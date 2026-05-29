@@ -1,5 +1,10 @@
 #!/bin/sh
-# flashcli installer — curl -fsSL …/install.sh | sh
+# flashcli installer
+#
+# Examples (restricted network — Gitee + mirror):
+#   curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
+# Open network (GitHub):
+#   curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
 #
 # Goals:
 #   1. Pre-flight: make the host as ready as possible for pyproject.toml [project]
@@ -24,12 +29,6 @@
 #   FLASHCLI_AUTO_INSTALL_PYTHON=1  (root) try apt/dnf/apk to install python3+pip+git
 #   FLASHCLI_BREAK_SYSTEM_PACKAGES=1  pass pip --break-system-packages (PEP 668 images)
 #   FLASHCLI_USE_VENV=1             install into ~/.flashcli/venv (bypass PEP 668)
-#
-# Examples:
-#   curl -fsSL …/install.sh | sh
-#   curl -fsSL …/install.sh | sh -s -- --ref feature/foo
-#   curl -fsSL …/install.sh | sh -s -- --mirror
-#   curl -fsSL …/install.sh | sh -s -- --repo https://gitee.com/org/flashcli.git --ref main
 
 set -eu
 
@@ -77,7 +76,8 @@ flashcli install.sh — install flashcli from git (default: main @ GitHub).
 
 Usage:
   ./install.sh [OPTIONS]
-  curl -fsSL …/install.sh | sh -s -- [OPTIONS]
+  curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- [OPTIONS]
+  curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh -s -- [OPTIONS]
 
 Options:
   -h, --help              Show this help
@@ -98,14 +98,15 @@ Environment (override flags):
   PIP_INDEX_URL, HF_ENDPOINT  Override mirror defaults
 
 Examples:
-  ./install.sh
+  curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
+  curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
   ./install.sh --mirror
   ./install.sh --global
   ./install.sh --ref develop
-  ./install.sh --mirror --ref v0.2.0
+  ./install.sh --mirror --ref main
   ./install.sh --gitee --ref main
-  ./install.sh --repo https://gitee.com/your-org/flashcli.git --ref main
-  FLASHCLI_USE_MIRROR=1 ./install.sh --repo https://gitee.com/your-org/flashcli.git
+  ./install.sh --repo https://gitee.com/aodiansoft/flashcli.git --ref main
+  FLASHCLI_USE_MIRROR=1 ./install.sh --repo https://gitee.com/aodiansoft/flashcli.git
 EOF
 }
 
