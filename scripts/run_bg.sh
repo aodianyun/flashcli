@@ -14,6 +14,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FLASHCLI_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# shellcheck source=lib/release_docker_state.sh
+source "${SCRIPT_DIR}/lib/release_docker_state.sh"
 
 NAME=""
 LOG_DIR="${FLASHCLI_ROOT}/logs"
@@ -131,6 +133,7 @@ cmd_supervisor_internal() {
     if (( child_pid != 0 )) && is_running "${child_pid}"; then
       kill_process_tree "${child_pid}" TERM
     fi
+    release_docker_stop_all "${FLASHCLI_ROOT}"
     exit 143
   }
   trap _supervisor_cleanup TERM INT
@@ -352,13 +355,16 @@ cmd_stop() {
 
   pid="$(tr -d '[:space:]' < "${pf}")"
   if ! is_running "${pid}"; then
-    log "Job '${NAME}' not running (pid ${pid})"
+    log "Job '${NAME}' not running (pid ${pid}); cleaning up release containers"
+    release_docker_stop_all "${FLASHCLI_ROOT}"
     rm -f "${pf}" "${stop_path}"
     exit 0
   fi
 
   log "Stopping '${NAME}' (supervisor pid ${pid})..."
   : > "${stop_path}"
+
+  release_docker_stop_all "${FLASHCLI_ROOT}"
 
   local worker_pgid worker_pid
   worker_pid="$(read_meta WORKER_PID 2>/dev/null || true)"
@@ -389,6 +395,8 @@ cmd_stop() {
       sleep 0.5
     done
   fi
+
+  release_docker_stop_all "${FLASHCLI_ROOT}"
 
   rm -f "${pf}" "${stop_path}"
   log "Stopped '${NAME}'"

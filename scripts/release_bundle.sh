@@ -21,6 +21,8 @@ source "${SCRIPT_DIR}/lib/ensure_flashrt_repo.sh"
 source "${SCRIPT_DIR}/lib/load_release_matrix.sh"
 # shellcheck source=lib/bundle_hooks.sh
 source "${SCRIPT_DIR}/lib/bundle_hooks.sh"
+# shellcheck source=lib/release_docker_state.sh
+source "${SCRIPT_DIR}/lib/release_docker_state.sh"
 
 _BUILTIN_FLASHRT_GIT_URL="https://github.com/LiangSu8899/FlashRT.git"
 _BUILTIN_FLASHRT_REF="main"
@@ -75,12 +77,12 @@ cleanup_on_interrupt() {
 
   if [[ -n "${ACTIVE_DOCKER_CONTAINER}" ]]; then
     log "Stopping Docker container ${ACTIVE_DOCKER_CONTAINER}..."
-    docker stop -t 5 "${ACTIVE_DOCKER_CONTAINER}" 2>/dev/null \
-      || docker kill "${ACTIVE_DOCKER_CONTAINER}" 2>/dev/null \
-      || true
-    docker rm -f "${ACTIVE_DOCKER_CONTAINER}" 2>/dev/null || true
+    release_docker_stop_container "${ACTIVE_DOCKER_CONTAINER}"
+    release_docker_state_unregister "${ACTIVE_DOCKER_CONTAINER}"
     ACTIVE_DOCKER_CONTAINER=""
   fi
+
+  release_docker_stop_all "${FLASHCLI_ROOT}"
 
   if [[ -n "${NATIVE_PID}" ]] && kill -0 "${NATIVE_PID}" 2>/dev/null; then
     log "Stopping native build (pid ${NATIVE_PID})..."
@@ -268,6 +270,7 @@ run_docker_cuda_line() {
   fi
 
   ACTIVE_DOCKER_CONTAINER="${container}"
+  release_docker_state_register "${container}"
 
   docker logs -f "${container}" 2>&1 &
   logs_pid=$!
@@ -284,6 +287,7 @@ run_docker_cuda_line() {
   kill "${logs_pid}" 2>/dev/null || true
   wait "${logs_pid}" 2>/dev/null || true
   ACTIVE_DOCKER_LOGS_PID=""
+  release_docker_state_unregister "${container}"
   ACTIVE_DOCKER_CONTAINER=""
 
   [[ "${ec}" -eq 0 ]] || die "Docker cu${cuda} build failed (exit ${ec})"
