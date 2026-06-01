@@ -92,6 +92,8 @@
         "device": "cuda:0",
         "max_seq": 262208,
         "K": 4,
+        "default_max_tokens": 2048,
+        "max_output_tokens": 16384,
         "warmup_preset": "agent",
         "warmup": "16:128,128:128",
         "model_name": "qwen3.6-27b-nvfp4"

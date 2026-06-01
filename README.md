@@ -2,106 +2,221 @@
 
 <p align="right"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
 
-**Distribution CLI** for [FlashRT](https://github.com/flashrt-ai/FlashRT): one command to fetch a Model Bundle, install runtime dependencies, download weights, and run inference.
+**Production CLI for shipping [FlashRT](https://github.com/flashrt-ai/FlashRT) inference to NVIDIA GPUs.**
 
-## Requirements
-
-- **Linux** + **NVIDIA GPU** (verified on **SM89**, e.g. RTX 4090 / L40; bundle metadata also lists SM120)
-- **Python ≥ 3.10** (see [`pyproject.toml`](pyproject.toml)); `install.sh` installs **flashcli** and **`huggingface_hub`** (provides `hf download` / `huggingface-cli download`)
-- **Network**: first run pulls a runtime zip from CDN; weights download via Hub CLI. For restricted networks use the **Gitee install script + `--mirror`** below and `export HF_ENDPOINT=https://hf-mirror.com`. Pi0.5 also needs Google Storage (PaliGemma tokenizer)
-- **Containers**: use an NVIDIA CUDA runtime image (e.g. `nvcr.io/nvidia/pytorch:24.05-py3`), not plain `python:3.x`; `nvidia-smi` working does not imply `/usr/local/cuda` is present
-
-## Quick start
-
-**Restricted network** (Gitee install script + pip/HF mirrors):
+One install, one preset name — flashcli resolves the right native runtime for your GPU, fetches a versioned **Model Bundle**, installs Python dependencies, caches Hugging Face weights, and runs **`run`** (engine) or **`serve`** (OpenAI-compatible HTTP) without hand-wiring FlashRT, CUDA tags, or pip matrices.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
+flashcli run pi05_libero --prompt "pick up the red block" --image /path/to/scene.jpg
+```
 
-# Restricted network (Gitee install script + pip/HF mirrors):
-# curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
+---
 
+## Overview
+
+| Layer | Role |
+|-------|------|
+| **flashcli** | Distribution CLI — catalog, bundle fetch, env detection, deps, cache, HTTP gateway |
+| **Model Bundle** | Versioned artifact (`flashcli-bundle.json` + `lib/*.so` + Python entry) shipped per model family |
+| **FlashRT** | Kernels and model frontends compiled into the bundle; not a pip dependency of flashcli |
+
+flashcli is intentionally thin: **inference code lives in the bundle**. The CLI activates the bundle on `PYTHONPATH`, selects the matching row from the bundle’s native matrix (`sm*-cu*-linux-x86_64-py*`), and delegates to each bundle’s `RunEngine` / `ServeEngine`.
+
+---
+
+## Why flashcli
+
+- **One command to first token** — `flashcli run <preset>` chains dependency install, CDN bundle download, weight pull, and inference.
+- **Environment-aware native selection** — multi-ABI zips (`lib/flash_rt_kernels-*-py310.so`, …); no manual `.so` picking. Use `flashcli models envs` to see what matches this host.
+- **Reproducible releases** — maintainers build matrix zips once; users consume pinned CDN URLs from [`models.yaml`](src/flashcli/catalog/models.yaml).
+- **OpenAI-compatible serving** — Qwen NVFP4 presets expose `/v1/chat/completions`, streaming, tools, and session reuse via FlashRT `qwen36_agent`.
+- **Operator-friendly** — structured serve logs, `/health` with `inference_busy`, GPU batch-1 gate (503 when busy), `doctor` for preflight checks.
+- **Mirror-friendly** — Gitee install script, pip/HF mirror env vars; works in restricted networks with documented fallbacks.
+
+---
+
+## Supported models & hardware
+
+| Preset | Task | GPU | CUDA line | Python | Capabilities |
+|--------|------|-----|-----------|--------|--------------|
+| [`pi05_libero`](bundles/pi05_libero/QUICKSTART.md) | Pi0.5 LIBERO VLA | SM89 / SM120 | cu124 or **cu130** (SM120) | 3.10–3.12 | `run` |
+| [`qwen3-8b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3-8B NVFP4 chat | **SM120** | **cu130 only** | 3.10–3.12 | `run`, `serve` |
+| [`qwen36-27b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **cu130 only** | 3.10–3.12 | `run`, `serve` |
+
+**Platform requirements**
+
+- Linux x86_64, NVIDIA driver with working `nvidia-smi`
+- **Containers**: NVIDIA CUDA runtime images (e.g. `nvcr.io/nvidia/pytorch:25.10-py3` for Qwen SM120), not plain `python:3.x`
+- **Network**: CDN bundle zip + Hugging Face weights on first run (Pi0.5 also needs Google Storage for PaliGemma tokenizer)
+
+Qwen3 and Qwen3.6 share **one** runtime zip; catalog `bundle_variant` selects weights. Weights are **never** inside the zip — cached under `~/.flashcli/models/<preset>/`.
+
+---
+
+## News
+
+| Month | What's new |
+|-------|------------|
+| **2026-06** | Production-grade **Qwen3.6 chat serving** — faster real-world replies (early stop on end-of-text), true streaming, longer outputs, and a lighter install path for HTTP + inference |
+| **2026-05** | **Qwen NVFP4 on Blackwell (SM120)** joins the catalog with one-command `run` and OpenAI-compatible `serve`; Pi0.5 gains SM120 coverage; reproducible multi-GPU release bundles |
+
+Full history: `git log`. Release checklist: [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
+## Getting started
+
+### 1. Install
+
+**Global network**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
+```
+
+**Restricted network** (Gitee script + mirrors)
+
+```bash
+curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
+export HF_ENDPOINT=https://hf-mirror.com   # before pull/run
+```
+
+**From source (developers)**
+
+```bash
+git clone https://github.com/aodianyun/flashcli.git && cd flashcli
+pip install -e .
+```
+
+### 2. Preflight
+
+```bash
+flashcli doctor
+flashcli models list
+flashcli models envs pi05_libero    # or qwen3-8b-nvfp4 / qwen36-27b-nvfp4
+```
+
+### 3. First inference — robotics (Pi0.5)
+
+```bash
 flashcli run pi05_libero \
   --prompt "pick up the red block and place it in the tray" \
   --image /path/to/base.jpg
 ```
 
-First `run` fetches the bundle, installs deps, and downloads weights. See [docs/environment.md](docs/environment.md) for install flags and env vars.
+First run downloads the runtime zip (~bundle size), installs torch stack, and pulls ~7.5GB weights.
 
-## Current catalog
+### 4. LLM — Qwen NVFP4
 
-| Preset | Capability | Runtime | Weights |
-|--------|------------|---------|---------|
-| `pi05_libero` | `run` | CDN zip (SM89 × cu124/cu130 × py310/311/312) | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) |
-| `qwen3-8b-nvfp4` | `run`, `serve` | Same CDN zip as qwen36 (SM120 × cu130 × py310/311/312) | [kaitchup/Qwen3-8B-NVFP4](https://huggingface.co/kaitchup/Qwen3-8B-NVFP4) |
-| `qwen36-27b-nvfp4` | `run`, `serve` | Same zip | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4) + MTP |
-
-`models.yaml` only registers **preset names** and **one bundle source per preset** (`zip`/`path`/`git`). Multi-env native runtimes ship inside that zip’s `lib/` matrix. `weights`, `entry`, `defaults`, etc. live in each bundle’s [`flashcli-bundle.json`](docs/model_bundle_standard.md).
-
-Check which environment matches this machine:
+**Engine (no HTTP)**
 
 ```bash
-flashcli models envs pi05_libero
+flashcli run qwen3-8b-nvfp4 --prompt "Hello" --max-tokens 128
+flashcli run qwen36-27b-nvfp4 --prompt "Hello" --max-tokens 128 --K 6
 ```
 
-## Local cache
+**OpenAI-compatible server**
+
+```bash
+# qwen3-8b — short context
+flashcli serve qwen3-8b-nvfp4 --host 0.0.0.0 --port 8000 \
+  --max-seq 2048 --max-q-seq 1024 --warmup-preset auto
+
+# qwen3.6-27b — long context + MTP (defaults: FP8-KV, route_min_seq=0)
+flashcli serve qwen36-27b-nvfp4 --host 0.0.0.0 --port 8000 \
+  --K 6 --max-seq 262208 --warmup-preset auto
+```
+
+```bash
+curl -N http://127.0.0.1:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"qwen3.6-27b-nvfp4","messages":[{"role":"user","content":"Hello"}],
+       "max_tokens":512,"stream":true,"temperature":0}'
+```
+
+**Local dev bundle** (rebuilt from FlashRT, not CDN):
+
+```bash
+export BUNDLE="$(pwd)/bundles/qwen_nvfp4"
+bash bundles/qwen_nvfp4/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
+flashcli serve qwen36-27b-nvfp4 --bundle "$BUNDLE" --port 8000 --K 6 --max-seq 262208
+```
+
+Step-by-step per bundle: **[qwen_nvfp4 QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md)** · **[pi05_libero QUICKSTART](bundles/pi05_libero/QUICKSTART.md)**
+
+---
+
+## Model catalog
+
+| Preset | Weights (Hugging Face) | Bundle quickstart |
+|--------|------------------------|-------------------|
+| `pi05_libero` | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) | [QUICKSTART](bundles/pi05_libero/QUICKSTART.md) |
+| `qwen3-8b-nvfp4` | [kaitchup/Qwen3-8B-NVFP4](https://huggingface.co/kaitchup/Qwen3-8B-NVFP4) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md) |
+| `qwen36-27b-nvfp4` | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4) + [MTP](https://huggingface.co/Qwen/Qwen3.6-27B-FP8) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md) |
+
+Catalog source: [`src/flashcli/catalog/models.yaml`](src/flashcli/catalog/models.yaml). Bundle format: [docs/model_bundle_standard.md](docs/model_bundle_standard.md).
+
+---
+
+## CLI reference
+
+| Command | Purpose |
+|---------|---------|
+| `flashcli run <preset>` | Sync inference (VLA, chat, …) |
+| `flashcli serve <preset>` | OpenAI HTTP API (Qwen) |
+| `flashcli pull <preset>` | Pre-fetch weights only |
+| `flashcli models list` | Catalog + local cache status |
+| `flashcli models envs [preset]` | Native matrix cells vs this GPU |
+| `flashcli doctor [--install]` | Environment / GPU preflight |
+| `flashcli bundle sync <preset>` | Pre-fetch runtime zip |
+| `flashcli bundle validate PATH` | Layout + native matrix check |
+
+**Common flags**: `--bundle PATH` (local bundle root), `--no-auto-install`, `--checkpoint`, `--quiet`
+
+`flash` and `flashcli` are equivalent entry points.
+
+Qwen `serve` highlights: `--max-seq`, `--max-q-seq` (qwen3), `--K`, `--max-output-tokens` (default 16384), `--warmup-preset`, `--default-max-tokens`.
+
+---
+
+## How it works
+
+```text
+models.yaml  →  bundle zip/path  →  activate (PYTHONPATH + lib/*.so)
+              →  pip (torch, …)   →  HF weights cache  →  RunEngine / ServeEngine
+```
+
+Detailed sequence diagrams and module map: [docs/architecture.md](docs/architecture.md).
+
+**Local cache**
 
 | Path | Contents |
 |------|----------|
 | `~/.flashcli/bundles/<preset>/` | Unpacked runtime zip |
-| `~/.flashcli/models/<preset>/checkpoint/` | Hugging Face weights |
-| `~/.cache/flash_rt/` | PaliGemma tokenizer (`post_pull`) |
+| `~/.flashcli/models/<preset>/checkpoint/` | Model weights |
+| `~/.cache/flash_rt/` | Pi0.5 PaliGemma tokenizer (post-pull) |
 
-## Environment variables
+Environment variables: [docs/environment.md](docs/environment.md) (`FLASHCLI_HOME`, `HF_ENDPOINT`, `FLASHRT_QWEN36_*`, …).
 
-Common variables (full reference: **[docs/environment.md](docs/environment.md)**):
-
-| Variable | Description |
-|----------|-------------|
-| `FLASHCLI_HOME` | Cache root (default `~/.flashcli`) |
-| `FLASHCLI_BUNDLES_DIR` | Override bundle cache (default `$FLASHCLI_HOME/bundles`) |
-| `FLASHCLI_MODELS_DIR` | Override HF weights cache (default `$FLASHCLI_HOME/models`) |
-| `FLASHCLI_MODELS_YAML` | Override preset catalog path (default: packaged `flashcli/catalog/models.yaml`) |
-| `FLASHCLI_SKIP_AUTO_INSTALL=1` | Skip auto pip install of flashcli CLI deps (same as `--no-auto-install`) |
-| `FLASHCLI_SKIP_BUNDLE_ZIP=1` | Do not download `bundle.zip` from catalog |
-| `FLASHCLI_SKIP_BUNDLE_GIT=1` | Do not git-fetch bundles |
-| `HF_ENDPOINT` | Hugging Face Hub mirror (e.g. `https://hf-mirror.com`); default tries official Hub first, then mirror on failure |
-| `HF_TOKEN` | Hugging Face token for gated models (`huggingface_hub`) |
-| `FLASH_RT_PALIGEMMA_TOKENIZER` | Pi0.5 PaliGemma tokenizer file path |
-| `FLASHRT_QWEN36_MTP_CKPT_DIR` | Qwen3.6 MTP weights dir (or `--mtp-checkpoint`) |
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `flashcli run <preset>` | Inference (Pi0.5 VLA, Qwen chat, etc.) |
-| `flashcli serve <preset>` | OpenAI-compatible HTTP (Qwen NVFP4) |
-| `flashcli pull <preset>` | Pre-fetch weights only |
-| `flashcli models list` | Show catalog and cache status |
-| `flashcli models envs [preset]` | List `models.yaml` environments and GPU match |
-| `flashcli doctor` | Environment and GPU check |
-| `flashcli bundle sync <preset>` | Pre-fetch or update runtime bundle |
-| `flashcli bundle validate PATH` | Validate local bundle layout |
-| `--bundle PATH` | Override catalog with local bundle root |
-
-**`pi05_libero` supports `run` only**; Qwen presets support `run` and `serve`.
-
-`flash` and `flashcli` are the same entry point (both registered in `pyproject.toml`).
+---
 
 ## Documentation
 
-Full index (with 简体中文): [docs/README.md](docs/README.md)
+| Document | Audience |
+|----------|----------|
+| [docs/README.md](docs/README.md) | Full doc index |
+| [docs/environment.md](docs/environment.md) | Install flags, env vars, mirrors |
+| [docs/runtime-matrix.md](docs/runtime-matrix.md) | Native matrix & release builds |
+| [docs/model_bundle_standard.md](docs/model_bundle_standard.md) | Bundle schema (authors) |
+| [docs/architecture.md](docs/architecture.md) | Modules & data flow |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Contribute & release checklist |
+| [FlashRT](https://github.com/flashrt-ai/FlashRT) | Kernels, precision, model docs |
 
-| Doc | Audience |
-|-----|------------|
-| [docs/runtime-matrix.md](docs/runtime-matrix.md) | Native matrix + release build (maintainers) |
-| [docs/environment.md](docs/environment.md) | Environment variables |
-| [docs/model_bundle_standard.md](docs/model_bundle_standard.md) | Model Bundle format (extend / maintain) |
-| [docs/architecture.md](docs/architecture.md) | Modules and data flow |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute + release checklist |
+---
 
-For inference kernels and precision details, see the [FlashRT](https://github.com/LiangSu8899/FlashRT) repository.
+## Contributing & license
 
-## License
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). For bundle maintainers: `bash scripts/release_bundle.sh --bundle <name> --clean`.
 
-Apache-2.0 (see `pyproject.toml`).
+**License**: Apache-2.0 ([`pyproject.toml`](pyproject.toml))

@@ -291,10 +291,14 @@ def merge_load_options(
         merged.setdefault("max_q_seq", int(merged.get("max_q_seq", 128)))
     if variant == "qwen36":
         merged.setdefault("K", int(merged.get("K", 4)))
-        merged.setdefault("max_output_tokens", int(merged.get("max_output_tokens", 8192)))
+        merged.setdefault("max_output_tokens", int(merged.get("max_output_tokens", 16384)))
         merged.setdefault("default_max_tokens", int(merged.get("default_max_tokens", 2048)))
         if options.get("K") is not None:
             merged["K"] = int(options["K"])
+        if options.get("max_output_tokens") is not None:
+            merged["max_output_tokens"] = int(options["max_output_tokens"])
+        if options.get("default_max_tokens") is not None:
+            merged["default_max_tokens"] = int(options["default_max_tokens"])
     if options.get("max_seq") is not None:
         merged["max_seq"] = int(options["max_seq"])
     if options.get("max_q_seq") is not None:

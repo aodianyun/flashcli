@@ -1,6 +1,6 @@
 # pi05_libero
 
-<p align="right"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
+<p align="right"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a> · <a href="QUICKSTART.md">Quick start</a></p>
 
 Pi0.5 LIBERO VLA; weights [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044).
 
@@ -21,6 +21,8 @@ flash_rt/                 # trimmed Python tree (no .so inside)
 Weights are downloaded by flashcli to `~/.flashcli/models/pi05_libero/checkpoint/`, not shipped in the zip.
 
 ## End users
+
+See **[QUICKSTART.md](QUICKSTART.md)** for copy-paste commands.
 
 ```bash
 pip install flashcli

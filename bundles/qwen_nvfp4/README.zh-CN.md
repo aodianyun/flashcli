@@ -1,6 +1,6 @@
 # qwen_nvfp4
 
-<p align="right"><a href="README.md">English</a> · <strong>简体中文</strong></p>
+<p align="right"><a href="README.md">English</a> · <strong>简体中文</strong> · <a href="QUICKSTART.zh-CN.md">快速上手</a></p>
 
 一个 **SM120 NVFP4** runtime zip；catalog 用多个 preset + `bundle_variant` 区分 Qwen3-8B / Qwen3.6-27B 权重。
 
@@ -85,11 +85,13 @@ bash bundles/qwen_nvfp4/build.sh --repo-root "$FLASHRT_REPO" -j "$(nproc)"
 
 ## 运行
 
+命令速查见 **[QUICKSTART.zh-CN.md](QUICKSTART.zh-CN.md)**。
+
 ```bash
 flashcli run qwen3-8b-nvfp4 --prompt "Hello"
 flashcli serve qwen3-8b-nvfp4 --host 0.0.0.0 --port 8000 --max-seq 2048 --max-q-seq 1024 --warmup-preset auto
 flashcli run qwen36-27b-nvfp4 --prompt "Hi" --K 4
-flashcli serve qwen36-27b-nvfp4 --port 8000 --K 4 --max-seq 262208 --warmup-preset agent
+flashcli serve qwen36-27b-nvfp4 --port 8000 --K 6 --max-seq 262208 --warmup-preset auto
 ```
 
 本地未用 CDN 时：

@@ -1,6 +1,6 @@
 # pi05_libero
 
-<p align="right"><a href="README.md">English</a> · <strong>简体中文</strong></p>
+<p align="right"><a href="README.md">English</a> · <strong>简体中文</strong> · <a href="QUICKSTART.zh-CN.md">快速上手</a></p>
 
 Pi0.5 LIBERO VLA，权重 [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044)。
 
@@ -23,6 +23,8 @@ flash_rt/                 # 裁剪后的 Python（无 .so）
 权重由 flashcli 下载到 `~/.flashcli/models/pi05_libero/checkpoint/`，**不**打进 bundle。
 
 ## 用户
+
+命令速查见 **[QUICKSTART.zh-CN.md](QUICKSTART.zh-CN.md)**。
 
 ```bash
 pip install flashcli

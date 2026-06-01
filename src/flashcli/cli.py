@@ -638,6 +638,16 @@ def serve(
         help="Max prefill chunk (qwen3 only, default from bundle).",
     ),
     K: Optional[int] = typer.Option(None, "--K", help="MTP speculative K (Qwen3.6)."),
+    default_max_tokens: Optional[int] = typer.Option(
+        None,
+        "--default-max-tokens",
+        help="Default max_tokens when the client omits it (qwen36 only, default 2048).",
+    ),
+    max_output_tokens: Optional[int] = typer.Option(
+        None,
+        "--max-output-tokens",
+        help="Hard cap on generated tokens per request (qwen36 only, default 16384).",
+    ),
     model: Optional[str] = typer.Option(
         None,
         "--model",
@@ -739,6 +749,8 @@ def serve(
         "max_seq": max_seq,
         "max_q_seq": max_q_seq,
         "warmup_preset": warmup_preset,
+        "default_max_tokens": default_max_tokens,
+        "max_output_tokens": max_output_tokens,
     }
     opts = {k: v for k, v in opts.items() if v is not None}
     serve_engine.load(Path(ckpt), p, **opts)

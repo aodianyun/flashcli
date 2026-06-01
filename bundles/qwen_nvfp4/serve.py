@@ -31,7 +31,7 @@ _VARIANT_DEFAULTS: dict[str, dict[str, Any]] = {
         "K": 4,
         "warmup_preset": "agent",
         "default_max_tokens": 2048,
-        "max_output_tokens": 8192,
+        "max_output_tokens": 16384,
         "warmup_committed_max_prompt": 1024,
     },
 }
@@ -83,7 +83,7 @@ class ServeEngine:
                     opts.get("default_max_tokens", defaults.get("default_max_tokens", 2048))
                 ),
                 max_output_tokens=int(
-                    opts.get("max_output_tokens", defaults.get("max_output_tokens", 8192))
+                    opts.get("max_output_tokens", defaults.get("max_output_tokens", 16384))
                 ),
             )
             return

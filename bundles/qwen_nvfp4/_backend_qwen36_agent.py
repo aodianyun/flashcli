@@ -38,7 +38,7 @@ class Qwen36AgentBackend:
         graph_cache_max: int | None = None,
         capsule_budget_bytes: int = 0,
         default_max_tokens: int = 2048,
-        max_output_tokens: int = 8192,
+        max_output_tokens: int = 16384,
     ) -> Qwen36AgentBackend:
         mods = import_qwen36_agent_modules()
         EngineCls = mods["Qwen36FrontendAgentEngine"]

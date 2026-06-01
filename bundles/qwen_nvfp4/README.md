@@ -1,6 +1,6 @@
 # qwen_nvfp4
 
-<p align="right"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
+<p align="right"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a> · <a href="QUICKSTART.md">Quick start</a></p>
 
 One **SM120 NVFP4** multi-env runtime zip; catalog presets select weights via `bundle_variant`.
 
@@ -48,11 +48,13 @@ See [README.zh-CN.md](README.zh-CN.md) and [docs/runtime-matrix.md](../../docs/r
 
 ## Run
 
+See **[QUICKSTART.md](QUICKSTART.md)** for copy-paste commands.
+
 ```bash
 flashcli run qwen3-8b-nvfp4 --prompt "Hello"
 flashcli serve qwen3-8b-nvfp4 --host 0.0.0.0 --port 8000 --max-seq 2048 --max-q-seq 1024 --warmup-preset auto
 flashcli run qwen36-27b-nvfp4 --prompt "Hi" --K 4
-flashcli serve qwen36-27b-nvfp4 --port 8000 --K 4 --max-seq 262208 --warmup-preset agent
+flashcli serve qwen36-27b-nvfp4 --port 8000 --K 6 --max-seq 262208 --warmup-preset auto
 ```
 
 Local bundle (no CDN):
