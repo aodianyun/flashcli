@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run a long command in the background with local logging.
+# Run a long command in the background with local logging and optional auto-restart.
 #
 # Usage:
 #   bash scripts/run_bg.sh --name release-pi05 -- \
@@ -20,6 +20,8 @@ LOG_DIR="${FLASHCLI_ROOT}/logs"
 LOG_FILE=""
 CWD="${FLASHCLI_ROOT}"
 ACTION="start"
+MAX_RETRIES=3
+RETRY_INTERVAL=3
 
 log() { printf '[run-bg] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
@@ -33,16 +35,18 @@ Usage:
   bash scripts/run_bg.sh --name JOB --status|--tail|--wait|--stop
 
 Start options:
-  --name NAME       Job id (required); used for .pid / .meta under logs/
-  --log-dir DIR     Log directory (default: flashcli/logs)
-  --log-file PATH   Explicit log path (default: logs/NAME-YYYYMMDD-HHMMSS.log)
-  --cwd DIR         Working directory for COMMAND (default: flashcli root)
+  --name NAME           Job id (required); used for .pid / .meta under logs/
+  --log-dir DIR         Log directory (default: flashcli/logs)
+  --log-file PATH       Explicit log path (default: logs/NAME-YYYYMMDD-HHMMSS.log)
+  --cwd DIR             Working directory for COMMAND (default: flashcli root)
+  --max-retries N       Restart up to N times after non-zero exit (default: 3; 0 = no restart)
+  --retry-interval SEC  Seconds between restart attempts (default: 3)
 
 Manage options (no COMMAND):
-  --status          Print pid / running state / log path
-  --tail            Follow the job log (tail -f)
-  --wait            Block until the job exits; print exit code
-  --stop            Send SIGTERM, then SIGKILL after 10s if still alive
+  --status              Print pid / running state / log path
+  --tail                Follow the job log (tail -f)
+  --wait                Block until the job exits; print exit code
+  --stop                Stop supervisor and child process tree
 
 Examples:
   bash scripts/run_bg.sh --name release-pi05 -- \
@@ -57,17 +61,132 @@ EOF
 
 pid_file() { printf '%s/%s.pid\n' "${LOG_DIR}" "${NAME}"; }
 meta_file() { printf '%s/%s.meta\n' "${LOG_DIR}" "${NAME}"; }
+stop_file() { printf '%s/%s.stop\n' "${LOG_DIR}" "${NAME}"; }
 
 read_meta() {
   local key="$1" file
   file="$(meta_file)"
   [[ -f "${file}" ]] || return 1
-  sed -n "s/^${key}=//p" "${file}" | head -1
+  sed -n "s/^${key}=//p" "${file}" | tail -1
 }
 
 is_running() {
   local pid="$1"
   [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null
+}
+
+kill_process_tree() {
+  local pid="$1" sig="${2:-TERM}"
+  local children child
+
+  [[ -z "${pid}" ]] && return 0
+  children="$(pgrep -P "${pid}" 2>/dev/null || true)"
+  for child in ${children}; do
+    kill_process_tree "${child}" "${sig}"
+  done
+  kill "-${sig}" "${pid}" 2>/dev/null || true
+}
+
+run_in_new_session() {
+  if command -v setsid >/dev/null 2>&1; then
+    setsid "$@"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' "$@"
+  else
+    "$@"
+  fi
+}
+
+append_meta() {
+  local file
+  file="$(meta_file)"
+  {
+    printf '%s\n' "$@"
+  } >> "${file}"
+}
+
+load_cmd_from_meta() {
+  local quoted
+  quoted="$(read_meta CMD_QUOTED 2>/dev/null || true)"
+  [[ -n "${quoted}" ]] || die "CMD_QUOTED missing in $(meta_file)"
+  printf '%s' "${quoted}"
+}
+
+cmd_supervisor_internal() {
+  [[ -n "${NAME}" ]] || die "--name is required for supervisor"
+
+  local stop_path cwd max_retries retry_interval attempt=0 child_pid=0 ec=0 cmd_quoted
+
+  stop_path="$(stop_file)"
+  cwd="$(read_meta CWD)"
+  max_retries="$(read_meta MAX_RETRIES)"
+  retry_interval="$(read_meta RETRY_INTERVAL)"
+  cmd_quoted="$(load_cmd_from_meta)"
+  # shellcheck disable=SC2086
+  eval "set -- ${cmd_quoted}"
+
+  rm -f "${stop_path}"
+
+  _supervisor_cleanup() {
+    if (( child_pid != 0 )) && is_running "${child_pid}"; then
+      kill_process_tree "${child_pid}" TERM
+    fi
+    exit 143
+  }
+  trap _supervisor_cleanup TERM INT
+
+  while (( attempt <= max_retries )); do
+    if [[ -f "${stop_path}" ]]; then
+      log "Stop requested; supervisor exiting"
+      break
+    fi
+
+    if (( attempt > 0 )); then
+      log "Restart ${attempt}/${max_retries} in ${retry_interval}s (previous exit ${ec})"
+      sleep "${retry_interval}"
+      if [[ -f "${stop_path}" ]]; then
+        log "Stop requested during restart wait; supervisor exiting"
+        break
+      fi
+    fi
+
+    log "Run attempt $((attempt + 1))/$((max_retries + 1)): $*"
+    set +e
+    run_in_new_session bash -c 'cd "$1" && shift && exec "$@"' _ "${cwd}" "$@" &
+    child_pid=$!
+    append_meta \
+      "WORKER_PID=${child_pid}" \
+      "WORKER_PGID=$(ps -o pgid= -p "${child_pid}" 2>/dev/null | tr -d '[:space:]')"
+    wait "${child_pid}"
+    ec=$?
+    child_pid=0
+    set -e
+
+    append_meta \
+      "RUN_ATTEMPT=$((attempt + 1))" \
+      "EXIT_CODE=${ec}" \
+      "FINISHED=$(date -Iseconds 2>/dev/null || date)"
+
+    if [[ -f "${stop_path}" ]]; then
+      log "Stop requested; supervisor exiting"
+      break
+    fi
+
+    if (( ec == 0 )); then
+      log "Command exited 0; supervisor done"
+      break
+    fi
+
+    if (( attempt >= max_retries )); then
+      log "Command failed with exit ${ec}; no retries left"
+      break
+    fi
+
+    attempt=$((attempt + 1))
+  done
+
+  rm -f "${stop_path}"
+  exit "${ec}"
 }
 
 cmd_start() {
@@ -87,6 +206,8 @@ cmd_start() {
     rm -f "${pf}"
   fi
 
+  rm -f "$(stop_file)"
+
   if [[ -z "${LOG_FILE}" ]]; then
     LOG_FILE="${LOG_DIR}/${NAME}-$(date +%Y%m%d-%H%M%S).log"
   else
@@ -99,33 +220,34 @@ cmd_start() {
   log "Starting '${NAME}' in ${CWD}"
   log "Command: $*"
   log "Log: ${LOG_FILE}"
+  log "Auto-restart: up to ${MAX_RETRIES} retries every ${RETRY_INTERVAL}s on non-zero exit"
 
-  (
-    cd "${CWD}"
-    set +e
-    "$@"
-    ec=$?
-    {
-      printf 'EXIT_CODE=%s\n' "${ec}"
-      printf 'FINISHED=%s\n' "$(date -Iseconds 2>/dev/null || date)"
-    } >> "$(meta_file)"
-    exit "${ec}"
-  ) >> "${LOG_FILE}" 2>&1 &
+  local cmd_quoted
+  printf -v cmd_quoted '%q ' "$@"
+
+  {
+    printf 'LOG_FILE=%s\n' "${LOG_FILE}"
+    printf 'CWD=%s\n' "${CWD}"
+    printf 'CMD_QUOTED=%s\n' "${cmd_quoted}"
+    printf 'MAX_RETRIES=%s\n' "${MAX_RETRIES}"
+    printf 'RETRY_INTERVAL=%s\n' "${RETRY_INTERVAL}"
+    printf 'STARTED=%s\n' "$(date -Iseconds 2>/dev/null || date)"
+  } > "$(meta_file)"
+
+  run_in_new_session bash "${SCRIPT_DIR}/run_bg.sh" \
+    --supervisor-internal \
+    --name "${NAME}" \
+    --log-dir "${LOG_DIR}" \
+    >> "${LOG_FILE}" 2>&1 &
 
   local pid=$!
   printf '%s\n' "${pid}" > "${pf}"
 
-  {
-    printf 'LOG_FILE=%s\n' "${LOG_FILE}"
-    printf 'PID=%s\n' "${pid}"
-    printf 'STARTED=%s\n' "$(date -Iseconds 2>/dev/null || date)"
-    printf 'CWD=%s\n' "${CWD}"
-    printf 'CMD=%s\n' "$*"
-  } > "$(meta_file)"
+  append_meta "PID=${pid}"
 
   ln -sfn "$(basename "${LOG_FILE}")" "${LOG_DIR}/${NAME}.latest.log"
 
-  log "Started pid=${pid}"
+  log "Started supervisor pid=${pid}"
   log "  status: bash scripts/run_bg.sh --name ${NAME} --status"
   log "  tail:   bash scripts/run_bg.sh --name ${NAME} --tail"
   log "  wait:   bash scripts/run_bg.sh --name ${NAME} --wait"
@@ -144,7 +266,7 @@ cmd_status() {
   pid="$(tr -d '[:space:]' < "${pf}")"
   log_path="$(read_meta LOG_FILE 2>/dev/null || true)"
   started="$(read_meta STARTED 2>/dev/null || true)"
-  cmd_line="$(read_meta CMD 2>/dev/null || true)"
+  cmd_line="$(read_meta CMD_QUOTED 2>/dev/null || true)"
 
   if is_running "${pid}"; then
     state="running"
@@ -152,9 +274,11 @@ cmd_status() {
     state="stopped"
   fi
 
-  local exit_code finished
+  local exit_code finished run_attempt max_retries
   exit_code="$(read_meta EXIT_CODE 2>/dev/null || true)"
   finished="$(read_meta FINISHED 2>/dev/null || true)"
+  run_attempt="$(read_meta RUN_ATTEMPT 2>/dev/null || true)"
+  max_retries="$(read_meta MAX_RETRIES 2>/dev/null || true)"
 
   printf 'name:    %s\n' "${NAME}"
   printf 'state:   %s\n' "${state}"
@@ -162,6 +286,8 @@ cmd_status() {
   [[ -n "${started}" ]] && printf 'started: %s\n' "${started}"
   [[ -n "${finished}" ]] && printf 'finished: %s\n' "${finished}"
   [[ -n "${exit_code}" ]] && printf 'exit:    %s\n' "${exit_code}"
+  [[ -n "${run_attempt}" ]] && printf 'attempt: %s\n' "${run_attempt}"
+  [[ -n "${max_retries}" ]] && printf 'retries: %s max\n' "${max_retries}"
   [[ -n "${log_path}" ]] && printf 'log:     %s\n' "${log_path}"
   [[ -n "${cmd_line}" ]] && printf 'cmd:     %s\n' "${cmd_line}"
 
@@ -219,19 +345,31 @@ cmd_wait() {
 cmd_stop() {
   [[ -n "${NAME}" ]] || die "--name is required"
 
-  local pf pid
+  local pf pid stop_path
   pf="$(pid_file)"
+  stop_path="$(stop_file)"
   [[ -f "${pf}" ]] || die "Job '${NAME}' not started"
 
   pid="$(tr -d '[:space:]' < "${pf}")"
   if ! is_running "${pid}"; then
     log "Job '${NAME}' not running (pid ${pid})"
-    rm -f "${pf}"
+    rm -f "${pf}" "${stop_path}"
     exit 0
   fi
 
-  log "Stopping '${NAME}' (pid ${pid})..."
-  kill -TERM "${pid}" 2>/dev/null || true
+  log "Stopping '${NAME}' (supervisor pid ${pid})..."
+  : > "${stop_path}"
+
+  local worker_pgid worker_pid
+  worker_pid="$(read_meta WORKER_PID 2>/dev/null || true)"
+  worker_pgid="$(read_meta WORKER_PGID 2>/dev/null || true)"
+  if [[ -n "${worker_pgid}" && "${worker_pgid}" != "$$" ]]; then
+    kill -TERM "-${worker_pgid}" 2>/dev/null || true
+  fi
+  if [[ -n "${worker_pid}" ]]; then
+    kill_process_tree "${worker_pid}" TERM
+  fi
+  kill_process_tree "${pid}" TERM
 
   local i
   for i in $(seq 1 20); do
@@ -240,10 +378,19 @@ cmd_stop() {
   done
 
   if is_running "${pid}"; then
-    log "Still running; sending SIGKILL"
-    kill -KILL "${pid}" 2>/dev/null || true
+    log "Still running; sending SIGKILL to process tree"
+    if [[ -n "${worker_pgid}" && "${worker_pgid}" != "$$" ]]; then
+      kill -KILL "-${worker_pgid}" 2>/dev/null || true
+    fi
+    [[ -n "${worker_pid}" ]] && kill_process_tree "${worker_pid}" KILL
+    kill_process_tree "${pid}" KILL
+    for i in $(seq 1 10); do
+      is_running "${pid}" || break
+      sleep 0.5
+    done
   fi
 
+  rm -f "${pf}" "${stop_path}"
   log "Stopped '${NAME}'"
 }
 
@@ -253,6 +400,9 @@ while [[ $# -gt 0 ]]; do
     --log-dir) LOG_DIR="$2"; shift 2 ;;
     --log-file) LOG_FILE="$2"; shift 2 ;;
     --cwd) CWD="$2"; shift 2 ;;
+    --max-retries) MAX_RETRIES="$2"; shift 2 ;;
+    --retry-interval) RETRY_INTERVAL="$2"; shift 2 ;;
+    --supervisor-internal) ACTION=supervisor; shift ;;
     --status) ACTION=status; shift ;;
     --tail) ACTION=tail; shift ;;
     --wait) ACTION=wait; shift ;;
@@ -270,6 +420,7 @@ done
 
 case "${ACTION}" in
   start) cmd_start "$@" ;;
+  supervisor) cmd_supervisor_internal "$@" ;;
   status) cmd_status ;;
   tail) cmd_tail ;;
   wait) cmd_wait ;;

@@ -20,6 +20,9 @@ RELEASE_BUNDLE_NAME="${RELEASE_BUNDLE_NAME:-}"
 log() { printf '[docker-matrix] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
 
+trap 'kill 0; exit 130' INT
+trap 'kill 0; exit 143' TERM
+
 [[ -n "${RELEASE_BUNDLE_NAME}" ]] || die "RELEASE_BUNDLE_NAME not set"
 [[ -d "${FLASHCLI_ROOT}/scripts" ]] || die "Missing flashcli at ${FLASHCLI_ROOT}"
 [[ -f "${FLASHRT_REPO}/CMakeLists.txt" && -d "${FLASHRT_REPO}/flash_rt" ]] \

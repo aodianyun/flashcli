@@ -43,13 +43,11 @@ flashcli pull qwen36-27b-nvfp4 --bundle "$BUNDLE"
 ## 3. 引擎层（无 HTTP）
 
 ```bash
-# qwen3-8B
-flashcli run qwen3-8b-nvfp4 --bundle "$BUNDLE" \
-  --prompt "你好" --max-tokens 64
+# flashcli run qwen36-27b-nvfp4 --prompt "Hello"
+flashcli run qwen3-8b-nvfp4 --bundle "$BUNDLE" --prompt "Hello" --max-tokens 64
 
-# qwen3.6-27B + MTP
-flashcli run qwen36-27b-nvfp4 --bundle "$BUNDLE" \
-  --prompt "你好" --max-tokens 64 --K 6
+# flashcli run qwen36-27b-nvfp4 --prompt "Hello"
+flashcli run qwen36-27b-nvfp4 --bundle "$BUNDLE" --prompt "Hello" --max-tokens 64 --K 6
 ```
 
 ---
@@ -58,22 +56,12 @@ flashcli run qwen36-27b-nvfp4 --bundle "$BUNDLE" \
 
 **同一 GPU 同时只跑一个 serve。** qwen3 与 qwen36 需分别起停。
 
-### qwen3-8b
-
 ```bash
-flashcli serve qwen3-8b-nvfp4 --bundle "$BUNDLE" \
-  --host 0.0.0.0 --port 8000 \
-  --max-seq 2048 --max-q-seq 1024 \
-  --warmup-preset auto
-```
+# flashcli serve qwen3-8b-nvfp4 --host 0.0.0.0 --port 8000 --max-seq 2048 --max-q-seq 1024 --warmup-preset auto
+flashcli serve qwen3-8b-nvfp4 --bundle "$BUNDLE" --host 0.0.0.0 --port 8000 --max-seq 2048 --max-q-seq 1024 --warmup-preset auto
 
-### qwen3.6-27B
-
-```bash
-flashcli serve qwen36-27b-nvfp4 --bundle "$BUNDLE" \
-  --host 0.0.0.0 --port 8000 \
-  --K 6 --max-seq 262208 \
-  --warmup-preset auto
+# flashcli serve qwen36-27b-nvfp4 --host 0.0.0.0 --port 8000 --K 6 --max-seq 262208 --warmup-preset auto
+flashcli serve qwen36-27b-nvfp4 --bundle "$BUNDLE" --host 0.0.0.0 --port 8000 --K 6 --max-seq 262208 --warmup-preset auto
 ```
 
 | 参数 | 默认 | 说明 |

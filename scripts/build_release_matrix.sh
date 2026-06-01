@@ -39,6 +39,9 @@ ONLY_PY=""
 log() { printf '[matrix] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
 
+trap 'kill 0; exit 130' INT
+trap 'kill 0; exit 143' TERM
+
 usage() {
   cat <<EOF
 Build a bundle native matrix from release-matrix.env (cuda × python cells → lib/).

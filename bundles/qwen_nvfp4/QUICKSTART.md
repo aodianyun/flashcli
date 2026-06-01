@@ -43,11 +43,11 @@ Restricted network: `export HF_ENDPOINT=https://hf-mirror.com`
 ## 3. Engine (`run`, no HTTP)
 
 ```bash
-flashcli run qwen3-8b-nvfp4 --bundle "$BUNDLE" \
-  --prompt "Hello" --max-tokens 64
+# flashcli run qwen36-27b-nvfp4 --prompt "Hello"
+flashcli run qwen3-8b-nvfp4 --bundle "$BUNDLE" --prompt "Hello" --max-tokens 64
 
-flashcli run qwen36-27b-nvfp4 --bundle "$BUNDLE" \
-  --prompt "Hello" --max-tokens 64 --K 6
+# flashcli run qwen36-27b-nvfp4 --prompt "Hello"
+flashcli run qwen36-27b-nvfp4 --bundle "$BUNDLE" --prompt "Hello" --max-tokens 64 --K 6
 ```
 
 ---
@@ -56,22 +56,12 @@ flashcli run qwen36-27b-nvfp4 --bundle "$BUNDLE" \
 
 **One GPU → one `flashcli serve` at a time.** Stop qwen3 before starting qwen36.
 
-### qwen3-8b
-
 ```bash
-flashcli serve qwen3-8b-nvfp4 --bundle "$BUNDLE" \
-  --host 0.0.0.0 --port 8000 \
-  --max-seq 2048 --max-q-seq 1024 \
-  --warmup-preset auto
-```
+# flashcli serve qwen3-8b-nvfp4 --host 0.0.0.0 --port 8000 --max-seq 2048 --max-q-seq 1024 --warmup-preset auto
+flashcli serve qwen3-8b-nvfp4 --bundle "$BUNDLE" --host 0.0.0.0 --port 8000 --max-seq 2048 --max-q-seq 1024 --warmup-preset auto
 
-### qwen3.6-27b
-
-```bash
-flashcli serve qwen36-27b-nvfp4 --bundle "$BUNDLE" \
-  --host 0.0.0.0 --port 8000 \
-  --K 6 --max-seq 262208 \
-  --warmup-preset auto
+# flashcli serve qwen36-27b-nvfp4 --host 0.0.0.0 --port 8000 --K 6 --max-seq 262208 --warmup-preset auto
+flashcli serve qwen36-27b-nvfp4 --bundle "$BUNDLE" --host 0.0.0.0 --port 8000 --K 6 --max-seq 262208 --warmup-preset auto
 ```
 
 | Flag | Default | Meaning |

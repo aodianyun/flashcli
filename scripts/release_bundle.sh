@@ -48,6 +48,56 @@ ONLY_CUDA=""
 log() { printf '[release] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
 
+ACTIVE_DOCKER_CONTAINER=""
+ACTIVE_DOCKER_LOGS_PID=""
+NATIVE_PID=""
+
+kill_process_tree() {
+  local pid="$1" sig="${2:-TERM}"
+  local children child
+
+  [[ -z "${pid}" ]] && return 0
+  children="$(pgrep -P "${pid}" 2>/dev/null || true)"
+  for child in ${children}; do
+    kill_process_tree "${child}" "${sig}"
+  done
+  kill "-${sig}" "${pid}" 2>/dev/null || true
+}
+
+cleanup_on_interrupt() {
+  local exit_code="${1:-130}"
+
+  if [[ -n "${ACTIVE_DOCKER_LOGS_PID}" ]]; then
+    kill "${ACTIVE_DOCKER_LOGS_PID}" 2>/dev/null || true
+    wait "${ACTIVE_DOCKER_LOGS_PID}" 2>/dev/null || true
+    ACTIVE_DOCKER_LOGS_PID=""
+  fi
+
+  if [[ -n "${ACTIVE_DOCKER_CONTAINER}" ]]; then
+    log "Stopping Docker container ${ACTIVE_DOCKER_CONTAINER}..."
+    docker stop -t 5 "${ACTIVE_DOCKER_CONTAINER}" 2>/dev/null \
+      || docker kill "${ACTIVE_DOCKER_CONTAINER}" 2>/dev/null \
+      || true
+    docker rm -f "${ACTIVE_DOCKER_CONTAINER}" 2>/dev/null || true
+    ACTIVE_DOCKER_CONTAINER=""
+  fi
+
+  if [[ -n "${NATIVE_PID}" ]] && kill -0 "${NATIVE_PID}" 2>/dev/null; then
+    log "Stopping native build (pid ${NATIVE_PID})..."
+    kill_process_tree "${NATIVE_PID}" TERM
+    sleep 1
+    kill_process_tree "${NATIVE_PID}" KILL
+    NATIVE_PID=""
+  fi
+
+  exit "${exit_code}"
+}
+
+install_interrupt_traps() {
+  trap 'cleanup_on_interrupt 130' INT
+  trap 'cleanup_on_interrupt 143' TERM
+}
+
 usage() {
   cat <<EOF
 Build and pack a flashcli model bundle release zip (multi-env lib/).
@@ -190,15 +240,20 @@ last_cuda_tag() {
 }
 
 run_docker_cuda_line() {
-  local cuda="$1" image
+  local cuda="$1" image container logs_pid wait_pid ec=0
   image="$(image_for_cuda "${cuda}")"
+  container="flashcli-release-${RELEASE_BUNDLE_NAME}-cu${cuda}-$$"
   log "Docker ${RELEASE_BUNDLE_NAME} cu${cuda}: ${image}"
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     log "DRY: docker run --gpus all -v ${WORKSPACE_ROOT}:/workspace ${image} cu${cuda}"
     return 0
   fi
   command -v docker >/dev/null 2>&1 || die "docker not found (use --native on Linux)"
-  docker run --rm --gpus all \
+
+  docker rm -f "${container}" 2>/dev/null || true
+
+  if ! docker run -d --rm --init --gpus all \
+    --name "${container}" \
     -v "${WORKSPACE_ROOT}:/workspace" \
     -e "FLASHCLI_ROOT=/workspace/flashcli" \
     -e "FLASHRT_REPO=/workspace/FlashRT" \
@@ -208,7 +263,30 @@ run_docker_cuda_line() {
     -e "RELEASE_BUNDLE_NAME=${RELEASE_BUNDLE_NAME}" \
     -w /workspace/flashcli \
     "${image}" \
-    bash /workspace/flashcli/scripts/lib/docker_matrix_build.sh "${cuda}"
+    bash /workspace/flashcli/scripts/lib/docker_matrix_build.sh "${cuda}"; then
+    die "docker run failed for cu${cuda}"
+  fi
+
+  ACTIVE_DOCKER_CONTAINER="${container}"
+
+  docker logs -f "${container}" 2>&1 &
+  logs_pid=$!
+  ACTIVE_DOCKER_LOGS_PID="${logs_pid}"
+
+  docker wait "${container}" &
+  wait_pid=$!
+
+  set +e
+  wait "${wait_pid}"
+  ec=$?
+  set -e
+
+  kill "${logs_pid}" 2>/dev/null || true
+  wait "${logs_pid}" 2>/dev/null || true
+  ACTIVE_DOCKER_LOGS_PID=""
+  ACTIVE_DOCKER_CONTAINER=""
+
+  [[ "${ec}" -eq 0 ]] || die "Docker cu${cuda} build failed (exit ${ec})"
 }
 
 run_native_cuda_line() {
@@ -226,7 +304,16 @@ run_native_cuda_line() {
     --git-ref "${GIT_REF}" \
     --skip-pack \
     --install-python \
-    -j "${JOBS}"
+    -j "${JOBS}" &
+  NATIVE_PID=$!
+
+  set +e
+  wait "${NATIVE_PID}"
+  local ec=$?
+  set -e
+  NATIVE_PID=""
+
+  [[ "${ec}" -eq 0 ]] || die "Native cu${cuda} build failed (exit ${ec})"
 }
 
 finalize_and_pack() {
@@ -271,6 +358,10 @@ fi
 BUILD_CUDA_TAGS="${CUDA_TAGS}"
 if [[ -n "${ONLY_CUDA}" ]]; then
   BUILD_CUDA_TAGS="${ONLY_CUDA}"
+fi
+
+if [[ "${DRY_RUN}" -eq 0 ]]; then
+  install_interrupt_traps
 fi
 
 for cuda in ${BUILD_CUDA_TAGS}; do
