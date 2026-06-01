@@ -4,6 +4,7 @@ __pycache__/
 .pytest_cache/
 *.zip
 *.DS_Store
+.cursor/
 
 build/
 codeplan/
