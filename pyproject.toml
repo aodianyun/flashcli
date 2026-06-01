@@ -19,6 +19,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# HTTP serve layer (flashcli.serve — not bundle inference runtime).
+serve = [
+    "fastapi>=0.100",
+    "uvicorn[standard]>=0.24",
+]
 # Dev convenience only — production installs from runtime manifest / FlashRT pyproject.
 dev = ["flash-rt[torch,server]"]
 

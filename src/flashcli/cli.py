@@ -51,6 +51,59 @@ def _auto_install_flag(no_auto_install: bool) -> bool:
     return not no_auto_install and not config.skip_auto_install()
 
 
+def _bundle_torch_index(bundle) -> str:
+    from flashcli.bundle.manifest import bundle_cuda_config
+    from flashcli.runtime.detect import torch_index_for_cuda_tag
+
+    cuda = bundle_cuda_config(bundle)
+    cuda_tag = str(cuda.get("cuda_tag", ""))
+    return str(cuda.get("recommended_torch_index", "")) or (
+        torch_index_for_cuda_tag(cuda_tag) if cuda_tag else "cu124"
+    )
+
+
+def _retry_after_bundle_repair(
+    action,
+    *,
+    bundle,
+    auto_install: bool,
+    quiet: bool,
+):
+    """Run *action*; on ImportError auto-install missing bundle deps and retry once."""
+    try:
+        return action()
+    except ImportError:
+        if not auto_install or bundle is None:
+            raise
+        from flashcli.deps import repair_bundle_python_stack
+
+        if not quiet:
+            typer.echo("Missing bundle dependency; installing ...", err=True)
+        repair_bundle_python_stack(
+            bundle_root=bundle.bundle_root,
+            torch_index=_bundle_torch_index(bundle),
+            quiet=quiet,
+        )
+        return action()
+
+
+def _ensure_flashcli_serve_imports(*, auto_install: bool, quiet: bool) -> None:
+    """Verify flashcli HTTP stack (fastapi/uvicorn); auto-install on demand."""
+    try:
+        __import__("fastapi")
+        __import__("uvicorn")
+    except ImportError:
+        if not auto_install:
+            raise
+        from flashcli.deps import repair_flashcli_serve_stack
+
+        if not quiet:
+            typer.echo("Installing flashcli serve dependencies ...", err=True)
+        repair_flashcli_serve_stack(quiet=quiet)
+        __import__("fastapi")
+        __import__("uvicorn")
+
+
 @doctor_app.callback(invoke_without_command=True)
 def doctor_main(
     ctx: typer.Context,
@@ -275,26 +328,21 @@ def bundle_validate(
 @bundle_app.command("install")
 def bundle_install(
     path: Path = typer.Argument(..., exists=True, file_okay=False, dir_okay=True),
-    profile: str = typer.Option("default", "--profile", help="default | serve"),
     force: bool = typer.Option(False, "--force"),
     quiet: bool = typer.Option(False, "--quiet", "-q"),
 ) -> None:
-    """Install Python dependencies from flashcli-bundle.json."""
+    """Install bundle inference dependencies from flashcli-bundle.json (torch, transformers, …)."""
     from flashcli.bundle.activate import activate_bundle
     from flashcli.bundle.manifest import load_bundle_manifest
 
-    if profile not in ("default", "serve"):
-        typer.echo("profile must be 'default' or 'serve'", err=True)
-        raise typer.Exit(1)
     bundle = load_bundle_manifest(path)
     activate_bundle(
         bundle,
-        profile=profile,  # type: ignore[arg-type]
         install_python=True,
         quiet=quiet,
         force_python=force,
     )
-    typer.echo("Bundle dependencies installed.")
+    typer.echo("Bundle inference dependencies installed.")
 
 
 @bundle_app.command("sync")
@@ -457,7 +505,6 @@ def run(
             p,
             bundle_path=bundle,
             bundle_ref=bundle_ref,
-            profile="default",
             auto_install_python=_auto_install_flag(no_auto_install),
             quiet=quiet,
         )
@@ -490,12 +537,22 @@ def run(
     if image:
         image_paths = [Path(part.strip()) for part in image.split(",") if part.strip()]
 
-    run_engine = create_run_engine(
-        p,
-        bundle_path=bundle,
-        bundle_ref=bundle_ref,
-        checkpoint=Path(ckpt),
-    )
+    auto_install = _auto_install_flag(no_auto_install)
+    try:
+        run_engine = _retry_after_bundle_repair(
+            lambda: create_run_engine(
+                p,
+                bundle_path=bundle,
+                bundle_ref=bundle_ref,
+                checkpoint=Path(ckpt),
+            ),
+            bundle=active,
+            auto_install=auto_install,
+            quiet=quiet,
+        )
+    except ImportError as exc:
+        typer.echo(f"Cannot load run engine: {exc}", err=True)
+        raise typer.Exit(1) from exc
     load_kw: dict = {
         "num_views": num_views,
         "hardware": hardware,
@@ -593,19 +650,17 @@ def serve(
     """Serve unified OpenAI HTTP API via the preset model bundle."""
     from flashcli.bundle.variants import resolve_effective_model_variant
     from flashcli.engines.factory import BundleNotReadyError, activate_for_preset, create_serve_engine
-    from flashcli.serve.app import build_app
 
     p = PresetRegistry().get(preset)
 
     if _auto_install_flag(no_auto_install):
-        ensure_environment(install_flashcli=True, quiet=quiet)
+        ensure_environment(install_flashcli=True, include_serve=True, quiet=quiet)
 
     try:
         activate_for_preset(
             p,
             bundle_path=bundle,
             bundle_ref=bundle_ref,
-            profile="serve",
             auto_install_python=_auto_install_flag(no_auto_install),
             quiet=quiet,
         )
@@ -616,6 +671,19 @@ def serve(
     from flashcli.bundle.activate import active_bundle
 
     active = active_bundle()
+    auto_install = _auto_install_flag(no_auto_install)
+
+    try:
+        _ensure_flashcli_serve_imports(auto_install=auto_install, quiet=quiet)
+        from flashcli.serve.app import build_app
+    except ImportError as exc:
+        typer.echo(
+            f"Cannot load flashcli HTTP serve stack: {exc} "
+            "(install flashcli with serve extras: pip install 'flashcli[serve]')",
+            err=True,
+        )
+        raise typer.Exit(1) from exc
+
     effective_variant = resolve_effective_model_variant(
         p, active, cli_override=model
     )
@@ -643,20 +711,27 @@ def serve(
     )
 
     try:
+        _ensure_flashcli_serve_imports(auto_install=auto_install, quiet=quiet)
         import uvicorn
     except ImportError as exc:
-        typer.echo(
-            "uvicorn required for serve; run: flashcli bundle install <bundle> --profile serve",
-            err=True,
-        )
+        typer.echo(f"Cannot load uvicorn: {exc}", err=True)
         raise typer.Exit(1) from exc
 
-    serve_engine = create_serve_engine(
-        p,
-        bundle_path=bundle,
-        bundle_ref=bundle_ref,
-        checkpoint=Path(ckpt),
-    )
+    try:
+        serve_engine = _retry_after_bundle_repair(
+            lambda: create_serve_engine(
+                p,
+                bundle_path=bundle,
+                bundle_ref=bundle_ref,
+                checkpoint=Path(ckpt),
+            ),
+            bundle=active,
+            auto_install=auto_install,
+            quiet=quiet,
+        )
+    except ImportError as exc:
+        typer.echo(f"Cannot load serve engine: {exc}", err=True)
+        raise typer.Exit(1) from exc
     opts: dict = {
         "model_name": model_name,
         "K": K,

@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from flashcli import config
-from flashcli.deps import flashcli_stack_satisfied
+from flashcli.deps import (
+    bundle_python_stack_satisfied,
+    flashcli_core_stack_satisfied,
+    flashcli_serve_stack_satisfied,
+)
 from flashcli.env import ensure_environment
 from flashcli.models.hf_hub import hub_cli_on_path
 from flashcli.runtime.detect import detect_gpu
@@ -21,10 +25,19 @@ def run_check(*, quiet: bool = False) -> int:
         print(f"[ok] GPU: {gpu.gpu_name} (sm{gpu.sm}, cuda_tag={gpu.cuda_tag})")
         print(f"     Recommended torch index: {gpu.recommended_torch_index}")
 
-    if flashcli_stack_satisfied():
-        print("[ok] flashcli Python dependencies (typer, huggingface_hub, …)")
+    if flashcli_core_stack_satisfied():
+        print("[ok] flashcli core dependencies (typer, huggingface_hub, …)")
     else:
-        print("[!] flashcli dependencies incomplete. Run: flashcli doctor --install")
+        print("[!] flashcli core dependencies incomplete. Run: flashcli doctor --install")
+        issues += 1
+
+    if flashcli_serve_stack_satisfied():
+        print("[ok] flashcli serve dependencies (fastapi, uvicorn)")
+    else:
+        print(
+            "[!] flashcli serve dependencies incomplete "
+            "(needed for `flashcli serve`). Run: flashcli doctor --install"
+        )
         issues += 1
 
     hf_cli = hub_cli_on_path()
@@ -58,15 +71,14 @@ def run_check(*, quiet: bool = False) -> int:
             print(line)
 
     from flashcli.bundle.activate import active_bundle
-    from flashcli.deps import python_stack_satisfied
 
     b = active_bundle()
     if b is not None:
         print(f"[ok] Active model bundle: {b.bundle_root}")
-        if python_stack_satisfied(bundle_root=b.bundle_root):
-            print("[ok] Bundle runtime Python stack")
+        if bundle_python_stack_satisfied(bundle_root=b.bundle_root):
+            print("[ok] Bundle inference Python stack")
         else:
-            print("[!] Bundle runtime Python stack incomplete.")
+            print("[!] Bundle inference Python stack incomplete.")
             issues += 1
     else:
         print(
@@ -84,5 +96,10 @@ def run_install(
     quiet: bool = False,
     force: bool = False,
 ) -> None:
-    ensure_environment(install_flashcli=True, quiet=quiet, force=force)
-    print("Environment install complete.")
+    ensure_environment(
+        install_flashcli=True,
+        include_serve=True,
+        quiet=quiet,
+        force=force,
+    )
+    print("flashcli environment install complete.")

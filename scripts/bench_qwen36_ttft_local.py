@@ -97,7 +97,6 @@ def _activate_bundle(bundle_root: Path) -> None:
     bundle = load_bundle_manifest(bundle_root)
     activate_bundle(
         bundle,
-        profile="serve",
         install_python=False,
         quiet=True,
         force_python=False,

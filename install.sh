@@ -59,6 +59,7 @@ REQUIRES_PYTHON_MIN="3.10"
 MIN_PIP_VERSION="21.3"
 GET_PIP_URL="https://bootstrap.pypa.io/get-pip.py"
 PYPROJECT_DEPS="typer>=0.12 pyyaml>=6.0 packaging>=23.0 huggingface_hub>=0.26 tqdm>=4.66"
+PYPROJECT_SERVE_DEPS="fastapi>=0.100 'uvicorn[standard]>=0.24'"
 # tomli>=2.0 only when python_version < '3.11' (handled in verify script)
 # Order: PATH defaults first (/usr/local before /usr), then versioned binaries.
 PYTHON_CANDIDATES="python python3 \
@@ -1094,10 +1095,10 @@ cleanup_stale_user_install() {
 install_flashcli() {
   spec="git+${REPO}@${REF}"
   if [ "$PIP_INSTALL_USER" = "1" ]; then
-    info "Installing $spec → $(pip_scripts_dir 1) (pip --user; may take a few minutes) ..."
+    info "Installing $spec[serve] → $(pip_scripts_dir 1) (pip --user; may take a few minutes) ..."
   else
     cleanup_stale_user_install
-    info "Installing $spec → $(pip_scripts_dir 0) (system site; may take a few minutes) ..."
+    info "Installing $spec[serve] → $(pip_scripts_dir 0) (system site; may take a few minutes) ..."
   fi
 
   set -- --upgrade --force-reinstall
@@ -1105,7 +1106,7 @@ install_flashcli() {
     set -- "$@" --user
   fi
   [ "$QUIET" = "1" ] && set -- "$@" -q
-  set -- "$@" "$spec"
+  set -- "$@" "${spec}[serve]"
 
   if ! do_pip_install "$@"; then
     die "pip install failed for $spec — check git/network/disk and errors above"
@@ -1122,6 +1123,7 @@ verify_and_repair_pyproject() {
   export FLASHCLI_INSTALL_REF="$REF"
   export FLASHCLI_NO_REPAIR="${FLASHCLI_NO_REPAIR:-0}"
   export FLASHCLI_PYPROJECT_DEPS="$PYPROJECT_DEPS"
+  export FLASHCLI_PYPROJECT_SERVE_DEPS="$PYPROJECT_SERVE_DEPS"
 
   if "$PYTHON" - <<'PY'
 import os

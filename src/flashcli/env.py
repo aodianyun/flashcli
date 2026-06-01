@@ -22,17 +22,21 @@ def resolve_torch_index() -> str:
 def ensure_environment(
     *,
     install_flashcli: bool = False,
+    include_serve: bool = False,
     quiet: bool = False,
     force: bool = False,
 ) -> None:
-    """Install missing flashcli CLI dependencies (typer, huggingface_hub, …)."""
+    """Install missing flashcli dependencies (core; + serve HTTP stack when requested)."""
     if not install_flashcli:
         return
-    if not force and flashcli_stack_satisfied():
+    if not force and flashcli_stack_satisfied(include_serve=include_serve):
         return
     if not quiet:
-        print("Ensuring flashcli Python dependencies ...")
-    ensure_flashcli_stack(quiet=quiet, force=force)
+        label = "flashcli + serve" if include_serve else "flashcli"
+        print(f"Ensuring {label} Python dependencies ...")
+    ensure_flashcli_stack(
+        quiet=quiet, force=force, include_serve=include_serve
+    )
 
 
 __all__ = ["ensure_environment", "resolve_torch_index", "torch_index_for_cuda_tag"]

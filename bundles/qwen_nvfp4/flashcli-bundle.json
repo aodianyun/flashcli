@@ -14,6 +14,22 @@
       "120"
     ]
   },
+  "python_dependencies": {
+    "torch": "torch",
+    "pip": [
+      "numpy",
+      "pyyaml",
+      "safetensors",
+      "sentencepiece",
+      "ml_dtypes",
+      "transformers<4.56",
+      "pillow"
+    ]
+  },
+  "cuda": {
+    "cuda_tag": "130",
+    "recommended_torch_index": "cu128"
+  },
   "entry": {
     "run": {
       "module": "run",
