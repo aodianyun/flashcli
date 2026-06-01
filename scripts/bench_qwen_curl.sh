@@ -32,7 +32,7 @@ QWEN36_MODEL="${QWEN36_MODEL:-qwen3.6-27b-nvfp4}"
 CKPT_QWEN3="${CKPT_QWEN3:-${HOME}/.flashcli/models/qwen3-8b-nvfp4/checkpoint}"
 CKPT_QWEN36="${CKPT_QWEN36:-${HOME}/.flashcli/models/qwen36-27b-nvfp4/checkpoint}"
 
-SHORT_PROMPT="${SHORT_PROMPT:-用一段话介绍量子纠缠。}"
+SHORT_PROMPT="${SHORT_PROMPT:-Explain quantum entanglement in one short paragraph.}"
 SHORT_MAX_TOKENS="${SHORT_MAX_TOKENS:-64}"
 # Qwen3 HTTP API: prompt_tokens must be <= serve --max-q-seq (not just max-seq).
 # Default 960 matches common serve --max-q-seq 1024 (+ 64 decode). For ~1536:

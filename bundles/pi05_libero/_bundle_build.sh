@@ -229,8 +229,13 @@ run_cmake_build() {
   if [[ "${FA2_NATIVE_ONLY}" -eq 1 ]]; then
     cmake_args+=(-DFA2_ARCH_NATIVE_ONLY=ON)
     log "FA2: sm_${GPU_ARCH} only (FA2_ARCH_NATIVE_ONLY=ON; SM120 unsupported)"
+  elif [[ "${CUDA_TAG}" == "124" ]]; then
+    # nvcc 12.4 cannot compile compute_120 (FA2 sm_120 AOT / PTX). cu124 cells
+    # ship sm_89 FA2 only; SM120 users pick cu130 cells from the same zip.
+    cmake_args+=(-DFA2_ARCH_NATIVE_ONLY=ON)
+    log "FA2: sm_${GPU_ARCH} AOT only for cu124 (nvcc 12.4; SM120 → cu130 cells in zip)"
   else
-    log "FA2: multi-arch sm_80 + sm_120 + PTX (release default; SM89 + SM120)"
+    log "FA2: multi-arch sm_80 + sm_120 + PTX (release default; SM89 + SM120 on cu${CUDA_TAG})"
   fi
   clean_flashrt_shared_native_outputs "${REPO_ROOT}"
   log "CMake configure GPU_ARCH=${GPU_ARCH} Python3_EXECUTABLE=${py_bin} ($("${py_bin}" --version 2>&1 | head -1))"

@@ -18,7 +18,7 @@
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
 
-# Restricted network** (Gitee install script + pip/HF mirrors):
+# Restricted network (Gitee install script + pip/HF mirrors):
 # curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
 
 flashcli run pi05_libero \
@@ -94,9 +94,11 @@ Full index (with 简体中文): [docs/README.md](docs/README.md)
 
 | Doc | Audience |
 |-----|------------|
+| [docs/runtime-matrix.md](docs/runtime-matrix.md) | Native matrix + release build (maintainers) |
 | [docs/environment.md](docs/environment.md) | Environment variables |
 | [docs/model_bundle_standard.md](docs/model_bundle_standard.md) | Model Bundle format (extend / maintain) |
 | [docs/architecture.md](docs/architecture.md) | Modules and data flow |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute + release checklist |
 
 For inference kernels and precision details, see the [FlashRT](https://github.com/LiangSu8899/FlashRT) repository.
 

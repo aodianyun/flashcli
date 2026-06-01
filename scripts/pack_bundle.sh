@@ -20,8 +20,12 @@ source "${SCRIPT_DIR}/lib/probe_native_abi.sh"
 source "${SCRIPT_DIR}/lib/native_naming.sh"
 # shellcheck source=lib/release_naming.sh
 source "${SCRIPT_DIR}/lib/release_naming.sh"
+# shellcheck source=lib/verify_native_abi.sh
+source "${SCRIPT_DIR}/lib/verify_native_abi.sh"
 # shellcheck source=lib/pack_verify.sh
 source "${SCRIPT_DIR}/lib/pack_verify.sh"
+# shellcheck source=lib/matrix_python.sh
+source "${SCRIPT_DIR}/lib/matrix_python.sh"
 
 BUNDLE_ARG=""
 BUNDLE_DIR=""

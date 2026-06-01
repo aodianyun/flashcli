@@ -14,8 +14,9 @@ Pi0.5 LIBERO VLA，权重 [lerobot/pi05_libero_finetuned_v044](https://huggingfa
 flashcli-bundle.json
 run.py
 _pi05_compat.py
-flash_rt_kernels.so
-flash_rt_fa2.so
+lib/
+  flash_rt_kernels-*-sm89-cu{124|130}-linux-x86_64-py{310|311|312}.so
+  flash_rt_fa2-*-....so
 flash_rt/                 # 裁剪后的 Python（无 .so）
 ```
 
@@ -32,13 +33,14 @@ flashcli run pi05_libero --prompt "..." --image /path/to/base.jpg
 
 ### FA2 与 SM120
 
-发布矩阵标签为 **sm89**，但 `requires.sm` 含 **120**（Blackwell 可选用同一份制品）。**发布构建默认关闭 `FA2_ARCH_NATIVE_ONLY`**，FA2 含 `sm_80 + sm_120 + PTX`，否则 SM120 会报：
+发布矩阵标签为 **sm89**，但 `requires.sm` 含 **120**。FA2 策略因 CUDA 线而异：
 
-```text
-no kernel image is available for execution on the device
-```
+| CUDA 线 | FA2 |
+|---------|-----|
+| **cu124**（nvcc 12.4） | 仅 sm_89 AOT（12.4 无法编 `compute_120`） |
+| **cu130**（nvcc 13.x） | sm_80 + sm_120 + PTX（SM120 用户须匹配 cu130 格） |
 
-本地单卡快速迭代可加 `--fa2-native-only`（仅当前 GPU 架构，**不可用于发布**）。
+本地单卡 SM89 加速：`build.sh --fa2-native-only`（**不可用于发布**）。
 
 ### 一键发布（推荐）
 
@@ -46,23 +48,14 @@ no kernel image is available for execution on the device
 
 ```bash
 cd flashcli/bundles/pi05_libero
-bash release.sh --git-ref main --clean
+bash release.sh --clean
 ```
 
-等价：
+等价：`bash scripts/release_bundle.sh --bundle pi05_libero --clean`
 
-```bash
-cd flashcli
-bash scripts/release_bundle.sh --bundle pi05_libero --git-ref main --clean
-```
+`--clean` 会删除 `lib/`、`dist/`、`.build-matrix/`、`.native-cache/`。
 
-`--clean` 会删除 `lib/`、`dist/`、`.build-matrix/`、`.native-cache/`（避免复用旧 FA2 单架构缓存）。
-
-产物：
-
-```text
-bundles/pi05_libero/dist/flashcli-bundle-pi05-main-sm89-multi-linux-x86_64-YYYYMMDD-HHMMSS.zip
-```
+产物示例：`dist/flashcli-bundle-pi05-{abi}-sm89-multi-linux-x86_64-{时间戳}.zip`
 
 ### 分步发布（宿主机已有 cu124 + cu130）
 
@@ -173,7 +166,7 @@ flashcli run pi05_libero --bundle bundles/pi05_libero \
 
 ### `no kernel image is available for execution on the device`（FA2 / SM120）
 
-多出现在 **SM120**（Blackwell）上跑**旧版** bundle：`flash_rt_fa2` 仅含 sm_89 SASS。请用**新脚本重打 bundle**（默认 FA2 多架构），或本地开发时不要对发布产物使用 `--fa2-native-only`。
+多出现在 **SM120** 上匹配了 **cu124** 格，或旧 bundle 的 FA2 无 sm_120。请确认 `flashcli models envs pi05_libero` 为 `sm120-cu130-*`，并用当前发布脚本重打 bundle。
 
 ### `'GemmRunner' object has no attribute 'fp8_nt_dev'`
 

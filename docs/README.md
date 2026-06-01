@@ -4,13 +4,14 @@
 
 | Document | Audience |
 |----------|------------|
-| [runtime-matrix.md](runtime-matrix.md) | Runtime release matrix (`sm` × CUDA × Python ABI) and build workflow |
+| [runtime-matrix.md](runtime-matrix.md) | **Maintainers**: native matrix (`sm` × CUDA × Python ABI), release pipeline, zip naming |
 | [environment.md](environment.md) | Environment variables (paths, catalog, HF, switches) |
-| [model_bundle_standard.md](model_bundle_standard.md) | Model Bundle format — extenders and maintainers |
+| [model_bundle_standard.md](model_bundle_standard.md) | Model Bundle format — third-party extenders and maintainers |
 | [architecture.md](architecture.md) | Module layout and runtime data flow |
-| [../codeplan/DEVELOPER.md](../codeplan/DEVELOPER.md) | Maintainer guide (build, catalog, boundaries) |
+| [../CONTRIBUTING.md](../CONTRIBUTING.md) | How to contribute + release bundle checklist |
 | [../README.md](../README.md) | User quick reference |
+| [../bundles/README.md](../bundles/README.md) | Published bundle sources |
 
-**Common commands**: `flashcli models list` · `flashcli models envs [preset]` (GPU vs `models.yaml` environments) · `flashcli bundle sync <preset>`
+**Common commands**: `flashcli models list` · `flashcli models envs [preset]` · `flashcli bundle sync <preset>` · `flashcli bundle validate PATH`
 
-Inference kernels and precision specs live in the [FlashRT](https://github.com/flashrt-ai/FlashRT) repository.
+Inference kernels and precision specs live in the [FlashRT](https://github.com/LiangSu8899/FlashRT) repository.

@@ -1,7 +1,8 @@
-# flashcli 模型目录 — 每 preset 一个 bundle zip；运行时从 lib/*.so 按环境选择
+# flashcli preset catalog — one bundle.zip per preset; runtime picks lib/*.so by host env
 #
-# 构建：bash scripts/release_bundle.sh --bundle <name>  或  bundles/<name>/release.sh
-# 文档：docs/runtime-matrix.zh-CN.md、scripts/lib/bundle_hooks.sh
+# Release: bash scripts/release_bundle.sh --bundle <name>  or  bundles/<name>/release.sh
+# Zip URL pattern: flashcli-bundle-{name}-{FlashRT_ABI}-sm{SM}-multi-linux-x86_64-{timestamp}.zip
+# Docs: docs/runtime-matrix.md, docs/model_bundle_standard.md
 
 schema_version: 6
 
@@ -14,7 +15,7 @@ models:
       # path: bundles/pi05_libero
       # git: xxx
 
-  # 共享同一 runtime zip；bundle_variant 选权重（HF 按 preset 名缓存）
+  # Same runtime zip as qwen36; bundle_variant selects weights (HF cache keyed by preset name)
   qwen3-8b-nvfp4:
     description: Qwen3-8B NVFP4 (SM120) — kaitchup/Qwen3-8B-NVFP4
     bundle_variant: qwen3

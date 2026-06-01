@@ -16,7 +16,7 @@
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
 
-# 受限网络**（Gitee 安装脚本 + pip/HF 镜像）：
+# 受限网络（Gitee 安装脚本 + pip/HF 镜像）：
 # curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
 
 flashcli run pi05_libero \
@@ -92,9 +92,11 @@ flashcli models envs pi05_libero
 
 | 文档 | 读者 |
 |------|------|
+| [docs/runtime-matrix.zh-CN.md](docs/runtime-matrix.zh-CN.md) | 原生矩阵与发布构建（维护者） |
 | [docs/environment.zh-CN.md](docs/environment.zh-CN.md) | 环境变量完整说明 |
 | [docs/model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md) | Model Bundle 格式（扩展方 / 维护者） |
 | [docs/architecture.zh-CN.md](docs/architecture.zh-CN.md) | 模块划分与数据流 |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献指南（英文）+ 发布 checklist |
 
 推理内核与精度说明请参阅 [FlashRT](https://github.com/LiangSu8899/FlashRT) 仓库文档。
 

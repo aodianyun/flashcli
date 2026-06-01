@@ -11,8 +11,12 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from flashcli.engines.base import ChatMessage, ChatRequest, ServeEngine
+from flashcli.engines.base import ChatRequest, ServeEngine
 from flashcli.serve.inference import GpuBusyError, InferenceGate, iter_on_inference_loop
+from flashcli.serve.openai_bridge import (
+    chat_result_to_completion_payload,
+    parse_chat_completions_body,
+)
 from flashcli.serve.request_log import (
     RequestTimer,
     client_label,
@@ -103,6 +107,9 @@ def build_app(engine: ServeEngine) -> FastAPI:
 
     app.add_middleware(AccessLogMiddleware)
 
+    if hasattr(engine, "register_routes"):
+        engine.register_routes(app)
+
     @app.get("/health")
     async def health():
         busy = gate.is_busy
@@ -130,31 +137,10 @@ def build_app(engine: ServeEngine) -> FastAPI:
         }
 
     def _parse_chat_request(body: dict[str, Any]) -> ChatRequest:
-        messages = body.get("messages")
-        if not isinstance(messages, list) or not messages:
-            raise HTTPException(400, "messages required")
-        chat_messages = [
-            ChatMessage(
-                role=str(m.get("role", "user")),
-                content=m.get("content"),
-                tool_calls=m.get("tool_calls"),
-            )
-            for m in messages
-        ]
-        stop = body.get("stop")
-        if isinstance(stop, str):
-            stop = [stop]
-        return ChatRequest(
-            messages=chat_messages,
-            max_tokens=int(body.get("max_tokens") or 256),
-            temperature=float(body.get("temperature", 0.0)),
-            top_p=float(body.get("top_p", 1.0)),
-            top_k=int(body.get("top_k", 0)),
-            stream=bool(body.get("stream", False)),
-            tools=body.get("tools"),
-            stop=stop if isinstance(stop, list) else None,
-            seed=body.get("seed"),
-        )
+        try:
+            return parse_chat_completions_body(body)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     async def _chat_result(req: ChatRequest) -> Any:
         if hasattr(engine, "chat_async"):
@@ -233,12 +219,6 @@ def build_app(engine: ServeEngine) -> FastAPI:
                 )
                 raise HTTPException(500, f"inference failed: {exc}") from exc
 
-            msg: dict[str, Any] = {
-                "role": "assistant",
-                "content": result.content,
-            }
-            if result.tool_calls:
-                msg["tool_calls"] = result.tool_calls
             usage_line = usage_summary(result.usage)
             log.info(
                 "chat END | id=%s | from=%s | status=200 | %.1f ms | "
@@ -250,20 +230,12 @@ def build_app(engine: ServeEngine) -> FastAPI:
                 usage_line,
                 f" | {summary}" if not usage_line else "",
             )
-            return {
-                "id": completion_id,
-                "object": "chat.completion",
-                "created": created,
-                "model": engine.model_id,
-                "choices": [
-                    {
-                        "index": 0,
-                        "message": msg,
-                        "finish_reason": result.finish_reason,
-                    }
-                ],
-                "usage": result.usage,
-            }
+            return chat_result_to_completion_payload(
+                result,
+                completion_id=completion_id,
+                model_id=engine.model_id,
+                created=created,
+            )
 
         try:
             await gate.acquire(req_id)

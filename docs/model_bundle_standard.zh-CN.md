@@ -4,7 +4,7 @@
 
 第三方通过 **Model Bundle** 交付：一份 **`flashcli-bundle.json`**、**`entry` 推理模块**、可选 **FlashRT `.so` / `flash_rt` Python**。flashcli **仅**加载 bundle 并调用 `entry`，**不**在 flashcli 源码中实现具体 Run/Serve 逻辑。
 
-维护 flashcli 请参阅 [DEVELOPER.zh-CN.md](../codeplan/DEVELOPER.zh-CN.md)。对外 catalog 见 [`models.yaml`](../src/flashcli/catalog/models.yaml)（`pi05_libero`、`qwen3-8b-nvfp4`、`qwen36-27b-nvfp4`）。
+维护 flashcli 请参阅 [CONTRIBUTING.md](../CONTRIBUTING.md)。对外 catalog 见 [`models.yaml`](../src/flashcli/catalog/models.yaml)（`pi05_libero`、`qwen3-8b-nvfp4`、`qwen36-27b-nvfp4`）。
 
 每个 preset 在 **`models.yaml`** 中仅登记 **一个** bundle 源：顶层 **`bundle.zip` / `path` / `git`**。多环境 runtime 打在同一制品内（推荐：**单 zip + `lib/` 原生矩阵**）。详见 [runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md)。
 
@@ -158,13 +158,13 @@ catalog 通过 `models.yaml` 的单个 `bundle.zip` 指向已组装制品；权�
 qwen3-8b-nvfp4:
   bundle_variant: qwen3
   bundle:
-    zip: https://.../flashcli-bundle-qwen_nvfp4-main-sm120-multi-linux-x86_64.zip
+    zip: https://.../flashcli-bundle-qwen_nvfp4-{abi}-sm120-multi-linux-x86_64-{timestamp}.zip
     # path: bundles/qwen_nvfp4
 
 qwen36-27b-nvfp4:
   bundle_variant: qwen36
   bundle:
-    zip: https://.../flashcli-bundle-qwen_nvfp4-main-sm120-multi-linux-x86_64.zip
+    zip: https://.../flashcli-bundle-qwen_nvfp4-{abi}-sm120-multi-linux-x86_64-{timestamp}.zip
 ```
 
 ```bash
@@ -173,7 +173,7 @@ flashcli run qwen36-27b-nvfp4 --prompt "你好" --K 6
 flashcli run qwen3-8b-nvfp4 --model qwen36 ...  # 临时覆盖（不推荐常态）
 ```
 
-发布构建：`bash scripts/build_qwen_release_matrix.sh` → `bundles/qwen_nvfp4/dist/*.zip`（**一个** multi-env zip，勿按 preset 拆包）。本地单档：[`bundles/qwen_nvfp4/build.sh`](../bundles/qwen_nvfp4/build.sh)。
+发布构建：`bash scripts/release_bundle.sh --bundle qwen_nvfp4 --clean` → `bundles/qwen_nvfp4/dist/*.zip`（**一个** multi-env zip，**cu130 only**，勿按 preset 拆包）。本地单档：[`bundles/qwen_nvfp4/build.sh`](../bundles/qwen_nvfp4/build.sh)。
 
 ## `entry` 入口约定
 
@@ -229,7 +229,7 @@ models:
   pi05_libero:
     description: Pi0.5 LIBERO — ...
     bundle:
-      zip: https://cdn.example/.../flashcli-bundle-pi05-main-sm89-multi-linux-x86_64.zip
+      zip: https://cdn.example/.../flashcli-bundle-pi05-{abi}-sm89-multi-linux-x86_64-{timestamp}.zip
       # path: bundles/pi05_libero   # 本地调试（须含本机匹配的 lib/*.so）
       # git: { repo: "...", ref: main }
 ```
@@ -247,27 +247,36 @@ Bundle 解析：`--bundle` > catalog 的 `zip` / `path` / `git` > 本地缓存 >
 
 环境变量（`FLASHCLI_MODELS_YAML`、`FLASHCLI_HOME`、`HF_ENDPOINT` 等）见 [environment.zh-CN.md](environment.zh-CN.md)。
 
-## 构建脚本（FlashRT 源码树，Linux GPU）
+## 构建脚本（FlashRT 源码，Linux + GPU）
 
-**矩阵发布（`pi05_libero` 推荐）：**
+矩阵配置：`bundles/<name>/release-matrix.env`。Bundle 专用 cmake：`bundles/<name>/_bundle_build.sh`。
 
-```bash
-export FLASHRT_REPO=/path/to/FlashRT
-export CUDA_HOME_CU124=/usr/local/cuda-12.4
-bash scripts/build_pi05_release_matrix.sh --cuda-tag 124
-# → bundles/pi05_libero/dist/flashcli-bundle-pi05-main-sm89-multi-linux-x86_64.zip
-```
-
-**单环境 bundle（维护者本地）：**
+**一键发布（推荐）：**
 
 ```bash
-bash scripts/build_pi05_bundle.sh --bundle-dir flashcli/bundles/pi05_libero
-bash scripts/build_pi05_bundle.sh --bundle-dir ... --pack-only
-bash scripts/build_pi05_bundle.sh \
-  --embed-checkpoint ~/.flashcli/models/pi05_libero/checkpoint
+cd flashcli
+bash scripts/release_bundle.sh --bundle pi05_libero --clean
+bash scripts/release_bundle.sh --bundle qwen_nvfp4 --clean
 ```
 
-Qwen NVFP4 使用 `scripts/build_qwen_bundle.sh` / `scripts/build_qwen_release_matrix.sh`（**SM120** + `flash_rt_fp4`）。见 [bundles/qwen_nvfp4/README.zh-CN.md](../bundles/qwen_nvfp4/README.zh-CN.md)。
+**分步（宿主机矩阵）：**
+
+```bash
+bash scripts/build_release_matrix.sh --bundle pi05_libero --check-only
+bash scripts/release_bundle.sh --bundle pi05_libero --cuda-tag 124   # 第二条线勿 --clean
+bash scripts/build_release_matrix.sh --bundle pi05_libero --pack-only
+```
+
+**单环境本地开发：**
+
+```bash
+cd bundles/pi05_libero
+bash build.sh --repo-root /path/to/FlashRT
+```
+
+Release zip 文件名含 FlashRT ABI + 时间戳，见 [runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md)。
+
+Qwen NVFP4：**仅 cu130**（需 nvcc 支持 sm_120/sm_120a）。见 [bundles/qwen_nvfp4/README.zh-CN.md](../bundles/qwen_nvfp4/README.zh-CN.md)。
 
 ## 最小交付清单
 

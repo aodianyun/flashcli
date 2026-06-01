@@ -314,11 +314,14 @@ stage_qwen_serve_modules() {
   esac
   case "${VARIANT}" in
     qwen36|all)
-      cp -f "${REPO_ROOT}/examples/qwen36_openai_server.py" \
-        "${serve_dir}/qwen36_openai.py"
+      [[ -d "${REPO_ROOT}/serving/qwen36_agent" ]] \
+        || die "Missing ${REPO_ROOT}/serving/qwen36_agent (update FlashRT for agent serving)"
+      rm -rf "${serve_dir}/qwen36_agent"
+      cp -a "${REPO_ROOT}/serving/qwen36_agent" "${serve_dir}/qwen36_agent"
+      rm -f "${serve_dir}/qwen36_openai.py"
       ;;
   esac
-  log "Staged OpenAI server engines -> ${serve_dir}/"
+  log "Staged serve engines -> ${serve_dir}/"
 }
 
 finalize_matrix_manifest() {
@@ -582,6 +585,9 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 if [[ "${SKIP_BUILD}" -eq 0 ]]; then
   [[ -n "${SM}" ]] || detect_sm
   [[ -n "${CUDA_TAG}" ]] || detect_cuda_tag
+  if [[ "${CUDA_TAG}" == "124" ]]; then
+    die "qwen_nvfp4 (SM120/NVFP4) cannot build cu124: nvcc 12.4 lacks sm_120/sm_120a. Use cu130 only (25.10-py3 container or --cuda-tag 130)."
+  fi
   GPU_ARCH="${GPU_ARCH:-${SM}}"
   command -v cmake >/dev/null 2>&1 || die "cmake not found"
   command -v nvcc >/dev/null 2>&1 || die "nvcc not found"

@@ -17,6 +17,10 @@ source "${SCRIPT_DIR}/lib/bundle_hooks.sh"
 source "${SCRIPT_DIR}/lib/matrix_python.sh"
 # shellcheck source=lib/matrix_cuda.sh
 source "${SCRIPT_DIR}/lib/matrix_cuda.sh"
+# shellcheck source=lib/probe_native_abi.sh
+source "${SCRIPT_DIR}/lib/probe_native_abi.sh"
+# shellcheck source=lib/verify_native_abi.sh
+source "${SCRIPT_DIR}/lib/verify_native_abi.sh"
 
 BUNDLE_ARG=""
 REPO_ROOT="${FLASHRT_REPO:-}"
@@ -204,6 +208,20 @@ for cuda in ${CUDA_TAGS}; do
     run_build_cell "${cuda}" "${py}"
   done
 done
+
+verify_built_native_python_abi() {
+  local verify_cuda="${CUDA_TAGS}" verify_py="${PY_MINORS}"
+  [[ -n "${ONLY_CUDA}" ]] && verify_cuda="${ONLY_CUDA}"
+  [[ -n "${ONLY_PY}" ]] && verify_py="${ONLY_PY}"
+  log "Verifying Python ABI for lib/*.so (matrix interpreters, cu${verify_cuda}, py${verify_py})"
+  verify_native_lib_python_abi \
+    "${BUNDLE_DIR}" "${MATRIX_SM}" "${verify_cuda}" "linux" "x86_64" "${verify_py}" 1
+  log "Python ABI verify OK"
+}
+
+if [[ "${DRY_RUN}" -eq 0 && "${PACK_ONLY}" -eq 0 && "${CHECK_ONLY}" -eq 0 ]]; then
+  verify_built_native_python_abi
+fi
 
 if [[ "${DRY_RUN}" -eq 0 && "${SKIP_PACK}" -eq 0 ]]; then
   pack_multi_zip

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# One-command pi05_libero CDN release (see scripts/release_bundle.sh).
+# One-command CDN release (see scripts/release_bundle.sh).
 #
 #   bash release.sh
-#   bash release.sh --git-ref main --clean
+#   bash release.sh --clean
 #
 set -euo pipefail
 

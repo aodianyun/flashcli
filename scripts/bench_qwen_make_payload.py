@@ -21,7 +21,7 @@ def resolve_long_prompt_seed(style: str, seed_arg: str | None) -> str:
     if key in ("flashrt", "doc", "comparable"):
         return FLASHRT_DOC_SEED
     if key == "repeat":
-        return "请用一句话说明量子力学的一个要点。"
+        return "Explain one key idea of quantum mechanics in a single sentence."
     raise SystemExit(
         f"unknown --long-prompt-style {style!r}; use repeat, flashrt, or doc"
     )

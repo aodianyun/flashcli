@@ -568,7 +568,7 @@ def serve(
     warmup_preset: Optional[str] = typer.Option(
         None,
         "--warmup-preset",
-        help="FlashRT warmup buckets: auto|short|long|all|none (qwen36 also supports long).",
+        help="Warmup bucket preset (bundle-specific; qwen3: auto|short|all|none; qwen36: agent|short|long|all|none).",
     ),
     max_seq: Optional[int] = typer.Option(
         None,
@@ -641,45 +641,6 @@ def serve(
         if active is not None
         else {}
     )
-    load_max_seq = int(
-        max_seq
-        if max_seq is not None
-        else bundle_serve.get("max_seq", 2048)
-    )
-    load_max_q_seq = int(
-        max_q_seq
-        if max_q_seq is not None
-        else bundle_serve.get("max_q_seq", 128)
-    )
-    warm_spec: str | None = None
-    if warmup_preset or warmup or bundle_serve.get("warmup"):
-        import importlib.util
-
-        util_path = (active.bundle_root / "_qwen_util.py") if active else None
-        if util_path is None or not util_path.is_file():
-            typer.echo(
-                "--warmup-preset requires a Qwen bundle (qwen_nvfp4).",
-                err=True,
-            )
-            raise typer.Exit(1)
-        spec = importlib.util.spec_from_file_location(
-            "flashcli_bundle_qwen_util", util_path
-        )
-        if spec is None or spec.loader is None:
-            typer.echo(f"Cannot load {util_path}", err=True)
-            raise typer.Exit(1)
-        qwen_util = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(qwen_util)
-        warm_spec = qwen_util.resolve_serve_warmup_spec(
-            effective_variant,
-            preset=warmup_preset,
-            max_seq=load_max_seq,
-            max_q_seq=load_max_q_seq,
-            extra_spec=warmup,
-            bundle_default=str(bundle_serve.get("warmup", "")) or None
-            if warmup is None and warmup_preset is None
-            else None,
-        )
 
     try:
         import uvicorn
@@ -699,13 +660,34 @@ def serve(
     opts: dict = {
         "model_name": model_name,
         "K": K,
-        "warmup": warm_spec,
         "model": effective_variant,
         "max_seq": max_seq,
         "max_q_seq": max_q_seq,
+        "warmup_preset": warmup_preset,
     }
     opts = {k: v for k, v in opts.items() if v is not None}
     serve_engine.load(Path(ckpt), p, **opts)
+
+    warm_spec: str | None = None
+    if warmup_preset or warmup or bundle_serve.get("warmup"):
+        if hasattr(serve_engine, "resolve_warmup"):
+            warm_spec = serve_engine.resolve_warmup(
+                preset=warmup_preset,
+                extra_spec=warmup,
+                bundle_default=str(bundle_serve.get("warmup", "")) or None
+                if warmup is None and warmup_preset is None
+                else None,
+            )
+        elif warmup:
+            warm_spec = warmup
+        elif bundle_serve.get("warmup"):
+            warm_spec = str(bundle_serve.get("warmup"))
+        elif warmup_preset:
+            typer.echo(
+                "This bundle does not support --warmup-preset; use --warmup instead.",
+                err=True,
+            )
+            raise typer.Exit(1)
     if warm_spec:
         serve_engine.warmup(warm_spec)
 

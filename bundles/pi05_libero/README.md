@@ -12,8 +12,9 @@ Pi0.5 LIBERO VLA; weights [lerobot/pi05_libero_finetuned_v044](https://huggingfa
 flashcli-bundle.json
 run.py
 _pi05_compat.py
-flash_rt_kernels.so
-flash_rt_fa2.so
+lib/
+  flash_rt_kernels-*-sm89-cu{124|130}-linux-x86_64-py{310|311|312}.so
+  flash_rt_fa2-*-....so
 flash_rt/                 # trimmed Python tree (no .so inside)
 ```
 
@@ -30,7 +31,14 @@ flashcli run pi05_libero --prompt "..." --image /path/to/base.jpg
 
 ### FA2 and SM120
 
-Matrix artifacts are labeled **sm89**, but `requires.sm` includes **120** (Blackwell reuses the same zip). **Release builds default to multi-arch FA2** (`sm_80 + sm_120 + PTX`). Do not ship with `FA2_ARCH_NATIVE_ONLY` — SM120 will fail with `no kernel image is available for execution on the device`. Use `build.sh --fa2-native-only` for fast local SM89-only dev only.
+Matrix artifacts are labeled **sm89**, but `requires.sm` includes **120**. FA2 strategy depends on the CUDA line:
+
+| CUDA line | FA2 |
+|-----------|-----|
+| **cu124** (nvcc 12.4) | sm_89 AOT only (nvcc 12.4 cannot build `compute_120`) |
+| **cu130** (nvcc 13.x) | sm_80 + sm_120 + PTX (required for SM120 users) |
+
+**SM120 hosts** must match `*-cu130-*` cells. Do not publish cu130 builds with `--fa2-native-only`. Local SM89-only dev: `build.sh --fa2-native-only`.
 
 ### One-command release (recommended)
 
@@ -38,12 +46,10 @@ Linux host with **Docker + NVIDIA GPU**:
 
 ```bash
 cd flashcli/bundles/pi05_libero
-bash release.sh --git-ref main --clean
+bash release.sh --clean
 ```
 
-`--clean` removes `lib/`, `dist/`, `.build-matrix/`, and `.native-cache/` (avoids reusing old single-arch FA2 caches).
-
-Output: `dist/flashcli-bundle-pi05-main-sm89-multi-linux-x86_64-*.zip`
+Output example: `dist/flashcli-bundle-pi05-{abi}-sm89-multi-linux-x86_64-{timestamp}.zip`
 
 ### Step-by-step (host with cu124 + cu130)
 
@@ -91,7 +97,7 @@ Pre-download on a reachable host, then `flashcli run pi05_libero --bundle bundle
 
 ### `no kernel image is available for execution on the device` (FA2 / SM120)
 
-Usually an **old bundle** on **SM120**: `flash_rt_fa2` was built with `FA2_ARCH_NATIVE_ONLY` (sm_89 only). Rebuild with current `_bundle_build.sh` (multi-arch FA2 default).
+Usually an **old bundle** or **wrong CUDA cell** on **SM120**: match `sm120-cu130-*` (not cu124). Rebuild with current release scripts.
 
 ### `'GemmRunner' object has no attribute 'fp8_nt_dev'`
 

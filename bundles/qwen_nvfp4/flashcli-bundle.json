@@ -41,6 +41,7 @@
         "device": "cuda:0",
         "max_seq": 2048,
         "max_q_seq": 128,
+        "warmup_preset": "auto",
         "warmup": "32:128,128:256",
         "model_name": "qwen3-8b-nvfp4"
       }
@@ -68,14 +69,15 @@
         "FLASHRT_QWEN36_MTP_CKPT_DIR": "{bundle_root}/mtp_fp8"
       },
       "defaults": {
-        "max_seq": 2048,
-        "K": 6
+        "max_seq": 262208,
+        "K": 4
       },
       "serve": {
         "device": "cuda:0",
-        "max_seq": 2048,
-        "K": 6,
-        "warmup": "8:512",
+        "max_seq": 262208,
+        "K": 4,
+        "warmup_preset": "agent",
+        "warmup": "16:128,128:128",
         "model_name": "qwen3.6-27b-nvfp4"
       }
     }

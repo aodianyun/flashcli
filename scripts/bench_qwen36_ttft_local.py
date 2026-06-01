@@ -106,15 +106,14 @@ def _activate_bundle(bundle_root: Path) -> None:
 
 
 def _load_engine(ckpt: Path, *, max_seq: int, K: int, device: str):
-    from _flashrt_serve import import_qwen36_engine_class
+    from _backend_qwen36_agent import Qwen36AgentBackend
 
-    EngineCls = import_qwen36_engine_class()
-    return EngineCls(
+    return Qwen36AgentBackend.from_checkpoint(
         checkpoint=str(ckpt),
-        K=K,
-        max_seq=max_seq,
         device=device,
+        max_seq=max_seq,
         model_name="qwen36-27b-nvfp4",
+        K=K,
     )
 
 
@@ -152,17 +151,24 @@ def _build_messages(args: argparse.Namespace) -> list[dict]:
 async def _run_full_generate(engine, messages, max_tokens: int) -> dict:
     import time
 
+    from flashcli.engines.base import ChatMessage, ChatRequest
+
+    req = ChatRequest(
+        messages=[ChatMessage(role=str(m["role"]), content=m.get("content")) for m in messages],
+        max_tokens=int(max_tokens),
+    )
     t0 = time.perf_counter()
-    data = await engine.generate(messages, None, max_tokens)
+    result = await engine.chat_async(req)
     wall_ms = (time.perf_counter() - t0) * 1000.0
+    usage = result.usage or {}
     return {
         "wall_ms": wall_ms,
-        "prefill_ms": float(data.get("prefill_ms") or 0.0),
-        "decode_ms": float(data.get("decode_ms") or 0.0),
-        "decode_tok_per_s": float(data.get("decode_tok_per_s") or 0.0),
-        "route": data.get("route"),
-        "prompt_tokens": int(data.get("prompt_tokens") or 0),
-        "completion_tokens": int(data.get("completion_tokens") or 0),
+        "prefill_ms": float(usage.get("prefill_ms") or 0.0),
+        "decode_ms": float(usage.get("decode_ms") or 0.0),
+        "decode_tok_per_s": float(usage.get("decode_tok_per_s") or 0.0),
+        "route": usage.get("route"),
+        "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+        "completion_tokens": int(usage.get("completion_tokens") or 0),
     }
 
 
@@ -188,7 +194,7 @@ def main() -> int:
         help="If set, fit long prompt to this max_seq (use 262208 for 256K)",
     )
     p.add_argument("--max-tokens", type=int, default=64)
-    p.add_argument("--K", type=int, default=6)
+    p.add_argument("--K", type=int, default=4)
     p.add_argument("--device", default="cuda:0")
     p.add_argument(
         "--target-prompt-tokens",

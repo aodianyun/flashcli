@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# One-command qwen_nvfp4 CDN release (see scripts/release_bundle.sh).
+# One-command CDN release (see scripts/release_bundle.sh).
 #
 #   bash release.sh
-#   bash release.sh --git-ref main --clean
+#   bash release.sh --clean
 #
 set -euo pipefail
 

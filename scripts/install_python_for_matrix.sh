@@ -255,8 +255,9 @@ main() {
   [[ ${#missing[@]} -eq 0 ]] || die "Still missing: ${missing[*]}"
 
   write_env_file
-  log "Ready. One-shot cu124 matrix:"
-  log "  source ${ENV_FILE} && bash scripts/release_bundle.sh --bundle pi05_libero"
+  local bundle="${RELEASE_BUNDLE_NAME:-<bundle>}"
+  log "Ready. Example next step:"
+  log "  source ${ENV_FILE} && bash scripts/release_bundle.sh --bundle ${bundle}"
 }
 
 main "$@"

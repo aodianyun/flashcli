@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, AsyncIterator, Iterator
+from typing import Any
 
 from flashcli.bundle.activate import active_bundle
 from flashcli.bundle.manifest import BundleManifest
@@ -12,7 +12,7 @@ from flashcli.bundle.variants import (
     variant_merged_load_options,
     variant_serve_cfg,
 )
-from flashcli.engines.base import ChatChunk, ChatRequest, ChatResult
+from flashcli.engines.base import ChatRequest, ChatResult
 
 
 def resolve_model_variant(bundle: BundleManifest, options: dict[str, Any]) -> str:
@@ -60,22 +60,19 @@ def warmup_shapes_to_spec(shapes: list[tuple[int, int]]) -> str:
 
 
 def qwen36_warmup_preset_shapes(preset: str, max_seq: int) -> list[tuple[int, int]]:
-    """Match FlashRT ``examples/qwen36_openai_server.py`` warmup buckets."""
+    """Match FlashRT ``serving/qwen36_agent/server.py`` warmup buckets."""
     key = (preset or "auto").lower()
     if key in ("none", "off", "false", "0"):
         return []
-    if key not in ("auto", "short", "long", "all"):
+    if key not in ("auto", "agent", "short", "long", "all"):
         raise ValueError(
-            f"invalid warmup-preset {preset!r}; expected auto, short, long, all, or none"
+            f"invalid warmup-preset {preset!r}; expected auto, agent, short, long, all, or none"
         )
-    short = [(8, 64), (128, 64), (512, 64), (1024, 64)]
+    short = [(16, 128), (32, 128), (64, 128), (128, 128), (512, 128)]
     long = [
-        (2048, 64),
-        (4096, 64),
-        (8192, 64),
-        (16384, 64),
+        (2048, 128),
+        (8192, 128),
         (32768, 64),
-        (65536, 64),
         (131072, 64),
         (204800, 64),
         (262144, 16),
@@ -84,6 +81,13 @@ def qwen36_warmup_preset_shapes(preset: str, max_seq: int) -> list[tuple[int, in
         candidates = short
     elif key == "long":
         candidates = long
+    elif key == "all":
+        candidates = short + [
+            (1024, 128),
+            (4096, 128),
+            (16384, 128),
+            (65536, 64),
+        ] + long
     else:
         candidates = short + long
     cap = int(max_seq)
@@ -160,10 +164,9 @@ def run_async(coro: Any) -> Any:
 
 
 def usage_from_qwen36_engine(data: dict[str, Any]) -> dict[str, Any]:
-    """Map FlashRT qwen36 ``generate()`` stats into OpenAI-style ``usage``.
+    """Map FlashRT qwen36 stats into OpenAI-style ``usage``.
 
-    Qwen36 reports ``decode_tok_per_s`` / ``e2e_tok_per_s`` (not ``tok_per_s``).
-    We expose both and set ``tok_per_s`` for bench/clients that expect qwen3 fields.
+    Accepts legacy ``generate()`` dicts and agent ``AgentResult``-shaped dicts.
     """
     pt = int(data.get("prompt_tokens", 0) or 0)
     ct = int(data.get("completion_tokens", 0) or 0)
@@ -181,6 +184,9 @@ def usage_from_qwen36_engine(data: dict[str, Any]) -> dict[str, Any]:
         "completion_tokens": ct,
         "total_tokens": pt + ct,
     }
+    cached = data.get("cached_tokens")
+    if cached is not None:
+        usage["prompt_tokens_details"] = {"cached_tokens": int(cached)}
     for key in (
         "prefill_ms",
         "decode_ms",
@@ -188,87 +194,89 @@ def usage_from_qwen36_engine(data: dict[str, Any]) -> dict[str, Any]:
         "decode_tok_per_s",
         "e2e_tok_per_s",
         "route",
+        "first_delta_ms",
+        "session_id",
+        "prefix_action",
     ):
         if data.get(key) is not None:
             usage[key] = data[key]
-    route = data.get("route")
-    if route is not None:
-        usage["route"] = route
     if tok is not None:
         usage["tok_per_s"] = tok
     if data.get("ttft_ms") is not None:
         usage["ttft_ms"] = data.get("ttft_ms")
+    elif data.get("first_delta_ms") is not None:
+        usage["ttft_ms"] = data.get("first_delta_ms")
     elif data.get("prefill_ms") is not None:
-        # Non-stream generate: first token arrives after prefill.
         usage["ttft_ms"] = data.get("prefill_ms")
     return usage
 
 
-def qwen36_result_to_chat(data: dict[str, Any]) -> ChatResult:
-    finish = "tool_calls" if data.get("tool_calls") else "stop"
+def agent_result_to_dict(result: Any, *, route: str | None = None) -> dict[str, Any]:
+    stats = result.stats
+    out = {
+        "text": result.text,
+        "tool_calls": list(result.tool_calls or []),
+        "prompt_tokens": int(stats.prompt_tokens),
+        "completion_tokens": int(result.usage.get("completion_tokens", 0)),
+        "cached_tokens": int(stats.cached_tokens),
+        "prefill_ms": float(stats.prefill_ms),
+        "first_delta_ms": float(stats.first_delta_ms),
+        "decode_ms": float(stats.decode_ms),
+        "decode_tok_per_s": float(stats.decode_tok_per_s),
+        "session_id": result.session_id,
+        "prefix_action": result.prefix_plan.action,
+        "finish_reason": result.finish_reason,
+    }
+    if route is not None:
+        out["route"] = route
+    return out
+
+
+def agent_result_to_chat(result: Any, *, route: str | None = None) -> ChatResult:
+    data = agent_result_to_dict(result, route=route)
+    stats = result.stats
+    extensions = {
+        "flashrt": {
+            "session_id": result.session_id,
+            "cached_tokens": int(stats.cached_tokens),
+            "new_prefill_tokens": int(stats.new_prefill_tokens),
+            "prefill_ms": float(stats.prefill_ms),
+            "first_delta_ms": float(stats.first_delta_ms),
+            "decode_ms": float(stats.decode_ms),
+            "decode_tok_per_s": float(stats.decode_tok_per_s),
+            "prefix_action": result.prefix_plan.action,
+        }
+    }
     return ChatResult(
         content=data.get("text") or None,
         tool_calls=list(data.get("tool_calls") or []),
-        finish_reason=finish,
+        finish_reason=str(data.get("finish_reason") or "stop"),
         usage=usage_from_qwen36_engine(data),
+        extensions=extensions,
     )
 
 
-async def collect_qwen3_stream(
-    engine: Any,
-    req: ChatRequest,
-) -> ChatResult:
-    messages = messages_from_request(req)
-    content = ""
-    tool_calls: list[dict[str, Any]] = []
-    finish = "stop"
-    usage: dict[str, Any] = {}
-    async for ev in engine.stream_generate(
-        messages,
-        req.tools,
-        req.max_tokens,
-        req.temperature,
-        req.top_p,
-        req.top_k,
-        req.seed,
-        req.stop,
-    ):
-        if ev[0] == "content":
-            content += ev[1]
-        elif ev[0] == "tool_calls":
-            tool_calls.extend(ev[1])
-        elif ev[0] == "finish":
-            _, finish, usage = ev
-    return ChatResult(
-        content=content or None,
-        tool_calls=tool_calls,
-        finish_reason=finish,
-        usage=usage,
-    )
+def chat_request_to_openai_body(req: ChatRequest) -> dict[str, Any]:
+    """Build an OpenAI-shaped body for FlashRT ``request_from_openai`` helpers."""
+    payload: dict[str, Any] = {
+        "messages": messages_from_request(req),
+        "max_tokens": int(req.max_tokens),
+        "stream": bool(req.stream),
+        "temperature": req.temperature,
+        "top_p": req.top_p,
+    }
+    if req.tools:
+        payload["tools"] = req.tools
+    if req.stop:
+        payload["stop"] = req.stop
+    if req.seed is not None:
+        payload["seed"] = req.seed
+    payload.update(req.extras)
+    return payload
 
 
-async def iter_qwen3_stream(
-    engine: Any,
-    req: ChatRequest,
-) -> AsyncIterator[ChatChunk]:
-    messages = messages_from_request(req)
-    async for ev in engine.stream_generate(
-        messages,
-        req.tools,
-        req.max_tokens,
-        req.temperature,
-        req.top_p,
-        req.top_k,
-        req.seed,
-        req.stop,
-    ):
-        if ev[0] == "content":
-            yield ChatChunk(content_delta=ev[1])
-        elif ev[0] == "tool_calls":
-            yield ChatChunk(tool_calls=ev[1])
-        elif ev[0] == "finish":
-            _, finish, usage = ev
-            yield ChatChunk(finish_reason=finish, usage=usage)
+def chat_request_to_agent_openai(req: ChatRequest) -> dict[str, Any]:
+    return chat_request_to_openai_body(req)
 
 
 def merge_load_options(
@@ -282,7 +290,9 @@ def merge_load_options(
     if variant == "qwen3":
         merged.setdefault("max_q_seq", int(merged.get("max_q_seq", 128)))
     if variant == "qwen36":
-        merged.setdefault("K", int(merged.get("K", 6)))
+        merged.setdefault("K", int(merged.get("K", 4)))
+        merged.setdefault("max_output_tokens", int(merged.get("max_output_tokens", 8192)))
+        merged.setdefault("default_max_tokens", int(merged.get("default_max_tokens", 2048)))
         if options.get("K") is not None:
             merged["K"] = int(options["K"])
     if options.get("max_seq") is not None:

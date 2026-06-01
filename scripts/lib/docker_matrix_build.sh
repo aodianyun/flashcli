@@ -53,11 +53,15 @@ case "${CUDA_TAG}" in
 esac
 export PATH="${CUDA_HOME}/bin:${PATH}"
 
-log "Installing Python 3.10/3.11/3.12 for matrix"
+# Persist matrix Pythons on the mounted workspace (reused across container runs + host pack).
+export FLASHCLI_PYTHON_ROOT="${FLASHCLI_PYTHON_ROOT:-/workspace/.flashcli-python}"
+export FLASHCLI_PYTHON_ENV="${FLASHCLI_PYTHON_ENV:-/workspace/.flashcli/python-matrix.env}"
+
+log "Installing Python 3.10/3.11/3.12 for matrix (${FLASHCLI_PYTHON_ROOT})"
 bash "${FLASHCLI_ROOT}/scripts/install_python_for_matrix.sh" \
   --method auto --minors 310,311,312 || die "install_python_for_matrix.sh failed"
 
-_env_file="${FLASHCLI_PYTHON_ENV:-/root/.flashcli/python-matrix.env}"
+_env_file="${FLASHCLI_PYTHON_ENV}"
 if [[ -f "${_env_file}" ]]; then
   # shellcheck source=/dev/null
   source "${_env_file}"
