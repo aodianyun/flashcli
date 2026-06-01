@@ -25,9 +25,11 @@ FLASHCLI_CORE_PACKAGES = [
     "pyyaml>=6.0",
     "packaging>=23.0",
     "huggingface_hub>=0.26",
+    "fastapi>=0.100",
+    "uvicorn[standard]>=0.24",
 ]
 
-# flashcli unified HTTP API (src/flashcli/serve — not bundle inference code).
+# Subset used only by flashcli serve HTTP layer (also in CORE — kept for checks).
 FLASHCLI_SERVE_PACKAGES = [
     "fastapi>=0.100",
     "uvicorn[standard]>=0.24",
@@ -69,7 +71,7 @@ def flashcli_core_stack_satisfied() -> bool:
 
 
 def flashcli_serve_stack_satisfied() -> bool:
-    return not _missing_imports(FLASHCLI_SERVE_PACKAGES)
+    return flashcli_core_stack_satisfied()
 
 
 def flashcli_stack_satisfied(*, include_serve: bool = False) -> bool:

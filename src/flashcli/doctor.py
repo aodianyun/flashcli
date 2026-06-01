@@ -98,7 +98,6 @@ def run_install(
 ) -> None:
     ensure_environment(
         install_flashcli=True,
-        include_serve=True,
         quiet=quiet,
         force=force,
     )

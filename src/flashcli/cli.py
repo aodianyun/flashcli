@@ -654,7 +654,7 @@ def serve(
     p = PresetRegistry().get(preset)
 
     if _auto_install_flag(no_auto_install):
-        ensure_environment(install_flashcli=True, include_serve=True, quiet=quiet)
+        ensure_environment(install_flashcli=True, quiet=quiet)
 
     try:
         activate_for_preset(
@@ -679,7 +679,7 @@ def serve(
     except ImportError as exc:
         typer.echo(
             f"Cannot load flashcli HTTP serve stack: {exc} "
-            "(install flashcli with serve extras: pip install 'flashcli[serve]')",
+            "(reinstall flashcli: pip install -e .)",
             err=True,
         )
         raise typer.Exit(1) from exc

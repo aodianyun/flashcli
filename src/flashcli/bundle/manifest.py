@@ -230,6 +230,12 @@ def validate_bundle_layout(
 
     errors.extend(validate_native_lib(bundle, probe_abi=probe_abi))
     errors.extend(validate_weights_spec(bundle))
+
+    if bundle_format_version(bundle) >= 2:
+        from flashcli.bundle.assembly import describe_bundle_assembly_gaps
+
+        errors.extend(describe_bundle_assembly_gaps(bundle.bundle_root))
+
     return errors
 
 

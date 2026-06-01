@@ -16,14 +16,11 @@ dependencies = [
     "huggingface_hub>=0.26",
     "tqdm>=4.66",
     "tomli>=2.0; python_version < '3.11'",
-]
-
-[project.optional-dependencies]
-# HTTP serve layer (flashcli.serve — not bundle inference runtime).
-serve = [
     "fastapi>=0.100",
     "uvicorn[standard]>=0.24",
 ]
+
+[project.optional-dependencies]
 # Dev convenience only — production installs from runtime manifest / FlashRT pyproject.
 dev = ["flash-rt[torch,server]"]
 
