@@ -59,14 +59,14 @@
           "source": "huggingface",
           "repo": "Qwen/Qwen3.6-27B-FP8",
           "revision": "main",
-          "relative_dir": "mtp_fp8",
+          "cache_name": "qwen36-27b-nvfp4/mtp_fp8",
           "allow_patterns": [
             "mtp.safetensors"
           ]
         }
       },
       "env": {
-        "FLASHRT_QWEN36_MTP_CKPT_DIR": "{bundle_root}/mtp_fp8"
+        "FLASHRT_QWEN36_MTP_CKPT_DIR": "{models_dir}/qwen36-27b-nvfp4/mtp_fp8"
       },
       "defaults": {
         "max_seq": 262208,
