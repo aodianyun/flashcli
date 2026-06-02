@@ -69,7 +69,7 @@ Modes:
   --report-only         Rebuild report from --out-dir
 
 Bench:
-  --quick               Short ctx only; rounds=3 skip-first=1
+  --quick               Short ctx only; warmup-preset none; rounds=3 skip-first=1
   --short-only          Skip long-context case
   --rounds / --skip-first / --profile comparable|stress
   --long-tokens N       Long prompt user tokens (default: ${LONG_TOKENS})
@@ -119,6 +119,8 @@ while [[ $# -gt 0 ]]; do
       SHORT_ONLY=1
       ROUNDS=3
       SKIP_FIRST=1
+      # agent warmup includes 256K shapes and blocks HTTP until done (30+ min).
+      WARMUP_PRESET=none
       shift
       ;;
     --short-only) SHORT_ONLY=1; shift ;;
@@ -330,9 +332,11 @@ cleanup_on_exit() {
 }
 
 wait_health() {
-  local port="$1" timeout="$2" start now
+  local port="$1" timeout="$2" serve_log="${3:-}"
+  local start now elapsed last_hint=0
   start="$(date +%s)"
   log "Waiting for http://${HOST}:${port}/health (timeout ${timeout}s) …"
+  log "  flashcli serve starts HTTP only after model load + warmup; see serve.log for progress."
   while true; do
     if curl -sf "http://${HOST}:${port}/health" >/dev/null 2>&1; then
       now="$(date +%s)"
@@ -340,8 +344,20 @@ wait_health() {
       return 0
     fi
     now="$(date +%s)"
+    elapsed=$((now - start))
     if (( now - start >= timeout )); then
+      if [[ -n "${serve_log}" && -f "${serve_log}" ]]; then
+        log "Last 40 lines of ${serve_log}:"
+        tail -n 40 "${serve_log}" >&2 || true
+      fi
       die "Timed out waiting for /health on port ${port}"
+    fi
+    if (( elapsed - last_hint >= 60 )); then
+      last_hint="${elapsed}"
+      log "  … still waiting for /health (${elapsed}s elapsed)"
+      if [[ -n "${serve_log}" && -f "${serve_log}" ]]; then
+        tail -n 3 "${serve_log}" 2>/dev/null | sed 's/^/[serve] /' >&2 || true
+      fi
     fi
     sleep 5
   done
@@ -521,7 +537,7 @@ run_flashcli_backend() {
     "${serve_cmd[@]}" \
     >>"${workdir}/serve.log" 2>&1
 
-  health_s="$(wait_health "${PORT}" "${HEALTH_TIMEOUT}")"
+  health_s="$(wait_health "${PORT}" "${HEALTH_TIMEOUT}" "${workdir}/serve.log")"
   write_manifest_header "${workdir}" "flashcli+FlashRT" "${server_cmd}" "${started}" "${health_s}" \
     "$(jq -n --arg hf_attn "" --arg hf_dtype "" '{stack: "FlashRT"}')"
 
@@ -558,7 +574,7 @@ run_pytorch_backend() {
     "${serve_cmd[@]}" \
     >>"${workdir}/serve.log" 2>&1
 
-  health_s="$(wait_health "${PORT}" "${HEALTH_TIMEOUT}")"
+  health_s="$(wait_health "${PORT}" "${HEALTH_TIMEOUT}" "${workdir}/serve.log")"
   write_manifest_header "${workdir}" "PyTorch HF" "${server_cmd}" "${started}" "${health_s}" \
     "$(jq -n \
       --arg hf_attn "${HF_ATTN}" \
