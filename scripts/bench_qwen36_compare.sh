@@ -341,7 +341,7 @@ prepare_shared_payloads() {
       max_tokens: $max_tokens,
       temperature: 0,
       stream: true,
-      enable_thinking: false
+      chat_template_kwargs: {enable_thinking: false}
     }' \
     >"${PAYLOAD_DIR}/qwen36_short.json"
   if [[ "${SHORT_ONLY}" -eq 1 ]]; then
@@ -566,6 +566,10 @@ run_vllm_backend() {
     --served-model-name "${HF_MODEL_NAME}"
     --trust-remote-code
     --enforce-eager
+    --reasoning-parser
+    qwen3
+    --default-chat-template-kwargs
+    '{"enable_thinking": false}'
   )
   if [[ -n "${VLLM_EXTRA_ARGS}" ]]; then
     # shellcheck disable=SC2206

@@ -82,6 +82,12 @@ def run_stream(url: str, body: dict[str, Any]) -> dict[str, Any]:
                 choice = (chunk.get("choices") or [{}])[0]
                 delta = choice.get("delta") or {}
                 content = delta.get("content")
+                # vLLM Qwen3.6 may mis-route answer into delta.reasoning when streaming
+                # (see vllm #40816); merge only when content is absent.
+                if not content:
+                    reasoning = delta.get("reasoning")
+                    if reasoning:
+                        content = reasoning
                 if content:
                     content_chunks += 1
                     if client_ttft_ms is None:

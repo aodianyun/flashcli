@@ -98,7 +98,7 @@ bash scripts/bench_qwen36_compare.sh --quick --pytorch-only --vllm \
   --hf-model-name qwen3.6-27b-fp8
 ```
 
-**通过标准**：`completion_tokens≈64`；正文应是量子纠缠段落，**不要**出现 `Here's a thinking process`（若出现说明未关 thinking，需同步脚本里的 `enable_thinking: false`）。
+**通过标准**：`completion_tokens≈64`；正文应是量子纠缠段落，**不要**出现 `Here's a thinking process`。vLLM 需 `chat_template_kwargs.enable_thinking=false`（脚本已在 serve 与 payload 中配置）。
 
 ### 步骤 3：正式可比 — 短 + 长 256K（FlashRT，~30min+）
 
