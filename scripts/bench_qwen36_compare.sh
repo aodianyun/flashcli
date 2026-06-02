@@ -42,6 +42,9 @@ SHORT_ONLY=0
 LONG_ONLY=0
 QUICK=0
 QUICK_MAX_SEQ="${QUICK_MAX_SEQ:-32768}"
+# Short serve window: auto-warmup at 262208 (catalog default) takes many minutes.
+SHORT_SERVE_MAX_SEQ="${SHORT_SERVE_MAX_SEQ:-8192}"
+REUSE_RUNNING_SERVE="${REUSE_RUNNING_SERVE:-1}"
 MAX_SEQ_EXPLICIT=0
 GPU_SETTLE_EXPLICIT=0
 RUN_FLASHCLI=1
@@ -239,6 +242,8 @@ while [[ $# -gt 0 ]]; do
     --max-seq) MAX_SEQ="$2"; MAX_SEQ_EXPLICIT=1; shift 2 ;;
     --warmup-preset) WARMUP_PRESET="$2"; WARMUP_EXPLICIT=1; shift 2 ;;
     --keep-server) KEEP_SERVER=1; shift ;;
+    --reuse-serve) REUSE_RUNNING_SERVE=1; shift ;;
+    --no-reuse-serve) REUSE_RUNNING_SERVE=0; shift ;;
     --health-timeout) HEALTH_TIMEOUT="$2"; shift 2 ;;
     --gpu-settle-sec) GPU_SETTLE_SEC="$2"; GPU_SETTLE_EXPLICIT=1; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -282,7 +287,9 @@ if [[ "${REPORT_ONLY}" -eq 0 ]]; then
   command -v python3 >/dev/null 2>&1 || die "python3 not found"
   [[ -d "${CHECKPOINT}" ]] || die "Checkpoint not found: ${CHECKPOINT}"
   [[ -d "${VLLM_CHECKPOINT}" ]] || die "vLLM checkpoint not found: ${VLLM_CHECKPOINT}"
-  [[ "${RUN_FLASHCLI}" -eq 1 ]] && ensure_flashrt_bundle
+  if [[ "${RUN_FLASHCLI}" -eq 1 && ! ( "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ) ]]; then
+    ensure_flashrt_bundle
+  fi
 fi
 
 validate_dual_arm_parity() {
@@ -517,7 +524,7 @@ wait_health() {
       tail -n 40 "${serve_log}" >&2 || true
       die "Timed out waiting for /health"
     fi
-    if (( elapsed - last_hint >= 60 )); then
+    if (( elapsed - last_hint >= 15 )); then
       last_hint=${elapsed}
       log "  … waiting (${elapsed}s)"
       tail -n 3 "${serve_log}" 2>/dev/null | sed 's/^/    /' >&2 || true
@@ -542,16 +549,25 @@ start_serve() {
   log "  pid=$(cat "${SERVE_PID_FILE}")"
 }
 
-long_prompt_style() {
-  case "${BENCH_PROFILE}" in
-    comparable|stress) echo "flashrt" ;;
-    *) echo "${LONG_PROMPT_STYLE:-repeat}" ;;
-  esac
+port_health_model() {
+  curl -sf "http://${HOST}:${PORT}/health" 2>/dev/null \
+    | jq -r '.model // empty' 2>/dev/null || true
+}
+
+can_reuse_flashrt_serve() {
+  [[ "${REUSE_RUNNING_SERVE}" -eq 1 ]] || return 1
+  local m
+  m="$(port_health_model)"
+  [[ -n "${m}" ]] && [[ "${m}" == "${MODEL_NAME}" || "${m}" == *qwen3.6* ]]
 }
 
 prepare_shared_payloads() {
   mkdir -p "${PAYLOAD_DIR}"
-  log "Step: build payloads (cases=$(bench_cases_label), max_seq=${MAX_SEQ}, tokenizer=${CHECKPOINT})"
+  if [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ]]; then
+    log "Step: build payloads (short-only)"
+  else
+    log "Step: build payloads (cases=$(bench_cases_label), max_seq=${MAX_SEQ}, tokenizer=${CHECKPOINT})"
+  fi
 
   if [[ "${LONG_ONLY}" -eq 0 ]]; then
     jq -n \
@@ -584,6 +600,13 @@ prepare_shared_payloads() {
       --stream --max-seq "${payload_max_seq}" --seq-slack "${PAYLOAD_SEQ_SLACK}"
     log "  qwen36_long.json (user_tokens=${LONG_TOKENS}, fit max_seq=${payload_max_seq})"
   fi
+}
+
+long_prompt_style() {
+  case "${BENCH_PROFILE}" in
+    comparable|stress) echo "flashrt" ;;
+    *) echo "${LONG_PROMPT_STYLE:-repeat}" ;;
+  esac
 }
 
 write_manifest_header() {
@@ -677,7 +700,15 @@ run_bench_cases() {
   fi
   args+=(--short-max-tokens "${SHORT_MAX_TOKENS}" --long-max-tokens "${LONG_MAX_TOKENS}")
   [[ "${SHORT_ONLY}" -eq 0 ]] && args+=(--qwen36-long-tokens "${LONG_TOKENS}")
+  # Do not let a failing tee/pipeline skip the vLLM arm (set -euo pipefail).
+  set +o pipefail
   bash "${BENCH_CURL}" "${args[@]}" 2>&1 | tee "${workdir}/bench.log"
+  local bench_ec=${PIPESTATUS[0]}
+  set -o pipefail
+  if (( bench_ec != 0 )); then
+    die "bench_qwen_curl failed (exit ${bench_ec}); see ${workdir}/bench.log"
+  fi
+  log "Step: HTTP bench finished → ${workdir}"
 }
 
 run_flashcli_backend() {
@@ -685,15 +716,21 @@ run_flashcli_backend() {
   mkdir -p "${workdir}"
 
   local -a cmd env_args=() started server_cmd health_s
+  local flashrt_reused=0
   if [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ]]; then
-    # Match manual short bench: no --bundle/--checkpoint/--max-seq/--K (flashcli catalog defaults).
+    # auto + catalog max_seq=262208 warms up for minutes; cap window for short-only startup.
     if command -v flashcli >/dev/null 2>&1; then
       cmd=(flashcli serve qwen36-27b-nvfp4)
     else
       cmd=(python3 -m flashcli.cli serve qwen36-27b-nvfp4)
       env_args+=(PYTHONPATH="${FLASHCLI_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}")
     fi
-    cmd+=(--host "${HOST}" --port "${PORT}" --warmup-preset "${WARMUP_PRESET}")
+    if [[ "${MAX_SEQ_EXPLICIT}" -eq 1 ]]; then
+      cmd+=(--host "${HOST}" --port "${PORT}" --warmup-preset "${WARMUP_PRESET}" --max-seq "${MAX_SEQ}")
+    else
+      cmd+=(--host "${HOST}" --port "${PORT}" --warmup-preset "${WARMUP_PRESET}"
+        --max-seq "${SHORT_SERVE_MAX_SEQ}")
+    fi
   else
     [[ -f "${BUNDLE}/flashcli-bundle.json" ]] || die "Bundle missing: ${BUNDLE}"
     [[ -f "${MTP_CKPT}/mtp.safetensors" ]] || die "MTP missing: ${MTP_CKPT}/mtp.safetensors"
@@ -721,18 +758,38 @@ run_flashcli_backend() {
   fi
 
   log "━━ FlashRT (flashcli) ━━"
-  log "  serve: ${server_cmd}"
   export SERVE_LOG_BACKEND=flashrt
-  if ((${#env_args[@]})); then
-    start_serve "${workdir}" env "${env_args[@]}" "${cmd[@]}"
+  health_s=0
+  if can_reuse_flashrt_serve; then
+    flashrt_reused=1
+    log "  reuse: :${PORT} already up (model=$(port_health_model)) — skip cold start"
+    log "  tip: export FLASHCLI_SERVE_LOG=/path/to/tee.log for engine metrics in report"
+    SERVE_LOG_PATH="${FLASHCLI_SERVE_LOG:-${workdir}/serve.log}"
+    if [[ -n "${FLASHCLI_SERVE_LOG:-}" && -f "${FLASHCLI_SERVE_LOG}" ]]; then
+      cp -f "${FLASHCLI_SERVE_LOG}" "${workdir}/serve.log" 2>/dev/null || true
+    fi
+    server_cmd="(reused running serve on :${PORT})"
   else
-    start_serve "${workdir}" "${cmd[@]}"
+    log "  serve: ${server_cmd}"
+    if ((${#env_args[@]})); then
+      start_serve "${workdir}" env "${env_args[@]}" "${cmd[@]}"
+    else
+      start_serve "${workdir}" "${cmd[@]}"
+    fi
+    health_s="$(wait_health "${workdir}/serve.log" flashrt)"
   fi
-  health_s="$(wait_health "${workdir}/serve.log" flashrt)"
   write_manifest_header "${workdir}" "flashcli+FlashRT" "${server_cmd}" "${started}" "${health_s}" "FlashRT"
   run_bench_cases "${workdir}" "${MODEL_NAME}"
   finish_manifest "${workdir}"
-  stop_serve
+  # Free :PORT for vLLM (dual-arm must not leave FlashRT bound).
+  if [[ "${RUN_VLLM}" -eq 1 ]]; then
+    log "Step: stop FlashRT (free :${PORT} for vLLM)"
+    stop_serve
+  elif [[ "${flashrt_reused}" -eq 0 ]]; then
+    stop_serve
+  else
+    log "  leaving your serve running on :${PORT} (--flashcli-only)"
+  fi
   log "Done FlashRT → ${workdir}"
 }
 
@@ -790,8 +847,12 @@ vllm_resolve_max_model_len() {
     echo "${VLLM_MAX_MODEL_LEN}"
     return
   fi
-  if [[ "${QUICK}" -eq 1 || "${SHORT_ONLY}" -eq 1 ]]; then
+  if [[ "${QUICK}" -eq 1 ]]; then
     echo 8192
+    return
+  fi
+  if [[ "${SHORT_ONLY}" -eq 1 ]]; then
+    echo "${SHORT_SERVE_MAX_SEQ}"
     return
   fi
   if [[ "${MAX_SEQ}" -gt 16384 ]]; then
@@ -875,8 +936,9 @@ write_report() {
   log "Report: ${OUT_DIR}/REPORT.md"
 }
 
+log "compare.sh: short_serve_max_seq=${SHORT_SERVE_MAX_SEQ} reuse_serve=${REUSE_RUNNING_SERVE} (sync this file to the bench host)"
 if [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ]]; then
-  log "out=${OUT_DIR} cases=$(bench_cases_label) flashcli_serve='flashcli serve qwen36-27b-nvfp4 --port ${PORT} --warmup-preset auto' flashcli=${RUN_FLASHCLI} vllm=${RUN_VLLM}"
+  log "out=${OUT_DIR} cases=$(bench_cases_label) flashcli_serve='flashcli serve qwen36-27b-nvfp4 --port ${PORT} --warmup-preset ${WARMUP_PRESET} --max-seq ${SHORT_SERVE_MAX_SEQ}' flashcli=${RUN_FLASHCLI} vllm=${RUN_VLLM}"
 else
   log "out=${OUT_DIR} cases=$(bench_cases_label) max_seq=${MAX_SEQ} flashcli=${RUN_FLASHCLI} vllm=${RUN_VLLM}"
 fi
@@ -909,7 +971,12 @@ write_bench_config
 trap cleanup_on_exit INT TERM EXIT
 
 prepare_shared_payloads
-[[ "${RUN_FLASHCLI}" -eq 1 ]] && run_flashcli_backend
-[[ "${RUN_VLLM}" -eq 1 ]] && run_vllm_backend
+if [[ "${RUN_FLASHCLI}" -eq 1 ]]; then
+  run_flashcli_backend
+fi
+if [[ "${RUN_VLLM}" -eq 1 ]]; then
+  log "━━ vLLM arm (after FlashRT) ━━"
+  run_vllm_backend
+fi
 write_report
 log "All done: ${OUT_DIR}"
