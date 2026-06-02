@@ -171,9 +171,9 @@ check_serve_log_fatal() {
     tail -n 20 "${serve_log}" >&2 || true
     die "Bundle not built (missing lib/ flash_rt/). See bundles/qwen_nvfp4/QUICKSTART.md"
   fi
-  if grep -qE 'Failed to load checkpoint|does not recognize this architecture|Qwen3_5ForCausalLM|Cannot import Qwen3_5' "${serve_log}"; then
-    tail -n 20 "${serve_log}" >&2 || true
-    die "HF load failed — need transformers>=5 (Qwen3_5ForCausalLM) and compressed-tensors>=0.14; see serve.log"
+  if grep -qE 'Failed to load checkpoint|does not recognize this architecture|Qwen3_5ForCausalLM|Cannot import Qwen3_5|torchvision::nms|requires .accelerate|torchvision are incompatible' "${serve_log}"; then
+    tail -n 25 "${serve_log}" >&2 || true
+    die "HF server failed — see serve.log above"
   fi
 }
 
@@ -185,7 +185,7 @@ wait_health() {
   while true; do
     if curl -sf "http://${HOST}:${PORT}/health" >/dev/null 2>&1; then
       now="$(date +%s)"
-      log "  /health OK (${now - start}s)"
+      log "  /health OK ($((now - start))s)"
       echo $((now - start))
       return 0
     fi

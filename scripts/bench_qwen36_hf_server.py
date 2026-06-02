@@ -45,24 +45,56 @@ def _parse_messages(body: dict[str, Any]) -> list[dict[str, Any]]:
     return messages
 
 
+def _torchvision_mismatch_hint() -> str:
+    import torch
+
+    tv = "not installed"
+    try:
+        import torchvision
+
+        tv = torchvision.__version__
+    except Exception:
+        pass
+    return (
+        f"torch {torch.__version__} + torchvision {tv} are incompatible "
+        "(transformers 5.x imports torchvision for Qwen3_5).\n"
+        "Reinstall torch and torchvision from the SAME PyTorch wheel index, e.g.:\n"
+        "  pip install -U torch torchvision --index-url https://download.pytorch.org/whl/cu130\n"
+        "Pick cu124/cu130/cpu to match your CUDA. Then verify:\n"
+        '  python3 -c "import torch, torchvision; from transformers import Qwen3_5ForCausalLM; print(\'ok\')"'
+    )
+
+
 def _hf_qwen36_install_hint() -> str:
     return (
-        "Qwen3.6 NVFP4 needs transformers with Qwen3_5ForCausalLM (usually v5+) and compressed-tensors:\n"
+        "Qwen3.6 NVFP4 also needs compressed-tensors:\n"
         "  pip install -U 'compressed-tensors>=0.14.0'\n"
-        "  pip install -U 'transformers>=5.0.0'\n"
-        "  # if PyPI transformers is too old:\n"
-        "  pip install -U git+https://github.com/huggingface/transformers.git\n"
-        "Then: python3 -c \"from transformers import Qwen3_5ForCausalLM; print('ok')\""
+        + _torchvision_mismatch_hint()
     )
 
 
 def _require_hf_qwen36_deps() -> None:
+    import torch
     import transformers
 
-    log.info("transformers %s", transformers.__version__)
+    log.info("torch %s  transformers %s", torch.__version__, transformers.__version__)
+    try:
+        import torchvision
+
+        log.info("torchvision %s", torchvision.__version__)
+    except RuntimeError as exc:
+        if "nms" in str(exc).lower():
+            sys.exit(_torchvision_mismatch_hint())
+        raise
+    except ImportError:
+        log.warning("torchvision not installed; transformers may still pull it indirectly")
+
     try:
         from transformers import Qwen3_5ForCausalLM  # noqa: F401
-    except ImportError as exc:
+    except (ImportError, ModuleNotFoundError) as exc:
+        msg = str(exc)
+        if "nms" in msg.lower() or "torchvision" in msg.lower():
+            sys.exit(_torchvision_mismatch_hint())
         sys.exit(f"Cannot import Qwen3_5ForCausalLM: {exc}\n\n{_hf_qwen36_install_hint()}")
     try:
         import compressed_tensors  # noqa: F401
@@ -125,9 +157,9 @@ class HfQwen36Engine:
             self.max_seq,
         )
         t0 = time.perf_counter()
+        # No device_map — avoids hard dependency on `accelerate` for single-GPU bench.
         load_kwargs: dict[str, Any] = {
             "torch_dtype": dtype,
-            "device_map": {"": str(self.device)},
             "low_cpu_mem_usage": True,
             "trust_remote_code": True,
         }
@@ -135,6 +167,8 @@ class HfQwen36Engine:
             load_kwargs["attn_implementation"] = attn_implementation
         try:
             self.model = AutoModelForCausalLM.from_pretrained(checkpoint, **load_kwargs)
+            log.info("Moving model to %s …", self.device)
+            self.model.to(self.device)
         except ImportError as exc:
             msg = str(exc)
             hint = _hf_qwen36_install_hint()
@@ -150,6 +184,8 @@ class HfQwen36Engine:
                 or "Qwen3_5" in msg
             ):
                 hint = f"\n\n{_hf_qwen36_install_hint()}"
+            elif "accelerate" in msg.lower():
+                hint = "\nTry: pip install accelerate  (or use an updated bench_qwen36_hf_server.py without device_map)"
             elif "compressed" in msg.lower() or "nvfp4" in msg.lower() or "quant" in msg.lower():
                 hint = "\nTry: pip install -U 'compressed-tensors>=0.14.0' 'transformers>=5.0.0'"
             sys.exit(
