@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any, AsyncIterator, Iterator
 
 from flashcli.engines.base import ChatChunk, ChatRequest, ChatResult
 from flashcli.serve.openai_bridge import sse_lines_to_chat_chunks
 
 from _flashrt_qwen36_agent import import_qwen36_agent_modules
-from _qwen_util import agent_result_to_chat, chat_request_to_openai_body
+from _qwen_util import agent_result_to_chat, chat_request_to_openai_body, usage_from_qwen36_engine
 from _serve_backend import bridge_sync_chunk_iterator
 
 log = logging.getLogger(__name__)
@@ -134,9 +135,49 @@ class Qwen36AgentBackend:
     def _iter_stream_chunks(self, req: ChatRequest) -> Iterator[ChatChunk]:
         agent_req = self._agent_request(req)
         agent_req.stream = True
-        yield from sse_lines_to_chat_chunks(
+        t0 = time.perf_counter()
+        first_delta_ms: float | None = None
+        t_first_content: float | None = None
+        route = getattr(self._engine, "_last_route", None)
+
+        for chunk in sse_lines_to_chat_chunks(
             self._service.stream_openai(agent_req, model=self.model_name)
-        )
+        ):
+            if chunk.content_delta:
+                if first_delta_ms is None:
+                    first_delta_ms = (time.perf_counter() - t0) * 1000.0
+                    t_first_content = time.perf_counter()
+                yield chunk
+                continue
+            if chunk.finish_reason:
+                raw_usage = dict(chunk.usage or {})
+                timing: dict[str, Any] = {
+                    "prompt_tokens": raw_usage.get("prompt_tokens"),
+                    "completion_tokens": raw_usage.get("completion_tokens"),
+                }
+                if first_delta_ms is not None:
+                    timing["first_delta_ms"] = first_delta_ms
+                ct = raw_usage.get("completion_tokens")
+                if t_first_content is not None and ct is not None:
+                    decode_ms = max(1.0, (time.perf_counter() - t_first_content) * 1000.0)
+                    timing["decode_ms"] = decode_ms
+                    timing["decode_tok_per_s"] = float(ct) * 1000.0 / decode_ms
+                if route is not None:
+                    timing["route"] = route
+                cached = (raw_usage.get("prompt_tokens_details") or {}).get(
+                    "cached_tokens"
+                )
+                if cached is not None:
+                    timing["cached_tokens"] = int(cached)
+                enriched = usage_from_qwen36_engine(
+                    {k: v for k, v in timing.items() if v is not None}
+                )
+                for key in ("prompt_tokens_details",):
+                    if key in raw_usage:
+                        enriched[key] = raw_usage[key]
+                yield ChatChunk(finish_reason=chunk.finish_reason, usage=enriched)
+                continue
+            yield chunk
 
     async def chat_stream_async(self, req: ChatRequest) -> AsyncIterator[ChatChunk]:
         async for chunk in bridge_sync_chunk_iterator(

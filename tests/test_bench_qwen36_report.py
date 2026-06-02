@@ -127,6 +127,8 @@ def test_report_estimates_decode_when_usage_lacks_timing(tmp_path: Path) -> None
     metrics = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))["backends"][
         "flashcli + FlashRT"
     ]["cases"]["qwen36_short"]["metrics"]
-    assert metrics["server_ttft_ms"] == 400.0
+    assert metrics["server_ttft_ms"] is None
+    assert metrics["client_ttft_ms"] == 400.0
+    assert metrics["ttft_ms"] == 400.0
     assert metrics["decode_tok_per_s_best"] is not None
     assert metrics["decode_tok_per_s_estimated"] is True

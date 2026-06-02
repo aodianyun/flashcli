@@ -75,32 +75,44 @@ def summarize_case(
     def collect_wall_ms() -> list[float]:
         return [float(r.get("wall_ms", 0.0)) for r in samples if r.get("wall_ms") is not None]
 
-    ttft_vals: list[float] = []
+    server_ttft_vals: list[float] = []
+    client_ttft_vals: list[float] = []
+    ttft_display_vals: list[float] = []
     decode_tps_fallback: list[float] = []
     for row in samples:
         usage = row.get("usage") or {}
         bench = row.get("bench") or {}
-        val = usage.get("ttft_ms")
-        if val is None:
-            val = usage.get("first_delta_ms")
-        if val is None:
-            val = usage.get("prefill_ms")
-        if val is None and bench.get("client_ttft_ms") is not None:
-            val = bench.get("client_ttft_ms")
-        if val is not None:
-            ttft_vals.append(float(val))
+        server_ttft = bench.get("server_ttft_ms")
+        if server_ttft is None:
+            server_ttft = usage.get("ttft_ms")
+        if server_ttft is None:
+            server_ttft = usage.get("first_delta_ms")
+        if server_ttft is not None:
+            server_ttft_vals.append(float(server_ttft))
+
+        client_ttft = bench.get("client_ttft_ms")
+        if client_ttft is not None:
+            client_ttft_vals.append(float(client_ttft))
+
+        display_ttft = server_ttft if server_ttft is not None else client_ttft
+        if display_ttft is not None:
+            ttft_display_vals.append(float(display_ttft))
 
         tok = usage.get("tok_per_s") or usage.get("decode_tok_per_s")
         if tok is None:
             ct = usage.get("completion_tokens")
-            wall = row.get("wall_ms")
-            ttft_guess = val
-            if ct is not None and wall is not None:
-                decode_ms = float(wall)
-                if ttft_guess is not None:
-                    decode_ms = max(1.0, decode_ms - float(ttft_guess))
-                if decode_ms > 0:
-                    decode_tps_fallback.append(float(ct) * 1000.0 / decode_ms)
+            decode_ms = usage.get("decode_ms")
+            if decode_ms is not None and ct is not None and float(decode_ms) > 0:
+                decode_tps_fallback.append(float(ct) * 1000.0 / float(decode_ms))
+            else:
+                wall = row.get("wall_ms")
+                ttft_guess = server_ttft if server_ttft is not None else client_ttft
+                if ct is not None and wall is not None:
+                    decode_wall = float(wall)
+                    if ttft_guess is not None:
+                        decode_wall = max(1.0, decode_wall - float(ttft_guess))
+                    if decode_wall > 0:
+                        decode_tps_fallback.append(float(ct) * 1000.0 / decode_wall)
 
     routes = [
         str((r.get("usage") or {}).get("route"))
@@ -111,8 +123,9 @@ def summarize_case(
     metrics: dict[str, Any] = {
         "prompt_tokens": _mean(collect_usage("prompt_tokens")),
         "completion_tokens": _mean(collect_usage("completion_tokens")),
-        "server_ttft_ms": _mean(ttft_vals),
-        "client_ttft_ms": _mean(collect_bench("client_ttft_ms")),
+        "server_ttft_ms": _mean(server_ttft_vals),
+        "client_ttft_ms": _mean(client_ttft_vals),
+        "ttft_ms": _mean(ttft_display_vals),
         "curl_wall_ms_mean": _mean(collect_wall_ms()),
         "prefill_ms": _mean(collect_usage("prefill_ms")),
         "decode_ms": _mean(collect_usage("decode_ms")),
@@ -208,7 +221,7 @@ def render_backend_section(backend: str, workdir: Path, cases: list[CaseSummary]
                     case.name,
                     _fmt_num(m.get("prompt_tokens"), digits=0),
                     _fmt_num(m.get("completion_tokens"), digits=0),
-                    _fmt_num(m.get("server_ttft_ms")),
+                    _fmt_num(m.get("ttft_ms") or m.get("server_ttft_ms")),
                     _fmt_num(m.get("decode_tok_per_s_best")),
                     _fmt_num(m.get("curl_wall_ms_mean"), digits=0),
                     str(m.get("route_last") or "n/a"),
@@ -243,7 +256,7 @@ def render_compare_section(
         "|------|--------|" + "|".join(["---:"] * 3) + "|",
     ]
     metric_specs = [
-        ("server_ttft_ms", "TTFT ms", False),
+        ("ttft_ms", "TTFT ms", False),
         ("decode_tok_per_s_best", "decode tok/s", True),
         ("curl_wall_ms_mean", "curl wall ms", False),
     ]

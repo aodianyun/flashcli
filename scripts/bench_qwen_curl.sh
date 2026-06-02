@@ -87,8 +87,8 @@ Env: HOST, QWEN3_PORT, QWEN36_PORT, CKPT_QWEN3, CKPT_QWEN36, SHORT_PROMPT,
      BENCH_ROUNDS, BENCH_SKIP_FIRST, BENCH_STREAM
 
 Stream: qwen3 has true token SSE (client_ttft_ms = first content chunk).
-qwen36 stream is pseudo (one chunk after full generate); use server ttft_ms
-until FlashRT adds real streaming.
+qwen36 uses true SSE (token-by-token); server TTFT from usage.first_delta_ms /
+usage.ttft_ms; client_ttft_ms is first HTTP content chunk (includes proxy overhead).
 EOF
 }
 
@@ -302,7 +302,7 @@ run_curl_once() {
     '{round: $round, wall_ms: $wall_ms, usage: $usage, bench: $bench}' >>"${jsonl}"
   local tps ttft client_ttft
   tps="$(jq -r '.usage.tok_per_s // .usage.decode_tok_per_s // .usage.e2e_tok_per_s // "n/a"' "${resp}" 2>/dev/null)"
-  ttft="$(jq -r '.usage.ttft_ms // .usage.prefill_ms // "n/a"' "${resp}" 2>/dev/null)"
+  ttft="$(jq -r '.bench.server_ttft_ms // .usage.ttft_ms // .usage.first_delta_ms // "n/a"' "${resp}" 2>/dev/null)"
   client_ttft="$(jq -r '.bench.client_ttft_ms // empty' "${resp}" 2>/dev/null)"
   if [[ -n "${client_ttft}" ]]; then
     log "  round ${round}/${ROUNDS}${tag}: curl_wall=${wall_ms}ms client_ttft_ms=${client_ttft} server_ttft_ms=${ttft} tok_per_s=${tps}"
@@ -354,13 +354,16 @@ def mean_nested(key, nested="bench"):
     return sum(vals) / len(vals) if vals else None
 
 def mean_ttft_ms():
-    """Server-side ttft_ms (engine); non-stream qwen36 uses prefill_ms."""
+    """Server TTFT: first_delta_ms / ttft_ms (not prefill_ms)."""
     vals = []
     for r in samples:
-        u = r.get("usage", {})
-        v = u.get("ttft_ms")
+        b = r.get("bench") or {}
+        u = r.get("usage") or {}
+        v = b.get("server_ttft_ms")
         if v is None:
-            v = u.get("prefill_ms")
+            v = u.get("ttft_ms")
+        if v is None:
+            v = u.get("first_delta_ms")
         if v is not None:
             vals.append(float(v))
     return sum(vals) / len(vals) if vals else None
@@ -430,7 +433,7 @@ run_bench_case() {
 
 log "workdir=${WORKDIR}  rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${_SCORED_ROUNDS} stream=${BENCH_STREAM} long_prompt_style=${LONG_PROMPT_STYLE} profile=${BENCH_PROFILE:-none}"
 if [[ "${BENCH_STREAM}" -eq 1 ]]; then
-  log "stream=true: qwen3 client_ttft_ms is first SSE content; qwen36 is pseudo-stream (see server_ttft_ms)"
+  log "stream=true: client_ttft_ms=first content chunk; server_ttft_ms=usage.first_delta_ms/ttft_ms"
 fi
 print_qwen36_hints
 if [[ "${SKIP_QWEN3}" -eq 0 ]]; then

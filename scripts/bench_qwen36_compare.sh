@@ -58,7 +58,7 @@ Usage: bash scripts/bench_qwen36_compare.sh [OPTIONS]
 
 Serial flow per backend: start serve → wait /health → bench_qwen_curl → stop serve → next.
 
-  --comparable         short + long ctx; 12 rounds; skip-first 2 (mean 10); max-seq ${MAX_SEQ}
+  --comparable         short+long; 12 rounds skip 2; max_tokens ${SHORT_MAX_TOKENS}/${LONG_MAX_TOKENS}; warmup auto
   --quick              short only; 3 rounds; skip-first 1; max-seq ${QUICK_MAX_SEQ}
   --rounds N --skip-first K   (defaults: ${ROUNDS} / ${SKIP_FIRST})
   --short-only         skip long-context case
@@ -86,7 +86,8 @@ while [[ $# -gt 0 ]]; do
       ROUNDS=12
       SKIP_FIRST=2
       BENCH_PROFILE=comparable
-      WARMUP_PRESET=none
+      # Match codeplan/bench_report: serve CUDA-graph warmup before HTTP rounds.
+      WARMUP_PRESET=auto
       shift
       ;;
     --quick)
@@ -369,8 +370,17 @@ run_bench_cases() {
   [[ -n "${BENCH_PROFILE}" ]] && args+=(--profile "${BENCH_PROFILE}")
   [[ "${SHORT_ONLY}" -eq 1 ]] && args+=(--skip-qwen36-long)
 
-  log "Step: bench_qwen_curl.sh"
+  log "Step: bench_qwen_curl.sh (short max_tokens=${SHORT_MAX_TOKENS}, long user_tokens=${LONG_TOKENS})"
   export CKPT_QWEN36="${CHECKPOINT}" HOST QWEN36_PORT="${PORT}" QWEN36_MAX_SEQ="${MAX_SEQ}"
+  export QWEN36_LONG_PROMPT_TOKENS="${LONG_TOKENS}"
+  export SHORT_MAX_TOKENS LONG_MAX_TOKENS
+  export FLASHRT_QWEN36_LONG_KV_CACHE=fp8
+  export FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ=512
+  args+=(
+    --qwen36-long-tokens "${LONG_TOKENS}"
+    --short-max-tokens "${SHORT_MAX_TOKENS}"
+    --long-max-tokens "${LONG_MAX_TOKENS}"
+  )
   bash "${BENCH_CURL}" "${args[@]}" 2>&1 | tee "${workdir}/bench.log"
 }
 
@@ -445,7 +455,8 @@ write_report() {
 }
 
 log "out=${OUT_DIR} max_seq=${MAX_SEQ} flashcli=${RUN_FLASHCLI} hf=${RUN_PYTORCH}"
-log "bench: cases=$([[ "${SHORT_ONLY}" -eq 1 ]] && echo short-only || echo short+long)  rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${SCORED_ROUNDS} profile=${BENCH_PROFILE} long_tokens=${LONG_TOKENS}"
+log "bench: cases=$([[ "${SHORT_ONLY}" -eq 1 ]] && echo short-only || echo short+long)  rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${SCORED_ROUNDS} profile=${BENCH_PROFILE}"
+log "  short: max_tokens=${SHORT_MAX_TOKENS} (decode length)  long: user_tokens=${LONG_TOKENS} max_tokens=${LONG_MAX_TOKENS}"
 [[ "${RUN_FLASHCLI}" -eq 1 ]] && log "  FlashRT checkpoint=${CHECKPOINT} warmup=${WARMUP_PRESET}"
 [[ "${RUN_PYTORCH}" -eq 1 ]] && log "  HF checkpoint=${HF_CHECKPOINT} model=${HF_MODEL_NAME}"
 log "GPU: $(gpu_name)"

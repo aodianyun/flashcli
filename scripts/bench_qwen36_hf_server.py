@@ -408,6 +408,7 @@ class HfQwen36Engine:
             "completion_tokens": completion_tokens,
             "total_tokens": len(prompt_ids) + completion_tokens,
             "prefill_ms": prefill_ms,
+            "first_delta_ms": prefill_ms,
             "ttft_ms": prefill_ms,
             "decode_ms": decode_ms,
             "decode_tok_per_s": decode_tok_per_s,
