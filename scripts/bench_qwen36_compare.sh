@@ -28,6 +28,12 @@ HF_DTYPE="${HF_DTYPE:-auto}"
 # PyTorch baseline stack: hf = bench_qwen36_hf_server.py ; vllm = vllm serve (recommended).
 PYTORCH_STACK="${PYTORCH_STACK:-hf}"
 VLLM_EXTRA_ARGS="${VLLM_EXTRA_ARGS:-}"
+# vLLM: avoid broken flash-attn .so (common with torch 2.12+cu130).
+VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-TORCH_SDPA}"
+VLLM_USE_V1="${VLLM_USE_V1:-0}"
+VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-}"
+VLLM_GPU_MEMORY_UTILIZATION="${VLLM_GPU_MEMORY_UTILIZATION:-0.88}"
+VLLM_TORCH_COMPILE_LEVEL="${VLLM_TORCH_COMPILE_LEVEL:-0}"
 MODEL_NAME="${MODEL_NAME:-qwen3.6-27b-nvfp4}"
 SHORT_PROMPT="${SHORT_PROMPT:-Explain quantum entanglement in one short paragraph.}"
 SHORT_MAX_TOKENS="${SHORT_MAX_TOKENS:-64}"
@@ -212,8 +218,17 @@ check_serve_log_fatal() {
     tail -n 20 "${serve_log}" >&2 || true
     die "Bundle not built (missing lib/ flash_rt/). See bundles/qwen_nvfp4/QUICKSTART.md"
   fi
-  if grep -qE 'Failed to load checkpoint|Cannot import Qwen3_5|does not recognize this architecture|torchvision::nms|requires .accelerate|torchvision are incompatible|CUDA out of memory|OutOfMemoryError|NVFP4 checkpoint cannot run on HF' "${serve_log}"; then
-    tail -n 25 "${serve_log}" >&2 || true
+  if grep -qE 'Failed to load checkpoint|Cannot import Qwen3_5|does not recognize this architecture|torchvision::nms|requires .accelerate|torchvision are incompatible|CUDA out of memory|OutOfMemoryError|NVFP4 checkpoint cannot run on HF|flash_attn_2_cuda.*undefined symbol|Engine core initialization failed' "${serve_log}"; then
+    tail -n 40 "${serve_log}" >&2 || true
+    if grep -q 'flash_attn_2_cuda.*undefined symbol' "${serve_log}" 2>/dev/null; then
+      die "vLLM: broken flash-attn vs torch ABI. Run: pip uninstall -y flash-attn  then re-run --vllm (see scripts/README.bench_qwen36.md)"
+    fi
+    if grep -q 'finegrained-fp8 kernel requires' "${serve_log}" 2>/dev/null; then
+      die "vLLM FP8 needs: pip install -U kernels  then re-run --vllm"
+    fi
+    if grep -q 'CUDA out of memory' "${serve_log}" 2>/dev/null; then
+      die "vLLM OOM on GPU. For --quick use VLLM_MAX_MODEL_LEN=8192 (default after script sync). Ensure no other process uses the GPU."
+    fi
     die "Server failed — see serve.log above"
   fi
   # Official Qwen3.6-27B-FP8 also logs linear_attn weight_scale_inv as MISSING (transformers init).
@@ -448,20 +463,66 @@ run_flashcli_backend() {
   log "Done FlashRT → ${workdir}"
 }
 
+vllm_preflight() {
+  python3 - <<'PY' || die "vLLM preflight python failed"
+import sys
+try:
+    import flash_attn_2_cuda  # noqa: F401
+except ImportError:
+    sys.exit(0)
+except OSError as exc:
+    if "undefined symbol" in str(exc) or "flash_attn" in str(exc):
+        print(
+            "broken flash-attn CUDA extension (ABI mismatch with installed torch).\n"
+            "  pip uninstall -y flash-attn\n"
+            "  bash scripts/bench_qwen36_compare.sh ... --vllm ...",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    raise
+PY
+}
+
+vllm_resolve_max_model_len() {
+  if [[ -n "${VLLM_MAX_MODEL_LEN}" ]]; then
+    echo "${VLLM_MAX_MODEL_LEN}"
+    return
+  fi
+  if [[ "${QUICK}" -eq 1 ]]; then
+    echo 8192
+    return
+  fi
+  # Qwen3.6-27B FP8 on ~48GB: 32K+ KV budget often OOMs during vLLM startup profiling.
+  if [[ "${MAX_SEQ}" -gt 16384 ]]; then
+    log "  vLLM: default --max-model-len 16384 (48GB-safe). Override: VLLM_MAX_MODEL_LEN=${MAX_SEQ}"
+    echo 16384
+    return
+  fi
+  echo "${MAX_SEQ}"
+}
+
 run_vllm_backend() {
   local workdir="${OUT_DIR}/pytorch_hf"
   mkdir -p "${workdir}"
+  local vllm_max_len
+  vllm_max_len="$(vllm_resolve_max_model_len)"
 
   [[ -d "${HF_CHECKPOINT}" ]] || die "HF checkpoint not found: ${HF_CHECKPOINT}"
   command -v vllm >/dev/null 2>&1 || die "vllm not in PATH. Install: pip install -U vllm (needs Qwen3.6 support in your vLLM build)"
+  vllm_preflight
+  if [[ "${SHORT_ONLY}" -eq 0 && "${MAX_SEQ}" -gt "${vllm_max_len}" ]]; then
+    log "  WARN: vLLM --max-model-len=${vllm_max_len} < bench max_seq=${MAX_SEQ}; long-context case may fail. Use --short-only for vLLM baseline on 48GB."
+  fi
 
   local -a cmd=(
     vllm serve "${HF_CHECKPOINT}"
     --host "${HOST}"
     --port "${PORT}"
-    --max-model-len "${MAX_SEQ}"
+    --max-model-len "${vllm_max_len}"
+    --gpu-memory-utilization "${VLLM_GPU_MEMORY_UTILIZATION}"
     --served-model-name "${HF_MODEL_NAME}"
     --trust-remote-code
+    --enforce-eager
   )
   if [[ -n "${VLLM_EXTRA_ARGS}" ]]; then
     # shellcheck disable=SC2206
@@ -474,8 +535,14 @@ run_vllm_backend() {
   server_cmd="$(printf '%q ' "${cmd[@]}")"
 
   log "━━ PyTorch baseline (vLLM) ━━"
+  log "  vllm: max-model-len=${vllm_max_len} gpu_mem=${VLLM_GPU_MEMORY_UTILIZATION} VLLM_USE_V1=${VLLM_USE_V1} attention=${VLLM_ATTENTION_BACKEND} compile_level=${VLLM_TORCH_COMPILE_LEVEL}"
   export SERVE_LOG_BACKEND=vllm
-  start_serve "${workdir}" "${cmd[@]}"
+  start_serve "${workdir}" env \
+    VLLM_USE_V1="${VLLM_USE_V1}" \
+    VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND}" \
+    VLLM_TORCH_COMPILE_LEVEL="${VLLM_TORCH_COMPILE_LEVEL}" \
+    PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}" \
+    "${cmd[@]}"
   health_s="$(wait_health "${workdir}/serve.log" hf)"
   write_manifest_header "${workdir}" "PyTorch vLLM" "${server_cmd}" "${started}" "${health_s}" \
     "vllm" "" ""

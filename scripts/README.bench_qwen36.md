@@ -59,7 +59,12 @@ huggingface-cli download Qwen/Qwen3.6-27B-FP8 \
   --local-dir ~/.flashcli/models/qwen36-27b-fp8/checkpoint
 
 # 基线服务（推荐）
-pip install -U vllm   # 需支持 Qwen3.6 的版本
+pip install -U vllm   # 需支持 Qwen3.6 的版本（你环境 vllm 0.22.0 OK）
+
+# vLLM 启动前（48GB）：
+pip uninstall -y flash-attn
+pip install -U kernels
+# --quick 默认 VLLM_MAX_MODEL_LEN=8192；首次 /health 可能需 5–10 分钟
 ```
 
 长测可比 env（FlashRT 臂，与 codeplan 一致）：
@@ -136,7 +141,11 @@ bash scripts/bench_qwen36_compare.sh --comparable --vllm \
 | `linear_attn MISSING` + compare 误杀 | 已修复：HF 臂不再因此退出；FP8 下可忽略或装 fla 内核 |
 | `server_ttft=n/a`, wall≈50ms, tok=n/a | 模型未生成；换 `--vllm` 或装 `flash-linear-attention causal-conv1d` |
 | FlashRT decode ~60 vs codeplan ~84 | 确认 `src=serve_log`、warmup `auto`、同 `K=6`；勿用 wall−client 估算当引擎 decode |
-| vLLM 起不来 | `vllm --version`；Qwen3.6 可能要新版本 vLLM |
+| vLLM `flash_attn_2_cuda` undefined symbol | **`pip uninstall -y flash-attn`** 后重跑（TORCH_SDPA 仍会 import 坏包） |
+| vLLM CUDA OOM @ max-model-len 32768 | 用默认 `VLLM_MAX_MODEL_LEN=8192`（--quick）或 `16384`；48GB 跑不了 27B@32K vLLM |
+| vLLM `finegrained-fp8` / `kernels` | `pip install -U kernels` |
+| vLLM 长上下文 256K 基线 | **不支持**（48GB）；长测只比 FlashRT 臂 |
+| vLLM 其它启动失败 | `vllm --version`；首次启动等 /health，看 serve.log |
 | Bundle invalid | `bundles/qwen_nvfp4/build.sh` + `flashcli bundle validate` |
 
 ---
