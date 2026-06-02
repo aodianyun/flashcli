@@ -305,12 +305,12 @@ def build_report(
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines = [
-        "# Qwen3.6-27B bench report (FlashRT vs PyTorch HF)",
+        "# Qwen3.6-27B NVFP4 bench report (FlashRT vs vLLM)",
         "",
         f"Generated: {now}",
         "",
         "Metrics are means over scored rounds (after warmup skips). "
-        "Both backends use the same HTTP payloads when run via `bench_qwen36_compare.sh`. "
+        "Both backends use the same NVFP4 weights and HTTP payloads from `bench_qwen36_compare.sh`. "
         "`decode tok/s` uses server `usage.tok_per_s` when present; otherwise estimates from "
         "`completion_tokens` and curl `wall_ms` minus TTFT.",
         "",
@@ -355,16 +355,22 @@ def main() -> int:
     p.add_argument("--out", type=Path, required=True, help="Report output directory")
     p.add_argument("--flashcli", type=Path, default=None, help="flashcli + FlashRT bench workdir")
     p.add_argument(
+        "--vllm",
+        type=Path,
+        default=None,
+        help="vLLM baseline bench workdir",
+    )
+    p.add_argument(
         "--pytorch",
         type=Path,
         default=None,
-        help="PyTorch HF baseline bench workdir",
+        help="(deprecated) alias for --vllm",
     )
     p.add_argument(
         "--flashrt",
         type=Path,
         default=None,
-        help="(deprecated) alias for --pytorch",
+        help="(deprecated) alias for --vllm",
     )
     p.add_argument(
         "--backend",
@@ -378,15 +384,15 @@ def main() -> int:
     backends: dict[str, Path] = {}
     if args.flashcli is not None:
         backends["flashcli + FlashRT"] = args.flashcli.expanduser().resolve()
-    pytorch_dir = args.pytorch or args.flashrt
-    if pytorch_dir is not None:
-        backends["PyTorch HF (transformers)"] = pytorch_dir.expanduser().resolve()
+    vllm_dir = args.vllm or args.pytorch or args.flashrt
+    if vllm_dir is not None:
+        backends["vLLM"] = vllm_dir.expanduser().resolve()
     if args.backend:
         for name, workdir in args.backend:
             backends[name] = Path(workdir).expanduser().resolve()
 
     if not backends:
-        raise SystemExit("Provide at least one of --flashcli, --pytorch, or --backend")
+        raise SystemExit("Provide at least one of --flashcli, --vllm, or --backend")
 
     for name, path in backends.items():
         if not path.is_dir():

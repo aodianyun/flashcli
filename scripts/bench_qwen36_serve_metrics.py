@@ -16,7 +16,7 @@ _FLASHRT_STREAM_RE = re.compile(
     r"decode=\s*([0-9.]+).*?\|\s*speed decode=\s*([0-9.]+)\s+tok/s",
 )
 
-# bench_qwen36_hf_server.py stream done log line.
+# Optional legacy / third-party stream done log line.
 _HF_STREAM_DONE_RE = re.compile(
     r"stream done prompt=(\d+) completion=(\d+) prefill_ms=([0-9.]+) "
     r"decode_ms=([0-9.]+) decode_tok_per_s=([0-9.]+)"
