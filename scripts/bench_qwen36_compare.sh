@@ -62,8 +62,8 @@ PAYLOAD_DIR=""
 SERVE_PID_FILE=""
 VLLM_MAX_LEN=""
 VLLM_SKIP_LONG=0
-PAYLOAD_SEQ_SLACK="${PAYLOAD_SEQ_SLACK:-32}"
-BENCH_STREAM="${BENCH_STREAM:-1}"
+FLASHRT_SERVE_MAX_SEQ="${FLASHRT_SERVE_MAX_SEQ:-}"
+FLASHRT_SERVE_MAX_SEQ_EXPLICIT=0
 
 usage() {
   cat <<EOF
@@ -76,7 +76,8 @@ Context cases (pick one scope; default without --short-only/--long-only = both):
   --short-only          Only short-context bench (qwen36_short)
   --long-only           Only long-context bench (qwen36_long)
   --long-tokens N       Long prompt user tokens (default: ${LONG_TOKENS})
-  --max-seq N           Serve + payload budget (default: ${MAX_SEQ})
+  --max-seq N           Payload fit + vLLM max-model-len (default: ${MAX_SEQ})
+  --flashrt-serve-max-seq N  FlashRT serve --max-seq (default: catalog 262208; omit for manual-equivalent startup)
 
 Presets:
   --comparable          short+long; ${ROUNDS} rounds skip ${SKIP_FIRST}; warmup auto; max_seq ${MAX_SEQ}
@@ -238,6 +239,7 @@ while [[ $# -gt 0 ]]; do
     --port) PORT="$2"; shift 2 ;;
     --K) K="$2"; K_EXPLICIT=1; shift 2 ;;
     --max-seq) MAX_SEQ="$2"; MAX_SEQ_EXPLICIT=1; shift 2 ;;
+    --flashrt-serve-max-seq) FLASHRT_SERVE_MAX_SEQ="$2"; FLASHRT_SERVE_MAX_SEQ_EXPLICIT=1; shift 2 ;;
     --warmup-preset) WARMUP_PRESET="$2"; WARMUP_EXPLICIT=1; shift 2 ;;
     --keep-server) KEEP_SERVER=1; shift ;;
     --reuse-serve) REUSE_RUNNING_SERVE=1; shift ;;
@@ -528,7 +530,11 @@ wait_health() {
       last_hint=${elapsed}
       log "  … waiting (${elapsed}s)"
       if [[ "${backend}" == "flashrt" && "${elapsed}" -ge 90 ]]; then
-        log "  tip: load/warmup finish before /health — tail -f ${serve_log} (same order as manual flashcli serve)"
+        if grep -q 'Serving .* on http://' "${serve_log}" 2>/dev/null; then
+          log "  tip: saw 'Serving …' in log — uvicorn should bind soon; tail -f ${serve_log}"
+        else
+          log "  tip: still in load/warmup (no /health until both finish) — tail -f ${serve_log}"
+        fi
       fi
       tail -n 3 "${serve_log}" 2>/dev/null | sed 's/^/    /' >&2 || true
     fi
@@ -720,20 +726,20 @@ run_flashcli_backend() {
   mkdir -p "${workdir}"
 
   local -a cmd env_args=() started server_cmd health_s
-  local flashrt_reused=0
+  local flashrt_reused=0 serve_max_seq=""
 
   [[ -f "${MTP_CKPT}/mtp.safetensors" ]] || die "MTP missing: ${MTP_CKPT}/mtp.safetensors"
-  env_args=(
-    FLASHRT_QWEN36_MTP_CKPT_DIR="${MTP_CKPT}"
-  )
-  if [[ "${SHORT_ONLY}" -eq 0 ]]; then
-    env_args+=(
-      FLASHRT_QWEN36_LONG_KV_CACHE=fp8
-      FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ="${FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ:-512}"
-    )
+
+  # Payload --max-seq caps HTTP prompt+output; FlashRT serve should stay on catalog
+  # default (262208) like manual `flashcli serve`. Small serve max-seq raises
+  # graph_cache_max (e.g. 16384→1024 vs 262208→128) and load+warmup can take 10× longer.
+  if [[ -n "${FLASHRT_SERVE_MAX_SEQ}" ]]; then
+    serve_max_seq="${FLASHRT_SERVE_MAX_SEQ}"
+  elif [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 && "${MAX_SEQ_EXPLICIT}" -eq 1 ]]; then
+    serve_max_seq="${MAX_SEQ}"
   fi
-  # Same as manual `flashcli serve qwen36-27b-nvfp4 …` — preset resolves bundle/checkpoint.
-  # Do not pass --bundle/--checkpoint/--no-auto-install (zip bundle path caused slow/hung startups).
+
+  # Same as manual `flashcli serve qwen36-27b-nvfp4 …` — preset resolves bundle/checkpoint/MTP.
   if command -v flashcli >/dev/null 2>&1; then
     cmd=(flashcli serve qwen36-27b-nvfp4)
   else
@@ -741,11 +747,7 @@ run_flashcli_backend() {
     env_args+=(PYTHONPATH="${FLASHCLI_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}")
   fi
   cmd+=(--host "${HOST}" --port "${PORT}" --warmup-preset "${WARMUP_PRESET}")
-  if [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ]]; then
-    [[ "${MAX_SEQ_EXPLICIT}" -eq 1 ]] && cmd+=(--max-seq "${MAX_SEQ}")
-  else
-    cmd+=(--max-seq "${MAX_SEQ}")
-  fi
+  [[ -n "${serve_max_seq}" ]] && cmd+=(--max-seq "${serve_max_seq}")
   [[ -n "${K}" ]] && cmd+=(--K "${K}")
 
   started="$(date -Iseconds 2>/dev/null || date)"
@@ -756,6 +758,11 @@ run_flashcli_backend() {
   fi
 
   log "━━ FlashRT (flashcli) ━━"
+  if [[ -n "${serve_max_seq}" ]]; then
+    log "  serve max-seq=${serve_max_seq} (payload/vLLM max_seq=${MAX_SEQ})"
+  else
+    log "  serve max-seq=catalog 262208 (payload/vLLM max_seq=${MAX_SEQ}; matches manual flashcli serve)"
+  fi
   export SERVE_LOG_BACKEND=flashrt
   health_s=0
   if can_reuse_flashrt_serve; then
