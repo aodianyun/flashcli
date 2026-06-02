@@ -168,6 +168,25 @@ PY
   return 1
 }
 
+ensure_flashrt_bundle() {
+  local bundle_root resolved
+  bundle_root="$(canonical_path "${BUNDLE}")"
+  if bundle_is_ready "${bundle_root}"; then
+    BUNDLE="${bundle_root}"
+    return 0
+  fi
+  resolved="$(resolve_default_bundle || true)"
+  if [[ -n "${resolved}" ]] && bundle_is_ready "${resolved}"; then
+    log "Bundle: using ${resolved}"
+    BUNDLE="${resolved}"
+    return 0
+  fi
+  die "FlashRT bundle not ready: ${BUNDLE}
+  Build: bash bundles/qwen_nvfp4/build.sh --repo-root \$FLASHRT_REPO
+  Or:   flashcli bundle sync qwen36-27b-nvfp4
+  Or:   export BUNDLE=/root/.flashcli/bundles/qwen36-27b-nvfp4/zip/.../extracted/flashcli-bundle-qwen_nvfp4-.../"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --flashcli-only) RUN_VLLM=0; shift ;;
@@ -242,24 +261,7 @@ if [[ "${REPORT_ONLY}" -eq 0 ]]; then
   command -v python3 >/dev/null 2>&1 || die "python3 not found"
   [[ -d "${CHECKPOINT}" ]] || die "Checkpoint not found: ${CHECKPOINT}"
   [[ -d "${VLLM_CHECKPOINT}" ]] || die "vLLM checkpoint not found: ${VLLM_CHECKPOINT}"
-  if [[ "${RUN_FLASHCLI}" -eq 1 ]]; then
-    local bundle_root resolved
-    bundle_root="$(canonical_path "${BUNDLE}")"
-    if bundle_is_ready "${bundle_root}"; then
-      BUNDLE="${bundle_root}"
-    else
-      resolved="$(resolve_default_bundle || true)"
-      if [[ -n "${resolved}" ]] && bundle_is_ready "${resolved}"; then
-        log "Bundle: using ${resolved}"
-        BUNDLE="${resolved}"
-      else
-        die "FlashRT bundle not ready: ${BUNDLE}
-  Build: bash bundles/qwen_nvfp4/build.sh --repo-root \$FLASHRT_REPO
-  Or:   flashcli bundle sync qwen36-27b-nvfp4
-  Or:   export BUNDLE=/root/.flashcli/bundles/qwen36-27b-nvfp4/zip/.../extracted/flashcli-bundle-qwen_nvfp4-.../"
-      fi
-    fi
-  fi
+  [[ "${RUN_FLASHCLI}" -eq 1 ]] && ensure_flashrt_bundle
 fi
 
 validate_dual_arm_parity() {
