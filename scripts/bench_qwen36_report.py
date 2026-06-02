@@ -35,6 +35,39 @@ def _mean(values: list[float]) -> float | None:
     return sum(values) / len(values) if values else None
 
 
+def _row_engine_ttft(row: dict[str, Any]) -> float | None:
+    """Engine TTFT from serve.log merge or usage; never prefer client when engine exists."""
+    usage = row.get("usage") or {}
+    bench = row.get("bench") or {}
+    if bench.get("metrics_source") or usage.get("metrics_source"):
+        for key in ("server_ttft_ms",):
+            val = bench.get(key)
+            if val is not None:
+                return float(val)
+        for key in ("ttft_ms", "first_delta_ms", "prefill_ms"):
+            val = usage.get(key)
+            if val is not None:
+                return float(val)
+    for key in ("server_ttft_ms",):
+        val = bench.get(key)
+        if val is not None:
+            return float(val)
+    for key in ("ttft_ms", "first_delta_ms"):
+        val = usage.get(key)
+        if val is not None:
+            return float(val)
+    return None
+
+
+def _row_decode_tps(row: dict[str, Any]) -> float | None:
+    usage = row.get("usage") or {}
+    for key in ("decode_tok_per_s", "tok_per_s", "e2e_tok_per_s"):
+        val = usage.get(key)
+        if val is not None:
+            return float(val)
+    return None
+
+
 def summarize_case(
     name: str,
     jsonl_path: Path,
@@ -75,44 +108,34 @@ def summarize_case(
     def collect_wall_ms() -> list[float]:
         return [float(r.get("wall_ms", 0.0)) for r in samples if r.get("wall_ms") is not None]
 
-    server_ttft_vals: list[float] = []
+    engine_ttft_vals: list[float] = []
     client_ttft_vals: list[float] = []
-    ttft_display_vals: list[float] = []
+    decode_tps_engine: list[float] = []
     decode_tps_fallback: list[float] = []
     for row in samples:
         usage = row.get("usage") or {}
         bench = row.get("bench") or {}
-        server_ttft = bench.get("ttft_ms")
-        if server_ttft is None:
-            server_ttft = bench.get("server_ttft_ms")
-        if server_ttft is None:
-            server_ttft = usage.get("ttft_ms")
-        if server_ttft is None:
-            server_ttft = usage.get("first_delta_ms")
-        if server_ttft is not None:
-            server_ttft_vals.append(float(server_ttft))
+        engine_ttft = _row_engine_ttft(row)
+        if engine_ttft is not None:
+            engine_ttft_vals.append(engine_ttft)
 
         client_ttft = bench.get("client_ttft_ms")
         if client_ttft is not None:
             client_ttft_vals.append(float(client_ttft))
 
-        display_ttft = server_ttft if server_ttft is not None else client_ttft
-        if display_ttft is not None:
-            ttft_display_vals.append(float(display_ttft))
-
-        tok = usage.get("tok_per_s") or usage.get("decode_tok_per_s")
-        if tok is None:
+        tok = _row_decode_tps(row)
+        if tok is not None:
+            decode_tps_engine.append(tok)
+        else:
             ct = usage.get("completion_tokens")
             decode_ms = usage.get("decode_ms")
             if decode_ms is not None and ct is not None and float(decode_ms) > 0:
                 decode_tps_fallback.append(float(ct) * 1000.0 / float(decode_ms))
             else:
                 wall = row.get("wall_ms")
-                ttft_guess = server_ttft if server_ttft is not None else client_ttft
-                if ct is not None and wall is not None:
-                    decode_wall = float(wall)
-                    if ttft_guess is not None:
-                        decode_wall = max(1.0, decode_wall - float(ttft_guess))
+                ttft_guess = engine_ttft if engine_ttft is not None else client_ttft
+                if ct is not None and wall is not None and ttft_guess is not None:
+                    decode_wall = max(1.0, float(wall) - float(ttft_guess))
                     if decode_wall > 0:
                         decode_tps_fallback.append(float(ct) * 1000.0 / decode_wall)
 
@@ -125,9 +148,10 @@ def summarize_case(
     metrics: dict[str, Any] = {
         "prompt_tokens": _mean(collect_usage("prompt_tokens")),
         "completion_tokens": _mean(collect_usage("completion_tokens")),
-        "server_ttft_ms": _mean(server_ttft_vals),
+        "engine_ttft_ms": _mean(engine_ttft_vals),
+        "server_ttft_ms": _mean(engine_ttft_vals),
         "client_ttft_ms": _mean(client_ttft_vals),
-        "ttft_ms": _mean(ttft_display_vals),
+        "ttft_ms": _mean(engine_ttft_vals) or _mean(client_ttft_vals),
         "curl_wall_ms_mean": _mean(collect_wall_ms()),
         "prefill_ms": _mean(collect_usage("prefill_ms")),
         "decode_ms": _mean(collect_usage("decode_ms")),
@@ -135,8 +159,13 @@ def summarize_case(
         "decode_tok_per_s": _mean(collect_usage("decode_tok_per_s")),
         "e2e_tok_per_s": _mean(collect_usage("e2e_tok_per_s")),
         "route_last": routes[-1] if routes else None,
+        "metrics_from_serve_log": any(
+            (r.get("bench") or {}).get("metrics_source") == "serve_log_flashrt"
+            or (r.get("usage") or {}).get("metrics_source") == "serve_log_flashrt"
+            for r in samples
+        ),
     }
-    tok = metrics.get("tok_per_s") or metrics.get("decode_tok_per_s") or metrics.get("e2e_tok_per_s")
+    tok = _mean(decode_tps_engine)
     if tok is None and decode_tps_fallback:
         tok = _mean(decode_tps_fallback)
         metrics["decode_tok_per_s_estimated"] = True
@@ -212,10 +241,17 @@ def render_backend_section(backend: str, workdir: Path, cases: list[CaseSummary]
             if key in manifest and manifest[key] not in (None, ""):
                 lines.append(f"- {key}: `{manifest[key]}`")
     lines.append("")
-    lines.append("| case | prompt | completion | TTFT (ms) | decode tok/s | curl wall (ms) | route |")
-    lines.append("|------|-------:|-----------:|-----------------:|-------------:|---------------:|-------|")
+    lines.append(
+        "| case | prompt | completion | engine TTFT (ms) | client TTFT (ms) | "
+        "decode tok/s | curl wall (ms) | route |"
+    )
+    lines.append(
+        "|------|-------:|-----------:|-----------------:|-----------------:|"
+        "-------------:|---------------:|-------|"
+    )
     for case in cases:
         m = case.metrics
+        est = "†" if m.get("decode_tok_per_s_estimated") else ""
         lines.append(
             "| "
             + " | ".join(
@@ -223,14 +259,19 @@ def render_backend_section(backend: str, workdir: Path, cases: list[CaseSummary]
                     case.name,
                     _fmt_num(m.get("prompt_tokens"), digits=0),
                     _fmt_num(m.get("completion_tokens"), digits=0),
-                    _fmt_num(m.get("ttft_ms") or m.get("server_ttft_ms")),
-                    _fmt_num(m.get("decode_tok_per_s_best")),
+                    _fmt_num(m.get("engine_ttft_ms") or m.get("server_ttft_ms")),
+                    _fmt_num(m.get("client_ttft_ms")),
+                    _fmt_num(m.get("decode_tok_per_s_best")) + est,
                     _fmt_num(m.get("curl_wall_ms_mean"), digits=0),
                     str(m.get("route_last") or "n/a"),
                 ]
             )
             + " |"
         )
+    lines.append("")
+    lines.append(
+        "† = decode estimated from curl wall when serve.log / usage had no engine decode_tok_per_s."
+    )
     lines.append("")
     return lines
 
@@ -259,7 +300,8 @@ def render_compare_section(
         "|------|--------|" + "|".join(["---:"] * 3) + "|",
     ]
     metric_specs = [
-        ("ttft_ms", "TTFT ms", False),
+        ("engine_ttft_ms", "engine TTFT ms", False),
+        ("client_ttft_ms", "client TTFT ms", False),
         ("decode_tok_per_s_best", "decode tok/s", True),
         ("curl_wall_ms_mean", "curl wall ms", False),
     ]
@@ -273,7 +315,7 @@ def render_compare_section(
                 "| "
                 + " | ".join(
                     [
-                        case_name if label == "TTFT ms" else "",
+                        case_name if label == "engine TTFT ms" else "",
                         label,
                         _fmt_num(lv, digits=0 if key == "curl_wall_ms_mean" else 1),
                         _fmt_num(rv, digits=0 if key == "curl_wall_ms_mean" else 1),
@@ -348,8 +390,9 @@ def build_report(
         "",
         "Metrics are means over scored rounds (after warmup skips). "
         "Both backends use the same NVFP4 weights and HTTP payloads from `bench_qwen36_compare.sh`. "
-        "`decode tok/s` uses server `usage.tok_per_s` when present; otherwise estimates from "
-        "`completion_tokens` and curl `wall_ms` minus TTFT.",
+        "**Engine TTFT / decode** come from FlashRT `stream |` lines in `serve.log` "
+        "(merged into metrics automatically). **Client TTFT** is the first HTTP content chunk. "
+        "Compare arms using **engine TTFT**, not client TTFT, for qwen36.",
         "",
     ]
     lines.extend(render_fairness_section(out_dir))
@@ -388,9 +431,44 @@ def build_report(
     return "\n".join(lines) + "\n", payload
 
 
+def rehydrate_backends(backends: dict[str, Path], *, backend_kind: str = "auto") -> None:
+    """Merge serve.log into metrics jsonl before summarizing."""
+    try:
+        from bench_qwen36_serve_metrics import rehydrate_workdir
+    except ImportError:
+        import importlib.util
+
+        mod_path = Path(__file__).resolve().parent / "bench_qwen36_serve_metrics.py"
+        spec = importlib.util.spec_from_file_location("bench_qwen36_serve_metrics", mod_path)
+        if spec is None or spec.loader is None:
+            return
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        rehydrate_workdir = mod.rehydrate_workdir
+
+    for _name, workdir in backends.items():
+        log_path = workdir / "serve.log"
+        if not log_path.is_file():
+            manifest_path = workdir / "manifest.json"
+            if manifest_path.is_file():
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                alt = manifest.get("serve_log_path")
+                if alt:
+                    log_path = Path(str(alt)).expanduser()
+        kind = backend_kind
+        if "vLLM" in _name or "vllm" in _name.lower():
+            kind = "vllm"
+        rehydrate_workdir(workdir, log_path, backend=kind)
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--out", type=Path, required=True, help="Report output directory")
+    p.add_argument(
+        "--no-rehydrate",
+        action="store_true",
+        help="Skip merging serve.log into metrics (default: rehydrate when serve.log exists)",
+    )
     p.add_argument("--flashcli", type=Path, default=None, help="flashcli + FlashRT bench workdir")
     p.add_argument(
         "--vllm",
@@ -440,6 +518,9 @@ def main() -> int:
 
     out_dir = args.out.expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    if not args.no_rehydrate:
+        rehydrate_backends(backends)
 
     md, payload = build_report(out_dir=out_dir, backends=backends)
     md_path = out_dir / "REPORT.md"

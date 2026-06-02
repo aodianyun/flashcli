@@ -133,6 +133,22 @@ bash scripts/bench_qwen36_compare.sh --pytorch-only --short-only \
 | vLLM OOM | `--short-only` 或 `VLLM_MAX_MODEL_LEN=8192` |
 | vLLM 长测 256K | 48GB 通常不可行；长测用 `--flashcli-only` |
 | decode n/a | 看 `*/serve.log`，确认 `completion_tokens≈64` |
+| 报告只有 client TTFT | 确认 `*/serve.log` 有 `stream \|` 行；`REPORT.md` 会自动 rehydrate |
+
+**手工 HTTP bench + 报告（引擎 TTFT 自动进 REPORT.md）**：
+
+```bash
+# 终端 1
+flashcli serve qwen36-27b-nvfp4 --port 8000 --warmup-preset auto 2>&1 | tee /tmp/qwen36-serve.log
+
+# 终端 2
+export SERVE_LOG_PATH=/tmp/qwen36-serve.log
+QWEN36_PORT=8000 bash scripts/bench_qwen_curl.sh --qwen36-only \
+  --rounds 12 --skip-first 2 --serve-log /tmp/qwen36-serve.log --write-report
+# → workdir/REPORT.md 含 engine TTFT / decode（来自 serve.log）
+```
+
+`bench_qwen36_compare.sh` 已把 `serve.log` 写在各 arm 的 workdir，生成 `OUT_DIR/REPORT.md` 时自动合并。
 
 ## 可比性说明（bench_config.json + REPORT.md）
 

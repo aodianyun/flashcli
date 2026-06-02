@@ -243,9 +243,10 @@ done
 [[ "${RUN_FLASHCLI}" -eq 1 || "${RUN_VLLM}" -eq 1 ]] || die "Nothing to run"
 [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 1 ]] && die "Use only one of --short-only or --long-only"
 
-# Short-only formal bench: match codeplan/bench_report (warmup-preset auto).
-if [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 && "${QUICK}" -eq 0 ]]; then
-  WARMUP_PRESET=auto
+# Short-only: light serve window + short graph warmup (avoid 262K long warmup at startup).
+if [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ]]; then
+  WARMUP_PRESET=short
+  [[ "${MAX_SEQ_EXPLICIT}" -eq 0 ]] && MAX_SEQ="${QUICK_MAX_SEQ}"
 fi
 
 if [[ "${SKIP_FIRST}" -ge "${ROUNDS}" ]]; then
@@ -665,10 +666,12 @@ run_flashcli_backend() {
   mkdir -p "${workdir}"
 
   local -a cmd
+  # Route: 512 → short_spec (codeplan doc). On some GPUs short prompts are faster with 0 (long path).
+  # Override: FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ=0 bash scripts/bench_qwen36_compare.sh ...
   local -a env_args=(
     FLASHRT_QWEN36_MTP_CKPT_DIR="${MTP_CKPT}"
     FLASHRT_QWEN36_LONG_KV_CACHE=fp8
-    FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ=512
+    FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ="${FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ:-512}"
   )
   if command -v flashcli >/dev/null 2>&1; then
     cmd=(flashcli serve qwen36-27b-nvfp4)
@@ -828,7 +831,7 @@ write_report() {
   local vwd
   vwd="$(resolve_vllm_workdir || true)"
   [[ -n "${vwd}" ]] && args+=(--vllm "${vwd}")
-  log "Step: report → ${OUT_DIR}/REPORT.md"
+  log "Step: report → ${OUT_DIR}/REPORT.md (engine TTFT/decode from each arm's serve.log)"
   python3 "${REPORT_PY}" "${args[@]}" >"${OUT_DIR}/REPORT.stdout.log" 2>&1
   log "Report: ${OUT_DIR}/REPORT.md"
 }
