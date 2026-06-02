@@ -12,6 +12,7 @@ import argparse
 import asyncio
 import json
 import logging
+import sys
 import time
 import uuid
 from typing import Any, Iterator
@@ -106,18 +107,24 @@ class HfQwen36Engine:
         try:
             self.model = AutoModelForCausalLM.from_pretrained(checkpoint, **load_kwargs)
         except ImportError as exc:
-            raise SystemExit(
+            sys.exit(
                 f"Failed to import deps for {checkpoint!r}: {exc}\n"
                 "NVFP4 checkpoints often need: pip install compressed-tensors"
-            ) from exc
+            )
         except Exception as exc:
             msg = str(exc)
             hint = ""
-            if "compressed" in msg.lower() or "nvfp4" in msg.lower() or "quant" in msg.lower():
+            if "does not recognize this architecture" in msg or "qwen3_5" in msg.lower():
+                hint = (
+                    "\nQwen3.6 checkpoints need a recent transformers, e.g.\n"
+                    "  pip install -U 'transformers>=4.57'\n"
+                    "  # or: pip install git+https://github.com/huggingface/transformers.git"
+                )
+            elif "compressed" in msg.lower() or "nvfp4" in msg.lower() or "quant" in msg.lower():
                 hint = "\nTry: pip install compressed-tensors transformers -U"
-            raise SystemExit(
+            sys.exit(
                 f"Failed to load checkpoint {checkpoint!r} with transformers: {exc}{hint}"
-            ) from exc
+            )
         self.model.eval()
         self.tokenizer = AutoTokenizer.from_pretrained(checkpoint)
         log.info("HF model ready in %.1f s", time.perf_counter() - t0)

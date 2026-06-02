@@ -370,16 +370,39 @@ tail_serve_progress() {
     | sed 's/^/[serve] /' >&2 || true
 }
 
+check_serve_log_fatal() {
+  local serve_log="$1"
+  [[ -f "${serve_log}" ]] || return 0
+  if grep -q 'Invalid model bundle:' "${serve_log}"; then
+    tail_serve_progress "${serve_log}"
+    die "Bundle not built: missing bundles/qwen_nvfp4/lib/ and flash_rt/. Build per bundles/qwen_nvfp4/QUICKSTART.md, or use --pytorch-only for HF baseline only."
+  fi
+  if grep -qE 'Failed to load checkpoint|does not recognize this architecture' "${serve_log}"; then
+    tail_serve_progress "${serve_log}"
+    die "HF server failed to load model (see serve.log). Qwen3.6 needs recent transformers, e.g. pip install -U 'transformers>=4.57' or pip install git+https://github.com/huggingface/transformers.git ; NVFP4 also needs: pip install compressed-tensors"
+  fi
+}
+
 check_bench_job_crashed() {
   local job="$1" serve_log="$2"
   local status_out state exit_code
-  status_out="$(bash "${RUN_BG}" --name "${job}" --status 2>&1)" || return 0
+  check_serve_log_fatal "${serve_log}"
+  # run_bg --status exits 1 when state!=running; still parse stdout.
+  status_out="$(bash "${RUN_BG}" --name "${job}" --status 2>&1)" || true
+  [[ -n "${status_out}" ]] || return 0
   state="$(printf '%s\n' "${status_out}" | sed -n 's/^state:[[:space:]]*//p' | head -1)"
   exit_code="$(printf '%s\n' "${status_out}" | sed -n 's/^exit:[[:space:]]*//p' | head -1)"
-  if [[ "${state}" == "stopped" && -n "${exit_code}" && "${exit_code}" != "0" ]]; then
-    log "Background job '${job}' exited with code ${exit_code}"
-    tail_serve_progress "${serve_log}" "${job}"
-    die "Server process died before /health (see serve log above or: bash scripts/run_bg.sh --name ${job} --tail)"
+  if [[ "${state}" == "stopped" ]]; then
+    if [[ -n "${exit_code}" && "${exit_code}" != "0" ]]; then
+      log "Background job '${job}' exited with code ${exit_code}"
+      tail_serve_progress "${serve_log}" "${job}"
+      die "Server process died before /health (see serve log above or: bash scripts/run_bg.sh --name ${job} --tail)"
+    fi
+    if ! curl -sf "http://${HOST}:${PORT}/health" >/dev/null 2>&1; then
+      log "Background job '${job}' stopped but /health is not up"
+      tail_serve_progress "${serve_log}" "${job}"
+      die "Server exited before /health (see serve log; flashcli may exit 0 on bundle errors)"
+    fi
   fi
 }
 
