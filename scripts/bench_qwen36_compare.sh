@@ -181,6 +181,20 @@ if [[ "${REPORT_ONLY}" -eq 0 ]]; then
   command -v python3 >/dev/null 2>&1 || die "python3 not found"
   [[ -d "${CHECKPOINT}" ]] || die "Checkpoint not found: ${CHECKPOINT}"
   [[ -d "${VLLM_CHECKPOINT}" ]] || die "vLLM checkpoint not found: ${VLLM_CHECKPOINT}"
+  if [[ "${RUN_FLASHCLI}" -eq 1 ]]; then
+    if ! bundle_is_ready "${BUNDLE}"; then
+      c="$(resolve_default_bundle || true)"
+      if [[ -n "${c}" ]]; then
+        log "Bundle: using cached ${c}"
+        BUNDLE="${c}"
+      else
+        die "FlashRT bundle not ready: ${BUNDLE}
+  Build: bash bundles/qwen_nvfp4/build.sh --repo-root \$FLASHRT_REPO
+  Or:   flashcli bundle sync qwen36-27b-nvfp4
+  Or:   export BUNDLE=~/.flashcli/bundles/.../extracted/flashcli-bundle-qwen_nvfp4-.../"
+      fi
+    fi
+  fi
 fi
 
 canonical_path() {
@@ -543,8 +557,56 @@ finish_manifest() {
   mv "${workdir}/manifest.json.tmp" "${workdir}/manifest.json"
 }
 
+bundle_is_ready() {
+  local root="$1"
+  [[ -f "${root}/flashcli-bundle.json" && -d "${root}/lib" && -d "${root}/flash_rt" ]]
+}
+
+resolve_default_bundle() {
+  local -a candidates=()
+  local c py_root found
+
+  if [[ -n "${BUNDLE:-}" ]]; then
+    candidates+=("$(canonical_path "${BUNDLE}")")
+  fi
+  candidates+=("$(canonical_path "${FLASHCLI_ROOT}/bundles/qwen_nvfp4")")
+
+  py_root="$(
+    python3 - <<'PY' 2>/dev/null || true
+try:
+    from flashcli.models.registry import get_preset
+    from flashcli.bundle.zip import resolve_cached_zip_bundle_root
+
+    p = get_preset("qwen36-27b-nvfp4")
+    r = resolve_cached_zip_bundle_root(p)
+    if r is not None:
+        print(r)
+except Exception:
+    pass
+PY
+  )"
+  [[ -n "${py_root}" ]] && candidates+=("${py_root}")
+
+  while IFS= read -r found; do
+    [[ -n "${found}" ]] && candidates+=("$(dirname "${found}")")
+  done < <(
+    find "${HOME}/.flashcli/bundles" -name flashcli-bundle.json 2>/dev/null \
+      | grep -E 'qwen_nvfp4|qwen36-27b-nvfp4' | sort -r
+  )
+
+  for c in "${candidates[@]}"; do
+    [[ -n "${c}" ]] || continue
+    if bundle_is_ready "${c}"; then
+      echo "${c}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 run_bench_cases() {
   local workdir="$1" api_model="${2:-${MODEL_NAME}}"
+  local bench_arm="${SERVE_LOG_BACKEND:-flashrt}"
 
   if [[ "${LONG_ONLY}" -eq 0 ]]; then
     jq --arg m "${api_model}" '.model = $m' "${PAYLOAD_DIR}/qwen36_short.json" >"${workdir}/qwen36_short.json"
@@ -558,7 +620,7 @@ run_bench_cases() {
   [[ -n "${BENCH_PROFILE}" ]] && args+=(--profile "${BENCH_PROFILE}")
   [[ "${SHORT_ONLY}" -eq 1 ]] && args+=(--skip-qwen36-long)
   [[ "${LONG_ONLY}" -eq 1 ]] && args+=(--skip-short)
-  if [[ "${BENCH_ARM}" == "vllm" && "${VLLM_SKIP_LONG}" -eq 1 ]]; then
+  if [[ "${bench_arm}" == "vllm" && "${VLLM_SKIP_LONG}" -eq 1 ]]; then
     args+=(--skip-qwen36-long)
   fi
 
@@ -566,11 +628,11 @@ run_bench_cases() {
   export HOST QWEN36_PORT="${PORT}" QWEN36_MAX_SEQ="${MAX_SEQ}"
   export SERVE_LOG_PATH="${workdir}/serve.log"
   export QWEN36_SERVE_LOG="${SERVE_LOG_PATH}"
-  export BENCH_ARM="${SERVE_LOG_BACKEND:-flashrt}"
+  export BENCH_ARM="${bench_arm}"
   export QWEN36_LONG_PROMPT_TOKENS="${LONG_TOKENS}"
   export SHORT_MAX_TOKENS LONG_MAX_TOKENS SHORT_PROMPT BENCH_STREAM=1
   export QWEN36_SEQ_SLACK="${PAYLOAD_SEQ_SLACK}"
-  if [[ "${BENCH_ARM}" == "vllm" ]]; then
+  if [[ "${bench_arm}" == "vllm" ]]; then
     export CKPT_QWEN36="${VLLM_CHECKPOINT}"
   else
     export CKPT_QWEN36="${CHECKPOINT}"
@@ -760,7 +822,6 @@ log "out=${OUT_DIR} cases=$(bench_cases_label) max_seq=${MAX_SEQ} flashcli=${RUN
 log "bench: rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${SCORED_ROUNDS} profile=${BENCH_PROFILE}"
 log "  short max_tokens=${SHORT_MAX_TOKENS}  long user_tokens=${LONG_TOKENS} long max_tokens=${LONG_MAX_TOKENS}"
 [[ "${RUN_FLASHCLI}" -eq 1 ]] && log "  FlashRT checkpoint=${CHECKPOINT} warmup=${WARMUP_PRESET} K=${K}"
-[[ "${RUN_VLLM}" -eq 1 ]] && log "  vLLM checkpoint=${VLLM_CHECKPOINT} model=${VLLM_MODEL_NAME} max_model_len=${VLLM_MAX_LEN:-pending}"
 log "GPU: $(gpu_name)"
 
 if [[ "${REPORT_ONLY}" -eq 1 ]]; then
@@ -770,6 +831,8 @@ fi
 
 compute_vllm_plan
 write_bench_config
+[[ "${RUN_FLASHCLI}" -eq 1 ]] && log "  FlashRT bundle=${BUNDLE}"
+[[ "${RUN_VLLM}" -eq 1 ]] && log "  vLLM checkpoint=${VLLM_CHECKPOINT} model=${VLLM_MODEL_NAME} max_model_len=${VLLM_MAX_LEN}"
 [[ "${RUN_FLASHCLI}" -eq 1 || "${RUN_VLLM}" -eq 1 ]] || die "No backend to run after vLLM context plan"
 
 trap cleanup_on_exit INT TERM EXIT
