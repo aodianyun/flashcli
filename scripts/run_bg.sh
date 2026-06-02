@@ -72,9 +72,80 @@ read_meta() {
   sed -n "s/^${key}=//p" "${file}" | tail -1
 }
 
+proc_state() {
+  local pid="$1"
+  [[ -n "${pid}" && -r "/proc/${pid}/status" ]] || return 1
+  awk '/^State:/ {print $2; exit}' "/proc/${pid}/status" 2>/dev/null
+}
+
+proc_exists() {
+  local pid="$1"
+  [[ -n "${pid}" && -r "/proc/${pid}/status" ]]
+}
+
+proc_is_zombie() {
+  [[ "$(proc_state "$1" 2>/dev/null || echo "")" == "Z" ]]
+}
+
 is_running() {
   local pid="$1"
-  [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null
+  proc_exists "${pid}" || return 1
+  ! proc_is_zombie "${pid}"
+}
+
+reap_worker_pid() {
+  local pid="$1"
+  proc_is_zombie "${pid}" || return 0
+  wait "${pid}" 2>/dev/null || true
+}
+
+wait_for_proc_gone() {
+  local pid="$1" tries="${2:-40}" i
+  for ((i = 0; i < tries; i++)); do
+    proc_exists "${pid}" || return 0
+    proc_is_zombie "${pid}" && return 0
+    sleep 0.25
+  done
+  return 1
+}
+
+wait_for_supervisor_idle() {
+  local sup="$1" worker tries="${2:-30}" i
+  worker="$(read_meta WORKER_PID 2>/dev/null || true)"
+  for ((i = 0; i < tries; i++)); do
+    if [[ -n "${worker}" ]] && proc_is_zombie "${worker}"; then
+      return 0
+    fi
+    if [[ -n "${worker}" ]] && ! proc_exists "${worker}"; then
+      return 0
+    fi
+    if ! any_job_workers_alive; then
+      return 0
+    fi
+    is_running "${sup}" || return 0
+    sleep 0.5
+  done
+  return 1
+}
+
+stop_supervisor_gracefully() {
+  local sup="$1" worker i
+  worker="$(read_meta WORKER_PID 2>/dev/null || true)"
+  is_running "${sup}" || return 0
+  kill -TERM "${sup}" 2>/dev/null || true
+  for i in $(seq 1 20); do
+    is_running "${sup}" || return 0
+    sleep 0.25
+  done
+  if any_job_workers_alive; then
+    return 1
+  fi
+  if [[ -n "${worker}" ]] && proc_is_zombie "${worker}"; then
+    sleep 2
+    is_running "${sup}" || return 0
+  fi
+  is_running "${sup}" || return 0
+  kill -KILL "${sup}" 2>/dev/null || true
 }
 
 kill_process_tree() {
@@ -113,6 +184,7 @@ kill_job_workers() {
       [[ $# -ge 3 && "$3" != --* ]] && pattern="${pattern} $3"
       while IFS= read -r p; do
         [[ -z "${p}" || "${p}" == "$$" ]] && continue
+        proc_is_zombie "${p}" && continue
         kill_process_tree "${p}" "${sig}"
       done < <(pgrep -f "${pattern}" 2>/dev/null || true)
     fi
@@ -136,7 +208,7 @@ kill_job_workers() {
   fi
 }
 
-any_job_workers_running() {
+any_job_workers_alive() {
   local worker_pid cmd_quoted pattern p
 
   worker_pid="$(read_meta WORKER_PID 2>/dev/null || true)"
@@ -151,10 +223,18 @@ any_job_workers_running() {
     if [[ $# -ge 2 ]]; then
       pattern="$1 $2"
       [[ $# -ge 3 && "$3" != --* ]] && pattern="${pattern} $3"
-      pgrep -f "${pattern}" >/dev/null 2>&1 && return 0
+      while IFS= read -r p; do
+        [[ -z "${p}" ]] && continue
+        is_running "${p}" && return 0
+      done < <(pgrep -f "${pattern}" 2>/dev/null || true)
     fi
   fi
   return 1
+}
+
+# Backward compat alias
+any_job_workers_running() {
+  any_job_workers_alive
 }
 
 run_in_new_session() {
@@ -198,8 +278,13 @@ cmd_supervisor_internal() {
   rm -f "${stop_path}"
 
   _supervisor_cleanup() {
-    if (( child_pid != 0 )) && is_running "${child_pid}"; then
-      kill_process_tree "${child_pid}" KILL
+    if (( child_pid != 0 )); then
+      if is_running "${child_pid}"; then
+        kill -TERM "${child_pid}" 2>/dev/null || true
+        sleep 1
+        is_running "${child_pid}" && kill -KILL "${child_pid}" 2>/dev/null || true
+      fi
+      wait "${child_pid}" 2>/dev/null || true
     fi
     release_docker_stop_all "${FLASHCLI_ROOT}"
     exit 143
@@ -208,10 +293,26 @@ cmd_supervisor_internal() {
 
   _wait_worker_or_stop() {
     local wp=$1
-    while is_running "${wp}"; do
+    while proc_exists "${wp}"; do
+      if proc_is_zombie "${wp}"; then
+        wait "${wp}" 2>/dev/null || true
+        return 0
+      fi
       if [[ -f "${stop_path}" ]]; then
-        log "Stop requested; killing worker pid ${wp}"
-        kill_process_tree "${wp}" KILL
+        log "Stop requested; stopping worker pid ${wp}"
+        kill -TERM "${wp}" 2>/dev/null || true
+        local j
+        for j in $(seq 1 10); do
+          proc_exists "${wp}" || break
+          proc_is_zombie "${wp}" && break
+          is_running "${wp}" || break
+          sleep 0.5
+        done
+        if is_running "${wp}"; then
+          kill -KILL "${wp}" 2>/dev/null || true
+          sleep 0.5
+        fi
+        wait "${wp}" 2>/dev/null || true
         return 0
       fi
       sleep 1
@@ -460,30 +561,40 @@ cmd_stop() {
 
   release_docker_stop_all "${FLASHCLI_ROOT}"
 
-  kill_job_workers TERM
-  kill_process_tree "${pid}" TERM
+  local worker_pid
+  worker_pid="$(read_meta WORKER_PID 2>/dev/null || true)"
 
-  local i
-  for i in $(seq 1 20); do
-    is_running "${pid}" || break
-    any_job_workers_running || break
-    sleep 0.5
-  done
+  # Prefer supervisor handling stop (TERM worker + wait to reap).
+  wait_for_supervisor_idle "${pid}" 25 || true
 
-  if is_running "${pid}" || any_job_workers_running; then
-    log "Still running; sending SIGKILL to job processes"
+  if any_job_workers_alive; then
+    log "Stopping worker processes..."
+    kill_job_workers TERM
+    wait_for_proc_gone "${worker_pid}" 40 || true
+  fi
+
+  if any_job_workers_alive; then
+    log "Worker still alive; sending SIGKILL"
     kill_job_workers KILL
-    kill_process_tree "${pid}" KILL
-    for i in $(seq 1 10); do
-      is_running "${pid}" || break
-      any_job_workers_running || break
-      sleep 0.5
-    done
+    wait_for_proc_gone "${worker_pid}" 20 || true
   fi
 
-  if any_job_workers_running; then
-    log "WARN: some job processes may still be running; try: pgrep -af '$(read_meta CMD_QUOTED 2>/dev/null | head -c 60)'"
+  if [[ -n "${worker_pid}" ]] && proc_is_zombie "${worker_pid}"; then
+    log "Reaping worker zombie pid ${worker_pid}"
+    if is_running "${pid}"; then
+      wait_for_supervisor_idle "${pid}" 10 || true
+    fi
+    reap_worker_pid "${worker_pid}" || true
   fi
+
+  if any_job_workers_alive; then
+    log "WARN: worker still active; try: pgrep -af '$(read_meta CMD_QUOTED 2>/dev/null | head -c 60)'"
+  fi
+
+  stop_supervisor_gracefully "${pid}" || {
+    log "WARN: supervisor did not exit cleanly"
+    kill -KILL "${pid}" 2>/dev/null || true
+  }
 
   release_docker_stop_all "${FLASHCLI_ROOT}"
 
