@@ -7,6 +7,7 @@
 #
 # Short only:  --short-only   |  Long only:  --long-only
 # Custom long: --long-tokens 131072 --max-seq 131072
+# 16K dual-arm:  bash scripts/bench_qwen36_compare.sh --ctx-16k
 # Re-report:   --report-only --out-dir /tmp/qwen36-bench-nvfp4-...
 #
 set -euo pipefail
@@ -83,6 +84,7 @@ Context cases (pick one scope; default without --short-only/--long-only = both):
 
 Presets:
   --comparable          short+long; ${ROUNDS} rounds skip ${SKIP_FIRST}; warmup auto; max_seq ${MAX_SEQ}
+  --ctx-16k             short+long at 16K window (max_seq=16384; FlashRT serve + vLLM aligned)
   --quick               short only; 3 rounds skip 1; warmup none; max_seq ${QUICK_MAX_SEQ}
 
 Arms:
@@ -212,6 +214,21 @@ while [[ $# -gt 0 ]]; do
       K_EXPLICIT=1
       shift
       ;;
+    --ctx-16k)
+      QUICK=0
+      SHORT_ONLY=0
+      LONG_ONLY=0
+      MAX_SEQ=16384
+      MAX_SEQ_EXPLICIT=1
+      ROUNDS=12
+      SKIP_FIRST=2
+      BENCH_PROFILE=comparable
+      WARMUP_PRESET=auto
+      WARMUP_EXPLICIT=1
+      K="${K:-6}"
+      K_EXPLICIT=1
+      shift
+      ;;
     --quick)
       QUICK=1
       SHORT_ONLY=1
@@ -280,6 +297,20 @@ if [[ "${SKIP_FIRST}" -ge "${ROUNDS}" ]]; then
   die "--skip-first (${SKIP_FIRST}) must be < --rounds (${ROUNDS})"
 fi
 SCORED_ROUNDS=$((ROUNDS - SKIP_FIRST))
+
+clamp_long_tokens_to_budget() {
+  [[ "${SHORT_ONLY}" -eq 0 ]] || return 0
+  local budget=$((MAX_SEQ - LONG_MAX_TOKENS - PAYLOAD_SEQ_SLACK))
+  if [[ "${budget}" -lt 1 ]]; then
+    die "max_seq=${MAX_SEQ} too small for long max_tokens=${LONG_MAX_TOKENS} slack=${PAYLOAD_SEQ_SLACK}"
+  fi
+  if [[ "${LONG_TOKENS}" -gt "${budget}" ]]; then
+    log "  long-tokens ${LONG_TOKENS} → ${budget} (fit max_seq=${MAX_SEQ} − max_tokens=${LONG_MAX_TOKENS} − slack=${PAYLOAD_SEQ_SLACK})"
+    LONG_TOKENS="${budget}"
+  fi
+}
+
+clamp_long_tokens_to_budget
 
 if [[ -z "${OUT_DIR}" ]]; then
   OUT_DIR="/tmp/qwen36-bench-nvfp4-$(date +%Y%m%d-%H%M%S)"
@@ -732,13 +763,17 @@ run_flashcli_backend() {
 
   [[ -f "${MTP_CKPT}/mtp.safetensors" ]] || die "MTP missing: ${MTP_CKPT}/mtp.safetensors"
 
-  # Payload --max-seq caps HTTP prompt+output; FlashRT serve should stay on catalog
-  # default (262208) like manual `flashcli serve`. Small serve max-seq raises
-  # graph_cache_max (e.g. 16384→1024 vs 262208→128) and load+warmup can take 10× longer.
+  # Payload --max-seq caps HTTP prompt+output. For 256K comparable, FlashRT serve stays
+  # on catalog default (262208) like manual `flashcli serve`. For ≤16K dual-arm benches,
+  # align FlashRT --max-seq with payload/vLLM so both arms share the same context window.
   if [[ -n "${FLASHRT_SERVE_MAX_SEQ}" ]]; then
     serve_max_seq="${FLASHRT_SERVE_MAX_SEQ}"
-  elif [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 && "${MAX_SEQ_EXPLICIT}" -eq 1 ]]; then
-    serve_max_seq="${MAX_SEQ}"
+  elif [[ "${MAX_SEQ_EXPLICIT}" -eq 1 ]]; then
+    if [[ "${MAX_SEQ}" -le 16384 ]]; then
+      serve_max_seq="${MAX_SEQ}"
+    elif [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ]]; then
+      serve_max_seq="${MAX_SEQ}"
+    fi
   fi
 
   # Same as manual `flashcli serve qwen36-27b-nvfp4 …` — preset resolves bundle/checkpoint/MTP.
