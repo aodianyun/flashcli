@@ -328,13 +328,18 @@ payload_fit_max_seq() {
 }
 
 write_bench_config() {
-  local ckpt_flashrt ckpt_vllm weights_match model_match
+  local ckpt_flashrt ckpt_vllm weights_match model_match flashrt_k_json
   ckpt_flashrt="$(canonical_path "${CHECKPOINT}")"
   ckpt_vllm="$(canonical_path "${VLLM_CHECKPOINT}")"
   weights_match=false
   model_match=false
   [[ "${ckpt_flashrt}" == "${ckpt_vllm}" ]] && weights_match=true
   [[ "${MODEL_NAME}" == "${VLLM_MODEL_NAME}" ]] && model_match=true
+  if [[ -n "${K}" ]]; then
+    flashrt_k_json="${K}"
+  else
+    flashrt_k_json="null"
+  fi
   jq -n \
     --arg generated_at "$(date -Iseconds 2>/dev/null || date)" \
     --arg gpu "$(gpu_name)" \
@@ -359,7 +364,7 @@ write_bench_config() {
     --argjson top_p 1 \
     --argjson stream "${BENCH_STREAM}" \
     --argjson enable_thinking false \
-    --argjson flashrt_mtp_k "${K}" \
+    --argjson flashrt_mtp_k "${flashrt_k_json}" \
     --argjson vllm_max_model_len "${VLLM_MAX_LEN:-0}" \
     --argjson vllm_skip_long "${VLLM_SKIP_LONG}" \
     --arg vllm_attention "${VLLM_ATTENTION_BACKEND}" \
