@@ -58,7 +58,7 @@ BENCH_STREAM="${BENCH_STREAM:-1}"
 WORKDIR="${WORKDIR:-/tmp/flashcli-bench-qwen-$$}"
 SERVE_LOG_PATH="${SERVE_LOG_PATH:-${QWEN36_SERVE_LOG:-}}"
 SERVE_LOG_BACKEND="${SERVE_LOG_BACKEND:-auto}"
-BENCH_ISOLATE_ROUNDS="${BENCH_ISOLATE_ROUNDS:-1}"
+BENCH_ISOLATE_ROUNDS="${BENCH_ISOLATE_ROUNDS:-0}"
 WRITE_REPORT=0
 REPORT_PY="${SCRIPT_DIR}/bench_qwen36_report.py"
 
@@ -85,7 +85,8 @@ Options:
   --skip-first K          Drop first K rounds before averaging (default: 1 if rounds>1)
   --long-prompt-style S   repeat | flashrt | doc (flashrt=FlashRT doc seed)
   --profile NAME          comparable (flashrt long + env hints) | stress (repeat fill)
-  --no-isolate-rounds     Reuse FlashRT agent session across rounds (default: cache_salt per round)
+  --no-isolate-rounds     Reuse FlashRT agent session across rounds (default for comparable long)
+  --isolate-rounds        Per-round cache_salt (no cross-round decode graph warmup)
   --stream                Use stream=true payloads (default)
   --no-stream             Use stream=false (legacy non-streaming)
   --serve-log PATH        flashcli serve.log (engine TTFT/decode → metrics + report)
@@ -192,6 +193,7 @@ while [[ $# -gt 0 ]]; do
     --stream) BENCH_STREAM=1; shift ;;
     --no-stream) BENCH_STREAM=0; shift ;;
     --no-isolate-rounds) BENCH_ISOLATE_ROUNDS=0; shift ;;
+    --isolate-rounds) BENCH_ISOLATE_ROUNDS=1; shift ;;
     --serve-log) SERVE_LOG_PATH="$2"; shift 2 ;;
     --write-report) WRITE_REPORT=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -408,6 +410,13 @@ write_curl_report() {
     || log "WARN: report generation failed (see ${WORKDIR}/report.stdout.log)"
 }
 
+flashrt_delete_session() {
+  local port="$1" session_id="$2"
+  [[ -n "${session_id}" && "${session_id}" != "null" ]] || return 0
+  curl -sf -X DELETE "http://${HOST}:${port}/v1/sessions/${session_id}" >/dev/null 2>&1 \
+    || log "  WARN: DELETE /v1/sessions/${session_id} failed (non-fatal)"
+}
+
 run_curl_once() {
   local label="$1" port="$2" payload="$3" resp="$4" round="$5" jsonl="$6"
   local wall_ms tag="" use_stream=false log_offset=0 round_payload="${payload}"
@@ -507,6 +516,11 @@ run_curl_once() {
         log "  WARN: no engine decode tok/s — tee serve stderr to a log and set SERVE_LOG_PATH (FlashRT stream | lines)"
         ;;
     esac
+  fi
+  if [[ "${BENCH_ISOLATE_ROUNDS}" -eq 0 && "${port}" == "${QWEN36_PORT}" && "${BENCH_ARM:-flashrt}" == "flashrt" ]]; then
+    local sid
+    sid="$(jq -r '.usage.session_id // empty' "${resp}" 2>/dev/null)"
+    flashrt_delete_session "${port}" "${sid}"
   fi
 }
 

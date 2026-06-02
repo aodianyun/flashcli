@@ -54,11 +54,12 @@ pip uninstall -y flash-attn
 pip install 'kernels>=0.12,<0.13'
 ```
 
-长测 FlashRT（与 codeplan 一致）：
+长测 FlashRT（与 codeplan 一致；comparable 长上下文会自动开启 TQ graph bench 模式）：
 
 ```bash
 export FLASHRT_QWEN36_LONG_KV_CACHE=fp8
 export FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ=512
+# comparable 长测还会默认：TQ_VERIFY_GRAPH=1 TQ_MTP_CHAIN_GRAPH=1（须在 serve 前生效；脚本已自动 export）
 ```
 
 ### 1. 冒烟 — 短上下文

@@ -69,7 +69,7 @@ PAYLOAD_SEQ_SLACK="${PAYLOAD_SEQ_SLACK:-32}"
 BENCH_STREAM="${BENCH_STREAM:-1}"
 FLASHRT_SERVE_MAX_SEQ="${FLASHRT_SERVE_MAX_SEQ:-}"
 FLASHRT_SERVE_MAX_SEQ_EXPLICIT=0
-BENCH_ISOLATE_ROUNDS="${BENCH_ISOLATE_ROUNDS:-1}"
+BENCH_ISOLATE_ROUNDS=""
 
 usage() {
   cat <<EOF
@@ -88,7 +88,8 @@ Context cases (pick one scope; default without --short-only/--long-only = both):
 Presets:
   --comparable          short+long; ${ROUNDS} rounds skip ${SKIP_FIRST}; warmup auto; max_seq ${MAX_SEQ}
   --stress              long prompt repeat-fill (MTP stress; not doc-comparable decode)
-  --no-isolate-rounds   Reuse FlashRT agent session across rounds (default: cache_salt per round)
+  --no-isolate-rounds   Keep hot session across rounds (comparable long default)
+  --isolate-rounds      Per-round cache_salt (no cross-round decode warmup)
   --ctx-16k             short+long at 16K payload (max_seq=16384; FlashRT serve=catalog 262208)
   --quick               short only; 3 rounds skip 1; warmup none; max_seq ${QUICK_MAX_SEQ}
 
@@ -248,6 +249,7 @@ while [[ $# -gt 0 ]]; do
     --long-only) LONG_ONLY=1; SHORT_ONLY=0; shift ;;
     --stress) BENCH_PROFILE=stress; shift ;;
     --no-isolate-rounds) BENCH_ISOLATE_ROUNDS=0; shift ;;
+    --isolate-rounds) BENCH_ISOLATE_ROUNDS=1; shift ;;
     --rounds) ROUNDS="$2"; shift 2 ;;
     --skip-first) SKIP_FIRST="$2"; shift 2 ;;
     --long-tokens|--qwen36-long-tokens) LONG_TOKENS="$2"; shift 2 ;;
@@ -720,6 +722,12 @@ export_flashrt_serve_env() {
   [[ "${SHORT_ONLY}" -eq 0 || "${LONG_ONLY}" -eq 1 ]] || return 0
   export FLASHRT_QWEN36_LONG_KV_CACHE="${FLASHRT_QWEN36_LONG_KV_CACHE:-fp8}"
   export FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ="${FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ:-512}"
+  # Fixed-shape long decode (FlashRT doc / historical comparable ~69 tok/s on PRO 5000).
+  # SM120 agent defaults TQ_*_GRAPH=0 (direct kernels ~29 tok/s at 256K); opt in for bench.
+  if [[ "${BENCH_PROFILE}" == "comparable" && "${SHORT_ONLY}" -eq 0 ]]; then
+    export FLASHRT_QWEN36_TQ_VERIFY_GRAPH="${FLASHRT_QWEN36_TQ_VERIFY_GRAPH:-1}"
+    export FLASHRT_QWEN36_TQ_MTP_CHAIN_GRAPH="${FLASHRT_QWEN36_TQ_MTP_CHAIN_GRAPH:-1}"
+  fi
 }
 
 flashrt_serve_env_args() {
@@ -728,6 +736,24 @@ flashrt_serve_env_args() {
     printf '%s\n' \
       "FLASHRT_QWEN36_LONG_KV_CACHE=${FLASHRT_QWEN36_LONG_KV_CACHE}" \
       "FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ=${FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ}"
+    if [[ "${BENCH_PROFILE}" == "comparable" && "${SHORT_ONLY}" -eq 0 ]]; then
+      printf '%s\n' \
+        "FLASHRT_QWEN36_TQ_VERIFY_GRAPH=${FLASHRT_QWEN36_TQ_VERIFY_GRAPH}" \
+        "FLASHRT_QWEN36_TQ_MTP_CHAIN_GRAPH=${FLASHRT_QWEN36_TQ_MTP_CHAIN_GRAPH}"
+    fi
+  fi
+}
+
+resolve_bench_isolate_rounds() {
+  if [[ -n "${BENCH_ISOLATE_ROUNDS}" ]]; then
+    echo "${BENCH_ISOLATE_ROUNDS}"
+    return
+  fi
+  # comparable long: same-shape decode warmup across rounds; drop hot session after each HTTP call.
+  if [[ "${BENCH_PROFILE}" == "comparable" && "${SHORT_ONLY}" -eq 0 ]]; then
+    echo 0
+  else
+    echo 1
   fi
 }
 
@@ -817,7 +843,7 @@ run_bench_cases() {
   export QWEN36_LONG_PROMPT_TOKENS="${LONG_TOKENS}"
   export SHORT_MAX_TOKENS LONG_MAX_TOKENS SHORT_PROMPT BENCH_STREAM=1
   export QWEN36_SEQ_SLACK="${PAYLOAD_SEQ_SLACK}"
-  export BENCH_ISOLATE_ROUNDS="${BENCH_ISOLATE_ROUNDS:-1}"
+  export BENCH_ISOLATE_ROUNDS="$(resolve_bench_isolate_rounds)"
   if [[ "${bench_arm}" == "vllm" ]]; then
     export CKPT_QWEN36="${VLLM_CHECKPOINT}"
   else
@@ -899,6 +925,9 @@ run_flashcli_backend() {
   else
     if [[ "${SHORT_ONLY}" -eq 0 || "${LONG_ONLY}" -eq 1 ]]; then
       log "  env: FLASHRT_QWEN36_LONG_KV_CACHE=${FLASHRT_QWEN36_LONG_KV_CACHE:-fp8} FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ=${FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ:-512}"
+      if [[ "${BENCH_PROFILE}" == "comparable" && "${SHORT_ONLY}" -eq 0 ]]; then
+        log "  env: FLASHRT_QWEN36_TQ_VERIFY_GRAPH=${FLASHRT_QWEN36_TQ_VERIFY_GRAPH:-1} FLASHRT_QWEN36_TQ_MTP_CHAIN_GRAPH=${FLASHRT_QWEN36_TQ_MTP_CHAIN_GRAPH:-1} (fixed-shape graph bench)"
+      fi
     fi
     log "  serve: ${server_cmd}"
     if ((${#env_args[@]})); then
