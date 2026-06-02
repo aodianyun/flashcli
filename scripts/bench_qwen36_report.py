@@ -277,6 +277,39 @@ def render_payload_tokens_section(payload_tokens: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _load_arm_failure(workdir: Path) -> dict[str, Any] | None:
+    path = workdir / "arm_failure.json"
+    if not path.is_file():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def render_backend_failure_section(
+    backend: str, workdir: Path, failure: dict[str, Any]
+) -> list[str]:
+    lines = [
+        f"## {backend}",
+        "",
+        f"- workdir: `{workdir}`",
+        f"- **status: FAILED**",
+        f"- phase: `{failure.get('phase', 'unknown')}`",
+        f"- exit_code: `{failure.get('exit_code', 'n/a')}`",
+        f"- failed_at: `{failure.get('failed_at', 'n/a')}`",
+        "",
+        "**Reason:**",
+        "",
+        "```",
+        str(failure.get("reason") or "unknown"),
+        "```",
+        "",
+    ]
+    serve_log = failure.get("serve_log")
+    if serve_log:
+        lines.append(f"See `{serve_log}` for full vLLM startup log.")
+        lines.append("")
+    return lines
+
+
 def render_backend_section(
     backend: str,
     workdir: Path,
@@ -474,7 +507,12 @@ def render_fairness_section(out_dir: Path) -> list[str]:
     ctx = cfg.get("context") or {}
     lines.append(
         f"- **Context**: cases={cfg.get('bench_cases')} max_seq_flashrt={ctx.get('max_seq_flashrt')} "
-        f"vllm_max_model_len={ctx.get('vllm_max_model_len')} vllm_skip_long={ctx.get('vllm_skip_long')}"
+        f"vllm_max_model_len={ctx.get('vllm_max_model_len')}"
+        + (
+            f" vllm_arm_failed={ctx.get('vllm_arm_failed')}"
+            if ctx.get("vllm_arm_failed")
+            else ""
+        )
     )
     payload_tokens = cfg.get("payload_tokens") or {}
     if payload_tokens:
@@ -537,11 +575,22 @@ def build_report(
     lines.extend(render_payload_tokens_section(payload_tokens))
 
     for name, workdir in backends.items():
+        failure = _load_arm_failure(workdir)
+        cases_list = backend_cases[name]
+        if failure and not cases_list:
+            lines.extend(render_backend_failure_section(name, workdir, failure))
+            continue
         lines.extend(
             render_backend_section(
-                name, workdir, backend_cases[name], payload_tokens=payload_tokens
+                name, workdir, cases_list, payload_tokens=payload_tokens
             )
         )
+        if failure:
+            lines.append(
+                f"_Note: {name} also recorded `{workdir}/arm_failure.json` "
+                f"({failure.get('phase', 'failed')})._"
+            )
+            lines.append("")
 
     keys = list(backends.keys())
     if len(keys) == 2:
@@ -568,6 +617,7 @@ def build_report(
         payload["backends"][name] = {
             "workdir": str(workdir),
             "manifest": manifest,
+            "arm_failure": _load_arm_failure(workdir),
             "cases": {
                 c.name: {
                     "rounds": c.rounds,
@@ -649,6 +699,11 @@ def main() -> int:
         metavar=("NAME", "WORKDIR"),
         help="Extra backend workdir (repeatable)",
     )
+    p.add_argument(
+        "--allow-arm-failure",
+        action="store_true",
+        help="Allow backend workdirs with arm_failure.json and no metrics jsonl",
+    )
     args = p.parse_args()
 
     backends: dict[str, Path] = {}
@@ -667,7 +722,9 @@ def main() -> int:
     for name, path in backends.items():
         if not path.is_dir():
             raise SystemExit(f"workdir not found for {name}: {path}")
-        if not list(path.glob("*.metrics.jsonl")):
+        has_metrics = bool(list(path.glob("*.metrics.jsonl")))
+        has_failure = (path / "arm_failure.json").is_file()
+        if not has_metrics and not (args.allow_arm_failure and has_failure):
             raise SystemExit(f"no *.metrics.jsonl under {path}")
 
     out_dir = args.out.expanduser().resolve()

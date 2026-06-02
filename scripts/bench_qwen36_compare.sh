@@ -64,6 +64,7 @@ PAYLOAD_DIR=""
 SERVE_PID_FILE=""
 VLLM_MAX_LEN=""
 VLLM_SKIP_LONG=0
+VLLM_ARM_FAILED=0
 PAYLOAD_SEQ_SLACK="${PAYLOAD_SEQ_SLACK:-32}"
 BENCH_STREAM="${BENCH_STREAM:-1}"
 FLASHRT_SERVE_MAX_SEQ="${FLASHRT_SERVE_MAX_SEQ:-}"
@@ -350,17 +351,25 @@ compute_vllm_plan() {
     die "max_seq=${MAX_SEQ} too small for long max_tokens=${LONG_MAX_TOKENS}"
   fi
   if [[ "${VLLM_MAX_LEN}" -lt "${long_budget}" ]]; then
-    VLLM_SKIP_LONG=1
-    log "  vLLM long case skipped: max-model-len=${VLLM_MAX_LEN} < FlashRT budget ${long_budget} (max_seq=${MAX_SEQ})"
-    log "  → short context is identical; long compare is FlashRT-only unless VLLM_MAX_MODEL_LEN=${MAX_SEQ}"
-    if [[ "${LONG_ONLY}" -eq 1 ]]; then
-      if [[ "${RUN_FLASHCLI}" -eq 0 ]]; then
-        die "vLLM --long-only impossible at max_seq=${MAX_SEQ} with max-model-len=${VLLM_MAX_LEN}. Set VLLM_MAX_MODEL_LEN>=${long_budget} or use --flashcli-only."
-      fi
-      log "  Dual-arm --long-only: disabling vLLM arm (no matching long payload)"
-      RUN_VLLM=0
-    fi
+    log "  vLLM: max-model-len ${VLLM_MAX_LEN} < long payload budget ${long_budget}; using max_seq=${MAX_SEQ} (no skip — OOM will be reported)"
+    VLLM_MAX_LEN="${MAX_SEQ}"
   fi
+  if [[ "${MAX_SEQ}" -gt 16384 ]]; then
+    log "  vLLM: long ctx max-model-len=${VLLM_MAX_LEN} (256K may OOM on 48GB; override: VLLM_MAX_MODEL_LEN=N)"
+  fi
+}
+
+record_arm_failure() {
+  local workdir="$1" phase="$2" reason="$3" exit_code="${4:-1}"
+  mkdir -p "${workdir}"
+  jq -n \
+    --arg phase "${phase}" \
+    --arg reason "${reason}" \
+    --argjson exit_code "${exit_code}" \
+    --arg failed_at "$(date -Iseconds 2>/dev/null || date)" \
+    --arg serve_log "${workdir}/serve.log" \
+    '{status: "failed", phase: $phase, reason: $reason, exit_code: $exit_code,
+      failed_at: $failed_at, serve_log: $serve_log}' >"${workdir}/arm_failure.json"
 }
 
 payload_fit_max_seq() {
@@ -416,6 +425,7 @@ write_bench_config() {
     --argjson flashrt_mtp_k "${flashrt_k_json}" \
     --argjson vllm_max_model_len "${VLLM_MAX_LEN:-0}" \
     --argjson vllm_skip_long "${VLLM_SKIP_LONG}" \
+    --argjson vllm_arm_failed "${VLLM_ARM_FAILED:-0}" \
     --arg vllm_attention "${VLLM_ATTENTION_BACKEND}" \
     --arg vllm_enforce_eager "true" \
     --arg flashrt_warmup "${WARMUP_PRESET}" \
@@ -443,7 +453,8 @@ write_bench_config() {
         payload_seq_slack: $payload_seq_slack,
         long_prompt_style: $long_prompt_style,
         vllm_max_model_len: $vllm_max_model_len,
-        vllm_skip_long: ($vllm_skip_long != 0)
+        vllm_skip_long: ($vllm_skip_long != 0),
+        vllm_arm_failed: ($vllm_arm_failed != 0)
       },
       methodology: {
         rounds: $rounds,
@@ -761,9 +772,6 @@ run_bench_cases() {
   [[ -n "${BENCH_PROFILE}" ]] && args+=(--profile "${BENCH_PROFILE}")
   [[ "${SHORT_ONLY}" -eq 1 ]] && args+=(--skip-qwen36-long)
   [[ "${LONG_ONLY}" -eq 1 ]] && args+=(--skip-short)
-  if [[ "${bench_arm}" == "vllm" && "${VLLM_SKIP_LONG}" -eq 1 ]]; then
-    args+=(--skip-qwen36-long)
-  fi
 
   log "Step: bench_qwen_curl.sh ($(bench_cases_label))"
   if [[ -f "${PAYLOAD_DIR}/manifest.json" ]]; then
@@ -945,11 +953,7 @@ vllm_resolve_max_model_len() {
     echo 8192
     return
   fi
-  if [[ "${MAX_SEQ}" -gt 16384 ]]; then
-    log "  vLLM: default --max-model-len 16384 (48GB-safe). Override: VLLM_MAX_MODEL_LEN=${MAX_SEQ}"
-    echo 16384
-    return
-  fi
+  # Long or short+long: align with FlashRT payload window (same max_seq). May OOM on 48GB.
   echo "${MAX_SEQ}"
 }
 
@@ -960,9 +964,7 @@ run_vllm_backend() {
 
   command -v vllm >/dev/null 2>&1 || die "vllm not in PATH (pip install -U vllm)"
   vllm_preflight
-  if [[ "${SHORT_ONLY}" -eq 0 && "${VLLM_SKIP_LONG}" -eq 1 ]]; then
-    log "  vLLM arm: long HTTP case skipped (max-model-len=${vllm_max_len} < FlashRT long budget)"
-  elif [[ "${SHORT_ONLY}" -eq 0 && "${MAX_SEQ}" -gt "${vllm_max_len}" ]]; then
+  if [[ "${SHORT_ONLY}" -eq 0 && "${MAX_SEQ}" -gt "${vllm_max_len}" ]]; then
     log "  WARN: vLLM --max-model-len=${vllm_max_len} < max_seq=${MAX_SEQ}"
   fi
 
@@ -1009,6 +1011,37 @@ run_vllm_backend() {
   log "Done vLLM → ${workdir}"
 }
 
+vllm_failure_reason_from_log() {
+  local serve_log="$1"
+  local line=""
+  [[ -f "${serve_log}" ]] || return 0
+  line="$(grep -E 'CUDA out of memory|OutOfMemoryError|Engine core initialization failed|No available memory|Failed to load|max_model_len|max-model-len|KV cache|OOM' "${serve_log}" 2>/dev/null | tail -1 || true)"
+  if [[ -n "${line}" ]]; then
+    echo "${line}"
+    return
+  fi
+  tail -n 5 "${serve_log}" 2>/dev/null | sed 's/^[[:space:]]*//' | tr '\n' ' '
+}
+
+run_vllm_backend_or_record_failure() {
+  local workdir="${OUT_DIR}/vllm"
+  local ec=0 reason=""
+  mkdir -p "${workdir}"
+  if ( run_vllm_backend ); then
+    return 0
+  fi
+  ec=$?
+  reason="$(vllm_failure_reason_from_log "${workdir}/serve.log")"
+  [[ -n "${reason}" ]] || reason="vLLM arm exited with code ${ec} (see ${workdir}/serve.log)"
+  record_arm_failure "${workdir}" "serve_or_bench" "${reason}" "${ec}"
+  VLLM_ARM_FAILED=1
+  log "ERROR: vLLM arm failed (exit ${ec})"
+  log "  reason: ${reason}"
+  log "  recorded: ${workdir}/arm_failure.json (FlashRT results kept; report will note failure)"
+  stop_serve
+  return "${ec}"
+}
+
 resolve_vllm_workdir() {
   if [[ -d "${OUT_DIR}/vllm" ]]; then
     echo "${OUT_DIR}/vllm"
@@ -1023,6 +1056,7 @@ write_report() {
   local vwd
   vwd="$(resolve_vllm_workdir || true)"
   [[ -n "${vwd}" ]] && args+=(--vllm "${vwd}")
+  [[ -f "${OUT_DIR}/vllm/arm_failure.json" || "${VLLM_ARM_FAILED}" -eq 1 ]] && args+=(--allow-arm-failure)
   log "Step: report → ${OUT_DIR}/REPORT.md (engine TTFT/decode from each arm's serve.log)"
   python3 "${REPORT_PY}" "${args[@]}" >"${OUT_DIR}/REPORT.stdout.log" 2>&1
   log "Report: ${OUT_DIR}/REPORT.md"
@@ -1067,7 +1101,12 @@ if [[ "${RUN_FLASHCLI}" -eq 1 ]]; then
 fi
 if [[ "${RUN_VLLM}" -eq 1 ]]; then
   log "━━ vLLM arm (after FlashRT) ━━"
-  run_vllm_backend
+  run_vllm_backend_or_record_failure || true
 fi
+write_bench_config
 write_report
+if [[ "${VLLM_ARM_FAILED}" -eq 1 ]]; then
+  log "Finished with vLLM arm failure — see ${OUT_DIR}/vllm/arm_failure.json and ${OUT_DIR}/REPORT.md"
+  exit 1
+fi
 log "All done: ${OUT_DIR}"

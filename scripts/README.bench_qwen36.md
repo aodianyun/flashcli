@@ -35,7 +35,7 @@ bench_qwen36_compare.sh          ← 唯一编排
 | `--ctx-16k` | **16K payload** 短+长双臂对比（HTTP 拟合 16384；FlashRT serve 仍用 catalog 262208） |
 | （默认 / `--comparable`） | **短 + 长** 都跑 |
 
-指定窗口：`--max-seq N`（FlashRT serve；长 payload 拟合；vLLM 在 48GB 上仍可能 cap 到 16384）。
+指定窗口：`--max-seq N`（FlashRT serve；长 payload 拟合；vLLM 默认同窗口，256K 在 48GB 可能 OOM，失败写入报告）。
 
 ---
 
@@ -81,8 +81,8 @@ bash scripts/bench_qwen36_compare.sh --comparable
 bash scripts/bench_qwen36_compare.sh --short-only --rounds 12 --skip-first 2
 # 等价 FlashRT 起服：flashcli serve qwen36-27b-nvfp4 --port 8000 --warmup-preset auto
 
-# 仅长 256K（FlashRT；vLLM 在 48GB 上建议 --pytorch-only 跳过或 --short-only）
-bash scripts/bench_qwen36_compare.sh --long-only --comparable --flashcli-only
+# 仅长 256K（双臂；vLLM 同样 max-model-len=262208，48GB OOM 时报告记录 arm_failure.json）
+bash scripts/bench_qwen36_compare.sh --long-only --comparable --rounds 12 --skip-first 2
 
 # 自定义长上下文，例如 128K
 bash scripts/bench_qwen36_compare.sh --long-only --long-tokens 131072 --max-seq 131072 \
@@ -143,8 +143,8 @@ bash scripts/bench_qwen36_compare.sh --pytorch-only --short-only \
 |------|------|
 | vLLM `flash_attn_2_cuda` | `pip uninstall -y flash-attn` |
 | vLLM `kernels` / transformers 崩 | `pip install 'kernels>=0.12,<0.13'` |
-| vLLM OOM | `--short-only` 或 `VLLM_MAX_MODEL_LEN=8192` |
-| vLLM 长测 256K | 48GB 通常不可行；长测用 `--flashcli-only` |
+| vLLM OOM（256K） | 正常失败；见 `OUT_DIR/vllm/arm_failure.json` 与 `REPORT.md`；FlashRT 结果保留 |
+| vLLM 长测 256K | 默认与 FlashRT 同 `max-model-len`；48GB 可能 OOM，**不再自动 skip** |
 | decode n/a | 看 `*/serve.log`，确认 `completion_tokens≈64` |
 | 报告只有 client TTFT | 正常：手工 `bench_qwen_curl` 默认只采 HTTP 首包；引擎 TTFT 见 `compare` 的 `serve.log` |
 
@@ -175,7 +175,7 @@ QWEN36_PORT=8000 bash scripts/bench_qwen_curl.sh --qwen36-only --rounds 12 --ski
 
 - FlashRT **MTP K=6**（vLLM 无投机解码）→ 短上下文 decode tok/s  FlashRT 会偏高
 - FlashRT **warmup-preset** vs vLLM **enforce-eager**
-- **长 256K**：48GB 上 vLLM 默认 `max-model-len=16384`，脚本会 **自动跳过 vLLM 长测**；Comparison 表只比共有的 case（通常仅 `qwen36_short`）。要对齐长上下文需 `VLLM_MAX_MODEL_LEN=262208` 且显存足够。
+- **长 256K**：vLLM 默认 `max-model-len=max_seq`（与 FlashRT payload 对齐）；48GB 可能 OOM，失败写入 `vllm/arm_failure.json` 且 `REPORT.md` 仍生成
 
 ---
 
