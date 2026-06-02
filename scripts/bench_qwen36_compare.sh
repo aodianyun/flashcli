@@ -329,11 +329,20 @@ prepare_shared_payloads() {
   tok_ckpt="$(payload_checkpoint)"
   mkdir -p "${PAYLOAD_DIR}"
   log "Step: build payloads (max_seq=${MAX_SEQ}, tokenizer=${tok_ckpt})"
+  local payload_model="${MODEL_NAME}"
+  [[ "${RUN_PYTORCH}" -eq 1 ]] && payload_model="${HF_MODEL_NAME}"
   jq -n \
-    --arg model "${MODEL_NAME}" \
+    --arg model "${payload_model}" \
     --arg content "${SHORT_PROMPT}" \
     --argjson max_tokens "${SHORT_MAX_TOKENS}" \
-    '{model: $model, messages: [{role: "user", content: $content}], max_tokens: $max_tokens, temperature: 0, stream: true}' \
+    '{
+      model: $model,
+      messages: [{role: "user", content: $content}],
+      max_tokens: $max_tokens,
+      temperature: 0,
+      stream: true,
+      enable_thinking: false
+    }' \
     >"${PAYLOAD_DIR}/qwen36_short.json"
   if [[ "${SHORT_ONLY}" -eq 1 ]]; then
     log "  qwen36_short.json only"

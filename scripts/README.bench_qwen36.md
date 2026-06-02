@@ -98,7 +98,7 @@ bash scripts/bench_qwen36_compare.sh --quick --pytorch-only --vllm \
   --hf-model-name qwen3.6-27b-fp8
 ```
 
-**通过标准**：同上；流式 `usage` 应由 vLLM 直接给出，不应出现 50ms 空跑。
+**通过标准**：`completion_tokens≈64`；正文应是量子纠缠段落，**不要**出现 `Here's a thinking process`（若出现说明未关 thinking，需同步脚本里的 `enable_thinking: false`）。
 
 ### 步骤 3：正式可比 — 短 + 长 256K（FlashRT，~30min+）
 
