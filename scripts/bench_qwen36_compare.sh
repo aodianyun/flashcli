@@ -1,20 +1,13 @@
 #!/usr/bin/env bash
-# One-click qwen36 bench: flashcli + FlashRT vs PyTorch HF on the SAME checkpoint & payloads.
+# Qwen36 bench: flashcli+FlashRT vs PyTorch HF — same checkpoint, same payloads, serial steps.
 #
-# Fairness guarantees:
-#   - One --checkpoint directory for both backends (default: NVFP4 from flashcli pull)
-#   - Same --max-seq and --long-tokens
-#   - HTTP payloads built once and reused (identical prompt text + max_tokens)
-#
-# Examples:
 #   bash scripts/bench_qwen36_compare.sh --quick
-#   bash scripts/bench_qwen36_compare.sh --checkpoint ~/.flashcli/models/qwen36-27b-nvfp4/checkpoint
+#   bash scripts/bench_qwen36_compare.sh --quick --pytorch-only
 #
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FLASHCLI_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-RUN_BG="${SCRIPT_DIR}/run_bg.sh"
 BENCH_CURL="${SCRIPT_DIR}/bench_qwen_curl.sh"
 MAKE_PAYLOAD="${SCRIPT_DIR}/bench_qwen_make_payload.py"
 HF_SERVER="${SCRIPT_DIR}/bench_qwen36_hf_server.py"
@@ -44,67 +37,26 @@ RUN_PYTORCH=1
 REPORT_ONLY=0
 KEEP_SERVER=0
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-1800}"
-GPU_IDLE_MAX_MIB="${GPU_IDLE_MAX_MIB:-1024}"
-GPU_IDLE_TIMEOUT="${GPU_IDLE_TIMEOUT:-180}"
 GPU_SETTLE_SEC="${GPU_SETTLE_SEC:-8}"
-JOB_PREFIX="${JOB_PREFIX:-qwen36-bench}"
 
 BUNDLE="${BUNDLE:-${FLASHCLI_ROOT}/bundles/qwen_nvfp4}"
 CHECKPOINT="${CHECKPOINT:-${CKPT_QWEN36:-${HOME}/.flashcli/models/qwen36-27b-nvfp4/checkpoint}}"
 MTP_CKPT="${MTP_CKPT:-${HOME}/.flashcli/models/qwen36-27b-nvfp4/mtp_fp8}"
 OUT_DIR="${OUT_DIR:-}"
 PAYLOAD_DIR=""
+SERVE_PID_FILE=""
 
 usage() {
   cat <<EOF
 Usage: bash scripts/bench_qwen36_compare.sh [OPTIONS]
 
-Compares the SAME model weights and the SAME HTTP payloads:
+Serial flow per backend: start serve → wait /health → bench_qwen_curl → stop serve → next.
 
-  A) flashcli serve + FlashRT  (NVFP4 + MTP speculative decode)
-  B) PyTorch HF baseline         (transformers greedy decode, no FlashRT)
+  --quick              short ctx, max-seq ${QUICK_MAX_SEQ}, warmup none, 3 rounds
+  --flashcli-only / --pytorch-only / --report-only
+  --checkpoint PATH  --max-seq N  --out-dir DIR  --help
 
-Modes:
-  (default)             Both backends + unified REPORT.md
-  --flashcli-only       FlashRT path only
-  --pytorch-only        PyTorch HF only  (alias: --hf-only)
-  --report-only         Rebuild report from --out-dir
-
-Bench:
-  --quick               Short ctx only; max-seq ${QUICK_MAX_SEQ}; warmup none; rounds=3
-  --short-only          Skip long-context case
-  --rounds / --skip-first / --profile comparable|stress
-  --long-tokens N       Long prompt user tokens (default: ${LONG_TOKENS})
-
-Shared model (both backends MUST use this):
-  --checkpoint PATH     Model directory (default: flashcli NVFP4 pull path)
-  --mtp-checkpoint PATH MTP dir for FlashRT spec only (default: paired mtp_fp8/)
-  --max-seq N           Context budget for BOTH (default: ${MAX_SEQ})
-  --bundle PATH         flashcli qwen_nvfp4 bundle (FlashRT native .so)
-
-FlashRT serve:
-  --K N                 MTP K (default: ${K})
-  --warmup-preset NAME  default: ${WARMUP_PRESET}
-
-PyTorch HF baseline (same --checkpoint):
-  --hf-attn NAME        sdpa | flash_attention_2 | eager (default: ${HF_ATTN})
-  --hf-dtype NAME       auto|bf16|fp16 (default: ${HF_DTYPE})
-
-Common:
-  --out-dir DIR         Output root (default: /tmp/qwen36-bench-<ts>)
-  --port N              HTTP port (default: ${PORT})
-  --keep-server         Debug: leave server running (breaks GPU exclusivity)
-  --gpu-idle-max-mib N  Max GPU mem (MiB) before next backend (default: ${GPU_IDLE_MAX_MIB})
-  --gpu-idle-timeout SEC (default: ${GPU_IDLE_TIMEOUT})
-  --gpu-settle-sec SEC  Sleep after GPU idle (default: ${GPU_SETTLE_SEC})
-
-Strict GPU exclusivity (default):
-  stop A → wait GPU idle → start B → bench → stop B → wait GPU idle → report
-
-Pull weights once:
-  flashcli pull qwen36-27b-nvfp4 --bundle bundles/qwen_nvfp4
-  # PyTorch HF side loads the same NVFP4 checkpoint directory; install if needed:
-  pip install compressed-tensors
+See script header for defaults.
 EOF
 }
 
@@ -121,11 +73,8 @@ while [[ $# -gt 0 ]]; do
       SHORT_ONLY=1
       ROUNDS=3
       SKIP_FIRST=1
-      # Full max-seq allocates 256K KV at load (10+ min). Quick uses a smaller budget.
       WARMUP_PRESET=none
-      if [[ "${MAX_SEQ_EXPLICIT}" -eq 0 ]]; then
-        MAX_SEQ="${QUICK_MAX_SEQ}"
-      fi
+      [[ "${MAX_SEQ_EXPLICIT}" -eq 0 ]] && MAX_SEQ="${QUICK_MAX_SEQ}"
       shift
       ;;
     --short-only) SHORT_ONLY=1; shift ;;
@@ -146,17 +95,13 @@ while [[ $# -gt 0 ]]; do
     --warmup-preset) WARMUP_PRESET="$2"; shift 2 ;;
     --keep-server) KEEP_SERVER=1; shift ;;
     --health-timeout) HEALTH_TIMEOUT="$2"; shift 2 ;;
-    --gpu-idle-max-mib) GPU_IDLE_MAX_MIB="$2"; shift 2 ;;
-    --gpu-idle-timeout) GPU_IDLE_TIMEOUT="$2"; shift 2 ;;
     --gpu-settle-sec) GPU_SETTLE_SEC="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
-    *) die "Unknown option: $1 (use --help)" ;;
+    *) die "Unknown option: $1" ;;
   esac
 done
 
-if [[ "${RUN_FLASHCLI}" -eq 0 && "${RUN_PYTORCH}" -eq 0 ]]; then
-  die "Nothing to run"
-fi
+[[ "${RUN_FLASHCLI}" -eq 1 || "${RUN_PYTORCH}" -eq 1 ]] || die "Nothing to run"
 
 if [[ -z "${OUT_DIR}" ]]; then
   OUT_DIR="/tmp/qwen36-bench-$(date +%Y%m%d-%H%M%S)"
@@ -169,283 +114,120 @@ if [[ "${REPORT_ONLY}" -eq 0 ]]; then
   command -v curl >/dev/null 2>&1 || die "curl not found"
   command -v jq >/dev/null 2>&1 || die "jq not found"
   command -v python3 >/dev/null 2>&1 || die "python3 not found"
-  [[ -f "${RUN_BG}" ]] || die "Missing ${RUN_BG}"
-  [[ -f "${BENCH_CURL}" ]] || die "Missing ${BENCH_CURL}"
-  [[ -f "${MAKE_PAYLOAD}" ]] || die "Missing ${MAKE_PAYLOAD}"
-  [[ -f "${HF_SERVER}" ]] || die "Missing ${HF_SERVER}"
-  [[ -f "${REPORT_PY}" ]] || die "Missing ${REPORT_PY}"
-  [[ -d "${CHECKPOINT}" ]] || die "Checkpoint not found: ${CHECKPOINT}
-Run: flashcli pull qwen36-27b-nvfp4 --bundle ${BUNDLE}"
+  [[ -d "${CHECKPOINT}" ]] || die "Checkpoint not found: ${CHECKPOINT}"
 fi
 
 gpu_name() {
   nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 || echo "unknown"
 }
 
-gpu_memory_used_mib() {
-  local v
-  v="$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d '[:space:]')"
-  if [[ -z "${v}" || ! "${v}" =~ ^[0-9]+$ ]]; then
-    echo "0"
-  else
-    echo "${v}"
-  fi
-}
-
-gpu_compute_process_lines() {
-  nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory \
-    --format=csv,noheader 2>/dev/null | sed '/^$/d' | grep -v 'Not Found' || true
-}
-
-port_in_use() {
-  local port="$1"
-  if command -v ss >/dev/null 2>&1; then
-    ss -tln "sport = :${port}" 2>/dev/null | grep -q LISTEN
-    return $?
-  fi
-  curl -sf "http://${HOST}:${port}/health" >/dev/null 2>&1
-}
-
 free_port() {
-  local port="$1"
-  if ! port_in_use "${port}"; then
-    return 0
-  fi
-  log "Releasing port ${port} …"
-  if command -v fuser >/dev/null 2>&1; then
-    fuser -k "${port}/tcp" 2>/dev/null || true
-  elif command -v ss >/dev/null 2>&1; then
-    local p
-    while IFS= read -r p; do
-      [[ -z "${p}" || "${p}" == "$$" ]] && continue
-      kill -TERM "${p}" 2>/dev/null || true
-    done < <(ss -tlnp "sport = :${port}" 2>/dev/null | grep -o 'pid=[0-9]*' | sed 's/pid=//' || true)
-  fi
-  sleep 1
-}
-
-kill_orphan_serve_procs() {
-  local p pattern
-  for pattern in \
-    "flashcli serve qwen36" \
-    "flashcli.cli serve qwen36" \
-    "bench_qwen36_hf_server.py" \
-    "qwen36_agent.server" \
-    "uvicorn.*:${PORT}"; do
-    while IFS= read -r p; do
-      [[ -z "${p}" || "${p}" == "$$" ]] && continue
-      log "Stopping orphan pid ${p} (${pattern})"
-      kill -TERM "${p}" 2>/dev/null || true
-    done < <(pgrep -f "${pattern}" 2>/dev/null || true)
-  done
-}
-
-stop_job() {
-  local name="$1"
-  if [[ "${KEEP_SERVER}" -eq 1 ]]; then
-    log "Keeping server job '${name}' (--keep-server)"
-    return 0
-  fi
-  if bash "${RUN_BG}" --name "${name}" --stop >>"${OUT_DIR}/stop.log" 2>&1; then
-    log "Stopped run_bg job '${name}'"
-  else
-    log "run_bg stop '${name}' (job may not exist)"
-  fi
-}
-
-stop_all_bench_jobs() {
-  stop_job "${JOB_PREFIX}-flashcli"
-  stop_job "${JOB_PREFIX}-pytorch"
-  kill_orphan_serve_procs
-  free_port "${PORT}"
-  sleep 1
-  kill_orphan_serve_procs
   if command -v fuser >/dev/null 2>&1; then
     fuser -k "${PORT}/tcp" 2>/dev/null || true
   fi
+  sleep 1
 }
 
-wait_gpu_idle() {
-  local label="$1"
-  local timeout="${2:-${GPU_IDLE_TIMEOUT}}"
-  local start now used lines
-  start="$(date +%s)"
-  log "Waiting for GPU idle before ${label} (mem<=${GPU_IDLE_MAX_MIB} MiB, timeout ${timeout}s) …"
-  while true; do
-    used="$(gpu_memory_used_mib)"
-    lines="$(gpu_compute_process_lines)"
-    if [[ -z "${lines}" && "${used}" -le "${GPU_IDLE_MAX_MIB}" ]]; then
-      if (( GPU_SETTLE_SEC > 0 )); then
-        log "GPU idle (used=${used} MiB); settling ${GPU_SETTLE_SEC}s …"
-        sleep "${GPU_SETTLE_SEC}"
-        used="$(gpu_memory_used_mib)"
-        lines="$(gpu_compute_process_lines)"
-        if [[ -z "${lines}" && "${used}" -le "${GPU_IDLE_MAX_MIB}" ]]; then
-          log "GPU ready for ${label} (used=${used} MiB, no compute processes)"
-          return 0
-        fi
-      else
-        log "GPU ready for ${label} (used=${used} MiB, no compute processes)"
-        return 0
-      fi
-    fi
-    now="$(date +%s)"
-    if (( now - start >= timeout )); then
-      log "WARN: GPU not fully idle after ${timeout}s (used=${used} MiB)"
-      if [[ -n "${lines}" ]]; then
-        log "WARN: compute processes still present:"
-        while IFS= read -r line; do
-          [[ -n "${line}" ]] && log "  ${line}"
-        done <<<"${lines}"
-      fi
-      die "Refusing to start ${label} while GPU is still occupied. Stop other jobs or raise --gpu-idle-timeout / --gpu-idle-max-mib."
-    fi
-    if (( (now - start) % 15 == 0 && now > start )); then
-      log "  … still waiting (used=${used} MiB)"
-      if [[ -n "${lines}" ]]; then
-        log "  … compute: $(echo "${lines}" | tr '\n' '; ')"
-      fi
-    fi
-    sleep 2
+kill_serve_procs() {
+  local p
+  for p in $(pgrep -f "flashcli.*serve qwen36|bench_qwen36_hf_server.py|flashcli.cli serve qwen36" 2>/dev/null || true); do
+    [[ "${p}" == "$$" ]] && continue
+    kill -TERM "${p}" 2>/dev/null || true
   done
+  sleep 1
 }
 
-ensure_gpu_exclusive() {
-  local label="$1"
-  log "━━ GPU exclusive gate: ${label} ━━"
-  stop_all_bench_jobs
-  wait_gpu_idle "${label}"
-}
-
-teardown_backend() {
-  local job="$1" label="$2"
-  log "━━ Teardown ${label}: stop serve + release GPU ━━"
-  stop_job "${job}"
-  if [[ "${KEEP_SERVER}" -eq 0 ]]; then
-    stop_all_bench_jobs
-    wait_gpu_idle "after ${label}"
+stop_serve() {
+  [[ "${KEEP_SERVER}" -eq 1 ]] && return 0
+  if [[ -n "${SERVE_PID_FILE}" && -f "${SERVE_PID_FILE}" ]]; then
+    local pid
+    pid="$(tr -d '[:space:]' <"${SERVE_PID_FILE}")"
+    if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null; then
+      log "Stopping serve pid=${pid}"
+      kill -TERM "${pid}" 2>/dev/null || true
+      wait "${pid}" 2>/dev/null || true
+    fi
+    rm -f "${SERVE_PID_FILE}"
+    SERVE_PID_FILE=""
+  fi
+  kill_serve_procs
+  free_port
+  if (( GPU_SETTLE_SEC > 0 )); then
+    log "GPU settle ${GPU_SETTLE_SEC}s …"
+    sleep "${GPU_SETTLE_SEC}"
   fi
 }
 
 cleanup_on_exit() {
   local ec=$?
-  if [[ "${KEEP_SERVER}" -eq 1 ]]; then
-    return 0
-  fi
-  stop_all_bench_jobs >/dev/null 2>&1 || true
+  stop_serve >/dev/null 2>&1 || true
   return "${ec}"
-}
-
-run_bg_log_path() {
-  local job="$1"
-  local log_path latest="${FLASHCLI_ROOT}/logs/${job}.latest.log"
-  if [[ -L "${latest}" ]]; then
-    log_path="$(readlink -f "${latest}" 2>/dev/null || readlink "${latest}")"
-    [[ "${log_path}" != /* ]] && log_path="${FLASHCLI_ROOT}/logs/${log_path}"
-    if [[ -f "${log_path}" ]]; then
-      printf '%s\n' "${log_path}"
-      return 0
-    fi
-  fi
-  local meta="${FLASHCLI_ROOT}/logs/${job}.meta"
-  if [[ -f "${meta}" ]]; then
-    sed -n 's/^LOG_FILE=//p' "${meta}" | tail -1
-  fi
-}
-
-tail_serve_progress() {
-  local serve_log="$1" job="${2:-}"
-  local log_path="${serve_log}"
-  if [[ -n "${job}" ]]; then
-    local rb_log
-    rb_log="$(run_bg_log_path "${job}" 2>/dev/null || true)"
-    if [[ -n "${rb_log}" && -f "${rb_log}" ]]; then
-      log_path="${rb_log}"
-    fi
-  fi
-  [[ -n "${log_path}" && -f "${log_path}" ]] || return 0
-  tail -n 80 "${log_path}" 2>/dev/null \
-    | grep -vE '^\[run-bg\] (Job |  status:|  tail:|  wait:)' \
-    | tail -n 5 \
-    | sed 's/^/[serve] /' >&2 || true
 }
 
 check_serve_log_fatal() {
   local serve_log="$1"
   [[ -f "${serve_log}" ]] || return 0
   if grep -q 'Invalid model bundle:' "${serve_log}"; then
-    tail_serve_progress "${serve_log}"
-    die "Bundle not built: missing bundles/qwen_nvfp4/lib/ and flash_rt/. Build per bundles/qwen_nvfp4/QUICKSTART.md, or use --pytorch-only for HF baseline only."
+    tail -n 20 "${serve_log}" >&2 || true
+    die "Bundle not built (missing lib/ flash_rt/). See bundles/qwen_nvfp4/QUICKSTART.md"
   fi
   if grep -qE 'Failed to load checkpoint|does not recognize this architecture' "${serve_log}"; then
-    tail_serve_progress "${serve_log}"
-    die "HF server failed to load model (see serve.log). Qwen3.6 needs recent transformers, e.g. pip install -U 'transformers>=4.57' or pip install git+https://github.com/huggingface/transformers.git ; NVFP4 also needs: pip install compressed-tensors"
+    tail -n 20 "${serve_log}" >&2 || true
+    die "HF load failed — upgrade transformers (>=4.57 or git main) and pip install compressed-tensors"
   fi
-}
-
-check_bench_job_crashed() {
-  local job="$1" serve_log="$2"
-  local status_out state exit_code
-  check_serve_log_fatal "${serve_log}"
-  # run_bg --status exits 1 when state!=running; still parse stdout.
-  status_out="$(bash "${RUN_BG}" --name "${job}" --status 2>&1)" || true
-  [[ -n "${status_out}" ]] || return 0
-  state="$(printf '%s\n' "${status_out}" | sed -n 's/^state:[[:space:]]*//p' | head -1)"
-  exit_code="$(printf '%s\n' "${status_out}" | sed -n 's/^exit:[[:space:]]*//p' | head -1)"
-  if [[ "${state}" == "stopped" ]]; then
-    if [[ -n "${exit_code}" && "${exit_code}" != "0" ]]; then
-      log "Background job '${job}' exited with code ${exit_code}"
-      tail_serve_progress "${serve_log}" "${job}"
-      die "Server process died before /health (see serve log above or: bash scripts/run_bg.sh --name ${job} --tail)"
-    fi
-    if ! curl -sf "http://${HOST}:${PORT}/health" >/dev/null 2>&1; then
-      log "Background job '${job}' stopped but /health is not up"
-      tail_serve_progress "${serve_log}" "${job}"
-      die "Server exited before /health (see serve log; flashcli may exit 0 on bundle errors)"
-    fi
-  fi
-}
-
-start_bench_server() {
-  local job="$1" workdir="$2"
-  shift 2
-  : >"${workdir}/serve.log"
-  bash "${RUN_BG}" --name "${job}" --cwd "${FLASHCLI_ROOT}" \
-    --log-file "${workdir}/serve.log" --max-retries 0 -- \
-    "$@"
 }
 
 wait_health() {
-  local port="$1" timeout="$2" serve_log="${3:-}" job="${4:-}"
-  local start now elapsed last_hint=0
+  local serve_log="$1"
+  local start now elapsed=0 last_hint=0
   start="$(date +%s)"
-  log "Waiting for http://${HOST}:${port}/health (timeout ${timeout}s) …"
-  log "  Serve log: ${serve_log} (tail: bash scripts/run_bg.sh --name ${job} --tail)"
+  log "Step: wait http://${HOST}:${PORT}/health (log: ${serve_log})"
   while true; do
-    if curl -sf "http://${HOST}:${port}/health" >/dev/null 2>&1; then
+    if curl -sf "http://${HOST}:${PORT}/health" >/dev/null 2>&1; then
       now="$(date +%s)"
+      log "  /health OK (${now - start}s)"
       echo $((now - start))
       return 0
     fi
-    if [[ -n "${job}" ]]; then
-      check_bench_job_crashed "${job}" "${serve_log}"
+    check_serve_log_fatal "${serve_log}"
+    if [[ -n "${SERVE_PID_FILE}" && -f "${SERVE_PID_FILE}" ]]; then
+      local pid
+      pid="$(tr -d '[:space:]' <"${SERVE_PID_FILE}")"
+      if [[ -n "${pid}" ]] && ! kill -0 "${pid}" 2>/dev/null; then
+        log "Serve process exited. Last lines of ${serve_log}:"
+        tail -n 30 "${serve_log}" >&2 || true
+        die "Server died before /health"
+      fi
     fi
     now="$(date +%s)"
     elapsed=$((now - start))
-    if (( now - start >= timeout )); then
-      if [[ -n "${serve_log}" && -f "${serve_log}" ]]; then
-        log "Last 40 lines of ${serve_log}:"
-        tail -n 40 "${serve_log}" >&2 || true
-      fi
-      die "Timed out waiting for /health on port ${port}"
+    if (( elapsed >= HEALTH_TIMEOUT )); then
+      tail -n 40 "${serve_log}" >&2 || true
+      die "Timed out waiting for /health"
     fi
     if (( elapsed - last_hint >= 60 )); then
-      last_hint="${elapsed}"
-      log "  … still waiting for /health (${elapsed}s elapsed)"
-      tail_serve_progress "${serve_log}" "${job}"
+      last_hint=${elapsed}
+      log "  … waiting (${elapsed}s)"
+      tail -n 3 "${serve_log}" 2>/dev/null | sed 's/^/    /' >&2 || true
     fi
     sleep 5
   done
+}
+
+start_serve() {
+  local workdir="$1"
+  shift
+  local serve_log="${workdir}/serve.log"
+  SERVE_PID_FILE="${workdir}/serve.pid"
+  stop_serve
+  : >"${serve_log}"
+  log "Step: start serve → ${serve_log}"
+  (
+    cd "${FLASHCLI_ROOT}"
+    "$@"
+  ) >>"${serve_log}" 2>&1 &
+  echo $! >"${SERVE_PID_FILE}"
+  log "  pid=$(cat "${SERVE_PID_FILE}")"
 }
 
 long_prompt_style() {
@@ -457,31 +239,16 @@ long_prompt_style() {
 
 prepare_shared_payloads() {
   mkdir -p "${PAYLOAD_DIR}"
-  log "Building shared payloads once (checkpoint=${CHECKPOINT}, max_seq=${MAX_SEQ}) …"
-
-  local stream_json=true
+  log "Step: build payloads (max_seq=${MAX_SEQ})"
   jq -n \
     --arg model "${MODEL_NAME}" \
     --arg content "${SHORT_PROMPT}" \
     --argjson max_tokens "${SHORT_MAX_TOKENS}" \
-    --argjson stream "${stream_json}" \
-    '{
-      model: $model,
-      messages: [{role: "user", content: $content}],
-      max_tokens: $max_tokens,
-      temperature: 0,
-      stream: $stream
-    }' >"${PAYLOAD_DIR}/qwen36_short.json"
-
+    '{model: $model, messages: [{role: "user", content: $content}], max_tokens: $max_tokens, temperature: 0, stream: true}' \
+    >"${PAYLOAD_DIR}/qwen36_short.json"
   if [[ "${SHORT_ONLY}" -eq 1 ]]; then
-    log "Shared payloads: qwen36_short.json only (--short-only)"
+    log "  qwen36_short.json only"
     return 0
-  fi
-
-  local -a extra=(--long-prompt-style "$(long_prompt_style)" --stream)
-  extra+=(--max-seq "${MAX_SEQ}" --seq-slack 32)
-  if [[ "${LONG_TOKENS}" -gt 8192 ]]; then
-    log "  building long payload (chat-template fit, may take several minutes) …"
   fi
   python3 "${MAKE_PAYLOAD}" \
     --checkpoint "${CHECKPOINT}" \
@@ -489,8 +256,8 @@ prepare_shared_payloads() {
     --target-prompt-tokens "${LONG_TOKENS}" \
     --max-tokens "${LONG_MAX_TOKENS}" \
     --output "${PAYLOAD_DIR}/qwen36_long.json" \
-    "${extra[@]}"
-  log "Shared payloads ready under ${PAYLOAD_DIR}"
+    --long-prompt-style "$(long_prompt_style)" \
+    --stream --max-seq "${MAX_SEQ}" --seq-slack 32
 }
 
 write_manifest_header() {
@@ -517,180 +284,107 @@ write_manifest_header() {
     --arg payload_dir "${PAYLOAD_DIR}" \
     --arg bundle "${BUNDLE}" \
     --argjson extra "${extra_json}" \
-    '{
-      backend: $backend,
-      started_at: $started_at,
-      health_wait_s: $health_wait_s,
-      gpu_name: $gpu_name,
-      server_cmd: $server_cmd,
-      host: $host,
-      port: $port,
-      K: $K,
-      max_seq: $max_seq,
-      warmup_preset: $warmup_preset,
-      rounds: $rounds,
-      skip_first: $skip_first,
-      profile: $profile,
-      long_tokens: $long_tokens,
-      short_only: ($short_only != 0),
-      checkpoint: $checkpoint,
-      mtp_checkpoint: $mtp_checkpoint,
-      payload_dir: $payload_dir,
-      bundle: $bundle,
-      shared_weights: true,
-      shared_payloads: true
-    } + $extra' >"${workdir}/manifest.json"
+    '{backend: $backend, started_at: $started_at, health_wait_s: $health_wait_s, gpu_name: $gpu_name,
+      server_cmd: $server_cmd, host: $host, port: $port, K: $K, max_seq: $max_seq,
+      warmup_preset: $warmup_preset, rounds: $rounds, skip_first: $skip_first, profile: $profile,
+      long_tokens: $long_tokens, short_only: ($short_only != 0), checkpoint: $checkpoint,
+      mtp_checkpoint: $mtp_checkpoint, payload_dir: $payload_dir, bundle: $bundle,
+      shared_weights: true, shared_payloads: true} + $extra' >"${workdir}/manifest.json"
 }
 
 finish_manifest() {
-  local workdir="$1"
-  local finished
+  local workdir="$1" finished
   finished="$(date -Iseconds 2>/dev/null || date)"
-  local tmp="${workdir}/manifest.json.tmp"
   jq --arg finished "${finished}" '. + {finished_at: $finished}' \
-    "${workdir}/manifest.json" >"${tmp}"
-  mv "${tmp}" "${workdir}/manifest.json"
+    "${workdir}/manifest.json" >"${workdir}/manifest.json.tmp"
+  mv "${workdir}/manifest.json.tmp" "${workdir}/manifest.json"
 }
 
 run_bench_cases() {
   local workdir="$1"
-  mkdir -p "${workdir}"
   cp "${PAYLOAD_DIR}/qwen36_short.json" "${workdir}/qwen36_short.json"
-  if [[ "${SHORT_ONLY}" -eq 0 ]]; then
-    cp "${PAYLOAD_DIR}/qwen36_long.json" "${workdir}/qwen36_long.json"
-  fi
+  [[ "${SHORT_ONLY}" -eq 0 ]] && cp "${PAYLOAD_DIR}/qwen36_long.json" "${workdir}/qwen36_long.json"
 
-  local -a bench_args=(
-    --qwen36-only
-    --rounds "${ROUNDS}"
-    --skip-first "${SKIP_FIRST}"
-    --workdir "${workdir}"
-    --skip-payload-build
-  )
-  if [[ -n "${BENCH_PROFILE}" ]]; then
-    bench_args+=(--profile "${BENCH_PROFILE}")
-  fi
-  if [[ "${SHORT_ONLY}" -eq 1 ]]; then
-    bench_args+=(--skip-qwen36-long)
-  fi
+  local -a args=(--qwen36-only --rounds "${ROUNDS}" --skip-first "${SKIP_FIRST}"
+    --workdir "${workdir}" --skip-payload-build)
+  [[ -n "${BENCH_PROFILE}" ]] && args+=(--profile "${BENCH_PROFILE}")
+  [[ "${SHORT_ONLY}" -eq 1 ]] && args+=(--skip-qwen36-long)
 
-  log "Running bench_qwen_curl.sh → ${workdir} (shared payloads, max_seq=${MAX_SEQ})"
-  (
-    export CKPT_QWEN36="${CHECKPOINT}" HOST QWEN36_PORT="${PORT}" QWEN36_MAX_SEQ="${MAX_SEQ}"
-    bash "${BENCH_CURL}" "${bench_args[@]}"
-  ) 2>&1 | tee "${workdir}/bench.log"
+  log "Step: bench_qwen_curl.sh"
+  export CKPT_QWEN36="${CHECKPOINT}" HOST QWEN36_PORT="${PORT}" QWEN36_MAX_SEQ="${MAX_SEQ}"
+  bash "${BENCH_CURL}" "${args[@]}" 2>&1 | tee "${workdir}/bench.log"
 }
 
 run_flashcli_backend() {
   local workdir="${OUT_DIR}/flashcli"
-  local job="${JOB_PREFIX}-flashcli"
-  local server_cmd started health_s
-
   [[ -f "${BUNDLE}/flashcli-bundle.json" ]] || die "Bundle missing: ${BUNDLE}"
-  [[ -f "${MTP_CKPT}/mtp.safetensors" ]] || die "MTP not found: ${MTP_CKPT}/mtp.safetensors"
-
-  ensure_gpu_exclusive "flashcli+FlashRT"
+  [[ -f "${MTP_CKPT}/mtp.safetensors" ]] || die "MTP missing: ${MTP_CKPT}/mtp.safetensors"
   mkdir -p "${workdir}"
 
-  local -a serve_cmd
-  local -a serve_env=(
-    FLASHRT_QWEN36_MTP_CKPT_DIR="${MTP_CKPT}"
-    FLASHRT_QWEN36_LONG_KV_CACHE=fp8
-  )
+  local -a cmd
+  local -a env_args=(FLASHRT_QWEN36_MTP_CKPT_DIR="${MTP_CKPT}" FLASHRT_QWEN36_LONG_KV_CACHE=fp8)
   if command -v flashcli >/dev/null 2>&1; then
-    serve_cmd=(flashcli serve qwen36-27b-nvfp4)
+    cmd=(flashcli serve qwen36-27b-nvfp4)
   else
-    serve_cmd=(python3 -m flashcli.cli serve qwen36-27b-nvfp4)
-    serve_env+=(PYTHONPATH="${FLASHCLI_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}")
+    cmd=(python3 -m flashcli.cli serve qwen36-27b-nvfp4)
+    env_args+=(PYTHONPATH="${FLASHCLI_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}")
   fi
-  serve_cmd+=(
-    --bundle "${BUNDLE}"
-    --checkpoint "${CHECKPOINT}"
-    --host "${HOST}"
-    --port "${PORT}"
-    --K "${K}"
-    --max-seq "${MAX_SEQ}"
-    --warmup-preset "${WARMUP_PRESET}"
-    --no-auto-install
-  )
-  server_cmd="$(printf '%q ' env "${serve_env[@]}" "${serve_cmd[@]}")"
+  cmd+=(--bundle "${BUNDLE}" --checkpoint "${CHECKPOINT}" --host "${HOST}" --port "${PORT}"
+    --K "${K}" --max-seq "${MAX_SEQ}" --warmup-preset "${WARMUP_PRESET}" --no-auto-install)
+
+  local started server_cmd health_s
   started="$(date -Iseconds 2>/dev/null || date)"
+  server_cmd="$(printf '%q ' env "${env_args[@]}" "${cmd[@]}")"
 
-  log "Starting flashcli + FlashRT (checkpoint=${CHECKPOINT}, max_seq=${MAX_SEQ}, warmup=${WARMUP_PRESET}) …"
-  start_bench_server "${job}" "${workdir}" \
-    env "${serve_env[@]}" \
-    "${serve_cmd[@]}"
-
-  health_s="$(wait_health "${PORT}" "${HEALTH_TIMEOUT}" "${workdir}/serve.log" "${job}")"
+  log "━━ FlashRT backend ━━"
+  start_serve "${workdir}" env "${env_args[@]}" "${cmd[@]}"
+  health_s="$(wait_health "${workdir}/serve.log")"
   write_manifest_header "${workdir}" "flashcli+FlashRT" "${server_cmd}" "${started}" "${health_s}" \
-    "$(jq -n --arg hf_attn "" --arg hf_dtype "" '{stack: "FlashRT"}')"
-
+    "$(jq -n '{stack: "FlashRT"}')"
   run_bench_cases "${workdir}"
   finish_manifest "${workdir}"
-  teardown_backend "${job}" "flashcli+FlashRT"
-  log "flashcli bench done → ${workdir}"
+  stop_serve
+  log "Done FlashRT → ${workdir}"
 }
 
 run_pytorch_backend() {
   local workdir="${OUT_DIR}/pytorch_hf"
-  local job="${JOB_PREFIX}-pytorch"
-  local server_cmd started health_s
-
-  ensure_gpu_exclusive "PyTorch HF"
   mkdir -p "${workdir}"
 
-  local -a serve_cmd=(
+  local -a cmd=(
     python3 "${HF_SERVER}"
     --checkpoint "${CHECKPOINT}"
     --model-name "${MODEL_NAME}"
-    --host "${HOST}"
-    --port "${PORT}"
-    --max-seq "${MAX_SEQ}"
-    --max-output-tokens 16384
-    --attn "${HF_ATTN}"
-    --dtype "${HF_DTYPE}"
+    --host "${HOST}" --port "${PORT}"
+    --max-seq "${MAX_SEQ}" --max-output-tokens 16384
+    --attn "${HF_ATTN}" --dtype "${HF_DTYPE}"
   )
-  server_cmd="$(printf '%q ' "${serve_cmd[@]}")"
+  local started server_cmd health_s
   started="$(date -Iseconds 2>/dev/null || date)"
+  server_cmd="$(printf '%q ' "${cmd[@]}")"
 
-  log "Starting PyTorch HF baseline (same checkpoint=${CHECKPOINT}, max_seq=${MAX_SEQ}) …"
-  start_bench_server "${job}" "${workdir}" "${serve_cmd[@]}"
-
-  health_s="$(wait_health "${PORT}" "${HEALTH_TIMEOUT}" "${workdir}/serve.log" "${job}")"
+  log "━━ PyTorch HF backend ━━"
+  start_serve "${workdir}" "${cmd[@]}"
+  health_s="$(wait_health "${workdir}/serve.log")"
   write_manifest_header "${workdir}" "PyTorch HF" "${server_cmd}" "${started}" "${health_s}" \
-    "$(jq -n \
-      --arg hf_attn "${HF_ATTN}" \
-      --arg hf_dtype "${HF_DTYPE}" \
-      '{stack: "transformers", hf_attn: $hf_attn, hf_dtype: $hf_dtype}')"
-
+    "$(jq -n --arg a "${HF_ATTN}" --arg d "${HF_DTYPE}" '{stack: "transformers", hf_attn: $a, hf_dtype: $d}')"
   run_bench_cases "${workdir}"
   finish_manifest "${workdir}"
-  teardown_backend "${job}" "PyTorch HF"
-  log "PyTorch HF bench done → ${workdir}"
+  stop_serve
+  log "Done PyTorch HF → ${workdir}"
 }
 
 write_report() {
-  local -a report_args=(--out "${OUT_DIR}")
-  if [[ -d "${OUT_DIR}/flashcli" ]] && [[ -n "$(find "${OUT_DIR}/flashcli" -name '*.metrics.jsonl' -print -quit 2>/dev/null || true)" ]]; then
-    report_args+=(--flashcli "${OUT_DIR}/flashcli")
-  fi
-  if [[ -d "${OUT_DIR}/pytorch_hf" ]] && [[ -n "$(find "${OUT_DIR}/pytorch_hf" -name '*.metrics.jsonl' -print -quit 2>/dev/null || true)" ]]; then
-    report_args+=(--pytorch "${OUT_DIR}/pytorch_hf")
-  fi
-  python3 "${REPORT_PY}" "${report_args[@]}" >"${OUT_DIR}/REPORT.stdout.log" 2>&1 || {
-    cat "${OUT_DIR}/REPORT.stdout.log" >&2
-    die "Report generation failed"
-  }
+  local -a args=(--out "${OUT_DIR}")
+  [[ -d "${OUT_DIR}/flashcli" ]] && args+=(--flashcli "${OUT_DIR}/flashcli")
+  [[ -d "${OUT_DIR}/pytorch_hf" ]] && args+=(--pytorch "${OUT_DIR}/pytorch_hf")
+  log "Step: report"
+  python3 "${REPORT_PY}" "${args[@]}" >"${OUT_DIR}/REPORT.stdout.log" 2>&1
   log "Report: ${OUT_DIR}/REPORT.md"
-  log "JSON:   ${OUT_DIR}/report.json"
 }
 
-log "out_dir=${OUT_DIR}  checkpoint=${CHECKPOINT}  max_seq=${MAX_SEQ}  long_tokens=${LONG_TOKENS}"
-log "flashcli=${RUN_FLASHCLI}  pytorch_hf=${RUN_PYTORCH}  quick=${QUICK}  short_only=${SHORT_ONLY}  warmup=${WARMUP_PRESET}"
-if [[ "${QUICK}" -eq 1 && "${MAX_SEQ_EXPLICIT}" -eq 0 ]]; then
-  log "  --quick uses max_seq=${MAX_SEQ} (override with --max-seq for full 256K compare)"
-fi
-log "GPU: $(gpu_name)"
+log "out=${OUT_DIR} ckpt=${CHECKPOINT} max_seq=${MAX_SEQ} flashcli=${RUN_FLASHCLI} hf=${RUN_PYTORCH} quick=${QUICK}"
+[[ "${QUICK}" -eq 1 ]] && log "GPU: $(gpu_name)"
 
 if [[ "${REPORT_ONLY}" -eq 1 ]]; then
   write_report
@@ -699,16 +393,8 @@ fi
 
 trap cleanup_on_exit INT TERM EXIT
 
-ensure_gpu_exclusive "bench start"
 prepare_shared_payloads
-
-if [[ "${RUN_FLASHCLI}" -eq 1 ]]; then
-  run_flashcli_backend
-fi
-
-if [[ "${RUN_PYTORCH}" -eq 1 ]]; then
-  run_pytorch_backend
-fi
-
+[[ "${RUN_FLASHCLI}" -eq 1 ]] && run_flashcli_backend
+[[ "${RUN_PYTORCH}" -eq 1 ]] && run_pytorch_backend
 write_report
-log "Done. Artifacts under ${OUT_DIR}"
+log "All done: ${OUT_DIR}"
