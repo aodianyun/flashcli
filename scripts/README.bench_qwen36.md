@@ -63,7 +63,7 @@ pip install -U vllm   # 需支持 Qwen3.6 的版本（你环境 vllm 0.22.0 OK�
 
 # vLLM 启动前（48GB）：
 pip uninstall -y flash-attn
-pip install -U kernels
+pip install 'kernels>=0.12,<0.13'   # 勿 pip install -U kernels（0.15+ 与 transformers 5.9 崩）
 # --quick 默认 VLLM_MAX_MODEL_LEN=8192；首次 /health 可能需 5–10 分钟
 ```
 
@@ -143,7 +143,8 @@ bash scripts/bench_qwen36_compare.sh --comparable --vllm \
 | FlashRT decode ~60 vs codeplan ~84 | 确认 `src=serve_log`、warmup `auto`、同 `K=6`；勿用 wall−client 估算当引擎 decode |
 | vLLM `flash_attn_2_cuda` undefined symbol | **`pip uninstall -y flash-attn`** 后重跑（TORCH_SDPA 仍会 import 坏包） |
 | vLLM CUDA OOM @ max-model-len 32768 | 用默认 `VLLM_MAX_MODEL_LEN=8192`（--quick）或 `16384`；48GB 跑不了 27B@32K vLLM |
-| vLLM `finegrained-fp8` / `kernels` | `pip install -U kernels` |
+| vLLM `revision or a version must be specified` | `pip install 'kernels>=0.12,<0.13'`（不要用 `-U kernels`） |
+| vLLM `finegrained-fp8` / `kernels` missing | 同上 |
 | vLLM 长上下文 256K 基线 | **不支持**（48GB）；长测只比 FlashRT 臂 |
 | vLLM 其它启动失败 | `vllm --version`；首次启动等 /health，看 serve.log |
 | Bundle invalid | `bundles/qwen_nvfp4/build.sh` + `flashcli bundle validate` |

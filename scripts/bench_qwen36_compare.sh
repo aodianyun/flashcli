@@ -223,8 +223,8 @@ check_serve_log_fatal() {
     if grep -q 'flash_attn_2_cuda.*undefined symbol' "${serve_log}" 2>/dev/null; then
       die "vLLM: broken flash-attn vs torch ABI. Run: pip uninstall -y flash-attn  then re-run --vllm (see scripts/README.bench_qwen36.md)"
     fi
-    if grep -q 'finegrained-fp8 kernel requires' "${serve_log}" 2>/dev/null; then
-      die "vLLM FP8 needs: pip install -U kernels  then re-run --vllm"
+    if grep -qE 'finegrained-fp8 kernel requires|revision or a version must be specified' "${serve_log}" 2>/dev/null; then
+      die "vLLM FP8: pip install 'kernels>=0.12,<0.13'  (not pip install -U kernels)"
     fi
     if grep -q 'CUDA out of memory' "${serve_log}" 2>/dev/null; then
       die "vLLM OOM on GPU. For --quick use VLLM_MAX_MODEL_LEN=8192 (default after script sync). Ensure no other process uses the GPU."
@@ -465,17 +465,51 @@ run_flashcli_backend() {
 
 vllm_preflight() {
   python3 - <<'PY' || die "vLLM preflight python failed"
+import importlib.metadata
 import sys
+
 try:
     import flash_attn_2_cuda  # noqa: F401
 except ImportError:
-    sys.exit(0)
+    pass
 except OSError as exc:
     if "undefined symbol" in str(exc) or "flash_attn" in str(exc):
         print(
             "broken flash-attn CUDA extension (ABI mismatch with installed torch).\n"
             "  pip uninstall -y flash-attn\n"
             "  bash scripts/bench_qwen36_compare.sh ... --vllm ...",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    raise
+
+try:
+    kv = importlib.metadata.version("kernels")
+except importlib.metadata.PackageNotFoundError:
+    print(
+        "kernels package missing (FP8 models need it).\n"
+        "  pip install 'kernels>=0.12,<0.13'",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+from packaging.version import Version
+
+if Version(kv) >= Version("0.13"):
+    print(
+        f"kernels {kv} is too new for transformers 5.9 (LayerRepository crash).\n"
+        "  pip install 'kernels>=0.12,<0.13'",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+try:
+    import transformers  # noqa: F401
+except ValueError as exc:
+    if "revision or a version must be specified" in str(exc):
+        print(
+            "transformers failed to import (kernels/transformers mismatch).\n"
+            "  pip install 'kernels>=0.12,<0.13'",
             file=sys.stderr,
         )
         sys.exit(1)
