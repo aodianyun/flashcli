@@ -6,11 +6,12 @@
 
 | 臂 | 权重 | 服务 | 角色 |
 |----|------|------|------|
-| **A. FlashRT** | NVFP4 + MTP | `flashcli serve` | 你要验证的产品路径 |
-| **B. 基线** | [Qwen3.6-27B-FP8](https://www.modelscope.cn/models/Qwen/Qwen3.6-27B-FP8) | **vLLM**（推荐） | 成熟 PyTorch 生态对照 |
+| **A. FlashRT** | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4) + MTP | `flashcli serve` | 产品路径 |
+| **B. 基线** | **同一份 NVFP4**（默认与 A 相同目录） | **vLLM**（推荐） | 同权重、比推理引擎 |
 
-**不要**用 NVFP4 权重跑 transformers / vLLM 基线。  
-**不要**指望 `bench_qwen36_hf_server.py` 当主基线（Qwen3.6 linear_attn + FP8 易空生成）。
+可选：B 臂改用 [Qwen3.6-27B-FP8](https://www.modelscope.cn/models/Qwen/Qwen3.6-27B-FP8)（`--hf-checkpoint`）做「官方 FP8 + vLLM」对照，**不是**同权重引擎对比。
+
+**不要**用 NVFP4 跑 `bench_qwen36_hf_server.py`（`--hf-server` 兜底）；那条路径会 partial load / 空生成。
 
 ---
 
@@ -54,9 +55,12 @@ cd /app/flashcli
 # - bundle 已 build：bundles/qwen_nvfp4/build.sh
 # - 权重：~/.flashcli/models/qwen36-27b-nvfp4/checkpoint + mtp_fp8
 
-# 基线臂（FP8）
-huggingface-cli download Qwen/Qwen3.6-27B-FP8 \
-  --local-dir ~/.flashcli/models/qwen36-27b-fp8/checkpoint
+# 基线臂默认与 FlashRT 同目录（pull 一次即可）：
+#   ~/.flashcli/models/qwen36-27b-nvfp4/checkpoint
+
+# 仅当要做 FP8 对照时再拉：
+# huggingface-cli download Qwen/Qwen3.6-27B-FP8 \
+#   --local-dir ~/.flashcli/models/qwen36-27b-fp8/checkpoint
 
 # 基线服务（推荐）
 pip install -U vllm   # 需支持 Qwen3.6 的版本（你环境 vllm 0.22.0 OK）
@@ -93,9 +97,8 @@ bash scripts/bench_qwen36_compare.sh --quick --flashcli-only
 ### 步骤 2：冒烟 — vLLM 基线（~3–5 分钟，含首次加载）
 
 ```bash
-bash scripts/bench_qwen36_compare.sh --quick --pytorch-only --vllm \
-  --hf-checkpoint ~/.flashcli/models/qwen36-27b-fp8/checkpoint \
-  --hf-model-name qwen3.6-27b-fp8
+bash scripts/bench_qwen36_compare.sh --quick --pytorch-only --vllm
+# 默认：vllm serve ~/.flashcli/models/qwen36-27b-nvfp4/checkpoint
 ```
 
 **通过标准**：`completion_tokens≈64`；正文应是量子纠缠段落，**不要**出现 `Here's a thinking process`。vLLM 需 `chat_template_kwargs.enable_thinking=false`（脚本已在 serve 与 payload 中配置）。
@@ -111,8 +114,8 @@ bash scripts/bench_qwen36_compare.sh --comparable --flashcli-only
 ### 步骤 4：正式可比 — 双臂（FlashRT + vLLM，串行占 GPU）
 
 ```bash
-bash scripts/bench_qwen36_compare.sh --comparable --vllm \
-  --hf-checkpoint ~/.flashcli/models/qwen36-27b-fp8/checkpoint
+bash scripts/bench_qwen36_compare.sh --comparable --vllm --short-only
+# 48GB 上 vLLM 长上下文 256K 仍不现实；短测双臂用同一 NVFP4 权重
 ```
 
 输出：`/tmp/qwen36-bench-*/REPORT.md`（含 Comparison 表）。
@@ -129,7 +132,7 @@ bash scripts/bench_qwen36_compare.sh --comparable --vllm \
 | `--pytorch-only` | 只跑基线 |
 | `--vllm` | 基线用 `vllm serve`（**推荐**） |
 | `--hf-server` | 基线用自建 transformers（不推荐） |
-| `--hf-checkpoint PATH` | FP8 目录 |
+| `--hf-checkpoint PATH` | 基线权重（默认 = FlashRT 的 `--checkpoint`，NVFP4） |
 | `--report-only` | 仅从已有 workdir 生成报告 |
 
 ---
@@ -138,7 +141,8 @@ bash scripts/bench_qwen36_compare.sh --comparable --vllm \
 
 | 现象 | 处理 |
 |------|------|
-| `linear_attn MISSING` + compare 误杀 | 已修复：HF 臂不再因此退出；FP8 下可忽略或装 fla 内核 |
+| vLLM + NVFP4 被 compare 误杀 | 已修复：`wait_health` 用 backend `vllm`，不再因 `linear_attn MISSING` 拒绝 NVFP4 |
+| vLLM NVFP4 起不来 | 看 `serve.log`；需 vLLM 支持 Qwen3.6 + compressed-tensors NVFP4（Blackwell）；失败再试 FP8 `--hf-checkpoint` |
 | `server_ttft=n/a`, wall≈50ms, tok=n/a | 模型未生成；换 `--vllm` 或装 `flash-linear-attention causal-conv1d` |
 | FlashRT decode ~60 vs codeplan ~84 | 确认 `src=serve_log`、warmup `auto`、同 `K=6`；勿用 wall−client 估算当引擎 decode |
 | vLLM `flash_attn_2_cuda` undefined symbol | **`pip uninstall -y flash-attn`** 后重跑（TORCH_SDPA 仍会 import 坏包） |

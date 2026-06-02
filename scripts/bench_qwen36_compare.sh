@@ -2,8 +2,9 @@
 # Qwen36 bench orchestrator (single entry). See scripts/README.bench_qwen36.md
 #
 # Smoke FlashRT:  bash scripts/bench_qwen36_compare.sh --quick --flashcli-only
-# Smoke vLLM:     bash scripts/bench_qwen36_compare.sh --quick --pytorch-only --vllm --hf-checkpoint <FP8>
-# Full compare:   bash scripts/bench_qwen36_compare.sh --comparable --vllm --hf-checkpoint <FP8>
+# Smoke vLLM:     bash scripts/bench_qwen36_compare.sh --quick --pytorch-only --vllm
+# Full compare:   bash scripts/bench_qwen36_compare.sh --comparable --vllm
+# Optional FP8:   add --hf-checkpoint ~/.flashcli/models/qwen36-27b-fp8/checkpoint --hf-model-name qwen3.6-27b-fp8
 #
 set -euo pipefail
 
@@ -51,9 +52,10 @@ GPU_SETTLE_SEC="${GPU_SETTLE_SEC:-8}"
 
 BUNDLE="${BUNDLE:-${FLASHCLI_ROOT}/bundles/qwen_nvfp4}"
 CHECKPOINT="${CHECKPOINT:-${CKPT_QWEN36:-${HOME}/.flashcli/models/qwen36-27b-nvfp4/checkpoint}}"
-# PyTorch HF cannot load NVFP4 linear_attn; use official FP8 for the baseline arm.
-HF_CHECKPOINT="${HF_CHECKPOINT:-${HOME}/.flashcli/models/qwen36-27b-fp8/checkpoint}"
-HF_MODEL_NAME="${HF_MODEL_NAME:-qwen3.6-27b-fp8}"
+# vLLM baseline defaults to the same NVFP4 weights as FlashRT (fair engine compare).
+# transformers --hf-server cannot load NVFP4 — pass --hf-checkpoint <FP8> for that path.
+HF_CHECKPOINT="${HF_CHECKPOINT:-${CHECKPOINT}}"
+HF_MODEL_NAME="${HF_MODEL_NAME:-${MODEL_NAME}}"
 MTP_CKPT="${MTP_CKPT:-${HOME}/.flashcli/models/qwen36-27b-nvfp4/mtp_fp8}"
 OUT_DIR="${OUT_DIR:-}"
 PAYLOAD_DIR=""
@@ -71,7 +73,7 @@ Serial flow per backend: start serve → wait /health → bench_qwen_curl → st
   --short-only         skip long-context case
   --flashcli-only / --pytorch-only / --report-only
   --checkpoint PATH     FlashRT weights (default: NVFP4 pull path)
-  --hf-checkpoint PATH  PyTorch baseline weights (default: Qwen3.6-27B-FP8)
+  --hf-checkpoint PATH  Baseline weights (default: same as --checkpoint, NVFP4)
   --hf-model-name NAME  OpenAI API model id (default: ${HF_MODEL_NAME})
   --vllm                Baseline: vLLM OpenAI server (recommended)
   --hf-server           Baseline: minimal transformers server (debug only)
@@ -237,10 +239,11 @@ check_serve_log_fatal() {
     tail -n 15 "${serve_log}" >&2 || true
     die "NVFP4 checkpoint partial load in HF (linear_attn MISSING). Use --hf-checkpoint with Qwen/Qwen3.6-27B-FP8 for PyTorch baseline, or flashcli+FlashRT for NVFP4."
   fi
+  # Minimal transformers server only — not vLLM.
   if [[ "${backend}" == "hf" ]] && grep -q 'linear_attn.*| MISSING' "${serve_log}" 2>/dev/null; then
     if checkpoint_looks_nvfp4 "${HF_CHECKPOINT}"; then
       tail -n 15 "${serve_log}" >&2 || true
-      die "HF baseline needs Qwen/Qwen3.6-27B-FP8 (ModelScope/HF), not NVFP4. See --hf-checkpoint."
+      die "transformers --hf-server cannot load NVFP4. Use --vllm (same checkpoint as FlashRT) or --hf-checkpoint <FP8>."
     fi
   fi
 }
@@ -595,7 +598,7 @@ run_vllm_backend() {
     VLLM_TORCH_COMPILE_LEVEL="${VLLM_TORCH_COMPILE_LEVEL}" \
     PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}" \
     "${cmd[@]}"
-  health_s="$(wait_health "${workdir}/serve.log" hf)"
+  health_s="$(wait_health "${workdir}/serve.log" vllm)"
   write_manifest_header "${workdir}" "PyTorch vLLM" "${server_cmd}" "${started}" "${health_s}" \
     "vllm" "" ""
   run_bench_cases "${workdir}" "${HF_MODEL_NAME}"
