@@ -45,6 +45,34 @@ def _parse_messages(body: dict[str, Any]) -> list[dict[str, Any]]:
     return messages
 
 
+def _hf_qwen36_install_hint() -> str:
+    return (
+        "Qwen3.6 NVFP4 needs transformers with Qwen3_5ForCausalLM (usually v5+) and compressed-tensors:\n"
+        "  pip install -U 'compressed-tensors>=0.14.0'\n"
+        "  pip install -U 'transformers>=5.0.0'\n"
+        "  # if PyPI transformers is too old:\n"
+        "  pip install -U git+https://github.com/huggingface/transformers.git\n"
+        "Then: python3 -c \"from transformers import Qwen3_5ForCausalLM; print('ok')\""
+    )
+
+
+def _require_hf_qwen36_deps() -> None:
+    import transformers
+
+    log.info("transformers %s", transformers.__version__)
+    try:
+        from transformers import Qwen3_5ForCausalLM  # noqa: F401
+    except ImportError as exc:
+        sys.exit(f"Cannot import Qwen3_5ForCausalLM: {exc}\n\n{_hf_qwen36_install_hint()}")
+    try:
+        import compressed_tensors  # noqa: F401
+    except ImportError:
+        sys.exit(
+            "compressed-tensors is required for NVFP4 checkpoints.\n"
+            "  pip install -U 'compressed-tensors>=0.14.0'"
+        )
+
+
 def _max_tokens(body: dict[str, Any]) -> int:
     raw = body.get("max_tokens", body.get("max_completion_tokens", 256))
     try:
@@ -73,6 +101,7 @@ class HfQwen36Engine:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
+        _require_hf_qwen36_deps()
         self.device = torch.device(device)
         self.model_name = model_name
         self.max_seq = int(max_seq)
@@ -107,21 +136,22 @@ class HfQwen36Engine:
         try:
             self.model = AutoModelForCausalLM.from_pretrained(checkpoint, **load_kwargs)
         except ImportError as exc:
-            sys.exit(
-                f"Failed to import deps for {checkpoint!r}: {exc}\n"
-                "NVFP4 checkpoints often need: pip install compressed-tensors"
-            )
+            msg = str(exc)
+            hint = _hf_qwen36_install_hint()
+            if "Qwen3_5" in msg or "qwen3_5" in msg.lower():
+                sys.exit(f"Failed to load {checkpoint!r}: {exc}\n\n{hint}")
+            sys.exit(f"Failed to import deps for {checkpoint!r}: {exc}\n{hint}")
         except Exception as exc:
             msg = str(exc)
             hint = ""
-            if "does not recognize this architecture" in msg or "qwen3_5" in msg.lower():
-                hint = (
-                    "\nQwen3.6 checkpoints need a recent transformers, e.g.\n"
-                    "  pip install -U 'transformers>=4.57'\n"
-                    "  # or: pip install git+https://github.com/huggingface/transformers.git"
-                )
+            if (
+                "does not recognize this architecture" in msg
+                or "qwen3_5" in msg.lower()
+                or "Qwen3_5" in msg
+            ):
+                hint = f"\n\n{_hf_qwen36_install_hint()}"
             elif "compressed" in msg.lower() or "nvfp4" in msg.lower() or "quant" in msg.lower():
-                hint = "\nTry: pip install compressed-tensors transformers -U"
+                hint = "\nTry: pip install -U 'compressed-tensors>=0.14.0' 'transformers>=5.0.0'"
             sys.exit(
                 f"Failed to load checkpoint {checkpoint!r} with transformers: {exc}{hint}"
             )

@@ -171,9 +171,9 @@ check_serve_log_fatal() {
     tail -n 20 "${serve_log}" >&2 || true
     die "Bundle not built (missing lib/ flash_rt/). See bundles/qwen_nvfp4/QUICKSTART.md"
   fi
-  if grep -qE 'Failed to load checkpoint|does not recognize this architecture' "${serve_log}"; then
+  if grep -qE 'Failed to load checkpoint|does not recognize this architecture|Qwen3_5ForCausalLM|Cannot import Qwen3_5' "${serve_log}"; then
     tail -n 20 "${serve_log}" >&2 || true
-    die "HF load failed — upgrade transformers (>=4.57 or git main) and pip install compressed-tensors"
+    die "HF load failed — need transformers>=5 (Qwen3_5ForCausalLM) and compressed-tensors>=0.14; see serve.log"
   fi
 }
 
