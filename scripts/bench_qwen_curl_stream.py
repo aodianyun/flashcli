@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -52,7 +53,39 @@ def _server_ttft_ms(usage: dict[str, Any]) -> float | None:
     return None
 
 
-def run_stream(url: str, body: dict[str, Any]) -> dict[str, Any]:
+def _apply_vllm_http_stream_metrics(
+    usage: dict[str, Any],
+    bench: dict[str, Any],
+    *,
+    bench_arm: str,
+) -> None:
+    """vLLM does not emit FlashRT-style serve.log decode lines; use HTTP stream phase."""
+    if bench_arm != "vllm":
+        return
+    if usage.get("decode_tok_per_s") is not None:
+        return
+    ct = usage.get("completion_tokens")
+    wall_ms = bench.get("wall_ms")
+    client_ttft_ms = bench.get("client_ttft_ms")
+    if ct is None or wall_ms is None or client_ttft_ms is None:
+        return
+    decode_ms = max(1.0, float(wall_ms) - float(client_ttft_ms))
+    if decode_ms <= 0:
+        return
+    decode_tps = float(ct) * 1000.0 / decode_ms
+    usage["decode_ms"] = decode_ms
+    usage["decode_tok_per_s"] = decode_tps
+    usage["tok_per_s"] = decode_tps
+    usage["ttft_ms"] = float(client_ttft_ms)
+    usage["first_delta_ms"] = float(client_ttft_ms)
+    usage["metrics_source"] = "vllm_http_stream"
+    bench["server_ttft_ms"] = float(client_ttft_ms)
+    bench["ttft_ms"] = float(client_ttft_ms)
+    bench["ttft_source"] = "client"
+    bench["metrics_source"] = "vllm_http_stream"
+
+
+def run_stream(url: str, body: dict[str, Any], *, bench_arm: str = "") -> dict[str, Any]:
     data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(
         url,
@@ -119,6 +152,17 @@ def run_stream(url: str, body: dict[str, Any]) -> dict[str, Any]:
 
     ttft_ms = server_ttft if server_ttft is not None else client_ttft_ms
     ttft_source = "engine" if server_ttft is not None else "client"
+    bench_out = {
+        "stream": True,
+        "wall_ms": wall_ms,
+        "client_ttft_ms": client_ttft_ms,
+        "server_ttft_ms": server_ttft,
+        "ttft_ms": ttft_ms,
+        "ttft_source": ttft_source,
+        "sse_chunks": chunks,
+        "sse_content_chunks": content_chunks,
+    }
+    _apply_vllm_http_stream_metrics(usage, bench_out, bench_arm=bench_arm)
     return {
         "id": "bench-stream",
         "object": "chat.completion",
@@ -133,16 +177,7 @@ def run_stream(url: str, body: dict[str, Any]) -> dict[str, Any]:
             }
         ],
         "usage": usage,
-        "bench": {
-            "stream": True,
-            "wall_ms": wall_ms,
-            "client_ttft_ms": client_ttft_ms,
-            "server_ttft_ms": server_ttft,
-            "ttft_ms": ttft_ms,
-            "ttft_source": ttft_source,
-            "sse_chunks": chunks,
-            "sse_content_chunks": content_chunks,
-        },
+        "bench": bench_out,
     }
 
 
@@ -155,7 +190,8 @@ def main() -> int:
     body = json.load(args.payload)
     if not body.get("stream"):
         raise SystemExit("payload stream=false; use curl for non-streaming")
-    out = run_stream(args.url, body)
+    bench_arm = os.environ.get("BENCH_ARM", "").strip().lower()
+    out = run_stream(args.url, body, bench_arm=bench_arm)
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False)
         f.write("\n")

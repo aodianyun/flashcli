@@ -262,8 +262,10 @@ make_short_payload() {
       messages: [{role: "user", content: $content}],
       max_tokens: $max_tokens,
       temperature: 0,
+      top_p: 1,
       stream: $stream
-    }' >"${out}"
+    }
+    + (if $stream then {stream_options: {include_usage: true}} else {} end)' >"${out}"
 }
 
 make_long_payload() {
@@ -460,8 +462,15 @@ run_curl_once() {
   else
     log "  round ${round}/${ROUNDS}${tag}: wall=${wall_ms}ms client_ttft=${client_ttft} decode=${tps} tok/s${route:+ route=${route}}"
   fi
-  if [[ "${port}" == "${QWEN36_PORT}" && "${tps}" == "n/a" && "${BENCH_ARM:-flashrt}" != "vllm" ]]; then
-    log "  WARN: no engine decode tok/s — tee serve stderr to a log and set SERVE_LOG_PATH (FlashRT stream | lines)"
+  if [[ "${port}" == "${QWEN36_PORT}" && "${tps}" == "n/a" ]]; then
+    case "${BENCH_ARM:-flashrt}" in
+      vllm)
+        log "  WARN: no vLLM decode tok/s — need completion_tokens in final SSE usage (stream_options.include_usage=true)"
+        ;;
+      *)
+        log "  WARN: no engine decode tok/s — tee serve stderr to a log and set SERVE_LOG_PATH (FlashRT stream | lines)"
+        ;;
+    esac
   fi
 }
 
@@ -594,11 +603,18 @@ run_bench_case() {
 
 log "workdir=${WORKDIR}  rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${_SCORED_ROUNDS} stream=${BENCH_STREAM} long_prompt_style=${LONG_PROMPT_STYLE} profile=${BENCH_PROFILE:-none}"
 if [[ "${BENCH_STREAM}" -eq 1 ]]; then
-  if [[ -n "${SERVE_LOG_PATH:-}" ]]; then
-    log "stream=true: engine TTFT/decode from serve.log; client_ttft=HTTP first chunk (diagnostic)"
-  else
-    log "stream=true: set SERVE_LOG_PATH=<serve.log> for engine decode tok/s (FlashRT stream | lines)"
-  fi
+  case "${BENCH_ARM:-flashrt}" in
+    vllm)
+      log "stream=true: vLLM decode/TTFT from HTTP stream phase (first content chunk → end; src=vllm_http_stream)"
+      ;;
+    *)
+      if [[ -n "${SERVE_LOG_PATH:-}" ]]; then
+        log "stream=true: engine TTFT/decode from serve.log; client_ttft=HTTP first chunk (diagnostic)"
+      else
+        log "stream=true: set SERVE_LOG_PATH=<serve.log> for engine decode tok/s (FlashRT stream | lines)"
+      fi
+      ;;
+  esac
 fi
 print_qwen36_hints
 if [[ "${SKIP_QWEN3}" -eq 0 ]]; then

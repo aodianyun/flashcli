@@ -270,6 +270,8 @@ def main() -> int:
         "stream": bool(args.stream),
         "chat_template_kwargs": {"enable_thinking": False},
     }
+    if args.stream:
+        payload["stream_options"] = {"include_usage": True}
     meta = {
         "long_prompt_style": args.long_prompt_style,
         "target_prompt_tokens": args.target_prompt_tokens,

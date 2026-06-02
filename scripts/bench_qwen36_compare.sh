@@ -579,6 +579,7 @@ prepare_shared_payloads() {
         temperature: 0,
         top_p: 1,
         stream: true,
+        stream_options: {include_usage: true},
         chat_template_kwargs: {enable_thinking: false}
       }' \
       >"${PAYLOAD_DIR}/qwen36_short.json"
@@ -878,6 +879,8 @@ run_vllm_backend() {
     --served-model-name "${VLLM_MODEL_NAME}"
     --trust-remote-code
     --enforce-eager
+    --generation-config
+    vllm
     --reasoning-parser
     qwen3
     --default-chat-template-kwargs

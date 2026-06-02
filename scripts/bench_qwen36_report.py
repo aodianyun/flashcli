@@ -152,6 +152,11 @@ def summarize_case(
             or (r.get("usage") or {}).get("metrics_source") == "serve_log_flashrt"
             for r in samples
         ),
+        "metrics_from_vllm_http": any(
+            (r.get("bench") or {}).get("metrics_source") == "vllm_http_stream"
+            or (r.get("usage") or {}).get("metrics_source") == "vllm_http_stream"
+            for r in samples
+        ),
     }
     tok = _mean(decode_tps_vals)
     metrics["decode_tok_per_s_best"] = tok
@@ -226,7 +231,10 @@ def render_backend_section(backend: str, workdir: Path, cases: list[CaseSummary]
             if key in manifest and manifest[key] not in (None, ""):
                 lines.append(f"- {key}: `{manifest[key]}`")
     lines.append("")
-    has_engine = any(c.metrics.get("metrics_from_serve_log") for c in cases)
+    has_engine = any(
+        c.metrics.get("metrics_from_serve_log") or c.metrics.get("metrics_from_vllm_http")
+        for c in cases
+    )
     if has_engine:
         lines.append(
             "| case | prompt | completion | prefill (ms) | engine TTFT (ms) | "
@@ -298,7 +306,12 @@ def render_compare_section(
         "|------|--------|" + "|".join(["---:"] * 3) + "|",
     ]
     any_engine = any(
-        (left_cases[n].metrics.get("metrics_from_serve_log") or right_cases[n].metrics.get("metrics_from_serve_log"))
+        (
+            left_cases[n].metrics.get("metrics_from_serve_log")
+            or left_cases[n].metrics.get("metrics_from_vllm_http")
+            or right_cases[n].metrics.get("metrics_from_serve_log")
+            or right_cases[n].metrics.get("metrics_from_vllm_http")
+        )
         for n in shared
     )
     metric_specs: list[tuple[str, str, bool]] = [
@@ -401,9 +414,9 @@ def build_report(
         "",
         "Metrics are means over scored rounds (after warmup skips). "
         "Both backends use the same NVFP4 weights and HTTP payloads from `bench_qwen36_compare.sh`. "
-        "**Client TTFT** = first HTTP content chunk (always available for HTTP bench). "
-        "**Engine TTFT / decode** appear only when `serve.log` was captured "
-        "(`bench_qwen36_compare.sh` does this automatically; optional `tee` for manual curl bench).",
+        "**FlashRT** engine TTFT/decode from `serve.log` (`stream | speed decode=`). "
+        "**vLLM** decode/TTFT from HTTP stream phase (`vllm_http_stream`: first content chunk → end). "
+        "**Client TTFT** is always the first HTTP content chunk (diagnostic).",
         "",
     ]
     lines.extend(render_fairness_section(out_dir))
