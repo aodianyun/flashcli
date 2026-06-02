@@ -41,8 +41,9 @@ def test_report_summarize_and_compare(tmp_path: Path) -> None:
                 "ttft_ms": 450.0,
                 "tok_per_s": 80.0,
                 "route": "short_spec",
+                "metrics_source": "serve_log_flashrt",
             },
-            "bench": {"client_ttft_ms": 460.0},
+            "bench": {"client_ttft_ms": 460.0, "metrics_source": "serve_log_flashrt"},
         },
         {
             "round": 2,
@@ -53,8 +54,9 @@ def test_report_summarize_and_compare(tmp_path: Path) -> None:
                 "ttft_ms": 440.0,
                 "tok_per_s": 85.0,
                 "route": "short_spec",
+                "metrics_source": "serve_log_flashrt",
             },
-            "bench": {"client_ttft_ms": 445.0},
+            "bench": {"client_ttft_ms": 445.0, "metrics_source": "serve_log_flashrt"},
         },
         {
             "round": 3,
@@ -65,14 +67,17 @@ def test_report_summarize_and_compare(tmp_path: Path) -> None:
                 "ttft_ms": 445.0,
                 "tok_per_s": 82.5,
                 "route": "short_spec",
+                "metrics_source": "serve_log_flashrt",
             },
-            "bench": {"client_ttft_ms": 450.0},
+            "bench": {"client_ttft_ms": 450.0, "metrics_source": "serve_log_flashrt"},
         },
     ]
     _write_jsonl(flashcli_dir / "qwen36_short.metrics.jsonl", sample_rows)
     slower = json.loads(json.dumps(sample_rows))
     for row in slower:
         row["usage"]["tok_per_s"] = float(row["usage"]["tok_per_s"]) - 5.0
+        row["usage"]["metrics_source"] = "serve_log_flashrt"
+        row["bench"]["metrics_source"] = "serve_log_flashrt"
     _write_jsonl(flashrt_dir / "qwen36_short.metrics.jsonl", slower)
 
     out_dir = tmp_path / "out"
@@ -99,7 +104,7 @@ def test_report_summarize_and_compare(tmp_path: Path) -> None:
     assert "Comparison" in proc.stdout
 
 
-def test_report_estimates_decode_when_usage_lacks_timing(tmp_path: Path) -> None:
+def test_report_omits_decode_without_engine_metrics(tmp_path: Path) -> None:
     workdir = tmp_path / "flashcli"
     workdir.mkdir()
     (workdir / "manifest.json").write_text(
@@ -130,5 +135,4 @@ def test_report_estimates_decode_when_usage_lacks_timing(tmp_path: Path) -> None
     assert metrics["server_ttft_ms"] is None
     assert metrics["client_ttft_ms"] == 400.0
     assert metrics["ttft_ms"] == 400.0
-    assert metrics["decode_tok_per_s_best"] is not None
-    assert metrics["decode_tok_per_s_estimated"] is True
+    assert metrics["decode_tok_per_s_best"] is None

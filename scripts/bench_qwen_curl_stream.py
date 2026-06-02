@@ -113,20 +113,9 @@ def run_stream(url: str, body: dict[str, Any]) -> dict[str, Any]:
             "stream returned no completion tokens (empty assistant message). "
             "Check serve.log and that chat_template_kwargs.enable_thinking=false is set."
         )
-    estimated_decode_tps: float | None = None
     ct = usage.get("completion_tokens")
     if ct is None and content_parts:
-        ct = len(content_parts)
-        usage["completion_tokens"] = ct
-    if not usage.get("decode_tok_per_s") and ct is not None:
-        decode_ms = usage.get("decode_ms")
-        if decode_ms is None:
-            ttft_for_decode = server_ttft if server_ttft is not None else client_ttft_ms
-            decode_ms = wall_ms
-            if ttft_for_decode is not None:
-                decode_ms = max(1.0, wall_ms - float(ttft_for_decode))
-        if decode_ms and float(decode_ms) > 0:
-            estimated_decode_tps = float(ct) * 1000.0 / float(decode_ms)
+        usage["completion_tokens"] = len(content_parts)
 
     ttft_ms = server_ttft if server_ttft is not None else client_ttft_ms
     ttft_source = "engine" if server_ttft is not None else "client"
@@ -151,7 +140,6 @@ def run_stream(url: str, body: dict[str, Any]) -> dict[str, Any]:
             "server_ttft_ms": server_ttft,
             "ttft_ms": ttft_ms,
             "ttft_source": ttft_source,
-            "estimated_decode_tok_per_s": estimated_decode_tps,
             "sse_chunks": chunks,
             "sse_content_chunks": content_chunks,
         },

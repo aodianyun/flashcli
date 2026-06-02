@@ -95,8 +95,8 @@ Env: HOST, QWEN3_PORT, QWEN36_PORT, CKPT_QWEN3, CKPT_QWEN36, SHORT_PROMPT,
      SERVE_LOG_PATH (or QWEN36_SERVE_LOG) — flashcli serve log for engine TTFT/decode
 
 Stream: qwen3 has true token SSE (client_ttft_ms = first content chunk).
-qwen36 uses true SSE (token-by-token); server TTFT from usage.first_delta_ms /
-usage.ttft_ms; client_ttft_ms is first HTTP content chunk (includes proxy overhead).
+qwen36: engine TTFT/decode from FlashRT serve.log (stream | lines) or SSE usage;
+client_ttft_ms is HTTP first chunk (diagnostic only, not used for decode tok/s).
 EOF
 }
 
@@ -447,7 +447,7 @@ run_curl_once() {
     --argjson bench "$(jq '.bench // {}' "${resp}")" \
     '{round: $round, wall_ms: $wall_ms, usage: $usage, bench: $bench}' >>"${jsonl}"
   local tps client_ttft engine_ttft prefill_ms route msrc
-  tps="$(jq -r '.usage.tok_per_s // .usage.decode_tok_per_s // .bench.estimated_decode_tok_per_s // "n/a"' "${resp}" 2>/dev/null)"
+  tps="$(jq -r '.usage.decode_tok_per_s // .usage.tok_per_s // "n/a"' "${resp}" 2>/dev/null)"
   client_ttft="$(jq -r '.bench.client_ttft_ms // "n/a"' "${resp}" 2>/dev/null)"
   engine_ttft="$(jq -r '.bench.server_ttft_ms // .usage.ttft_ms // empty' "${resp}" 2>/dev/null)"
   prefill_ms="$(jq -r '.usage.prefill_ms // empty' "${resp}" 2>/dev/null)"
@@ -455,8 +455,13 @@ run_curl_once() {
   msrc="$(jq -r '.bench.metrics_source // empty' "${resp}" 2>/dev/null)"
   if [[ -n "${msrc}" && -n "${engine_ttft}" ]]; then
     log "  round ${round}/${ROUNDS}${tag}: wall=${wall_ms}ms prefill=${prefill_ms:-n/a} engine_ttft=${engine_ttft} client_ttft=${client_ttft} decode=${tps} tok/s${route:+ route=${route}} src=${msrc}"
+  elif [[ -n "${engine_ttft}" ]]; then
+    log "  round ${round}/${ROUNDS}${tag}: wall=${wall_ms}ms prefill=${prefill_ms:-n/a} engine_ttft=${engine_ttft} client_ttft=${client_ttft} decode=${tps} tok/s${route:+ route=${route}}"
   else
     log "  round ${round}/${ROUNDS}${tag}: wall=${wall_ms}ms client_ttft=${client_ttft} decode=${tps} tok/s${route:+ route=${route}}"
+  fi
+  if [[ "${port}" == "${QWEN36_PORT}" && "${tps}" == "n/a" && "${BENCH_ARM:-flashrt}" != "vllm" ]]; then
+    log "  WARN: no engine decode tok/s — tee serve stderr to a log and set SERVE_LOG_PATH (FlashRT stream | lines)"
   fi
 }
 
@@ -590,9 +595,9 @@ run_bench_case() {
 log "workdir=${WORKDIR}  rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${_SCORED_ROUNDS} stream=${BENCH_STREAM} long_prompt_style=${LONG_PROMPT_STYLE} profile=${BENCH_PROFILE:-none}"
 if [[ "${BENCH_STREAM}" -eq 1 ]]; then
   if [[ -n "${SERVE_LOG_PATH:-}" ]]; then
-    log "stream=true: engine TTFT/decode from serve.log (optional); client_ttft=HTTP first chunk"
+    log "stream=true: engine TTFT/decode from serve.log; client_ttft=HTTP first chunk (diagnostic)"
   else
-    log "stream=true: client_ttft=HTTP first content chunk (no serve.log — engine TTFT not collected)"
+    log "stream=true: set SERVE_LOG_PATH=<serve.log> for engine decode tok/s (FlashRT stream | lines)"
   fi
 fi
 print_qwen36_hints
@@ -680,4 +685,6 @@ if [[ "${WRITE_REPORT}" -eq 1 ]]; then
   write_curl_report
 fi
 log "Done. Payloads and responses in ${WORKDIR}"
-[[ -f "${WORKDIR}/REPORT.md" ]] && log "Report: ${WORKDIR}/REPORT.md"
+if [[ -f "${WORKDIR}/REPORT.md" ]]; then
+  log "Report: ${WORKDIR}/REPORT.md"
+fi

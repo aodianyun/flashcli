@@ -60,10 +60,11 @@ def _row_engine_ttft(row: dict[str, Any]) -> float | None:
 
 
 def _row_decode_tps(row: dict[str, Any]) -> float | None:
+    """Engine decode tok/s from FlashRT stats (SSE usage or serve.log merge)."""
     usage = row.get("usage") or {}
-    for key in ("decode_tok_per_s", "tok_per_s", "e2e_tok_per_s"):
+    for key in ("decode_tok_per_s", "tok_per_s"):
         val = usage.get(key)
-        if val is not None:
+        if val is not None and float(val) > 0:
             return float(val)
     return None
 
@@ -110,8 +111,7 @@ def summarize_case(
 
     engine_ttft_vals: list[float] = []
     client_ttft_vals: list[float] = []
-    decode_tps_engine: list[float] = []
-    decode_tps_fallback: list[float] = []
+    decode_tps_vals: list[float] = []
     for row in samples:
         usage = row.get("usage") or {}
         bench = row.get("bench") or {}
@@ -125,19 +125,7 @@ def summarize_case(
 
         tok = _row_decode_tps(row)
         if tok is not None:
-            decode_tps_engine.append(tok)
-        else:
-            ct = usage.get("completion_tokens")
-            decode_ms = usage.get("decode_ms")
-            if decode_ms is not None and ct is not None and float(decode_ms) > 0:
-                decode_tps_fallback.append(float(ct) * 1000.0 / float(decode_ms))
-            else:
-                wall = row.get("wall_ms")
-                ttft_guess = engine_ttft if engine_ttft is not None else client_ttft
-                if ct is not None and wall is not None and ttft_guess is not None:
-                    decode_wall = max(1.0, float(wall) - float(ttft_guess))
-                    if decode_wall > 0:
-                        decode_tps_fallback.append(float(ct) * 1000.0 / decode_wall)
+            decode_tps_vals.append(tok)
 
     routes = [
         str((r.get("usage") or {}).get("route"))
@@ -165,10 +153,7 @@ def summarize_case(
             for r in samples
         ),
     }
-    tok = _mean(decode_tps_engine)
-    if tok is None and decode_tps_fallback:
-        tok = _mean(decode_tps_fallback)
-        metrics["decode_tok_per_s_estimated"] = True
+    tok = _mean(decode_tps_vals)
     metrics["decode_tok_per_s_best"] = tok
 
     return CaseSummary(
@@ -262,7 +247,6 @@ def render_backend_section(backend: str, workdir: Path, cases: list[CaseSummary]
         )
     for case in cases:
         m = case.metrics
-        est = "†" if m.get("decode_tok_per_s_estimated") else ""
         if has_engine:
             row = [
                 case.name,
@@ -271,7 +255,7 @@ def render_backend_section(backend: str, workdir: Path, cases: list[CaseSummary]
                 _fmt_num(m.get("prefill_ms")),
                 _fmt_num(m.get("engine_ttft_ms") or m.get("server_ttft_ms")),
                 _fmt_num(m.get("client_ttft_ms")),
-                _fmt_num(m.get("decode_tok_per_s_best")) + est,
+                _fmt_num(m.get("decode_tok_per_s_best")),
                 _fmt_num(m.get("curl_wall_ms_mean"), digits=0),
                 str(m.get("route_last") or "n/a"),
             ]
@@ -281,16 +265,11 @@ def render_backend_section(backend: str, workdir: Path, cases: list[CaseSummary]
                 _fmt_num(m.get("prompt_tokens"), digits=0),
                 _fmt_num(m.get("completion_tokens"), digits=0),
                 _fmt_num(m.get("client_ttft_ms") or m.get("ttft_ms")),
-                _fmt_num(m.get("decode_tok_per_s_best")) + est,
+                _fmt_num(m.get("decode_tok_per_s_best")),
                 _fmt_num(m.get("curl_wall_ms_mean"), digits=0),
                 str(m.get("route_last") or "n/a"),
             ]
         lines.append("| " + " | ".join(row) + " |")
-    lines.append("")
-    lines.append(
-        "† = decode estimated from curl wall minus client TTFT when engine decode_tok_per_s "
-        "is unavailable."
-    )
     lines.append("")
     return lines
 

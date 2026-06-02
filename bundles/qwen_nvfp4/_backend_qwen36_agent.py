@@ -137,7 +137,6 @@ class Qwen36AgentBackend:
         agent_req.stream = True
         t0 = time.perf_counter()
         first_delta_ms: float | None = None
-        t_first_content: float | None = None
         route = getattr(self._engine, "_last_route", None)
 
         for chunk in sse_lines_to_chat_chunks(
@@ -146,23 +145,31 @@ class Qwen36AgentBackend:
             if chunk.content_delta:
                 if first_delta_ms is None:
                     first_delta_ms = (time.perf_counter() - t0) * 1000.0
-                    t_first_content = time.perf_counter()
                 yield chunk
                 continue
             if chunk.finish_reason:
                 raw_usage = dict(chunk.usage or {})
-                timing: dict[str, Any] = {
-                    "prompt_tokens": raw_usage.get("prompt_tokens"),
-                    "completion_tokens": raw_usage.get("completion_tokens"),
-                }
-                if first_delta_ms is not None:
+                timing: dict[str, Any] = {}
+                for key in (
+                    "prompt_tokens",
+                    "completion_tokens",
+                    "prefill_ms",
+                    "first_delta_ms",
+                    "ttft_ms",
+                    "decode_ms",
+                    "decode_tok_per_s",
+                    "tok_per_s",
+                    "e2e_tok_per_s",
+                    "route",
+                    "wall_s",
+                ):
+                    val = raw_usage.get(key)
+                    if val is not None:
+                        timing[key] = val
+                # Client-observed TTFT only when AgentService did not report engine TTFT.
+                if first_delta_ms is not None and timing.get("first_delta_ms") is None:
                     timing["first_delta_ms"] = first_delta_ms
-                ct = raw_usage.get("completion_tokens")
-                if t_first_content is not None and ct is not None:
-                    decode_ms = max(1.0, (time.perf_counter() - t_first_content) * 1000.0)
-                    timing["decode_ms"] = decode_ms
-                    timing["decode_tok_per_s"] = float(ct) * 1000.0 / decode_ms
-                if route is not None:
+                if route is not None and timing.get("route") is None:
                     timing["route"] = route
                 cached = (raw_usage.get("prompt_tokens_details") or {}).get(
                     "cached_tokens"
