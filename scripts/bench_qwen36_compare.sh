@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Qwen36 bench: flashcli+FlashRT vs PyTorch HF — same checkpoint, same payloads, serial steps.
+# Qwen36 bench: flashcli+FlashRT vs PyTorch HF — same HTTP payloads, serial steps.
 #
-#   bash scripts/bench_qwen36_compare.sh --quick
-#   bash scripts/bench_qwen36_compare.sh --quick --pytorch-only
+# Full comparable (short + long, 12 rounds, drop first 2, mean last 10):
+#   bash scripts/bench_qwen36_compare.sh --comparable
+#
+# Smoke:
+#   bash scripts/bench_qwen36_compare.sh --quick --flashcli-only
 #
 set -euo pipefail
 
@@ -55,7 +58,10 @@ Usage: bash scripts/bench_qwen36_compare.sh [OPTIONS]
 
 Serial flow per backend: start serve → wait /health → bench_qwen_curl → stop serve → next.
 
-  --quick              short ctx, max-seq ${QUICK_MAX_SEQ}, warmup none, 3 rounds
+  --comparable         short + long ctx; 12 rounds; skip-first 2 (mean 10); max-seq ${MAX_SEQ}
+  --quick              short only; 3 rounds; skip-first 1; max-seq ${QUICK_MAX_SEQ}
+  --rounds N --skip-first K   (defaults: ${ROUNDS} / ${SKIP_FIRST})
+  --short-only         skip long-context case
   --flashcli-only / --pytorch-only / --report-only
   --checkpoint PATH     FlashRT weights (default: NVFP4 pull path)
   --hf-checkpoint PATH  PyTorch HF weights (default: Qwen3.6-27B-FP8)
@@ -74,6 +80,15 @@ while [[ $# -gt 0 ]]; do
     --flashcli-only) RUN_PYTORCH=0; shift ;;
     --pytorch-only|--hf-only) RUN_FLASHCLI=0; shift ;;
     --report-only) REPORT_ONLY=1; shift ;;
+    --comparable)
+      QUICK=0
+      SHORT_ONLY=0
+      ROUNDS=12
+      SKIP_FIRST=2
+      BENCH_PROFILE=comparable
+      WARMUP_PRESET=none
+      shift
+      ;;
     --quick)
       QUICK=1
       SHORT_ONLY=1
@@ -110,6 +125,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ "${RUN_FLASHCLI}" -eq 1 || "${RUN_PYTORCH}" -eq 1 ]] || die "Nothing to run"
+
+if [[ "${SKIP_FIRST}" -ge "${ROUNDS}" ]]; then
+  die "--skip-first (${SKIP_FIRST}) must be < --rounds (${ROUNDS})"
+fi
+SCORED_ROUNDS=$((ROUNDS - SKIP_FIRST))
 
 if [[ -z "${OUT_DIR}" ]]; then
   OUT_DIR="/tmp/qwen36-bench-$(date +%Y%m%d-%H%M%S)"
@@ -424,10 +444,11 @@ write_report() {
   log "Report: ${OUT_DIR}/REPORT.md"
 }
 
-log "out=${OUT_DIR} max_seq=${MAX_SEQ} flashcli=${RUN_FLASHCLI} hf=${RUN_PYTORCH} quick=${QUICK}"
-[[ "${RUN_FLASHCLI}" -eq 1 ]] && log "  FlashRT checkpoint=${CHECKPOINT}"
+log "out=${OUT_DIR} max_seq=${MAX_SEQ} flashcli=${RUN_FLASHCLI} hf=${RUN_PYTORCH}"
+log "bench: cases=$([[ "${SHORT_ONLY}" -eq 1 ]] && echo short-only || echo short+long)  rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${SCORED_ROUNDS} profile=${BENCH_PROFILE} long_tokens=${LONG_TOKENS}"
+[[ "${RUN_FLASHCLI}" -eq 1 ]] && log "  FlashRT checkpoint=${CHECKPOINT} warmup=${WARMUP_PRESET}"
 [[ "${RUN_PYTORCH}" -eq 1 ]] && log "  HF checkpoint=${HF_CHECKPOINT} model=${HF_MODEL_NAME}"
-[[ "${QUICK}" -eq 1 ]] && log "GPU: $(gpu_name)"
+log "GPU: $(gpu_name)"
 
 if [[ "${REPORT_ONLY}" -eq 1 ]]; then
   write_report
