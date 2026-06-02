@@ -97,3 +97,36 @@ def test_report_summarize_and_compare(tmp_path: Path) -> None:
     fc = payload["backends"]["flashcli + FlashRT"]["cases"]["qwen36_short"]["metrics"]
     assert fc["decode_tok_per_s_best"] == 83.75
     assert "Comparison" in proc.stdout
+
+
+def test_report_estimates_decode_when_usage_lacks_timing(tmp_path: Path) -> None:
+    workdir = tmp_path / "flashcli"
+    workdir.mkdir()
+    (workdir / "manifest.json").write_text(
+        json.dumps({"rounds": 2, "skip_first": 1}), encoding="utf-8"
+    )
+    _write_jsonl(
+        workdir / "qwen36_short.metrics.jsonl",
+        [
+            {"round": 1, "wall_ms": 1000, "usage": {"prompt_tokens": 23, "completion_tokens": 64}, "bench": {}},
+            {
+                "round": 2,
+                "wall_ms": 1338,
+                "usage": {"prompt_tokens": 23, "completion_tokens": 64},
+                "bench": {"client_ttft_ms": 400.0},
+            },
+        ],
+    )
+    out_dir = tmp_path / "out"
+    subprocess.run(
+        [sys.executable, str(REPORT_PY), "--out", str(out_dir), "--flashcli", str(workdir)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    metrics = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))["backends"][
+        "flashcli + FlashRT"
+    ]["cases"]["qwen36_short"]["metrics"]
+    assert metrics["server_ttft_ms"] == 400.0
+    assert metrics["decode_tok_per_s_best"] is not None
+    assert metrics["decode_tok_per_s_estimated"] is True

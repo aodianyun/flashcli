@@ -65,6 +65,33 @@ def run_stream(url: str, body: dict[str, Any]) -> dict[str, Any]:
     if client_ttft_ms is None and content_parts:
         client_ttft_ms = wall_ms
 
+    if not usage.get("tok_per_s") and not usage.get("decode_tok_per_s"):
+        ct = usage.get("completion_tokens")
+        if ct is None and content_parts:
+            # Usage chunk may only appear on the final SSE event.
+            pass
+        if ct is not None:
+            ttft_guess = (
+                usage.get("ttft_ms")
+                or usage.get("first_delta_ms")
+                or usage.get("prefill_ms")
+                or client_ttft_ms
+            )
+            decode_ms = wall_ms
+            if ttft_guess is not None:
+                decode_ms = max(1.0, wall_ms - float(ttft_guess))
+            if decode_ms > 0:
+                tps = float(ct) * 1000.0 / decode_ms
+                usage["decode_tok_per_s"] = tps
+                usage["tok_per_s"] = tps
+    if usage.get("ttft_ms") is None:
+        if usage.get("first_delta_ms") is not None:
+            usage["ttft_ms"] = usage["first_delta_ms"]
+        elif usage.get("prefill_ms") is not None:
+            usage["ttft_ms"] = usage["prefill_ms"]
+        elif client_ttft_ms is not None:
+            usage["ttft_ms"] = client_ttft_ms
+
     return {
         "id": "bench-stream",
         "object": "chat.completion",

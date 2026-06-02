@@ -76,13 +76,31 @@ def summarize_case(
         return [float(r.get("wall_ms", 0.0)) for r in samples if r.get("wall_ms") is not None]
 
     ttft_vals: list[float] = []
+    decode_tps_fallback: list[float] = []
     for row in samples:
         usage = row.get("usage") or {}
+        bench = row.get("bench") or {}
         val = usage.get("ttft_ms")
         if val is None:
+            val = usage.get("first_delta_ms")
+        if val is None:
             val = usage.get("prefill_ms")
+        if val is None and bench.get("client_ttft_ms") is not None:
+            val = bench.get("client_ttft_ms")
         if val is not None:
             ttft_vals.append(float(val))
+
+        tok = usage.get("tok_per_s") or usage.get("decode_tok_per_s")
+        if tok is None:
+            ct = usage.get("completion_tokens")
+            wall = row.get("wall_ms")
+            ttft_guess = val
+            if ct is not None and wall is not None:
+                decode_ms = float(wall)
+                if ttft_guess is not None:
+                    decode_ms = max(1.0, decode_ms - float(ttft_guess))
+                if decode_ms > 0:
+                    decode_tps_fallback.append(float(ct) * 1000.0 / decode_ms)
 
     routes = [
         str((r.get("usage") or {}).get("route"))
@@ -104,6 +122,9 @@ def summarize_case(
         "route_last": routes[-1] if routes else None,
     }
     tok = metrics.get("tok_per_s") or metrics.get("decode_tok_per_s") or metrics.get("e2e_tok_per_s")
+    if tok is None and decode_tps_fallback:
+        tok = _mean(decode_tps_fallback)
+        metrics["decode_tok_per_s_estimated"] = True
     metrics["decode_tok_per_s_best"] = tok
 
     return CaseSummary(
@@ -274,8 +295,9 @@ def build_report(
         f"Generated: {now}",
         "",
         "Metrics are means over scored rounds (after warmup skips). "
-        "Both backends use the same checkpoint and shared HTTP payloads when run via "
-        "`bench_qwen36_compare.sh`. `decode tok/s` prefers server `usage.tok_per_s` / `decode_tok_per_s`.",
+        "Both backends use the same HTTP payloads when run via `bench_qwen36_compare.sh`. "
+        "`decode tok/s` uses server `usage.tok_per_s` when present; otherwise estimates from "
+        "`completion_tokens` and curl `wall_ms` minus TTFT.",
         "",
     ]
 
