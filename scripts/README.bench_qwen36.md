@@ -32,7 +32,7 @@ bench_qwen36_compare.sh          ← 唯一编排
 | `--short-only` | 仅短上下文（`qwen36_short`） |
 | `--long-only` | 仅长上下文（`qwen36_long`） |
 | `--long-tokens N` | 长 prompt 目标 token 数（配合 long 或 comparable） |
-| `--ctx-16k` | **16K 窗口**短+长双臂对比（`max_seq=16384`，FlashRT serve 与 vLLM 对齐） |
+| `--ctx-16k` | **16K payload** 短+长双臂对比（HTTP 拟合 16384；FlashRT serve 仍用 catalog 262208） |
 | （默认 / `--comparable`） | **短 + 长** 都跑 |
 
 指定窗口：`--max-seq N`（FlashRT serve；长 payload 拟合；vLLM 在 48GB 上仍可能 cap 到 16384）。
@@ -93,6 +93,7 @@ bash scripts/bench_qwen36_compare.sh --long-tokens 65536 --max-seq 65536
 
 # 16K 上下文双臂对比（FlashRT + vLLM，推荐）
 bash scripts/bench_qwen36_compare.sh --ctx-16k
+# payload/vLLM 窗口 16384；FlashRT 起服同手工（catalog max_seq=262208，勿传 --max-seq 16384）
 # 等价于：
 # bash scripts/bench_qwen36_compare.sh --max-seq 16384 --long-tokens 16384 \
 #   --rounds 12 --skip-first 2 --K 6
@@ -125,7 +126,7 @@ bash scripts/bench_qwen36_compare.sh --pytorch-only --short-only \
 | 参数 | 含义 |
 |------|------|
 | `--comparable` | 短+长；12 轮 skip 2；warmup auto；max_seq 262208 |
-| `--ctx-16k` | 16K 窗口短+长；FlashRT `--max-seq 16384` + vLLM `max-model-len=16384` |
+| `--ctx-16k` | 16K payload 短+长；vLLM max-model-len=16384；FlashRT serve=catalog 262208 |
 | `--quick` | 仅短；3 轮 skip 1 |
 | `--short-only` / `--long-only` | 只跑一种 case |
 | `--long-tokens N` | 长 prompt user tokens |

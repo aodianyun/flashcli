@@ -84,7 +84,7 @@ Context cases (pick one scope; default without --short-only/--long-only = both):
 
 Presets:
   --comparable          short+long; ${ROUNDS} rounds skip ${SKIP_FIRST}; warmup auto; max_seq ${MAX_SEQ}
-  --ctx-16k             short+long at 16K window (max_seq=16384; FlashRT serve + vLLM aligned)
+  --ctx-16k             short+long at 16K payload (max_seq=16384; FlashRT serve=catalog 262208)
   --quick               short only; 3 rounds skip 1; warmup none; max_seq ${QUICK_MAX_SEQ}
 
 Arms:
@@ -562,11 +562,13 @@ wait_health() {
     if (( elapsed - last_hint >= 15 )); then
       last_hint=${elapsed}
       log "  … waiting (${elapsed}s)"
-      if [[ "${backend}" == "flashrt" && "${elapsed}" -ge 90 ]]; then
+      if [[ "${backend}" == "flashrt" && "${elapsed}" -ge 30 ]]; then
         if grep -q 'Serving .* on http://' "${serve_log}" 2>/dev/null; then
           log "  tip: saw 'Serving …' in log — uvicorn should bind soon; tail -f ${serve_log}"
+        elif grep -q 'qwen36 agent warmup:' "${serve_log}" 2>/dev/null; then
+          log "  tip: warmup finished, waiting for uvicorn — tail -f ${serve_log}"
         else
-          log "  tip: still in load/warmup (no /health until both finish) — tail -f ${serve_log}"
+          log "  tip: load/warmup in progress (serve.log quiet until done; catalog max_seq ~2–8 min, small --max-seq much slower)"
         fi
       fi
       tail -n 3 "${serve_log}" 2>/dev/null | sed 's/^/    /' >&2 || true
@@ -763,17 +765,15 @@ run_flashcli_backend() {
 
   [[ -f "${MTP_CKPT}/mtp.safetensors" ]] || die "MTP missing: ${MTP_CKPT}/mtp.safetensors"
 
-  # Payload --max-seq caps HTTP prompt+output. For 256K comparable, FlashRT serve stays
-  # on catalog default (262208) like manual `flashcli serve`. For ≤16K dual-arm benches,
-  # align FlashRT --max-seq with payload/vLLM so both arms share the same context window.
+  # Payload --max-seq caps HTTP prompt+output; FlashRT serve stays on catalog
+  # default (262208) like manual `flashcli serve`. Do NOT pass small --max-seq
+  # to FlashRT for 16K benches: max_seq<=32768 → graph_cache_max=1024 (vs 128
+  # at 262208), load+warmup can stall 10×+ with almost no serve.log output
+  # until uvicorn binds /health.
   if [[ -n "${FLASHRT_SERVE_MAX_SEQ}" ]]; then
     serve_max_seq="${FLASHRT_SERVE_MAX_SEQ}"
-  elif [[ "${MAX_SEQ_EXPLICIT}" -eq 1 ]]; then
-    if [[ "${MAX_SEQ}" -le 16384 ]]; then
-      serve_max_seq="${MAX_SEQ}"
-    elif [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ]]; then
-      serve_max_seq="${MAX_SEQ}"
-    fi
+  elif [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 && "${MAX_SEQ_EXPLICIT}" -eq 1 ]]; then
+    serve_max_seq="${MAX_SEQ}"
   fi
 
   # Same as manual `flashcli serve qwen36-27b-nvfp4 …` — preset resolves bundle/checkpoint/MTP.
