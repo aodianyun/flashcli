@@ -42,8 +42,6 @@ SHORT_ONLY=0
 LONG_ONLY=0
 QUICK=0
 QUICK_MAX_SEQ="${QUICK_MAX_SEQ:-32768}"
-# Short serve window: auto-warmup at 262208 (catalog default) takes many minutes.
-SHORT_SERVE_MAX_SEQ="${SHORT_SERVE_MAX_SEQ:-8192}"
 REUSE_RUNNING_SERVE="${REUSE_RUNNING_SERVE:-1}"
 MAX_SEQ_EXPLICIT=0
 GPU_SETTLE_EXPLICIT=0
@@ -718,19 +716,14 @@ run_flashcli_backend() {
   local -a cmd env_args=() started server_cmd health_s
   local flashrt_reused=0
   if [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ]]; then
-    # auto + catalog max_seq=262208 warms up for minutes; cap window for short-only startup.
+    # Exactly: flashcli serve qwen36-27b-nvfp4 --port 8000 --warmup-preset auto
     if command -v flashcli >/dev/null 2>&1; then
-      cmd=(flashcli serve qwen36-27b-nvfp4)
+      cmd=(flashcli serve qwen36-27b-nvfp4 --port "${PORT}" --warmup-preset auto)
     else
-      cmd=(python3 -m flashcli.cli serve qwen36-27b-nvfp4)
+      cmd=(python3 -m flashcli.cli serve qwen36-27b-nvfp4 --port "${PORT}" --warmup-preset auto)
       env_args+=(PYTHONPATH="${FLASHCLI_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}")
     fi
-    if [[ "${MAX_SEQ_EXPLICIT}" -eq 1 ]]; then
-      cmd+=(--host "${HOST}" --port "${PORT}" --warmup-preset "${WARMUP_PRESET}" --max-seq "${MAX_SEQ}")
-    else
-      cmd+=(--host "${HOST}" --port "${PORT}" --warmup-preset "${WARMUP_PRESET}"
-        --max-seq "${SHORT_SERVE_MAX_SEQ}")
-    fi
+    [[ "${MAX_SEQ_EXPLICIT}" -eq 1 ]] && cmd+=(--max-seq "${MAX_SEQ}")
   else
     [[ -f "${BUNDLE}/flashcli-bundle.json" ]] || die "Bundle missing: ${BUNDLE}"
     [[ -f "${MTP_CKPT}/mtp.safetensors" ]] || die "MTP missing: ${MTP_CKPT}/mtp.safetensors"
@@ -852,7 +845,7 @@ vllm_resolve_max_model_len() {
     return
   fi
   if [[ "${SHORT_ONLY}" -eq 1 ]]; then
-    echo "${SHORT_SERVE_MAX_SEQ}"
+    echo 8192
     return
   fi
   if [[ "${MAX_SEQ}" -gt 16384 ]]; then
@@ -936,9 +929,8 @@ write_report() {
   log "Report: ${OUT_DIR}/REPORT.md"
 }
 
-log "compare.sh: short_serve_max_seq=${SHORT_SERVE_MAX_SEQ} reuse_serve=${REUSE_RUNNING_SERVE} (sync this file to the bench host)"
 if [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ]]; then
-  log "out=${OUT_DIR} cases=$(bench_cases_label) flashcli_serve='flashcli serve qwen36-27b-nvfp4 --port ${PORT} --warmup-preset ${WARMUP_PRESET} --max-seq ${SHORT_SERVE_MAX_SEQ}' flashcli=${RUN_FLASHCLI} vllm=${RUN_VLLM}"
+  log "out=${OUT_DIR} cases=$(bench_cases_label) flashcli_serve='flashcli serve qwen36-27b-nvfp4 --port ${PORT} --warmup-preset auto' flashcli=${RUN_FLASHCLI} vllm=${RUN_VLLM}"
 else
   log "out=${OUT_DIR} cases=$(bench_cases_label) max_seq=${MAX_SEQ} flashcli=${RUN_FLASHCLI} vllm=${RUN_VLLM}"
 fi
