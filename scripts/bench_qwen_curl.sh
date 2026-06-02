@@ -239,7 +239,11 @@ make_long_payload() {
 
 print_qwen36_hints() {
   [[ "${SKIP_QWEN36}" -eq 0 ]] || return 0
-  log "qwen36 hints (for decode comparable to FlashRT docs on 5090/PRO 5000):"
+  # FlashRT serve tuning only; vLLM/PyTorch baseline ignores these env vars.
+  case "${BENCH_ARM:-flashrt}" in
+    vllm|hf|pytorch*) return 0 ;;
+  esac
+  log "qwen36 hints (FlashRT serve only — for decode comparable to FlashRT docs on 5090/PRO 5000):"
   log "  export FLASHRT_QWEN36_LONG_KV_CACHE=fp8"
   log "  export FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ=512"
   log "  long prompt: --profile comparable  OR  --long-prompt-style flashrt"
@@ -480,7 +484,17 @@ if [[ "${SKIP_QWEN3}" -eq 0 ]]; then
   log "qwen3 → http://${HOST}:${QWEN3_PORT}  ckpt=${CKPT_QWEN3}"
 fi
 if [[ "${SKIP_QWEN36}" -eq 0 ]]; then
-  log "qwen36 → http://${HOST}:${QWEN36_PORT}  ckpt=${CKPT_QWEN36}"
+  case "${BENCH_ARM:-flashrt}" in
+    vllm)
+      log "HTTP bench → http://${HOST}:${QWEN36_PORT}  backend=vLLM  weights=${CKPT_QWEN36}"
+      ;;
+    hf|pytorch*)
+      log "HTTP bench → http://${HOST}:${QWEN36_PORT}  backend=PyTorch-HF  weights=${CKPT_QWEN36}"
+      ;;
+    *)
+      log "HTTP bench → http://${HOST}:${QWEN36_PORT}  backend=FlashRT  weights=${CKPT_QWEN36}"
+      ;;
+  esac
 fi
 
 if [[ "${SKIP_QWEN3}" -eq 0 ]]; then
