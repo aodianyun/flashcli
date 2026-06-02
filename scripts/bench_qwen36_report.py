@@ -82,7 +82,9 @@ def summarize_case(
     for row in samples:
         usage = row.get("usage") or {}
         bench = row.get("bench") or {}
-        server_ttft = bench.get("server_ttft_ms")
+        server_ttft = bench.get("ttft_ms")
+        if server_ttft is None:
+            server_ttft = bench.get("server_ttft_ms")
         if server_ttft is None:
             server_ttft = usage.get("ttft_ms")
         if server_ttft is None:
@@ -210,7 +212,7 @@ def render_backend_section(backend: str, workdir: Path, cases: list[CaseSummary]
             if key in manifest and manifest[key] not in (None, ""):
                 lines.append(f"- {key}: `{manifest[key]}`")
     lines.append("")
-    lines.append("| case | prompt | completion | server TTFT (ms) | decode tok/s | curl wall (ms) | route |")
+    lines.append("| case | prompt | completion | TTFT (ms) | decode tok/s | curl wall (ms) | route |")
     lines.append("|------|-------:|-----------:|-----------------:|-------------:|---------------:|-------|")
     for case in cases:
         m = case.metrics

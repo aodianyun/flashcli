@@ -343,15 +343,12 @@ run_curl_once() {
     '{round: $round, wall_ms: $wall_ms, usage: $usage, bench: $bench}' >>"${jsonl}"
   local tps ttft client_ttft
   tps="$(jq -r '.usage.tok_per_s // .usage.decode_tok_per_s // .bench.estimated_decode_tok_per_s // "n/a"' "${resp}" 2>/dev/null)"
-  ttft="$(jq -r '.bench.server_ttft_ms // .usage.ttft_ms // .usage.first_delta_ms // "n/a"' "${resp}" 2>/dev/null)"
-  client_ttft="$(jq -r '.bench.client_ttft_ms // empty' "${resp}" 2>/dev/null)"
+  local ttft_src
+  ttft="$(jq -r '.bench.ttft_ms // .bench.client_ttft_ms // .usage.ttft_ms // "n/a"' "${resp}" 2>/dev/null)"
+  ttft_src="$(jq -r '.bench.ttft_source // empty' "${resp}" 2>/dev/null)"
   local msrc
   msrc="$(jq -r '.bench.metrics_source // empty' "${resp}" 2>/dev/null)"
-  if [[ -n "${client_ttft}" ]]; then
-    log "  round ${round}/${ROUNDS}${tag}: curl_wall=${wall_ms}ms client_ttft_ms=${client_ttft} server_ttft_ms=${ttft} decode_tok_per_s=${tps}${msrc:+ src=${msrc}}"
-  else
-    log "  round ${round}/${ROUNDS}${tag}: curl_wall=${wall_ms}ms server_ttft_ms=${ttft} tok_per_s=${tps}"
-  fi
+  log "  round ${round}/${ROUNDS}${tag}: curl_wall=${wall_ms}ms ttft_ms=${ttft}${ttft_src:+ (${ttft_src})} decode_tok_per_s=${tps}${msrc:+ src=${msrc}}"
 }
 
 summarize_rounds() {

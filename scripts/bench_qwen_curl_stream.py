@@ -129,6 +129,8 @@ def run_stream(url: str, body: dict[str, Any]) -> dict[str, Any]:
         if decode_ms and float(decode_ms) > 0:
             estimated_decode_tps = float(ct) * 1000.0 / float(decode_ms)
 
+    ttft_ms = server_ttft if server_ttft is not None else client_ttft_ms
+    ttft_source = "engine" if server_ttft is not None else "client"
     return {
         "id": "bench-stream",
         "object": "chat.completion",
@@ -148,6 +150,8 @@ def run_stream(url: str, body: dict[str, Any]) -> dict[str, Any]:
             "wall_ms": wall_ms,
             "client_ttft_ms": client_ttft_ms,
             "server_ttft_ms": server_ttft,
+            "ttft_ms": ttft_ms,
+            "ttft_source": ttft_source,
             "estimated_decode_tok_per_s": estimated_decode_tps,
             "sse_chunks": chunks,
             "sse_content_chunks": content_chunks,
@@ -175,6 +179,8 @@ def main() -> int:
             {
                 "wall_ms": bench.get("wall_ms"),
                 "client_ttft_ms": bench.get("client_ttft_ms"),
+                "ttft_ms": bench.get("ttft_ms"),
+                "ttft_source": bench.get("ttft_source"),
                 "server_ttft_ms": bench.get("server_ttft_ms"),
                 "tok_per_s": usage.get("tok_per_s")
                 or usage.get("decode_tok_per_s")
