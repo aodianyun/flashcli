@@ -259,6 +259,11 @@ if [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ]]; then
   [[ "${GPU_SETTLE_EXPLICIT}" -eq 0 ]] && GPU_SETTLE_SEC=2
 fi
 
+# --profile comparable without --comparable: still use bench K=6 for FlashRT docs parity.
+if [[ "${BENCH_PROFILE}" == "comparable" && "${K_EXPLICIT}" -eq 0 ]]; then
+  K=6
+fi
+
 if [[ -z "${BENCH_PROFILE}" ]]; then
   if [[ "${SHORT_ONLY}" -eq 0 && "${LONG_ONLY}" -eq 0 ]]; then
     BENCH_PROFILE=comparable
@@ -285,9 +290,6 @@ if [[ "${REPORT_ONLY}" -eq 0 ]]; then
   command -v python3 >/dev/null 2>&1 || die "python3 not found"
   [[ -d "${CHECKPOINT}" ]] || die "Checkpoint not found: ${CHECKPOINT}"
   [[ -d "${VLLM_CHECKPOINT}" ]] || die "vLLM checkpoint not found: ${VLLM_CHECKPOINT}"
-  if [[ "${RUN_FLASHCLI}" -eq 1 && ! ( "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ) ]]; then
-    ensure_flashrt_bundle
-  fi
 fi
 
 validate_dual_arm_parity() {
@@ -525,6 +527,9 @@ wait_health() {
     if (( elapsed - last_hint >= 15 )); then
       last_hint=${elapsed}
       log "  … waiting (${elapsed}s)"
+      if [[ "${backend}" == "flashrt" && "${elapsed}" -ge 90 ]]; then
+        log "  tip: load/warmup finish before /health — tail -f ${serve_log} (same order as manual flashcli serve)"
+      fi
       tail -n 3 "${serve_log}" 2>/dev/null | sed 's/^/    /' >&2 || true
     fi
     sleep 5
@@ -541,7 +546,7 @@ start_serve() {
   log "Step: start serve → ${serve_log}"
   (
     cd "${FLASHCLI_ROOT}"
-    "$@"
+    PYTHONUNBUFFERED=1 "$@"
   ) >>"${serve_log}" 2>&1 &
   echo $! >"${SERVE_PID_FILE}"
   log "  pid=$(cat "${SERVE_PID_FILE}")"
@@ -716,33 +721,32 @@ run_flashcli_backend() {
 
   local -a cmd env_args=() started server_cmd health_s
   local flashrt_reused=0
-  if [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ]]; then
-    # Exactly: flashcli serve qwen36-27b-nvfp4 --port 8000 --warmup-preset auto
-    if command -v flashcli >/dev/null 2>&1; then
-      cmd=(flashcli serve qwen36-27b-nvfp4 --port "${PORT}" --warmup-preset auto)
-    else
-      cmd=(python3 -m flashcli.cli serve qwen36-27b-nvfp4 --port "${PORT}" --warmup-preset auto)
-      env_args+=(PYTHONPATH="${FLASHCLI_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}")
-    fi
-    [[ "${MAX_SEQ_EXPLICIT}" -eq 1 ]] && cmd+=(--max-seq "${MAX_SEQ}")
-  else
-    [[ -f "${BUNDLE}/flashcli-bundle.json" ]] || die "Bundle missing: ${BUNDLE}"
-    [[ -f "${MTP_CKPT}/mtp.safetensors" ]] || die "MTP missing: ${MTP_CKPT}/mtp.safetensors"
-    env_args=(FLASHRT_QWEN36_MTP_CKPT_DIR="${MTP_CKPT}")
+
+  [[ -f "${MTP_CKPT}/mtp.safetensors" ]] || die "MTP missing: ${MTP_CKPT}/mtp.safetensors"
+  env_args=(
+    FLASHRT_QWEN36_MTP_CKPT_DIR="${MTP_CKPT}"
+  )
+  if [[ "${SHORT_ONLY}" -eq 0 ]]; then
     env_args+=(
       FLASHRT_QWEN36_LONG_KV_CACHE=fp8
       FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ="${FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ:-512}"
     )
-    if command -v flashcli >/dev/null 2>&1; then
-      cmd=(flashcli serve qwen36-27b-nvfp4)
-    else
-      cmd=(python3 -m flashcli.cli serve qwen36-27b-nvfp4)
-      env_args+=(PYTHONPATH="${FLASHCLI_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}")
-    fi
-    cmd+=(--bundle "${BUNDLE}" --checkpoint "${CHECKPOINT}" --host "${HOST}" --port "${PORT}"
-      --max-seq "${MAX_SEQ}" --warmup-preset "${WARMUP_PRESET}" --no-auto-install)
-    [[ -n "${K}" ]] && cmd+=(--K "${K}")
   fi
+  # Same as manual `flashcli serve qwen36-27b-nvfp4 …` — preset resolves bundle/checkpoint.
+  # Do not pass --bundle/--checkpoint/--no-auto-install (zip bundle path caused slow/hung startups).
+  if command -v flashcli >/dev/null 2>&1; then
+    cmd=(flashcli serve qwen36-27b-nvfp4)
+  else
+    cmd=(python3 -m flashcli.cli serve qwen36-27b-nvfp4)
+    env_args+=(PYTHONPATH="${FLASHCLI_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}")
+  fi
+  cmd+=(--host "${HOST}" --port "${PORT}" --warmup-preset "${WARMUP_PRESET}")
+  if [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ]]; then
+    [[ "${MAX_SEQ_EXPLICIT}" -eq 1 ]] && cmd+=(--max-seq "${MAX_SEQ}")
+  else
+    cmd+=(--max-seq "${MAX_SEQ}")
+  fi
+  [[ -n "${K}" ]] && cmd+=(--K "${K}")
 
   started="$(date -Iseconds 2>/dev/null || date)"
   if ((${#env_args[@]})); then
@@ -959,7 +963,7 @@ fi
 
 compute_vllm_plan
 write_bench_config
-[[ "${RUN_FLASHCLI}" -eq 1 ]] && log "  FlashRT bundle=${BUNDLE}"
+[[ "${RUN_FLASHCLI}" -eq 1 ]] && log "  FlashRT serve=preset qwen36-27b-nvfp4 (manual-equivalent, no --bundle zip)"
 [[ "${RUN_VLLM}" -eq 1 ]] && log "  vLLM checkpoint=${VLLM_CHECKPOINT} model=${VLLM_MODEL_NAME} max_model_len=${VLLM_MAX_LEN}"
 [[ "${RUN_FLASHCLI}" -eq 1 || "${RUN_VLLM}" -eq 1 ]] || die "No backend to run after vLLM context plan"
 
