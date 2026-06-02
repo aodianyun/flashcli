@@ -21,6 +21,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FLASHCLI_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MAKE_PAYLOAD="${SCRIPT_DIR}/bench_qwen_make_payload.py"
+PAYLOAD_META="${SCRIPT_DIR}/bench_qwen_payload_meta.py"
 STREAM_ONCE="${SCRIPT_DIR}/bench_qwen_curl_stream.py"
 SERVE_METRICS_PY="${SCRIPT_DIR}/bench_qwen36_serve_metrics.py"
 
@@ -102,6 +103,29 @@ EOF
 
 log() { printf '[bench-qwen] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
+
+payload_case_tokens() {
+  local stem="$1"
+  local manifest="${BENCH_PAYLOAD_MANIFEST:-}"
+  [[ -n "${manifest}" && -f "${manifest}" ]] || return 0
+  jq -r --arg s "${stem}" '
+    .cases[$s] // empty
+    | if . then
+        "ctx=\(.rendered_prompt_tokens // "?") out_req=\(.max_output_tokens // "?")"
+      else empty end
+  ' "${manifest}" 2>/dev/null || true
+}
+
+payload_case_label() {
+  local stem="$1" label="$2"
+  local tok
+  tok="$(payload_case_tokens "${stem}")"
+  if [[ -n "${tok}" ]]; then
+    echo "${label} (${tok})"
+  else
+    echo "${label}"
+  fi
+}
 
 # Find a regular file receiving flashcli serve stderr/stdout (tee target).
 discover_serve_log_path() {
@@ -448,19 +472,22 @@ run_curl_once() {
     --argjson usage "$(jq '.usage // {}' "${resp}")" \
     --argjson bench "$(jq '.bench // {}' "${resp}")" \
     '{round: $round, wall_ms: $wall_ms, usage: $usage, bench: $bench}' >>"${jsonl}"
-  local tps client_ttft engine_ttft prefill_ms route msrc
+  local tps client_ttft engine_ttft prefill_ms route msrc prompt_tok completion_tok
   tps="$(jq -r '.usage.decode_tok_per_s // .usage.tok_per_s // "n/a"' "${resp}" 2>/dev/null)"
   client_ttft="$(jq -r '.bench.client_ttft_ms // "n/a"' "${resp}" 2>/dev/null)"
   engine_ttft="$(jq -r '.bench.server_ttft_ms // .usage.ttft_ms // empty' "${resp}" 2>/dev/null)"
   prefill_ms="$(jq -r '.usage.prefill_ms // empty' "${resp}" 2>/dev/null)"
   route="$(jq -r '.usage.route // empty' "${resp}" 2>/dev/null)"
   msrc="$(jq -r '.bench.metrics_source // empty' "${resp}" 2>/dev/null)"
+  prompt_tok="$(jq -r '.usage.prompt_tokens // "n/a"' "${resp}" 2>/dev/null)"
+  completion_tok="$(jq -r '.usage.completion_tokens // "n/a"' "${resp}" 2>/dev/null)"
+  local tok_part="ctx=${prompt_tok} out=${completion_tok}"
   if [[ -n "${msrc}" && -n "${engine_ttft}" ]]; then
-    log "  round ${round}/${ROUNDS}${tag}: wall=${wall_ms}ms prefill=${prefill_ms:-n/a} engine_ttft=${engine_ttft} client_ttft=${client_ttft} decode=${tps} tok/s${route:+ route=${route}} src=${msrc}"
+    log "  round ${round}/${ROUNDS}${tag}: ${tok_part} wall=${wall_ms}ms prefill=${prefill_ms:-n/a} engine_ttft=${engine_ttft} client_ttft=${client_ttft} decode=${tps} tok/s${route:+ route=${route}} src=${msrc}"
   elif [[ -n "${engine_ttft}" ]]; then
-    log "  round ${round}/${ROUNDS}${tag}: wall=${wall_ms}ms prefill=${prefill_ms:-n/a} engine_ttft=${engine_ttft} client_ttft=${client_ttft} decode=${tps} tok/s${route:+ route=${route}}"
+    log "  round ${round}/${ROUNDS}${tag}: ${tok_part} wall=${wall_ms}ms prefill=${prefill_ms:-n/a} engine_ttft=${engine_ttft} client_ttft=${client_ttft} decode=${tps} tok/s${route:+ route=${route}}"
   else
-    log "  round ${round}/${ROUNDS}${tag}: wall=${wall_ms}ms client_ttft=${client_ttft} decode=${tps} tok/s${route:+ route=${route}}"
+    log "  round ${round}/${ROUNDS}${tag}: ${tok_part} wall=${wall_ms}ms client_ttft=${client_ttft} decode=${tps} tok/s${route:+ route=${route}}"
   fi
   if [[ "${port}" == "${QWEN36_PORT}" && "${tps}" == "n/a" ]]; then
     case "${BENCH_ARM:-flashrt}" in
@@ -540,7 +567,8 @@ def fmt(key, nested="usage", digits=1):
     if m is None:
         return None
     if key in ("prompt_tokens", "completion_tokens"):
-        return f"{key}={int(round(m))}"
+        label = "ctx_tok" if key == "prompt_tokens" else "out_tok"
+        return f"{label}={int(round(m))}"
     if nested == "":
         return f"{key}={m:.0f}"
     return f"{key}={m:.{digits}f}"
@@ -566,8 +594,14 @@ for k in (
     "e2e_tok_per_s",
 ):
     s = fmt(k)
-    if s:
+    if s and k not in ("prompt_tokens", "completion_tokens"):
         parts.append(s)
+ctx_s = fmt("prompt_tokens")
+out_s = fmt("completion_tokens")
+if ctx_s:
+    parts.insert(0, ctx_s)
+if out_s:
+    parts.insert(1 if ctx_s else 0, out_s)
 wall = fmt("wall_ms", nested="", digits=0)
 if wall:
     parts.insert(0, wall.replace("wall_ms=", "curl_wall_ms_mean="))
@@ -592,13 +626,15 @@ PY
 run_bench_case() {
   local label="$1" port="$2" payload="$3" stem="$4"
   local jsonl="${WORKDIR}/${stem}.metrics.jsonl"
-  local r resp
+  local r resp case_label
+  case_label="$(payload_case_label "${stem}" "${label}")"
+  log "━━ ${case_label} ━━ rounds=${ROUNDS} skip_first=${SKIP_FIRST}"
   : >"${jsonl}"
   for ((r = 1; r <= ROUNDS; r++)); do
     resp="${WORKDIR}/${stem}.r${r}.out.json"
-    run_curl_once "${label}" "${port}" "${payload}" "${resp}" "${r}" "${jsonl}"
+    run_curl_once "${case_label}" "${port}" "${payload}" "${resp}" "${r}" "${jsonl}"
   done
-  summarize_rounds "${label}" "${jsonl}" "${WORKDIR}/${stem}.r${ROUNDS}.out.json"
+  summarize_rounds "${case_label}" "${jsonl}" "${WORKDIR}/${stem}.r${ROUNDS}.out.json"
 }
 
 log "workdir=${WORKDIR}  rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${_SCORED_ROUNDS} stream=${BENCH_STREAM} long_prompt_style=${LONG_PROMPT_STYLE} profile=${BENCH_PROFILE:-none}"

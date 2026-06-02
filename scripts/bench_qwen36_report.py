@@ -188,6 +188,45 @@ def _fmt_num(val: Any, *, digits: int = 1) -> str:
     return str(val)
 
 
+def _load_payload_tokens(out_dir: Path) -> dict[str, Any]:
+    cfg_path = out_dir / "bench_config.json"
+    if cfg_path.is_file():
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+        tokens = cfg.get("payload_tokens")
+        if isinstance(tokens, dict) and tokens:
+            return tokens
+    manifest_path = out_dir / "payloads" / "manifest.json"
+    if manifest_path.is_file():
+        doc = json.loads(manifest_path.read_text(encoding="utf-8"))
+        cases = doc.get("cases")
+        if isinstance(cases, dict):
+            return cases
+    return {}
+
+
+def _case_token_caption(name: str, payload_tokens: dict[str, Any]) -> str:
+    meta = payload_tokens.get(name) or {}
+    ctx = meta.get("rendered_prompt_tokens")
+    out_req = meta.get("max_output_tokens")
+    bits: list[str] = [name]
+    if ctx is not None:
+        bits.append(f"ctx≈{int(ctx)}")
+    if out_req is not None:
+        bits.append(f"out_req={int(out_req)}")
+    return " · ".join(bits) if len(bits) > 1 else name
+
+
+def _case_measured_caption(name: str, metrics: dict[str, Any]) -> str:
+    ctx = metrics.get("prompt_tokens")
+    out = metrics.get("completion_tokens")
+    bits: list[str] = []
+    if ctx is not None:
+        bits.append(f"ctx_mean={int(round(ctx))}")
+    if out is not None:
+        bits.append(f"out_mean={int(round(out))}")
+    return ", ".join(bits)
+
+
 def _fmt_delta(a: float | None, b: float | None, *, higher_is_better: bool) -> str:
     if a is None or b is None or b == 0:
         return "n/a"
@@ -198,7 +237,54 @@ def _fmt_delta(a: float | None, b: float | None, *, higher_is_better: bool) -> s
     return f"{sign}{pct:.1f}% {tag}"
 
 
-def render_backend_section(backend: str, workdir: Path, cases: list[CaseSummary]) -> list[str]:
+def render_payload_tokens_section(payload_tokens: dict[str, Any]) -> list[str]:
+    if not payload_tokens:
+        return []
+    lines = [
+        "## Payload tokens (shared HTTP requests)",
+        "",
+        "ctx = chat-template **rendered prompt** tokens; out = request `max_tokens` (decode budget).",
+        "",
+        "| case | ctx (rendered) | out (max_tokens) | total budget | notes |",
+        "|------|---------------:|-----------------:|-------------:|-------|",
+    ]
+    for name in sorted(payload_tokens):
+        meta = payload_tokens[name] or {}
+        ctx = meta.get("rendered_prompt_tokens")
+        out_req = meta.get("max_output_tokens")
+        total = meta.get("total_tokens_budget")
+        notes: list[str] = []
+        if meta.get("user_tokens") is not None:
+            notes.append(f"user={meta['user_tokens']}")
+        if meta.get("target_user_tokens") is not None:
+            notes.append(f"target_user={meta['target_user_tokens']}")
+        if meta.get("long_prompt_style"):
+            notes.append(str(meta["long_prompt_style"]))
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    name,
+                    _fmt_num(ctx, digits=0),
+                    _fmt_num(out_req, digits=0),
+                    _fmt_num(total, digits=0),
+                    ", ".join(notes) if notes else "—",
+                ]
+            )
+            + " |"
+        )
+    lines.append("")
+    return lines
+
+
+def render_backend_section(
+    backend: str,
+    workdir: Path,
+    cases: list[CaseSummary],
+    *,
+    payload_tokens: dict[str, Any] | None = None,
+) -> list[str]:
+    payload_tokens = payload_tokens or {}
     manifest: dict[str, Any] = {}
     manifest_path = workdir / "manifest.json"
     if manifest_path.is_file():
@@ -237,27 +323,31 @@ def render_backend_section(backend: str, workdir: Path, cases: list[CaseSummary]
     )
     if has_engine:
         lines.append(
-            "| case | prompt | completion | prefill (ms) | engine TTFT (ms) | "
+            "| case | ctx (prompt) | out (completion) | prefill (ms) | engine TTFT (ms) | "
             "client TTFT (ms) | decode tok/s | curl wall (ms) | route |"
         )
         lines.append(
-            "|------|-------:|-----------:|-------------:|-----------------:|"
+            "|------|-------------:|-----------------:|-------------:|-----------------:|"
             "-----------------:|-------------:|---------------:|-------|"
         )
     else:
         lines.append(
-            "| case | prompt | completion | client TTFT (ms) | "
+            "| case | ctx (prompt) | out (completion) | client TTFT (ms) | "
             "decode tok/s | curl wall (ms) | route |"
         )
         lines.append(
-            "|------|-------:|-----------:|-----------------:|"
+            "|------|-------------:|-----------------:|-----------------:|"
             "-------------:|---------------:|-------|"
         )
     for case in cases:
         m = case.metrics
+        case_label = _case_token_caption(case.name, payload_tokens)
+        measured = _case_measured_caption(case.name, m)
+        if measured:
+            case_label = f"{case_label} ({measured})"
         if has_engine:
             row = [
-                case.name,
+                case_label,
                 _fmt_num(m.get("prompt_tokens"), digits=0),
                 _fmt_num(m.get("completion_tokens"), digits=0),
                 _fmt_num(m.get("prefill_ms")),
@@ -269,7 +359,7 @@ def render_backend_section(backend: str, workdir: Path, cases: list[CaseSummary]
             ]
         else:
             row = [
-                case.name,
+                case_label,
                 _fmt_num(m.get("prompt_tokens"), digits=0),
                 _fmt_num(m.get("completion_tokens"), digits=0),
                 _fmt_num(m.get("client_ttft_ms") or m.get("ttft_ms")),
@@ -287,7 +377,10 @@ def render_compare_section(
     right: str,
     left_cases: dict[str, CaseSummary],
     right_cases: dict[str, CaseSummary],
+    *,
+    payload_tokens: dict[str, Any] | None = None,
 ) -> list[str]:
+    payload_tokens = payload_tokens or {}
     shared = sorted(set(left_cases) & set(right_cases))
     if not shared:
         return ["## Comparison", "", "_No shared cases._", ""]
@@ -332,6 +425,10 @@ def render_compare_section(
     for case_name in shared:
         lc = left_cases[case_name].metrics
         rc = right_cases[case_name].metrics
+        case_hdr = _case_token_caption(case_name, payload_tokens)
+        ctx_note = _case_measured_caption(case_name, lc)
+        if ctx_note:
+            case_hdr = f"{case_hdr} [{ctx_note}]"
         for mi, (key, label, higher_better) in enumerate(metric_specs):
             lv = lc.get(key)
             rv = rc.get(key)
@@ -339,7 +436,7 @@ def render_compare_section(
                 "| "
                 + " | ".join(
                     [
-                        case_name if mi == 0 else "",
+                        case_hdr if mi == 0 else "",
                         label,
                         _fmt_num(lv, digits=0 if key == "curl_wall_ms_mean" else 1),
                         _fmt_num(rv, digits=0 if key == "curl_wall_ms_mean" else 1),
@@ -379,6 +476,20 @@ def render_fairness_section(out_dir: Path) -> list[str]:
         f"- **Context**: cases={cfg.get('bench_cases')} max_seq_flashrt={ctx.get('max_seq_flashrt')} "
         f"vllm_max_model_len={ctx.get('vllm_max_model_len')} vllm_skip_long={ctx.get('vllm_skip_long')}"
     )
+    payload_tokens = cfg.get("payload_tokens") or {}
+    if payload_tokens:
+        lines.append("- **Payload tokens** (ctx=rendered prompt, out=max_output_tokens):")
+        for name in sorted(payload_tokens):
+            meta = payload_tokens[name] or {}
+            lines.append(
+                f"  - `{name}`: ctx={meta.get('rendered_prompt_tokens', 'n/a')} "
+                f"out={meta.get('max_output_tokens', 'n/a')}"
+                + (
+                    f" (user={meta.get('user_tokens')})"
+                    if meta.get("user_tokens") is not None
+                    else ""
+                )
+            )
     asym = cfg.get("known_asymmetries") or []
     if asym:
         lines.append("- **Known asymmetries** (not bugs):")
@@ -406,6 +517,8 @@ def build_report(
         backend_cases[name] = cases
         backend_map[name] = case_map
 
+    payload_tokens = _load_payload_tokens(out_dir)
+
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines = [
         "# Qwen3.6-27B NVFP4 bench report (FlashRT vs vLLM)",
@@ -414,19 +527,33 @@ def build_report(
         "",
         "Metrics are means over scored rounds (after warmup skips). "
         "Both backends use the same NVFP4 weights and HTTP payloads from `bench_qwen36_compare.sh`. "
+        "**ctx** = prompt/context tokens (rendered chat template); **out** = completion tokens (`max_tokens` request budget). "
         "**FlashRT** engine TTFT/decode from `serve.log` (`stream | speed decode=`). "
         "**vLLM** decode/TTFT from HTTP stream phase (`vllm_http_stream`: first content chunk → end). "
         "**Client TTFT** is always the first HTTP content chunk (diagnostic).",
         "",
     ]
     lines.extend(render_fairness_section(out_dir))
+    lines.extend(render_payload_tokens_section(payload_tokens))
 
     for name, workdir in backends.items():
-        lines.extend(render_backend_section(name, workdir, backend_cases[name]))
+        lines.extend(
+            render_backend_section(
+                name, workdir, backend_cases[name], payload_tokens=payload_tokens
+            )
+        )
 
     keys = list(backends.keys())
     if len(keys) == 2:
-        lines.extend(render_compare_section(keys[0], keys[1], backend_map[keys[0]], backend_map[keys[1]]))
+        lines.extend(
+            render_compare_section(
+                keys[0],
+                keys[1],
+                backend_map[keys[0]],
+                backend_map[keys[1]],
+                payload_tokens=payload_tokens,
+            )
+        )
 
     payload: dict[str, Any] = {
         "generated_at": now,
@@ -446,11 +573,14 @@ def build_report(
                     "rounds": c.rounds,
                     "skip_first": c.skip_first,
                     "scored_rounds": c.scored_rounds,
+                    "payload_tokens": payload_tokens.get(c.name),
                     "metrics": c.metrics,
                 }
                 for c in backend_cases[name]
             },
         }
+
+    payload["payload_tokens"] = payload_tokens
 
     return "\n".join(lines) + "\n", payload
 

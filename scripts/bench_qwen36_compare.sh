@@ -16,6 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FLASHCLI_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BENCH_CURL="${SCRIPT_DIR}/bench_qwen_curl.sh"
 MAKE_PAYLOAD="${SCRIPT_DIR}/bench_qwen_make_payload.py"
+PAYLOAD_META="${SCRIPT_DIR}/bench_qwen_payload_meta.py"
 REPORT_PY="${SCRIPT_DIR}/bench_qwen36_report.py"
 
 HOST="${HOST:-127.0.0.1}"
@@ -371,7 +372,7 @@ payload_fit_max_seq() {
 }
 
 write_bench_config() {
-  local ckpt_flashrt ckpt_vllm weights_match model_match flashrt_k_json
+  local ckpt_flashrt ckpt_vllm weights_match model_match flashrt_k_json payload_cases_json
   ckpt_flashrt="$(canonical_path "${CHECKPOINT}")"
   ckpt_vllm="$(canonical_path "${VLLM_CHECKPOINT}")"
   weights_match=false
@@ -382,6 +383,11 @@ write_bench_config() {
     flashrt_k_json="${K}"
   else
     flashrt_k_json="null"
+  fi
+  if [[ -f "${PAYLOAD_DIR}/manifest.json" ]]; then
+    payload_cases_json="$(jq -c '.cases // {}' "${PAYLOAD_DIR}/manifest.json")"
+  else
+    payload_cases_json="{}"
   fi
   jq -n \
     --arg generated_at "$(date -Iseconds 2>/dev/null || date)" \
@@ -413,6 +419,7 @@ write_bench_config() {
     --arg vllm_attention "${VLLM_ATTENTION_BACKEND}" \
     --arg vllm_enforce_eager "true" \
     --arg flashrt_warmup "${WARMUP_PRESET}" \
+    --argjson payload_tokens "${payload_cases_json}" \
     '{
       schema: "qwen36-bench-nvfp4/v1",
       generated_at: $generated_at,
@@ -430,6 +437,7 @@ write_bench_config() {
         stream: $stream,
         chat_template_kwargs: {enable_thinking: $enable_thinking}
       },
+      payload_tokens: $payload_tokens,
       context: {
         max_seq_flashrt: $max_seq,
         payload_seq_slack: $payload_seq_slack,
@@ -605,6 +613,28 @@ can_reuse_flashrt_serve() {
   [[ -n "${m}" ]] && [[ "${m}" == "${MODEL_NAME}" || "${m}" == *qwen3.6* ]]
 }
 
+write_payloads_manifest() {
+  [[ -d "${PAYLOAD_DIR}" ]] || return 0
+  python3 - <<PY
+import json
+from pathlib import Path
+p = Path("${PAYLOAD_DIR}")
+cases = {}
+for meta in sorted(p.glob("*.meta.json")):
+    stem = meta.name[: -len(".meta.json")]
+    cases[stem] = json.loads(meta.read_text(encoding="utf-8"))
+(p / "manifest.json").write_text(json.dumps({"cases": cases}, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
+log_payload_tokens() {
+  [[ -f "${PAYLOAD_DIR}/manifest.json" ]] || return 0
+  log "  payload tokens (ctx=rendered prompt, out=max_output_tokens):"
+  jq -r '.cases | to_entries[] |
+    "    \(.key): ctx=\(.value.rendered_prompt_tokens // "?") out=\(.value.max_output_tokens // "?") total_budget=\(.value.total_tokens_budget // "?")"' \
+    "${PAYLOAD_DIR}/manifest.json" >&2 || true
+}
+
 prepare_shared_payloads() {
   mkdir -p "${PAYLOAD_DIR}"
   if [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ]]; then
@@ -629,7 +659,12 @@ prepare_shared_payloads() {
         chat_template_kwargs: {enable_thinking: false}
       }' \
       >"${PAYLOAD_DIR}/qwen36_short.json"
-    log "  qwen36_short.json"
+    python3 "${PAYLOAD_META}" \
+      --payload "${PAYLOAD_DIR}/qwen36_short.json" \
+      --checkpoint "${CHECKPOINT}" \
+      --case qwen36_short \
+      --meta-output "${PAYLOAD_DIR}/qwen36_short.meta.json" >/dev/null
+    log "  qwen36_short.json ($(jq -r '"ctx=\(.rendered_prompt_tokens) out=\(.max_output_tokens)"' "${PAYLOAD_DIR}/qwen36_short.meta.json"))"
   fi
 
   if [[ "${SHORT_ONLY}" -eq 0 ]]; then
@@ -641,10 +676,14 @@ prepare_shared_payloads() {
       --target-prompt-tokens "${LONG_TOKENS}" \
       --max-tokens "${LONG_MAX_TOKENS}" \
       --output "${PAYLOAD_DIR}/qwen36_long.json" \
+      --meta-output "${PAYLOAD_DIR}/qwen36_long.meta.json" \
       --long-prompt-style "$(long_prompt_style)" \
-      --stream --max-seq "${payload_max_seq}" --seq-slack "${PAYLOAD_SEQ_SLACK}"
-    log "  qwen36_long.json (user_tokens=${LONG_TOKENS}, fit max_seq=${payload_max_seq})"
+      --stream --max-seq "${payload_max_seq}" --seq-slack "${PAYLOAD_SEQ_SLACK}" \
+      2>"${PAYLOAD_DIR}/qwen36_long.fit.log"
+    log "  qwen36_long.json ($(jq -r '"ctx=\(.rendered_prompt_tokens) out=\(.max_output_tokens) user=\(.user_tokens)"' "${PAYLOAD_DIR}/qwen36_long.meta.json" 2>/dev/null || echo "user_tokens=${LONG_TOKENS} fit max_seq=${payload_max_seq}"))"
   fi
+  write_payloads_manifest
+  log_payload_tokens
 }
 
 long_prompt_style() {
@@ -726,8 +765,17 @@ run_bench_cases() {
     args+=(--skip-qwen36-long)
   fi
 
-  log "Step: bench_qwen_curl.sh ($(bench_cases_label), short max_tokens=${SHORT_MAX_TOKENS})"
+  log "Step: bench_qwen_curl.sh ($(bench_cases_label))"
+  if [[ -f "${PAYLOAD_DIR}/manifest.json" ]]; then
+    log "  shared payloads (ctx=rendered prompt tok, out=max_output_tokens):"
+    jq -r '.cases | to_entries[] |
+      "    \(.key): ctx=\(.value.rendered_prompt_tokens // "?") out=\(.value.max_output_tokens // "?")"' \
+      "${PAYLOAD_DIR}/manifest.json" >&2 || true
+  else
+    log "  short out=${SHORT_MAX_TOKENS}  long ctx_target=${LONG_TOKENS} out=${LONG_MAX_TOKENS}"
+  fi
   export HOST QWEN36_PORT="${PORT}" QWEN36_MAX_SEQ="${MAX_SEQ}"
+  export BENCH_PAYLOAD_MANIFEST="${PAYLOAD_DIR}/manifest.json"
   export SERVE_LOG_PATH="${workdir}/serve.log"
   export QWEN36_SERVE_LOG="${SERVE_LOG_PATH}"
   export BENCH_ARM="${bench_arm}"
@@ -1006,7 +1054,6 @@ if [[ "${REPORT_ONLY}" -eq 1 ]]; then
 fi
 
 compute_vllm_plan
-write_bench_config
 [[ "${RUN_FLASHCLI}" -eq 1 ]] && log "  FlashRT serve=preset qwen36-27b-nvfp4 (manual-equivalent, no --bundle zip)"
 [[ "${RUN_VLLM}" -eq 1 ]] && log "  vLLM checkpoint=${VLLM_CHECKPOINT} model=${VLLM_MODEL_NAME} max_model_len=${VLLM_MAX_LEN}"
 [[ "${RUN_FLASHCLI}" -eq 1 || "${RUN_VLLM}" -eq 1 ]] || die "No backend to run after vLLM context plan"
@@ -1014,6 +1061,7 @@ write_bench_config
 trap cleanup_on_exit INT TERM EXIT
 
 prepare_shared_payloads
+write_bench_config
 if [[ "${RUN_FLASHCLI}" -eq 1 ]]; then
   run_flashcli_backend
 fi

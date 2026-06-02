@@ -233,6 +233,12 @@ def main() -> int:
         default=True,
         help="Set stream on chat/completions JSON (default: true)",
     )
+    p.add_argument(
+        "--meta-output",
+        type=Path,
+        default=None,
+        help="Write token metadata JSON (context + max output) alongside payload",
+    )
     args = p.parse_args()
 
     ckpt = args.checkpoint.expanduser().resolve()
@@ -288,6 +294,23 @@ def main() -> int:
         json.dumps(payload, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+    if args.meta_output is not None:
+        case_meta = {
+            "case": args.output.stem,
+            "payload_file": args.output.name,
+            "max_output_tokens": meta["max_tokens"],
+            "user_tokens": meta["actual_prompt_tokens"],
+            "rendered_prompt_tokens": meta["rendered_prompt_tokens"],
+            "total_tokens_budget": meta["total_tokens_budget"],
+            "target_user_tokens": meta["target_prompt_tokens"],
+            "max_seq": meta["max_seq"],
+            "seq_slack": meta["seq_slack"],
+            "long_prompt_style": meta["long_prompt_style"],
+        }
+        args.meta_output.write_text(
+            json.dumps(case_meta, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
     print(json.dumps(meta, ensure_ascii=False), file=sys.stderr)
     return 0
 
