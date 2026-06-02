@@ -76,12 +76,9 @@ bash scripts/bench_qwen36_compare.sh --comparable
 ### 3. 仅短 / 仅长 / 自定义长上下文
 
 ```bash
-# 仅短（与手工 bench_qwen_curl 对齐：warmup auto、bundle 默认 K=4、不设 long-ctx env）
+# 仅短：FlashRT 用 catalog 默认 serve（同手工），然后 vLLM 同 payload 对比
 bash scripts/bench_qwen36_compare.sh --short-only --rounds 12 --skip-first 2
-
-# 短测要 codeplan 口径（K=6 + fp8 + route 512）请用 --comparable 或显式：
-# bash scripts/bench_qwen36_compare.sh --short-only --comparable   # 仍会跑长测，勿用
-# 仅短且 codeplan 参数：--K 6 --warmup-preset auto + export FLASHRT_QWEN36_*=...
+# 等价 FlashRT 起服：flashcli serve qwen36-27b-nvfp4 --port 8000 --warmup-preset auto
 
 # 仅长 256K（FlashRT；vLLM 在 48GB 上建议 --pytorch-only 跳过或 --short-only）
 bash scripts/bench_qwen36_compare.sh --long-only --comparable --flashcli-only

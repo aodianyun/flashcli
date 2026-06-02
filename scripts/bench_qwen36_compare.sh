@@ -43,6 +43,7 @@ LONG_ONLY=0
 QUICK=0
 QUICK_MAX_SEQ="${QUICK_MAX_SEQ:-32768}"
 MAX_SEQ_EXPLICIT=0
+GPU_SETTLE_EXPLICIT=0
 RUN_FLASHCLI=1
 RUN_VLLM=1
 REPORT_ONLY=0
@@ -239,7 +240,7 @@ while [[ $# -gt 0 ]]; do
     --warmup-preset) WARMUP_PRESET="$2"; WARMUP_EXPLICIT=1; shift 2 ;;
     --keep-server) KEEP_SERVER=1; shift ;;
     --health-timeout) HEALTH_TIMEOUT="$2"; shift 2 ;;
-    --gpu-settle-sec) GPU_SETTLE_SEC="$2"; shift 2 ;;
+    --gpu-settle-sec) GPU_SETTLE_SEC="$2"; GPU_SETTLE_EXPLICIT=1; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown option: $1" ;;
   esac
@@ -248,11 +249,11 @@ done
 [[ "${RUN_FLASHCLI}" -eq 1 || "${RUN_VLLM}" -eq 1 ]] || die "Nothing to run"
 [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 1 ]] && die "Use only one of --short-only or --long-only"
 
-# Short-only: align with manual bench_qwen_curl (bundle defaults, no long-ctx tuning).
-# Full short+long (--comparable or default both cases) keeps codeplan-style K=6 / fp8 / route 512.
+# Short-only: same as manual `flashcli serve qwen36-27b-nvfp4 --port 8000 --warmup-preset auto`.
 if [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ]]; then
   [[ "${WARMUP_EXPLICIT}" -eq 0 ]] && WARMUP_PRESET=auto
   [[ "${K_EXPLICIT}" -eq 0 ]] && K=""
+  [[ "${GPU_SETTLE_EXPLICIT}" -eq 0 ]] && GPU_SETTLE_SEC=2
 fi
 
 if [[ -z "${BENCH_PROFILE}" ]]; then
@@ -433,6 +434,7 @@ kill_serve_procs() {
 
 stop_serve() {
   [[ "${KEEP_SERVER}" -eq 1 ]] && return 0
+  local stopped=0
   if [[ -n "${SERVE_PID_FILE}" && -f "${SERVE_PID_FILE}" ]]; then
     local pid
     pid="$(tr -d '[:space:]' <"${SERVE_PID_FILE}")"
@@ -440,13 +442,14 @@ stop_serve() {
       log "Stopping serve pid=${pid}"
       kill -TERM "${pid}" 2>/dev/null || true
       wait "${pid}" 2>/dev/null || true
+      stopped=1
     fi
     rm -f "${SERVE_PID_FILE}"
     SERVE_PID_FILE=""
   fi
   kill_serve_procs
   free_port
-  if (( GPU_SETTLE_SEC > 0 )); then
+  if (( stopped && GPU_SETTLE_SEC > 0 )); then
     log "GPU settle ${GPU_SETTLE_SEC}s …"
     sleep "${GPU_SETTLE_SEC}"
   fi
@@ -672,48 +675,59 @@ run_bench_cases() {
       export FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ="${FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ:-512}"
     fi
   fi
-  args+=(
-    --qwen36-long-tokens "${LONG_TOKENS}"
-    --short-max-tokens "${SHORT_MAX_TOKENS}"
-    --long-max-tokens "${LONG_MAX_TOKENS}"
-  )
+  args+=(--short-max-tokens "${SHORT_MAX_TOKENS}" --long-max-tokens "${LONG_MAX_TOKENS}")
+  [[ "${SHORT_ONLY}" -eq 0 ]] && args+=(--qwen36-long-tokens "${LONG_TOKENS}")
   bash "${BENCH_CURL}" "${args[@]}" 2>&1 | tee "${workdir}/bench.log"
 }
 
 run_flashcli_backend() {
   local workdir="${OUT_DIR}/flashcli"
-  [[ -f "${BUNDLE}/flashcli-bundle.json" ]] || die "Bundle missing: ${BUNDLE}"
-  [[ -f "${MTP_CKPT}/mtp.safetensors" ]] || die "MTP missing: ${MTP_CKPT}/mtp.safetensors"
   mkdir -p "${workdir}"
 
-  local -a cmd
-  # Route: 512 → short_spec (codeplan doc). On some GPUs short prompts are faster with 0 (long path).
-  # Override: FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ=0 bash scripts/bench_qwen36_compare.sh ...
-  local -a env_args=(FLASHRT_QWEN36_MTP_CKPT_DIR="${MTP_CKPT}")
-  # Long-ctx / codeplan tuning only when not short-only-only (avoid slowing short decode).
-  if [[ "${SHORT_ONLY}" -eq 0 || "${LONG_ONLY}" -eq 1 ]]; then
+  local -a cmd env_args=() started server_cmd health_s
+  if [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ]]; then
+    # Match manual short bench: no --bundle/--checkpoint/--max-seq/--K (flashcli catalog defaults).
+    if command -v flashcli >/dev/null 2>&1; then
+      cmd=(flashcli serve qwen36-27b-nvfp4)
+    else
+      cmd=(python3 -m flashcli.cli serve qwen36-27b-nvfp4)
+      env_args+=(PYTHONPATH="${FLASHCLI_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}")
+    fi
+    cmd+=(--host "${HOST}" --port "${PORT}" --warmup-preset "${WARMUP_PRESET}")
+  else
+    [[ -f "${BUNDLE}/flashcli-bundle.json" ]] || die "Bundle missing: ${BUNDLE}"
+    [[ -f "${MTP_CKPT}/mtp.safetensors" ]] || die "MTP missing: ${MTP_CKPT}/mtp.safetensors"
+    env_args=(FLASHRT_QWEN36_MTP_CKPT_DIR="${MTP_CKPT}")
     env_args+=(
       FLASHRT_QWEN36_LONG_KV_CACHE=fp8
       FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ="${FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ:-512}"
     )
+    if command -v flashcli >/dev/null 2>&1; then
+      cmd=(flashcli serve qwen36-27b-nvfp4)
+    else
+      cmd=(python3 -m flashcli.cli serve qwen36-27b-nvfp4)
+      env_args+=(PYTHONPATH="${FLASHCLI_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}")
+    fi
+    cmd+=(--bundle "${BUNDLE}" --checkpoint "${CHECKPOINT}" --host "${HOST}" --port "${PORT}"
+      --max-seq "${MAX_SEQ}" --warmup-preset "${WARMUP_PRESET}" --no-auto-install)
+    [[ -n "${K}" ]] && cmd+=(--K "${K}")
   fi
-  if command -v flashcli >/dev/null 2>&1; then
-    cmd=(flashcli serve qwen36-27b-nvfp4)
-  else
-    cmd=(python3 -m flashcli.cli serve qwen36-27b-nvfp4)
-    env_args+=(PYTHONPATH="${FLASHCLI_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}")
-  fi
-  cmd+=(--bundle "${BUNDLE}" --checkpoint "${CHECKPOINT}" --host "${HOST}" --port "${PORT}"
-    --max-seq "${MAX_SEQ}" --warmup-preset "${WARMUP_PRESET}" --no-auto-install)
-  [[ -n "${K}" ]] && cmd+=(--K "${K}")
 
-  local started server_cmd health_s
   started="$(date -Iseconds 2>/dev/null || date)"
-  server_cmd="$(printf '%q ' env "${env_args[@]}" "${cmd[@]}")"
+  if ((${#env_args[@]})); then
+    server_cmd="$(printf '%q ' env "${env_args[@]}" "${cmd[@]}")"
+  else
+    server_cmd="$(printf '%q ' "${cmd[@]}")"
+  fi
 
   log "━━ FlashRT (flashcli) ━━"
+  log "  serve: ${server_cmd}"
   export SERVE_LOG_BACKEND=flashrt
-  start_serve "${workdir}" env "${env_args[@]}" "${cmd[@]}"
+  if ((${#env_args[@]})); then
+    start_serve "${workdir}" env "${env_args[@]}" "${cmd[@]}"
+  else
+    start_serve "${workdir}" "${cmd[@]}"
+  fi
   health_s="$(wait_health "${workdir}/serve.log" flashrt)"
   write_manifest_header "${workdir}" "flashcli+FlashRT" "${server_cmd}" "${started}" "${health_s}" "FlashRT"
   run_bench_cases "${workdir}" "${MODEL_NAME}"
@@ -861,9 +875,17 @@ write_report() {
   log "Report: ${OUT_DIR}/REPORT.md"
 }
 
-log "out=${OUT_DIR} cases=$(bench_cases_label) max_seq=${MAX_SEQ} flashcli=${RUN_FLASHCLI} vllm=${RUN_VLLM}"
-log "bench: rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${SCORED_ROUNDS} profile=${BENCH_PROFILE}"
-log "  short max_tokens=${SHORT_MAX_TOKENS}  long user_tokens=${LONG_TOKENS} long max_tokens=${LONG_MAX_TOKENS}"
+if [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ]]; then
+  log "out=${OUT_DIR} cases=$(bench_cases_label) flashcli_serve='flashcli serve qwen36-27b-nvfp4 --port ${PORT} --warmup-preset auto' flashcli=${RUN_FLASHCLI} vllm=${RUN_VLLM}"
+else
+  log "out=${OUT_DIR} cases=$(bench_cases_label) max_seq=${MAX_SEQ} flashcli=${RUN_FLASHCLI} vllm=${RUN_VLLM}"
+fi
+log "bench: rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${SCORED_ROUNDS} profile=${BENCH_PROFILE:-none}"
+if [[ "${SHORT_ONLY}" -eq 1 ]]; then
+  log "  short max_tokens=${SHORT_MAX_TOKENS}  (FlashRT serve → bench → vLLM serve → bench)"
+else
+  log "  short max_tokens=${SHORT_MAX_TOKENS}  long user_tokens=${LONG_TOKENS} long max_tokens=${LONG_MAX_TOKENS}"
+fi
 if [[ "${RUN_FLASHCLI}" -eq 1 ]]; then
   if [[ -n "${K}" ]]; then
     log "  FlashRT checkpoint=${CHECKPOINT} warmup=${WARMUP_PRESET} K=${K}"
