@@ -73,6 +73,28 @@ def _hf_qwen36_install_hint() -> str:
     )
 
 
+def _assert_hf_checkpoint_not_nvfp4(checkpoint: str) -> None:
+    import json
+    from pathlib import Path
+
+    cfg_path = Path(checkpoint) / "config.json"
+    if not cfg_path.is_file():
+        return
+    try:
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    blob = json.dumps(cfg).lower()
+    if "nvfp4" in blob or ("fp4" in blob and "compressed" in blob):
+        sys.exit(
+            f"NVFP4 checkpoint cannot run on HF baseline: {checkpoint}\n"
+            "Use official FP8 weights, e.g. ModelScope Qwen/Qwen3.6-27B-FP8:\n"
+            "  huggingface-cli download Qwen/Qwen3.6-27B-FP8 "
+            f"--local-dir {checkpoint}\n"
+            "Or use flashcli+FlashRT for NVFP4."
+        )
+
+
 def _require_hf_qwen36_deps() -> None:
     import torch
     import transformers
@@ -134,6 +156,7 @@ class HfQwen36Engine:
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         _require_hf_qwen36_deps()
+        _assert_hf_checkpoint_not_nvfp4(checkpoint)
         self.device = torch.device(device)
         self.model_name = model_name
         self.max_seq = int(max_seq)
@@ -166,16 +189,26 @@ class HfQwen36Engine:
         if attn_implementation and attn_implementation not in ("default", "auto"):
             load_kwargs["attn_implementation"] = attn_implementation
         try:
-            self.model = AutoModelForCausalLM.from_pretrained(checkpoint, **load_kwargs)
-            log.info("Moving model to %s …", self.device)
             try:
-                self.model.to(self.device)
-            except torch.cuda.OutOfMemoryError:
-                sys.exit(
-                    "CUDA OOM while loading model onto GPU. "
-                    "HF transformers decompresses NVFP4 to full weights (~54GB+ in bf16); "
-                    "on a 48GB GPU use Qwen/Qwen3.6-27B-FP8 for the PyTorch baseline instead."
+                import accelerate  # noqa: F401
+
+                load_kwargs["device_map"] = str(self.device)
+                log.info("Loading with device_map=%s (accelerate)", self.device)
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    checkpoint, **load_kwargs
                 )
+            except ImportError:
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    checkpoint, **load_kwargs
+                )
+                log.info("Moving model to %s …", self.device)
+                self.model.to(self.device)
+        except torch.cuda.OutOfMemoryError:
+            sys.exit(
+                "CUDA OOM while loading model onto GPU. "
+                "HF transformers decompresses NVFP4 to full weights (~54GB+ in bf16); "
+                "on a 48GB GPU use Qwen/Qwen3.6-27B-FP8 for the PyTorch baseline instead."
+            )
         except ImportError as exc:
             msg = str(exc)
             hint = _hf_qwen36_install_hint()

@@ -193,26 +193,50 @@ cleanup_on_exit() {
   return "${ec}"
 }
 
+checkpoint_looks_nvfp4() {
+  local ckpt="$1"
+  [[ -n "${ckpt}" && -f "${ckpt}/config.json" ]] || return 1
+  grep -qiE 'nvfp4|compressed.tensors|quant_method.*fp4' "${ckpt}/config.json" 2>/dev/null
+}
+
 check_serve_log_fatal() {
   local serve_log="$1"
+  local backend="${2:-flashrt}"
   [[ -f "${serve_log}" ]] || return 0
   if grep -q 'Invalid model bundle:' "${serve_log}"; then
     tail -n 20 "${serve_log}" >&2 || true
     die "Bundle not built (missing lib/ flash_rt/). See bundles/qwen_nvfp4/QUICKSTART.md"
   fi
-  if grep -qE 'Failed to load checkpoint|Cannot import Qwen3_5|does not recognize this architecture|torchvision::nms|requires .accelerate|torchvision are incompatible|CUDA out of memory|OutOfMemoryError' "${serve_log}"; then
+  if grep -qE 'Failed to load checkpoint|Cannot import Qwen3_5|does not recognize this architecture|torchvision::nms|requires .accelerate|torchvision are incompatible|CUDA out of memory|OutOfMemoryError|NVFP4 checkpoint cannot run on HF' "${serve_log}"; then
     tail -n 25 "${serve_log}" >&2 || true
-    die "HF server failed — see serve.log above"
+    die "Server failed — see serve.log above"
   fi
-  # transformers LOAD REPORT with many MISSING linear_attn keys → NVFP4 not viable for naive HF
-  if grep -q 'linear_attn.*| MISSING' "${serve_log}" 2>/dev/null; then
+  # Official Qwen3.6-27B-FP8 also logs linear_attn weight_scale_inv as MISSING (transformers init).
+  # Only treat as fatal for FlashRT bundle serve or when the checkpoint path is NVFP4.
+  if [[ "${backend}" != "hf" ]] && grep -q 'linear_attn.*| MISSING' "${serve_log}" 2>/dev/null; then
     tail -n 15 "${serve_log}" >&2 || true
-    die "NVFP4 checkpoint partial load in HF (linear_attn MISSING). Use --checkpoint with Qwen/Qwen3.6-27B-FP8 for PyTorch baseline, or flashcli+FlashRT for NVFP4."
+    die "NVFP4 checkpoint partial load in HF (linear_attn MISSING). Use --hf-checkpoint with Qwen/Qwen3.6-27B-FP8 for PyTorch baseline, or flashcli+FlashRT for NVFP4."
+  fi
+  if [[ "${backend}" == "hf" ]] && grep -q 'linear_attn.*| MISSING' "${serve_log}" 2>/dev/null; then
+    if checkpoint_looks_nvfp4 "${HF_CHECKPOINT}"; then
+      tail -n 15 "${serve_log}" >&2 || true
+      die "HF baseline needs Qwen/Qwen3.6-27B-FP8 (ModelScope/HF), not NVFP4. See --hf-checkpoint."
+    fi
+  fi
+}
+
+warn_hf_load_report() {
+  local serve_log="$1"
+  [[ -f "${serve_log}" ]] || return 0
+  if grep -q 'linear_attn.*| MISSING' "${serve_log}" 2>/dev/null; then
+    log "  note: transformers LOAD REPORT lists linear_attn scale_inv as MISSING for official FP8 — usually OK if /health succeeded"
+    log "  for faster linear-attn: pip install flash-linear-attention causal-conv1d (see transformers log)"
   fi
 }
 
 wait_health() {
   local serve_log="$1"
+  local backend="${2:-flashrt}"
   local start now elapsed=0 last_hint=0
   start="$(date +%s)"
   log "Step: wait http://${HOST}:${PORT}/health (log: ${serve_log})"
@@ -223,7 +247,7 @@ wait_health() {
       echo $((now - start))
       return 0
     fi
-    check_serve_log_fatal "${serve_log}"
+    check_serve_log_fatal "${serve_log}" "${backend}"
     if [[ -n "${SERVE_PID_FILE}" && -f "${SERVE_PID_FILE}" ]]; then
       local pid
       pid="$(tr -d '[:space:]' <"${SERVE_PID_FILE}")"
@@ -408,7 +432,7 @@ run_flashcli_backend() {
 
   log "━━ FlashRT backend ━━"
   start_serve "${workdir}" env "${env_args[@]}" "${cmd[@]}"
-  health_s="$(wait_health "${workdir}/serve.log")"
+  health_s="$(wait_health "${workdir}/serve.log" flashrt)"
   write_manifest_header "${workdir}" "flashcli+FlashRT" "${server_cmd}" "${started}" "${health_s}" "FlashRT"
   run_bench_cases "${workdir}" "${MODEL_NAME}"
   finish_manifest "${workdir}"
@@ -437,7 +461,8 @@ run_pytorch_backend() {
 
   log "━━ PyTorch HF backend ━━"
   start_serve "${workdir}" "${cmd[@]}"
-  health_s="$(wait_health "${workdir}/serve.log")"
+  health_s="$(wait_health "${workdir}/serve.log" hf)"
+  warn_hf_load_report "${workdir}/serve.log"
   write_manifest_header "${workdir}" "PyTorch HF" "${server_cmd}" "${started}" "${health_s}" \
     "transformers" "${HF_ATTN}" "${HF_DTYPE}"
   run_bench_cases "${workdir}" "${HF_MODEL_NAME}"
