@@ -111,8 +111,7 @@ def run_stream(url: str, body: dict[str, Any]) -> dict[str, Any]:
     if not content_parts and not usage.get("completion_tokens"):
         raise SystemExit(
             "stream returned no completion tokens (empty assistant message). "
-            "HF baseline: install flash-linear-attention + causal-conv1d, or use "
-            "bench_qwen36_compare.sh --vllm. See serve.log for load errors."
+            "Check serve.log and that chat_template_kwargs.enable_thinking=false is set."
         )
     estimated_decode_tps: float | None = None
     ct = usage.get("completion_tokens")

@@ -134,9 +134,26 @@ bash scripts/bench_qwen36_compare.sh --pytorch-only --short-only \
 | vLLM 长测 256K | 48GB 通常不可行；长测用 `--flashcli-only` |
 | decode n/a | 看 `*/serve.log`，确认 `completion_tokens≈64` |
 
----
+## 可比性说明（bench_config.json + REPORT.md）
 
-## 修订原则
+每次跑完会在 `OUT_DIR/bench_config.json` 记录：
+
+| 维度 | 对齐方式 |
+|------|----------|
+| **权重** | 双臂默认同一路径；不一致时 `validate_dual_arm_parity` 直接报错 |
+| **API model** | 默认 `qwen3.6-27b-nvfp4`，双臂必须相同 |
+| **短 prompt 正文** | 同一 `SHORT_PROMPT` + 同一 JSON（`temperature=0` `top_p=1` `stream=true` `enable_thinking=false`） |
+| **长 prompt** | 同一 tokenizer（checkpoint）、同一 `flashrt` seed、`--max-seq` 拟合；长 JSON 也带 `chat_template_kwargs` |
+| **decode 长度** | 短/长均为 `max_tokens=64` |
+| **统计** | 相同 `rounds` / `skip_first`；丢弃轮次不计入均值 |
+
+**无法对齐、已在报告中声明的差异**：
+
+- FlashRT **MTP K=6**（vLLM 无投机解码）→ 短上下文 decode tok/s  FlashRT 会偏高
+- FlashRT **warmup-preset** vs vLLM **enforce-eager**
+- **长 256K**：48GB 上 vLLM 默认 `max-model-len=16384`，脚本会 **自动跳过 vLLM 长测**；Comparison 表只比共有的 case（通常仅 `qwen36_short`）。要对齐长上下文需 `VLLM_MAX_MODEL_LEN=262208` 且显存足够。
+
+---
 
 1. 只改 `bench_qwen36_compare.sh` 做编排  
 2. HTTP 压测只改 `bench_qwen_curl.sh` / `bench_qwen_curl_stream.py`  

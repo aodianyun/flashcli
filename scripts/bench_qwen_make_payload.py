@@ -266,7 +266,9 @@ def main() -> int:
         "messages": [{"role": "user", "content": content}],
         "max_tokens": int(args.max_tokens),
         "temperature": float(args.temperature),
+        "top_p": 1.0,
         "stream": bool(args.stream),
+        "chat_template_kwargs": {"enable_thinking": False},
     }
     meta = {
         "long_prompt_style": args.long_prompt_style,

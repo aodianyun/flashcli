@@ -56,6 +56,10 @@ MTP_CKPT="${MTP_CKPT:-${HOME}/.flashcli/models/qwen36-27b-nvfp4/mtp_fp8}"
 OUT_DIR="${OUT_DIR:-}"
 PAYLOAD_DIR=""
 SERVE_PID_FILE=""
+VLLM_MAX_LEN=""
+VLLM_SKIP_LONG=0
+PAYLOAD_SEQ_SLACK="${PAYLOAD_SEQ_SLACK:-32}"
+BENCH_STREAM="${BENCH_STREAM:-1}"
 
 usage() {
   cat <<EOF
@@ -177,6 +181,142 @@ if [[ "${REPORT_ONLY}" -eq 0 ]]; then
   command -v python3 >/dev/null 2>&1 || die "python3 not found"
   [[ -d "${CHECKPOINT}" ]] || die "Checkpoint not found: ${CHECKPOINT}"
   [[ -d "${VLLM_CHECKPOINT}" ]] || die "vLLM checkpoint not found: ${VLLM_CHECKPOINT}"
+fi
+
+canonical_path() {
+  local p="$1"
+  if [[ -d "${p}" ]]; then
+    (cd "${p}" && pwd)
+  elif [[ -f "${p}" ]]; then
+    local d b
+    d="$(cd "$(dirname "${p}")" && pwd)"
+    b="$(basename "${p}")"
+    echo "${d}/${b}"
+  else
+    echo "${p}"
+  fi
+}
+
+validate_dual_arm_parity() {
+  [[ "${RUN_FLASHCLI}" -eq 1 && "${RUN_VLLM}" -eq 1 ]] || return 0
+  local ckpt_flashrt ckpt_vllm
+  ckpt_flashrt="$(canonical_path "${CHECKPOINT}")"
+  ckpt_vllm="$(canonical_path "${VLLM_CHECKPOINT}")"
+  if [[ "${ckpt_flashrt}" != "${ckpt_vllm}" ]]; then
+    die "Dual-arm bench requires identical weights: FlashRT=${ckpt_flashrt} vLLM=${ckpt_vllm}"
+  fi
+  if [[ "${MODEL_NAME}" != "${VLLM_MODEL_NAME}" ]]; then
+    die "Dual-arm bench requires identical API model id: FlashRT=${MODEL_NAME} vLLM=${VLLM_MODEL_NAME}"
+  fi
+}
+
+compute_vllm_plan() {
+  VLLM_MAX_LEN="$(vllm_resolve_max_model_len)"
+  VLLM_SKIP_LONG=0
+  [[ "${RUN_VLLM}" -eq 1 && "${SHORT_ONLY}" -eq 0 ]] || return 0
+  local long_budget=$((MAX_SEQ - LONG_MAX_TOKENS - PAYLOAD_SEQ_SLACK))
+  if [[ "${long_budget}" -lt 1 ]]; then
+    die "max_seq=${MAX_SEQ} too small for long max_tokens=${LONG_MAX_TOKENS}"
+  fi
+  if [[ "${VLLM_MAX_LEN}" -lt "${long_budget}" ]]; then
+    VLLM_SKIP_LONG=1
+    log "  vLLM long case skipped: max-model-len=${VLLM_MAX_LEN} < FlashRT budget ${long_budget} (max_seq=${MAX_SEQ})"
+    log "  → short context is identical; long compare is FlashRT-only unless VLLM_MAX_MODEL_LEN=${MAX_SEQ}"
+    if [[ "${LONG_ONLY}" -eq 1 ]]; then
+      if [[ "${RUN_FLASHCLI}" -eq 0 ]]; then
+        die "vLLM --long-only impossible at max_seq=${MAX_SEQ} with max-model-len=${VLLM_MAX_LEN}. Set VLLM_MAX_MODEL_LEN>=${long_budget} or use --flashcli-only."
+      fi
+      log "  Dual-arm --long-only: disabling vLLM arm (no matching long payload)"
+      RUN_VLLM=0
+    fi
+  fi
+}
+
+payload_fit_max_seq() {
+  if [[ "${RUN_FLASHCLI}" -eq 1 ]]; then
+    echo "${MAX_SEQ}"
+    return
+  fi
+  echo "${VLLM_MAX_LEN}"
+}
+
+write_bench_config() {
+  local ckpt_flashrt ckpt_vllm weights_match model_match
+  ckpt_flashrt="$(canonical_path "${CHECKPOINT}")"
+  ckpt_vllm="$(canonical_path "${VLLM_CHECKPOINT}")"
+  weights_match=false
+  model_match=false
+  [[ "${ckpt_flashrt}" == "${ckpt_vllm}" ]] && weights_match=true
+  [[ "${MODEL_NAME}" == "${VLLM_MODEL_NAME}" ]] && model_match=true
+  jq -n \
+    --arg generated_at "$(date -Iseconds 2>/dev/null || date)" \
+    --arg gpu "$(gpu_name)" \
+    --arg bench_cases "$(bench_cases_label)" \
+    --arg checkpoint "${ckpt_flashrt}" \
+    --arg vllm_checkpoint "${ckpt_vllm}" \
+    --argjson weights_match "${weights_match}" \
+    --argjson model_match "${model_match}" \
+    --arg model_name "${MODEL_NAME}" \
+    --arg vllm_model_name "${VLLM_MODEL_NAME}" \
+    --arg short_prompt "${SHORT_PROMPT}" \
+    --argjson short_max_tokens "${SHORT_MAX_TOKENS}" \
+    --argjson long_max_tokens "${LONG_MAX_TOKENS}" \
+    --argjson long_tokens "${LONG_TOKENS}" \
+    --argjson max_seq "${MAX_SEQ}" \
+    --argjson payload_seq_slack "${PAYLOAD_SEQ_SLACK}" \
+    --argjson rounds "${ROUNDS}" \
+    --argjson skip_first "${SKIP_FIRST}" \
+    --arg profile "${BENCH_PROFILE}" \
+    --arg long_prompt_style "$(long_prompt_style)" \
+    --argjson temperature 0 \
+    --argjson top_p 1 \
+    --argjson stream "${BENCH_STREAM}" \
+    --argjson enable_thinking false \
+    --argjson flashrt_mtp_k "${K}" \
+    --argjson vllm_max_model_len "${VLLM_MAX_LEN:-0}" \
+    --argjson vllm_skip_long "${VLLM_SKIP_LONG}" \
+    --arg vllm_attention "${VLLM_ATTENTION_BACKEND}" \
+    --arg vllm_enforce_eager "true" \
+    --arg flashrt_warmup "${WARMUP_PRESET}" \
+    '{
+      schema: "qwen36-bench-nvfp4/v1",
+      generated_at: $generated_at,
+      gpu: $gpu,
+      bench_cases: $bench_cases,
+      weights: {flashrt: $checkpoint, vllm: $vllm_checkpoint, identical: $weights_match},
+      api_model: {flashrt: $model_name, vllm: $vllm_model_name, identical: $model_match},
+      http_request: {
+        short_prompt: $short_prompt,
+        short_max_tokens: $short_max_tokens,
+        long_max_tokens: $long_max_tokens,
+        long_user_tokens_target: $long_tokens,
+        temperature: $temperature,
+        top_p: $top_p,
+        stream: $stream,
+        chat_template_kwargs: {enable_thinking: $enable_thinking}
+      },
+      context: {
+        max_seq_flashrt: $max_seq,
+        payload_seq_slack: $payload_seq_slack,
+        long_prompt_style: $long_prompt_style,
+        vllm_max_model_len: $vllm_max_model_len,
+        vllm_skip_long: ($vllm_skip_long != 0)
+      },
+      methodology: {
+        rounds: $rounds,
+        skip_first: $skip_first,
+        profile: $profile
+      },
+      known_asymmetries: [
+        "FlashRT uses MTP speculative decode (K=\($flashrt_mtp_k)); vLLM has no MTP in this bench",
+        "FlashRT warmup-preset=\($flashrt_warmup); vLLM uses enforce-eager + HTTP warmup rounds only",
+        "vLLM attention backend=\($vllm_attention) (FlashRT uses native FlashRT kernels)"
+      ]
+    }' >"${OUT_DIR}/bench_config.json"
+}
+
+if [[ "${REPORT_ONLY}" -eq 0 ]]; then
+  validate_dual_arm_parity
 fi
 
 gpu_name() {
@@ -328,6 +468,7 @@ prepare_shared_payloads() {
         messages: [{role: "user", content: $content}],
         max_tokens: $max_tokens,
         temperature: 0,
+        top_p: 1,
         stream: true,
         chat_template_kwargs: {enable_thinking: false}
       }' \
@@ -336,6 +477,8 @@ prepare_shared_payloads() {
   fi
 
   if [[ "${SHORT_ONLY}" -eq 0 ]]; then
+    local payload_max_seq
+    payload_max_seq="$(payload_fit_max_seq)"
     python3 "${MAKE_PAYLOAD}" \
       --checkpoint "${CHECKPOINT}" \
       --model "${MODEL_NAME}" \
@@ -343,8 +486,8 @@ prepare_shared_payloads() {
       --max-tokens "${LONG_MAX_TOKENS}" \
       --output "${PAYLOAD_DIR}/qwen36_long.json" \
       --long-prompt-style "$(long_prompt_style)" \
-      --stream --max-seq "${MAX_SEQ}" --seq-slack 32
-    log "  qwen36_long.json (user_tokens=${LONG_TOKENS})"
+      --stream --max-seq "${payload_max_seq}" --seq-slack "${PAYLOAD_SEQ_SLACK}"
+    log "  qwen36_long.json (user_tokens=${LONG_TOKENS}, fit max_seq=${payload_max_seq})"
   fi
 }
 
@@ -377,12 +520,17 @@ write_manifest_header() {
     --arg bundle "${BUNDLE}" \
     --arg stack "${stack}" \
     --arg bench_cases "$(bench_cases_label)" \
+    --argjson vllm_max_model_len "${VLLM_MAX_LEN:-0}" \
+    --argjson vllm_skip_long "${VLLM_SKIP_LONG:-0}" \
+    --argjson payload_seq_slack "${PAYLOAD_SEQ_SLACK}" \
     '{backend: $backend, started_at: $started_at, health_wait_s: $health_wait_s, gpu_name: $gpu_name,
       server_cmd: $server_cmd, host: $host, port: $port, K: $K, max_seq: $max_seq,
       warmup_preset: $warmup_preset, rounds: $rounds, skip_first: $skip_first, profile: $profile,
       long_tokens: $long_tokens, short_only: ($short_only != 0), long_only: ($long_only != 0),
       bench_cases: $bench_cases, checkpoint: $checkpoint, vllm_checkpoint: $vllm_checkpoint,
       mtp_checkpoint: $mtp_checkpoint, payload_dir: $payload_dir, bundle: $bundle,
+      vllm_max_model_len: $vllm_max_model_len, vllm_skip_long: ($vllm_skip_long != 0),
+      payload_seq_slack: $payload_seq_slack,
       shared_weights: true, shared_payloads: true}
       + (if $stack != "" then {stack: $stack} else {} end)' >"${workdir}/manifest.json"
 }
@@ -410,6 +558,9 @@ run_bench_cases() {
   [[ -n "${BENCH_PROFILE}" ]] && args+=(--profile "${BENCH_PROFILE}")
   [[ "${SHORT_ONLY}" -eq 1 ]] && args+=(--skip-qwen36-long)
   [[ "${LONG_ONLY}" -eq 1 ]] && args+=(--skip-short)
+  if [[ "${BENCH_ARM}" == "vllm" && "${VLLM_SKIP_LONG}" -eq 1 ]]; then
+    args+=(--skip-qwen36-long)
+  fi
 
   log "Step: bench_qwen_curl.sh ($(bench_cases_label), short max_tokens=${SHORT_MAX_TOKENS})"
   export HOST QWEN36_PORT="${PORT}" QWEN36_MAX_SEQ="${MAX_SEQ}"
@@ -417,7 +568,8 @@ run_bench_cases() {
   export QWEN36_SERVE_LOG="${SERVE_LOG_PATH}"
   export BENCH_ARM="${SERVE_LOG_BACKEND:-flashrt}"
   export QWEN36_LONG_PROMPT_TOKENS="${LONG_TOKENS}"
-  export SHORT_MAX_TOKENS LONG_MAX_TOKENS
+  export SHORT_MAX_TOKENS LONG_MAX_TOKENS SHORT_PROMPT BENCH_STREAM=1
+  export QWEN36_SEQ_SLACK="${PAYLOAD_SEQ_SLACK}"
   if [[ "${BENCH_ARM}" == "vllm" ]]; then
     export CKPT_QWEN36="${VLLM_CHECKPOINT}"
   else
@@ -534,13 +686,14 @@ vllm_resolve_max_model_len() {
 run_vllm_backend() {
   local workdir="${OUT_DIR}/vllm"
   mkdir -p "${workdir}"
-  local vllm_max_len
-  vllm_max_len="$(vllm_resolve_max_model_len)"
+  local vllm_max_len="${VLLM_MAX_LEN}"
 
   command -v vllm >/dev/null 2>&1 || die "vllm not in PATH (pip install -U vllm)"
   vllm_preflight
-  if [[ "${SHORT_ONLY}" -eq 0 && "${MAX_SEQ}" -gt "${vllm_max_len}" ]]; then
-    log "  WARN: vLLM --max-model-len=${vllm_max_len} < max_seq=${MAX_SEQ}; long case may fail on 48GB."
+  if [[ "${SHORT_ONLY}" -eq 0 && "${VLLM_SKIP_LONG}" -eq 1 ]]; then
+    log "  vLLM arm: long HTTP case skipped (max-model-len=${vllm_max_len} < FlashRT long budget)"
+  elif [[ "${SHORT_ONLY}" -eq 0 && "${MAX_SEQ}" -gt "${vllm_max_len}" ]]; then
+    log "  WARN: vLLM --max-model-len=${vllm_max_len} < max_seq=${MAX_SEQ}"
   fi
 
   local -a cmd=(
@@ -607,13 +760,17 @@ log "out=${OUT_DIR} cases=$(bench_cases_label) max_seq=${MAX_SEQ} flashcli=${RUN
 log "bench: rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${SCORED_ROUNDS} profile=${BENCH_PROFILE}"
 log "  short max_tokens=${SHORT_MAX_TOKENS}  long user_tokens=${LONG_TOKENS} long max_tokens=${LONG_MAX_TOKENS}"
 [[ "${RUN_FLASHCLI}" -eq 1 ]] && log "  FlashRT checkpoint=${CHECKPOINT} warmup=${WARMUP_PRESET} K=${K}"
-[[ "${RUN_VLLM}" -eq 1 ]] && log "  vLLM checkpoint=${VLLM_CHECKPOINT} model=${VLLM_MODEL_NAME}"
+[[ "${RUN_VLLM}" -eq 1 ]] && log "  vLLM checkpoint=${VLLM_CHECKPOINT} model=${VLLM_MODEL_NAME} max_model_len=${VLLM_MAX_LEN:-pending}"
 log "GPU: $(gpu_name)"
 
 if [[ "${REPORT_ONLY}" -eq 1 ]]; then
   write_report
   exit 0
 fi
+
+compute_vllm_plan
+write_bench_config
+[[ "${RUN_FLASHCLI}" -eq 1 || "${RUN_VLLM}" -eq 1 ]] || die "No backend to run after vLLM context plan"
 
 trap cleanup_on_exit INT TERM EXIT
 

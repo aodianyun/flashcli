@@ -250,7 +250,8 @@ def render_compare_section(
         "",
         f"Delta column: `{left}` vs `{right}`. "
         "Positive % on decode tok/s means the left column is faster. "
-        "Runs should share one checkpoint and identical HTTP payloads.",
+        "Runs should share one checkpoint and identical HTTP payloads. "
+        "Long-context rows appear only when both arms ran the same `qwen36_long` case.",
         "",
         "| case | metric | "
         + " | ".join([left, right, "delta"])
@@ -285,6 +286,42 @@ def render_compare_section(
     return lines
 
 
+def render_fairness_section(out_dir: Path) -> list[str]:
+    cfg_path = out_dir / "bench_config.json"
+    if not cfg_path.is_file():
+        return []
+    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    lines = ["## Bench fairness (from bench_config.json)", ""]
+    w = cfg.get("weights") or {}
+    lines.append(
+        f"- **Weights**: identical={w.get('identical')} "
+        f"(FlashRT `{w.get('flashrt')}`, vLLM `{w.get('vllm')}`)"
+    )
+    api = cfg.get("api_model") or {}
+    lines.append(
+        f"- **API model id**: identical={api.get('identical')} "
+        f"(`{api.get('flashrt')}` / `{api.get('vllm')}`)"
+    )
+    http = cfg.get("http_request") or {}
+    lines.append(
+        f"- **HTTP**: temperature={http.get('temperature')} top_p={http.get('top_p')} "
+        f"stream={http.get('stream')} enable_thinking="
+        f"{(http.get('chat_template_kwargs') or {}).get('enable_thinking')}"
+    )
+    ctx = cfg.get("context") or {}
+    lines.append(
+        f"- **Context**: cases={cfg.get('bench_cases')} max_seq_flashrt={ctx.get('max_seq_flashrt')} "
+        f"vllm_max_model_len={ctx.get('vllm_max_model_len')} vllm_skip_long={ctx.get('vllm_skip_long')}"
+    )
+    asym = cfg.get("known_asymmetries") or []
+    if asym:
+        lines.append("- **Known asymmetries** (not bugs):")
+        for item in asym:
+            lines.append(f"  - {item}")
+    lines.append("")
+    return lines
+
+
 def build_report(
     *,
     out_dir: Path,
@@ -315,6 +352,7 @@ def build_report(
         "`completion_tokens` and curl `wall_ms` minus TTFT.",
         "",
     ]
+    lines.extend(render_fairness_section(out_dir))
 
     for name, workdir in backends.items():
         lines.extend(render_backend_section(name, workdir, backend_cases[name]))
