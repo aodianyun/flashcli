@@ -372,6 +372,7 @@ run_bench_cases() {
 
   log "Step: bench_qwen_curl.sh (short max_tokens=${SHORT_MAX_TOKENS}, long user_tokens=${LONG_TOKENS})"
   export CKPT_QWEN36="${CHECKPOINT}" HOST QWEN36_PORT="${PORT}" QWEN36_MAX_SEQ="${MAX_SEQ}"
+  export QWEN36_SERVE_LOG="${workdir}/serve.log"
   export QWEN36_LONG_PROMPT_TOKENS="${LONG_TOKENS}"
   export SHORT_MAX_TOKENS LONG_MAX_TOKENS
   export FLASHRT_QWEN36_LONG_KV_CACHE=fp8

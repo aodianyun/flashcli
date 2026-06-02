@@ -22,6 +22,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FLASHCLI_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MAKE_PAYLOAD="${SCRIPT_DIR}/bench_qwen_make_payload.py"
 STREAM_ONCE="${SCRIPT_DIR}/bench_qwen_curl_stream.py"
+SERVE_METRICS_PY="${SCRIPT_DIR}/bench_qwen36_serve_metrics.py"
 
 HOST="${HOST:-127.0.0.1}"
 QWEN3_PORT="${QWEN3_PORT:-8000}"
@@ -246,14 +247,41 @@ print_qwen36_hints() {
 }
 
 # One HTTP request; append one JSON line to metrics jsonl. Prints brief round log.
+serve_log_offset() {
+  local log_path="$1"
+  if [[ -f "${log_path}" ]]; then
+    wc -c <"${log_path}" | tr -d ' '
+  else
+    echo 0
+  fi
+}
+
+merge_qwen36_serve_log_metrics() {
+  local resp="$1" log_path="$2" offset="$3"
+  [[ -f "${log_path}" ]] || return 0
+  local metrics
+  metrics="$(python3 "${SERVE_METRICS_PY}" --log "${log_path}" --offset "${offset}" 2>/dev/null || true)"
+  [[ -n "${metrics}" && "${metrics}" != "null" ]] || return 0
+  jq --argjson m "${metrics}" '
+    .usage = ((.usage // {}) + ($m | del(.metrics_source)))
+    | .bench = ((.bench // {}) + {
+        server_ttft_ms: ($m.ttft_ms // $m.first_delta_ms),
+        metrics_source: $m.metrics_source
+      })
+  ' "${resp}" >"${resp}.metrics.tmp" && mv "${resp}.metrics.tmp" "${resp}"
+}
+
 run_curl_once() {
   local label="$1" port="$2" payload="$3" resp="$4" round="$5" jsonl="$6"
-  local wall_ms tag="" use_stream=false
+  local wall_ms tag="" use_stream=false log_offset=0
   if [[ "${round}" -le "${SKIP_FIRST}" ]]; then
     tag=" (warmup, excluded)"
   fi
   if [[ "$(jq -r '.stream // false' "${payload}")" == "true" ]]; then
     use_stream=true
+  fi
+  if [[ "${use_stream}" == "true" && -n "${QWEN36_SERVE_LOG:-}" && "${port}" == "${QWEN36_PORT}" ]]; then
+    log_offset="$(serve_log_offset "${QWEN36_SERVE_LOG}")"
   fi
   if [[ "${use_stream}" == "true" ]]; then
     if ! python3 "${STREAM_ONCE}" \
@@ -293,6 +321,9 @@ run_curl_once() {
   fi
   if [[ "${use_stream}" == "true" ]]; then
     wall_ms="$(jq -r '.bench.wall_ms // 0' "${resp}")"
+    if [[ -n "${QWEN36_SERVE_LOG:-}" && "${port}" == "${QWEN36_PORT}" ]]; then
+      merge_qwen36_serve_log_metrics "${resp}" "${QWEN36_SERVE_LOG}" "${log_offset}"
+    fi
   fi
   jq -cn \
     --argjson round "${round}" \
@@ -301,11 +332,13 @@ run_curl_once() {
     --argjson bench "$(jq '.bench // {}' "${resp}")" \
     '{round: $round, wall_ms: $wall_ms, usage: $usage, bench: $bench}' >>"${jsonl}"
   local tps ttft client_ttft
-  tps="$(jq -r '.usage.tok_per_s // .usage.decode_tok_per_s // .usage.e2e_tok_per_s // "n/a"' "${resp}" 2>/dev/null)"
+  tps="$(jq -r '.usage.tok_per_s // .usage.decode_tok_per_s // .bench.estimated_decode_tok_per_s // "n/a"' "${resp}" 2>/dev/null)"
   ttft="$(jq -r '.bench.server_ttft_ms // .usage.ttft_ms // .usage.first_delta_ms // "n/a"' "${resp}" 2>/dev/null)"
   client_ttft="$(jq -r '.bench.client_ttft_ms // empty' "${resp}" 2>/dev/null)"
+  local msrc
+  msrc="$(jq -r '.bench.metrics_source // empty' "${resp}" 2>/dev/null)"
   if [[ -n "${client_ttft}" ]]; then
-    log "  round ${round}/${ROUNDS}${tag}: curl_wall=${wall_ms}ms client_ttft_ms=${client_ttft} server_ttft_ms=${ttft} tok_per_s=${tps}"
+    log "  round ${round}/${ROUNDS}${tag}: curl_wall=${wall_ms}ms client_ttft_ms=${client_ttft} server_ttft_ms=${ttft} decode_tok_per_s=${tps}${msrc:+ src=${msrc}}"
   else
     log "  round ${round}/${ROUNDS}${tag}: curl_wall=${wall_ms}ms server_ttft_ms=${ttft} tok_per_s=${tps}"
   fi
@@ -433,7 +466,7 @@ run_bench_case() {
 
 log "workdir=${WORKDIR}  rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${_SCORED_ROUNDS} stream=${BENCH_STREAM} long_prompt_style=${LONG_PROMPT_STYLE} profile=${BENCH_PROFILE:-none}"
 if [[ "${BENCH_STREAM}" -eq 1 ]]; then
-  log "stream=true: client_ttft_ms=first content chunk; server_ttft_ms=usage.first_delta_ms/ttft_ms"
+  log "stream=true: server TTFT/decode from usage or serve.log (engine); client_ttft_ms=HTTP first chunk"
 fi
 print_qwen36_hints
 if [[ "${SKIP_QWEN3}" -eq 0 ]]; then

@@ -102,22 +102,20 @@ def run_stream(url: str, body: dict[str, Any]) -> dict[str, Any]:
         client_ttft_ms = wall_ms
 
     server_ttft = _server_ttft_ms(usage)
-    if not usage.get("tok_per_s") and not usage.get("decode_tok_per_s"):
-        ct = usage.get("completion_tokens")
-        if ct is None and content_parts:
-            ct = len(content_parts)
-            usage["completion_tokens"] = ct
-        if ct is not None:
-            decode_ms = usage.get("decode_ms")
-            if decode_ms is None:
-                ttft_for_decode = server_ttft if server_ttft is not None else client_ttft_ms
-                decode_ms = wall_ms
-                if ttft_for_decode is not None:
-                    decode_ms = max(1.0, wall_ms - float(ttft_for_decode))
-            if decode_ms and float(decode_ms) > 0:
-                tps = float(ct) * 1000.0 / float(decode_ms)
-                usage.setdefault("decode_tok_per_s", tps)
-                usage.setdefault("tok_per_s", tps)
+    estimated_decode_tps: float | None = None
+    ct = usage.get("completion_tokens")
+    if ct is None and content_parts:
+        ct = len(content_parts)
+        usage["completion_tokens"] = ct
+    if not usage.get("decode_tok_per_s") and ct is not None:
+        decode_ms = usage.get("decode_ms")
+        if decode_ms is None:
+            ttft_for_decode = server_ttft if server_ttft is not None else client_ttft_ms
+            decode_ms = wall_ms
+            if ttft_for_decode is not None:
+                decode_ms = max(1.0, wall_ms - float(ttft_for_decode))
+        if decode_ms and float(decode_ms) > 0:
+            estimated_decode_tps = float(ct) * 1000.0 / float(decode_ms)
 
     return {
         "id": "bench-stream",
@@ -138,6 +136,7 @@ def run_stream(url: str, body: dict[str, Any]) -> dict[str, Any]:
             "wall_ms": wall_ms,
             "client_ttft_ms": client_ttft_ms,
             "server_ttft_ms": server_ttft,
+            "estimated_decode_tok_per_s": estimated_decode_tps,
             "sse_chunks": chunks,
             "sse_content_chunks": content_chunks,
         },

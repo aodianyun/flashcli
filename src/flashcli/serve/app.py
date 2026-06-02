@@ -341,7 +341,23 @@ def build_app(engine: ServeEngine) -> FastAPI:
                             ],
                         }
                         if chunk.usage:
-                            last["usage"] = chunk.usage
+                            usage_out = dict(chunk.usage)
+                            last["usage"] = usage_out
+                            flashrt_block = {
+                                k: usage_out[k]
+                                for k in (
+                                    "prefill_ms",
+                                    "decode_ms",
+                                    "ttft_ms",
+                                    "first_delta_ms",
+                                    "decode_tok_per_s",
+                                    "tok_per_s",
+                                    "route",
+                                )
+                                if usage_out.get(k) is not None
+                            }
+                            if flashrt_block:
+                                last["flashrt"] = flashrt_block
                         yield f"data: {json.dumps(last)}\n\n"
                         yield "data: [DONE]\n\n"
                         _log_chat_end("200 stream")
