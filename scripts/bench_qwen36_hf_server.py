@@ -234,6 +234,29 @@ class HfQwen36Engine:
         self.model.eval()
         self.tokenizer = AutoTokenizer.from_pretrained(checkpoint)
         log.info("HF model ready in %.1f s", time.perf_counter() - t0)
+        self._sanity_generate()
+
+    def _sanity_generate(self) -> None:
+        """Fail fast when weights did not load (common with FP8 + missing linear_attn kernels)."""
+        ids = self.tokenize_chat([{"role": "user", "content": "Say hi in one word."}])
+        generated, usage = self._generate_greedy(ids, max_new_tokens=8)
+        if not generated:
+            sys.exit(
+                "HF smoke test produced 0 tokens — checkpoint likely unusable in this env.\n"
+                "The LOAD REPORT may list linear_attn scale_inv as MISSING; transformers then "
+                "falls back to slow/broken paths.\n"
+                "Try:\n"
+                "  pip install -U flash-linear-attention causal-conv1d\n"
+                "Or use a mature OpenAI server for the baseline arm:\n"
+                "  bash scripts/bench_qwen36_compare.sh --vllm --pytorch-only "
+                "--hf-checkpoint <path>\n"
+                "Official weights: https://www.modelscope.cn/models/Qwen/Qwen3.6-27B-FP8"
+            )
+        log.info(
+            "HF smoke test ok: completion_tokens=%d decode_tok_per_s=%.1f",
+            len(generated),
+            float(usage.get("decode_tok_per_s", 0.0)),
+        )
 
     def tokenize_chat(self, messages: list[dict[str, Any]]) -> list[int]:
         kwargs: dict[str, Any] = {

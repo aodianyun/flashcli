@@ -256,11 +256,12 @@ serve_log_offset() {
   fi
 }
 
-merge_qwen36_serve_log_metrics() {
+merge_serve_log_metrics() {
   local resp="$1" log_path="$2" offset="$3"
+  local backend="${4:-auto}"
   [[ -f "${log_path}" ]] || return 0
   local metrics
-  metrics="$(python3 "${SERVE_METRICS_PY}" --log "${log_path}" --offset "${offset}" 2>/dev/null || true)"
+  metrics="$(python3 "${SERVE_METRICS_PY}" --log "${log_path}" --offset "${offset}" --backend "${backend}" 2>/dev/null || true)"
   [[ -n "${metrics}" && "${metrics}" != "null" ]] || return 0
   jq --argjson m "${metrics}" '
     .usage = ((.usage // {}) + ($m | del(.metrics_source)))
@@ -280,8 +281,8 @@ run_curl_once() {
   if [[ "$(jq -r '.stream // false' "${payload}")" == "true" ]]; then
     use_stream=true
   fi
-  if [[ "${use_stream}" == "true" && -n "${QWEN36_SERVE_LOG:-}" && "${port}" == "${QWEN36_PORT}" ]]; then
-    log_offset="$(serve_log_offset "${QWEN36_SERVE_LOG}")"
+  if [[ "${use_stream}" == "true" && -n "${SERVE_LOG_PATH:-}" && "${port}" == "${QWEN36_PORT}" ]]; then
+    log_offset="$(serve_log_offset "${SERVE_LOG_PATH}")"
   fi
   if [[ "${use_stream}" == "true" ]]; then
     if ! python3 "${STREAM_ONCE}" \
@@ -321,8 +322,17 @@ run_curl_once() {
   fi
   if [[ "${use_stream}" == "true" ]]; then
     wall_ms="$(jq -r '.bench.wall_ms // 0' "${resp}")"
-    if [[ -n "${QWEN36_SERVE_LOG:-}" && "${port}" == "${QWEN36_PORT}" ]]; then
-      merge_qwen36_serve_log_metrics "${resp}" "${QWEN36_SERVE_LOG}" "${log_offset}"
+    if [[ -n "${SERVE_LOG_PATH:-}" && "${port}" == "${QWEN36_PORT}" ]]; then
+      merge_serve_log_metrics "${resp}" "${SERVE_LOG_PATH}" "${log_offset}" "${SERVE_LOG_BACKEND:-auto}"
+    fi
+  fi
+  if jq -e '.bench.stream == true' "${resp}" >/dev/null 2>&1; then
+    local ct preview
+    ct="$(jq -r '.usage.completion_tokens // 0' "${resp}" 2>/dev/null)"
+    preview="$(jq -r '.choices[0].message.content // ""' "${resp}" 2>/dev/null | head -c 80)"
+    if [[ "${ct}" == "0" || -z "${preview}" ]]; then
+      log "  WARN round ${round}: 0 completion tokens or empty text — check ${resp} and serve.log"
+      jq -r '.error // empty' "${resp}" 2>/dev/null | head -5 >&2 || true
     fi
   fi
   jq -cn \

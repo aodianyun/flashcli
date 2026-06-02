@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
-# Qwen36 bench: flashcli+FlashRT vs PyTorch HF — same HTTP payloads, serial steps.
+# Qwen36 bench orchestrator (single entry). See scripts/README.bench_qwen36.md
 #
-# Full comparable (short + long, 12 rounds, drop first 2, mean last 10):
-#   bash scripts/bench_qwen36_compare.sh --comparable
-#
-# Smoke:
-#   bash scripts/bench_qwen36_compare.sh --quick --flashcli-only
+# Smoke FlashRT:  bash scripts/bench_qwen36_compare.sh --quick --flashcli-only
+# Smoke vLLM:     bash scripts/bench_qwen36_compare.sh --quick --pytorch-only --vllm --hf-checkpoint <FP8>
+# Full compare:   bash scripts/bench_qwen36_compare.sh --comparable --vllm --hf-checkpoint <FP8>
 #
 set -euo pipefail
 
@@ -27,6 +25,9 @@ BENCH_PROFILE="${BENCH_PROFILE:-comparable}"
 LONG_TOKENS="${LONG_TOKENS:-262144}"
 HF_ATTN="${HF_ATTN:-sdpa}"
 HF_DTYPE="${HF_DTYPE:-auto}"
+# PyTorch baseline stack: hf = bench_qwen36_hf_server.py ; vllm = vllm serve (recommended).
+PYTORCH_STACK="${PYTORCH_STACK:-hf}"
+VLLM_EXTRA_ARGS="${VLLM_EXTRA_ARGS:-}"
 MODEL_NAME="${MODEL_NAME:-qwen3.6-27b-nvfp4}"
 SHORT_PROMPT="${SHORT_PROMPT:-Explain quantum entanglement in one short paragraph.}"
 SHORT_MAX_TOKENS="${SHORT_MAX_TOKENS:-64}"
@@ -64,11 +65,13 @@ Serial flow per backend: start serve → wait /health → bench_qwen_curl → st
   --short-only         skip long-context case
   --flashcli-only / --pytorch-only / --report-only
   --checkpoint PATH     FlashRT weights (default: NVFP4 pull path)
-  --hf-checkpoint PATH  PyTorch HF weights (default: Qwen3.6-27B-FP8)
-  --hf-model-name NAME  HF API model id (default: ${HF_MODEL_NAME})
+  --hf-checkpoint PATH  PyTorch baseline weights (default: Qwen3.6-27B-FP8)
+  --hf-model-name NAME  OpenAI API model id (default: ${HF_MODEL_NAME})
+  --vllm                Baseline: vLLM OpenAI server (recommended)
+  --hf-server           Baseline: minimal transformers server (debug only)
   --max-seq N  --out-dir DIR  --help
 
-See script header for defaults.
+Full workflow: scripts/README.bench_qwen36.md
 EOF
 }
 
@@ -111,6 +114,8 @@ while [[ $# -gt 0 ]]; do
     --mtp-checkpoint) MTP_CKPT="$2"; shift 2 ;;
     --hf-attn) HF_ATTN="$2"; shift 2 ;;
     --hf-dtype) HF_DTYPE="$2"; shift 2 ;;
+    --vllm) PYTORCH_STACK=vllm; shift ;;
+    --hf-server) PYTORCH_STACK=hf; shift ;;
     --model-name) MODEL_NAME="$2"; shift 2 ;;
     --out-dir) OUT_DIR="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
@@ -396,7 +401,9 @@ run_bench_cases() {
 
   log "Step: bench_qwen_curl.sh (short max_tokens=${SHORT_MAX_TOKENS}, long user_tokens=${LONG_TOKENS})"
   export CKPT_QWEN36="${CHECKPOINT}" HOST QWEN36_PORT="${PORT}" QWEN36_MAX_SEQ="${MAX_SEQ}"
-  export QWEN36_SERVE_LOG="${workdir}/serve.log"
+  export SERVE_LOG_PATH="${workdir}/serve.log"
+  export QWEN36_SERVE_LOG="${SERVE_LOG_PATH}"
+  export SERVE_LOG_BACKEND="${SERVE_LOG_BACKEND:-auto}"
   export QWEN36_LONG_PROMPT_TOKENS="${LONG_TOKENS}"
   export SHORT_MAX_TOKENS LONG_MAX_TOKENS
   export FLASHRT_QWEN36_LONG_KV_CACHE=fp8
@@ -431,6 +438,7 @@ run_flashcli_backend() {
   server_cmd="$(printf '%q ' env "${env_args[@]}" "${cmd[@]}")"
 
   log "━━ FlashRT backend ━━"
+  export SERVE_LOG_BACKEND=flashrt
   start_serve "${workdir}" env "${env_args[@]}" "${cmd[@]}"
   health_s="$(wait_health "${workdir}/serve.log" flashrt)"
   write_manifest_header "${workdir}" "flashcli+FlashRT" "${server_cmd}" "${started}" "${health_s}" "FlashRT"
@@ -440,7 +448,44 @@ run_flashcli_backend() {
   log "Done FlashRT → ${workdir}"
 }
 
-run_pytorch_backend() {
+run_vllm_backend() {
+  local workdir="${OUT_DIR}/pytorch_hf"
+  mkdir -p "${workdir}"
+
+  [[ -d "${HF_CHECKPOINT}" ]] || die "HF checkpoint not found: ${HF_CHECKPOINT}"
+  command -v vllm >/dev/null 2>&1 || die "vllm not in PATH. Install: pip install -U vllm (needs Qwen3.6 support in your vLLM build)"
+
+  local -a cmd=(
+    vllm serve "${HF_CHECKPOINT}"
+    --host "${HOST}"
+    --port "${PORT}"
+    --max-model-len "${MAX_SEQ}"
+    --served-model-name "${HF_MODEL_NAME}"
+    --trust-remote-code
+  )
+  if [[ -n "${VLLM_EXTRA_ARGS}" ]]; then
+    # shellcheck disable=SC2206
+    local extra=( ${VLLM_EXTRA_ARGS} )
+    cmd+=("${extra[@]}")
+  fi
+
+  local started server_cmd health_s
+  started="$(date -Iseconds 2>/dev/null || date)"
+  server_cmd="$(printf '%q ' "${cmd[@]}")"
+
+  log "━━ PyTorch baseline (vLLM) ━━"
+  export SERVE_LOG_BACKEND=vllm
+  start_serve "${workdir}" "${cmd[@]}"
+  health_s="$(wait_health "${workdir}/serve.log" hf)"
+  write_manifest_header "${workdir}" "PyTorch vLLM" "${server_cmd}" "${started}" "${health_s}" \
+    "vllm" "" ""
+  run_bench_cases "${workdir}" "${HF_MODEL_NAME}"
+  finish_manifest "${workdir}"
+  stop_serve
+  log "Done vLLM baseline → ${workdir}"
+}
+
+run_hf_transformers_backend() {
   local workdir="${OUT_DIR}/pytorch_hf"
   mkdir -p "${workdir}"
 
@@ -459,16 +504,26 @@ run_pytorch_backend() {
   started="$(date -Iseconds 2>/dev/null || date)"
   server_cmd="$(printf '%q ' "${cmd[@]}")"
 
-  log "━━ PyTorch HF backend ━━"
+  log "━━ PyTorch baseline (transformers HF server) ━━"
+  log "  tip: for production-like baseline use --vllm instead of this minimal server"
+  export SERVE_LOG_BACKEND=hf
   start_serve "${workdir}" "${cmd[@]}"
   health_s="$(wait_health "${workdir}/serve.log" hf)"
   warn_hf_load_report "${workdir}/serve.log"
-  write_manifest_header "${workdir}" "PyTorch HF" "${server_cmd}" "${started}" "${health_s}" \
+  write_manifest_header "${workdir}" "PyTorch HF (transformers)" "${server_cmd}" "${started}" "${health_s}" \
     "transformers" "${HF_ATTN}" "${HF_DTYPE}"
   run_bench_cases "${workdir}" "${HF_MODEL_NAME}"
   finish_manifest "${workdir}"
   stop_serve
-  log "Done PyTorch HF → ${workdir}"
+  log "Done transformers HF → ${workdir}"
+}
+
+run_pytorch_backend() {
+  case "${PYTORCH_STACK}" in
+    vllm) run_vllm_backend ;;
+    hf) run_hf_transformers_backend ;;
+    *) die "Unknown PYTORCH_STACK=${PYTORCH_STACK} (use hf or vllm)" ;;
+  esac
 }
 
 write_report() {
@@ -484,7 +539,9 @@ log "out=${OUT_DIR} max_seq=${MAX_SEQ} flashcli=${RUN_FLASHCLI} hf=${RUN_PYTORCH
 log "bench: cases=$([[ "${SHORT_ONLY}" -eq 1 ]] && echo short-only || echo short+long)  rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${SCORED_ROUNDS} profile=${BENCH_PROFILE}"
 log "  short: max_tokens=${SHORT_MAX_TOKENS} (decode length)  long: user_tokens=${LONG_TOKENS} max_tokens=${LONG_MAX_TOKENS}"
 [[ "${RUN_FLASHCLI}" -eq 1 ]] && log "  FlashRT checkpoint=${CHECKPOINT} warmup=${WARMUP_PRESET}"
-[[ "${RUN_PYTORCH}" -eq 1 ]] && log "  HF checkpoint=${HF_CHECKPOINT} model=${HF_MODEL_NAME}"
+if [[ "${RUN_PYTORCH}" -eq 1 ]]; then
+  log "  PyTorch baseline: stack=${PYTORCH_STACK} checkpoint=${HF_CHECKPOINT} model=${HF_MODEL_NAME}"
+fi
 log "GPU: $(gpu_name)"
 
 if [[ "${REPORT_ONLY}" -eq 1 ]]; then
