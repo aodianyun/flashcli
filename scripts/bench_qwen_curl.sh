@@ -59,6 +59,8 @@ WORKDIR="${WORKDIR:-/tmp/flashcli-bench-qwen-$$}"
 SERVE_LOG_PATH="${SERVE_LOG_PATH:-${QWEN36_SERVE_LOG:-}}"
 SERVE_LOG_BACKEND="${SERVE_LOG_BACKEND:-auto}"
 BENCH_ISOLATE_ROUNDS="${BENCH_ISOLATE_ROUNDS:-1}"
+WRITE_REPORT=0
+REPORT_PY="${SCRIPT_DIR}/bench_qwen36_report.py"
 
 usage() {
   cat <<EOF
