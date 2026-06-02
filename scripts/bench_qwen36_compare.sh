@@ -107,6 +107,67 @@ bench_cases_label() {
 log() { printf '[qwen36-bench] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
 
+canonical_path() {
+  local p="$1"
+  if [[ -d "${p}" ]]; then
+    (cd "${p}" && pwd)
+  elif [[ -f "${p}" ]]; then
+    local d b
+    d="$(cd "$(dirname "${p}")" && pwd)"
+    b="$(basename "${p}")"
+    echo "${d}/${b}"
+  else
+    echo "${p}"
+  fi
+}
+
+bundle_is_ready() {
+  local root="$1"
+  [[ -f "${root}/flashcli-bundle.json" && -d "${root}/lib" && -d "${root}/flash_rt" ]]
+}
+
+resolve_default_bundle() {
+  local -a candidates=()
+  local c py_root found
+
+  if [[ -n "${BUNDLE:-}" ]]; then
+    candidates+=("$(canonical_path "${BUNDLE}")")
+  fi
+  candidates+=("$(canonical_path "${FLASHCLI_ROOT}/bundles/qwen_nvfp4")")
+
+  py_root="$(
+    python3 - <<'PY' 2>/dev/null || true
+try:
+    from flashcli.models.registry import get_preset
+    from flashcli.bundle.zip import resolve_cached_zip_bundle_root
+
+    p = get_preset("qwen36-27b-nvfp4")
+    r = resolve_cached_zip_bundle_root(p)
+    if r is not None:
+        print(r)
+except Exception:
+    pass
+PY
+  )"
+  [[ -n "${py_root}" ]] && candidates+=("${py_root}")
+
+  while IFS= read -r found; do
+    [[ -n "${found}" ]] && candidates+=("$(dirname "${found}")")
+  done < <(
+    find "${HOME}/.flashcli/bundles" -name flashcli-bundle.json 2>/dev/null \
+      | grep -E 'qwen_nvfp4|qwen36-27b-nvfp4' | sort -r
+  )
+
+  for c in "${candidates[@]}"; do
+    [[ -n "${c}" ]] || continue
+    if bundle_is_ready "${c}"; then
+      echo "${c}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --flashcli-only) RUN_VLLM=0; shift ;;
@@ -182,34 +243,24 @@ if [[ "${REPORT_ONLY}" -eq 0 ]]; then
   [[ -d "${CHECKPOINT}" ]] || die "Checkpoint not found: ${CHECKPOINT}"
   [[ -d "${VLLM_CHECKPOINT}" ]] || die "vLLM checkpoint not found: ${VLLM_CHECKPOINT}"
   if [[ "${RUN_FLASHCLI}" -eq 1 ]]; then
-    if ! bundle_is_ready "${BUNDLE}"; then
-      c="$(resolve_default_bundle || true)"
-      if [[ -n "${c}" ]]; then
-        log "Bundle: using cached ${c}"
-        BUNDLE="${c}"
+    local bundle_root resolved
+    bundle_root="$(canonical_path "${BUNDLE}")"
+    if bundle_is_ready "${bundle_root}"; then
+      BUNDLE="${bundle_root}"
+    else
+      resolved="$(resolve_default_bundle || true)"
+      if [[ -n "${resolved}" ]] && bundle_is_ready "${resolved}"; then
+        log "Bundle: using ${resolved}"
+        BUNDLE="${resolved}"
       else
         die "FlashRT bundle not ready: ${BUNDLE}
   Build: bash bundles/qwen_nvfp4/build.sh --repo-root \$FLASHRT_REPO
   Or:   flashcli bundle sync qwen36-27b-nvfp4
-  Or:   export BUNDLE=~/.flashcli/bundles/.../extracted/flashcli-bundle-qwen_nvfp4-.../"
+  Or:   export BUNDLE=/root/.flashcli/bundles/qwen36-27b-nvfp4/zip/.../extracted/flashcli-bundle-qwen_nvfp4-.../"
       fi
     fi
   fi
 fi
-
-canonical_path() {
-  local p="$1"
-  if [[ -d "${p}" ]]; then
-    (cd "${p}" && pwd)
-  elif [[ -f "${p}" ]]; then
-    local d b
-    d="$(cd "$(dirname "${p}")" && pwd)"
-    b="$(basename "${p}")"
-    echo "${d}/${b}"
-  else
-    echo "${p}"
-  fi
-}
 
 validate_dual_arm_parity() {
   [[ "${RUN_FLASHCLI}" -eq 1 && "${RUN_VLLM}" -eq 1 ]] || return 0
@@ -555,53 +606,6 @@ finish_manifest() {
   jq --arg finished "${finished}" '. + {finished_at: $finished}' \
     "${workdir}/manifest.json" >"${workdir}/manifest.json.tmp"
   mv "${workdir}/manifest.json.tmp" "${workdir}/manifest.json"
-}
-
-bundle_is_ready() {
-  local root="$1"
-  [[ -f "${root}/flashcli-bundle.json" && -d "${root}/lib" && -d "${root}/flash_rt" ]]
-}
-
-resolve_default_bundle() {
-  local -a candidates=()
-  local c py_root found
-
-  if [[ -n "${BUNDLE:-}" ]]; then
-    candidates+=("$(canonical_path "${BUNDLE}")")
-  fi
-  candidates+=("$(canonical_path "${FLASHCLI_ROOT}/bundles/qwen_nvfp4")")
-
-  py_root="$(
-    python3 - <<'PY' 2>/dev/null || true
-try:
-    from flashcli.models.registry import get_preset
-    from flashcli.bundle.zip import resolve_cached_zip_bundle_root
-
-    p = get_preset("qwen36-27b-nvfp4")
-    r = resolve_cached_zip_bundle_root(p)
-    if r is not None:
-        print(r)
-except Exception:
-    pass
-PY
-  )"
-  [[ -n "${py_root}" ]] && candidates+=("${py_root}")
-
-  while IFS= read -r found; do
-    [[ -n "${found}" ]] && candidates+=("$(dirname "${found}")")
-  done < <(
-    find "${HOME}/.flashcli/bundles" -name flashcli-bundle.json 2>/dev/null \
-      | grep -E 'qwen_nvfp4|qwen36-27b-nvfp4' | sort -r
-  )
-
-  for c in "${candidates[@]}"; do
-    [[ -n "${c}" ]] || continue
-    if bundle_is_ready "${c}"; then
-      echo "${c}"
-      return 0
-    fi
-  done
-  return 1
 }
 
 run_bench_cases() {
