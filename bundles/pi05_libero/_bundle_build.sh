@@ -566,8 +566,10 @@ if [[ "${SKIP_BUILD}" -eq 0 ]]; then
 
   # cu130 matrix: cross-compile sm120 (Blackwell) in the same 25.10 container after sm89 pass.
   if [[ "${MERGE_NATIVE}" -eq 1 && "${CUDA_TAG}" == "130" ]]; then
-    local _saved_sm="${SM}" _saved_gpu="${GPU_ARCH}" _saved_build="${BUILD_DIR:-}"
-    local _py="${PYTHON_MINOR:-310}"
+    _saved_sm="${SM}"
+    _saved_gpu="${GPU_ARCH}"
+    _saved_build="${BUILD_DIR:-}"
+    _py="${PYTHON_MINOR:-310}"
     log "======== sm120 cu130 pass (Blackwell, cross-compile, py${_py}) ========"
     SM=120
     GPU_ARCH=120
