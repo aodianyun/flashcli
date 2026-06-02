@@ -58,8 +58,7 @@ BENCH_STREAM="${BENCH_STREAM:-1}"
 WORKDIR="${WORKDIR:-/tmp/flashcli-bench-qwen-$$}"
 SERVE_LOG_PATH="${SERVE_LOG_PATH:-${QWEN36_SERVE_LOG:-}}"
 SERVE_LOG_BACKEND="${SERVE_LOG_BACKEND:-auto}"
-WRITE_REPORT=0
-REPORT_PY="${SCRIPT_DIR}/bench_qwen36_report.py"
+BENCH_ISOLATE_ROUNDS="${BENCH_ISOLATE_ROUNDS:-1}"
 
 usage() {
   cat <<EOF
@@ -84,6 +83,7 @@ Options:
   --skip-first K          Drop first K rounds before averaging (default: 1 if rounds>1)
   --long-prompt-style S   repeat | flashrt | doc (flashrt=FlashRT doc seed)
   --profile NAME          comparable (flashrt long + env hints) | stress (repeat fill)
+  --no-isolate-rounds     Reuse FlashRT agent session across rounds (default: cache_salt per round)
   --stream                Use stream=true payloads (default)
   --no-stream             Use stream=false (legacy non-streaming)
   --serve-log PATH        flashcli serve.log (engine TTFT/decode → metrics + report)
@@ -189,6 +189,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --stream) BENCH_STREAM=1; shift ;;
     --no-stream) BENCH_STREAM=0; shift ;;
+    --no-isolate-rounds) BENCH_ISOLATE_ROUNDS=0; shift ;;
     --serve-log) SERVE_LOG_PATH="$2"; shift 2 ;;
     --write-report) WRITE_REPORT=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -323,10 +324,12 @@ print_qwen36_hints() {
   case "${BENCH_ARM:-flashrt}" in
     vllm|hf|pytorch*) return 0 ;;
   esac
+  if [[ "${BENCH_PROFILE}" == "comparable" ]]; then
+    return 0
+  fi
   log "qwen36 hints (FlashRT serve only — for decode comparable to FlashRT docs on 5090/PRO 5000):"
-  log "  export FLASHRT_QWEN36_LONG_KV_CACHE=fp8"
-  log "  export FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ=512"
-  log "  long prompt: --profile comparable  OR  --long-prompt-style flashrt"
+  log "  bash scripts/bench_qwen36_compare.sh --long-only --comparable"
+  log "  or: --profile comparable  /  --long-prompt-style flashrt"
   log "  256K: QWEN36_MAX_SEQ=<serve --max-seq>  (repeat fill lowers MTP vs flashrt seed)"
   if [[ -n "${SERVE_LOG_PATH:-}" ]]; then
     log "  optional engine metrics: SERVE_LOG_PATH=${SERVE_LOG_PATH}"
@@ -405,11 +408,15 @@ write_curl_report() {
 
 run_curl_once() {
   local label="$1" port="$2" payload="$3" resp="$4" round="$5" jsonl="$6"
-  local wall_ms tag="" use_stream=false log_offset=0
+  local wall_ms tag="" use_stream=false log_offset=0 round_payload="${payload}"
   if [[ "${round}" -le "${SKIP_FIRST}" ]]; then
     tag=" (warmup, excluded)"
   fi
-  if [[ "$(jq -r '.stream // false' "${payload}")" == "true" ]]; then
+  if [[ "${BENCH_ISOLATE_ROUNDS}" -eq 1 && "${port}" == "${QWEN36_PORT}" && "${BENCH_ARM:-flashrt}" == "flashrt" ]]; then
+    round_payload="${resp}.payload.json"
+    jq --arg salt "bench-r${round}" '. + {cache_salt: $salt}' "${payload}" >"${round_payload}"
+  fi
+  if [[ "$(jq -r '.stream // false' "${round_payload}")" == "true" ]]; then
     use_stream=true
   fi
   if [[ "${use_stream}" == "true" && -n "${SERVE_LOG_PATH:-}" && "${port}" == "${QWEN36_PORT}" ]]; then
@@ -418,7 +425,7 @@ run_curl_once() {
   if [[ "${use_stream}" == "true" ]]; then
     if ! python3 "${STREAM_ONCE}" \
       --url "http://${HOST}:${port}/v1/chat/completions" \
-      --payload "${payload}" \
+      --payload "${round_payload}" \
       -o "${resp}" 2>"${resp}.stderr"; then
       if [[ -s "${resp}.stderr" ]]; then
         cat "${resp}.stderr" >&2
@@ -433,7 +440,7 @@ run_curl_once() {
     t0="$(python3 -c 'import time; print(int(time.time()*1000))')"
     if ! curl -sf "http://${HOST}:${port}/v1/chat/completions" \
       -H "Content-Type: application/json" \
-      -d @"${payload}" \
+      -d @"${round_payload}" \
       -o "${resp}"; then
       if [[ -s "${resp}" ]]; then
         log "${label} round ${round}/${ROUNDS}: server response:"
@@ -637,7 +644,7 @@ run_bench_case() {
   summarize_rounds "${case_label}" "${jsonl}" "${WORKDIR}/${stem}.r${ROUNDS}.out.json"
 }
 
-log "workdir=${WORKDIR}  rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${_SCORED_ROUNDS} stream=${BENCH_STREAM} long_prompt_style=${LONG_PROMPT_STYLE} profile=${BENCH_PROFILE:-none}"
+log "workdir=${WORKDIR}  rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${_SCORED_ROUNDS} stream=${BENCH_STREAM} long_prompt_style=${LONG_PROMPT_STYLE} profile=${BENCH_PROFILE:-none} isolate_rounds=${BENCH_ISOLATE_ROUNDS}"
 if [[ "${BENCH_STREAM}" -eq 1 ]]; then
   case "${BENCH_ARM:-flashrt}" in
     vllm)

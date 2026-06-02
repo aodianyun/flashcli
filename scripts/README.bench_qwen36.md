@@ -30,7 +30,8 @@ bench_qwen36_compare.sh          ← 唯一编排
 | 用法 | 含义 |
 |------|------|
 | `--short-only` | 仅短上下文（`qwen36_short`） |
-| `--long-only` | 仅长上下文（`qwen36_long`） |
+| `--long-only` | 仅长上下文（`qwen36_long`）；**默认 `profile=comparable`**（flashrt seed + K=6） |
+| `--stress` | 长 prompt 用 repeat 填充（MTP 压测，decode 不可与文档可比） |
 | `--long-tokens N` | 长 prompt 目标 token 数（配合 long 或 comparable） |
 | `--ctx-16k` | **16K payload** 短+长双臂对比（HTTP 拟合 16384；FlashRT serve 仍用 catalog 262208） |
 | （默认 / `--comparable`） | **短 + 长** 都跑 |
@@ -81,8 +82,11 @@ bash scripts/bench_qwen36_compare.sh --comparable
 bash scripts/bench_qwen36_compare.sh --short-only --rounds 12 --skip-first 2
 # 等价 FlashRT 起服：flashcli serve qwen36-27b-nvfp4 --port 8000 --warmup-preset auto
 
-# 仅长 256K（双臂；vLLM 同样 max-model-len=262208，48GB OOM 时报告记录 arm_failure.json）
-bash scripts/bench_qwen36_compare.sh --long-only --comparable --rounds 12 --skip-first 2
+# 仅长 256K（双臂；默认 comparable；vLLM max-model-len=262208，48GB OOM 时报告记录 arm_failure.json）
+bash scripts/bench_qwen36_compare.sh --long-only --rounds 12 --skip-first 2
+
+# repeat 填充压测（非 doc-comparable decode）
+bash scripts/bench_qwen36_compare.sh --long-only --stress --rounds 12 --skip-first 2
 
 # 自定义长上下文，例如 128K
 bash scripts/bench_qwen36_compare.sh --long-only --long-tokens 131072 --max-seq 131072 \
@@ -128,7 +132,8 @@ bash scripts/bench_qwen36_compare.sh --pytorch-only --short-only \
 | `--comparable` | 短+长；12 轮 skip 2；warmup auto；max_seq 262208 |
 | `--ctx-16k` | 16K payload 短+长；vLLM max-model-len=16384；FlashRT serve=catalog 262208 |
 | `--quick` | 仅短；3 轮 skip 1 |
-| `--short-only` / `--long-only` | 只跑一种 case |
+| `--short-only` / `--long-only` | 只跑一种 case（long-only 默认 comparable） |
+| `--stress` | 长 prompt repeat 填充（对比 `--comparable` 的 flashrt seed） |
 | `--long-tokens N` | 长 prompt user tokens |
 | `--flashcli-only` / `--pytorch-only` | 单臂 |
 | `--report-only` | 仅从已有 workdir 生成报告 |

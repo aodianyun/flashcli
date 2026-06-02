@@ -69,6 +69,7 @@ PAYLOAD_SEQ_SLACK="${PAYLOAD_SEQ_SLACK:-32}"
 BENCH_STREAM="${BENCH_STREAM:-1}"
 FLASHRT_SERVE_MAX_SEQ="${FLASHRT_SERVE_MAX_SEQ:-}"
 FLASHRT_SERVE_MAX_SEQ_EXPLICIT=0
+BENCH_ISOLATE_ROUNDS="${BENCH_ISOLATE_ROUNDS:-1}"
 
 usage() {
   cat <<EOF
@@ -86,6 +87,8 @@ Context cases (pick one scope; default without --short-only/--long-only = both):
 
 Presets:
   --comparable          short+long; ${ROUNDS} rounds skip ${SKIP_FIRST}; warmup auto; max_seq ${MAX_SEQ}
+  --stress              long prompt repeat-fill (MTP stress; not doc-comparable decode)
+  --no-isolate-rounds   Reuse FlashRT agent session across rounds (default: cache_salt per round)
   --ctx-16k             short+long at 16K payload (max_seq=16384; FlashRT serve=catalog 262208)
   --quick               short only; 3 rounds skip 1; warmup none; max_seq ${QUICK_MAX_SEQ}
 
@@ -243,6 +246,8 @@ while [[ $# -gt 0 ]]; do
       ;;
     --short-only) SHORT_ONLY=1; LONG_ONLY=0; shift ;;
     --long-only) LONG_ONLY=1; SHORT_ONLY=0; shift ;;
+    --stress) BENCH_PROFILE=stress; shift ;;
+    --no-isolate-rounds) BENCH_ISOLATE_ROUNDS=0; shift ;;
     --rounds) ROUNDS="$2"; shift 2 ;;
     --skip-first) SKIP_FIRST="$2"; shift 2 ;;
     --long-tokens|--qwen36-long-tokens) LONG_TOKENS="$2"; shift 2 ;;
@@ -288,7 +293,12 @@ if [[ "${BENCH_PROFILE}" == "comparable" && "${K_EXPLICIT}" -eq 0 ]]; then
 fi
 
 if [[ -z "${BENCH_PROFILE}" ]]; then
-  if [[ "${SHORT_ONLY}" -eq 0 && "${LONG_ONLY}" -eq 0 ]]; then
+  if [[ "${LONG_ONLY}" -eq 1 ]]; then
+    BENCH_PROFILE=comparable
+    [[ "${K_EXPLICIT}" -eq 0 ]] && K="${K:-6}"
+    [[ "${WARMUP_EXPLICIT}" -eq 0 ]] && WARMUP_PRESET=auto
+    log "  --long-only: default profile=comparable (flashrt seed, K=${K:-6}; use --stress for repeat fill)"
+  elif [[ "${SHORT_ONLY}" -eq 0 && "${LONG_ONLY}" -eq 0 ]]; then
     BENCH_PROFILE=comparable
     [[ "${K_EXPLICIT}" -eq 0 ]] && K="${K:-6}"
     [[ "${WARMUP_EXPLICIT}" -eq 0 ]] && WARMUP_PRESET=auto
@@ -699,9 +709,26 @@ prepare_shared_payloads() {
 
 long_prompt_style() {
   case "${BENCH_PROFILE}" in
-    comparable|stress) echo "flashrt" ;;
+    comparable) echo "flashrt" ;;
+    stress) echo "repeat" ;;
     *) echo "${LONG_PROMPT_STYLE:-repeat}" ;;
   esac
+}
+
+export_flashrt_serve_env() {
+  # Engine reads these at serve load; export before flashcli serve, not only before curl.
+  [[ "${SHORT_ONLY}" -eq 0 || "${LONG_ONLY}" -eq 1 ]] || return 0
+  export FLASHRT_QWEN36_LONG_KV_CACHE="${FLASHRT_QWEN36_LONG_KV_CACHE:-fp8}"
+  export FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ="${FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ:-512}"
+}
+
+flashrt_serve_env_args() {
+  export_flashrt_serve_env
+  if [[ "${SHORT_ONLY}" -eq 0 || "${LONG_ONLY}" -eq 1 ]]; then
+    printf '%s\n' \
+      "FLASHRT_QWEN36_LONG_KV_CACHE=${FLASHRT_QWEN36_LONG_KV_CACHE}" \
+      "FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ=${FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ}"
+  fi
 }
 
 write_manifest_header() {
@@ -790,14 +817,12 @@ run_bench_cases() {
   export QWEN36_LONG_PROMPT_TOKENS="${LONG_TOKENS}"
   export SHORT_MAX_TOKENS LONG_MAX_TOKENS SHORT_PROMPT BENCH_STREAM=1
   export QWEN36_SEQ_SLACK="${PAYLOAD_SEQ_SLACK}"
+  export BENCH_ISOLATE_ROUNDS="${BENCH_ISOLATE_ROUNDS:-1}"
   if [[ "${bench_arm}" == "vllm" ]]; then
     export CKPT_QWEN36="${VLLM_CHECKPOINT}"
   else
     export CKPT_QWEN36="${CHECKPOINT}"
-    if [[ "${SHORT_ONLY}" -eq 0 || "${LONG_ONLY}" -eq 1 ]]; then
-      export FLASHRT_QWEN36_LONG_KV_CACHE=fp8
-      export FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ="${FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ:-512}"
-    fi
+    export_flashrt_serve_env
   fi
   args+=(--short-max-tokens "${SHORT_MAX_TOKENS}" --long-max-tokens "${LONG_MAX_TOKENS}")
   [[ "${SHORT_ONLY}" -eq 0 ]] && args+=(--qwen36-long-tokens "${LONG_TOKENS}")
@@ -843,6 +868,10 @@ run_flashcli_backend() {
   [[ -n "${serve_max_seq}" ]] && cmd+=(--max-seq "${serve_max_seq}")
   [[ -n "${K}" ]] && cmd+=(--K "${K}")
 
+  while IFS= read -r _flashrt_env; do
+    [[ -n "${_flashrt_env}" ]] && env_args+=("${_flashrt_env}")
+  done < <(flashrt_serve_env_args)
+
   started="$(date -Iseconds 2>/dev/null || date)"
   if ((${#env_args[@]})); then
     server_cmd="$(printf '%q ' env "${env_args[@]}" "${cmd[@]}")"
@@ -868,6 +897,9 @@ run_flashcli_backend() {
     fi
     server_cmd="(reused running serve on :${PORT})"
   else
+    if [[ "${SHORT_ONLY}" -eq 0 || "${LONG_ONLY}" -eq 1 ]]; then
+      log "  env: FLASHRT_QWEN36_LONG_KV_CACHE=${FLASHRT_QWEN36_LONG_KV_CACHE:-fp8} FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ=${FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ:-512}"
+    fi
     log "  serve: ${server_cmd}"
     if ((${#env_args[@]})); then
       start_serve "${workdir}" env "${env_args[@]}" "${cmd[@]}"
