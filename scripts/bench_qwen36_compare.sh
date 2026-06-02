@@ -41,6 +41,9 @@ GPU_SETTLE_SEC="${GPU_SETTLE_SEC:-8}"
 
 BUNDLE="${BUNDLE:-${FLASHCLI_ROOT}/bundles/qwen_nvfp4}"
 CHECKPOINT="${CHECKPOINT:-${CKPT_QWEN36:-${HOME}/.flashcli/models/qwen36-27b-nvfp4/checkpoint}}"
+# PyTorch HF cannot load NVFP4 linear_attn; use official FP8 for the baseline arm.
+HF_CHECKPOINT="${HF_CHECKPOINT:-${HOME}/.flashcli/models/qwen36-27b-fp8/checkpoint}"
+HF_MODEL_NAME="${HF_MODEL_NAME:-qwen3.6-27b-fp8}"
 MTP_CKPT="${MTP_CKPT:-${HOME}/.flashcli/models/qwen36-27b-nvfp4/mtp_fp8}"
 OUT_DIR="${OUT_DIR:-}"
 PAYLOAD_DIR=""
@@ -54,7 +57,10 @@ Serial flow per backend: start serve → wait /health → bench_qwen_curl → st
 
   --quick              short ctx, max-seq ${QUICK_MAX_SEQ}, warmup none, 3 rounds
   --flashcli-only / --pytorch-only / --report-only
-  --checkpoint PATH  --max-seq N  --out-dir DIR  --help
+  --checkpoint PATH     FlashRT weights (default: NVFP4 pull path)
+  --hf-checkpoint PATH  PyTorch HF weights (default: Qwen3.6-27B-FP8)
+  --hf-model-name NAME  HF API model id (default: ${HF_MODEL_NAME})
+  --max-seq N  --out-dir DIR  --help
 
 See script header for defaults.
 EOF
@@ -84,6 +90,8 @@ while [[ $# -gt 0 ]]; do
     --profile) BENCH_PROFILE="$2"; shift 2 ;;
     --bundle) BUNDLE="$2"; shift 2 ;;
     --checkpoint) CHECKPOINT="$2"; shift 2 ;;
+    --hf-checkpoint) HF_CHECKPOINT="$2"; shift 2 ;;
+    --hf-model-name) HF_MODEL_NAME="$2"; shift 2 ;;
     --mtp-checkpoint) MTP_CKPT="$2"; shift 2 ;;
     --hf-attn) HF_ATTN="$2"; shift 2 ;;
     --hf-dtype) HF_DTYPE="$2"; shift 2 ;;
@@ -171,9 +179,14 @@ check_serve_log_fatal() {
     tail -n 20 "${serve_log}" >&2 || true
     die "Bundle not built (missing lib/ flash_rt/). See bundles/qwen_nvfp4/QUICKSTART.md"
   fi
-  if grep -qE 'Failed to load checkpoint|does not recognize this architecture|Qwen3_5ForCausalLM|Cannot import Qwen3_5|torchvision::nms|requires .accelerate|torchvision are incompatible' "${serve_log}"; then
+  if grep -qE 'Failed to load checkpoint|Cannot import Qwen3_5|does not recognize this architecture|torchvision::nms|requires .accelerate|torchvision are incompatible|CUDA out of memory|OutOfMemoryError' "${serve_log}"; then
     tail -n 25 "${serve_log}" >&2 || true
     die "HF server failed — see serve.log above"
+  fi
+  # transformers LOAD REPORT with many MISSING linear_attn keys → NVFP4 not viable for naive HF
+  if grep -q 'linear_attn.*| MISSING' "${serve_log}" 2>/dev/null; then
+    tail -n 15 "${serve_log}" >&2 || true
+    die "NVFP4 checkpoint partial load in HF (linear_attn MISSING). Use --checkpoint with Qwen/Qwen3.6-27B-FP8 for PyTorch baseline, or flashcli+FlashRT for NVFP4."
   fi
 }
 
@@ -237,9 +250,20 @@ long_prompt_style() {
   esac
 }
 
+payload_checkpoint() {
+  # Tokenizer for long-payload fit: prefer HF FP8 tree when running HF arm.
+  if [[ "${RUN_PYTORCH}" -eq 1 && -d "${HF_CHECKPOINT}" ]]; then
+    echo "${HF_CHECKPOINT}"
+  else
+    echo "${CHECKPOINT}"
+  fi
+}
+
 prepare_shared_payloads() {
+  local tok_ckpt
+  tok_ckpt="$(payload_checkpoint)"
   mkdir -p "${PAYLOAD_DIR}"
-  log "Step: build payloads (max_seq=${MAX_SEQ})"
+  log "Step: build payloads (max_seq=${MAX_SEQ}, tokenizer=${tok_ckpt})"
   jq -n \
     --arg model "${MODEL_NAME}" \
     --arg content "${SHORT_PROMPT}" \
@@ -251,7 +275,7 @@ prepare_shared_payloads() {
     return 0
   fi
   python3 "${MAKE_PAYLOAD}" \
-    --checkpoint "${CHECKPOINT}" \
+    --checkpoint "${tok_ckpt}" \
     --model "${MODEL_NAME}" \
     --target-prompt-tokens "${LONG_TOKENS}" \
     --max-tokens "${LONG_MAX_TOKENS}" \
@@ -262,7 +286,9 @@ prepare_shared_payloads() {
 
 write_manifest_header() {
   local workdir="$1" backend="$2" server_cmd="$3" started_at="$4" health_wait_s="$5"
-  local extra_json="${6:-{}}"
+  local stack="${6:-}" hf_attn="${7:-}" hf_dtype="${8:-}"
+  health_wait_s="${health_wait_s//[^0-9]/}"
+  [[ -n "${health_wait_s}" ]] || health_wait_s=0
   jq -n \
     --arg backend "${backend}" \
     --arg started_at "${started_at}" \
@@ -280,16 +306,22 @@ write_manifest_header() {
     --argjson long_tokens "${LONG_TOKENS}" \
     --argjson short_only "${SHORT_ONLY}" \
     --arg checkpoint "${CHECKPOINT}" \
+    --arg hf_checkpoint "${HF_CHECKPOINT:-}" \
     --arg mtp_checkpoint "${MTP_CKPT}" \
     --arg payload_dir "${PAYLOAD_DIR}" \
     --arg bundle "${BUNDLE}" \
-    --argjson extra "${extra_json}" \
+    --arg stack "${stack}" \
+    --arg hf_attn "${hf_attn}" \
+    --arg hf_dtype "${hf_dtype}" \
     '{backend: $backend, started_at: $started_at, health_wait_s: $health_wait_s, gpu_name: $gpu_name,
       server_cmd: $server_cmd, host: $host, port: $port, K: $K, max_seq: $max_seq,
       warmup_preset: $warmup_preset, rounds: $rounds, skip_first: $skip_first, profile: $profile,
       long_tokens: $long_tokens, short_only: ($short_only != 0), checkpoint: $checkpoint,
-      mtp_checkpoint: $mtp_checkpoint, payload_dir: $payload_dir, bundle: $bundle,
-      shared_weights: true, shared_payloads: true} + $extra' >"${workdir}/manifest.json"
+      hf_checkpoint: $hf_checkpoint, mtp_checkpoint: $mtp_checkpoint, payload_dir: $payload_dir,
+      bundle: $bundle, shared_weights: true, shared_payloads: true}
+      + (if $stack != "" then {stack: $stack} else {} end)
+      + (if $hf_attn != "" then {hf_attn: $hf_attn} else {} end)
+      + (if $hf_dtype != "" then {hf_dtype: $hf_dtype} else {} end)' >"${workdir}/manifest.json"
 }
 
 finish_manifest() {
@@ -301,9 +333,16 @@ finish_manifest() {
 }
 
 run_bench_cases() {
-  local workdir="$1"
-  cp "${PAYLOAD_DIR}/qwen36_short.json" "${workdir}/qwen36_short.json"
-  [[ "${SHORT_ONLY}" -eq 0 ]] && cp "${PAYLOAD_DIR}/qwen36_long.json" "${workdir}/qwen36_long.json"
+  local workdir="$1" api_model="${2:-${MODEL_NAME}}"
+  if [[ -n "${api_model}" ]]; then
+    jq --arg m "${api_model}" '.model = $m' "${PAYLOAD_DIR}/qwen36_short.json" >"${workdir}/qwen36_short.json"
+    if [[ "${SHORT_ONLY}" -eq 0 ]]; then
+      jq --arg m "${api_model}" '.model = $m' "${PAYLOAD_DIR}/qwen36_long.json" >"${workdir}/qwen36_long.json"
+    fi
+  else
+    cp "${PAYLOAD_DIR}/qwen36_short.json" "${workdir}/qwen36_short.json"
+    [[ "${SHORT_ONLY}" -eq 0 ]] && cp "${PAYLOAD_DIR}/qwen36_long.json" "${workdir}/qwen36_long.json"
+  fi
 
   local -a args=(--qwen36-only --rounds "${ROUNDS}" --skip-first "${SKIP_FIRST}"
     --workdir "${workdir}" --skip-payload-build)
@@ -339,9 +378,8 @@ run_flashcli_backend() {
   log "━━ FlashRT backend ━━"
   start_serve "${workdir}" env "${env_args[@]}" "${cmd[@]}"
   health_s="$(wait_health "${workdir}/serve.log")"
-  write_manifest_header "${workdir}" "flashcli+FlashRT" "${server_cmd}" "${started}" "${health_s}" \
-    "$(jq -n '{stack: "FlashRT"}')"
-  run_bench_cases "${workdir}"
+  write_manifest_header "${workdir}" "flashcli+FlashRT" "${server_cmd}" "${started}" "${health_s}" "FlashRT"
+  run_bench_cases "${workdir}" "${MODEL_NAME}"
   finish_manifest "${workdir}"
   stop_serve
   log "Done FlashRT → ${workdir}"
@@ -351,10 +389,13 @@ run_pytorch_backend() {
   local workdir="${OUT_DIR}/pytorch_hf"
   mkdir -p "${workdir}"
 
+  [[ -d "${HF_CHECKPOINT}" ]] || die "HF checkpoint not found: ${HF_CHECKPOINT}
+  huggingface-cli download Qwen/Qwen3.6-27B-FP8 --local-dir ${HF_CHECKPOINT}"
+
   local -a cmd=(
     python3 "${HF_SERVER}"
-    --checkpoint "${CHECKPOINT}"
-    --model-name "${MODEL_NAME}"
+    --checkpoint "${HF_CHECKPOINT}"
+    --model-name "${HF_MODEL_NAME}"
     --host "${HOST}" --port "${PORT}"
     --max-seq "${MAX_SEQ}" --max-output-tokens 16384
     --attn "${HF_ATTN}" --dtype "${HF_DTYPE}"
@@ -367,8 +408,8 @@ run_pytorch_backend() {
   start_serve "${workdir}" "${cmd[@]}"
   health_s="$(wait_health "${workdir}/serve.log")"
   write_manifest_header "${workdir}" "PyTorch HF" "${server_cmd}" "${started}" "${health_s}" \
-    "$(jq -n --arg a "${HF_ATTN}" --arg d "${HF_DTYPE}" '{stack: "transformers", hf_attn: $a, hf_dtype: $d}')"
-  run_bench_cases "${workdir}"
+    "transformers" "${HF_ATTN}" "${HF_DTYPE}"
+  run_bench_cases "${workdir}" "${HF_MODEL_NAME}"
   finish_manifest "${workdir}"
   stop_serve
   log "Done PyTorch HF → ${workdir}"
@@ -383,7 +424,9 @@ write_report() {
   log "Report: ${OUT_DIR}/REPORT.md"
 }
 
-log "out=${OUT_DIR} ckpt=${CHECKPOINT} max_seq=${MAX_SEQ} flashcli=${RUN_FLASHCLI} hf=${RUN_PYTORCH} quick=${QUICK}"
+log "out=${OUT_DIR} max_seq=${MAX_SEQ} flashcli=${RUN_FLASHCLI} hf=${RUN_PYTORCH} quick=${QUICK}"
+[[ "${RUN_FLASHCLI}" -eq 1 ]] && log "  FlashRT checkpoint=${CHECKPOINT}"
+[[ "${RUN_PYTORCH}" -eq 1 ]] && log "  HF checkpoint=${HF_CHECKPOINT} model=${HF_MODEL_NAME}"
 [[ "${QUICK}" -eq 1 ]] && log "GPU: $(gpu_name)"
 
 if [[ "${REPORT_ONLY}" -eq 1 ]]; then

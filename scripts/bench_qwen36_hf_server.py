@@ -168,7 +168,14 @@ class HfQwen36Engine:
         try:
             self.model = AutoModelForCausalLM.from_pretrained(checkpoint, **load_kwargs)
             log.info("Moving model to %s …", self.device)
-            self.model.to(self.device)
+            try:
+                self.model.to(self.device)
+            except torch.cuda.OutOfMemoryError:
+                sys.exit(
+                    "CUDA OOM while loading model onto GPU. "
+                    "HF transformers decompresses NVFP4 to full weights (~54GB+ in bf16); "
+                    "on a 48GB GPU use Qwen/Qwen3.6-27B-FP8 for the PyTorch baseline instead."
+                )
         except ImportError as exc:
             msg = str(exc)
             hint = _hf_qwen36_install_hint()
