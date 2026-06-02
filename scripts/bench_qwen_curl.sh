@@ -47,6 +47,7 @@ SKIP_QWEN36=0
 SKIP_QWEN3_LONG=0
 SKIP_QWEN36_LONG=0
 SKIP_SHORT=0
+SKIP_PAYLOAD_BUILD=0
 ROUNDS="${BENCH_ROUNDS:-1}"
 SKIP_FIRST="${BENCH_SKIP_FIRST-}"
 LONG_PROMPT_STYLE="${LONG_PROMPT_STYLE:-repeat}"
@@ -72,6 +73,7 @@ Options:
   --skip-qwen3-long       Skip qwen3 long (qwen3 is short-ctx only in FlashRT)
   --skip-qwen36-long      Skip qwen36 long prefill test
   --skip-short            Skip short tests
+  --skip-payload-build    Require qwen36_short.json (+ qwen36_long.json) already in --workdir
   --rounds N              Repeat each case N times (default: ${ROUNDS})
   --skip-first K          Drop first K rounds before averaging (default: 1 if rounds>1)
   --long-prompt-style S   repeat | flashrt | doc (flashrt=FlashRT doc seed)
@@ -105,6 +107,7 @@ while [[ $# -gt 0 ]]; do
     --skip-qwen3-long) SKIP_QWEN3_LONG=1; shift ;;
     --skip-qwen36-long) SKIP_QWEN36_LONG=1; shift ;;
     --skip-short) SKIP_SHORT=1; shift ;;
+    --skip-payload-build) SKIP_PAYLOAD_BUILD=1; shift ;;
     --rounds) ROUNDS="$2"; shift 2 ;;
     --skip-first) SKIP_FIRST="$2"; shift 2 ;;
     --long-prompt-style) LONG_PROMPT_STYLE="$2"; shift 2 ;;
@@ -446,12 +449,20 @@ fi
 
 if [[ "${SKIP_SHORT}" -eq 0 ]]; then
   if [[ "${SKIP_QWEN3}" -eq 0 ]]; then
-    make_short_payload "${QWEN3_MODEL}" "${WORKDIR}/qwen3_short.json"
+    if [[ "${SKIP_PAYLOAD_BUILD}" -eq 0 ]]; then
+      make_short_payload "${QWEN3_MODEL}" "${WORKDIR}/qwen3_short.json"
+    else
+      [[ -f "${WORKDIR}/qwen3_short.json" ]] || die "missing ${WORKDIR}/qwen3_short.json (--skip-payload-build)"
+    fi
     run_bench_case "qwen3 short ctx" "${QWEN3_PORT}" \
       "${WORKDIR}/qwen3_short.json" "qwen3_short"
   fi
   if [[ "${SKIP_QWEN36}" -eq 0 ]]; then
-    make_short_payload "${QWEN36_MODEL}" "${WORKDIR}/qwen36_short.json"
+    if [[ "${SKIP_PAYLOAD_BUILD}" -eq 0 ]]; then
+      make_short_payload "${QWEN36_MODEL}" "${WORKDIR}/qwen36_short.json"
+    else
+      [[ -f "${WORKDIR}/qwen36_short.json" ]] || die "missing ${WORKDIR}/qwen36_short.json (--skip-payload-build)"
+    fi
     run_bench_case "qwen36 short ctx" "${QWEN36_PORT}" \
       "${WORKDIR}/qwen36_short.json" "qwen36_short"
   fi
@@ -473,8 +484,12 @@ if [[ "${SKIP_QWEN36}" -eq 0 && "${SKIP_QWEN36_LONG}" -eq 0 ]]; then
   else
     log "qwen36 long: target user_tokens=${QWEN36_LONG_PROMPT_TOKENS} (set QWEN36_MAX_SEQ=<serve --max-seq> to auto-fit template overhead)"
   fi
-  make_long_payload "${CKPT_QWEN36}" "${QWEN36_MODEL}" \
-    "${QWEN36_LONG_PROMPT_TOKENS}" "${WORKDIR}/qwen36_long.json" "${_qwen36_max_seq}"
+  if [[ "${SKIP_PAYLOAD_BUILD}" -eq 0 ]]; then
+    make_long_payload "${CKPT_QWEN36}" "${QWEN36_MODEL}" \
+      "${QWEN36_LONG_PROMPT_TOKENS}" "${WORKDIR}/qwen36_long.json" "${_qwen36_max_seq}"
+  else
+    [[ -f "${WORKDIR}/qwen36_long.json" ]] || die "missing ${WORKDIR}/qwen36_long.json (--skip-payload-build)"
+  fi
   run_bench_case "qwen36 long ctx (user≈${QWEN36_LONG_PROMPT_TOKENS})" "${QWEN36_PORT}" \
     "${WORKDIR}/qwen36_long.json" "qwen36_long"
 fi
