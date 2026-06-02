@@ -103,6 +103,36 @@ EOF
 log() { printf '[bench-qwen] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
 
+# Find a regular file receiving flashcli serve stderr/stdout (tee target).
+discover_serve_log_path() {
+  local pid path fd cand
+  if [[ -n "${SERVE_LOG_PATH:-}" && -f "${SERVE_LOG_PATH}" ]]; then
+    printf '%s' "${SERVE_LOG_PATH}"
+    return 0
+  fi
+  for cand in \
+    "${QWEN36_SERVE_LOG:-}" \
+    "${FLASHCLI_SERVE_LOG:-}" \
+    "${HOME}/.flashcli/serve.log" \
+    /tmp/qwen36-serve.log \
+    /tmp/flashcli-serve.log; do
+    [[ -n "${cand}" && -f "${cand}" ]] || continue
+    printf '%s' "${cand}"
+    return 0
+  done
+  if command -v pgrep >/dev/null 2>&1; then
+    for pid in $(pgrep -f 'flashcli.*serve' 2>/dev/null || true); do
+      for fd in 1 2; do
+        path="$(readlink -f "/proc/${pid}/fd/${fd}" 2>/dev/null || true)"
+        [[ -n "${path}" && -f "${path}" && "${path}" != /dev/* ]] || continue
+        printf '%s' "${path}"
+        return 0
+      done
+    done
+  fi
+  return 1
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --workdir) WORKDIR="$2"; shift 2 ;;
@@ -173,8 +203,15 @@ mkdir -p "${WORKDIR}"
 if [[ -z "${SERVE_LOG_PATH}" && -f "${WORKDIR}/serve.log" ]]; then
   SERVE_LOG_PATH="${WORKDIR}/serve.log"
 fi
+if [[ -z "${SERVE_LOG_PATH}" ]]; then
+  _auto_serve_log="$(discover_serve_log_path 2>/dev/null || true)"
+  if [[ -n "${_auto_serve_log}" ]]; then
+    SERVE_LOG_PATH="${_auto_serve_log}"
+    log "auto-detected SERVE_LOG_PATH=${SERVE_LOG_PATH}"
+  fi
+fi
 if [[ "${WRITE_REPORT}" -eq 1 && -z "${SERVE_LOG_PATH}" ]]; then
-  die "--write-report requires --serve-log PATH or SERVE_LOG_PATH (or ${WORKDIR}/serve.log)"
+  die "--write-report requires serve.log (tee serve stderr, --serve-log, or auto-detect failed)"
 fi
 
 # After CLI flags: cap qwen3 long prompt to fit assumed serve --max-q-seq.
@@ -266,9 +303,7 @@ print_qwen36_hints() {
   log "  long prompt: --profile comparable  OR  --long-prompt-style flashrt"
   log "  256K: QWEN36_MAX_SEQ=<serve --max-seq>  (repeat fill lowers MTP vs flashrt seed)"
   if [[ -n "${SERVE_LOG_PATH:-}" ]]; then
-    log "  engine metrics: SERVE_LOG_PATH=${SERVE_LOG_PATH} (parse FlashRT 'stream |' lines)"
-  else
-    log "  engine TTFT: export SERVE_LOG_PATH=<serve.log>  (else only client_ttft in .out.json)"
+    log "  optional engine metrics: SERVE_LOG_PATH=${SERVE_LOG_PATH}"
   fi
 }
 
@@ -411,16 +446,18 @@ run_curl_once() {
     --argjson usage "$(jq '.usage // {}' "${resp}")" \
     --argjson bench "$(jq '.bench // {}' "${resp}")" \
     '{round: $round, wall_ms: $wall_ms, usage: $usage, bench: $bench}' >>"${jsonl}"
-  local tps ttft client_ttft server_ttft route
+  local tps client_ttft engine_ttft prefill_ms route msrc
   tps="$(jq -r '.usage.tok_per_s // .usage.decode_tok_per_s // .bench.estimated_decode_tok_per_s // "n/a"' "${resp}" 2>/dev/null)"
-  ttft="$(jq -r '.bench.server_ttft_ms // .usage.ttft_ms // .usage.first_delta_ms // .bench.ttft_ms // "n/a"' "${resp}" 2>/dev/null)"
   client_ttft="$(jq -r '.bench.client_ttft_ms // "n/a"' "${resp}" 2>/dev/null)"
-  server_ttft="$(jq -r '.bench.server_ttft_ms // empty' "${resp}" 2>/dev/null)"
+  engine_ttft="$(jq -r '.bench.server_ttft_ms // .usage.ttft_ms // empty' "${resp}" 2>/dev/null)"
+  prefill_ms="$(jq -r '.usage.prefill_ms // empty' "${resp}" 2>/dev/null)"
   route="$(jq -r '.usage.route // empty' "${resp}" 2>/dev/null)"
-  local ttft_src msrc
-  ttft_src="$(jq -r '.bench.ttft_source // empty' "${resp}" 2>/dev/null)"
   msrc="$(jq -r '.bench.metrics_source // empty' "${resp}" 2>/dev/null)"
-  log "  round ${round}/${ROUNDS}${tag}: wall=${wall_ms}ms engine_ttft=${ttft} client_ttft=${client_ttft} decode=${tps} tok/s${route:+ route=${route}}${msrc:+ src=${msrc}}"
+  if [[ -n "${msrc}" && -n "${engine_ttft}" ]]; then
+    log "  round ${round}/${ROUNDS}${tag}: wall=${wall_ms}ms prefill=${prefill_ms:-n/a} engine_ttft=${engine_ttft} client_ttft=${client_ttft} decode=${tps} tok/s${route:+ route=${route}} src=${msrc}"
+  else
+    log "  round ${round}/${ROUNDS}${tag}: wall=${wall_ms}ms client_ttft=${client_ttft} decode=${tps} tok/s${route:+ route=${route}}"
+  fi
 }
 
 summarize_rounds() {
@@ -501,6 +538,9 @@ if client_ttft_m is not None:
 engine_ttft_m = mean_ttft_ms(engine=True)
 if engine_ttft_m is not None:
     parts.append(f"engine_ttft_ms={engine_ttft_m:.1f}")
+prefill_m = mean("prefill_ms", "usage")
+if prefill_m is not None:
+    parts.append(f"prefill_ms={prefill_m:.1f}")
 for k in (
     "prompt_tokens",
     "completion_tokens",
@@ -549,7 +589,11 @@ run_bench_case() {
 
 log "workdir=${WORKDIR}  rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${_SCORED_ROUNDS} stream=${BENCH_STREAM} long_prompt_style=${LONG_PROMPT_STYLE} profile=${BENCH_PROFILE:-none}"
 if [[ "${BENCH_STREAM}" -eq 1 ]]; then
-  log "stream=true: server TTFT/decode from usage or serve.log (engine); client_ttft_ms=HTTP first chunk"
+  if [[ -n "${SERVE_LOG_PATH:-}" ]]; then
+    log "stream=true: engine TTFT/decode from serve.log (optional); client_ttft=HTTP first chunk"
+  else
+    log "stream=true: client_ttft=HTTP first content chunk (no serve.log — engine TTFT not collected)"
+  fi
 fi
 print_qwen36_hints
 if [[ "${SKIP_QWEN3}" -eq 0 ]]; then

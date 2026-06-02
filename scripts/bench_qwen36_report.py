@@ -241,36 +241,55 @@ def render_backend_section(backend: str, workdir: Path, cases: list[CaseSummary]
             if key in manifest and manifest[key] not in (None, ""):
                 lines.append(f"- {key}: `{manifest[key]}`")
     lines.append("")
-    lines.append(
-        "| case | prompt | completion | engine TTFT (ms) | client TTFT (ms) | "
-        "decode tok/s | curl wall (ms) | route |"
-    )
-    lines.append(
-        "|------|-------:|-----------:|-----------------:|-----------------:|"
-        "-------------:|---------------:|-------|"
-    )
+    has_engine = any(c.metrics.get("metrics_from_serve_log") for c in cases)
+    if has_engine:
+        lines.append(
+            "| case | prompt | completion | prefill (ms) | engine TTFT (ms) | "
+            "client TTFT (ms) | decode tok/s | curl wall (ms) | route |"
+        )
+        lines.append(
+            "|------|-------:|-----------:|-------------:|-----------------:|"
+            "-----------------:|-------------:|---------------:|-------|"
+        )
+    else:
+        lines.append(
+            "| case | prompt | completion | client TTFT (ms) | "
+            "decode tok/s | curl wall (ms) | route |"
+        )
+        lines.append(
+            "|------|-------:|-----------:|-----------------:|"
+            "-------------:|---------------:|-------|"
+        )
     for case in cases:
         m = case.metrics
         est = "†" if m.get("decode_tok_per_s_estimated") else ""
-        lines.append(
-            "| "
-            + " | ".join(
-                [
-                    case.name,
-                    _fmt_num(m.get("prompt_tokens"), digits=0),
-                    _fmt_num(m.get("completion_tokens"), digits=0),
-                    _fmt_num(m.get("engine_ttft_ms") or m.get("server_ttft_ms")),
-                    _fmt_num(m.get("client_ttft_ms")),
-                    _fmt_num(m.get("decode_tok_per_s_best")) + est,
-                    _fmt_num(m.get("curl_wall_ms_mean"), digits=0),
-                    str(m.get("route_last") or "n/a"),
-                ]
-            )
-            + " |"
-        )
+        if has_engine:
+            row = [
+                case.name,
+                _fmt_num(m.get("prompt_tokens"), digits=0),
+                _fmt_num(m.get("completion_tokens"), digits=0),
+                _fmt_num(m.get("prefill_ms")),
+                _fmt_num(m.get("engine_ttft_ms") or m.get("server_ttft_ms")),
+                _fmt_num(m.get("client_ttft_ms")),
+                _fmt_num(m.get("decode_tok_per_s_best")) + est,
+                _fmt_num(m.get("curl_wall_ms_mean"), digits=0),
+                str(m.get("route_last") or "n/a"),
+            ]
+        else:
+            row = [
+                case.name,
+                _fmt_num(m.get("prompt_tokens"), digits=0),
+                _fmt_num(m.get("completion_tokens"), digits=0),
+                _fmt_num(m.get("client_ttft_ms") or m.get("ttft_ms")),
+                _fmt_num(m.get("decode_tok_per_s_best")) + est,
+                _fmt_num(m.get("curl_wall_ms_mean"), digits=0),
+                str(m.get("route_last") or "n/a"),
+            ]
+        lines.append("| " + " | ".join(row) + " |")
     lines.append("")
     lines.append(
-        "† = decode estimated from curl wall when serve.log / usage had no engine decode_tok_per_s."
+        "† = decode estimated from curl wall minus client TTFT when engine decode_tok_per_s "
+        "is unavailable."
     )
     lines.append("")
     return lines
@@ -299,23 +318,36 @@ def render_compare_section(
         + " |",
         "|------|--------|" + "|".join(["---:"] * 3) + "|",
     ]
-    metric_specs = [
-        ("engine_ttft_ms", "engine TTFT ms", False),
-        ("client_ttft_ms", "client TTFT ms", False),
+    any_engine = any(
+        (left_cases[n].metrics.get("metrics_from_serve_log") or right_cases[n].metrics.get("metrics_from_serve_log"))
+        for n in shared
+    )
+    metric_specs: list[tuple[str, str, bool]] = [
         ("decode_tok_per_s_best", "decode tok/s", True),
         ("curl_wall_ms_mean", "curl wall ms", False),
     ]
+    if any_engine:
+        metric_specs = [
+            ("engine_ttft_ms", "engine TTFT ms", False),
+            ("client_ttft_ms", "client TTFT ms", False),
+            *metric_specs,
+        ]
+    else:
+        metric_specs = [
+            ("client_ttft_ms", "client TTFT ms", False),
+            *metric_specs,
+        ]
     for case_name in shared:
         lc = left_cases[case_name].metrics
         rc = right_cases[case_name].metrics
-        for key, label, higher_better in metric_specs:
+        for mi, (key, label, higher_better) in enumerate(metric_specs):
             lv = lc.get(key)
             rv = rc.get(key)
             lines.append(
                 "| "
                 + " | ".join(
                     [
-                        case_name if label == "engine TTFT ms" else "",
+                        case_name if mi == 0 else "",
                         label,
                         _fmt_num(lv, digits=0 if key == "curl_wall_ms_mean" else 1),
                         _fmt_num(rv, digits=0 if key == "curl_wall_ms_mean" else 1),
@@ -390,9 +422,9 @@ def build_report(
         "",
         "Metrics are means over scored rounds (after warmup skips). "
         "Both backends use the same NVFP4 weights and HTTP payloads from `bench_qwen36_compare.sh`. "
-        "**Engine TTFT / decode** come from FlashRT `stream |` lines in `serve.log` "
-        "(merged into metrics automatically). **Client TTFT** is the first HTTP content chunk. "
-        "Compare arms using **engine TTFT**, not client TTFT, for qwen36.",
+        "**Client TTFT** = first HTTP content chunk (always available for HTTP bench). "
+        "**Engine TTFT / decode** appear only when `serve.log` was captured "
+        "(`bench_qwen36_compare.sh` does this automatically; optional `tee` for manual curl bench).",
         "",
     ]
     lines.extend(render_fairness_section(out_dir))
