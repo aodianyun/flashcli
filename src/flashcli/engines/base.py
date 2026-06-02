@@ -27,6 +27,8 @@ class ChatRequest:
     tools: list[dict[str, Any]] | None = None
     stop: list[str] | None = None
     seed: int | None = None
+    # Vendor / backend-specific fields (e.g. flashrt_session_id, enable_thinking).
+    extras: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -35,6 +37,8 @@ class ChatResult:
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     finish_reason: str = "stop"
     usage: dict[str, Any] = field(default_factory=dict)
+    # Optional top-level response extensions (e.g. {"flashrt": {...}}).
+    extensions: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

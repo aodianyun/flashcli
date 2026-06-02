@@ -1,6 +1,6 @@
 # pi05_libero
 
-<p align="right"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
+<p align="right"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a> · <a href="QUICKSTART.md">Quick start</a></p>
 
 Pi0.5 LIBERO VLA; weights [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044).
 
@@ -12,8 +12,9 @@ Pi0.5 LIBERO VLA; weights [lerobot/pi05_libero_finetuned_v044](https://huggingfa
 flashcli-bundle.json
 run.py
 _pi05_compat.py
-flash_rt_kernels.so
-flash_rt_fa2.so
+lib/
+  flash_rt_kernels-*-sm89-cu{124|130}-linux-x86_64-py{310|311|312}.so
+  flash_rt_fa2-*-....so
 flash_rt/                 # trimmed Python tree (no .so inside)
 ```
 
@@ -21,38 +22,64 @@ Weights are downloaded by flashcli to `~/.flashcli/models/pi05_libero/checkpoint
 
 ## End users
 
+See **[QUICKSTART.md](QUICKSTART.md)** for copy-paste commands.
+
 ```bash
 pip install flashcli
 flashcli run pi05_libero --prompt "..." --image /path/to/base.jpg
 ```
 
-## Maintainers: assemble bundle
+## Maintainers: release bundle
 
-**Linux + NVIDIA GPU** (SM89 or SM120):
+**Supported GPU**: **SM89 only** (Ada, e.g. RTX 4090). SM120 / Blackwell is not supported in this release line.
+
+### FA2 build (matrix)
+
+| CUDA line | FA2 |
+|-----------|-----|
+| **cu124** (nvcc 12.4) | sm_89 AOT only (`FA2_ARCH_NATIVE_ONLY`) |
+| **cu130** (nvcc 13.x) | sm_80 + sm_120 + PTX (multi-arch FA2 in cu130 cells; **kernels remain sm_89**) |
+
+Do not publish cu130 builds with `--fa2-native-only`. Local SM89-only dev: `build.sh --fa2-native-only`.
+
+### One-command release (recommended)
+
+Linux host with **Docker + NVIDIA GPU**:
 
 ```bash
 cd flashcli/bundles/pi05_libero
-bash build.sh --repo-root /path/to/FlashRT
-bash pack.sh --sm 89                  # release zip (cuda tag auto from nvcc, typically cu124)
+bash release.sh --clean
 ```
 
-Register the matrix zip URL in `src/flashcli/catalog/models.yaml`, e.g.:
+Output example: `dist/flashcli-bundle-pi05-{abi}-sm89-multi-linux-x86_64-{timestamp}.zip`
 
-```yaml
-bundle:
-  zip: https://cdn.../flashcli-bundle-pi05-main-sm89-multi-linux-x86_64.zip
-```
-
-See [docs/runtime-matrix.md](../../docs/runtime-matrix.md) for building the multi-env `lib/` layout.
-
-`build.sh` stages only the Pi0.5 RTX `flash_rt/` subtree and copies `flash_rt_kernels.so` + `flash_rt_fa2.so` only.
-
-Do **not** ship `requirements-runtime.txt` in the release zip — dependencies live in `flashcli-bundle.json` → `python_dependencies`.
+### Step-by-step (host with cu124 + cu130)
 
 ```bash
-flashcli bundle validate "$(pwd)/bundles/pi05_libero"
-flashcli run pi05_libero --bundle "$(pwd)/bundles/pi05_libero" --image /path/to/base.jpg
+cd flashcli
+bash scripts/build_release_matrix.sh --bundle pi05_libero --check-only
+bash scripts/release_bundle.sh --bundle pi05_libero --clean --cuda-tag 124
+bash scripts/release_bundle.sh --bundle pi05_libero --cuda-tag 130
+flashcli bundle validate bundles/pi05_libero
 ```
+
+Use `--native` instead of Docker when both CUDA toolkits are on the host.
+
+### After release
+
+1. Smoke-test: `flashcli run pi05_libero --bundle bundles/pi05_libero --benchmark 5`
+2. Upload `dist/*.zip` to CDN
+3. Update `src/flashcli/catalog/models.yaml` → `pi05_libero.bundle.zip`
+4. Verify on **SM89** (e.g. RTX 4090)
+
+### Local single-env dev
+
+```bash
+bash build.sh --repo-root /path/to/FlashRT
+flashcli bundle validate .
+```
+
+See [docs/runtime-matrix.md](../../docs/runtime-matrix.md) for the full matrix layout.
 
 ## Troubleshooting
 
@@ -69,6 +96,10 @@ flashcli pull pi05_libero
 Pre-download on a reachable host, then `flashcli run pi05_libero --bundle bundles/pi05_libero --checkpoint ./checkpoint --image ...`.
 
 `--bundle` must be a directory containing `flashcli-bundle.json` (e.g. `bundles/pi05_libero` or an extracted `dist/flashcli-bundle-pi05-*` folder), not the `.zip` file.
+
+### `no kernel image is available for execution on the device`
+
+Usually **wrong GPU** (SM120 is not supported) or a **CUDA cell mismatch** on SM89. Run `flashcli models envs pi05_libero` — expect `sm89-cu124-*` or `sm89-cu130-*`.
 
 ### `'GemmRunner' object has no attribute 'fp8_nt_dev'`
 

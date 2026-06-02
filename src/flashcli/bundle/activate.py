@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
-from typing import Literal
 
 from flashcli.bundle.manifest import (
     BundleManifest,
@@ -13,15 +11,13 @@ from flashcli.bundle.manifest import (
     bundle_python_root,
     check_bundle_python_abi,
 )
-from flashcli.deps import Profile, ensure_runtime_python_stack, python_stack_satisfied
+from flashcli.deps import ensure_runtime_python_stack, bundle_python_stack_satisfied
 from flashcli.runtime.detect import torch_index_for_cuda_tag
 from flashcli.bundle.native import (
     ensure_bundle_importable,
     probe_native_python_abi,
     verify_native_modules,
 )
-
-ProfileArg = Literal["default", "serve"]
 
 _ACTIVE_BUNDLE: BundleManifest | None = None
 
@@ -33,12 +29,11 @@ def active_bundle() -> BundleManifest | None:
 def activate_bundle(
     bundle: BundleManifest,
     *,
-    profile: ProfileArg = "default",
     install_python: bool = True,
     quiet: bool = False,
     force_python: bool = False,
 ) -> Path:
-    """Put bundle on PYTHONPATH, install deps from bundle json, preload native modules."""
+    """Put bundle on PYTHONPATH, install inference deps, preload native modules."""
     global _ACTIVE_BUNDLE
     python_root = bundle_python_root(bundle)
     py_str = str(python_root.resolve())
@@ -66,8 +61,8 @@ def activate_bundle(
         torch_index = str(cuda.get("recommended_torch_index", "")) or (
             torch_index_for_cuda_tag(cuda_tag) if cuda_tag else "cu124"
         )
-        if not force_python and python_stack_satisfied(
-            profile, bundle_root=bundle_root
+        if not force_python and bundle_python_stack_satisfied(
+            bundle_root=bundle_root
         ):
             pass
         else:
@@ -78,9 +73,18 @@ def activate_bundle(
             ensure_runtime_python_stack(
                 bundle_root=bundle_root,
                 torch_index=torch_index,
-                profile=profile,
                 quiet=quiet,
                 force=force_python,
+            )
+        if not bundle_python_stack_satisfied(bundle_root=bundle_root):
+            if not quiet:
+                print("Retrying bundle dependency install ...")
+            from flashcli.deps import repair_bundle_python_stack
+
+            repair_bundle_python_stack(
+                bundle_root=bundle_root,
+                torch_index=torch_index,
+                quiet=quiet,
             )
 
     ensure_bundle_importable(bundle, gpu=gpu)

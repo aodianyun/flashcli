@@ -1,28 +1,27 @@
 #!/usr/bin/env bash
-# Build / stage a Qwen model bundle (flash_rt + CUDA kernels) for flashcli serve.
+# Build / stage this bundle (bundles/pi05_libero/_bundle_build.sh).
 #
-# Usage:
-#   bash flashcli/scripts/build_qwen_bundle.sh --bundle-dir flashcli/bundles/qwen_nvfp4
-#   bash flashcli/scripts/build_qwen_bundle.sh --bundle-dir ... --variant qwen3 --repo-root /app/FlashRT
-#   bash flashcli/scripts/build_qwen_bundle.sh --bundle-dir ... --pack-only
+#   bash build.sh
+#   bash build.sh --pack-only --repo-root /app/FlashRT
+#   bash matrix_cell.sh ...          # release matrix (via build_release_matrix.sh)
+#   bash finalize_manifest.sh ...    # after full matrix
 #
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FLASHCLI_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-# shellcheck source=lib/native_naming.sh
-source "${SCRIPT_DIR}/lib/native_naming.sh"
-# shellcheck source=lib/probe_native_abi.sh
-source "${SCRIPT_DIR}/lib/probe_native_abi.sh"
-GEN_MANIFEST="${SCRIPT_DIR}/generate_runtime_manifest.py"
-BUNDLED_REQUIREMENTS="${SCRIPT_DIR}/requirements/runtime-inference.txt"
+BUNDLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FLASHCLI_ROOT="$(cd "${BUNDLE_DIR}/../.." && pwd)"
+FLASHCLI_SCRIPTS="${FLASHCLI_ROOT}/scripts"
+# shellcheck source=../../scripts/lib/native_naming.sh
+source "${FLASHCLI_SCRIPTS}/lib/native_naming.sh"
+# shellcheck source=../../scripts/lib/probe_native_abi.sh
+source "${FLASHCLI_SCRIPTS}/lib/probe_native_abi.sh"
+GEN_MANIFEST="${FLASHCLI_SCRIPTS}/generate_runtime_manifest.py"
+BUNDLED_REQUIREMENTS="${FLASHCLI_SCRIPTS}/requirements/runtime-inference.txt"
 
 REPO_ROOT=""
-BUNDLE_DIR=""
 OUTPUT_DIR=""
 GIT_REF="main"
 RUNTIME_VERSION="1.0.0"
-VARIANT="all"
 SM=""
 CUDA_TAG=""
 OS_NAME=""
@@ -31,10 +30,9 @@ GPU_ARCH=""
 BUILD_DIR=""
 JOBS="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 SKIP_BUILD=0
-MERGE_NATIVE=0
-SKIP_MANIFEST=0
-FINALIZE_MATRIX_MANIFEST=0
-FA2_NATIVE_ONLY=1
+# Release default: multi-arch FA2 (sm_80 + sm_120 + PTX) so SM89-labeled artifacts
+# also run on SM120 (Blackwell). Use --fa2-native-only for faster local SM89-only dev.
+FA2_NATIVE_ONLY=0
 FLASHRT_TAG=""
 BUILD_ID=""
 MIN_DRIVER=""
@@ -42,46 +40,50 @@ CUTLASS_REF="v4.4.2"
 EMBED_CHECKPOINT=""
 PYTHON_BIN=""
 PYTHON_MINOR=""
+MERGE_NATIVE=0
+SKIP_MANIFEST=0
+FINALIZE_MATRIX_MANIFEST=0
 
 usage() {
   cat <<EOF
-Assemble a Qwen flashcli model bundle (v2: flash_rt/ + tagged *.so under lib/).
+Assemble a Pi0.5 flashcli model bundle (flat layout: *.so + flash_rt/ + run.py at bundle root).
 
 Usage:
-  bash flashcli/scripts/build_qwen_bundle.sh --bundle-dir DIR [OPTIONS]
+  bash flashcli/scripts/build_pi05_bundle.sh --bundle-dir DIR [OPTIONS]
 
 Required:
   --bundle-dir DIR        Bundle root (must contain flashcli-bundle.json)
 
 Options:
-  --variant NAME          qwen3 | qwen36 | all (default: all)
   --repo-root DIR         FlashRT source (default: auto-detect)
   --output-dir DIR        Also write tarball here (optional)
   --git-ref REF           Record in flashcli-bundle.json git_ref (default: main)
   --runtime-version VER   manifest runtime_version (default: 1.0.0)
   --gpu-arch ARCH         CMake -DGPU_ARCH= (default: auto SM)
+  --python-bin PATH       Python for pybind build + manifest (default: python3)
+  --python-minor NNN      Record python_abi 310/311/312 (default: from --python-bin)
+  --sm SM                 Target SM label e.g. 89 (default: auto nvidia-smi)
+  --cuda-tag TAG          Target cuda tag 124/130 (default: auto nvcc)
   --build-dir DIR         CMake build dir (default: <repo>/build)
   -j, --jobs N            Parallel cmake jobs
-  --pack-only             Skip cmake; stage existing .so
+  --pack-only             Skip cmake; stage existing .so under flash_rt/ or build/
   --embed-checkpoint DIR  Copy weights into bundle checkpoint/
-  --python-bin BIN        Python for manifest ABI tag (default: python3)
-  --python-minor TAG      310 / 311 / 312 (default: from --python-bin)
-  --sm SM                 SM label (default: auto from GPU; release matrix uses 120)
-  --cuda-tag TAG          CUDA tag 124 / 130 (default: from nvcc)
-  --merge-native          Stage .so into lib/ without replacing other matrix cells
-  --skip-manifest         Skip flashcli-bundle.json update (matrix intermediate cell)
-  --finalize-matrix-manifest  After full matrix, scan lib/ and write multi-env manifest
+  --flashrt-tag TAG       manifest flashrt_tag
+  --build-id ID           manifest build_id
+  --min-driver VER        manifest min_driver_version
+  --cutlass-branch REF    CUTLASS tag (default: v4.4.2)
+  --merge-native          Install .so under lib/ (accumulate matrix cells)
+  --fa2-native-only       Fast dev: FA2 sm_\${GPU_ARCH} only (breaks SM120; not for release)
+  --skip-manifest         Skip flashcli-bundle.json manifest update
+  --finalize-matrix-manifest  Scan lib/ and write multi-env manifest (after full matrix)
   -h, --help
-
-Note: Qwen NVFP4 requires SM120 + flash_rt_fp4. Release zip: see
-  scripts/build_qwen_release_matrix.sh (cu130 × py310/311/312).
 EOF
 }
 
-log() { printf '[qwen-bundle] %s\n' "$*" >&2; }
+log() { printf '[pi05-bundle] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
 
-# Copy a source tree into dst, honoring exclude globs (rsync or tar fallback).
+# Copy a source tree into dst, honoring rsync-style exclude globs.
 sync_tree() {
   local src="$1" dst="$2"
   shift 2
@@ -96,23 +98,11 @@ sync_tree() {
     rsync "${args[@]}" "${src}/" "${dst}/"
     return 0
   fi
-  log "rsync not found; using tar for ${src} -> ${dst}"
   local -a tar_args=(-C "${src}")
-  local pat
   for pat in "${excludes[@]}"; do
     tar_args+=(--exclude="${pat}")
   done
   tar "${tar_args[@]}" -cf - . | tar -C "${dst}" -xf -
-}
-
-copy_dir() {
-  local src="$1" dst="$2"
-  mkdir -p "${dst}"
-  if command -v rsync >/dev/null 2>&1; then
-    rsync -a "${src}/" "${dst}/"
-  else
-    cp -a "${src}/." "${dst}/"
-  fi
 }
 
 is_flashrt_repo() {
@@ -135,7 +125,7 @@ resolve_repo_root() {
       return
     fi
   done
-  die "Cannot find FlashRT repo; pass --repo-root"
+  die "Cannot find FlashRT repo; pass --repo-root (need CMakeLists.txt + flash_rt/)"
 }
 
 ensure_runtime_requirements_file() {
@@ -238,8 +228,15 @@ run_cmake_build() {
   )
   if [[ "${FA2_NATIVE_ONLY}" -eq 1 ]]; then
     cmake_args+=(-DFA2_ARCH_NATIVE_ONLY=ON)
+    log "FA2: sm_${GPU_ARCH} only (FA2_ARCH_NATIVE_ONLY=ON; SM120 unsupported)"
+  elif [[ "${CUDA_TAG}" == "124" ]]; then
+    # nvcc 12.4 cannot compile compute_120 (FA2 sm_120 AOT / PTX). cu124 cells
+    # ship sm_89 FA2 only; SM120 users pick cu130 cells from the same zip.
+    cmake_args+=(-DFA2_ARCH_NATIVE_ONLY=ON)
+    log "FA2: sm_${GPU_ARCH} AOT only for cu124 (nvcc 12.4; SM120 → cu130 cells in zip)"
+  else
+    log "FA2: multi-arch sm_80 + sm_120 + PTX (release default; SM89 + SM120 on cu${CUDA_TAG})"
   fi
-  # FlashRT writes pybind .so into ${REPO_ROOT}/flash_rt/ (shared). Clear stale ABIs.
   clean_flashrt_shared_native_outputs "${REPO_ROOT}"
   log "CMake configure GPU_ARCH=${GPU_ARCH} Python3_EXECUTABLE=${py_bin} ($("${py_bin}" --version 2>&1 | head -1))"
   cmake "${cmake_args[@]}"
@@ -255,72 +252,66 @@ run_cmake_build() {
   shopt -u nullglob
 }
 
-ensure_bundle_entry_modules() {
-  if [[ -f "${BUNDLE_DIR}/run.py" && -f "${BUNDLE_DIR}/serve.py" ]]; then
-    return 0
-  fi
-  local partner_src="${BUNDLE_DIR}/partner"
-  if [[ -d "${partner_src}" ]]; then
-    touch "${partner_src}/__init__.py"
-    return 0
-  fi
-  die "Missing run.py+serve.py (v2 flat) or partner/ under ${BUNDLE_DIR}"
-}
+# Official pi05_libero bundle: minimal flash_rt tree (matches end-user zip contents).
+stage_pi05_flash_rt_minimal() {
+  local dst="$1"
+  local src="${REPO_ROOT}/flash_rt"
+  rm -rf "${dst}"
+  mkdir -p "${dst}"
 
-stage_flash_rt_python() {
-  local py_dir="$1"
-  local flash_rt_src="${REPO_ROOT}/flash_rt"
-  local -a excludes=(
-    '*.so'
-    'frontends/jax'
-    'datasets'
-    'refs'
-    'executors/jax'
-    'models/groot'
-    'models/groot_n17'
-    'models/pi0'
-    'models/pi0fast'
-    'models/motus'
-    'hardware/thor'
-    'frontends/torch/groot_thor.py'
-    'frontends/torch/groot_rtx.py'
-    'frontends/torch/pi05_thor.py'
-    'frontends/torch/pi05_thor_fp4.py'
-    'frontends/torch/motus'
-  )
-  case "${VARIANT}" in
-    qwen3)
-      excludes+=('models/qwen36')
-      excludes+=('frontends/torch/qwen36_rtx.py')
-      ;;
-    qwen36)
-      excludes+=('models/qwen3')
-      excludes+=('frontends/torch/qwen3_rtx.py')
-      ;;
-    all) ;;
-    *) die "Unknown --variant ${VARIANT} (use qwen3, qwen36, or all)" ;;
-  esac
-  sync_tree "${flash_rt_src}" "${py_dir}" "${excludes[@]}"
-}
+  _cp_file() {
+    local rel="$1"
+    mkdir -p "${dst}/$(dirname "${rel}")"
+    cp -a "${src}/${rel}" "${dst}/${rel}"
+  }
 
-stage_qwen_serve_modules() {
-  local py_dir="$1"
-  local serve_dir="${py_dir}/serve"
-  mkdir -p "${serve_dir}"
-  touch "${serve_dir}/__init__.py"
-  case "${VARIANT}" in
-    qwen3|all)
-      cp -f "${REPO_ROOT}/examples/qwen3_openai_server.py" \
-        "${serve_dir}/qwen3_openai.py"
-      ;;
-  esac
-  case "${VARIANT}" in
-    qwen36|all)
-      cp -f "${REPO_ROOT}/examples/qwen36_openai_server.py" \
-        "${serve_dir}/qwen36_openai.py"
-      ;;
-  esac
-  log "Staged OpenAI server engines -> ${serve_dir}/"
+  for rel in __init__.py api.py models/__init__.py; do
+    _cp_file "${rel}"
+  done
+
+  mkdir -p "${dst}/models/pi05"
+  sync_tree "${src}/models/pi05" "${dst}/models/pi05" 'pipeline_thor*'
+
+  for rel in \
+    frontends/__init__.py \
+    frontends/torch/__init__.py \
+    frontends/torch/pi05_rtx.py; do
+    _cp_file "${rel}"
+  done
+
+  _cp_file hardware/__init__.py
+  [[ -f "${src}/hardware/backend.py" ]] && _cp_file hardware/backend.py
+
+  mkdir -p "${dst}/hardware/rtx"
+  for rel in attn_backend.py attn_backend_batched_pi05.py; do
+    cp -a "${src}/hardware/rtx/${rel}" "${dst}/hardware/rtx/${rel}"
+  done
+  cat > "${dst}/hardware/rtx/__init__.py" <<'PY'
+"""RTX attention backends (pi05_libero bundle subset)."""
+from .attn_backend import AttnBackend, RtxFlashAttnBackend, TorchFlashAttnBackend
+from .attn_backend_batched_pi05 import PI05_BATCH_SIZE, RtxFlashAttnBatchedBackendPi05
+
+__all__ = [
+    "AttnBackend",
+    "RtxFlashAttnBackend",
+    "TorchFlashAttnBackend",
+    "PI05_BATCH_SIZE",
+    "RtxFlashAttnBatchedBackendPi05",
+]
+PY
+
+  mkdir -p "${dst}/core"
+  sync_tree "${src}/core" "${dst}/core" '*.so' 'rl'
+
+  mkdir -p "${dst}/executors"
+  for rel in __init__.py torch_weights.py weight_loader.py; do
+    [[ -f "${src}/executors/${rel}" ]] && cp -a "${src}/executors/${rel}" "${dst}/executors/${rel}"
+  done
+
+  mkdir -p "${dst}/utils"
+  sync_tree "${src}/utils" "${dst}/utils"
+
+  log "Staged minimal flash_rt/ for pi05_libero ($(find "${dst}" -type f | wc -l) files)"
 }
 
 finalize_matrix_manifest() {
@@ -338,43 +329,46 @@ finalize_matrix_manifest() {
     --git-commit "$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)" \
     --build-id "${BUILD_ID:-matrix}" \
     --git-ref "${GIT_REF}" \
-    --sm "${SM:-120}" \
+    --sm "${SM:-89}" \
     --os-name "${OS_NAME:-linux}" \
     --cpuarch "${CPU_ARCH:-x86_64}" \
-    --gpu-arch "${GPU_ARCH:-120}" \
-    --cuda-tag "${CUDA_TAG:-130}" \
-    --toolkit "13.0" \
-    --torch-index "cu128" \
-    --min-driver "550.54.14" \
+    --gpu-arch "${GPU_ARCH:-89}" \
+    --cuda-tag "${CUDA_TAG:-124}" \
+    --toolkit "12.4" \
+    --torch-index "cu124" \
+    --min-driver "525.60.13" \
     --has-fa2 "1" \
-    --has-fp4 "1" \
+    --has-fp4 "0" \
     --has-fmha "0" \
     --python-minor "310" >/dev/null
 }
 
 stage_bundle_runtime() {
-  local lib_dir="${BUNDLE_DIR}/lib"
+  local native_lib="${BUNDLE_DIR}/lib"
+  local lib_dir="${BUNDLE_DIR}"
+  if [[ "${MERGE_NATIVE}" -eq 1 ]]; then
+    lib_dir="${native_lib}"
+    mkdir -p "${native_lib}"
+  fi
   local py_dir="${BUNDLE_DIR}/flash_rt"
+  local flash_rt_src="${REPO_ROOT}/flash_rt"
   local build_src="${BUILD_DIR:-${REPO_ROOT}/build}/native-out"
-  local py_bin="${PYTHON_BIN:-python3}"
   local skip_py_stage=0
 
-  mkdir -p "${lib_dir}"
   if [[ "${MERGE_NATIVE}" -eq 1 && -d "${py_dir}" && -f "${py_dir}/api.py" ]]; then
     skip_py_stage=1
-    log "Keeping existing flash_rt/ (--merge-native)"
+    log "Keeping existing flash_rt/ (--merge-native matrix cell)"
   else
     rm -rf "${py_dir}"
   fi
   rm -rf "${BUNDLE_DIR}/runtime"
-  # v2 spec: native *.so live under lib/ only (not bundle root).
-  rm -f "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so
-  for legacy_so in "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so; do
-    [[ -f "${legacy_so}" ]] || continue
-    log "Moving legacy $(basename "${legacy_so}") -> lib/"
-    mv -f "${legacy_so}" "${lib_dir}/"
-  done
+  if [[ "${MERGE_NATIVE}" -eq 1 ]]; then
+    rm -f "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so
+  else
+    rm -f "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so
+  fi
 
+  local py_bin="${PYTHON_BIN:-python3}"
   if [[ -z "${PYTHON_MINOR}" ]]; then
     PYTHON_MINOR="$("${py_bin}" -c 'import sys; print(f"{sys.version_info.major}{sys.version_info.minor:02d}")')"
   fi
@@ -384,64 +378,39 @@ stage_bundle_runtime() {
   flashrt_tag="${FLASHRT_TAG:-$(git -C "${REPO_ROOT}" describe --tags --always 2>/dev/null || echo dev)}"
   flashrt_abi="$(sanitize_flashrt_abi "${flashrt_tag}" "${git_commit}")"
   native_tag="$(native_artifact_tag "${flashrt_abi}" "${SM}" "${CUDA_TAG}" "${OS_NAME}" "${CPU_ARCH}" "${PYTHON_MINOR}")"
-  local kernels_name fa2_name fp4_name
+  local kernels_name fa2_name
   kernels_name="$(native_so_filename flash_rt_kernels "${native_tag}")"
   fa2_name="$(native_so_filename flash_rt_fa2 "${native_tag}")"
-  fp4_name="$(native_so_filename flash_rt_fp4 "${native_tag}")"
   log "Native artifact tag: ${native_tag}"
   log "  ${kernels_name}"
   log "  ${fa2_name}"
-  [[ "${VARIANT}" == "qwen36" || "${VARIANT}" == "all" ]] && log "  ${fp4_name} (optional)"
 
   local cache_dir="${FLASHCLI_ROOT}/.native-cache/${native_tag}"
-  local has_kernels=0 has_fa2=0 has_fp4=0
-  rm -f "${lib_dir}/${kernels_name}" "${lib_dir}/${fa2_name}" "${lib_dir}/${fp4_name}"
-  if [[ -f "${cache_dir}/${kernels_name}" ]]; then
+  local has_kernels=0 has_fa2=0
+  rm -f "${lib_dir}/${kernels_name}" "${lib_dir}/${fa2_name}"
+  if [[ -f "${cache_dir}/${kernels_name}" && -f "${cache_dir}/${fa2_name}" ]]; then
     log "Reusing cached native libs from ${cache_dir}"
-    cp -f "${cache_dir}/${kernels_name}" "${lib_dir}/"
+    cp -f "${cache_dir}/${kernels_name}" "${cache_dir}/${fa2_name}" "${lib_dir}/"
     has_kernels=1
-    [[ -f "${cache_dir}/${fa2_name}" ]] && cp -f "${cache_dir}/${fa2_name}" "${lib_dir}/" && has_fa2=1
-    [[ -f "${cache_dir}/${fp4_name}" ]] && cp -f "${cache_dir}/${fp4_name}" "${lib_dir}/" && has_fp4=1
+    has_fa2=1
   fi
   if [[ ! -d "${build_src}" ]] || ! compgen -G "${build_src}"/*.so >/dev/null; then
-    build_src="${REPO_ROOT}/flash_rt"
+    build_src="${flash_rt_src}"
     log "Using ${build_src} for native staging (--pack-only or missing native-out)"
   fi
   stage_native_module_to_lib "${build_src}" "${lib_dir}" flash_rt_kernels "${kernels_name}" \
     "${PYTHON_MINOR}" && has_kernels=1
   stage_native_module_to_lib "${build_src}" "${lib_dir}" flash_rt_fa2 "${fa2_name}" \
     "${PYTHON_MINOR}" && has_fa2=1
-  stage_native_module_to_lib "${build_src}" "${lib_dir}" flash_rt_fp4 "${fp4_name}" \
-    "${PYTHON_MINOR}" && has_fp4=1
 
   [[ "${has_kernels}" -eq 1 ]] || die "${kernels_name} missing (build FlashRT or use --pack-only)"
-  [[ "${has_fa2}" -eq 1 ]] || die "${fa2_name} missing (required for Qwen FA2 attention)"
-  # SM120 Qwen NVFP4 is compiled into flash_rt_kernels (CUTLASS sm_120a).
-  # flash_rt_fp4.so is a separate Thor/SM100 add-on (CMake ENABLE_SM100_CUTLASS only).
-  if [[ "${has_fp4}" -eq 0 ]]; then
-    if [[ "${SM}" == "120" ]]; then
-      log "flash_rt_fp4.so not built (expected on SM120 — NVFP4 is in ${kernels_name})"
-    else
-      die "${fp4_name} missing (flash_rt_fp4 required when sm != 120)"
-    fi
-  fi
-  local nvfp4_feature=0
-  if [[ "${SM}" == "120" && "${has_kernels}" -eq 1 ]]; then
-    nvfp4_feature=1
-  elif [[ "${has_fp4}" -eq 1 ]]; then
-    nvfp4_feature=1
-  fi
-
-  if [[ "${SM}" != "120" ]]; then
-    log "WARNING: Qwen NVFP4 needs SM120; detected sm=${SM}"
-  fi
+  [[ "${has_fa2}" -eq 1 ]] || die "${fa2_name} missing (required for Pi0.5 FA2 attention)"
 
   _verify_staged_native_abi() {
     local name="$1"
     local so="${lib_dir}/${name}"
     [[ -f "${so}" ]] || return 0
-    local rc=0
-    local err=""
+    local rc=0 err=""
     err="$(probe_native_so_python_abi "${py_bin}" "${so}" 2>&1)" || rc=$?
     if [[ "${rc}" -eq 2 ]]; then
       die \
@@ -456,12 +425,9 @@ stage_bundle_runtime() {
   }
   _verify_staged_native_abi "${kernels_name}"
   _verify_staged_native_abi "${fa2_name}"
-  [[ "${has_fp4}" -eq 1 ]] && _verify_staged_native_abi "${fp4_name}"
 
-  ensure_bundle_entry_modules
   if [[ "${skip_py_stage}" -eq 0 ]]; then
-    stage_flash_rt_python "${py_dir}"
-    stage_qwen_serve_modules "${py_dir}"
+    stage_pi05_flash_rt_minimal "${py_dir}"
     find "${py_dir}" -name '*.so' -type f -delete 2>/dev/null || true
   fi
 
@@ -471,18 +437,17 @@ stage_bundle_runtime() {
 
   if [[ "${SKIP_MANIFEST}" -eq 1 ]]; then
     log "Skipping manifest update (--skip-manifest)"
-    mkdir -p "${cache_dir}"
-    cp -f "${lib_dir}/${kernels_name}" "${lib_dir}/${fa2_name}" "${cache_dir}/"
-    [[ "${has_fp4}" -eq 1 ]] && cp -f "${lib_dir}/${fp4_name}" "${cache_dir}/"
+    mkdir -p "${FLASHCLI_ROOT}/.native-cache/${native_tag}"
+    cp -f "${lib_dir}/${kernels_name}" "${lib_dir}/${fa2_name}" \
+      "${FLASHCLI_ROOT}/.native-cache/${native_tag}/"
     return 0
   fi
 
-  log "Updating flashcli-bundle.json (v2, lib/) python_abi=${PYTHON_MINOR}"
+  log "Updating flashcli-bundle.json (v2) python_abi=${PYTHON_MINOR}"
   "${py_bin}" "${GEN_MANIFEST}" \
     --repo-root "${REPO_ROOT}" \
     --bundle-json "${BUNDLE_DIR}/flashcli-bundle.json" \
     --lib-dir "${lib_dir}" \
-    --matrix-manifest \
     --runtime-version "${RUNTIME_VERSION}" \
     --flashrt-tag "${flashrt_tag}" \
     --git-commit "${git_commit}" \
@@ -497,15 +462,14 @@ stage_bundle_runtime() {
     --torch-index "${torch_idx}" \
     --min-driver "${min_drv}" \
     --has-fa2 "${has_fa2}" \
-    --has-fp4 "${nvfp4_feature}" \
+    --has-fp4 "0" \
     --has-fmha "0" \
     --python-minor "${PYTHON_MINOR}" \
     --native-artifact-tag "${native_tag}" >/dev/null
-
-  mkdir -p "${cache_dir}"
-  cp -f "${lib_dir}/${kernels_name}" "${lib_dir}/${fa2_name}" "${cache_dir}/"
-  [[ "${has_fp4}" -eq 1 ]] && cp -f "${lib_dir}/${fp4_name}" "${cache_dir}/"
-  log "Cached native reuse dir: ${cache_dir}/"
+  log "Cached native reuse dir: ${FLASHCLI_ROOT}/.native-cache/${native_tag}/"
+  mkdir -p "${FLASHCLI_ROOT}/.native-cache/${native_tag}"
+  cp -f "${lib_dir}/${kernels_name}" "${lib_dir}/${fa2_name}" \
+    "${FLASHCLI_ROOT}/.native-cache/${native_tag}/"
 }
 
 embed_checkpoint() {
@@ -513,22 +477,33 @@ embed_checkpoint() {
   local dest="${BUNDLE_DIR}/checkpoint"
   [[ -d "${src}" ]] || die "Checkpoint not found: ${src}"
   rm -rf "${dest}"
-  copy_dir "${src}" "${dest}"
+  mkdir -p "${dest}"
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a "${src}/" "${dest}/"
+  else
+    cp -a "${src}/." "${dest}/"
+  fi
   log "Embedded checkpoint -> ${dest}"
 }
 
 maybe_write_tarball() {
   [[ -n "${OUTPUT_DIR}" ]] || return 0
-  local name="flashcli-bundle-qwen-${VARIANT}-${GIT_REF}-sm${SM}-cu${CUDA_TAG}-${OS_NAME}-${CPU_ARCH}"
+  local py_suffix=""
+  if [[ -n "${PYTHON_MINOR}" ]]; then
+    py_suffix="-py${PYTHON_MINOR}"
+  fi
+  local name="flashcli-bundle-pi05-${GIT_REF}-sm${SM}-cu${CUDA_TAG}-${OS_NAME}-${CPU_ARCH}${py_suffix}"
   local stage="${OUTPUT_DIR}/${name}"
   mkdir -p "${OUTPUT_DIR}"
   rm -rf "${stage}"
-  copy_dir "${BUNDLE_DIR}" "${stage}"
-  command -v zstd >/dev/null 2>&1 || die "zstd required for tarball"
+  mkdir -p "${stage}"
+  rsync -a "${BUNDLE_DIR}/" "${stage}/"
+  command -v zstd >/dev/null 2>&1 || die "zstd required for tarball (--output-dir)"
   local archive="${OUTPUT_DIR}/${name}.tar.zst"
   log "Creating ${archive}"
   tar -C "${OUTPUT_DIR}" --use-compress-program=zstd -cf "${archive}" "${name}" 2>/dev/null \
     || tar -cf - -C "${OUTPUT_DIR}" "${name}" | zstd -T0 -q -o "${archive}"
+  log "Tarball: ${archive}"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -536,7 +511,6 @@ while [[ $# -gt 0 ]]; do
     --repo-root) REPO_ROOT="$2"; shift 2 ;;
     --bundle-dir) BUNDLE_DIR="$2"; shift 2 ;;
     --output-dir) OUTPUT_DIR="$2"; shift 2 ;;
-    --variant) VARIANT="$2"; shift 2 ;;
     --git-ref) GIT_REF="$2"; shift 2 ;;
     --runtime-version) RUNTIME_VERSION="$2"; shift 2 ;;
     --gpu-arch) GPU_ARCH="$2"; shift 2 ;;
@@ -553,6 +527,7 @@ while [[ $# -gt 0 ]]; do
     --sm) SM="$2"; shift 2 ;;
     --cuda-tag) CUDA_TAG="$2"; shift 2 ;;
     --merge-native) MERGE_NATIVE=1; shift ;;
+    --fa2-native-only) FA2_NATIVE_ONLY=1; shift ;;
     --skip-manifest) SKIP_MANIFEST=1; shift ;;
     --finalize-matrix-manifest) FINALIZE_MATRIX_MANIFEST=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -560,14 +535,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -n "${BUNDLE_DIR}" ]] || { usage; die "--bundle-dir is required"; }
-BUNDLE_DIR="$(cd "${BUNDLE_DIR}" && pwd)"
-[[ -f "${BUNDLE_DIR}/flashcli-bundle.json" ]] || die "Missing flashcli-bundle.json"
+[[ -f "${BUNDLE_DIR}/flashcli-bundle.json" ]] || die "Missing ${BUNDLE_DIR}/flashcli-bundle.json"
 
 if [[ "${FINALIZE_MATRIX_MANIFEST}" -eq 1 ]]; then
   resolve_repo_root
   detect_platform
-  SM="${SM:-120}"
+  [[ -n "${SM}" ]] || SM="89"
   finalize_matrix_manifest
   log "Matrix manifest ready: ${BUNDLE_DIR}/flashcli-bundle.json"
   exit 0
@@ -578,26 +551,43 @@ ensure_runtime_requirements_file
 detect_platform
 
 if [[ "${OS_NAME}" != "linux" && "${SKIP_BUILD}" -eq 0 ]]; then
-  die "Full build requires Linux; use --pack-only on macOS"
+  die "Full build requires Linux; use --pack-only on macOS after copying .so from a GPU build"
 fi
-
-PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 if [[ "${SKIP_BUILD}" -eq 0 ]]; then
   [[ -n "${SM}" ]] || detect_sm
   [[ -n "${CUDA_TAG}" ]] || detect_cuda_tag
   GPU_ARCH="${GPU_ARCH:-${SM}}"
+  PYTHON_BIN="${PYTHON_BIN:-python3}"
   command -v cmake >/dev/null 2>&1 || die "cmake not found"
   command -v nvcc >/dev/null 2>&1 || die "nvcc not found"
   run_cmake_build
-else
-  [[ -z "${SM}" ]] && detect_sm
-  [[ -z "${CUDA_TAG}" ]] && detect_cuda_tag
-  GPU_ARCH="${GPU_ARCH:-${SM}}"
-  log "Skipping cmake (--pack-only)"
-fi
+  stage_bundle_runtime
 
-stage_bundle_runtime
+  # cu130 matrix: cross-compile sm120 (Blackwell) in the same 25.10 container after sm89 pass.
+  if [[ "${MERGE_NATIVE}" -eq 1 && "${CUDA_TAG}" == "130" ]]; then
+    _saved_sm="${SM}"
+    _saved_gpu="${GPU_ARCH}"
+    _saved_build="${BUILD_DIR:-}"
+    _py="${PYTHON_MINOR:-310}"
+    log "======== sm120 cu130 pass (Blackwell, cross-compile, py${_py}) ========"
+    SM=120
+    GPU_ARCH=120
+    BUILD_DIR="${_saved_build:-${REPO_ROOT}/build}-sm120-cu130-py${_py}"
+    run_cmake_build
+    stage_bundle_runtime
+    SM="${_saved_sm}"
+    GPU_ARCH="${_saved_gpu}"
+    BUILD_DIR="${_saved_build}"
+  fi
+else
+  [[ -n "${SM}" ]] || detect_sm
+  [[ -n "${CUDA_TAG}" ]] || detect_cuda_tag
+  GPU_ARCH="${GPU_ARCH:-${SM}}"
+  PYTHON_BIN="${PYTHON_BIN:-python3}"
+  log "Skipping cmake (--pack-only)"
+  stage_bundle_runtime
+fi
 
 if [[ -n "${EMBED_CHECKPOINT}" ]]; then
   embed_checkpoint "${EMBED_CHECKPOINT}"
@@ -607,6 +597,4 @@ maybe_write_tarball
 
 log "Bundle ready: ${BUNDLE_DIR}"
 log "  flashcli bundle validate ${BUNDLE_DIR}"
-log "  flashcli run qwen3-8b-nvfp4 --bundle ${BUNDLE_DIR} --prompt 'Hello'"
-log "  flashcli serve qwen3-8b-nvfp4 --bundle ${BUNDLE_DIR}"
-log "  Release matrix: bash scripts/build_qwen_release_matrix.sh"
+log "  flashcli run pi05_libero --bundle ${BUNDLE_DIR}"

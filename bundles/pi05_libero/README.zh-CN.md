@@ -1,6 +1,6 @@
 # pi05_libero
 
-<p align="right"><a href="README.md">English</a> · <strong>简体中文</strong></p>
+<p align="right"><a href="README.md">English</a> · <strong>简体中文</strong> · <a href="QUICKSTART.zh-CN.md">快速上手</a></p>
 
 Pi0.5 LIBERO VLA，权重 [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044)。
 
@@ -14,8 +14,9 @@ Pi0.5 LIBERO VLA，权重 [lerobot/pi05_libero_finetuned_v044](https://huggingfa
 flashcli-bundle.json
 run.py
 _pi05_compat.py
-flash_rt_kernels.so
-flash_rt_fa2.so
+lib/
+  flash_rt_kernels-*-sm89-cu{124|130}-linux-x86_64-py{310|311|312}.so
+  flash_rt_fa2-*-....so
 flash_rt/                 # 裁剪后的 Python（无 .so）
 ```
 
@@ -23,38 +24,111 @@ flash_rt/                 # 裁剪后的 Python（无 .so）
 
 ## 用户
 
+命令速查见 **[QUICKSTART.zh-CN.md](QUICKSTART.zh-CN.md)**。
+
 ```bash
 pip install flashcli
 flashcli run pi05_libero --prompt "..." --image /path/to/base.jpg
 ```
 
-## 维护者：组装 bundle
+## 维护者：发布 bundle
 
-**Linux + NVIDIA GPU**（SM89 或 SM120）：
+**支持 GPU**：**仅 SM89**（Ada，如 RTX 4090）。SM120 / Blackwell 暂不在此 release 线支持范围内。
+
+### FA2 编译（矩阵）
+
+| CUDA 线 | FA2 |
+|---------|-----|
+| **cu124**（nvcc 12.4） | 仅 sm_89 AOT（`FA2_ARCH_NATIVE_ONLY`） |
+| **cu130**（nvcc 13.x） | sm_80 + sm_120 + PTX（cu130 格内 FA2 多架构；**kernels 仍为 sm_89**） |
+
+本地单卡 SM89 加速：`build.sh --fa2-native-only`（**不可用于发布**）。
+
+### 一键发布（推荐）
+
+宿主机需 **Linux + Docker + NVIDIA GPU**（矩阵在容器内编译）。自动 clone/update FlashRT、双 CUDA 线（cu124/cu130）× Python 3.10/3.11/3.12、写 manifest、打 zip：
+
+```bash
+cd flashcli/bundles/pi05_libero
+bash release.sh --clean
+```
+
+等价：`bash scripts/release_bundle.sh --bundle pi05_libero --clean`
+
+`--clean` 会删除 `lib/`、`dist/`、`.build-matrix/`、`.native-cache/`。
+
+产物示例：`dist/flashcli-bundle-pi05-{abi}-sm89-multi-linux-x86_64-{时间戳}.zip`
+
+### 分步发布（宿主机已有 cu124 + cu130）
+
+```bash
+cd flashcli
+
+# 0) 可选：检查 Python / nvcc 布局
+bash scripts/build_release_matrix.sh --bundle pi05_libero --check-only
+
+# 1) 编矩阵（每条 CUDA 线 3 个 Python ABI，FA2 多架构，耗时较长）
+bash scripts/release_bundle.sh --bundle pi05_libero --clean --cuda-tag 124
+bash scripts/release_bundle.sh --bundle pi05_libero --cuda-tag 130
+
+# 2) 第二条 CUDA 线跑完会自动 finalize + pack；若只编了一条，补跑：
+bash scripts/build_release_matrix.sh --bundle pi05_libero --pack-only
+
+# 3) 校验
+flashcli bundle validate bundles/pi05_libero
+```
+
+无 Docker、双 CUDA 已在宿主机时可用 `--native`：
+
+```bash
+bash scripts/release_bundle.sh --bundle pi05_libero --native --clean
+```
+
+指定本地 FlashRT：
+
+```bash
+export FLASHRT_REPO=/path/to/FlashRT
+bash release.sh --clean --repo-root "$FLASHRT_REPO"
+```
+
+### 发布后
+
+1. **本机抽测**（有对应 GPU 时）：
+
+```bash
+flashcli run pi05_libero \
+  --bundle "$(pwd)/bundles/pi05_libero" \
+  --benchmark 5
+```
+
+2. **上传** `dist/*.zip` 到 CDN。
+
+3. **更新** [`src/flashcli/catalog/models.yaml`](../../src/flashcli/catalog/models.yaml) 中 `pi05_libero.bundle.zip` URL。
+
+4. **SM89 验收**（如 RTX 4090）：
+
+```bash
+flashcli models envs pi05_libero
+flashcli run pi05_libero --benchmark 5
+```
+
+### 本地单环境开发
+
+不跑完整矩阵，只编当前机子的一个 cu×py 档：
 
 ```bash
 cd flashcli/bundles/pi05_libero
 bash build.sh --repo-root /path/to/FlashRT
-bash pack.sh --sm 89                    # 仅打开发布 zip（cuda 标签由 nvcc 自动检测，通常为 cu124）
+flashcli bundle validate .
 ```
 
-发布后在 `src/flashcli/catalog/models.yaml` 登记矩阵 zip URL，例如：
-
-```yaml
-bundle:
-  zip: https://cdn.../flashcli-bundle-pi05-main-sm89-multi-linux-x86_64.zip
-```
-
-构建多环境 `lib/` 见 [docs/runtime-matrix.zh-CN.md](../../docs/runtime-matrix.zh-CN.md)。
-
-`build.sh` 仅打入 Pi0.5 RTX 路径需要的 `flash_rt/` 子树，并只复制 `flash_rt_kernels.so`、`flash_rt_fa2.so`。
-
-**不需要** `requirements-runtime.txt`：pip 依赖已在 `flashcli-bundle.json` 的 `python_dependencies` 中，该 txt 仅为旧版冗余副本，发布 zip 请勿包含。
+仅本机 SM89、加快 FA2 编译：
 
 ```bash
-flashcli bundle validate "$(pwd)/bundles/pi05_libero"
-flashcli run pi05_libero --bundle "$(pwd)/bundles/pi05_libero" --image /path/to/base.jpg
+bash build.sh --repo-root /path/to/FlashRT --fa2-native-only
 ```
+
+矩阵维度见 `release-matrix.env`（sm89 × cu124/cu130 × py310/311/312）。细节：[docs/runtime-matrix.zh-CN.md](../../docs/runtime-matrix.zh-CN.md)、[scripts/lib/bundle_hooks.sh](../../scripts/lib/bundle_hooks.sh)。
 
 ## 排错
 
@@ -91,6 +165,10 @@ flashcli run pi05_libero --bundle bundles/pi05_libero \
 ```
 
 `--bundle` 应指向含 `flashcli-bundle.json` 的目录（如 `bundles/pi05_libero` 或解压后的 `dist/flashcli-bundle-pi05-*`），不是 zip 文件本身。
+
+### `no kernel image is available for execution on the device`
+
+多为 **GPU 不符**（SM120 暂不支持）或 SM89 上 **CUDA 格不匹配**。执行 `flashcli models envs pi05_libero`，应匹配 `sm89-cu124-*` 或 `sm89-cu130-*`。
 
 ### `'GemmRunner' object has no attribute 'fp8_nt_dev'`
 

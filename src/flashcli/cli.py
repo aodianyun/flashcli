@@ -51,6 +51,59 @@ def _auto_install_flag(no_auto_install: bool) -> bool:
     return not no_auto_install and not config.skip_auto_install()
 
 
+def _bundle_torch_index(bundle) -> str:
+    from flashcli.bundle.manifest import bundle_cuda_config
+    from flashcli.runtime.detect import torch_index_for_cuda_tag
+
+    cuda = bundle_cuda_config(bundle)
+    cuda_tag = str(cuda.get("cuda_tag", ""))
+    return str(cuda.get("recommended_torch_index", "")) or (
+        torch_index_for_cuda_tag(cuda_tag) if cuda_tag else "cu124"
+    )
+
+
+def _retry_after_bundle_repair(
+    action,
+    *,
+    bundle,
+    auto_install: bool,
+    quiet: bool,
+):
+    """Run *action*; on ImportError auto-install missing bundle deps and retry once."""
+    try:
+        return action()
+    except ImportError:
+        if not auto_install or bundle is None:
+            raise
+        from flashcli.deps import repair_bundle_python_stack
+
+        if not quiet:
+            typer.echo("Missing bundle dependency; installing ...", err=True)
+        repair_bundle_python_stack(
+            bundle_root=bundle.bundle_root,
+            torch_index=_bundle_torch_index(bundle),
+            quiet=quiet,
+        )
+        return action()
+
+
+def _ensure_flashcli_serve_imports(*, auto_install: bool, quiet: bool) -> None:
+    """Verify flashcli HTTP stack (fastapi/uvicorn); auto-install on demand."""
+    try:
+        __import__("fastapi")
+        __import__("uvicorn")
+    except ImportError:
+        if not auto_install:
+            raise
+        from flashcli.deps import repair_flashcli_serve_stack
+
+        if not quiet:
+            typer.echo("Installing flashcli serve dependencies ...", err=True)
+        repair_flashcli_serve_stack(quiet=quiet)
+        __import__("fastapi")
+        __import__("uvicorn")
+
+
 @doctor_app.callback(invoke_without_command=True)
 def doctor_main(
     ctx: typer.Context,
@@ -275,26 +328,21 @@ def bundle_validate(
 @bundle_app.command("install")
 def bundle_install(
     path: Path = typer.Argument(..., exists=True, file_okay=False, dir_okay=True),
-    profile: str = typer.Option("default", "--profile", help="default | serve"),
     force: bool = typer.Option(False, "--force"),
     quiet: bool = typer.Option(False, "--quiet", "-q"),
 ) -> None:
-    """Install Python dependencies from flashcli-bundle.json."""
+    """Install bundle inference dependencies from flashcli-bundle.json (torch, transformers, …)."""
     from flashcli.bundle.activate import activate_bundle
     from flashcli.bundle.manifest import load_bundle_manifest
 
-    if profile not in ("default", "serve"):
-        typer.echo("profile must be 'default' or 'serve'", err=True)
-        raise typer.Exit(1)
     bundle = load_bundle_manifest(path)
     activate_bundle(
         bundle,
-        profile=profile,  # type: ignore[arg-type]
         install_python=True,
         quiet=quiet,
         force_python=force,
     )
-    typer.echo("Bundle dependencies installed.")
+    typer.echo("Bundle inference dependencies installed.")
 
 
 @bundle_app.command("sync")
@@ -457,7 +505,6 @@ def run(
             p,
             bundle_path=bundle,
             bundle_ref=bundle_ref,
-            profile="default",
             auto_install_python=_auto_install_flag(no_auto_install),
             quiet=quiet,
         )
@@ -490,12 +537,22 @@ def run(
     if image:
         image_paths = [Path(part.strip()) for part in image.split(",") if part.strip()]
 
-    run_engine = create_run_engine(
-        p,
-        bundle_path=bundle,
-        bundle_ref=bundle_ref,
-        checkpoint=Path(ckpt),
-    )
+    auto_install = _auto_install_flag(no_auto_install)
+    try:
+        run_engine = _retry_after_bundle_repair(
+            lambda: create_run_engine(
+                p,
+                bundle_path=bundle,
+                bundle_ref=bundle_ref,
+                checkpoint=Path(ckpt),
+            ),
+            bundle=active,
+            auto_install=auto_install,
+            quiet=quiet,
+        )
+    except ImportError as exc:
+        typer.echo(f"Cannot load run engine: {exc}", err=True)
+        raise typer.Exit(1) from exc
     load_kw: dict = {
         "num_views": num_views,
         "hardware": hardware,
@@ -568,7 +625,7 @@ def serve(
     warmup_preset: Optional[str] = typer.Option(
         None,
         "--warmup-preset",
-        help="FlashRT warmup buckets: auto|short|long|all|none (qwen36 also supports long).",
+        help="Warmup bucket preset (bundle-specific; qwen3: auto|short|all|none; qwen36: agent|short|long|all|none).",
     ),
     max_seq: Optional[int] = typer.Option(
         None,
@@ -581,6 +638,16 @@ def serve(
         help="Max prefill chunk (qwen3 only, default from bundle).",
     ),
     K: Optional[int] = typer.Option(None, "--K", help="MTP speculative K (Qwen3.6)."),
+    default_max_tokens: Optional[int] = typer.Option(
+        None,
+        "--default-max-tokens",
+        help="Default max_tokens when the client omits it (qwen36 only, default 2048).",
+    ),
+    max_output_tokens: Optional[int] = typer.Option(
+        None,
+        "--max-output-tokens",
+        help="Hard cap on generated tokens per request (qwen36 only, default 16384).",
+    ),
     model: Optional[str] = typer.Option(
         None,
         "--model",
@@ -593,7 +660,6 @@ def serve(
     """Serve unified OpenAI HTTP API via the preset model bundle."""
     from flashcli.bundle.variants import resolve_effective_model_variant
     from flashcli.engines.factory import BundleNotReadyError, activate_for_preset, create_serve_engine
-    from flashcli.serve.app import build_app
 
     p = PresetRegistry().get(preset)
 
@@ -605,7 +671,6 @@ def serve(
             p,
             bundle_path=bundle,
             bundle_ref=bundle_ref,
-            profile="serve",
             auto_install_python=_auto_install_flag(no_auto_install),
             quiet=quiet,
         )
@@ -616,6 +681,19 @@ def serve(
     from flashcli.bundle.activate import active_bundle
 
     active = active_bundle()
+    auto_install = _auto_install_flag(no_auto_install)
+
+    try:
+        _ensure_flashcli_serve_imports(auto_install=auto_install, quiet=quiet)
+        from flashcli.serve.app import build_app
+    except ImportError as exc:
+        typer.echo(
+            f"Cannot load flashcli HTTP serve stack: {exc} "
+            "(reinstall flashcli: pip install -e .)",
+            err=True,
+        )
+        raise typer.Exit(1) from exc
+
     effective_variant = resolve_effective_model_variant(
         p, active, cli_override=model
     )
@@ -641,71 +719,62 @@ def serve(
         if active is not None
         else {}
     )
-    load_max_seq = int(
-        max_seq
-        if max_seq is not None
-        else bundle_serve.get("max_seq", 2048)
-    )
-    load_max_q_seq = int(
-        max_q_seq
-        if max_q_seq is not None
-        else bundle_serve.get("max_q_seq", 128)
-    )
-    warm_spec: str | None = None
-    if warmup_preset or warmup or bundle_serve.get("warmup"):
-        import importlib.util
-
-        util_path = (active.bundle_root / "_qwen_util.py") if active else None
-        if util_path is None or not util_path.is_file():
-            typer.echo(
-                "--warmup-preset requires a Qwen bundle (qwen_nvfp4).",
-                err=True,
-            )
-            raise typer.Exit(1)
-        spec = importlib.util.spec_from_file_location(
-            "flashcli_bundle_qwen_util", util_path
-        )
-        if spec is None or spec.loader is None:
-            typer.echo(f"Cannot load {util_path}", err=True)
-            raise typer.Exit(1)
-        qwen_util = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(qwen_util)
-        warm_spec = qwen_util.resolve_serve_warmup_spec(
-            effective_variant,
-            preset=warmup_preset,
-            max_seq=load_max_seq,
-            max_q_seq=load_max_q_seq,
-            extra_spec=warmup,
-            bundle_default=str(bundle_serve.get("warmup", "")) or None
-            if warmup is None and warmup_preset is None
-            else None,
-        )
 
     try:
+        _ensure_flashcli_serve_imports(auto_install=auto_install, quiet=quiet)
         import uvicorn
     except ImportError as exc:
-        typer.echo(
-            "uvicorn required for serve; run: flashcli bundle install <bundle> --profile serve",
-            err=True,
-        )
+        typer.echo(f"Cannot load uvicorn: {exc}", err=True)
         raise typer.Exit(1) from exc
 
-    serve_engine = create_serve_engine(
-        p,
-        bundle_path=bundle,
-        bundle_ref=bundle_ref,
-        checkpoint=Path(ckpt),
-    )
+    try:
+        serve_engine = _retry_after_bundle_repair(
+            lambda: create_serve_engine(
+                p,
+                bundle_path=bundle,
+                bundle_ref=bundle_ref,
+                checkpoint=Path(ckpt),
+            ),
+            bundle=active,
+            auto_install=auto_install,
+            quiet=quiet,
+        )
+    except ImportError as exc:
+        typer.echo(f"Cannot load serve engine: {exc}", err=True)
+        raise typer.Exit(1) from exc
     opts: dict = {
         "model_name": model_name,
         "K": K,
-        "warmup": warm_spec,
         "model": effective_variant,
         "max_seq": max_seq,
         "max_q_seq": max_q_seq,
+        "warmup_preset": warmup_preset,
+        "default_max_tokens": default_max_tokens,
+        "max_output_tokens": max_output_tokens,
     }
     opts = {k: v for k, v in opts.items() if v is not None}
     serve_engine.load(Path(ckpt), p, **opts)
+
+    warm_spec: str | None = None
+    if warmup_preset or warmup or bundle_serve.get("warmup"):
+        if hasattr(serve_engine, "resolve_warmup"):
+            warm_spec = serve_engine.resolve_warmup(
+                preset=warmup_preset,
+                extra_spec=warmup,
+                bundle_default=str(bundle_serve.get("warmup", "")) or None
+                if warmup is None and warmup_preset is None
+                else None,
+            )
+        elif warmup:
+            warm_spec = warmup
+        elif bundle_serve.get("warmup"):
+            warm_spec = str(bundle_serve.get("warmup"))
+        elif warmup_preset:
+            typer.echo(
+                "This bundle does not support --warmup-preset; use --warmup instead.",
+                err=True,
+            )
+            raise typer.Exit(1)
     if warm_spec:
         serve_engine.warmup(warm_spec)
 

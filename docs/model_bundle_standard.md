@@ -4,7 +4,7 @@
 
 Third parties ship models as a **Model Bundle**: one **`flashcli-bundle.json`**, **`entry` inference modules**, and optional **FlashRT `.so` / `flash_rt` Python**. flashcli **only** loads the bundle and calls `entry`; it does **not** implement Run/Serve logic in flashcli source.
 
-Maintainers: see [DEVELOPER.md](../codeplan/DEVELOPER.md). Public catalog: [`models.yaml`](../src/flashcli/catalog/models.yaml) (`pi05_libero`, `qwen3-8b-nvfp4`, `qwen36-27b-nvfp4`).
+Maintainers: see [CONTRIBUTING.md](../CONTRIBUTING.md). Public catalog: [`models.yaml`](../src/flashcli/catalog/models.yaml) (`pi05_libero`, `qwen3-8b-nvfp4`, `qwen36-27b-nvfp4`).
 
 Each preset has **one** bundle source in **`models.yaml`**: top-level **`bundle.zip` / `path` / `git`**. Multi-environment runtimes ship inside that artifact (recommended: **`lib/` native matrix** in a single zip). See [runtime-matrix.md](runtime-matrix.md) for `pi05_libero` release layout.
 
@@ -129,7 +129,7 @@ At `flashcli run`, the host key is **`sm{SM}-cu{CUDA}-{os}-{arch}-py{PY}`** (inc
   "config": "pi05",
   "framework": "torch",
   "capabilities": ["run"],
-  "requires": { "sm": ["89", "120"] },
+  "requires": { "sm": ["89"] },
   "weights": {
     "source": "huggingface",
     "repo": "lerobot/pi05_libero_finetuned_v044",
@@ -145,7 +145,7 @@ The catalog points at one assembled zip via `models.yaml` → `bundle.zip`; weig
 
 ### Example: related models — one runtime, many catalog presets (Qwen NVFP4)
 
-Ship **one** multi-env runtime zip (`bundles/qwen_nvfp4/dist/`) with `variants` in `flashcli-bundle.json`. Register **multiple** `models.yaml` presets sharing `bundle.zip` and **`bundle_variant`** (`qwen3`, `qwen36`). Release: `scripts/build_qwen_release_matrix.sh` (SM120 × cu130 × py310/311/312). See [bundles/qwen_nvfp4/README.md](../bundles/qwen_nvfp4/README.md).
+Ship **one** multi-env runtime zip (`bundles/qwen_nvfp4/dist/`) with `variants` in `flashcli-bundle.json`. Register **multiple** `models.yaml` presets sharing `bundle.zip` and **`bundle_variant`** (`qwen3`, `qwen36`). Release: `scripts/release_bundle.sh --bundle qwen_nvfp4` (SM120 × **cu130 only** × py310/311/312). See [bundles/qwen_nvfp4/README.md](../bundles/qwen_nvfp4/README.md).
 
 ## `entry` contract
 
@@ -174,6 +174,11 @@ Bundle `entry` modules implement these interfaces; flashcli `serve` exposes fixe
 | `model_id` | Id returned by `/v1/models` |
 | `chat(request)` | Non-streaming |
 | `chat_stream(request)` | Streaming |
+| `chat_async` / `chat_stream_async` | Optional async (preferred when implemented) |
+| `resolve_warmup(...)` | Optional: bundle resolves `--warmup-preset` + `--warmup` |
+| `register_routes(app)` | Optional: vendor HTTP routes (e.g. qwen36 `/v1/sessions`) |
+
+HTTP layer: [`src/flashcli/serve/app.py`](../src/flashcli/serve/app.py) + [`openai_bridge.py`](../src/flashcli/serve/openai_bridge.py). Unknown JSON fields on `/v1/chat/completions` are passed through as `ChatRequest.extras` for backend-specific keys (`flashrt_*`, `enable_thinking`, etc.).
 
 ## Git bundles
 
@@ -201,7 +206,7 @@ models:
   pi05_libero:
     description: Pi0.5 LIBERO — ...
     bundle:
-      zip: https://cdn.example/.../flashcli-bundle-pi05-main-sm89-multi-linux-x86_64.zip
+      zip: https://cdn.example/.../flashcli-bundle-pi05-{abi}-sm89-multi-linux-x86_64-{timestamp}.zip
       # path: bundles/pi05_libero   # local debug (needs lib/*.so for this host)
       # git: { repo: "...", ref: main }
 ```
@@ -219,27 +224,37 @@ Bundle resolution: `--bundle` > catalog `zip` / `path` / `git` > local cache > d
 
 Environment variables (`FLASHCLI_MODELS_YAML`, `FLASHCLI_HOME`, `HF_ENDPOINT`, …): [environment.md](environment.md).
 
-## Build scripts (FlashRT source tree, Linux GPU)
+## Build scripts (FlashRT source, Linux + GPU)
 
-**Matrix release (recommended for `pi05_libero`):**
+Matrix configuration: `bundles/<name>/release-matrix.env`. Bundle-specific cmake: `bundles/<name>/_bundle_build.sh`.
 
-```bash
-export FLASHRT_REPO=/path/to/FlashRT
-export CUDA_HOME_CU124=/usr/local/cuda-12.4
-bash scripts/build_pi05_release_matrix.sh --cuda-tag 124
-# → bundles/pi05_libero/dist/flashcli-bundle-pi05-main-sm89-multi-linux-x86_64.zip
-```
-
-**Single-environment bundle (maintainer dev):**
+**One-command release (recommended):**
 
 ```bash
-bash scripts/build_pi05_bundle.sh --bundle-dir flashcli/bundles/pi05_libero
-bash scripts/build_pi05_bundle.sh --bundle-dir ... --pack-only   # reuse cached .so
-bash scripts/build_pi05_bundle.sh \
-  --embed-checkpoint ~/.flashcli/models/pi05_libero/checkpoint
+cd flashcli
+bash scripts/release_bundle.sh --bundle pi05_libero --clean
+bash scripts/release_bundle.sh --bundle qwen_nvfp4 --clean
 ```
 
-Qwen NVFP4: `scripts/build_qwen_release_matrix.sh` → one multi-env zip. See [bundles/qwen_nvfp4/README.md](../bundles/qwen_nvfp4/README.md).
+**Step-by-step (host matrix, no final pack until last line):**
+
+```bash
+bash scripts/build_release_matrix.sh --bundle pi05_libero --check-only
+bash scripts/release_bundle.sh --bundle pi05_libero --cuda-tag 124 --skip-pack   # via docker in release_bundle
+bash scripts/build_release_matrix.sh --bundle pi05_libero --pack-only
+```
+
+**Single-environment dev (one cu × py):**
+
+```bash
+cd bundles/pi05_libero
+bash build.sh --repo-root /path/to/FlashRT
+bash pack.sh --repo-root /path/to/FlashRT    # optional: pack existing lib/
+```
+
+Release zip names include FlashRT ABI + timestamp — see [runtime-matrix.md](runtime-matrix.md).
+
+Qwen NVFP4: **cu130 only** (nvcc must support sm_120/sm_120a). See [bundles/qwen_nvfp4/README.md](../bundles/qwen_nvfp4/README.md).
 
 ## Minimum delivery checklist
 

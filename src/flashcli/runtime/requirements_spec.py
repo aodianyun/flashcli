@@ -30,17 +30,24 @@ class RuntimeRequirementsSpec:
     optional_groups: dict[str, list[str]] = field(default_factory=dict)
     source: str = "unknown"
 
-    def packages_for_profile(self, profile: str = "default") -> list[str]:
-        pkgs = list(self.pip_packages)
-        if profile == "serve":
-            pkgs.extend(self.optional_groups.get("server", []))
-        return _dedupe_strings(pkgs)
+    def pip_packages_for_bundle(self) -> list[str]:
+        """Inference-only pip packages declared by the bundle manifest."""
+        return _dedupe_strings(list(self.pip_packages))
 
-    def all_packages_for_profile(self, profile: str = "default") -> list[str]:
-        pkgs = list(self.packages_for_profile(profile))
+    def packages_for_profile(self, profile: str = "default") -> list[str]:
+        """Backward-compatible alias — bundle deps do not vary by CLI command."""
+        del profile
+        return self.pip_packages_for_bundle()
+
+    def all_packages(self) -> list[str]:
+        pkgs = list(self.pip_packages_for_bundle())
         if self.torch_package.strip():
             pkgs.insert(0, self.torch_package)
         return _dedupe_strings(pkgs)
+
+    def all_packages_for_profile(self, profile: str = "default") -> list[str]:
+        del profile
+        return self.all_packages()
 
 
 def _load_toml(path: Path) -> dict:
@@ -247,6 +254,55 @@ def load_from_runtime_dir(runtime_dir: Path) -> RuntimeRequirementsSpec:
     )
 
 
+def _flashcli_bundled_inference_spec() -> RuntimeRequirementsSpec:
+    """Last-resort runtime deps shipped with flashcli (dev bundles without manifest)."""
+    flashcli_root = Path(__file__).resolve().parents[3]
+    req_file = flashcli_root / "scripts" / "requirements" / "runtime-inference.txt"
+    pip_packages: list[str] = []
+    if req_file.is_file():
+        pip_packages = _parse_requirements_txt(req_file.read_text(encoding="utf-8"))
+    if not pip_packages:
+        pip_packages = [
+            "numpy",
+            "pyyaml",
+            "safetensors",
+            "sentencepiece",
+            "ml_dtypes",
+            "transformers<4.56",
+            "pillow",
+        ]
+    return RuntimeRequirementsSpec(
+        pip_packages=pip_packages,
+        torch_package="torch",
+        source=f"flashcli-bundled:{req_file}",
+    )
+
+
+def _flashrt_repo_candidates() -> list[Path]:
+    flashcli_root = Path(__file__).resolve().parents[3]
+    seen: set[Path] = set()
+    candidates: list[Path] = []
+    for raw in (
+        os.environ.get("FLASHRT_REPO_ROOT", "").strip(),
+        os.environ.get("FLASHRT_REPO", "").strip(),
+    ):
+        if not raw:
+            continue
+        path = Path(raw).expanduser().resolve()
+        if path not in seen:
+            seen.add(path)
+            candidates.append(path)
+    for path in (
+        flashcli_root.parent / "FlashRT",
+        flashcli_root.parent,
+    ):
+        resolved = path.resolve()
+        if resolved not in seen:
+            seen.add(resolved)
+            candidates.append(resolved)
+    return candidates
+
+
 def resolve_runtime_requirements(
     runtime_dir: Path | None = None,
     *,
@@ -263,28 +319,16 @@ def resolve_runtime_requirements(
             except FileNotFoundError:
                 pass
 
-    env_root = os.environ.get("FLASHRT_REPO_ROOT", "").strip()
-    candidates: list[Path] = []
-    if env_root:
-        candidates.append(Path(env_root))
-    # flashcli lives at <FlashRT>/flashcli/
-    flashcli_pkg = Path(__file__).resolve().parents[3]
-    candidates.append(flashcli_pkg.parent)
-
-    for root in candidates:
-        if (root / "pyproject.toml").is_file() and (root / "flash_rt").is_dir():
+    for candidate in _flashrt_repo_candidates():
+        if (candidate / "pyproject.toml").is_file() and (candidate / "flash_rt").is_dir():
             try:
-                spec = extract_from_flashrt_pyproject(root)
-                spec.source = f"fallback-pyproject:{root}"
+                spec = extract_from_flashrt_pyproject(candidate)
+                spec.source = f"fallback-pyproject:{candidate}"
                 return spec
             except (FileNotFoundError, KeyError, ValueError):
                 continue
 
-    raise RuntimeError(
-        "Cannot resolve FlashRT runtime Python dependencies. "
-        "Rebuild the model bundle (flashcli/scripts/build_*_bundle.sh) so it includes "
-        "manifest python_dependencies / requirements-runtime.txt, or set FLASHRT_REPO_ROOT."
-    )
+    return _flashcli_bundled_inference_spec()
 
 
 def write_runtime_requirements_artifacts(
@@ -304,7 +348,6 @@ def write_runtime_requirements_artifacts(
         merge_into_manifest["python_dependencies"] = {
             "torch": spec.torch_package,
             "pip": spec.pip_packages,
-            "optional_groups": spec.optional_groups,
         }
 
 

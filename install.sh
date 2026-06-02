@@ -1,5 +1,10 @@
 #!/bin/sh
-# flashcli installer — curl -fsSL …/install.sh | sh
+# flashcli installer
+#
+# Examples (restricted network — Gitee + mirror):
+#   curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
+# Open network (GitHub):
+#   curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
 #
 # Goals:
 #   1. Pre-flight: make the host as ready as possible for pyproject.toml [project]
@@ -10,8 +15,10 @@
 #
 # Optional env:
 #   FLASHCLI_INSTALL_REPO / FLASHCLI_INSTALL_REF   (default: main @ GitHub)
-#   FLASHCLI_USE_MIRROR=1   Aliyun PyPI + hf-mirror for pip/HF (optional GitHub fetch proxy)
-#   FLASHCLI_GIT_PROXY=0|URL   disable or override default GitHub proxy when using --mirror
+#   FLASHCLI_USE_MIRROR=1   China-friendly mirrors: pip/HF/git + apt/yum/dnf/apk (root)
+#   FLASHCLI_OS_MIRROR=0    With --mirror, skip rewriting OS package-manager sources
+#   FLASHCLI_GIT_PROXY=URL   Opt-in GitHub fetch proxy (e.g. https://mirror.ghproxy.com/)
+#   FLASHCLI_GIT_TIMEOUT=25  Timeout (seconds) for git ls-remote during preflight
 #   FLASHCLI_PYTHON
 #   FLASHCLI_SKIP_GPU_CHECK=1
 #   FLASHCLI_SKIP_ENV_CHECK=1
@@ -22,17 +29,11 @@
 #   FLASHCLI_AUTO_INSTALL_PYTHON=1  (root) try apt/dnf/apk to install python3+pip+git
 #   FLASHCLI_BREAK_SYSTEM_PACKAGES=1  pass pip --break-system-packages (PEP 668 images)
 #   FLASHCLI_USE_VENV=1             install into ~/.flashcli/venv (bypass PEP 668)
-#
-# Examples:
-#   curl -fsSL …/install.sh | sh
-#   curl -fsSL …/install.sh | sh -s -- --ref feature/foo
-#   curl -fsSL …/install.sh | sh -s -- --mirror
-#   curl -fsSL …/install.sh | sh -s -- --repo https://gitee.com/org/flashcli.git --ref main
 
 set -eu
 
 DEFAULT_REPO_GITHUB="https://github.com/aodianyun/flashcli.git"
-DEFAULT_REPO_GITEE="https://gitee.com/aodianyun/flashcli.git"
+DEFAULT_REPO_GITEE="https://gitee.com/aodiansoft/flashcli.git"
 DEFAULT_REPO="$DEFAULT_REPO_GITHUB"
 REPO="${FLASHCLI_INSTALL_REPO:-$DEFAULT_REPO}"
 REF="${FLASHCLI_INSTALL_REF:-main}"
@@ -47,7 +48,9 @@ fi
 MIRROR_PIP_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/"
 MIRROR_PIP_TRUSTED_HOST="mirrors.aliyun.com"
 MIRROR_HF_ENDPOINT="https://hf-mirror.com"
+MIRROR_GET_PIP_URL="https://mirrors.aliyun.com/pypi/get-pip/get-pip.py"
 DEFAULT_GIT_PROXY_PREFIX="https://mirror.ghproxy.com/"
+OS_MIRRORS_APPLIED=0
 
 # ---------------------------------------------------------------------------
 # pyproject.toml [project] — keep in sync with repo pyproject.toml
@@ -55,7 +58,7 @@ DEFAULT_GIT_PROXY_PREFIX="https://mirror.ghproxy.com/"
 REQUIRES_PYTHON_MIN="3.10"
 MIN_PIP_VERSION="21.3"
 GET_PIP_URL="https://bootstrap.pypa.io/get-pip.py"
-PYPROJECT_DEPS="typer>=0.12 pyyaml>=6.0 packaging>=23.0 huggingface_hub>=0.26 tqdm>=4.66"
+PYPROJECT_DEPS="typer>=0.12 pyyaml>=6.0 packaging>=23.0 huggingface_hub>=0.26 tqdm>=4.66 fastapi>=0.100 'uvicorn[standard]>=0.24'"
 # tomli>=2.0 only when python_version < '3.11' (handled in verify script)
 # Order: PATH defaults first (/usr/local before /usr), then versioned binaries.
 PYTHON_CANDIDATES="python python3 \
@@ -73,33 +76,37 @@ flashcli install.sh — install flashcli from git (default: main @ GitHub).
 
 Usage:
   ./install.sh [OPTIONS]
-  curl -fsSL …/install.sh | sh -s -- [OPTIONS]
+  curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- [OPTIONS]
+  curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh -s -- [OPTIONS]
 
 Options:
   -h, --help              Show this help
   -q, --quiet             Less output
   --ref REF, --branch REF   Git ref (branch/tag/commit). Default: main
   --repo URL, --git-url URL Git remote for pip install (GitHub, Gitee, self-hosted, …)
-  --mirror                  Use alternate PyPI + Hugging Face Hub mirrors for install
+  --mirror                  Use China-friendly mirrors (pip/HF/git; root: apt/yum/dnf/apk too)
   --global, --no-mirror     Disable mirror endpoints (force direct official endpoints)
-  --gitee                   Shortcut: --repo https://gitee.com/aodianyun/flashcli.git
+  --gitee                   Shortcut: --repo https://gitee.com/aodiansoft/flashcli.git
   --github                  Shortcut: --repo https://github.com/aodianyun/flashcli.git
 
 Environment (override flags):
   FLASHCLI_INSTALL_REPO, FLASHCLI_INSTALL_REF
   FLASHCLI_USE_MIRROR=1
-  FLASHCLI_GIT_PROXY=0      Disable GitHub fetch proxy when --mirror + default repo
+  FLASHCLI_OS_MIRROR=0      With --mirror, do not rewrite apt/yum/dnf/apk sources
+  FLASHCLI_GIT_PROXY=URL    Opt-in GitHub proxy (default --mirror uses Gitee for official repo)
+  FLASHCLI_GIT_TIMEOUT=25   git ls-remote timeout during preflight (seconds)
   PIP_INDEX_URL, HF_ENDPOINT  Override mirror defaults
 
 Examples:
-  ./install.sh
+  curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
+  curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
   ./install.sh --mirror
   ./install.sh --global
   ./install.sh --ref develop
-  ./install.sh --mirror --ref v0.2.0
+  ./install.sh --mirror --ref main
   ./install.sh --gitee --ref main
-  ./install.sh --repo https://gitee.com/your-org/flashcli.git --ref main
-  FLASHCLI_USE_MIRROR=1 ./install.sh --repo https://gitee.com/your-org/flashcli.git
+  ./install.sh --repo https://gitee.com/aodiansoft/flashcli.git --ref main
+  FLASHCLI_USE_MIRROR=1 ./install.sh --repo https://gitee.com/aodiansoft/flashcli.git
 EOF
 }
 
@@ -108,6 +115,122 @@ mirror_mode_enabled() {
     1|true|yes|on) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+os_mirror_enabled() {
+  mirror_mode_enabled || return 1
+  case "${FLASHCLI_OS_MIRROR:-1}" in
+    0|false|no|off) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+get_pip_bootstrap_url() {
+  if mirror_mode_enabled && [ -z "${GET_PIP_URL_OVERRIDE:-}" ]; then
+    printf '%s\n' "$MIRROR_GET_PIP_URL"
+  else
+    printf '%s\n' "${GET_PIP_URL_OVERRIDE:-$GET_PIP_URL}"
+  fi
+}
+
+# Best-effort rewrite of OS package sources to Aliyun (root, Linux). Idempotent.
+apply_apt_mirror() {
+  have_cmd apt-get || return 0
+  have_cmd sed || return 0
+  if grep -rq 'mirrors.aliyun.com' /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null; then
+    return 0
+  fi
+  info "[i] mirror: switching apt sources → mirrors.aliyun.com (backup: sources.list.flashcli-bak)"
+  if [ -f /etc/apt/sources.list ] && [ ! -f /etc/apt/sources.list.flashcli-bak ]; then
+    cp -a /etc/apt/sources.list /etc/apt/sources.list.flashcli-bak 2>/dev/null || true
+  fi
+  for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.list; do
+    [ -f "$f" ] || continue
+    sed -i \
+      -e 's|http://archive.ubuntu.com|https://mirrors.aliyun.com|g' \
+      -e 's|https://archive.ubuntu.com|https://mirrors.aliyun.com|g' \
+      -e 's|http://security.ubuntu.com|https://mirrors.aliyun.com|g' \
+      -e 's|https://security.ubuntu.com|https://mirrors.aliyun.com|g' \
+      -e 's|http://ports.ubuntu.com|https://mirrors.aliyun.com|g' \
+      -e 's|https://ports.ubuntu.com|https://mirrors.aliyun.com|g' \
+      -e 's|http://deb.debian.org|https://mirrors.aliyun.com|g' \
+      -e 's|https://deb.debian.org|https://mirrors.aliyun.com|g' \
+      -e 's|http://security.debian.org|https://mirrors.aliyun.com|g' \
+      -e 's|https://security.debian.org|https://mirrors.aliyun.com|g' \
+      "$f" 2>/dev/null || true
+  done
+}
+
+apply_dnf_yum_mirror() {
+  _repos="/etc/yum.repos.d"
+  [ -d "$_repos" ] || return 0
+  have_cmd sed || return 0
+  if grep -rq 'mirrors.aliyun.com' "$_repos" 2>/dev/null; then
+    return 0
+  fi
+  info "[i] mirror: switching yum/dnf repos → mirrors.aliyun.com"
+  for f in "$_repos"/*.repo; do
+    [ -f "$f" ] || continue
+    sed -i \
+      -e 's|^mirrorlist=|#mirrorlist=|g' \
+      -e 's|^#baseurl=|baseurl=|g' \
+      -e 's|http://mirror.centos.org|https://mirrors.aliyun.com|g' \
+      -e 's|https://mirror.centos.org|https://mirrors.aliyun.com|g' \
+      -e 's|http://vault.centos.org|https://mirrors.aliyun.com|g' \
+      -e 's|https://vault.centos.org|https://mirrors.aliyun.com|g' \
+      -e 's|http://mirrorlist.centos.org|https://mirrors.aliyun.com|g' \
+      -e 's|https://mirrors.fedoraproject.org|https://mirrors.aliyun.com/fedora|g' \
+      -e 's|http://download.fedoraproject.org|https://mirrors.aliyun.com/fedora|g' \
+      -e 's|https://download.fedoraproject.org|https://mirrors.aliyun.com/fedora|g' \
+      "$f" 2>/dev/null || true
+  done
+}
+
+apply_apk_mirror() {
+  _f="/etc/apk/repositories"
+  [ -f "$_f" ] || return 0
+  have_cmd sed || return 0
+  if grep -q 'mirrors.aliyun.com' "$_f" 2>/dev/null; then
+    return 0
+  fi
+  info "[i] mirror: switching apk repositories → mirrors.aliyun.com"
+  if [ ! -f "${_f}.flashcli-bak" ]; then
+    cp -a "$_f" "${_f}.flashcli-bak" 2>/dev/null || true
+  fi
+  sed -i \
+    -e 's|https\?://dl-cdn.alpinelinux.org|https://mirrors.aliyun.com|g' \
+    "$_f" 2>/dev/null || true
+}
+
+apply_zypper_mirror() {
+  _dir="/etc/zypp/repos.d"
+  [ -d "$_dir" ] || return 0
+  have_cmd sed || return 0
+  if grep -rq 'mirrors.aliyun.com' "$_dir" 2>/dev/null; then
+    return 0
+  fi
+  info "[i] mirror: switching zypper repos → mirrors.aliyun.com"
+  for f in "$_dir"/*.repo; do
+    [ -f "$f" ] || continue
+    sed -i \
+      -e 's|http://download.opensuse.org|https://mirrors.aliyun.com/opensuse|g' \
+      -e 's|https://download.opensuse.org|https://mirrors.aliyun.com/opensuse|g' \
+      "$f" 2>/dev/null || true
+  done
+}
+
+apply_os_package_mirrors() {
+  os_mirror_enabled || return 0
+  [ "$OS_MIRRORS_APPLIED" -eq 1 ] && return 0
+  if [ "$(id -u 2>/dev/null || echo 1)" -ne 0 ]; then
+    warn "mirror: OS package sources need root — skipping apt/yum/dnf/apk rewrite (pip/HF mirrors still active)"
+    return 0
+  fi
+  apply_apt_mirror
+  apply_dnf_yum_mirror
+  apply_apk_mirror
+  apply_zypper_mirror
+  OS_MIRRORS_APPLIED=1
 }
 
 # Apply mirror endpoints unless the user already exported overrides.
@@ -126,29 +249,49 @@ apply_mirror_endpoints() {
   fi
 
   maybe_apply_default_git_proxy
+  apply_os_package_mirrors
+
+  if [ -z "${PIP_DEFAULT_TIMEOUT:-}" ]; then
+    export PIP_DEFAULT_TIMEOUT=120
+  fi
 
   info "[i] mirror: PIP_INDEX_URL=${PIP_INDEX_URL:-$MIRROR_PIP_INDEX_URL}"
   info "[i] mirror: HF_ENDPOINT=${HF_ENDPOINT:-$MIRROR_HF_ENDPOINT}"
+  info "[i] mirror: get-pip → $(get_pip_bootstrap_url)"
 }
 
-# When --mirror is on and repo is still the default GitHub URL, optionally prefix a fetch proxy.
+# When --mirror is on: official repo → Gitee; other GitHub URLs → direct unless FLASHCLI_GIT_PROXY set.
 maybe_apply_default_git_proxy() {
   mirror_mode_enabled || return 0
   [ "$REPO_FROM_USER" -eq 1 ] && return 0
-  case "${FLASHCLI_GIT_PROXY:-auto}" in
-    0|false|no|off) return 0 ;;
+
+  if [ "$REPO" = "$DEFAULT_REPO_GITHUB" ]; then
+    REPO="$DEFAULT_REPO_GITEE"
+    info "[i] mirror: git clone via Gitee ($REPO); pass --github to keep GitHub"
+    return 0
+  fi
+
+  case "${FLASHCLI_GIT_PROXY:-}" in
+    ""|auto|0|false|no|off) return 0 ;;
   esac
   case "$REPO" in
     https://github.com/*) ;;
     *) return 0 ;;
   esac
-  _proxy="${FLASHCLI_GIT_PROXY:-$DEFAULT_GIT_PROXY_PREFIX}"
-  case "$_proxy" in
-    auto) _proxy="$DEFAULT_GIT_PROXY_PREFIX" ;;
-  esac
+  _proxy="${FLASHCLI_GIT_PROXY}"
   _proxy="${_proxy%/}/"
   REPO="${_proxy}${REPO}"
   info "[i] mirror: git fetch via ${REPO}"
+}
+
+# Run git with a network timeout so preflight cannot hang silently on dead proxies.
+run_git_timeout() {
+  _secs="${FLASHCLI_GIT_TIMEOUT:-25}"
+  if have_cmd timeout; then
+    timeout "$_secs" git "$@"
+    return $?
+  fi
+  git -c http.lowSpeedLimit=1000 -c "http.lowSpeedTime=${_secs}" "$@"
 }
 
 parse_args() {
@@ -360,6 +503,7 @@ try_auto_install_python() {
     return 1
   fi
   info "Attempting OS package install for python3 + pip + git + zip + rsync (FLASHCLI_AUTO_INSTALL_PYTHON=1) ..."
+  apply_os_package_mirrors
   if have_cmd apt-get; then
     apt-get update -qq && apt-get install -y python3 python3-pip python3-venv git zip rsync \
       && return 0
@@ -395,21 +539,29 @@ run_py() {
   "$PYTHON" "$@"
 }
 
-# pip install with PEP 668 / old pip fallbacks.
+# pip install with PEP 668 / old pip fallbacks. Streams to stderr unless --quiet.
 do_pip_install() {
   _log="/tmp/flashcli-pip-$$.log"
   _break="$(pip_extra_flags || true)"
   if [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ]; then
     set -- --root-user-action=ignore "$@"
   fi
+  _run_pip() {
+    if [ "$QUIET" = "1" ]; then
+      run_py -m pip install "$@" >"$_log" 2>&1
+    elif have_cmd tee; then
+      run_py -m pip install "$@" 2>&1 | tee "$_log" >&2
+    else
+      run_py -m pip install "$@" >"$_log" 2>&1
+      cat "$_log" >&2
+    fi
+  }
   if [ -n "$_break" ]; then
-    if run_py -m pip install $_break "$@" >"$_log" 2>&1; then
-      [ "$QUIET" = "1" ] || cat "$_log" >&2
+    if _run_pip $_break "$@"; then
       rm -f "$_log"
       return 0
     fi
-  elif run_py -m pip install "$@" >"$_log" 2>&1; then
-    [ "$QUIET" = "1" ] || cat "$_log" >&2
+  elif _run_pip "$@"; then
     rm -f "$_log"
     return 0
   fi
@@ -459,6 +611,7 @@ PY
 try_apt_python3_pip() {
   [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ] || return 1
   have_cmd apt-get || return 1
+  apply_os_package_mirrors
   info "Installing python3-pip via apt (Debian/Ubuntu) ..."
   apt-get update -qq && apt-get install -y python3-pip python3-venv \
     && return 0
@@ -470,10 +623,11 @@ bootstrap_pip_get_pip() {
     return 1
   fi
   _tmp="$(mktemp /tmp/get-pip.XXXXXX.py)"
+  _url="$(get_pip_bootstrap_url)"
   if have_cmd curl; then
-    curl -fsSL "$GET_PIP_URL" -o "$_tmp" || return 1
+    curl -fsSL "$_url" -o "$_tmp" || return 1
   else
-    wget -qO "$_tmp" "$GET_PIP_URL" || return 1
+    wget -qO "$_tmp" "$_url" || return 1
   fi
   info "Bootstrapping pip via get-pip.py ..."
   _break="$(pip_extra_flags || true)"
@@ -676,6 +830,7 @@ check_git() {
 install_os_packages() {
   [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ] || return 1
   [ $# -gt 0 ] || return 1
+  apply_os_package_mirrors
   if have_cmd apt-get; then
     info "Installing OS packages via apt: $*"
     apt-get update -qq && apt-get install -y "$@" && return 0
@@ -758,28 +913,29 @@ check_network() {
   if ! have_cmd git; then
     return 0
   fi
+  info "Checking git remote (${FLASHCLI_GIT_TIMEOUT:-25}s timeout): $REPO @ $REF"
   if git_ref_reachable "$REPO" "$REF"; then
     info "[ok] git remote reachable: $REPO ($REF)"
     return 0
   fi
-  warn "cannot verify git remote (offline/firewall?) — pip clone may still fail"
+  warn "cannot verify git remote (timeout/offline/firewall?) — pip clone may still fail"
 }
 
 git_ref_reachable() {
   _repo="$1"
   _ref="$2"
   # branch
-  if git ls-remote --exit-code --heads "$_repo" "$_ref" >/dev/null 2>&1; then
+  if run_git_timeout ls-remote --exit-code --heads "$_repo" "$_ref" >/dev/null 2>&1; then
     return 0
   fi
   # tag
-  if git ls-remote --exit-code --tags "$_repo" "$_ref" >/dev/null 2>&1; then
+  if run_git_timeout ls-remote --exit-code --tags "$_repo" "$_ref" >/dev/null 2>&1; then
     return 0
   fi
   # commit sha (short/full): match object id at line start
   case "$_ref" in
     [0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]*)
-      git ls-remote "$_repo" 2>/dev/null | awk -v want="$_ref" '
+      run_git_timeout ls-remote "$_repo" 2>/dev/null | awk -v want="$_ref" '
         BEGIN { ok=1 }
         {
           oid=$1
@@ -938,10 +1094,10 @@ cleanup_stale_user_install() {
 install_flashcli() {
   spec="git+${REPO}@${REF}"
   if [ "$PIP_INSTALL_USER" = "1" ]; then
-    info "Installing $spec → $(pip_scripts_dir 1) (pip --user)"
+    info "Installing $spec → $(pip_scripts_dir 1) (pip --user; may take a few minutes) ..."
   else
     cleanup_stale_user_install
-    info "Installing $spec → $(pip_scripts_dir 0) (system site)"
+    info "Installing $spec → $(pip_scripts_dir 0) (system site; may take a few minutes) ..."
   fi
 
   set -- --upgrade --force-reinstall
@@ -1262,6 +1418,7 @@ persist_path_config() {
     {
       printf '%s\n' "export PATH=\"${cli_dir}:\$PATH\""
       if mirror_mode_enabled; then
+        printf '%s\n' "export FLASHCLI_USE_MIRROR=1"
         [ -n "${PIP_INDEX_URL:-}" ] && printf '%s\n' "export PIP_INDEX_URL=\"${PIP_INDEX_URL}\""
         [ -n "${PIP_TRUSTED_HOST:-}" ] && printf '%s\n' "export PIP_TRUSTED_HOST=\"${PIP_TRUSTED_HOST}\""
         [ -n "${HF_ENDPOINT:-}" ] && printf '%s\n' "export HF_ENDPOINT=\"${HF_ENDPOINT}\""
@@ -1282,6 +1439,7 @@ persist_path_config() {
         if mirror_mode_enabled && ! grep -Fq 'HF_ENDPOINT=' "$rc" 2>/dev/null; then
           {
             printf '\n# flashcli install.sh (mirror endpoints)\n'
+            printf '%s\n' 'export FLASHCLI_USE_MIRROR=1'
             [ -n "${PIP_INDEX_URL:-}" ] && printf 'export PIP_INDEX_URL="%s"\n' "$PIP_INDEX_URL"
             [ -n "${PIP_TRUSTED_HOST:-}" ] && printf 'export PIP_TRUSTED_HOST="%s"\n' "$PIP_TRUSTED_HOST"
             [ -n "${HF_ENDPOINT:-}" ] && printf 'export HF_ENDPOINT="%s"\n' "$HF_ENDPOINT"
@@ -1311,6 +1469,20 @@ mirror_cli_to_usr_bin() {
   fi
 }
 
+write_flashcli_mirror_env() {
+  mirror_mode_enabled || return 0
+  _home="${FLASHCLI_HOME:-${HOME:-/root}/.flashcli}"
+  mkdir -p "$_home"
+  {
+    printf '%s\n' "FLASHCLI_USE_MIRROR=1"
+    printf 'PIP_INDEX_URL=%s\n' "${PIP_INDEX_URL:-$MIRROR_PIP_INDEX_URL}"
+    printf 'PIP_TRUSTED_HOST=%s\n' "${PIP_TRUSTED_HOST:-$MIRROR_PIP_TRUSTED_HOST}"
+    printf 'HF_ENDPOINT=%s\n' "${HF_ENDPOINT:-$MIRROR_HF_ENDPOINT}"
+    printf '%s\n' "FLASHCLI_PREFER_HF_MIRROR=1"
+  } > "${_home}/mirror.env"
+  info "Wrote ${_home}/mirror.env (flashcli run pip/HF will use mirrors)"
+}
+
 # Verify flashcli works in parent shell (minimal PATH / no /usr/local/bin is common in containers).
 verify_cli_usable() {
   link_cli_into_system_bin
@@ -1326,7 +1498,10 @@ verify_cli_usable() {
   if ! path_has_dir "$cli_dir"; then
     mirror_cli_to_usr_bin "$cli"
     persist_path_config "$cli_dir"
+  else
+    persist_path_config "$cli_dir"
   fi
+  write_flashcli_mirror_env
 
   # Prefer: current PATH → cli_dir first → common system paths
   resolved=""
@@ -1369,7 +1544,10 @@ print_success() {
   [ "$QUIET" = "1" ] && return 0
   printf '\n%s\n' 'flashcli installed successfully.'
   if mirror_mode_enabled; then
-    printf '%s\n' "  (mirror endpoints: ref=${REF})"
+    printf '%s\n' "  (mirror: pip/HF/git + get-pip; ref=${REF})"
+    if os_mirror_enabled && [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ]; then
+      printf '%s\n' "  (mirror: apt/yum/dnf/apk → mirrors.aliyun.com when applicable)"
+    fi
   fi
   printf '%s\n' "  (source: ${REPO} @ ${REF})"
   printf '%s\n' '' 'Next steps:'

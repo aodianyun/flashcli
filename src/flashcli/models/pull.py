@@ -46,14 +46,19 @@ def _hf_endpoint_configured(spec: dict[str, Any]) -> tuple[str, bool]:
     return "", False
 
 
-def _prepare_download_dest(dest: Path, *, quiet: bool) -> None:
+def _prepare_download_dest(
+    dest: Path,
+    *,
+    quiet: bool,
+    allow_patterns: list[str] | None = None,
+) -> None:
     """Remove stale partial caches before a fresh Hub CLI download."""
-    from flashcli.bundle.checkpoint import has_usable_checkpoint
+    from flashcli.bundle.checkpoint import has_cached_weight_files
 
     if not dest.exists():
         dest.mkdir(parents=True, exist_ok=True)
         return
-    if has_usable_checkpoint(dest):
+    if has_cached_weight_files(dest, allow_patterns):
         return
     try:
         has_entries = any(dest.iterdir())
@@ -83,18 +88,18 @@ def _download_huggingface(
     if not repo:
         raise ValueError("HuggingFace weights spec requires non-empty 'repo'")
 
-    from flashcli.bundle.checkpoint import has_usable_checkpoint
+    from flashcli.bundle.checkpoint import has_cached_weight_files
 
-    if has_usable_checkpoint(dest):
+    patterns = _allow_patterns(spec)
+    if has_cached_weight_files(dest, patterns):
         if not quiet:
             print(f"Weights already cached: {dest}", file=sys.stderr)
         return
 
-    _prepare_download_dest(dest, quiet=quiet)
+    _prepare_download_dest(dest, quiet=quiet, allow_patterns=patterns)
     revision = spec.get("revision")
     rev = str(revision) if revision else None
     endpoint, explicit = _hf_endpoint_configured(spec)
-    patterns = _allow_patterns(spec)
 
     endpoints = download_endpoint_order(endpoint, explicit=explicit)
     if not explicit:

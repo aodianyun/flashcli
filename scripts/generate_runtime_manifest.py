@@ -159,6 +159,7 @@ def main() -> int:
     repo_root = args.repo_root.resolve()
 
     torch_spec, pip_packages, optional_groups = extract_runtime_packages(repo_root)
+    del optional_groups  # HTTP server extras belong to flashcli, not bundle zip.
 
     _src = Path(__file__).resolve().parents[1] / "src"
     if str(_src) not in sys.path:
@@ -225,7 +226,6 @@ def main() -> int:
     bundle["python_dependencies"] = {
         "torch": torch_spec,
         "pip": pip_packages,
-        "optional_groups": optional_groups,
     }
     bundle["cuda"] = {
         "cuda_tag": args.cuda_tag,

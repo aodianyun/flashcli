@@ -24,7 +24,6 @@ def activate_for_preset(
     bundle_ref: str | None = None,
     bundle_version: str | None = None,
     checkpoint: Path | None = None,
-    profile: str = "default",
     auto_install_python: bool = True,
     quiet: bool = False,
     force_python: bool = False,
@@ -54,7 +53,6 @@ def activate_for_preset(
         )
     activate_bundle(
         bundle,
-        profile=profile,  # type: ignore[arg-type]
         install_python=auto_install_python,
         quiet=quiet,
         force_python=force_python,
