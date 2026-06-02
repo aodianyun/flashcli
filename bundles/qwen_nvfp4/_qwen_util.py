@@ -279,6 +279,22 @@ def chat_request_to_agent_openai(req: ChatRequest) -> dict[str, Any]:
     return chat_request_to_openai_body(req)
 
 
+def resolve_qwen36_route_min_seq(explicit: Any = None) -> int:
+    """Short prompts should use ``short_spec`` (route when prompt < threshold).
+
+    ``route_min_seq=0`` forces the long FP8-KV path for every request (~60 tok/s vs ~84).
+    Default 512 matches ``FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ`` in comparable benches.
+    """
+    import os
+
+    if explicit is not None:
+        return int(explicit)
+    env = os.environ.get("FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ", "").strip()
+    if env.isdigit():
+        return int(env)
+    return 512
+
+
 def merge_load_options(
     bundle: BundleManifest,
     **options: Any,

@@ -14,6 +14,7 @@ from _backend_qwen36_agent import Qwen36AgentBackend
 from _qwen_util import (
     merge_load_options,
     parse_warmup_spec,
+    resolve_qwen36_route_min_seq,
     resolve_serve_warmup_spec,
     run_async,
     serve_cfg,
@@ -77,7 +78,7 @@ class ServeEngine:
                 max_seq=int(opts.get("max_seq", defaults.get("max_seq", 262208))),
                 model_name=self._model_id,
                 K=int(opts.get("K", defaults.get("K", 4))),
-                route_min_seq=opts.get("route_min_seq", 0),
+                route_min_seq=resolve_qwen36_route_min_seq(opts.get("route_min_seq")),
                 capsule_budget_bytes=int(opts.get("capsule_budget_bytes", 0)),
                 default_max_tokens=int(
                     opts.get("default_max_tokens", defaults.get("default_max_tokens", 2048))
