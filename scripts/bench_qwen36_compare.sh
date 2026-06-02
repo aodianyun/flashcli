@@ -37,6 +37,8 @@ SHORT_MAX_TOKENS="${SHORT_MAX_TOKENS:-64}"
 LONG_MAX_TOKENS="${LONG_MAX_TOKENS:-64}"
 SHORT_ONLY=0
 QUICK=0
+QUICK_MAX_SEQ="${QUICK_MAX_SEQ:-32768}"
+MAX_SEQ_EXPLICIT=0
 RUN_FLASHCLI=1
 RUN_PYTORCH=1
 REPORT_ONLY=0
@@ -69,7 +71,7 @@ Modes:
   --report-only         Rebuild report from --out-dir
 
 Bench:
-  --quick               Short ctx only; warmup-preset none; rounds=3 skip-first=1
+  --quick               Short ctx only; max-seq ${QUICK_MAX_SEQ}; warmup none; rounds=3
   --short-only          Skip long-context case
   --rounds / --skip-first / --profile comparable|stress
   --long-tokens N       Long prompt user tokens (default: ${LONG_TOKENS})
@@ -119,8 +121,11 @@ while [[ $# -gt 0 ]]; do
       SHORT_ONLY=1
       ROUNDS=3
       SKIP_FIRST=1
-      # agent warmup includes 256K shapes and blocks HTTP until done (30+ min).
+      # Full max-seq allocates 256K KV at load (10+ min). Quick uses a smaller budget.
       WARMUP_PRESET=none
+      if [[ "${MAX_SEQ_EXPLICIT}" -eq 0 ]]; then
+        MAX_SEQ="${QUICK_MAX_SEQ}"
+      fi
       shift
       ;;
     --short-only) SHORT_ONLY=1; shift ;;
@@ -137,7 +142,7 @@ while [[ $# -gt 0 ]]; do
     --out-dir) OUT_DIR="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
     --K) K="$2"; shift 2 ;;
-    --max-seq) MAX_SEQ="$2"; shift 2 ;;
+    --max-seq) MAX_SEQ="$2"; MAX_SEQ_EXPLICIT=1; shift 2 ;;
     --warmup-preset) WARMUP_PRESET="$2"; shift 2 ;;
     --keep-server) KEEP_SERVER=1; shift ;;
     --health-timeout) HEALTH_TIMEOUT="$2"; shift 2 ;;
@@ -331,17 +336,76 @@ cleanup_on_exit() {
   return "${ec}"
 }
 
+run_bg_log_path() {
+  local job="$1"
+  local log_path latest="${FLASHCLI_ROOT}/logs/${job}.latest.log"
+  if [[ -L "${latest}" ]]; then
+    log_path="$(readlink -f "${latest}" 2>/dev/null || readlink "${latest}")"
+    [[ "${log_path}" != /* ]] && log_path="${FLASHCLI_ROOT}/logs/${log_path}"
+    if [[ -f "${log_path}" ]]; then
+      printf '%s\n' "${log_path}"
+      return 0
+    fi
+  fi
+  local meta="${FLASHCLI_ROOT}/logs/${job}.meta"
+  if [[ -f "${meta}" ]]; then
+    sed -n 's/^LOG_FILE=//p' "${meta}" | tail -1
+  fi
+}
+
+tail_serve_progress() {
+  local serve_log="$1" job="${2:-}"
+  local log_path="${serve_log}"
+  if [[ -n "${job}" ]]; then
+    local rb_log
+    rb_log="$(run_bg_log_path "${job}" 2>/dev/null || true)"
+    if [[ -n "${rb_log}" && -f "${rb_log}" ]]; then
+      log_path="${rb_log}"
+    fi
+  fi
+  [[ -n "${log_path}" && -f "${log_path}" ]] || return 0
+  tail -n 80 "${log_path}" 2>/dev/null \
+    | grep -vE '^\[run-bg\] (Job |  status:|  tail:|  wait:)' \
+    | tail -n 5 \
+    | sed 's/^/[serve] /' >&2 || true
+}
+
+check_bench_job_crashed() {
+  local job="$1" serve_log="$2"
+  local status_out state exit_code
+  status_out="$(bash "${RUN_BG}" --name "${job}" --status 2>&1)" || return 0
+  state="$(printf '%s\n' "${status_out}" | sed -n 's/^state:[[:space:]]*//p' | head -1)"
+  exit_code="$(printf '%s\n' "${status_out}" | sed -n 's/^exit:[[:space:]]*//p' | head -1)"
+  if [[ "${state}" == "stopped" && -n "${exit_code}" && "${exit_code}" != "0" ]]; then
+    log "Background job '${job}' exited with code ${exit_code}"
+    tail_serve_progress "${serve_log}" "${job}"
+    die "Server process died before /health (see serve log above or: bash scripts/run_bg.sh --name ${job} --tail)"
+  fi
+}
+
+start_bench_server() {
+  local job="$1" workdir="$2"
+  shift 2
+  : >"${workdir}/serve.log"
+  bash "${RUN_BG}" --name "${job}" --cwd "${FLASHCLI_ROOT}" \
+    --log-file "${workdir}/serve.log" --max-retries 0 -- \
+    "$@"
+}
+
 wait_health() {
-  local port="$1" timeout="$2" serve_log="${3:-}"
+  local port="$1" timeout="$2" serve_log="${3:-}" job="${4:-}"
   local start now elapsed last_hint=0
   start="$(date +%s)"
   log "Waiting for http://${HOST}:${port}/health (timeout ${timeout}s) …"
-  log "  flashcli serve starts HTTP only after model load + warmup; see serve.log for progress."
+  log "  Serve log: ${serve_log} (tail: bash scripts/run_bg.sh --name ${job} --tail)"
   while true; do
     if curl -sf "http://${HOST}:${port}/health" >/dev/null 2>&1; then
       now="$(date +%s)"
       echo $((now - start))
       return 0
+    fi
+    if [[ -n "${job}" ]]; then
+      check_bench_job_crashed "${job}" "${serve_log}"
     fi
     now="$(date +%s)"
     elapsed=$((now - start))
@@ -355,9 +419,7 @@ wait_health() {
     if (( elapsed - last_hint >= 60 )); then
       last_hint="${elapsed}"
       log "  … still waiting for /health (${elapsed}s elapsed)"
-      if [[ -n "${serve_log}" && -f "${serve_log}" ]]; then
-        tail -n 3 "${serve_log}" 2>/dev/null | sed 's/^/[serve] /' >&2 || true
-      fi
+      tail_serve_progress "${serve_log}" "${job}"
     fi
     sleep 5
   done
@@ -531,13 +593,12 @@ run_flashcli_backend() {
   server_cmd="$(printf '%q ' env "${serve_env[@]}" "${serve_cmd[@]}")"
   started="$(date -Iseconds 2>/dev/null || date)"
 
-  log "Starting flashcli + FlashRT (checkpoint=${CHECKPOINT}) …"
-  bash "${RUN_BG}" --name "${job}" --cwd "${FLASHCLI_ROOT}" -- \
+  log "Starting flashcli + FlashRT (checkpoint=${CHECKPOINT}, max_seq=${MAX_SEQ}, warmup=${WARMUP_PRESET}) …"
+  start_bench_server "${job}" "${workdir}" \
     env "${serve_env[@]}" \
-    "${serve_cmd[@]}" \
-    >>"${workdir}/serve.log" 2>&1
+    "${serve_cmd[@]}"
 
-  health_s="$(wait_health "${PORT}" "${HEALTH_TIMEOUT}" "${workdir}/serve.log")"
+  health_s="$(wait_health "${PORT}" "${HEALTH_TIMEOUT}" "${workdir}/serve.log" "${job}")"
   write_manifest_header "${workdir}" "flashcli+FlashRT" "${server_cmd}" "${started}" "${health_s}" \
     "$(jq -n --arg hf_attn "" --arg hf_dtype "" '{stack: "FlashRT"}')"
 
@@ -570,11 +631,9 @@ run_pytorch_backend() {
   started="$(date -Iseconds 2>/dev/null || date)"
 
   log "Starting PyTorch HF baseline (same checkpoint=${CHECKPOINT}, max_seq=${MAX_SEQ}) …"
-  bash "${RUN_BG}" --name "${job}" --cwd "${FLASHCLI_ROOT}" -- \
-    "${serve_cmd[@]}" \
-    >>"${workdir}/serve.log" 2>&1
+  start_bench_server "${job}" "${workdir}" "${serve_cmd[@]}"
 
-  health_s="$(wait_health "${PORT}" "${HEALTH_TIMEOUT}" "${workdir}/serve.log")"
+  health_s="$(wait_health "${PORT}" "${HEALTH_TIMEOUT}" "${workdir}/serve.log" "${job}")"
   write_manifest_header "${workdir}" "PyTorch HF" "${server_cmd}" "${started}" "${health_s}" \
     "$(jq -n \
       --arg hf_attn "${HF_ATTN}" \
@@ -604,7 +663,10 @@ write_report() {
 }
 
 log "out_dir=${OUT_DIR}  checkpoint=${CHECKPOINT}  max_seq=${MAX_SEQ}  long_tokens=${LONG_TOKENS}"
-log "flashcli=${RUN_FLASHCLI}  pytorch_hf=${RUN_PYTORCH}  quick=${QUICK}  short_only=${SHORT_ONLY}"
+log "flashcli=${RUN_FLASHCLI}  pytorch_hf=${RUN_PYTORCH}  quick=${QUICK}  short_only=${SHORT_ONLY}  warmup=${WARMUP_PRESET}"
+if [[ "${QUICK}" -eq 1 && "${MAX_SEQ_EXPLICIT}" -eq 0 ]]; then
+  log "  --quick uses max_seq=${MAX_SEQ} (override with --max-seq for full 256K compare)"
+fi
 log "GPU: $(gpu_name)"
 
 if [[ "${REPORT_ONLY}" -eq 1 ]]; then
