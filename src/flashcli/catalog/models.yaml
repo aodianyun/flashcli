@@ -9,7 +9,7 @@ schema_version: 6
 models:
 
   pi05_libero:
-    description: Pi0.5 LIBERO — lerobot/pi05_libero_finetuned_v044 (SM89/SM120)
+    description: Pi0.5 LIBERO — lerobot/pi05_libero_finetuned_v044 (SM89 / SM120)
     bundle:
       zip: https://flashhub-cdn.aodianyun.com/repo/5/versions/6/flashcli-bundle-pi05-ee6f916-sm89-multi-linux-x86_64-20260601-211734.zip
       # path: bundles/pi05_libero

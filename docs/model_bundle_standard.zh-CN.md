@@ -129,7 +129,7 @@ lib/
   "config": "pi05",
   "framework": "torch",
   "capabilities": ["run"],
-  "requires": { "sm": ["89", "120"] },
+  "requires": { "sm": ["89"] },
   "weights": {
     "source": "huggingface",
     "repo": "lerobot/pi05_libero_finetuned_v044",

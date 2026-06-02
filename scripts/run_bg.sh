@@ -81,12 +81,80 @@ kill_process_tree() {
   local pid="$1" sig="${2:-TERM}"
   local children child
 
-  [[ -z "${pid}" ]] && return 0
+  [[ -z "${pid}" ]] || [[ "${pid}" == "$$" ]] && return 0
   children="$(pgrep -P "${pid}" 2>/dev/null || true)"
   for child in ${children}; do
     kill_process_tree "${child}" "${sig}"
   done
   kill "-${sig}" "${pid}" 2>/dev/null || true
+}
+
+# Kill worker + orphans matched by job command line (e.g. flashcli serve after setsid reparent).
+kill_job_workers() {
+  local sig="${1:-TERM}"
+  local worker_pid worker_pgid cmd_quoted pattern p port
+
+  worker_pid="$(read_meta WORKER_PID 2>/dev/null || true)"
+  worker_pgid="$(read_meta WORKER_PGID 2>/dev/null || true)"
+
+  if [[ -n "${worker_pgid}" && "${worker_pgid}" != "$$" && "${worker_pgid}" != "1" ]]; then
+    kill "-${sig}" "-${worker_pgid}" 2>/dev/null || true
+  fi
+  if [[ -n "${worker_pid}" ]]; then
+    kill_process_tree "${worker_pid}" "${sig}"
+  fi
+
+  cmd_quoted="$(read_meta CMD_QUOTED 2>/dev/null || true)"
+  if [[ -n "${cmd_quoted}" ]]; then
+    # shellcheck disable=SC2086
+    eval "set -- ${cmd_quoted}"
+    if [[ $# -ge 2 ]]; then
+      pattern="$1 $2"
+      [[ $# -ge 3 && "$3" != --* ]] && pattern="${pattern} $3"
+      while IFS= read -r p; do
+        [[ -z "${p}" || "${p}" == "$$" ]] && continue
+        kill_process_tree "${p}" "${sig}"
+      done < <(pgrep -f "${pattern}" 2>/dev/null || true)
+    fi
+    while [[ $# -gt 0 ]]; do
+      if [[ "$1" == "--port" && -n "${2:-}" ]]; then
+        port="$2"
+        break
+      fi
+      shift
+    done
+    if [[ -n "${port}" ]]; then
+      if command -v fuser >/dev/null 2>&1; then
+        fuser -k "${port}/tcp" 2>/dev/null || true
+      elif command -v ss >/dev/null 2>&1; then
+        while IFS= read -r p; do
+          [[ -z "${p}" || "${p}" == "$$" ]] && continue
+          kill_process_tree "${p}" "${sig}"
+        done < <(ss -tlnp "sport = :${port}" 2>/dev/null | grep -o 'pid=[0-9]*' | sed 's/pid=//' || true)
+      fi
+    fi
+  fi
+}
+
+any_job_workers_running() {
+  local worker_pid cmd_quoted pattern p
+
+  worker_pid="$(read_meta WORKER_PID 2>/dev/null || true)"
+  if [[ -n "${worker_pid}" ]] && is_running "${worker_pid}"; then
+    return 0
+  fi
+
+  cmd_quoted="$(read_meta CMD_QUOTED 2>/dev/null || true)"
+  if [[ -n "${cmd_quoted}" ]]; then
+    # shellcheck disable=SC2086
+    eval "set -- ${cmd_quoted}"
+    if [[ $# -ge 2 ]]; then
+      pattern="$1 $2"
+      [[ $# -ge 3 && "$3" != --* ]] && pattern="${pattern} $3"
+      pgrep -f "${pattern}" >/dev/null 2>&1 && return 0
+    fi
+  fi
+  return 1
 }
 
 run_in_new_session() {
@@ -131,12 +199,24 @@ cmd_supervisor_internal() {
 
   _supervisor_cleanup() {
     if (( child_pid != 0 )) && is_running "${child_pid}"; then
-      kill_process_tree "${child_pid}" TERM
+      kill_process_tree "${child_pid}" KILL
     fi
     release_docker_stop_all "${FLASHCLI_ROOT}"
     exit 143
   }
   trap _supervisor_cleanup TERM INT
+
+  _wait_worker_or_stop() {
+    local wp=$1
+    while is_running "${wp}"; do
+      if [[ -f "${stop_path}" ]]; then
+        log "Stop requested; killing worker pid ${wp}"
+        kill_process_tree "${wp}" KILL
+        return 0
+      fi
+      sleep 1
+    done
+  }
 
   while (( attempt <= max_retries )); do
     if [[ -f "${stop_path}" ]]; then
@@ -155,12 +235,14 @@ cmd_supervisor_internal() {
 
     log "Run attempt $((attempt + 1))/$((max_retries + 1)): $*"
     set +e
-    run_in_new_session bash -c 'cd "$1" && shift && exec "$@"' _ "${cwd}" "$@" &
+    # Do not setsid the worker — keeps flashcli in the supervisor tree so --stop can kill it.
+    ( cd "${cwd}"; exec "$@" ) &
     child_pid=$!
     append_meta \
       "WORKER_PID=${child_pid}" \
       "WORKER_PGID=$(ps -o pgid= -p "${child_pid}" 2>/dev/null | tr -d '[:space:]')"
-    wait "${child_pid}"
+    _wait_worker_or_stop "${child_pid}"
+    wait "${child_pid}" 2>/dev/null || true
     ec=$?
     child_pid=0
     set -e
@@ -351,11 +433,23 @@ cmd_stop() {
   local pf pid stop_path
   pf="$(pid_file)"
   stop_path="$(stop_file)"
-  [[ -f "${pf}" ]] || die "Job '${NAME}' not started"
+  if [[ ! -f "${pf}" ]]; then
+    if [[ -f "$(meta_file)" ]]; then
+      log "No pid file; killing orphaned workers for '${NAME}'"
+      kill_job_workers KILL
+      release_docker_stop_all "${FLASHCLI_ROOT}"
+      rm -f "${stop_path}"
+      exit 0
+    fi
+    die "Job '${NAME}' not started"
+  fi
 
   pid="$(tr -d '[:space:]' < "${pf}")"
   if ! is_running "${pid}"; then
-    log "Job '${NAME}' not running (pid ${pid}); cleaning up release containers"
+    log "Job '${NAME}' supervisor not running (pid ${pid}); cleaning up workers"
+    if [[ -f "$(meta_file)" ]]; then
+      kill_job_workers KILL
+    fi
     release_docker_stop_all "${FLASHCLI_ROOT}"
     rm -f "${pf}" "${stop_path}"
     exit 0
@@ -366,34 +460,29 @@ cmd_stop() {
 
   release_docker_stop_all "${FLASHCLI_ROOT}"
 
-  local worker_pgid worker_pid
-  worker_pid="$(read_meta WORKER_PID 2>/dev/null || true)"
-  worker_pgid="$(read_meta WORKER_PGID 2>/dev/null || true)"
-  if [[ -n "${worker_pgid}" && "${worker_pgid}" != "$$" ]]; then
-    kill -TERM "-${worker_pgid}" 2>/dev/null || true
-  fi
-  if [[ -n "${worker_pid}" ]]; then
-    kill_process_tree "${worker_pid}" TERM
-  fi
+  kill_job_workers TERM
   kill_process_tree "${pid}" TERM
 
   local i
   for i in $(seq 1 20); do
     is_running "${pid}" || break
+    any_job_workers_running || break
     sleep 0.5
   done
 
-  if is_running "${pid}"; then
-    log "Still running; sending SIGKILL to process tree"
-    if [[ -n "${worker_pgid}" && "${worker_pgid}" != "$$" ]]; then
-      kill -KILL "-${worker_pgid}" 2>/dev/null || true
-    fi
-    [[ -n "${worker_pid}" ]] && kill_process_tree "${worker_pid}" KILL
+  if is_running "${pid}" || any_job_workers_running; then
+    log "Still running; sending SIGKILL to job processes"
+    kill_job_workers KILL
     kill_process_tree "${pid}" KILL
     for i in $(seq 1 10); do
       is_running "${pid}" || break
+      any_job_workers_running || break
       sleep 0.5
     done
+  fi
+
+  if any_job_workers_running; then
+    log "WARN: some job processes may still be running; try: pgrep -af '$(read_meta CMD_QUOTED 2>/dev/null | head -c 60)'"
   fi
 
   release_docker_stop_all "${FLASHCLI_ROOT}"

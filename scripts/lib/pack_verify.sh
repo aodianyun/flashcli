@@ -13,6 +13,15 @@ pack_verify_lib_matrix_and_abi() {
     "${py_minors}" flash_rt_kernels flash_rt_fa2 \
     || die "lib/ matrix incomplete (expected sm${sm} × cu${cuda_tags} × py${py_minors})"
 
+  if [[ -n "${RELEASE_MATRIX_SM120_CUDA_TAGS:-${SM120_CUDA_TAGS:-}}" ]]; then
+    local sm120_cuda="${RELEASE_MATRIX_SM120_CUDA_TAGS:-${SM120_CUDA_TAGS}}"
+    for cuda in ${sm120_cuda}; do
+      verify_native_matrix_lib "${native_lib}" "120" "${cuda}" "${os_name}" "${arch}" \
+        "${py_minors}" flash_rt_kernels flash_rt_fa2 \
+        || die "lib/ missing sm120-cu${cuda} cells (Blackwell)"
+    done
+  fi
+
   # Host pack may lack matrix interpreters; compile-time verify (build_release_matrix.sh) is strict.
   verify_native_lib_python_abi \
     "${bundle_dir}" "${sm}" "${cuda_tags}" "${os_name}" "${arch}" "${py_minors}" 0

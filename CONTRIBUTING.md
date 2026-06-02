@@ -111,7 +111,7 @@ Details: [docs/runtime-matrix.md](docs/runtime-matrix.md).
 - [ ] `lib/` contains all cells declared in `release-matrix.env`
 - [ ] Zip includes runtime files only (no `build.sh`, README, or dev artifacts — see `RELEASE_PACK_FILES`)
 - [ ] `flashcli models envs <preset>` matches expected host keys on target GPUs
-- [ ] Smoke `flashcli run` / `flashcli serve` on at least one matrix cell (SM89+cu124, SM120+cu130, etc.)
+- [ ] Smoke `flashcli run` / `flashcli serve` on at least one matrix cell (e.g. pi05 SM89+cu124, qwen SM120+cu130)
 - [ ] Upload zip to CDN; update `models.yaml` `bundle.zip` URL(s)
 - [ ] For qwen: both `qwen3-8b-nvfp4` and `qwen36-27b-nvfp4` share the **same** zip URL
 
@@ -119,7 +119,7 @@ Details: [docs/runtime-matrix.md](docs/runtime-matrix.md).
 
 | Bundle | Note |
 |--------|------|
-| `pi05_libero` | cu124 line: FA2 is sm_89 only (nvcc 12.4). SM120 users need **cu130** cells. |
+| `pi05_libero` | **SM89 only.** cu124 line: FA2 is sm_89 AOT. cu130 line: FA2 multi-arch; kernels sm_89. |
 | `qwen_nvfp4` | **No cu124 line** — SM120/NVFP4 requires nvcc ≥ 12.8 (use `25.10-py3` container). |
 
 ## Reporting issues

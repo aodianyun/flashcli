@@ -40,7 +40,7 @@ flashcli 刻意保持轻薄：**推理代码在 bundle 内**。CLI 将 bundle �
 
 | Preset | 任务 | GPU | CUDA 线 | Python | 能力 |
 |--------|------|-----|---------|--------|------|
-| [`pi05_libero`](bundles/pi05_libero/QUICKSTART.zh-CN.md) | Pi0.5 LIBERO VLA | SM89 / SM120 | cu124 或 **cu130**（SM120） | 3.10–3.12 | `run` |
+| [`pi05_libero`](bundles/pi05_libero/QUICKSTART.zh-CN.md) | Pi0.5 LIBERO VLA | **SM89** | cu124 或 cu130 | 3.10–3.12 | `run` |
 | [`qwen3-8b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) | Qwen3-8B NVFP4 对话 | **SM120** | **仅 cu130** | 3.10–3.12 | `run`, `serve` |
 | [`qwen36-27b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **仅 cu130** | 3.10–3.12 | `run`, `serve` |
 
@@ -59,7 +59,7 @@ Qwen3 与 Qwen3.6 **共用** runtime zip；catalog 用 `bundle_variant` 区分�
 | 月份 | 亮点 |
 |------|------|
 | **2026-06** | **Qwen3.6 对话服务**达到生产可用 — 回复更快（遇结束符即停）、真流式输出、更长单次生成，HTTP 与推理安装更省心 |
-| **2026-05** | **Blackwell（SM120）Qwen NVFP4** 入库 — 一条命令 `run` / OpenAI 兼容 `serve`；Pi0.5 覆盖 SM120；可复现的多环境发布包 |
+| **2026-05** | **Blackwell（SM120）Qwen NVFP4** 入库 — 一条命令 `run` / OpenAI 兼容 `serve`；可复现的多环境发布包 |
 
 完整历史见 `git log`；发布 checklist：[CONTRIBUTING.md](CONTRIBUTING.md)。
 

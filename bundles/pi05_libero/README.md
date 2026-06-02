@@ -31,16 +31,16 @@ flashcli run pi05_libero --prompt "..." --image /path/to/base.jpg
 
 ## Maintainers: release bundle
 
-### FA2 and SM120
+**Supported GPU**: **SM89 only** (Ada, e.g. RTX 4090). SM120 / Blackwell is not supported in this release line.
 
-Matrix artifacts are labeled **sm89**, but `requires.sm` includes **120**. FA2 strategy depends on the CUDA line:
+### FA2 build (matrix)
 
 | CUDA line | FA2 |
 |-----------|-----|
-| **cu124** (nvcc 12.4) | sm_89 AOT only (nvcc 12.4 cannot build `compute_120`) |
-| **cu130** (nvcc 13.x) | sm_80 + sm_120 + PTX (required for SM120 users) |
+| **cu124** (nvcc 12.4) | sm_89 AOT only (`FA2_ARCH_NATIVE_ONLY`) |
+| **cu130** (nvcc 13.x) | sm_80 + sm_120 + PTX (multi-arch FA2 in cu130 cells; **kernels remain sm_89**) |
 
-**SM120 hosts** must match `*-cu130-*` cells. Do not publish cu130 builds with `--fa2-native-only`. Local SM89-only dev: `build.sh --fa2-native-only`.
+Do not publish cu130 builds with `--fa2-native-only`. Local SM89-only dev: `build.sh --fa2-native-only`.
 
 ### One-command release (recommended)
 
@@ -70,7 +70,7 @@ Use `--native` instead of Docker when both CUDA toolkits are on the host.
 1. Smoke-test: `flashcli run pi05_libero --bundle bundles/pi05_libero --benchmark 5`
 2. Upload `dist/*.zip` to CDN
 3. Update `src/flashcli/catalog/models.yaml` → `pi05_libero.bundle.zip`
-4. Verify on SM120 (e.g. RTX PRO 5000)
+4. Verify on **SM89** (e.g. RTX 4090)
 
 ### Local single-env dev
 
@@ -97,9 +97,9 @@ Pre-download on a reachable host, then `flashcli run pi05_libero --bundle bundle
 
 `--bundle` must be a directory containing `flashcli-bundle.json` (e.g. `bundles/pi05_libero` or an extracted `dist/flashcli-bundle-pi05-*` folder), not the `.zip` file.
 
-### `no kernel image is available for execution on the device` (FA2 / SM120)
+### `no kernel image is available for execution on the device`
 
-Usually an **old bundle** or **wrong CUDA cell** on **SM120**: match `sm120-cu130-*` (not cu124). Rebuild with current release scripts.
+Usually **wrong GPU** (SM120 is not supported) or a **CUDA cell mismatch** on SM89. Run `flashcli models envs pi05_libero` — expect `sm89-cu124-*` or `sm89-cu130-*`.
 
 ### `'GemmRunner' object has no attribute 'fp8_nt_dev'`
 

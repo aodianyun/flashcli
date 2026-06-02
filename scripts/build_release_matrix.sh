@@ -224,6 +224,11 @@ verify_built_native_python_abi() {
 
 if [[ "${DRY_RUN}" -eq 0 && "${PACK_ONLY}" -eq 0 && "${CHECK_ONLY}" -eq 0 ]]; then
   verify_built_native_python_abi
+  if [[ -n "${SM120_CUDA_TAGS:-}" ]]; then
+    log "Verifying sm120 Python ABI (Blackwell cu${SM120_CUDA_TAGS})"
+    verify_native_lib_python_abi \
+      "${BUNDLE_DIR}" "120" "${SM120_CUDA_TAGS}" "linux" "x86_64" "${PY_MINORS}" 1
+  fi
 fi
 
 if [[ "${DRY_RUN}" -eq 0 && "${SKIP_PACK}" -eq 0 ]]; then

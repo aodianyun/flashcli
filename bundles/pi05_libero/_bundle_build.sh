@@ -562,15 +562,30 @@ if [[ "${SKIP_BUILD}" -eq 0 ]]; then
   command -v cmake >/dev/null 2>&1 || die "cmake not found"
   command -v nvcc >/dev/null 2>&1 || die "nvcc not found"
   run_cmake_build
+  stage_bundle_runtime
+
+  # cu130 matrix: cross-compile sm120 (Blackwell) in the same 25.10 container after sm89 pass.
+  if [[ "${MERGE_NATIVE}" -eq 1 && "${CUDA_TAG}" == "130" ]]; then
+    local _saved_sm="${SM}" _saved_gpu="${GPU_ARCH}" _saved_build="${BUILD_DIR:-}"
+    local _py="${PYTHON_MINOR:-310}"
+    log "======== sm120 cu130 pass (Blackwell, cross-compile, py${_py}) ========"
+    SM=120
+    GPU_ARCH=120
+    BUILD_DIR="${_saved_build:-${REPO_ROOT}/build}-sm120-cu130-py${_py}"
+    run_cmake_build
+    stage_bundle_runtime
+    SM="${_saved_sm}"
+    GPU_ARCH="${_saved_gpu}"
+    BUILD_DIR="${_saved_build}"
+  fi
 else
   [[ -n "${SM}" ]] || detect_sm
   [[ -n "${CUDA_TAG}" ]] || detect_cuda_tag
   GPU_ARCH="${GPU_ARCH:-${SM}}"
   PYTHON_BIN="${PYTHON_BIN:-python3}"
   log "Skipping cmake (--pack-only)"
+  stage_bundle_runtime
 fi
-
-stage_bundle_runtime
 
 if [[ -n "${EMBED_CHECKPOINT}" ]]; then
   embed_checkpoint "${EMBED_CHECKPOINT}"

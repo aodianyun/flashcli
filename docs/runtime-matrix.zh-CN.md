@@ -57,16 +57,16 @@ flash_rt_fa2-abc1234-sm89-cu124-linux-x86_64-py312.so
 
 示例：`flashcli-bundle-pi05-7cf622f-sm89-multi-linux-x86_64-20260529-193354.zip`（见 `scripts/pack_bundle.sh`）。
 
-### FA2 与 SM120（pi05_libero）
+### FA2（pi05_libero）
 
-矩阵在 **SM89** 标签（`GPU_ARCH=89`）上编译，但 `flashcli-bundle.json` 的 `requires.sm` 含 `120`。
+**仅支持 SM89**。矩阵在 **sm89**（`GPU_ARCH=89`）上编译；`flashcli-bundle.json` 的 `requires.sm` 为 `["89"]`。
 
-| CUDA 线 | FA2 策略 | 原因 |
+| CUDA 线 | FA2 策略 | 说明 |
 |---------|----------|------|
-| **cu124**（nvcc 12.4） | `FA2_ARCH_NATIVE_ONLY` → sm_89 AOT | nvcc 12.4 **不能**编 `compute_120` |
-| **cu130**（nvcc 13.x） | 默认 sm_80 + sm_120 + PTX | Blackwell 用户选 cu130 格 |
+| **cu124**（nvcc 12.4） | `FA2_ARCH_NATIVE_ONLY` → sm_89 AOT | CUDA 12.4 用户态 |
+| **cu130**（nvcc 13.x） | FA2 默认 sm_80 + sm_120 + PTX | kernels 仍为 sm_89；供 CUDA 13 上的 SM89 机器 |
 
-因此：**SM120 用户应匹配 `*-cu130-*` 的 `.so`**；cu124 格只服务 CUDA 12.4 + SM89（及兼容路径）。本地单卡加速可加 `build.sh --fa2-native-only`（仅开发，勿发布）。
+**SM120 / Blackwell 暂不支持 pi05**。本地单卡加速：`build.sh --fa2-native-only`（仅开发，勿发布）。
 
 登记位置：[`src/flashcli/catalog/models.yaml`](../src/flashcli/catalog/models.yaml)。包格式：[model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
 

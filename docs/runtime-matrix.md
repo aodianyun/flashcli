@@ -92,18 +92,14 @@ Docker images (defaults in `release-matrix.env`):
 
 ## pi05_libero
 
-### FA2 and SM120
+**Supported GPU**: **SM89 only** (Ada). Artifacts are labeled **sm89** (`GPU_ARCH=89`); `requires.sm` is `["89"]`.
 
-Artifacts are labeled **sm89** (`GPU_ARCH=89`), but `requires.sm` includes **120** so Blackwell can reuse the same zip.
+| CUDA line | FA2 build strategy | Notes |
+|-----------|-------------------|-------|
+| **cu124** (nvcc 12.4) | `FA2_ARCH_NATIVE_ONLY` → sm_89 AOT only | Default for CUDA 12.4 userland |
+| **cu130** (nvcc 13.x) | Default sm_80 + sm_120 + PTX in FA2 | Kernels remain sm_89; for SM89 hosts on CUDA 13 |
 
-| CUDA line | FA2 build strategy | Why |
-|-----------|-------------------|-----|
-| **cu124** (nvcc 12.4) | `FA2_ARCH_NATIVE_ONLY` → sm_89 AOT only | nvcc 12.4 cannot compile `compute_120` |
-| **cu130** (nvcc 13.x) | Default sm_80 + sm_120 + PTX | SM120 users must match **`*-cu130-*`** cells |
-
-**SM120 + CUDA 13.0 hosts** should match `sm120-cu130-linux-x86_64-py3xx`. cu124 cells serve SM89 (and compatible) users on CUDA 12.4 userland.
-
-For local SM89-only dev (not for release): `build.sh --fa2-native-only`.
+SM120 / Blackwell is **not supported** for pi05 yet. For local SM89-only dev (not for release): `build.sh --fa2-native-only`.
 
 ### Release build
 

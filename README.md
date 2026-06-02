@@ -40,7 +40,7 @@ flashcli is intentionally thin: **inference code lives in the bundle**. The CLI 
 
 | Preset | Task | GPU | CUDA line | Python | Capabilities |
 |--------|------|-----|-----------|--------|--------------|
-| [`pi05_libero`](bundles/pi05_libero/QUICKSTART.md) | Pi0.5 LIBERO VLA | SM89 / SM120 | cu124 or **cu130** (SM120) | 3.10–3.12 | `run` |
+| [`pi05_libero`](bundles/pi05_libero/QUICKSTART.md) | Pi0.5 LIBERO VLA | **SM89** | cu124 or cu130 | 3.10–3.12 | `run` |
 | [`qwen3-8b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3-8B NVFP4 chat | **SM120** | **cu130 only** | 3.10–3.12 | `run`, `serve` |
 | [`qwen36-27b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **cu130 only** | 3.10–3.12 | `run`, `serve` |
 
@@ -59,7 +59,7 @@ Qwen3 and Qwen3.6 share **one** runtime zip; catalog `bundle_variant` selects we
 | Month | What's new |
 |-------|------------|
 | **2026-06** | Production-grade **Qwen3.6 chat serving** — faster real-world replies (early stop on end-of-text), true streaming, longer outputs, and a lighter install path for HTTP + inference |
-| **2026-05** | **Qwen NVFP4 on Blackwell (SM120)** joins the catalog with one-command `run` and OpenAI-compatible `serve`; Pi0.5 gains SM120 coverage; reproducible multi-GPU release bundles |
+| **2026-05** | **Qwen NVFP4 on Blackwell (SM120)** joins the catalog with one-command `run` and OpenAI-compatible `serve`; reproducible multi-GPU release bundles |
 
 Full history: `git log`. Release checklist: [CONTRIBUTING.md](CONTRIBUTING.md).
 

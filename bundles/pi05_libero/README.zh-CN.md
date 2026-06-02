@@ -33,14 +33,14 @@ flashcli run pi05_libero --prompt "..." --image /path/to/base.jpg
 
 ## 维护者：发布 bundle
 
-### FA2 与 SM120
+**支持 GPU**：**仅 SM89**（Ada，如 RTX 4090）。SM120 / Blackwell 暂不在此 release 线支持范围内。
 
-发布矩阵标签为 **sm89**，但 `requires.sm` 含 **120**。FA2 策略因 CUDA 线而异：
+### FA2 编译（矩阵）
 
 | CUDA 线 | FA2 |
 |---------|-----|
-| **cu124**（nvcc 12.4） | 仅 sm_89 AOT（12.4 无法编 `compute_120`） |
-| **cu130**（nvcc 13.x） | sm_80 + sm_120 + PTX（SM120 用户须匹配 cu130 格） |
+| **cu124**（nvcc 12.4） | 仅 sm_89 AOT（`FA2_ARCH_NATIVE_ONLY`） |
+| **cu130**（nvcc 13.x） | sm_80 + sm_120 + PTX（cu130 格内 FA2 多架构；**kernels 仍为 sm_89**） |
 
 本地单卡 SM89 加速：`build.sh --fa2-native-only`（**不可用于发布**）。
 
@@ -105,7 +105,7 @@ flashcli run pi05_libero \
 
 3. **更新** [`src/flashcli/catalog/models.yaml`](../../src/flashcli/catalog/models.yaml) 中 `pi05_libero.bundle.zip` URL。
 
-4. **SM120 验收**（如 RTX PRO 5000）：
+4. **SM89 验收**（如 RTX 4090）：
 
 ```bash
 flashcli models envs pi05_libero
@@ -166,9 +166,9 @@ flashcli run pi05_libero --bundle bundles/pi05_libero \
 
 `--bundle` 应指向含 `flashcli-bundle.json` 的目录（如 `bundles/pi05_libero` 或解压后的 `dist/flashcli-bundle-pi05-*`），不是 zip 文件本身。
 
-### `no kernel image is available for execution on the device`（FA2 / SM120）
+### `no kernel image is available for execution on the device`
 
-多出现在 **SM120** 上匹配了 **cu124** 格，或旧 bundle 的 FA2 无 sm_120。请确认 `flashcli models envs pi05_libero` 为 `sm120-cu130-*`，并用当前发布脚本重打 bundle。
+多为 **GPU 不符**（SM120 暂不支持）或 SM89 上 **CUDA 格不匹配**。执行 `flashcli models envs pi05_libero`，应匹配 `sm89-cu124-*` 或 `sm89-cu130-*`。
 
 ### `'GemmRunner' object has no attribute 'fp8_nt_dev'`
 
