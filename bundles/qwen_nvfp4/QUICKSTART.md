@@ -86,7 +86,7 @@ curl -N http://127.0.0.1:8000/v1/chat/completions \
   -d '{
     "model": "qwen3.6-27b-nvfp4",
     "messages": [{"role": "user", "content": "Hello"}],
-    "max_tokens": 512,
+    "max_tokens": 128,
     "temperature": 0,
     "stream": true
   }'

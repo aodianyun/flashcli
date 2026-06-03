@@ -22,6 +22,7 @@ from flashcli.serve.request_log import (
     client_label,
     header_hint,
     log,
+    format_enable_thinking,
     summarize_chat_body,
     usage_summary,
 )
@@ -166,6 +167,7 @@ def build_app(engine: ServeEngine) -> FastAPI:
         timer: RequestTimer = getattr(request.state, "timer", None) or RequestTimer()
         client = client_label(request)
         summary = summarize_chat_body(body)
+        thinking_line = format_enable_thinking(body)
 
         log.info(
             "chat START | id=%s | from=%s | model=%s | %s",
@@ -222,11 +224,12 @@ def build_app(engine: ServeEngine) -> FastAPI:
             usage_line = usage_summary(result.usage)
             log.info(
                 "chat END | id=%s | from=%s | status=200 | %.1f ms | "
-                "finish=%s | %s%s",
+                "finish=%s | %s | %s%s",
                 req_id,
                 client,
                 timer.elapsed_ms,
                 result.finish_reason,
+                thinking_line,
                 usage_line,
                 f" | {summary}" if not usage_line else "",
             )
@@ -269,6 +272,7 @@ def build_app(engine: ServeEngine) -> FastAPI:
                     parts.append(f"finish={finish_label}")
                 if usage_line:
                     parts.append(usage_line)
+                parts.append(thinking_line)
                 msg = " | ".join(parts)
                 if use_warning:
                     log.warning(msg)

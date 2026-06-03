@@ -10,6 +10,9 @@ from starlette.requests import Request
 
 log = logging.getLogger("flashcli.serve")
 
+# flashcli serve default for Qwen3.6 thinking template (overridable per request).
+DEFAULT_ENABLE_THINKING = True
+
 _SENSITIVE_HEADERS = frozenset(
     {"authorization", "x-api-key", "cookie", "set-cookie"}
 )
@@ -61,6 +64,64 @@ def _content_summary(content: Any) -> str:
     return f"type={type(content).__name__}"
 
 
+def _parse_bool_field(value: Any) -> bool | None:
+    """Return bool if *value* is a recognized boolean literal, else None."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in ("1", "true", "yes", "on"):
+            return True
+        if v in ("0", "false", "no", "off"):
+            return False
+    return None
+
+
+def resolve_enable_thinking(
+    body: dict[str, Any],
+    *,
+    default: bool = DEFAULT_ENABLE_THINKING,
+) -> tuple[bool, str | None]:
+    """Resolve Qwen thinking mode from an OpenAI chat/completions body.
+
+    Precedence: top-level ``enable_thinking`` (FlashRT native), then
+    ``chat_template_kwargs.enable_thinking`` (vLLM / OpenAI-compat clients),
+    else *default* (``DEFAULT_ENABLE_THINKING``, currently true).
+    """
+    if "enable_thinking" in body:
+        parsed = _parse_bool_field(body.get("enable_thinking"))
+        if parsed is not None:
+            return parsed, "body"
+    kwargs = body.get("chat_template_kwargs")
+    if isinstance(kwargs, dict) and "enable_thinking" in kwargs:
+        parsed = _parse_bool_field(kwargs.get("enable_thinking"))
+        if parsed is not None:
+            return parsed, "chat_template_kwargs"
+    return default, None
+
+
+def format_enable_thinking(body: dict[str, Any]) -> str:
+    """Compact log fragment, e.g. ``enable_thinking=true(src=chat_template_kwargs)``."""
+    value, source = resolve_enable_thinking(body)
+    if source:
+        return f"enable_thinking={str(value).lower()}(src={source})"
+    return f"enable_thinking={str(value).lower()}"
+
+
+def apply_enable_thinking_to_openai_payload(payload: dict[str, Any]) -> bool:
+    """Hoist thinking flag to top-level for FlashRT ``request_from_openai``.
+
+    FlashRT only reads ``enable_thinking`` on the request root. vLLM-style
+    clients send ``chat_template_kwargs.enable_thinking``; flashcli normalizes
+    that here before calling into the bundle backend.
+    """
+    value, _ = resolve_enable_thinking(payload)
+    payload["enable_thinking"] = value
+    return value
+
+
 def summarize_messages(messages: list[Any]) -> str:
     if not messages:
         return "messages=0"
@@ -96,6 +157,7 @@ def summarize_chat_body(body: dict[str, Any]) -> str:
         bits.append(f"stop={body.get('stop')!r}")
     if body.get("seed") is not None:
         bits.append(f"seed={body.get('seed')}")
+    bits.append(format_enable_thinking(body))
     return " | ".join(bits)
 
 

@@ -11,6 +11,8 @@ from flashcli.engines.base import ChatChunk, ChatRequest, ChatResult
 from flashcli.serve.openai_bridge import sse_lines_to_chat_chunks
 
 from _flashrt_qwen36_agent import import_qwen36_agent_modules
+from flashcli.serve.request_log import format_enable_thinking
+
 from _qwen_util import agent_result_to_chat, chat_request_to_openai_body, usage_from_qwen36_engine
 from _serve_backend import bridge_sync_chunk_iterator
 
@@ -80,7 +82,7 @@ class Qwen36AgentBackend:
         tools: list[dict[str, Any]] | None,
         max_tokens: int,
         *,
-        enable_thinking: bool = False,
+        enable_thinking: bool = True,
     ) -> Any:
         import torch
 
@@ -122,6 +124,10 @@ class Qwen36AgentBackend:
 
     def _agent_request(self, req: ChatRequest) -> Any:
         body = chat_request_to_openai_body(req)
+        log.info(
+            "qwen36 agent request | %s",
+            format_enable_thinking(body),
+        )
         return self._service.request_from_openai(body)
 
     async def chat_async(self, req: ChatRequest) -> ChatResult:

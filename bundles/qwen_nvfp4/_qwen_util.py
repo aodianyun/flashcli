@@ -258,6 +258,8 @@ def agent_result_to_chat(result: Any, *, route: str | None = None) -> ChatResult
 
 def chat_request_to_openai_body(req: ChatRequest) -> dict[str, Any]:
     """Build an OpenAI-shaped body for FlashRT ``request_from_openai`` helpers."""
+    from flashcli.serve.request_log import apply_enable_thinking_to_openai_payload
+
     payload: dict[str, Any] = {
         "messages": messages_from_request(req),
         "max_tokens": int(req.max_tokens),
@@ -272,6 +274,7 @@ def chat_request_to_openai_body(req: ChatRequest) -> dict[str, Any]:
     if req.seed is not None:
         payload["seed"] = req.seed
     payload.update(req.extras)
+    apply_enable_thinking_to_openai_payload(payload)
     return payload
 
 
