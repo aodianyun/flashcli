@@ -21,9 +21,9 @@ from flashcli.serve.request_log import (
     RequestTimer,
     apply_enable_thinking_to_openai_payload,
     client_label,
+    format_enable_thinking,
     header_hint,
     log,
-    format_enable_thinking,
     summarize_chat_body,
     usage_summary,
 )

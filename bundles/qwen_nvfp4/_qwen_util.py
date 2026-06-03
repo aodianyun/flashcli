@@ -238,11 +238,11 @@ def agent_result_to_chat(
     route: str | None = None,
     enable_thinking: bool = False,
 ) -> ChatResult:
-    from flashcli.serve.thinking_response import split_reasoning_content
+    from _qwen36_thinking import split_qwen36_assistant_text
 
     data = agent_result_to_dict(result, route=route)
     raw_text = data.get("text") or ""
-    reasoning, content = split_reasoning_content(
+    reasoning, content = split_qwen36_assistant_text(
         raw_text,
         enable_thinking=enable_thinking,
     )

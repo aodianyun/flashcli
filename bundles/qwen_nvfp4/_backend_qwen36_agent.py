@@ -11,9 +11,9 @@ from flashcli.engines.base import ChatChunk, ChatRequest, ChatResult
 from flashcli.serve.openai_bridge import sse_lines_to_chat_chunks
 
 from _flashrt_qwen36_agent import import_qwen36_agent_modules
-from flashcli.serve.request_log import enable_thinking_from_chat_request, format_enable_thinking
-from flashcli.serve.thinking_response import ThinkingStreamSplitter
+from flashcli.serve.request_log import format_enable_thinking
 
+from _qwen36_thinking import Qwen36ThinkingStreamSplitter, enable_thinking_from_request
 from _qwen_util import agent_result_to_chat, chat_request_to_openai_body, usage_from_qwen36_engine
 from _serve_backend import bridge_sync_chunk_iterator
 
@@ -133,23 +133,22 @@ class Qwen36AgentBackend:
         return self._service.request_from_openai(body)
 
     async def chat_async(self, req: ChatRequest) -> ChatResult:
-        thinking = enable_thinking_from_chat_request(req)
         agent_req = self._agent_request(req)
         result = await asyncio.to_thread(self._service.complete, agent_req)
         return agent_result_to_chat(
             result,
             route=getattr(self._engine, "_last_route", None),
-            enable_thinking=thinking,
+            enable_thinking=enable_thinking_from_request(req),
         )
 
     def _iter_stream_chunks(self, req: ChatRequest) -> Iterator[ChatChunk]:
-        thinking = enable_thinking_from_chat_request(req)
+        thinking = enable_thinking_from_request(req)
         agent_req = self._agent_request(req)
         agent_req.stream = True
         t0 = time.perf_counter()
         first_delta_ms: float | None = None
         route = getattr(self._engine, "_last_route", None)
-        splitter = ThinkingStreamSplitter(enabled=thinking)
+        splitter = Qwen36ThinkingStreamSplitter(enabled=thinking)
 
         for chunk in sse_lines_to_chat_chunks(
             self._service.stream_openai(agent_req, model=self.model_name)
