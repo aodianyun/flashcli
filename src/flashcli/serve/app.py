@@ -19,6 +19,7 @@ from flashcli.serve.openai_bridge import (
 )
 from flashcli.serve.request_log import (
     RequestTimer,
+    apply_enable_thinking_to_openai_payload,
     client_label,
     header_hint,
     log,
@@ -166,6 +167,7 @@ def build_app(engine: ServeEngine) -> FastAPI:
         req_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex[:12]
         timer: RequestTimer = getattr(request.state, "timer", None) or RequestTimer()
         client = client_label(request)
+        apply_enable_thinking_to_openai_payload(body)
         summary = summarize_chat_body(body)
         thinking_line = format_enable_thinking(body)
 
@@ -298,6 +300,23 @@ def build_app(engine: ServeEngine) -> FastAPI:
                 async for chunk in iter_on_inference_loop(
                     lambda: _chunk_iter(req),
                 ):
+                    if chunk.reasoning_delta:
+                        out = {
+                            "id": completion_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": engine.model_id,
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "delta": {
+                                        "reasoning_content": chunk.reasoning_delta
+                                    },
+                                    "finish_reason": None,
+                                }
+                            ],
+                        }
+                        yield f"data: {json.dumps(out)}\n\n"
                     if chunk.content_delta:
                         out = {
                             "id": completion_id,

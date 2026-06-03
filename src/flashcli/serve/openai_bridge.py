@@ -90,6 +90,8 @@ def chat_result_to_completion_payload(
         "role": "assistant",
         "content": result.content,
     }
+    if result.reasoning_content:
+        msg["reasoning_content"] = result.reasoning_content
     if result.tool_calls:
         msg["tool_calls"] = result.tool_calls
     payload: dict[str, Any] = {
@@ -136,6 +138,8 @@ def sse_lines_to_chat_chunks(lines: Iterator[str]) -> Iterator[ChatChunk]:
         usage = obj.get("usage")
         if delta.get("role"):
             continue
+        if delta.get("reasoning_content"):
+            yield ChatChunk(reasoning_delta=str(delta["reasoning_content"]))
         if "content" in delta and delta["content"]:
             yield ChatChunk(content_delta=str(delta["content"]))
         if delta.get("tool_calls"):

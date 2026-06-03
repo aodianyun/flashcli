@@ -110,6 +110,14 @@ def format_enable_thinking(body: dict[str, Any]) -> str:
     return f"enable_thinking={str(value).lower()}"
 
 
+def enable_thinking_from_chat_request(req: Any) -> bool:
+    """Read resolved thinking flag from a ``ChatRequest`` (extras + defaults)."""
+    extras = getattr(req, "extras", None) or {}
+    if not isinstance(extras, dict):
+        return DEFAULT_ENABLE_THINKING
+    return resolve_enable_thinking(extras)[0]
+
+
 def apply_enable_thinking_to_openai_payload(payload: dict[str, Any]) -> bool:
     """Hoist thinking flag to top-level for FlashRT ``request_from_openai``.
 

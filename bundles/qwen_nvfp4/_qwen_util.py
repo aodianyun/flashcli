@@ -232,8 +232,21 @@ def agent_result_to_dict(result: Any, *, route: str | None = None) -> dict[str, 
     return out
 
 
-def agent_result_to_chat(result: Any, *, route: str | None = None) -> ChatResult:
+def agent_result_to_chat(
+    result: Any,
+    *,
+    route: str | None = None,
+    enable_thinking: bool = False,
+) -> ChatResult:
+    from flashcli.serve.thinking_response import split_reasoning_content
+
     data = agent_result_to_dict(result, route=route)
+    raw_text = data.get("text") or ""
+    reasoning, content = (
+        split_reasoning_content(raw_text)
+        if enable_thinking
+        else (None, raw_text or None)
+    )
     stats = result.stats
     extensions = {
         "flashrt": {
@@ -248,7 +261,8 @@ def agent_result_to_chat(result: Any, *, route: str | None = None) -> ChatResult
         }
     }
     return ChatResult(
-        content=data.get("text") or None,
+        content=content,
+        reasoning_content=reasoning,
         tool_calls=list(data.get("tool_calls") or []),
         finish_reason=str(data.get("finish_reason") or "stop"),
         usage=usage_from_qwen36_engine(data),
