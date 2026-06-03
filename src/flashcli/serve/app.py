@@ -285,6 +285,13 @@ def build_app(engine: ServeEngine) -> FastAPI:
                     log.info(msg)
 
             try:
+                # Thinking models: omit empty ``content`` on the role chunk. Some
+                # clients (e.g. OpenCode without interleaved config) treat the
+                # presence of ``content`` as starting the answer stream and merge
+                # ``reasoning_content`` deltas into the same bubble.
+                first_delta: dict[str, Any] = {"role": "assistant"}
+                if not thinking_value:
+                    first_delta["content"] = ""
                 first = {
                     "id": completion_id,
                     "object": "chat.completion.chunk",
@@ -293,7 +300,7 @@ def build_app(engine: ServeEngine) -> FastAPI:
                     "choices": [
                         {
                             "index": 0,
-                            "delta": {"role": "assistant", "content": ""},
+                            "delta": first_delta,
                             "finish_reason": None,
                         }
                     ],
