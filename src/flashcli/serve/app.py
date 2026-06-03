@@ -285,12 +285,14 @@ def build_app(engine: ServeEngine) -> FastAPI:
                     log.info(msg)
 
             try:
-                # Thinking models: omit empty ``content`` on the role chunk. Some
-                # clients (e.g. OpenCode without interleaved config) treat the
-                # presence of ``content`` as starting the answer stream and merge
-                # ``reasoning_content`` deltas into the same bubble.
+                # Thinking: no empty ``content`` (avoids merging into the answer
+                # bubble) but do open the reasoning channel immediately so clients
+                # like OpenCode do not sit on "waiting for thinking" until TTFT.
                 first_delta: dict[str, Any] = {"role": "assistant"}
-                if not thinking_value:
+                if thinking_value:
+                    first_delta["reasoning_content"] = ""
+                    first_delta["reasoning"] = ""
+                else:
                     first_delta["content"] = ""
                 first = {
                     "id": completion_id,
@@ -320,7 +322,11 @@ def build_app(engine: ServeEngine) -> FastAPI:
                                 {
                                     "index": 0,
                                     "delta": {
-                                        "reasoning_content": chunk.reasoning_delta
+                                        "reasoning_content": (
+                                            chunk.reasoning_delta
+                                        ),
+                                        # vLLM / some clients use ``reasoning``.
+                                        "reasoning": chunk.reasoning_delta,
                                     },
                                     "finish_reason": None,
                                 }
@@ -436,6 +442,14 @@ def build_app(engine: ServeEngine) -> FastAPI:
                     )
                 gate.release()
 
-        return StreamingResponse(stream_chunks(), media_type="text/event-stream")
+        return StreamingResponse(
+            stream_chunks(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     return app
