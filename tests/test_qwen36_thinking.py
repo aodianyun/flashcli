@@ -25,6 +25,33 @@ def test_split_at_closing_tag_only():
     assert content == "answer"
 
 
+def test_split_thought_close_tag():
+    mod = _qwen36_thinking()
+    text = "draft</thought>\n\n正文"
+    reasoning, content = mod.split_qwen36_assistant_text(text, enable_thinking=True)
+    assert reasoning == "draft"
+    assert content == "正文"
+
+
+def test_no_close_tag_all_reasoning_when_thinking():
+    mod = _qwen36_thinking()
+    reasoning, content = mod.split_qwen36_assistant_text(
+        "English draft\n\n中文还在思考",
+        enable_thinking=True,
+    )
+    assert reasoning == "English draft\n\n中文还在思考"
+    assert content is None
+
+
+def test_stream_does_not_split_without_close_tag():
+    mod = _qwen36_thinking()
+    splitter = mod.Qwen36ThinkingStreamSplitter(enabled=True)
+    chunks = list(splitter.feed("English draft\n\n中文还在思考"))
+    assert chunks
+    assert all(field == "reasoning_content" for field, _ in chunks)
+    assert splitter._done_reasoning is False
+
+
 def test_enable_thinking_from_request_extras():
     mod = _qwen36_thinking()
     req = ChatRequest(
