@@ -437,7 +437,7 @@ def build_app(engine: ServeEngine) -> FastAPI:
                 if not end_logged:
                     _log_chat_end(
                         "stream closed before finish (client disconnect or "
-                        "proxy timeout)",
+                        "proxy timeout); releasing GPU slot after stream cleanup",
                         use_warning=True,
                     )
                 gate.release()
