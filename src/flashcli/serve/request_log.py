@@ -103,11 +103,15 @@ def resolve_enable_thinking(
 
 
 def format_enable_thinking(body: dict[str, Any]) -> str:
-    """Compact log fragment, e.g. ``enable_thinking=true(src=chat_template_kwargs)``."""
+    """Compact log fragment from the **client** body (call before payload injection)."""
     value, source = resolve_enable_thinking(body)
-    if source:
-        return f"enable_thinking={str(value).lower()}(src={source})"
-    return f"enable_thinking={str(value).lower()}"
+    return format_enable_thinking_resolved(value, source)
+
+
+def format_enable_thinking_resolved(value: bool, source: str | None) -> str:
+    """Log fragment after ``resolve_enable_thinking`` (source None → default)."""
+    src = source if source else "default"
+    return f"enable_thinking={str(value).lower()}(src={src})"
 
 
 def apply_enable_thinking_to_openai_payload(payload: dict[str, Any]) -> bool:
@@ -138,17 +142,22 @@ def summarize_messages(messages: list[Any]) -> str:
     return f"messages={len(messages)} [" + "; ".join(parts) + "]"
 
 
-def summarize_chat_body(body: dict[str, Any]) -> str:
+def summarize_chat_body(
+    body: dict[str, Any],
+    *,
+    thinking_log: str | None = None,
+) -> str:
     messages = body.get("messages")
     msg_part = (
         summarize_messages(messages)
         if isinstance(messages, list)
         else "messages=invalid"
     )
+    stream = _parse_bool_field(body.get("stream"))
     bits = [
         msg_part,
         f"max_tokens={body.get('max_tokens', 256)}",
-        f"stream={bool(body.get('stream', False))}",
+        f"stream={stream if stream is not None else False}",
         f"temperature={body.get('temperature', 0.0)}",
     ]
     if body.get("tools"):
@@ -157,7 +166,7 @@ def summarize_chat_body(body: dict[str, Any]) -> str:
         bits.append(f"stop={body.get('stop')!r}")
     if body.get("seed") is not None:
         bits.append(f"seed={body.get('seed')}")
-    bits.append(format_enable_thinking(body))
+    bits.append(thinking_log if thinking_log else format_enable_thinking(body))
     return " | ".join(bits)
 
 

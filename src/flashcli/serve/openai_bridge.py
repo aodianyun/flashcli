@@ -6,6 +6,7 @@ import json
 from typing import Any, Iterator
 
 from flashcli.engines.base import ChatChunk, ChatMessage, ChatRequest, ChatResult
+from flashcli.serve.request_log import _parse_bool_field
 
 # Standard OpenAI chat/completions body keys (everything else → ChatRequest.extras).
 _CHAT_COMPLETIONS_KNOWN: frozenset[str] = frozenset(
@@ -71,7 +72,7 @@ def parse_chat_completions_body(body: dict[str, Any]) -> ChatRequest:
         temperature=float(body.get("temperature", 0.0)),
         top_p=float(body.get("top_p", 1.0)),
         top_k=int(body.get("top_k", 0)),
-        stream=bool(body.get("stream", False)),
+        stream=_parse_bool_field(body.get("stream")) or False,
         tools=body.get("tools") if isinstance(body.get("tools"), list) else None,
         stop=stop if isinstance(stop, list) else None,
         seed=body.get("seed") if body.get("seed") is not None else None,

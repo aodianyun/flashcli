@@ -21,9 +21,10 @@ from flashcli.serve.request_log import (
     RequestTimer,
     apply_enable_thinking_to_openai_payload,
     client_label,
-    format_enable_thinking,
+    format_enable_thinking_resolved,
     header_hint,
     log,
+    resolve_enable_thinking,
     summarize_chat_body,
     usage_summary,
 )
@@ -167,9 +168,12 @@ def build_app(engine: ServeEngine) -> FastAPI:
         req_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex[:12]
         timer: RequestTimer = getattr(request.state, "timer", None) or RequestTimer()
         client = client_label(request)
+        thinking_value, thinking_source = resolve_enable_thinking(body)
+        thinking_line = format_enable_thinking_resolved(
+            thinking_value, thinking_source
+        )
         apply_enable_thinking_to_openai_payload(body)
-        summary = summarize_chat_body(body)
-        thinking_line = format_enable_thinking(body)
+        summary = summarize_chat_body(body, thinking_log=thinking_line)
 
         log.info(
             "chat START | id=%s | from=%s | model=%s | %s",
