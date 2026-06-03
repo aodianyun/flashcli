@@ -19,7 +19,6 @@ from flashcli.serve.openai_bridge import (
 )
 from flashcli.serve.request_log import (
     RequestTimer,
-    apply_enable_thinking_to_openai_payload,
     client_label,
     format_enable_thinking_resolved,
     header_hint,
@@ -172,7 +171,7 @@ def build_app(engine: ServeEngine) -> FastAPI:
         thinking_line = format_enable_thinking_resolved(
             thinking_value, thinking_source
         )
-        apply_enable_thinking_to_openai_payload(body)
+        # Hoist enable_thinking for FlashRT in the bundle (chat_request_to_openai_body).
         summary = summarize_chat_body(body, thinking_log=thinking_line)
 
         log.info(

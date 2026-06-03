@@ -44,13 +44,27 @@ def test_summarize_chat_body_includes_enable_thinking():
 
 
 def test_format_enable_thinking_default():
-    assert format_enable_thinking({}) == "enable_thinking=true"
+    assert format_enable_thinking({}) == "enable_thinking=true(src=default)"
 
 
 def test_resolve_enable_thinking_explicit_false():
     assert resolve_enable_thinking({"enable_thinking": False}) == (False, "body")
     body = {"chat_template_kwargs": {"enable_thinking": False}}
     assert resolve_enable_thinking(body) == (False, "chat_template_kwargs")
+
+
+def test_parse_extras_without_serve_injection_keeps_default_source():
+    """Serve must not inject enable_thinking before parse (bundle logs src=default)."""
+    from flashcli.serve.openai_bridge import parse_chat_completions_body
+
+    req = parse_chat_completions_body(
+        {
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 64,
+        }
+    )
+    assert "enable_thinking" not in (req.extras or {})
+    assert resolve_enable_thinking(dict(req.extras or {})) == (True, None)
 
 
 def test_apply_enable_thinking_hoists_chat_template_kwargs():

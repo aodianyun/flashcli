@@ -11,7 +11,10 @@ from flashcli.engines.base import ChatChunk, ChatRequest, ChatResult
 from flashcli.serve.openai_bridge import sse_lines_to_chat_chunks
 
 from _flashrt_qwen36_agent import import_qwen36_agent_modules
-from flashcli.serve.request_log import format_enable_thinking
+from flashcli.serve.request_log import (
+    format_enable_thinking_resolved,
+    resolve_enable_thinking,
+)
 
 from _qwen36_thinking import Qwen36ThinkingStreamSplitter, enable_thinking_from_request
 from _qwen_util import agent_result_to_chat, chat_request_to_openai_body, usage_from_qwen36_engine
@@ -124,10 +127,13 @@ class Qwen36AgentBackend:
         )
 
     def _agent_request(self, req: ChatRequest) -> Any:
+        thinking_value, thinking_source = resolve_enable_thinking(
+            dict(req.extras or {})
+        )
         body = chat_request_to_openai_body(req)
         log.info(
             "qwen36 agent request | %s | forwarded=%s",
-            format_enable_thinking(body),
+            format_enable_thinking_resolved(thinking_value, thinking_source),
             body.get("enable_thinking"),
         )
         return self._service.request_from_openai(body)
