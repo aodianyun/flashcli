@@ -10,10 +10,35 @@ def test_split_reasoning_content_with_tags():
     assert content == "答案"
 
 
-def test_split_reasoning_content_without_tags():
-    reasoning, content = split_reasoning_content("直接回答")
+def test_split_reasoning_content_without_tags_non_thinking():
+    reasoning, content = split_reasoning_content("直接回答", enable_thinking=False)
     assert reasoning is None
     assert content == "直接回答"
+
+
+def test_split_reasoning_content_thinking_only_no_visible_tags():
+    text = "Here's a thinking process:\n\n1. Plan step"
+    reasoning, content = split_reasoning_content(text, enable_thinking=True)
+    assert reasoning == text
+    assert content is None
+
+
+def test_split_reasoning_content_closing_tag_only():
+    text = (
+        "Here's a thinking process:\n\nstep 1\n"
+        "</think>\n\n相对论是物理学理论。"
+    )
+    reasoning, content = split_reasoning_content(text, enable_thinking=True)
+    assert "thinking process" in (reasoning or "")
+    assert "<think>" not in (reasoning or "")
+    assert content and "相对论" in content
+
+
+def test_split_reasoning_content_heuristic_cjk_answer():
+    text = "Here's a thinking process:\n\n相对论是物理学理论。"
+    reasoning, content = split_reasoning_content(text, enable_thinking=True)
+    assert "thinking" in (reasoning or "")
+    assert content and "相对论" in content
 
 
 def test_thinking_stream_splitter_emits_reasoning_then_content():

@@ -242,10 +242,9 @@ def agent_result_to_chat(
 
     data = agent_result_to_dict(result, route=route)
     raw_text = data.get("text") or ""
-    reasoning, content = (
-        split_reasoning_content(raw_text)
-        if enable_thinking
-        else (None, raw_text or None)
+    reasoning, content = split_reasoning_content(
+        raw_text,
+        enable_thinking=enable_thinking,
     )
     stats = result.stats
     extensions = {
