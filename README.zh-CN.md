@@ -69,17 +69,10 @@ Qwen3 与 Qwen3.6 **共用** runtime zip；catalog 用 `bundle_variant` 区分�
 
 ### 1. 安装
 
-**公网**
+**自动（推荐）**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
-```
-
-**受限网络**（Gitee + 镜像）
-
-```bash
-curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
-export HF_ENDPOINT=https://hf-mirror.com
+curl -fsSL https://flashhub.top/flashcli_install/auto_install.sh | sh
 ```
 
 **源码（开发者）**

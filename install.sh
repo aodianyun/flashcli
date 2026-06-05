@@ -1,6 +1,8 @@
 #!/bin/sh
 # flashcli installer
 #
+# Auto-detect network (recommended):
+#   curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/auto_install.sh | sh -s -- [OPTIONS]
 # Examples (restricted network — Gitee + mirror):
 #   curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
 # Open network (GitHub):
