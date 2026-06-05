@@ -53,6 +53,32 @@ def _server_ttft_ms(usage: dict[str, Any]) -> float | None:
     return None
 
 
+def _apply_flashrt_http_stream_fallback(
+    usage: dict[str, Any],
+    bench: dict[str, Any],
+    *,
+    bench_arm: str,
+) -> None:
+    """FlashRT stream SSE omits engine decode stats; estimate from wall − TTFT."""
+    if bench_arm not in ("", "flashrt"):
+        return
+    if usage.get("decode_tok_per_s") is not None:
+        return
+    ct = usage.get("completion_tokens")
+    wall_ms = bench.get("wall_ms")
+    ttft_ms = bench.get("ttft_ms") or bench.get("client_ttft_ms")
+    if ct is None or wall_ms is None or ttft_ms is None:
+        return
+    decode_ms = max(1.0, float(wall_ms) - float(ttft_ms))
+    if decode_ms <= 0:
+        return
+    decode_tps = float(ct) * 1000.0 / decode_ms
+    usage["decode_ms"] = decode_ms
+    usage["decode_tok_per_s"] = decode_tps
+    usage["tok_per_s"] = decode_tps
+    usage["metrics_source"] = "http_wall_estimate"
+
+
 def _apply_vllm_http_stream_metrics(
     usage: dict[str, Any],
     bench: dict[str, Any],
@@ -163,6 +189,7 @@ def run_stream(url: str, body: dict[str, Any], *, bench_arm: str = "") -> dict[s
         "sse_content_chunks": content_chunks,
     }
     _apply_vllm_http_stream_metrics(usage, bench_out, bench_arm=bench_arm)
+    _apply_flashrt_http_stream_fallback(usage, bench_out, bench_arm=bench_arm)
     return {
         "id": "bench-stream",
         "object": "chat.completion",

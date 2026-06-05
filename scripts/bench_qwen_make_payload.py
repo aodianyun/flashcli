@@ -255,17 +255,25 @@ def main() -> int:
     tok = AutoTokenizer.from_pretrained(str(ckpt), trust_remote_code=True)
     seed = resolve_long_prompt_seed(args.long_prompt_style, args.seed)
     max_seq = int(args.max_seq or 0)
+    max_out = int(args.max_tokens)
+    slack = int(args.seq_slack)
+    target = int(args.target_prompt_tokens)
     if max_seq > 0:
-        content, actual, rendered = fit_user_prompt_to_budget(
-            tok,
-            args.target_prompt_tokens,
-            max_seq,
-            args.max_tokens,
-            seed,
-            seq_slack=int(args.seq_slack),
-        )
+        budget = max_seq - max_out - slack
+        # Short ctx: hit target token count. Long ctx (256K): fill toward budget.
+        if target > 0 and target < budget - 256:
+            content, actual = build_prompt_text(tok, target, seed)
+            rendered = rendered_prompt_tokens(tok, content)
+            if rendered + max_out + slack > max_seq:
+                content, actual, rendered = fit_user_prompt_to_budget(
+                    tok, target, max_seq, max_out, seed, seq_slack=slack,
+                )
+        else:
+            content, actual, rendered = fit_user_prompt_to_budget(
+                tok, target, max_seq, max_out, seed, seq_slack=slack,
+            )
     else:
-        content, actual = build_prompt_text(tok, args.target_prompt_tokens, seed)
+        content, actual = build_prompt_text(tok, target, seed)
         rendered = rendered_prompt_tokens(tok, content)
     payload = {
         "model": args.model,

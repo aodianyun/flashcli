@@ -12,6 +12,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MAKE_PAYLOAD="${SCRIPT_DIR}/bench_qwen_make_payload.py"
 STREAM_ONCE="${SCRIPT_DIR}/bench_qwen_curl_stream.py"
+SERVE_METRICS_PY="${SCRIPT_DIR}/bench_qwen36_serve_metrics.py"
 
 CTX=""
 ROUNDS=12
@@ -21,7 +22,9 @@ CHECKPOINT=""
 MODEL=""
 PORT="${PORT:-8000}"
 HOST="${HOST:-127.0.0.1}"
-MAX_SEQ=262208
+MAX_SEQ=""
+MAX_SEQ_EXPLICIT=0
+SERVE_LOG=""
 OUT_LEN=128
 WORKDIR=""
 
@@ -42,7 +45,8 @@ while [[ $# -gt 0 ]]; do
     --model) MODEL="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
     --host) HOST="$2"; shift 2 ;;
-    --max-seq) MAX_SEQ="$2"; shift 2 ;;
+    --max-seq) MAX_SEQ="$2"; MAX_SEQ_EXPLICIT=1; shift 2 ;;
+    --serve-log) SERVE_LOG="$2"; shift 2 ;;
     --output-len|--max-tokens) OUT_LEN="$2"; shift 2 ;;
     --out) OUT="$2"; shift 2 ;;
     --workdir) WORKDIR="$2"; shift 2 ;;
@@ -62,21 +66,87 @@ if [[ -z "${WORKDIR}" ]]; then
 fi
 mkdir -p "$(dirname "${OUT}")"
 
+resolve_max_seq() {
+  if [[ "${MAX_SEQ_EXPLICIT}" -eq 1 ]]; then
+    echo "${MAX_SEQ}"
+    return
+  fi
+  case "${CTX}" in
+    32|512) echo 0 ;;
+    4096) echo 12288 ;;
+    16384) echo 32768 ;;
+    32768) echo 33024 ;;
+    262144) echo 262208 ;;
+    *) echo 8192 ;;
+  esac
+}
+
+RESOLVED_MAX_SEQ="$(resolve_max_seq)"
 PAYLOAD="${WORKDIR}/payload.json"
 META="${WORKDIR}/payload.meta.json"
 
-log "build payload ctx≈${CTX} out=${OUT_LEN} max_seq=${MAX_SEQ}"
-python3 "${MAKE_PAYLOAD}" \
-  --checkpoint "${CHECKPOINT}" \
-  --model "${MODEL}" \
-  --target-prompt-tokens "${CTX}" \
-  --max-tokens "${OUT_LEN}" \
-  --max-seq "${MAX_SEQ}" \
-  --long-prompt-style flashrt \
-  --temperature 0 \
-  --stream \
-  -o "${PAYLOAD}" \
+PAYLOAD_ARGS=(
+  --checkpoint "${CHECKPOINT}"
+  --model "${MODEL}"
+  --target-prompt-tokens "${CTX}"
+  --max-tokens "${OUT_LEN}"
+  --long-prompt-style flashrt
+  --temperature 0
+  --stream
+  -o "${PAYLOAD}"
   --meta-output "${META}"
+)
+if [[ "${RESOLVED_MAX_SEQ}" -gt 0 ]]; then
+  PAYLOAD_ARGS+=(--max-seq "${RESOLVED_MAX_SEQ}")
+fi
+
+log "build payload ctx≈${CTX} out=${OUT_LEN} max_seq=${RESOLVED_MAX_SEQ:-auto}"
+python3 "${MAKE_PAYLOAD}" "${PAYLOAD_ARGS[@]}"
+
+serve_log_offset() {
+  local log_path="$1"
+  if [[ -f "${log_path}" ]]; then
+    wc -c <"${log_path}" | tr -d ' '
+  else
+    echo 0
+  fi
+}
+
+merge_serve_log_metrics() {
+  local resp="$1" log_path="$2" offset="$3"
+  local metrics_file="${WORKDIR}/serve_metrics.json"
+  [[ -f "${log_path}" ]] || return 0
+  if ! python3 "${SERVE_METRICS_PY}" \
+      --log "${log_path}" --offset "${offset}" --backend flashrt \
+      -o "${metrics_file}" 2>/dev/null; then
+    return 0
+  fi
+  BENCH_RESP="${resp}" BENCH_METRICS="${metrics_file}" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+resp = Path(os.environ["BENCH_RESP"])
+metrics = json.loads(Path(os.environ["BENCH_METRICS"]).read_text())
+if not metrics:
+    raise SystemExit(0)
+row = json.loads(resp.read_text())
+usage = dict(row.get("usage") or {})
+bench = dict(row.get("bench") or {})
+for k, v in metrics.items():
+    if k != "metrics_source" and v is not None:
+        usage[k] = v
+ttft = metrics.get("ttft_ms") or metrics.get("first_delta_ms")
+if ttft is not None:
+    bench["server_ttft_ms"] = float(ttft)
+    bench["ttft_ms"] = float(ttft)
+    bench["ttft_source"] = "engine"
+    bench["metrics_source"] = metrics.get("metrics_source")
+row["usage"] = usage
+row["bench"] = bench
+resp.write_text(json.dumps(row, ensure_ascii=False) + "\n")
+PY
+}
 
 RENDERED="$(python3 -c "import json; print(int(json.load(open('${META}'))['rendered_prompt_tokens']))")"
 log "meta: rendered_prompt_tokens=${RENDERED} (target=${CTX})"
@@ -91,9 +161,16 @@ scored=0
 for ((r = 1; r <= ROUNDS; r++)); do
   resp="${WORKDIR}/r${r}.json"
   export BENCH_ARM="${BENCH_ARM:-flashrt}"
+  log_offset=0
+  if [[ -n "${SERVE_LOG}" ]]; then
+    log_offset="$(serve_log_offset "${SERVE_LOG}")"
+  fi
   if ! python3 "${STREAM_ONCE}" --url "${URL}" --payload "${PAYLOAD}" -o "${resp}"; then
     log "round ${r} failed"
     continue
+  fi
+  if [[ -n "${SERVE_LOG}" ]]; then
+    merge_serve_log_metrics "${resp}" "${SERVE_LOG}" "${log_offset}"
   fi
   line="$(python3 - <<PY
 import json
