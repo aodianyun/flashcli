@@ -331,8 +331,10 @@ print_qwen36_hints() {
   if [[ "${BENCH_PROFILE}" == "comparable" ]]; then
     return 0
   fi
-  log "qwen36 hints (FlashRT serve only — for decode comparable to FlashRT docs on 5090/PRO 5000):"
-  log "  bash scripts/bench_qwen36_compare.sh --long-only --comparable"
+  log "qwen36 hints:"
+  log "  Flash-only long ctx: bash scripts/bench_qwen_curl.sh --qwen36-only --profile comparable --qwen36-long-tokens 262144"
+  log "  Multi-ctx HTTP bench: scripts/bench_qwen36_ctx_http.sh (see scripts/README.bench_qwen36.md)"
+  log "  Legacy dual-arm: scripts/bench_qwen36_compare.sh (deprecated)"
   log "  or: --profile comparable  /  --long-prompt-style flashrt"
   log "  256K: QWEN36_MAX_SEQ=<serve --max-seq>  (repeat fill lowers MTP vs flashrt seed)"
   if [[ -n "${SERVE_LOG_PATH:-}" ]]; then

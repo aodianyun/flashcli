@@ -43,7 +43,7 @@ flashcli pull qwen36-27b-nvfp4 --bundle "$BUNDLE"
 ## 3. 引擎层（无 HTTP）
 
 ```bash
-# flashcli run qwen36-27b-nvfp4 --prompt "Hello"
+# flashcli run qwen3-8b-nvfp4 --prompt "Hello"
 flashcli run qwen3-8b-nvfp4 --bundle "$BUNDLE" --prompt "Hello" --max-tokens 64
 
 # flashcli run qwen36-27b-nvfp4 --prompt "Hello"
@@ -106,10 +106,8 @@ curl -s http://127.0.0.1:8000/health | jq
 export CKPT_QWEN3=~/.flashcli/models/qwen3-8b-nvfp4/checkpoint
 export CKPT_QWEN36=~/.flashcli/models/qwen36-27b-nvfp4/checkpoint
 
-# qwen3（serve 在 8000）
 bash scripts/bench_qwen_curl.sh --qwen3-only --rounds 5
 
-# qwen36 对标 FlashRT（serve 在 8000，需 --max-seq 262208）
 QWEN36_MAX_SEQ=262208 QWEN36_PORT=8000 \
   bash scripts/bench_qwen_curl.sh --qwen36-only \
   --profile comparable --qwen36-long-tokens 262144 \

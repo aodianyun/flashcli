@@ -564,7 +564,8 @@ def build_report(
         f"Generated: {now}",
         "",
         "Metrics are means over scored rounds (after warmup skips). "
-        "Both backends use the same NVFP4 weights and HTTP payloads from `bench_qwen36_compare.sh`. "
+        "Legacy report from `bench_qwen36_compare.sh` (deprecated; see `scripts/README.bench_qwen36.md` for current HTTP bench). "
+        "Both backends use the same NVFP4 weights and HTTP payloads from that legacy runner. "
         "**ctx** = prompt/context tokens (rendered chat template); **out** = completion tokens (`max_tokens` request budget). "
         "**FlashRT** engine TTFT/decode from `serve.log` (`stream | speed decode=`). "
         "**vLLM** decode/TTFT from HTTP stream phase (`vllm_http_stream`: first content chunk → end). "

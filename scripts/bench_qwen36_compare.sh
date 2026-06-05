@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Qwen3.6-27B NVFP4: FlashRT (flashcli) vs vLLM — one entry for bench + REPORT.md
-# See scripts/README.bench_qwen36.md
+# DEPRECATED (2026-06): legacy FlashRT vs vLLM dual-arm bench + REPORT.md
+# Current HTTP multi-ctx bench: scripts/README.bench_qwen36.md + bench_qwen36_ctx_http.sh
+# See scripts/README.bench_qwen36.md (legacy notes only)
 #
 # One-click (short+long, 12 rounds):
 #   bash scripts/bench_qwen36_compare.sh --comparable
