@@ -192,6 +192,7 @@ print(json.dumps({
 PY
 )"
   echo "${line}" >>"${OUT}"
+  echo "${line}" >&2
   if (( r <= SKIP )); then
     log "round ${r} (warmup, skip)"
     continue
