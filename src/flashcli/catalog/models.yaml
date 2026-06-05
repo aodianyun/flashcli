@@ -20,12 +20,12 @@ models:
     description: Qwen3-8B NVFP4 (SM120) — kaitchup/Qwen3-8B-NVFP4
     bundle_variant: qwen3
     bundle:
-      zip: https://flashhub-cdn.aodianyun.com/repo/6/versions/7/flashcli-bundle-qwen_nvfp4-ee6f916-sm120-multi-linux-x86_64-20260601-161042.zip
+      zip: https://flashhub-cdn.aodianyun.com/repo/6/versions/7/flashcli-bundle-qwen_nvfp4-ee6f916-sm120-multi-linux-x86_64-20260605-1708.zip
       # path: bundles/qwen_nvfp4 
 
   qwen36-27b-nvfp4:
     description: Qwen3.6-27B NVFP4 + MTP speculative decode (SM120)
     bundle_variant: qwen36
     bundle:
-      zip: https://flashhub-cdn.aodianyun.com/repo/6/versions/7/flashcli-bundle-qwen_nvfp4-ee6f916-sm120-multi-linux-x86_64-20260601-161042.zip
+      zip: https://flashhub-cdn.aodianyun.com/repo/6/versions/7/flashcli-bundle-qwen_nvfp4-ee6f916-sm120-multi-linux-x86_64-20260605-1708.zip
       # path: bundles/qwen_nvfp4

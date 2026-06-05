@@ -11,7 +11,7 @@
 # Goals:
 #   1. Pre-flight: make the host as ready as possible for pyproject.toml [project]
 #      (incl. zip/rsync for bundle zip workflows)
-#   2. Install flashcli (+ deps incl. huggingface_hub → hf CLI) for root/venv/user
+#   2. Auto-install python3+pip when missing (root); install flashcli+deps into ~/.flashcli/venv by default
 #   3. Post-flight: verify imports, flashcli/hf on PATH, pip check; auto-repair once
 #   4. Exit 1 with actionable errors if requirements still cannot be met
 #
@@ -22,15 +22,16 @@
 #   FLASHCLI_GIT_PROXY=URL   Opt-in GitHub fetch proxy (e.g. https://mirror.ghproxy.com/)
 #   FLASHCLI_GIT_TIMEOUT=25  Timeout (seconds) for git ls-remote during preflight
 #   FLASHCLI_PYTHON
-#   FLASHCLI_SKIP_GPU_CHECK=1
+#   FLASHCLI_SKIP_GPU_CHECK=1   skip GPU probe (default: warn if missing, still install)
+#   FLASHCLI_REQUIRE_GPU=1      abort install when no NVIDIA GPU (default: install CLI anyway)
 #   FLASHCLI_SKIP_ENV_CHECK=1
 #   FLASHCLI_PIP_USER=auto|0|1
 #   FLASHCLI_QUIET=1
 #   FLASHCLI_NO_REPAIR=1          skip one automatic pip repair retry
 #   FLASHCLI_STRICT_PIP_CHECK=1   fail on any pip check conflict (default: flashcli-only)
-#   FLASHCLI_AUTO_INSTALL_PYTHON=1  (root) try apt/dnf/apk to install python3+pip+git
+#   FLASHCLI_AUTO_INSTALL_PYTHON=0  disable auto OS install of python3+pip+git (default: on when root)
 #   FLASHCLI_BREAK_SYSTEM_PACKAGES=1  pass pip --break-system-packages (PEP 668 images)
-#   FLASHCLI_USE_VENV=1             install into ~/.flashcli/venv (bypass PEP 668)
+#   FLASHCLI_USE_VENV=0             skip venv; install to system/user site (default: ~/.flashcli/venv)
 
 set -eu
 
@@ -97,6 +98,10 @@ Environment (override flags):
   FLASHCLI_OS_MIRROR=0      With --mirror, do not rewrite apt/yum/dnf/apk sources
   FLASHCLI_GIT_PROXY=URL    Opt-in GitHub proxy (default --mirror uses Gitee for official repo)
   FLASHCLI_GIT_TIMEOUT=25   git ls-remote timeout during preflight (seconds)
+  FLASHCLI_AUTO_INSTALL_PYTHON=0  Disable auto OS install of python3+pip (default: on for root)
+  FLASHCLI_USE_VENV=0             Install to system/user site instead of ~/.flashcli/venv (default: venv)
+  FLASHCLI_REQUIRE_GPU=1          Abort when no NVIDIA GPU (default: warn and continue)
+  FLASHCLI_SKIP_GPU_CHECK=1       Skip GPU probe entirely
   PIP_INDEX_URL, HF_ENDPOINT  Override mirror defaults
 
 Examples:
@@ -352,6 +357,37 @@ parse_args() {
 
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 
+# venv lives under HOME; containers sometimes omit it.
+ensure_home() {
+  if [ -n "${HOME:-}" ] && [ -d "${HOME:-}" ]; then
+    return 0
+  fi
+  if [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ]; then
+    export HOME=/root
+    info "[i] HOME unset — using /root"
+    return 0
+  fi
+  _u="$(id -un 2>/dev/null || echo "")"
+  if [ -n "$_u" ] && have_cmd getent; then
+    _home="$(getent passwd "$_u" 2>/dev/null | cut -d: -f6 || true)"
+    if [ -n "$_home" ] && [ -d "$_home" ]; then
+      export HOME="$_home"
+      info "[i] HOME unset — using $_home"
+      return 0
+    fi
+  fi
+  die "HOME is not set and could not be determined — required for ~/.flashcli/venv (set HOME=... or re-run as root)"
+}
+
+ensure_download_tool() {
+  have_cmd curl && return 0
+  have_cmd wget && return 0
+  warn "curl/wget not found — attempting OS package install ..."
+  install_os_packages curl \
+    || install_os_packages wget \
+    || die "curl or wget required to bootstrap pip (get-pip.py) — install curl and re-run"
+}
+
 path_has_dir() {
   case ":${PATH:-}:" in *":$1:"*) return 0 ;; esac
   return 1
@@ -484,40 +520,73 @@ pip_extra_flags() {
 }
 
 die_no_python() {
-  printf '%s\n' "error: no Python >= ${REQUIRES_PYTHON_MIN} found on this system." >&2
+  _reason="unknown"
+  if [ "$(id -u 2>/dev/null || echo 1)" -ne 0 ]; then
+    _reason="running as non-root — cannot auto-install OS python packages"
+  elif ! auto_install_python_enabled; then
+    _reason="FLASHCLI_AUTO_INSTALL_PYTHON=0 disabled automatic python install"
+  elif ! have_cmd apt-get && ! have_cmd dnf && ! have_cmd yum && ! have_cmd apk && ! have_cmd zypper; then
+    _reason="no supported package manager (need apt, dnf, yum, apk, or zypper)"
+  else
+    _reason="OS package install for python3 failed (network, repos, or disk)"
+  fi
+  printf '%s\n' "error: cannot install flashcli — no Python >= ${REQUIRES_PYTHON_MIN} available." >&2
+  printf '%s\n' "error: reason: ${_reason}" >&2
   printf '%s\n' "error: searched: ${PYTHON_CANDIDATES:-python3}" >&2
   printf '%s\n' "error:" >&2
-  printf '%s\n' "error: Install Python 3.10+ and pip, then re-run. Examples:" >&2
-  printf '%s\n' "error:   Debian/Ubuntu: apt install -y python3 python3-pip python3-venv git" >&2
-  printf '%s\n' "error:   RHEL/Fedora:   dnf install -y python3 python3-pip git" >&2
-  printf '%s\n' "error:   Alpine:        apk add python3 py3-pip git" >&2
-  printf '%s\n' "error: Or set: FLASHCLI_PYTHON=/usr/bin/python3.12" >&2
-  printf '%s\n' "error: Optional (root): FLASHCLI_AUTO_INSTALL_PYTHON=1 ./install.sh" >&2
+  printf '%s\n' "error: Fix options:" >&2
+  printf '%s\n' "error:   1. Re-run as root (auto-installs python3+pip+git by default)" >&2
+  printf '%s\n' "error:   2. Install Python 3.10+ manually, then re-run:" >&2
+  printf '%s\n' "error:        Debian/Ubuntu: apt install -y python3 python3-pip python3-venv git" >&2
+  printf '%s\n' "error:        RHEL/Fedora:   dnf install -y python3 python3-pip git" >&2
+  printf '%s\n' "error:        Alpine:        apk add python3 py3-pip git" >&2
+  printf '%s\n' "error:   3. Point to an existing interpreter: FLASHCLI_PYTHON=/usr/bin/python3.12 ./install.sh" >&2
   exit 1
 }
 
+auto_install_python_enabled() {
+  case "${FLASHCLI_AUTO_INSTALL_PYTHON:-1}" in
+    0 | false | no | off) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+should_use_venv() {
+  case "${FLASHCLI_USE_VENV:-1}" in
+    0 | false | no | off) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+flashcli_venv_path() {
+  printf '%s' "${FLASHCLI_VENV:-${HOME:-/root}/.flashcli/venv}"
+}
+
 try_auto_install_python() {
-  if [ "${FLASHCLI_AUTO_INSTALL_PYTHON:-0}" != "1" ]; then
+  if ! auto_install_python_enabled; then
     return 1
   fi
   if [ "$(id -u 2>/dev/null || echo 1)" -ne 0 ]; then
-    warn "FLASHCLI_AUTO_INSTALL_PYTHON=1 requires root; skipping OS package install"
+    warn "auto python install requires root; skipping OS package install"
     return 1
   fi
-  info "Attempting OS package install for python3 + pip + git + zip + rsync (FLASHCLI_AUTO_INSTALL_PYTHON=1) ..."
+  info "Attempting OS package install for python3 + pip + git + zip + rsync ..."
   apply_os_package_mirrors
   if have_cmd apt-get; then
     apt-get update -qq && apt-get install -y python3 python3-pip python3-venv git zip rsync \
       && return 0
   fi
   if have_cmd dnf; then
-    dnf install -y python3 python3-pip git zip rsync && return 0
+    dnf install -y python3 python3-pip python3-virtualenv git zip rsync 2>/dev/null \
+      || dnf install -y python3 python3-pip git zip rsync && return 0
   fi
   if have_cmd yum; then
-    yum install -y python3 python3-pip git zip rsync && return 0
+    yum install -y python3 python3-pip python3-virtualenv git zip rsync 2>/dev/null \
+      || yum install -y python3 python3-pip git zip rsync && return 0
   fi
   if have_cmd apk; then
-    apk add --no-cache python3 py3-pip git zip rsync && return 0
+    apk add --no-cache python3 py3-pip py3-virtualenv git zip rsync 2>/dev/null \
+      || apk add --no-cache python3 py3-pip git zip rsync && return 0
   fi
   if have_cmd zypper; then
     zypper --non-interactive install python3 python3-pip git zip rsync && return 0
@@ -527,11 +596,11 @@ try_auto_install_python() {
 
 resolve_python() {
   if PYTHON="$(discover_python)"; then
-    export PYTHON
+    export PYTHON FLASHCLI_BASE_PYTHON="$PYTHON"
     return 0
   fi
   if try_auto_install_python; then
-    PYTHON="$(discover_python)" && export PYTHON && return 0
+    PYTHON="$(discover_python)" && export PYTHON FLASHCLI_BASE_PYTHON="$PYTHON" && return 0
   fi
   die_no_python
 }
@@ -568,6 +637,15 @@ do_pip_install() {
     return 0
   fi
   if grep -qi 'externally-managed-environment' "$_log" 2>/dev/null; then
+    if should_use_venv && [ -z "${VIRTUAL_ENV:-}" ]; then
+      warn "PEP 668 externally-managed environment — switching to venv and retrying pip ..."
+      if ensure_flashcli_venv; then
+        if _run_pip "$@"; then
+          rm -f "$_log"
+          return 0
+        fi
+      fi
+    fi
     if should_break_system_packages; then
       warn "PEP 668 — retrying pip with --break-system-packages"
       if run_py -m pip install --break-system-packages "$@" >"$_log" 2>&1; then
@@ -610,20 +688,68 @@ raise SystemExit(0 if parse_ver(m.group(1)) >= parse_ver(min_s) else 1)
 PY
 }
 
-try_apt_python3_pip() {
+try_os_install_pip() {
   [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ] || return 1
-  have_cmd apt-get || return 1
+  if ! auto_install_python_enabled; then
+    return 1
+  fi
   apply_os_package_mirrors
-  info "Installing python3-pip via apt (Debian/Ubuntu) ..."
-  apt-get update -qq && apt-get install -y python3-pip python3-venv \
-    && return 0
+  if have_cmd apt-get; then
+    info "Installing python3-pip via apt (Debian/Ubuntu) ..."
+    apt-get update -qq && apt-get install -y python3-pip python3-venv \
+      && return 0
+  fi
+  if have_cmd dnf; then
+    info "Installing python3-pip via dnf ..."
+    dnf install -y python3-pip && return 0
+  fi
+  if have_cmd yum; then
+    info "Installing python3-pip via yum ..."
+    yum install -y python3-pip && return 0
+  fi
+  if have_cmd apk; then
+    info "Installing py3-pip via apk ..."
+    apk add --no-cache py3-pip && return 0
+  fi
+  if have_cmd zypper; then
+    info "Installing python3-pip via zypper ..."
+    zypper --non-interactive install python3-pip && return 0
+  fi
+  return 1
+}
+
+ensure_venv_module() {
+  if run_py -m venv -h >/dev/null 2>&1; then
+    return 0
+  fi
+  if ! auto_install_python_enabled; then
+    return 1
+  fi
+  if [ "$(id -u 2>/dev/null || echo 1)" -ne 0 ]; then
+    return 1
+  fi
+  info "python venv module missing — installing python3-venv ..."
+  apply_os_package_mirrors
+  if have_cmd apt-get; then
+    apt-get update -qq && apt-get install -y python3-venv && return 0
+  fi
+  if have_cmd dnf; then
+    dnf install -y python3-venv 2>/dev/null || dnf install -y python3 && return 0
+  fi
+  if have_cmd yum; then
+    yum install -y python3-venv 2>/dev/null || yum install -y python3 && return 0
+  fi
+  if have_cmd apk; then
+    apk add --no-cache python3-venv 2>/dev/null || apk add --no-cache py3-virtualenv && return 0
+  fi
+  if have_cmd zypper; then
+    zypper --non-interactive install python3-venv && return 0
+  fi
   return 1
 }
 
 bootstrap_pip_get_pip() {
-  if ! have_cmd curl && ! have_cmd wget; then
-    return 1
-  fi
+  ensure_download_tool || return 1
   _tmp="$(mktemp /tmp/get-pip.XXXXXX.py)"
   _url="$(get_pip_bootstrap_url)"
   if have_cmd curl; then
@@ -648,31 +774,134 @@ bootstrap_pip_get_pip() {
   pip_works
 }
 
-# Dedicated venv when system Python is PEP 668 and pip cannot be bootstrapped in-place.
-ensure_flashcli_venv() {
-  _venv="${FLASHCLI_VENV:-${HOME:-/root}/.flashcli/venv}"
-  case "${FLASHCLI_USE_VENV:-auto}" in
-    0 | false | no) return 1 ;;
-  esac
-  if [ "${FLASHCLI_USE_VENV:-auto}" != "1" ] && [ "${FLASHCLI_USE_VENV:-auto}" != "true" ]; then
-    # auto: only when PEP 668 and pip still missing
-    python_is_pep668 "$PYTHON" 2>/dev/null || return 1
-    pip_works && return 1
+# Bootstrap pip on the system interpreter before venv creation (non-root may need --user).
+ensure_minimal_base_pip() {
+  should_use_venv || return 0
+  [ -n "${VIRTUAL_ENV:-}" ] && return 0
+  pip_works && return 0
+
+  info "Bootstrapping minimal pip on $PYTHON (needed to create venv) ..."
+  _saved_pip_user="${PIP_INSTALL_USER:-}"
+  _saved_flag="${FLASHCLI_PIP_USER_FLAG:-}"
+  if [ "$(id -u 2>/dev/null || echo 1)" -ne 0 ]; then
+    PIP_INSTALL_USER=1
+    FLASHCLI_PIP_USER_FLAG="--user"
+    export PIP_INSTALL_USER FLASHCLI_PIP_INSTALL_USER=1
   fi
-  info "Creating virtualenv at $_venv (PEP 668 / FLASHCLI_USE_VENV) ..."
-  run_py -m venv "$_venv" 2>/dev/null \
-    || run_py -m virtualenv "$_venv" 2>/dev/null \
-    || die "cannot create venv at $_venv — install python3-venv"
-  PYTHON="${_venv}/bin/python3"
-  if [ ! -x "$PYTHON" ]; then
-    PYTHON="${_venv}/bin/python"
+
+  run_py -m ensurepip --upgrade >/dev/null 2>&1 \
+    || run_py -m ensurepip >/dev/null 2>&1 \
+    || true
+  if ! pip_works; then
+    try_pip3_same_interpreter || true
   fi
+  if ! pip_works; then
+    try_os_install_pip || true
+    if [ -z "${VIRTUAL_ENV:-}" ] && PYTHON="$(discover_python)"; then
+      export PYTHON
+    fi
+  fi
+  if ! pip_works; then
+    bootstrap_pip_get_pip || true
+  fi
+
+  PIP_INSTALL_USER="${_saved_pip_user:-0}"
+  FLASHCLI_PIP_USER_FLAG="${_saved_flag:-}"
+  export PIP_INSTALL_USER FLASHCLI_PIP_INSTALL_USER="${PIP_INSTALL_USER:-0}"
+  pip_works
+}
+
+create_flashcli_venv_dir() {
+  _venv="$1"
+  _base="${2:-${FLASHCLI_BASE_PYTHON:-$PYTHON}}"
+  _parent="$(dirname "$_venv")"
+
+  if ! mkdir -p "$_parent" 2>/dev/null; then
+    die "cannot create venv parent directory $_parent — check HOME (${HOME:-unset}) and disk permissions"
+  fi
+
+  if "$_base" -m venv "$_venv" 2>/dev/null; then
+    return 0
+  fi
+
+  ensure_venv_module || true
+  if "$_base" -m venv "$_venv" 2>/dev/null; then
+    return 0
+  fi
+
+  if "$_base" -m virtualenv "$_venv" 2>/dev/null; then
+    return 0
+  fi
+
+  if python_has_pip "$_base"; then
+    info "Installing virtualenv package (python3-venv unavailable) ..."
+    if [ "$(id -u 2>/dev/null || echo 1)" -ne 0 ]; then
+      "$_base" -m pip install --user virtualenv >/dev/null 2>&1 || return 1
+    else
+      "$_base" -m pip install virtualenv >/dev/null 2>&1 \
+        || "$_base" -m pip install --break-system-packages virtualenv >/dev/null 2>&1 \
+        || return 1
+    fi
+    "$_base" -m virtualenv "$_venv" 2>/dev/null && return 0
+  fi
+  return 1
+}
+
+# Default install target: ~/.flashcli/venv (opt out with FLASHCLI_USE_VENV=0).
+activate_flashcli_venv_python() {
+  _venv="$1"
+  _py="${_venv}/bin/python3"
+  if [ ! -x "$_py" ]; then
+    _py="${_venv}/bin/python"
+  fi
+  [ -x "$_py" ] || return 1
+  PYTHON="$_py"
   export PYTHON VIRTUAL_ENV="$_venv"
   PIP_INSTALL_USER=0
   FLASHCLI_PIP_USER_FLAG=""
   unset PYTHONNOUSERSITE
   export PIP_INSTALL_USER FLASHCLI_PIP_INSTALL_USER=0
-  pip_works || die "venv created but pip missing in $_venv"
+  return 0
+}
+
+ensure_flashcli_venv() {
+  should_use_venv || return 1
+
+  _venv="$(flashcli_venv_path)"
+  _base_python="${FLASHCLI_BASE_PYTHON:-${PYTHON:-}}"
+
+  _venv_py="${_venv}/bin/python3"
+  [ ! -x "$_venv_py" ] && _venv_py="${_venv}/bin/python"
+  if [ -x "$_venv_py" ]; then
+    if activate_flashcli_venv_python "$_venv"; then
+      if run_py -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" 2>/dev/null \
+        && pip_works; then
+        info "[ok] using existing venv: $_venv ($PYTHON)"
+        return 0
+      fi
+      warn "existing venv at $_venv is unusable — recreating"
+      rm -rf "$_venv"
+      PYTHON="$_base_python"
+      export PYTHON
+    fi
+  fi
+
+  ensure_minimal_base_pip || true
+  info "Creating virtualenv at $_venv ..."
+  if ! create_flashcli_venv_dir "$_venv" "$_base_python"; then
+    die "cannot create venv at $_venv.
+Reason: python3-venv/virtualenv unavailable and pip bootstrap failed.
+Fix:
+  apt install -y python3-venv          # Debian/Ubuntu (root)
+  FLASHCLI_USE_VENV=0 ./install.sh     # install to system/user site instead"
+  fi
+
+  activate_flashcli_venv_python "$_venv" \
+    || die "venv created but python missing in $_venv"
+  if ! pip_works; then
+    run_py -m ensurepip --upgrade >/dev/null 2>&1 || run_py -m ensurepip >/dev/null 2>&1 || true
+  fi
+  pip_works || die "venv created but pip missing in $_venv — try: rm -rf $_venv && re-run install.sh"
   info "[ok] using venv Python: $PYTHON"
 }
 
@@ -706,10 +935,22 @@ check_gpu() {
     return 0
   fi
   if ! have_cmd nvidia-smi; then
-    die "nvidia-smi not found — flashcli inference needs an NVIDIA GPU on Linux"
+    if [ "${FLASHCLI_REQUIRE_GPU:-0}" = "1" ]; then
+      die "cannot install flashcli — nvidia-smi not found (FLASHCLI_REQUIRE_GPU=1).
+Reason: flashcli inference requires an NVIDIA GPU.
+Fix: install NVIDIA driver + nvidia-smi, or unset FLASHCLI_REQUIRE_GPU to install CLI only"
+    fi
+    warn "nvidia-smi not found — install continues (GPU needed for inference; run flashcli doctor later)"
+    return 0
   fi
   gpu_line="$(nvidia-smi --query-gpu=name,compute_cap --format=csv,noheader 2>/dev/null | head -n 1 || true)"
-  [ -n "$gpu_line" ] || die "nvidia-smi present but no GPU reported"
+  if [ -z "$gpu_line" ]; then
+    if [ "${FLASHCLI_REQUIRE_GPU:-0}" = "1" ]; then
+      die "cannot install flashcli — nvidia-smi present but no GPU reported (FLASHCLI_REQUIRE_GPU=1)"
+    fi
+    warn "nvidia-smi present but no GPU reported — install continues"
+    return 0
+  fi
   info "[ok] GPU: $gpu_line"
 }
 
@@ -764,12 +1005,12 @@ ensure_pip() {
 
   try_pip3_same_interpreter && info "[ok] pip via pip3" && return 0
 
-  if try_apt_python3_pip; then
-    if PYTHON="$(discover_python)"; then
+  if try_os_install_pip; then
+    if [ -z "${VIRTUAL_ENV:-}" ] && PYTHON="$(discover_python)"; then
       export PYTHON
     fi
     if pip_works; then
-      info "[ok] pip via apt python3-pip ($PYTHON)"
+      info "[ok] pip via OS package manager ($PYTHON)"
       return 0
     fi
   fi
@@ -787,12 +1028,12 @@ ensure_pip() {
   fi
 
   die "cannot bootstrap pip for $PYTHON.
-
-This host mixes interpreters (e.g. Debian /usr/bin/python3.13 + /usr/local python3.12).
-Try:
+Reason: pip/ensurepip/get-pip and OS package install all failed.
+This host may mix interpreters (e.g. Debian /usr/bin/python3.13 + /usr/local python3.12).
+Fix:
   FLASHCLI_PYTHON=\$(command -v python3) ./install.sh
-  apt install -y python3-pip python3-venv   # Debian/Ubuntu
-  FLASHCLI_USE_VENV=1 ./install.sh
+  apt install -y python3-pip python3-venv   # Debian/Ubuntu (root)
+  ./install.sh --mirror                      # slow/blocked network
   FLASHCLI_BREAK_SYSTEM_PACKAGES=1 ./install.sh"
 }
 
@@ -807,7 +1048,9 @@ ensure_packaging() {
     set -- "$@" --user
   fi
   do_pip_install "$@" \
-    || die "cannot install packaging>=23.0 — check network, permissions, or PEP 668 (try FLASHCLI_BREAK_SYSTEM_PACKAGES=1)"
+    || die "cannot install packaging>=23.0.
+Reason: pip/network/permissions failed (venv avoids most PEP 668 issues).
+Fix: ./install.sh --mirror   or   check errors above"
 }
 
 ensure_build_deps() {
@@ -820,12 +1063,26 @@ ensure_build_deps() {
     set -- "$@" --user
   fi
   do_pip_install "$@" \
-    || die "cannot install build dependencies (setuptools, wheel)"
+    || die "cannot install build dependencies (setuptools, wheel) — check network and pip errors above"
 }
 
-check_git() {
-  have_cmd git || die "git not found — required for: pip install git+${REPO}"
-  info "[ok] git: $(git --version 2>/dev/null | head -n 1)"
+ensure_git() {
+  if have_cmd git; then
+    info "[ok] git: $(git --version 2>/dev/null | head -n 1)"
+    return 0
+  fi
+  warn "git not found — attempting OS package install ..."
+  if install_os_packages git && have_cmd git; then
+    info "[ok] git: $(git --version 2>/dev/null | head -n 1) (installed)"
+    return 0
+  fi
+  die "cannot install flashcli — git not found and auto-install failed.
+Reason: pip install git+${REPO} requires git.
+Fix:
+  apt install -y git    # Debian/Ubuntu
+  dnf install -y git    # RHEL/Fedora
+  apk add git           # Alpine
+  Re-run as root so install.sh can install git automatically"
 }
 
 # Install OS packages when running as root (best-effort across common distros).
@@ -954,7 +1211,7 @@ git_ref_reachable() {
 }
 
 check_install_target() {
-  "$PYTHON" - <<'PY' || die "install target not writable (permissions?)"
+  "$PYTHON" - <<'PY' || die "install target not writable — check disk space and permissions (venv: ${VIRTUAL_ENV:-system site})"
 import os, sys, sysconfig, tempfile
 
 def ok(p):
@@ -1054,9 +1311,12 @@ warn_python2_only() {
 }
 
 run_preflight() {
+  ensure_home
   if [ "${FLASHCLI_SKIP_ENV_CHECK:-0}" = "1" ]; then
     warn "FLASHCLI_SKIP_ENV_CHECK=1: minimal pre-flight only"
     resolve_python
+    ensure_minimal_base_pip || true
+    ensure_flashcli_venv || true
     set_pip_install_mode
     ensure_pip
     ensure_packaging
@@ -1066,13 +1326,15 @@ run_preflight() {
   check_gpu
   warn_python2_only
   resolve_python
+  ensure_minimal_base_pip || true
+  ensure_flashcli_venv || true
   set_pip_install_mode
   check_python_version
   ensure_pip
   ensure_packaging
   preflight_pyproject
   ensure_build_deps
-  check_git
+  ensure_git
   ensure_zip_rsync
   check_network
   check_install_target
@@ -1093,26 +1355,63 @@ cleanup_stale_user_install() {
   rm -f "${user_bin}/flashcli" "${user_bin}/flash" 2>/dev/null || true
 }
 
-install_flashcli() {
-  spec="git+${REPO}@${REF}"
-  if [ "$PIP_INSTALL_USER" = "1" ]; then
-    info "Installing $spec → $(pip_scripts_dir 1) (pip --user; may take a few minutes) ..."
-  else
-    cleanup_stale_user_install
-    info "Installing $spec → $(pip_scripts_dir 0) (system site; may take a few minutes) ..."
-  fi
-
+_pip_install_flashcli_spec() {
+  _spec="$1"
   set -- --upgrade --force-reinstall
   if [ "$PIP_INSTALL_USER" = "1" ]; then
     set -- "$@" --user
   fi
   [ "$QUIET" = "1" ] && set -- "$@" -q
-  set -- "$@" "$spec"
+  set -- "$@" "$_spec"
+  do_pip_install "$@"
+}
 
-  if ! do_pip_install "$@"; then
-    die "pip install failed for $spec — check git/network/disk and errors above"
+try_mirror_repo_fallback() {
+  [ "$REPO_FROM_USER" -eq 1 ] && return 1
+  case "$REPO" in
+    "$DEFAULT_REPO_GITHUB"|https://github.com/aodianyun/flashcli.git) ;;
+    *) return 1 ;;
+  esac
+  warn "GitHub pip install failed — retrying with Gitee + mirror endpoints ..."
+  REPO="$DEFAULT_REPO_GITEE"
+  USE_MIRROR=1
+  export FLASHCLI_INSTALL_REPO="$REPO" FLASHCLI_USE_MIRROR="$USE_MIRROR"
+  apply_mirror_endpoints
+  return 0
+}
+
+install_flashcli() {
+  spec="git+${REPO}@${REF}"
+  if [ "$PIP_INSTALL_USER" = "1" ]; then
+    info "Installing $spec → $(pip_scripts_dir 1) (pip --user; may take a few minutes) ..."
+  elif [ -n "${VIRTUAL_ENV:-}" ]; then
+    info "Installing $spec → $(pip_scripts_dir 0) (venv; may take a few minutes) ..."
+  else
+    cleanup_stale_user_install
+    info "Installing $spec → $(pip_scripts_dir 0) (system site; may take a few minutes) ..."
   fi
-  info "[ok] pip install finished"
+
+  if _pip_install_flashcli_spec "$spec"; then
+    info "[ok] pip install finished"
+    return 0
+  fi
+
+  if try_mirror_repo_fallback; then
+    spec="git+${REPO}@${REF}"
+    info "Retrying install: $spec"
+    if _pip_install_flashcli_spec "$spec"; then
+      info "[ok] pip install finished (mirror fallback)"
+      return 0
+    fi
+  fi
+
+  die "pip install failed for git+${REPO}@${REF}.
+Reason: git clone or pip dependency install failed (network, firewall, disk, or git auth).
+Fix:
+  ./install.sh --mirror
+  ./install.sh --gitee
+  export FLASHCLI_USE_MIRROR=1 ./install.sh
+  Check errors above for the first failing package"
 }
 
 # ---------------------------------------------------------------------------
@@ -1545,6 +1844,13 @@ verify_cli_usable() {
 print_success() {
   [ "$QUIET" = "1" ] && return 0
   printf '\n%s\n' 'flashcli installed successfully.'
+  if should_use_venv && [ -n "${VIRTUAL_ENV:-}" ]; then
+    printf '%s\n' "  (venv: ${VIRTUAL_ENV})"
+    _venv_bin="${VIRTUAL_ENV}/bin"
+    if ! path_has_dir "$_venv_bin"; then
+      printf '%s\n' "  export PATH=\"${_venv_bin}:\$PATH\"   # activate venv CLI in this shell"
+    fi
+  fi
   if mirror_mode_enabled; then
     printf '%s\n' "  (mirror: pip/HF/git + get-pip; ref=${REF})"
     if os_mirror_enabled && [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ]; then
