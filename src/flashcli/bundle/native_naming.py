@@ -176,6 +176,16 @@ def bundle_uses_native_matrix(raw: dict) -> bool:
     return False
 
 
+def lib_dir_has_tagged_native_artifacts(lib_dir: Path) -> bool:
+    """True when ``lib/`` holds ``*-sm…-pyNNN.so`` files (multi-env matrix layout)."""
+    if not lib_dir.is_dir():
+        return False
+    for path in lib_dir.glob("*.so"):
+        if parse_native_tag_from_filename(path.name) is not None:
+            return True
+    return False
+
+
 def host_runtime_env_key(gpu: GpuInfo, *, python_minor: str | None = None) -> RuntimeEnvKey:
     return parse_variant_key(variant_dir_name(gpu, python_minor=python_minor))
 
