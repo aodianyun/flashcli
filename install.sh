@@ -1676,41 +1676,77 @@ PY
 # ---------------------------------------------------------------------------
 # CLI on PATH (critical for ./install.sh in parent shell)
 # ---------------------------------------------------------------------------
+flashcli_script_is_runnable() {
+  _f="$1"
+  [ -n "$_f" ] && [ -f "$_f" ] && "$_f" --help >/dev/null 2>&1
+}
+
+_find_flashcli_script_in_dir() {
+  _d="$1"
+  [ -n "$_d" ] || return 1
+  [ -f "${_d}/flashcli" ] || return 1
+  printf '%s' "${_d}/flashcli"
+}
+
 flashcli_script_path() {
   if [ "$PIP_INSTALL_USER" = "1" ]; then
     for d in "$(pip_scripts_dir 1)" "${HOME:-}/.local/bin"; do
-      [ -n "$d" ] && [ -x "${d}/flashcli" ] && printf '%s' "${d}/flashcli" && return 0
+      _f="$(_find_flashcli_script_in_dir "$d" 2>/dev/null || true)"
+      [ -n "$_f" ] && printf '%s' "$_f" && return 0
     done
     return 1
   fi
-  for d in "$(pip_scripts_dir 0)" "/usr/local/bin" "/usr/bin"; do
-    [ -n "$d" ] && [ -x "${d}/flashcli" ] && printf '%s' "${d}/flashcli" && return 0
+  for d in /usr/local/bin /usr/bin "$(pip_scripts_dir 0)"; do
+    _f="$(_find_flashcli_script_in_dir "$d" 2>/dev/null || true)"
+    [ -n "$_f" ] && printf '%s' "$_f" && return 0
   done
   return 1
 }
 
-link_cli_into_system_bin() {
-  [ "$PIP_INSTALL_USER" = "0" ] || return 0
-  system_bin="$(pip_scripts_dir 0)"
-  [ -n "$system_bin" ] || system_bin="/usr/local/bin"
-  cli="$(flashcli_script_path || true)"
-  [ -n "$cli" ] || return 0
-  [ "$(dirname "$cli")" = "$system_bin" ] && return 0
-  mkdir -p "$system_bin" 2>/dev/null || die "cannot create $system_bin"
-  info "Linking flashcli → ${system_bin}/flashcli"
-  ln -sf "$cli" "${system_bin}/flashcli"
-  ln -sf "$cli" "${system_bin}/flash" 2>/dev/null || true
-  _link_hub_cli_from_dir "$system_bin" "$(dirname "$cli")"
+write_module_cli_wrapper() {
+  _dest="$1"
+  _py="$2"
+  _mod="$3"
+  _parent="$(dirname "$_dest")"
+  mkdir -p "$_parent" 2>/dev/null || return 1
+  {
+    printf '%s\n' '#!/bin/sh'
+    printf '%s\n' "exec \"$_py\" -m $_mod \"\$@\""
+  } > "$_dest" || return 1
+  chmod 755 "$_dest" 2>/dev/null || chmod +x "$_dest" 2>/dev/null || return 1
 }
 
-_link_hub_cli_from_dir() {
-  _dest="$1"
-  _src_dir="$2"
-  for _name in hf huggingface-cli; do
-    if [ -x "${_src_dir}/${_name}" ]; then
-      ln -sf "${_src_dir}/${_name}" "${_dest}/${_name}" 2>/dev/null || true
+install_cli_wrappers_in_dir() {
+  _dir="$1"
+  write_module_cli_wrapper "${_dir}/flashcli" "$PYTHON" "flashcli.cli" || return 1
+  write_module_cli_wrapper "${_dir}/flash" "$PYTHON" "flashcli.cli" || return 1
+  if run_py -c "import huggingface_hub" 2>/dev/null; then
+    write_module_cli_wrapper "${_dir}/hf" "$PYTHON" "huggingface_hub.cli.hf" || true
+    rm -f "${_dir}/huggingface-cli" 2>/dev/null || true
+    ln -sf hf "${_dir}/huggingface-cli" 2>/dev/null || true
+  fi
+}
+
+# Real wrapper scripts (not symlinks into ~/.flashcli/venv) — works when /root is noexec.
+ensure_global_cli_wrappers() {
+  [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ] || return 0
+  _installed=0
+  for _dir in /usr/local/bin /usr/bin; do
+    [ -d "$(dirname "$_dir")" ] || continue
+    if install_cli_wrappers_in_dir "$_dir"; then
+      info "Installed CLI wrappers → $_dir"
+      _installed=1
     fi
   done
+  [ "$_installed" -eq 1 ]
+}
+
+prepend_path_dir() {
+  _dir="$1"
+  [ -n "$_dir" ] || return 0
+  path_has_dir "$_dir" && return 0
+  PATH="${_dir}${PATH:+:${PATH}}"
+  export PATH
 }
 
 persist_path_config() {
@@ -1754,22 +1790,6 @@ persist_path_config() {
   fi
 }
 
-# Minimal PATH images often omit /usr/local/bin — mirror CLI into /usr/bin when needed.
-mirror_cli_to_usr_bin() {
-  cli="$1"
-  cli_dir="$(dirname "$cli")"
-  [ "$cli_dir" != "/usr/bin" ] || return 0
-  [ -d /usr/bin ] || return 0
-  if path_has_dir /usr/bin; then
-    if [ ! -e /usr/bin/flashcli ] || [ -L /usr/bin/flashcli ]; then
-      info "Linking flashcli → /usr/bin/flashcli (current PATH lacks ${cli_dir})"
-      ln -sf "$cli" /usr/bin/flashcli
-      ln -sf "$cli" /usr/bin/flash 2>/dev/null || true
-      _link_hub_cli_from_dir /usr/bin "$cli_dir"
-    fi
-  fi
-}
-
 write_flashcli_mirror_env() {
   mirror_mode_enabled || return 0
   _home="${FLASHCLI_HOME:-${HOME:-/root}/.flashcli}"
@@ -1786,48 +1806,45 @@ write_flashcli_mirror_env() {
 
 # Verify flashcli works in parent shell (minimal PATH / no /usr/local/bin is common in containers).
 verify_cli_usable() {
-  link_cli_into_system_bin
   cli="$(flashcli_script_path || true)"
   [ -n "$cli" ] || die "flashcli console script missing after install"
 
   cli_dir="$(dirname "$cli")"
 
-  if ! "$cli" --help >/dev/null 2>&1; then
+  if ! flashcli_script_is_runnable "$cli"; then
     die "flashcli --help failed: $cli"
   fi
 
-  if ! path_has_dir "$cli_dir"; then
-    mirror_cli_to_usr_bin "$cli"
-    persist_path_config "$cli_dir"
-  else
-    persist_path_config "$cli_dir"
-  fi
+  ensure_global_cli_wrappers || true
+  for _path_dir in /usr/local/bin /usr/bin "$cli_dir"; do
+    prepend_path_dir "$_path_dir"
+  done
+  hash -r 2>/dev/null || true
+
+  persist_path_config "$cli_dir"
   write_flashcli_mirror_env
 
-  # Prefer: current PATH → cli_dir first → common system paths
-  resolved=""
-  for try_path in \
-    "${PATH:-}" \
-    "${cli_dir}:${PATH:-}" \
-    "${cli_dir}:/usr/local/bin:/usr/bin:/bin" \
-    "/usr/bin:/bin"; do
-    [ -n "$try_path" ] || continue
-    resolved="$(env PATH="$try_path" command -v flashcli 2>/dev/null || true)"
-    if [ -n "$resolved" ]; then
-      break
-    fi
-  done
+  resolved="$(command -v flashcli 2>/dev/null || true)"
+  if [ -z "$resolved" ]; then
+    for _candidate in /usr/local/bin/flashcli /usr/bin/flashcli "$cli"; do
+      if flashcli_script_is_runnable "$_candidate"; then
+        resolved="$_candidate"
+        prepend_path_dir "$(dirname "$_candidate")"
+        hash -r 2>/dev/null || true
+        break
+      fi
+    done
+  fi
 
   if [ -z "$resolved" ]; then
-    if [ -x /usr/bin/flashcli ]; then
-      resolved="/usr/bin/flashcli"
-    elif [ -x "$cli" ]; then
-      resolved="$cli"
-      warn "flashcli is at $cli but not on PATH — run: export PATH=\"${cli_dir}:\$PATH\" && hash -r"
-      info "[ok] flashcli installed: $cli"
-      return 0
-    fi
-    die "flashcli not found on PATH. Installed at: $cli — run: export PATH=\"${cli_dir}:\$PATH\" && hash -r"
+    die "flashcli not found on PATH after install.
+Reason: CLI wrappers could not be placed on PATH (check permissions).
+Installed at: $cli
+Fix: export PATH=\"${cli_dir}:\$PATH\" && hash -r"
+  fi
+
+  if ! flashcli_script_is_runnable "$resolved"; then
+    die "flashcli --help failed for resolved command: $resolved"
   fi
 
   info "[ok] flashcli on PATH: $resolved"

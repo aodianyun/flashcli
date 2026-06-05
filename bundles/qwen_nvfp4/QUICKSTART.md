@@ -43,7 +43,7 @@ Restricted network: `export HF_ENDPOINT=https://hf-mirror.com`
 ## 3. Engine (`run`, no HTTP)
 
 ```bash
-# flashcli run qwen36-27b-nvfp4 --prompt "Hello"
+# flashcli run qwen3-8b-nvfp --prompt "Hello"
 flashcli run qwen3-8b-nvfp4 --bundle "$BUNDLE" --prompt "Hello" --max-tokens 64
 
 # flashcli run qwen36-27b-nvfp4 --prompt "Hello"
