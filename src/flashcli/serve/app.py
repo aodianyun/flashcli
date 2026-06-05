@@ -20,8 +20,10 @@ from flashcli.serve.openai_bridge import (
 from flashcli.serve.request_log import (
     RequestTimer,
     client_label,
+    format_enable_thinking_resolved,
     header_hint,
     log,
+    resolve_enable_thinking,
     summarize_chat_body,
     usage_summary,
 )
@@ -165,7 +167,12 @@ def build_app(engine: ServeEngine) -> FastAPI:
         req_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex[:12]
         timer: RequestTimer = getattr(request.state, "timer", None) or RequestTimer()
         client = client_label(request)
-        summary = summarize_chat_body(body)
+        thinking_value, thinking_source = resolve_enable_thinking(body)
+        thinking_line = format_enable_thinking_resolved(
+            thinking_value, thinking_source
+        )
+        # Hoist enable_thinking for FlashRT in the bundle (chat_request_to_openai_body).
+        summary = summarize_chat_body(body, thinking_log=thinking_line)
 
         log.info(
             "chat START | id=%s | from=%s | model=%s | %s",
@@ -222,11 +229,12 @@ def build_app(engine: ServeEngine) -> FastAPI:
             usage_line = usage_summary(result.usage)
             log.info(
                 "chat END | id=%s | from=%s | status=200 | %.1f ms | "
-                "finish=%s | %s%s",
+                "finish=%s | %s | %s%s",
                 req_id,
                 client,
                 timer.elapsed_ms,
                 result.finish_reason,
+                thinking_line,
                 usage_line,
                 f" | {summary}" if not usage_line else "",
             )
@@ -269,6 +277,7 @@ def build_app(engine: ServeEngine) -> FastAPI:
                     parts.append(f"finish={finish_label}")
                 if usage_line:
                     parts.append(usage_line)
+                parts.append(thinking_line)
                 msg = " | ".join(parts)
                 if use_warning:
                     log.warning(msg)
@@ -276,6 +285,15 @@ def build_app(engine: ServeEngine) -> FastAPI:
                     log.info(msg)
 
             try:
+                # Thinking: no empty ``content`` (avoids merging into the answer
+                # bubble) but do open the reasoning channel immediately so clients
+                # like OpenCode do not sit on "waiting for thinking" until TTFT.
+                first_delta: dict[str, Any] = {"role": "assistant"}
+                if thinking_value:
+                    first_delta["reasoning_content"] = ""
+                    first_delta["reasoning"] = ""
+                else:
+                    first_delta["content"] = ""
                 first = {
                     "id": completion_id,
                     "object": "chat.completion.chunk",
@@ -284,7 +302,7 @@ def build_app(engine: ServeEngine) -> FastAPI:
                     "choices": [
                         {
                             "index": 0,
-                            "delta": {"role": "assistant", "content": ""},
+                            "delta": first_delta,
                             "finish_reason": None,
                         }
                     ],
@@ -294,6 +312,27 @@ def build_app(engine: ServeEngine) -> FastAPI:
                 async for chunk in iter_on_inference_loop(
                     lambda: _chunk_iter(req),
                 ):
+                    if chunk.reasoning_delta:
+                        out = {
+                            "id": completion_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": engine.model_id,
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "delta": {
+                                        "reasoning_content": (
+                                            chunk.reasoning_delta
+                                        ),
+                                        # vLLM / some clients use ``reasoning``.
+                                        "reasoning": chunk.reasoning_delta,
+                                    },
+                                    "finish_reason": None,
+                                }
+                            ],
+                        }
+                        yield f"data: {json.dumps(out)}\n\n"
                     if chunk.content_delta:
                         out = {
                             "id": completion_id,
@@ -341,7 +380,23 @@ def build_app(engine: ServeEngine) -> FastAPI:
                             ],
                         }
                         if chunk.usage:
-                            last["usage"] = chunk.usage
+                            usage_out = dict(chunk.usage)
+                            last["usage"] = usage_out
+                            flashrt_block = {
+                                k: usage_out[k]
+                                for k in (
+                                    "prefill_ms",
+                                    "decode_ms",
+                                    "ttft_ms",
+                                    "first_delta_ms",
+                                    "decode_tok_per_s",
+                                    "tok_per_s",
+                                    "route",
+                                )
+                                if usage_out.get(k) is not None
+                            }
+                            if flashrt_block:
+                                last["flashrt"] = flashrt_block
                         yield f"data: {json.dumps(last)}\n\n"
                         yield "data: [DONE]\n\n"
                         _log_chat_end("200 stream")
@@ -382,11 +437,19 @@ def build_app(engine: ServeEngine) -> FastAPI:
                 if not end_logged:
                     _log_chat_end(
                         "stream closed before finish (client disconnect or "
-                        "proxy timeout)",
+                        "proxy timeout); releasing GPU slot after stream cleanup",
                         use_warning=True,
                     )
                 gate.release()
 
-        return StreamingResponse(stream_chunks(), media_type="text/event-stream")
+        return StreamingResponse(
+            stream_chunks(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     return app

@@ -232,8 +232,20 @@ def agent_result_to_dict(result: Any, *, route: str | None = None) -> dict[str, 
     return out
 
 
-def agent_result_to_chat(result: Any, *, route: str | None = None) -> ChatResult:
+def agent_result_to_chat(
+    result: Any,
+    *,
+    route: str | None = None,
+    enable_thinking: bool = False,
+) -> ChatResult:
+    from _qwen36_thinking import split_qwen36_assistant_text
+
     data = agent_result_to_dict(result, route=route)
+    raw_text = data.get("text") or ""
+    reasoning, content = split_qwen36_assistant_text(
+        raw_text,
+        enable_thinking=enable_thinking,
+    )
     stats = result.stats
     extensions = {
         "flashrt": {
@@ -248,7 +260,8 @@ def agent_result_to_chat(result: Any, *, route: str | None = None) -> ChatResult
         }
     }
     return ChatResult(
-        content=data.get("text") or None,
+        content=content,
+        reasoning_content=reasoning,
         tool_calls=list(data.get("tool_calls") or []),
         finish_reason=str(data.get("finish_reason") or "stop"),
         usage=usage_from_qwen36_engine(data),
@@ -258,6 +271,8 @@ def agent_result_to_chat(result: Any, *, route: str | None = None) -> ChatResult
 
 def chat_request_to_openai_body(req: ChatRequest) -> dict[str, Any]:
     """Build an OpenAI-shaped body for FlashRT ``request_from_openai`` helpers."""
+    from flashcli.serve.request_log import apply_enable_thinking_to_openai_payload
+
     payload: dict[str, Any] = {
         "messages": messages_from_request(req),
         "max_tokens": int(req.max_tokens),
@@ -272,11 +287,28 @@ def chat_request_to_openai_body(req: ChatRequest) -> dict[str, Any]:
     if req.seed is not None:
         payload["seed"] = req.seed
     payload.update(req.extras)
+    apply_enable_thinking_to_openai_payload(payload)
     return payload
 
 
 def chat_request_to_agent_openai(req: ChatRequest) -> dict[str, Any]:
     return chat_request_to_openai_body(req)
+
+
+def resolve_qwen36_route_min_seq(explicit: Any = None) -> int:
+    """Short prompts should use ``short_spec`` (route when prompt < threshold).
+
+    ``route_min_seq=0`` forces the long FP8-KV path for every request (~60 tok/s vs ~84).
+    Default 512 matches ``FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ`` in comparable benches.
+    """
+    import os
+
+    if explicit is not None:
+        return int(explicit)
+    env = os.environ.get("FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ", "").strip()
+    if env.isdigit():
+        return int(env)
+    return 512
 
 
 def merge_load_options(

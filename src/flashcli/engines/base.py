@@ -37,6 +37,7 @@ class ChatResult:
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     finish_reason: str = "stop"
     usage: dict[str, Any] = field(default_factory=dict)
+    reasoning_content: str | None = None
     # Optional top-level response extensions (e.g. {"flashrt": {...}}).
     extensions: dict[str, Any] = field(default_factory=dict)
 
@@ -44,6 +45,7 @@ class ChatResult:
 @dataclass
 class ChatChunk:
     content_delta: str = ""
+    reasoning_delta: str = ""
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     finish_reason: str | None = None
     usage: dict[str, Any] | None = None

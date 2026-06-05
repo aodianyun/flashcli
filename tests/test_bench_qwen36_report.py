@@ -41,8 +41,9 @@ def test_report_summarize_and_compare(tmp_path: Path) -> None:
                 "ttft_ms": 450.0,
                 "tok_per_s": 80.0,
                 "route": "short_spec",
+                "metrics_source": "serve_log_flashrt",
             },
-            "bench": {"client_ttft_ms": 460.0},
+            "bench": {"client_ttft_ms": 460.0, "metrics_source": "serve_log_flashrt"},
         },
         {
             "round": 2,
@@ -53,8 +54,9 @@ def test_report_summarize_and_compare(tmp_path: Path) -> None:
                 "ttft_ms": 440.0,
                 "tok_per_s": 85.0,
                 "route": "short_spec",
+                "metrics_source": "serve_log_flashrt",
             },
-            "bench": {"client_ttft_ms": 445.0},
+            "bench": {"client_ttft_ms": 445.0, "metrics_source": "serve_log_flashrt"},
         },
         {
             "round": 3,
@@ -65,14 +67,17 @@ def test_report_summarize_and_compare(tmp_path: Path) -> None:
                 "ttft_ms": 445.0,
                 "tok_per_s": 82.5,
                 "route": "short_spec",
+                "metrics_source": "serve_log_flashrt",
             },
-            "bench": {"client_ttft_ms": 450.0},
+            "bench": {"client_ttft_ms": 450.0, "metrics_source": "serve_log_flashrt"},
         },
     ]
     _write_jsonl(flashcli_dir / "qwen36_short.metrics.jsonl", sample_rows)
     slower = json.loads(json.dumps(sample_rows))
     for row in slower:
         row["usage"]["tok_per_s"] = float(row["usage"]["tok_per_s"]) - 5.0
+        row["usage"]["metrics_source"] = "serve_log_flashrt"
+        row["bench"]["metrics_source"] = "serve_log_flashrt"
     _write_jsonl(flashrt_dir / "qwen36_short.metrics.jsonl", slower)
 
     out_dir = tmp_path / "out"
@@ -97,3 +102,37 @@ def test_report_summarize_and_compare(tmp_path: Path) -> None:
     fc = payload["backends"]["flashcli + FlashRT"]["cases"]["qwen36_short"]["metrics"]
     assert fc["decode_tok_per_s_best"] == 83.75
     assert "Comparison" in proc.stdout
+
+
+def test_report_omits_decode_without_engine_metrics(tmp_path: Path) -> None:
+    workdir = tmp_path / "flashcli"
+    workdir.mkdir()
+    (workdir / "manifest.json").write_text(
+        json.dumps({"rounds": 2, "skip_first": 1}), encoding="utf-8"
+    )
+    _write_jsonl(
+        workdir / "qwen36_short.metrics.jsonl",
+        [
+            {"round": 1, "wall_ms": 1000, "usage": {"prompt_tokens": 23, "completion_tokens": 64}, "bench": {}},
+            {
+                "round": 2,
+                "wall_ms": 1338,
+                "usage": {"prompt_tokens": 23, "completion_tokens": 64},
+                "bench": {"client_ttft_ms": 400.0},
+            },
+        ],
+    )
+    out_dir = tmp_path / "out"
+    subprocess.run(
+        [sys.executable, str(REPORT_PY), "--out", str(out_dir), "--flashcli", str(workdir)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    metrics = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))["backends"][
+        "flashcli + FlashRT"
+    ]["cases"]["qwen36_short"]["metrics"]
+    assert metrics["server_ttft_ms"] is None
+    assert metrics["client_ttft_ms"] == 400.0
+    assert metrics["ttft_ms"] == 400.0
+    assert metrics["decode_tok_per_s_best"] is None

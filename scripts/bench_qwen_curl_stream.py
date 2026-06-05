@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -22,7 +23,95 @@ def _parse_sse_line(line: str) -> dict[str, Any] | None:
     return json.loads(payload)
 
 
-def run_stream(url: str, body: dict[str, Any]) -> dict[str, Any]:
+def _merge_flashrt_into_usage(usage: dict[str, Any], flashrt: dict[str, Any]) -> None:
+    """Promote top-level ``flashrt`` timing into ``usage`` without overwriting tokens."""
+    for key in (
+        "prefill_ms",
+        "decode_ms",
+        "first_delta_ms",
+        "ttft_ms",
+        "decode_tok_per_s",
+        "e2e_tok_per_s",
+        "tok_per_s",
+        "route",
+        "cached_tokens",
+        "session_id",
+        "prefix_action",
+    ):
+        if usage.get(key) is None and flashrt.get(key) is not None:
+            usage[key] = flashrt[key]
+    if usage.get("ttft_ms") is None and usage.get("first_delta_ms") is not None:
+        usage["ttft_ms"] = usage["first_delta_ms"]
+
+
+def _server_ttft_ms(usage: dict[str, Any]) -> float | None:
+    """Engine TTFT: first token latency, not full prefill wall."""
+    for key in ("ttft_ms", "first_delta_ms"):
+        val = usage.get(key)
+        if val is not None:
+            return float(val)
+    return None
+
+
+def _apply_flashrt_http_stream_fallback(
+    usage: dict[str, Any],
+    bench: dict[str, Any],
+    *,
+    bench_arm: str,
+) -> None:
+    """FlashRT stream SSE omits engine decode stats; estimate from wall − TTFT."""
+    if bench_arm not in ("", "flashrt"):
+        return
+    if usage.get("decode_tok_per_s") is not None:
+        return
+    ct = usage.get("completion_tokens")
+    wall_ms = bench.get("wall_ms")
+    ttft_ms = bench.get("ttft_ms") or bench.get("client_ttft_ms")
+    if ct is None or wall_ms is None or ttft_ms is None:
+        return
+    decode_ms = max(1.0, float(wall_ms) - float(ttft_ms))
+    if decode_ms <= 0:
+        return
+    decode_tps = float(ct) * 1000.0 / decode_ms
+    usage["decode_ms"] = decode_ms
+    usage["decode_tok_per_s"] = decode_tps
+    usage["tok_per_s"] = decode_tps
+    usage["metrics_source"] = "http_wall_estimate"
+
+
+def _apply_vllm_http_stream_metrics(
+    usage: dict[str, Any],
+    bench: dict[str, Any],
+    *,
+    bench_arm: str,
+) -> None:
+    """vLLM does not emit FlashRT-style serve.log decode lines; use HTTP stream phase."""
+    if bench_arm != "vllm":
+        return
+    if usage.get("decode_tok_per_s") is not None:
+        return
+    ct = usage.get("completion_tokens")
+    wall_ms = bench.get("wall_ms")
+    client_ttft_ms = bench.get("client_ttft_ms")
+    if ct is None or wall_ms is None or client_ttft_ms is None:
+        return
+    decode_ms = max(1.0, float(wall_ms) - float(client_ttft_ms))
+    if decode_ms <= 0:
+        return
+    decode_tps = float(ct) * 1000.0 / decode_ms
+    usage["decode_ms"] = decode_ms
+    usage["decode_tok_per_s"] = decode_tps
+    usage["tok_per_s"] = decode_tps
+    usage["ttft_ms"] = float(client_ttft_ms)
+    usage["first_delta_ms"] = float(client_ttft_ms)
+    usage["metrics_source"] = "vllm_http_stream"
+    bench["server_ttft_ms"] = float(client_ttft_ms)
+    bench["ttft_ms"] = float(client_ttft_ms)
+    bench["ttft_source"] = "client"
+    bench["metrics_source"] = "vllm_http_stream"
+
+
+def run_stream(url: str, body: dict[str, Any], *, bench_arm: str = "") -> dict[str, Any]:
     data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(
         url,
@@ -46,17 +135,29 @@ def run_stream(url: str, body: dict[str, Any]) -> dict[str, Any]:
                 if chunk is None:
                     continue
                 chunks += 1
+                flashrt = chunk.get("flashrt")
+                if isinstance(flashrt, dict):
+                    _merge_flashrt_into_usage(usage, flashrt)
                 choice = (chunk.get("choices") or [{}])[0]
                 delta = choice.get("delta") or {}
-                if delta.get("content"):
+                content = delta.get("content")
+                # vLLM Qwen3.6 may mis-route answer into delta.reasoning when streaming
+                # (see vllm #40816); merge only when content is absent.
+                if not content:
+                    reasoning = delta.get("reasoning")
+                    if reasoning:
+                        content = reasoning
+                if content:
                     content_chunks += 1
                     if client_ttft_ms is None:
                         client_ttft_ms = (time.perf_counter() - t0) * 1000.0
-                    content_parts.append(str(delta["content"]))
+                    content_parts.append(str(content))
                 if choice.get("finish_reason"):
                     finish_reason = str(choice["finish_reason"])
                 if chunk.get("usage"):
                     usage = dict(chunk["usage"])
+                    if isinstance(flashrt, dict):
+                        _merge_flashrt_into_usage(usage, flashrt)
     except urllib.error.HTTPError as exc:
         err_body = exc.read().decode("utf-8", errors="replace")
         raise SystemExit(f"HTTP {exc.code}: {err_body}") from exc
@@ -65,6 +166,30 @@ def run_stream(url: str, body: dict[str, Any]) -> dict[str, Any]:
     if client_ttft_ms is None and content_parts:
         client_ttft_ms = wall_ms
 
+    server_ttft = _server_ttft_ms(usage)
+    if not content_parts and not usage.get("completion_tokens"):
+        raise SystemExit(
+            "stream returned no completion tokens (empty assistant message). "
+            "Check serve.log and that chat_template_kwargs.enable_thinking=false is set."
+        )
+    ct = usage.get("completion_tokens")
+    if ct is None and content_parts:
+        usage["completion_tokens"] = len(content_parts)
+
+    ttft_ms = server_ttft if server_ttft is not None else client_ttft_ms
+    ttft_source = "engine" if server_ttft is not None else "client"
+    bench_out = {
+        "stream": True,
+        "wall_ms": wall_ms,
+        "client_ttft_ms": client_ttft_ms,
+        "server_ttft_ms": server_ttft,
+        "ttft_ms": ttft_ms,
+        "ttft_source": ttft_source,
+        "sse_chunks": chunks,
+        "sse_content_chunks": content_chunks,
+    }
+    _apply_vllm_http_stream_metrics(usage, bench_out, bench_arm=bench_arm)
+    _apply_flashrt_http_stream_fallback(usage, bench_out, bench_arm=bench_arm)
     return {
         "id": "bench-stream",
         "object": "chat.completion",
@@ -79,13 +204,7 @@ def run_stream(url: str, body: dict[str, Any]) -> dict[str, Any]:
             }
         ],
         "usage": usage,
-        "bench": {
-            "stream": True,
-            "wall_ms": wall_ms,
-            "client_ttft_ms": client_ttft_ms,
-            "sse_chunks": chunks,
-            "sse_content_chunks": content_chunks,
-        },
+        "bench": bench_out,
     }
 
 
@@ -98,7 +217,8 @@ def main() -> int:
     body = json.load(args.payload)
     if not body.get("stream"):
         raise SystemExit("payload stream=false; use curl for non-streaming")
-    out = run_stream(args.url, body)
+    bench_arm = os.environ.get("BENCH_ARM", "").strip().lower()
+    out = run_stream(args.url, body, bench_arm=bench_arm)
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False)
         f.write("\n")
@@ -109,7 +229,9 @@ def main() -> int:
             {
                 "wall_ms": bench.get("wall_ms"),
                 "client_ttft_ms": bench.get("client_ttft_ms"),
-                "server_ttft_ms": usage.get("ttft_ms") or usage.get("prefill_ms"),
+                "ttft_ms": bench.get("ttft_ms"),
+                "ttft_source": bench.get("ttft_source"),
+                "server_ttft_ms": bench.get("server_ttft_ms"),
                 "tok_per_s": usage.get("tok_per_s")
                 or usage.get("decode_tok_per_s")
                 or usage.get("e2e_tok_per_s"),

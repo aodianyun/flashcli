@@ -21,7 +21,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FLASHCLI_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MAKE_PAYLOAD="${SCRIPT_DIR}/bench_qwen_make_payload.py"
+PAYLOAD_META="${SCRIPT_DIR}/bench_qwen_payload_meta.py"
 STREAM_ONCE="${SCRIPT_DIR}/bench_qwen_curl_stream.py"
+SERVE_METRICS_PY="${SCRIPT_DIR}/bench_qwen36_serve_metrics.py"
 
 HOST="${HOST:-127.0.0.1}"
 QWEN3_PORT="${QWEN3_PORT:-8000}"
@@ -54,6 +56,11 @@ LONG_PROMPT_STYLE="${LONG_PROMPT_STYLE:-repeat}"
 BENCH_PROFILE="${BENCH_PROFILE:-}"
 BENCH_STREAM="${BENCH_STREAM:-1}"
 WORKDIR="${WORKDIR:-/tmp/flashcli-bench-qwen-$$}"
+SERVE_LOG_PATH="${SERVE_LOG_PATH:-${QWEN36_SERVE_LOG:-}}"
+SERVE_LOG_BACKEND="${SERVE_LOG_BACKEND:-auto}"
+BENCH_ISOLATE_ROUNDS="${BENCH_ISOLATE_ROUNDS:-0}"
+WRITE_REPORT=0
+REPORT_PY="${SCRIPT_DIR}/bench_qwen36_report.py"
 
 usage() {
   cat <<EOF
@@ -78,22 +85,80 @@ Options:
   --skip-first K          Drop first K rounds before averaging (default: 1 if rounds>1)
   --long-prompt-style S   repeat | flashrt | doc (flashrt=FlashRT doc seed)
   --profile NAME          comparable (flashrt long + env hints) | stress (repeat fill)
+  --no-isolate-rounds     Reuse FlashRT agent session across rounds (default for comparable long)
+  --isolate-rounds        Per-round cache_salt (no cross-round decode graph warmup)
   --stream                Use stream=true payloads (default)
   --no-stream             Use stream=false (legacy non-streaming)
+  --serve-log PATH        flashcli serve.log (engine TTFT/decode → metrics + report)
+  --write-report          Write ${WORKDIR}/REPORT.md after bench (needs serve.log)
   -h, --help
 
 Env: HOST, QWEN3_PORT, QWEN36_PORT, CKPT_QWEN3, CKPT_QWEN36, SHORT_PROMPT,
      QWEN3_MAX_Q_SEQ, QWEN36_MAX_SEQ, LONG_PROMPT_STYLE, BENCH_PROFILE,
-     BENCH_ROUNDS, BENCH_SKIP_FIRST, BENCH_STREAM
+     BENCH_ROUNDS, BENCH_SKIP_FIRST, BENCH_STREAM,
+     SERVE_LOG_PATH (or QWEN36_SERVE_LOG) — flashcli serve log for engine TTFT/decode
 
 Stream: qwen3 has true token SSE (client_ttft_ms = first content chunk).
-qwen36 stream is pseudo (one chunk after full generate); use server ttft_ms
-until FlashRT adds real streaming.
+qwen36: engine TTFT/decode from FlashRT serve.log (stream | lines) or SSE usage;
+client_ttft_ms is HTTP first chunk (diagnostic only, not used for decode tok/s).
 EOF
 }
 
 log() { printf '[bench-qwen] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
+
+payload_case_tokens() {
+  local stem="$1"
+  local manifest="${BENCH_PAYLOAD_MANIFEST:-}"
+  [[ -n "${manifest}" && -f "${manifest}" ]] || return 0
+  jq -r --arg s "${stem}" '
+    .cases[$s] // empty
+    | if . then
+        "ctx=\(.rendered_prompt_tokens // "?") out_req=\(.max_output_tokens // "?")"
+      else empty end
+  ' "${manifest}" 2>/dev/null || true
+}
+
+payload_case_label() {
+  local stem="$1" label="$2"
+  local tok
+  tok="$(payload_case_tokens "${stem}")"
+  if [[ -n "${tok}" ]]; then
+    echo "${label} (${tok})"
+  else
+    echo "${label}"
+  fi
+}
+
+# Find a regular file receiving flashcli serve stderr/stdout (tee target).
+discover_serve_log_path() {
+  local pid path fd cand
+  if [[ -n "${SERVE_LOG_PATH:-}" && -f "${SERVE_LOG_PATH}" ]]; then
+    printf '%s' "${SERVE_LOG_PATH}"
+    return 0
+  fi
+  for cand in \
+    "${QWEN36_SERVE_LOG:-}" \
+    "${FLASHCLI_SERVE_LOG:-}" \
+    "${HOME}/.flashcli/serve.log" \
+    /tmp/qwen36-serve.log \
+    /tmp/flashcli-serve.log; do
+    [[ -n "${cand}" && -f "${cand}" ]] || continue
+    printf '%s' "${cand}"
+    return 0
+  done
+  if command -v pgrep >/dev/null 2>&1; then
+    for pid in $(pgrep -f 'flashcli.*serve' 2>/dev/null || true); do
+      for fd in 1 2; do
+        path="$(readlink -f "/proc/${pid}/fd/${fd}" 2>/dev/null || true)"
+        [[ -n "${path}" && -f "${path}" && "${path}" != /dev/* ]] || continue
+        printf '%s' "${path}"
+        return 0
+      done
+    done
+  fi
+  return 1
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -127,6 +192,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --stream) BENCH_STREAM=1; shift ;;
     --no-stream) BENCH_STREAM=0; shift ;;
+    --no-isolate-rounds) BENCH_ISOLATE_ROUNDS=0; shift ;;
+    --isolate-rounds) BENCH_ISOLATE_ROUNDS=1; shift ;;
+    --serve-log) SERVE_LOG_PATH="$2"; shift 2 ;;
+    --write-report) WRITE_REPORT=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown option: $1" ;;
   esac
@@ -158,6 +227,21 @@ if [[ "${SKIP_FIRST}" -ge "${ROUNDS}" ]]; then
   die "--skip-first (${SKIP_FIRST}) must be < --rounds (${ROUNDS})"
 fi
 _SCORED_ROUNDS=$((ROUNDS - SKIP_FIRST))
+
+mkdir -p "${WORKDIR}"
+if [[ -z "${SERVE_LOG_PATH}" && -f "${WORKDIR}/serve.log" ]]; then
+  SERVE_LOG_PATH="${WORKDIR}/serve.log"
+fi
+if [[ -z "${SERVE_LOG_PATH}" ]]; then
+  _auto_serve_log="$(discover_serve_log_path 2>/dev/null || true)"
+  if [[ -n "${_auto_serve_log}" ]]; then
+    SERVE_LOG_PATH="${_auto_serve_log}"
+    log "auto-detected SERVE_LOG_PATH=${SERVE_LOG_PATH}"
+  fi
+fi
+if [[ "${WRITE_REPORT}" -eq 1 && -z "${SERVE_LOG_PATH}" ]]; then
+  die "--write-report requires serve.log (tee serve stderr, --serve-log, or auto-detect failed)"
+fi
 
 # After CLI flags: cap qwen3 long prompt to fit assumed serve --max-q-seq.
 _qwen3_cap_max_q_seq=""
@@ -207,8 +291,10 @@ make_short_payload() {
       messages: [{role: "user", content: $content}],
       max_tokens: $max_tokens,
       temperature: 0,
+      top_p: 1,
       stream: $stream
-    }' >"${out}"
+    }
+    + (if $stream then {stream_options: {include_usage: true}} else {} end)' >"${out}"
 }
 
 make_long_payload() {
@@ -238,27 +324,121 @@ make_long_payload() {
 
 print_qwen36_hints() {
   [[ "${SKIP_QWEN36}" -eq 0 ]] || return 0
-  log "qwen36 hints (for decode comparable to FlashRT docs on 5090/PRO 5000):"
-  log "  export FLASHRT_QWEN36_LONG_KV_CACHE=fp8"
-  log "  export FLASHRT_QWEN36_LONG_CTX_ROUTE_MIN_SEQ=512"
-  log "  long prompt: --profile comparable  OR  --long-prompt-style flashrt"
+  # FlashRT serve tuning only; vLLM/PyTorch baseline ignores these env vars.
+  case "${BENCH_ARM:-flashrt}" in
+    vllm|hf|pytorch*) return 0 ;;
+  esac
+  if [[ "${BENCH_PROFILE}" == "comparable" ]]; then
+    return 0
+  fi
+  log "qwen36 hints:"
+  log "  Flash-only long ctx: bash scripts/bench_qwen_curl.sh --qwen36-only --profile comparable --qwen36-long-tokens 262144"
+  log "  Multi-ctx HTTP bench: scripts/bench_qwen36_ctx_http.sh (see scripts/README.bench_qwen36.md)"
+  log "  Legacy dual-arm: scripts/bench_qwen36_compare.sh (deprecated)"
+  log "  or: --profile comparable  /  --long-prompt-style flashrt"
   log "  256K: QWEN36_MAX_SEQ=<serve --max-seq>  (repeat fill lowers MTP vs flashrt seed)"
+  if [[ -n "${SERVE_LOG_PATH:-}" ]]; then
+    log "  optional engine metrics: SERVE_LOG_PATH=${SERVE_LOG_PATH}"
+  fi
 }
 
 # One HTTP request; append one JSON line to metrics jsonl. Prints brief round log.
+serve_log_offset() {
+  local log_path="$1"
+  if [[ -f "${log_path}" ]]; then
+    wc -c <"${log_path}" | tr -d ' '
+  else
+    echo 0
+  fi
+}
+
+merge_serve_log_metrics() {
+  local resp="$1" log_path="$2" offset="$3"
+  local backend="${4:-auto}"
+  [[ -f "${log_path}" ]] || return 0
+  local metrics
+  metrics="$(python3 "${SERVE_METRICS_PY}" --log "${log_path}" --offset "${offset}" --backend "${backend}" 2>/dev/null || true)"
+  [[ -n "${metrics}" && "${metrics}" != "null" ]] || return 0
+  jq --argjson m "${metrics}" '
+    .usage = ((.usage // {}) + ($m | del(.metrics_source)))
+    | .bench = ((.bench // {}) + {
+        server_ttft_ms: ($m.ttft_ms // $m.first_delta_ms),
+        ttft_ms: ($m.ttft_ms // $m.first_delta_ms),
+        ttft_source: "engine",
+        metrics_source: $m.metrics_source
+      })
+  ' "${resp}" >"${resp}.metrics.tmp" && mv "${resp}.metrics.tmp" "${resp}"
+}
+
+rehydrate_workdir_from_serve_log() {
+  local wd="$1" log="$2" backend="${3:-auto}"
+  [[ -f "${log}" ]] || return 0
+  python3 "${SERVE_METRICS_PY}" --rehydrate-workdir "${wd}" --log "${log}" --backend "${backend}" \
+    >/dev/null 2>&1 || true
+}
+
+write_bench_manifest() {
+  jq -n \
+    --argjson rounds "${ROUNDS}" \
+    --argjson skip_first "${SKIP_FIRST}" \
+    --arg profile "${BENCH_PROFILE:-}" \
+    --arg serve_log "${SERVE_LOG_PATH:-}" \
+    --arg bench_arm "${BENCH_ARM:-flashrt}" \
+    --arg host "${HOST}" \
+    --argjson qwen36_port "${QWEN36_PORT}" \
+    '{
+      rounds: $rounds,
+      skip_first: $skip_first,
+      profile: (if $profile != "" then $profile else null end),
+      serve_log_path: (if $serve_log != "" then $serve_log else null end),
+      bench_arm: $bench_arm,
+      host: $host,
+      qwen36_port: $qwen36_port
+    }' >"${WORKDIR}/manifest.json"
+}
+
+write_curl_report() {
+  local report_py="${SCRIPT_DIR}/bench_qwen36_report.py"
+  [[ -f "${report_py}" ]] || return 0
+  rehydrate_workdir_from_serve_log "${WORKDIR}" "${SERVE_LOG_PATH:-${WORKDIR}/serve.log}" "${SERVE_LOG_BACKEND:-auto}"
+  local backend_label="FlashRT HTTP bench"
+  case "${BENCH_ARM:-flashrt}" in
+    vllm) backend_label="vLLM HTTP bench" ;;
+    hf|pytorch*) backend_label="PyTorch-HF HTTP bench" ;;
+  esac
+  log "Writing ${WORKDIR}/REPORT.md (engine TTFT from serve.log when available)"
+  python3 "${report_py}" --out "${WORKDIR}" --backend "${backend_label}" "${WORKDIR}" \
+    >"${WORKDIR}/report.stdout.log" 2>&1 \
+    || log "WARN: report generation failed (see ${WORKDIR}/report.stdout.log)"
+}
+
+flashrt_delete_session() {
+  local port="$1" session_id="$2"
+  [[ -n "${session_id}" && "${session_id}" != "null" ]] || return 0
+  curl -sf -X DELETE "http://${HOST}:${port}/v1/sessions/${session_id}" >/dev/null 2>&1 \
+    || log "  WARN: DELETE /v1/sessions/${session_id} failed (non-fatal)"
+}
+
 run_curl_once() {
   local label="$1" port="$2" payload="$3" resp="$4" round="$5" jsonl="$6"
-  local wall_ms tag="" use_stream=false
+  local wall_ms tag="" use_stream=false log_offset=0 round_payload="${payload}"
   if [[ "${round}" -le "${SKIP_FIRST}" ]]; then
     tag=" (warmup, excluded)"
   fi
-  if [[ "$(jq -r '.stream // false' "${payload}")" == "true" ]]; then
+  if [[ "${BENCH_ISOLATE_ROUNDS}" -eq 1 && "${port}" == "${QWEN36_PORT}" && "${BENCH_ARM:-flashrt}" == "flashrt" ]]; then
+    round_payload="${resp}.payload.json"
+    jq --arg salt "bench-r${round}" '. + {cache_salt: $salt}' "${payload}" >"${round_payload}"
+  fi
+  if [[ "$(jq -r '.stream // false' "${round_payload}")" == "true" ]]; then
     use_stream=true
+  fi
+  if [[ "${use_stream}" == "true" && -n "${SERVE_LOG_PATH:-}" && "${port}" == "${QWEN36_PORT}" ]]; then
+    log_offset="$(serve_log_offset "${SERVE_LOG_PATH}")"
   fi
   if [[ "${use_stream}" == "true" ]]; then
     if ! python3 "${STREAM_ONCE}" \
       --url "http://${HOST}:${port}/v1/chat/completions" \
-      --payload "${payload}" \
+      --payload "${round_payload}" \
       -o "${resp}" 2>"${resp}.stderr"; then
       if [[ -s "${resp}.stderr" ]]; then
         cat "${resp}.stderr" >&2
@@ -273,7 +453,7 @@ run_curl_once() {
     t0="$(python3 -c 'import time; print(int(time.time()*1000))')"
     if ! curl -sf "http://${HOST}:${port}/v1/chat/completions" \
       -H "Content-Type: application/json" \
-      -d @"${payload}" \
+      -d @"${round_payload}" \
       -o "${resp}"; then
       if [[ -s "${resp}" ]]; then
         log "${label} round ${round}/${ROUNDS}: server response:"
@@ -293,6 +473,18 @@ run_curl_once() {
   fi
   if [[ "${use_stream}" == "true" ]]; then
     wall_ms="$(jq -r '.bench.wall_ms // 0' "${resp}")"
+    if [[ -n "${SERVE_LOG_PATH:-}" && "${port}" == "${QWEN36_PORT}" ]]; then
+      merge_serve_log_metrics "${resp}" "${SERVE_LOG_PATH}" "${log_offset}" "${SERVE_LOG_BACKEND:-auto}"
+    fi
+  fi
+  if jq -e '.bench.stream == true' "${resp}" >/dev/null 2>&1; then
+    local ct preview
+    ct="$(jq -r '.usage.completion_tokens // 0' "${resp}" 2>/dev/null)"
+    preview="$(jq -r '.choices[0].message.content // ""' "${resp}" 2>/dev/null | head -c 80)"
+    if [[ "${ct}" == "0" || -z "${preview}" ]]; then
+      log "  WARN round ${round}: 0 completion tokens or empty text — check ${resp} and serve.log"
+      jq -r '.error // empty' "${resp}" 2>/dev/null | head -5 >&2 || true
+    fi
   fi
   jq -cn \
     --argjson round "${round}" \
@@ -300,14 +492,37 @@ run_curl_once() {
     --argjson usage "$(jq '.usage // {}' "${resp}")" \
     --argjson bench "$(jq '.bench // {}' "${resp}")" \
     '{round: $round, wall_ms: $wall_ms, usage: $usage, bench: $bench}' >>"${jsonl}"
-  local tps ttft client_ttft
-  tps="$(jq -r '.usage.tok_per_s // .usage.decode_tok_per_s // .usage.e2e_tok_per_s // "n/a"' "${resp}" 2>/dev/null)"
-  ttft="$(jq -r '.usage.ttft_ms // .usage.prefill_ms // "n/a"' "${resp}" 2>/dev/null)"
-  client_ttft="$(jq -r '.bench.client_ttft_ms // empty' "${resp}" 2>/dev/null)"
-  if [[ -n "${client_ttft}" ]]; then
-    log "  round ${round}/${ROUNDS}${tag}: curl_wall=${wall_ms}ms client_ttft_ms=${client_ttft} server_ttft_ms=${ttft} tok_per_s=${tps}"
+  local tps client_ttft engine_ttft prefill_ms route msrc prompt_tok completion_tok
+  tps="$(jq -r '.usage.decode_tok_per_s // .usage.tok_per_s // "n/a"' "${resp}" 2>/dev/null)"
+  client_ttft="$(jq -r '.bench.client_ttft_ms // "n/a"' "${resp}" 2>/dev/null)"
+  engine_ttft="$(jq -r '.bench.server_ttft_ms // .usage.ttft_ms // empty' "${resp}" 2>/dev/null)"
+  prefill_ms="$(jq -r '.usage.prefill_ms // empty' "${resp}" 2>/dev/null)"
+  route="$(jq -r '.usage.route // empty' "${resp}" 2>/dev/null)"
+  msrc="$(jq -r '.bench.metrics_source // empty' "${resp}" 2>/dev/null)"
+  prompt_tok="$(jq -r '.usage.prompt_tokens // "n/a"' "${resp}" 2>/dev/null)"
+  completion_tok="$(jq -r '.usage.completion_tokens // "n/a"' "${resp}" 2>/dev/null)"
+  local tok_part="ctx=${prompt_tok} out=${completion_tok}"
+  if [[ -n "${msrc}" && -n "${engine_ttft}" ]]; then
+    log "  round ${round}/${ROUNDS}${tag}: ${tok_part} wall=${wall_ms}ms prefill=${prefill_ms:-n/a} engine_ttft=${engine_ttft} client_ttft=${client_ttft} decode=${tps} tok/s${route:+ route=${route}} src=${msrc}"
+  elif [[ -n "${engine_ttft}" ]]; then
+    log "  round ${round}/${ROUNDS}${tag}: ${tok_part} wall=${wall_ms}ms prefill=${prefill_ms:-n/a} engine_ttft=${engine_ttft} client_ttft=${client_ttft} decode=${tps} tok/s${route:+ route=${route}}"
   else
-    log "  round ${round}/${ROUNDS}${tag}: curl_wall=${wall_ms}ms server_ttft_ms=${ttft} tok_per_s=${tps}"
+    log "  round ${round}/${ROUNDS}${tag}: ${tok_part} wall=${wall_ms}ms client_ttft=${client_ttft} decode=${tps} tok/s${route:+ route=${route}}"
+  fi
+  if [[ "${port}" == "${QWEN36_PORT}" && "${tps}" == "n/a" ]]; then
+    case "${BENCH_ARM:-flashrt}" in
+      vllm)
+        log "  WARN: no vLLM decode tok/s — need completion_tokens in final SSE usage (stream_options.include_usage=true)"
+        ;;
+      *)
+        log "  WARN: no engine decode tok/s — tee serve stderr to a log and set SERVE_LOG_PATH (FlashRT stream | lines)"
+        ;;
+    esac
+  fi
+  if [[ "${BENCH_ISOLATE_ROUNDS}" -eq 0 && "${port}" == "${QWEN36_PORT}" && "${BENCH_ARM:-flashrt}" == "flashrt" ]]; then
+    local sid
+    sid="$(jq -r '.usage.session_id // empty' "${resp}" 2>/dev/null)"
+    flashrt_delete_session "${port}" "${sid}"
   fi
 }
 
@@ -353,14 +568,21 @@ def mean_nested(key, nested="bench"):
             vals.append(float(v))
     return sum(vals) / len(vals) if vals else None
 
-def mean_ttft_ms():
-    """Server-side ttft_ms (engine); non-stream qwen36 uses prefill_ms."""
+def mean_ttft_ms(engine=True):
+    """Engine TTFT from serve.log merge or usage; client only if engine missing."""
     vals = []
     for r in samples:
-        u = r.get("usage", {})
-        v = u.get("ttft_ms")
-        if v is None:
-            v = u.get("prefill_ms")
+        b = r.get("bench") or {}
+        u = r.get("usage") or {}
+        v = None
+        if engine:
+            v = b.get("server_ttft_ms")
+            if v is None and (b.get("metrics_source") or u.get("metrics_source")):
+                v = u.get("ttft_ms") or u.get("first_delta_ms")
+            if v is None:
+                v = u.get("ttft_ms") or u.get("first_delta_ms")
+        if v is None and not engine:
+            v = b.get("client_ttft_ms")
         if v is not None:
             vals.append(float(v))
     return sum(vals) / len(vals) if vals else None
@@ -370,7 +592,8 @@ def fmt(key, nested="usage", digits=1):
     if m is None:
         return None
     if key in ("prompt_tokens", "completion_tokens"):
-        return f"{key}={int(round(m))}"
+        label = "ctx_tok" if key == "prompt_tokens" else "out_tok"
+        return f"{label}={int(round(m))}"
     if nested == "":
         return f"{key}={m:.0f}"
     return f"{key}={m:.{digits}f}"
@@ -379,9 +602,12 @@ parts = []
 client_ttft_m = mean_nested("client_ttft_ms", "bench")
 if client_ttft_m is not None:
     parts.append(f"client_ttft_ms={client_ttft_m:.1f}")
-ttft_m = mean_ttft_ms()
-if ttft_m is not None:
-    parts.append(f"server_ttft_ms={ttft_m:.1f}")
+engine_ttft_m = mean_ttft_ms(engine=True)
+if engine_ttft_m is not None:
+    parts.append(f"engine_ttft_ms={engine_ttft_m:.1f}")
+prefill_m = mean("prefill_ms", "usage")
+if prefill_m is not None:
+    parts.append(f"prefill_ms={prefill_m:.1f}")
 for k in (
     "prompt_tokens",
     "completion_tokens",
@@ -393,8 +619,14 @@ for k in (
     "e2e_tok_per_s",
 ):
     s = fmt(k)
-    if s:
+    if s and k not in ("prompt_tokens", "completion_tokens"):
         parts.append(s)
+ctx_s = fmt("prompt_tokens")
+out_s = fmt("completion_tokens")
+if ctx_s:
+    parts.insert(0, ctx_s)
+if out_s:
+    parts.insert(1 if ctx_s else 0, out_s)
 wall = fmt("wall_ms", nested="", digits=0)
 if wall:
     parts.insert(0, wall.replace("wall_ms=", "curl_wall_ms_mean="))
@@ -419,25 +651,48 @@ PY
 run_bench_case() {
   local label="$1" port="$2" payload="$3" stem="$4"
   local jsonl="${WORKDIR}/${stem}.metrics.jsonl"
-  local r resp
+  local r resp case_label
+  case_label="$(payload_case_label "${stem}" "${label}")"
+  log "━━ ${case_label} ━━ rounds=${ROUNDS} skip_first=${SKIP_FIRST}"
   : >"${jsonl}"
   for ((r = 1; r <= ROUNDS; r++)); do
     resp="${WORKDIR}/${stem}.r${r}.out.json"
-    run_curl_once "${label}" "${port}" "${payload}" "${resp}" "${r}" "${jsonl}"
+    run_curl_once "${case_label}" "${port}" "${payload}" "${resp}" "${r}" "${jsonl}"
   done
-  summarize_rounds "${label}" "${jsonl}" "${WORKDIR}/${stem}.r${ROUNDS}.out.json"
+  summarize_rounds "${case_label}" "${jsonl}" "${WORKDIR}/${stem}.r${ROUNDS}.out.json"
 }
 
-log "workdir=${WORKDIR}  rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${_SCORED_ROUNDS} stream=${BENCH_STREAM} long_prompt_style=${LONG_PROMPT_STYLE} profile=${BENCH_PROFILE:-none}"
+log "workdir=${WORKDIR}  rounds=${ROUNDS} skip_first=${SKIP_FIRST} scored=${_SCORED_ROUNDS} stream=${BENCH_STREAM} long_prompt_style=${LONG_PROMPT_STYLE} profile=${BENCH_PROFILE:-none} isolate_rounds=${BENCH_ISOLATE_ROUNDS}"
 if [[ "${BENCH_STREAM}" -eq 1 ]]; then
-  log "stream=true: qwen3 client_ttft_ms is first SSE content; qwen36 is pseudo-stream (see server_ttft_ms)"
+  case "${BENCH_ARM:-flashrt}" in
+    vllm)
+      log "stream=true: vLLM decode/TTFT from HTTP stream phase (first content chunk → end; src=vllm_http_stream)"
+      ;;
+    *)
+      if [[ -n "${SERVE_LOG_PATH:-}" ]]; then
+        log "stream=true: engine TTFT/decode from serve.log; client_ttft=HTTP first chunk (diagnostic)"
+      else
+        log "stream=true: set SERVE_LOG_PATH=<serve.log> for engine decode tok/s (FlashRT stream | lines)"
+      fi
+      ;;
+  esac
 fi
 print_qwen36_hints
 if [[ "${SKIP_QWEN3}" -eq 0 ]]; then
   log "qwen3 → http://${HOST}:${QWEN3_PORT}  ckpt=${CKPT_QWEN3}"
 fi
 if [[ "${SKIP_QWEN36}" -eq 0 ]]; then
-  log "qwen36 → http://${HOST}:${QWEN36_PORT}  ckpt=${CKPT_QWEN36}"
+  case "${BENCH_ARM:-flashrt}" in
+    vllm)
+      log "HTTP bench → http://${HOST}:${QWEN36_PORT}  backend=vLLM  weights=${CKPT_QWEN36}"
+      ;;
+    hf|pytorch*)
+      log "HTTP bench → http://${HOST}:${QWEN36_PORT}  backend=PyTorch-HF  weights=${CKPT_QWEN36}"
+      ;;
+    *)
+      log "HTTP bench → http://${HOST}:${QWEN36_PORT}  backend=FlashRT  weights=${CKPT_QWEN36}"
+      ;;
+  esac
 fi
 
 if [[ "${SKIP_QWEN3}" -eq 0 ]]; then
@@ -494,4 +749,19 @@ if [[ "${SKIP_QWEN36}" -eq 0 && "${SKIP_QWEN36_LONG}" -eq 0 ]]; then
     "${WORKDIR}/qwen36_long.json" "qwen36_long"
 fi
 
+write_bench_manifest
+if [[ -n "${SERVE_LOG_PATH:-}" && -f "${SERVE_LOG_PATH}" ]]; then
+  if [[ "${SERVE_LOG_PATH}" != "${WORKDIR}/serve.log" ]]; then
+    cp -f "${SERVE_LOG_PATH}" "${WORKDIR}/serve.log" 2>/dev/null \
+      || ln -sf "$(realpath "${SERVE_LOG_PATH}" 2>/dev/null || echo "${SERVE_LOG_PATH}")" "${WORKDIR}/serve.log" 2>/dev/null \
+      || true
+  fi
+  rehydrate_workdir_from_serve_log "${WORKDIR}" "${SERVE_LOG_PATH}" "${SERVE_LOG_BACKEND:-auto}"
+fi
+if [[ "${WRITE_REPORT}" -eq 1 ]]; then
+  write_curl_report
+fi
 log "Done. Payloads and responses in ${WORKDIR}"
+if [[ -f "${WORKDIR}/REPORT.md" ]]; then
+  log "Report: ${WORKDIR}/REPORT.md"
+fi

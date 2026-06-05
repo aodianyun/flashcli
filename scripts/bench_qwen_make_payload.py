@@ -233,6 +233,12 @@ def main() -> int:
         default=True,
         help="Set stream on chat/completions JSON (default: true)",
     )
+    p.add_argument(
+        "--meta-output",
+        type=Path,
+        default=None,
+        help="Write token metadata JSON (context + max output) alongside payload",
+    )
     args = p.parse_args()
 
     ckpt = args.checkpoint.expanduser().resolve()
@@ -249,25 +255,37 @@ def main() -> int:
     tok = AutoTokenizer.from_pretrained(str(ckpt), trust_remote_code=True)
     seed = resolve_long_prompt_seed(args.long_prompt_style, args.seed)
     max_seq = int(args.max_seq or 0)
+    max_out = int(args.max_tokens)
+    slack = int(args.seq_slack)
+    target = int(args.target_prompt_tokens)
     if max_seq > 0:
-        content, actual, rendered = fit_user_prompt_to_budget(
-            tok,
-            args.target_prompt_tokens,
-            max_seq,
-            args.max_tokens,
-            seed,
-            seq_slack=int(args.seq_slack),
-        )
+        budget = max_seq - max_out - slack
+        # Short ctx: hit target token count. Long ctx (256K): fill toward budget.
+        if target > 0 and target < budget - 256:
+            content, actual = build_prompt_text(tok, target, seed)
+            rendered = rendered_prompt_tokens(tok, content)
+            if rendered + max_out + slack > max_seq:
+                content, actual, rendered = fit_user_prompt_to_budget(
+                    tok, target, max_seq, max_out, seed, seq_slack=slack,
+                )
+        else:
+            content, actual, rendered = fit_user_prompt_to_budget(
+                tok, target, max_seq, max_out, seed, seq_slack=slack,
+            )
     else:
-        content, actual = build_prompt_text(tok, args.target_prompt_tokens, seed)
+        content, actual = build_prompt_text(tok, target, seed)
         rendered = rendered_prompt_tokens(tok, content)
     payload = {
         "model": args.model,
         "messages": [{"role": "user", "content": content}],
         "max_tokens": int(args.max_tokens),
         "temperature": float(args.temperature),
+        "top_p": 1.0,
         "stream": bool(args.stream),
+        "chat_template_kwargs": {"enable_thinking": False},
     }
+    if args.stream:
+        payload["stream_options"] = {"include_usage": True}
     meta = {
         "long_prompt_style": args.long_prompt_style,
         "target_prompt_tokens": args.target_prompt_tokens,
@@ -284,6 +302,23 @@ def main() -> int:
         json.dumps(payload, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+    if args.meta_output is not None:
+        case_meta = {
+            "case": args.output.stem,
+            "payload_file": args.output.name,
+            "max_output_tokens": meta["max_tokens"],
+            "user_tokens": meta["actual_prompt_tokens"],
+            "rendered_prompt_tokens": meta["rendered_prompt_tokens"],
+            "total_tokens_budget": meta["total_tokens_budget"],
+            "target_user_tokens": meta["target_prompt_tokens"],
+            "max_seq": meta["max_seq"],
+            "seq_slack": meta["seq_slack"],
+            "long_prompt_style": meta["long_prompt_style"],
+        }
+        args.meta_output.write_text(
+            json.dumps(case_meta, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
     print(json.dumps(meta, ensure_ascii=False), file=sys.stderr)
     return 0
 

@@ -69,17 +69,16 @@ Full history: `git log`. Release checklist: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### 1. Install
 
-**Global network**
+**Auto (recommended)**
+
+```bash
+curl -fsSL https://flashhub.top/flashcli_install/auto_install.sh | sh
+```
+
+**Github**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
-```
-
-**Restricted network** (Gitee script + mirrors)
-
-```bash
-curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
-export HF_ENDPOINT=https://hf-mirror.com   # before pull/run
 ```
 
 **From source (developers)**

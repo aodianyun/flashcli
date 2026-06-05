@@ -6,6 +6,7 @@ import json
 from typing import Any, Iterator
 
 from flashcli.engines.base import ChatChunk, ChatMessage, ChatRequest, ChatResult
+from flashcli.serve.request_log import _parse_bool_field
 
 # Standard OpenAI chat/completions body keys (everything else → ChatRequest.extras).
 _CHAT_COMPLETIONS_KNOWN: frozenset[str] = frozenset(
@@ -71,7 +72,7 @@ def parse_chat_completions_body(body: dict[str, Any]) -> ChatRequest:
         temperature=float(body.get("temperature", 0.0)),
         top_p=float(body.get("top_p", 1.0)),
         top_k=int(body.get("top_k", 0)),
-        stream=bool(body.get("stream", False)),
+        stream=_parse_bool_field(body.get("stream")) or False,
         tools=body.get("tools") if isinstance(body.get("tools"), list) else None,
         stop=stop if isinstance(stop, list) else None,
         seed=body.get("seed") if body.get("seed") is not None else None,
@@ -90,6 +91,8 @@ def chat_result_to_completion_payload(
         "role": "assistant",
         "content": result.content,
     }
+    if result.reasoning_content:
+        msg["reasoning_content"] = result.reasoning_content
     if result.tool_calls:
         msg["tool_calls"] = result.tool_calls
     payload: dict[str, Any] = {
@@ -136,6 +139,8 @@ def sse_lines_to_chat_chunks(lines: Iterator[str]) -> Iterator[ChatChunk]:
         usage = obj.get("usage")
         if delta.get("role"):
             continue
+        if delta.get("reasoning_content"):
+            yield ChatChunk(reasoning_delta=str(delta["reasoning_content"]))
         if "content" in delta and delta["content"]:
             yield ChatChunk(content_delta=str(delta["content"]))
         if delta.get("tool_calls"):

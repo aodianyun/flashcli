@@ -168,3 +168,10 @@ async def iter_on_inference_loop(
     finally:
         if not produce_fut.done():
             produce_fut.cancel()
+        # Wait for producer teardown (closes sync GPU stream on client disconnect).
+        try:
+            await asyncio.wrap_future(produce_fut)
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            pass

@@ -18,9 +18,9 @@ from flashcli.bundle.native_naming import (
     NativeEnvironmentNotSupportedError,
     bundle_native_lib_dir,
     bundle_uses_native_matrix,
+    lib_dir_has_tagged_native_artifacts,
     logical_native_module_name,
     parse_native_tag_from_filename,
-    pick_native_so,
     resolve_native_modules_for_host,
     select_native_module_for_host,
     select_native_module_ranked,
@@ -95,10 +95,13 @@ def _allowed_sm(bundle: BundleManifest) -> list[str] | None:
 
 
 def _native_matrix_enabled(bundle: BundleManifest) -> bool:
+    lib = bundle_native_lib_dir(bundle.bundle_root, bundle_native_lib_rel(bundle))
+    if not lib.is_dir() or not any(lib.glob("*.so")):
+        return False
     if bundle_uses_native_matrix(bundle.raw):
-        lib = bundle_native_lib_dir(bundle.bundle_root, bundle_native_lib_rel(bundle))
-        return lib.is_dir() and any(lib.glob("*.so"))
-    return False
+        return True
+    # Shipped zips may include multi-ABI lib/ without native_layout in manifest.
+    return lib_dir_has_tagged_native_artifacts(lib)
 
 
 def _resolve_matrix_paths_loadable(
@@ -277,13 +280,14 @@ def probe_native_python_abi(bundle: BundleManifest, *, gpu: GpuInfo | None = Non
 
     if not bundle_modules(bundle):
         root = bundle.bundle_root.resolve()
-        tag = _bundle_native_artifact_tag(bundle)
         lib_rel = bundle_native_lib_rel(bundle)
-        for base in ("flash_rt_kernels", "flash_rt_fa2"):
-            path = pick_native_so(
-                root, base, artifact_tag=tag, native_lib_rel=lib_rel
-            )
-            if path is not None:
+        lib = bundle_native_lib_dir(root, lib_rel)
+        if lib_dir_has_tagged_native_artifacts(lib):
+            allowed = _allowed_sm(bundle)
+            for base in ("flash_rt_kernels", "flash_rt_fa2"):
+                path = select_native_module_for_host(
+                    lib, base, gpu, allowed_sm=allowed
+                )
                 _probe_so_file(path)
                 return
         return

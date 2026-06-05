@@ -43,7 +43,7 @@ Restricted network: `export HF_ENDPOINT=https://hf-mirror.com`
 ## 3. Engine (`run`, no HTTP)
 
 ```bash
-# flashcli run qwen36-27b-nvfp4 --prompt "Hello"
+# flashcli run qwen3-8b-nvfp4 --prompt "Hello"
 flashcli run qwen3-8b-nvfp4 --bundle "$BUNDLE" --prompt "Hello" --max-tokens 64
 
 # flashcli run qwen36-27b-nvfp4 --prompt "Hello"
@@ -86,7 +86,7 @@ curl -N http://127.0.0.1:8000/v1/chat/completions \
   -d '{
     "model": "qwen3.6-27b-nvfp4",
     "messages": [{"role": "user", "content": "Hello"}],
-    "max_tokens": 512,
+    "max_tokens": 128,
     "temperature": 0,
     "stream": true
   }'
@@ -106,7 +106,6 @@ export CKPT_QWEN36=~/.flashcli/models/qwen36-27b-nvfp4/checkpoint
 
 bash scripts/bench_qwen_curl.sh --qwen3-only --rounds 5
 
-# qwen36 对标 FlashRT 文档（serve 在 8000，需 --max-seq 262208）
 QWEN36_MAX_SEQ=262208 QWEN36_PORT=8000 \
   bash scripts/bench_qwen_curl.sh --qwen36-only \
   --profile comparable --qwen36-long-tokens 262144 \
