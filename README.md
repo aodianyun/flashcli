@@ -72,7 +72,7 @@ Full history: `git log`. Release checklist: [CONTRIBUTING.md](CONTRIBUTING.md).
 **Auto (recommended)**
 
 ```bash
-curl -fsSL https://flashhub.top/flashcli_install/auto_install.sh | sh
+curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
 ```
 
 **Github**

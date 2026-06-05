@@ -72,7 +72,7 @@ Qwen3 与 Qwen3.6 **共用** runtime zip；catalog 用 `bundle_variant` 区分�
 **自动（推荐）**
 
 ```bash
-curl -fsSL https://flashhub.top/flashcli_install/auto_install.sh | sh
+curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
 ```
 
 **源码（开发者）**
