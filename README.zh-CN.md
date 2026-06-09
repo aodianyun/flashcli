@@ -18,18 +18,18 @@ flashcli run pi05_libero --prompt "pick up the red block" --image /path/to/scene
 | 层级 | 职责 |
 |------|------|
 | **flashcli** | 分发 CLI — catalog、bundle 拉取、环境探测、依赖、缓存、HTTP 网关 |
-| **Model Bundle** | 按模型族发布的制品（`flashcli-bundle.json` + `lib/*.so` + Python entry） |
+| **Model Bundle** | 按模型族发布的制品（`flashcli-bundle.json` + Python entry + 按 env 分包的 `runtime/`） |
 | **FlashRT** | 编译进 bundle 的内核与前端；**不是** flashcli 的 pip 依赖 |
 
-flashcli 刻意保持轻薄：**推理代码在 bundle 内**。CLI 将 bundle 加入 `PYTHONPATH`、从 native 矩阵（`sm*-cu*-linux-x86_64-py*`）选取匹配 `.so`，再调用各 bundle 的 `RunEngine` / `ServeEngine`。
+flashcli 刻意保持轻薄：**推理代码在 bundle 内**。CLI 从 FlashHub 拉取 bundle、preflight 匹配 `runtime` env、创建 bundle venv，再调用各 bundle 的 `RunEngine` / `ServeEngine`。
 
 ---
 
 ## 核心优势
 
-- **一条命令到首 token** — `flashcli run <preset>` 串联依赖安装、CDN bundle、权重拉取与推理。
-- **按环境选原生库** — 多 ABI zip（`lib/flash_rt_kernels-*-py310.so` 等），无需手工挑 `.so`；`flashcli models envs` 查看本机匹配档。
-- **可复现发布** — 维护者打一次矩阵 zip，用户通过 [`models.yaml`](src/flashcli/catalog/models.yaml) 消费固定 CDN URL。
+- **一条命令到首 token** — `flashcli run <preset>` 串联依赖安装、FlashHub bundle sync、权重拉取与推理。
+- **按环境分包下载** — 只拉本机 GPU/CUDA/Python 对应的 `runtime/<env-key>/`；`flashcli models envs` 查看本机 env key。
+- **可复现发布** — 维护者构建 `dist/` 上传 FlashHub；用户通过 [`models.yaml`](src/flashcli/catalog/models.yaml) 中的 `bundle.repo` 消费固定版本 URL。
 - **OpenAI 兼容服务** — Qwen NVFP4 提供 `/v1/chat/completions`、流式、tools、会话复用（FlashRT `qwen36_agent`）。
 - **运维友好** — serve 结构化日志、`/health` 含 `inference_busy`、GPU batch=1 忙时 503、`doctor` 预检。
 - **镜像网络友好** — Gitee 安装脚本、pip/HF 镜像环境变量；受限网络有文档化 fallback。
@@ -40,17 +40,17 @@ flashcli 刻意保持轻薄：**推理代码在 bundle 内**。CLI 将 bundle �
 
 | Preset | 任务 | GPU | CUDA 线 | Python | 能力 |
 |--------|------|-----|---------|--------|------|
-| [`pi05_libero`](bundles/pi05_libero/QUICKSTART.zh-CN.md) | Pi0.5 LIBERO VLA | **SM89** | cu124 或 cu130 | 3.10–3.12 | `run` |
-| [`qwen3-8b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) | Qwen3-8B NVFP4 对话 | **SM120** | **仅 cu130** | 3.10–3.12 | `run`, `serve` |
-| [`qwen36-27b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **仅 cu130** | 3.10–3.12 | `run`, `serve` |
+| [`pi05_libero`](bundles/pi05_libero/QUICKSTART.zh-CN.md) | Pi0.5 LIBERO VLA | **SM89** / **SM120** | cu124 或 cu130 | **3.12**（bundle venv） | `run` |
+| [`qwen3-8b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) | Qwen3-8B NVFP4 对话 | **SM120** | **仅 cu130** | **3.12** | `run`, `serve` |
+| [`qwen36-27b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **仅 cu130** | **3.12** | `run`, `serve` |
 
 **平台要求**
 
 - Linux x86_64，NVIDIA 驱动与 `nvidia-smi` 可用
 - **容器**：NVIDIA CUDA 运行时镜像（Qwen SM120 推荐 `nvcr.io/nvidia/pytorch:25.10-py3`），勿用纯 `python:3.x`
-- **网络**：首次需 CDN bundle zip + Hugging Face 权重（Pi0.5 另需 Google Storage 拉 PaliGemma tokenizer）
+- **网络**：首次需 FlashHub bundle sync + Hugging Face 权重（Pi0.5 另需 Google Storage 拉 PaliGemma tokenizer）
 
-Qwen3 与 Qwen3.6 **共用** runtime zip；catalog 用 `bundle_variant` 区分权重。权重**不打进** zip，缓存在 `~/.flashcli/models/<preset>/`。
+Qwen3 与 Qwen3.6 **共用** 同一 FlashHub repo；catalog 用 `bundle_variant` 区分权重。权重**不打进** bundle，缓存在 `~/.flashcli/models/<preset>/`。
 
 ---
 
@@ -98,7 +98,7 @@ flashcli run pi05_libero \
   --image /path/to/base.jpg
 ```
 
-首次运行会下载 runtime zip、安装 torch 栈并拉取约 7.5GB 权重。
+首次运行会 sync FlashHub runtime、创建 bundle venv、安装 torch 栈并拉取约 7.5GB 权重。
 
 ### 4. 大模型 — Qwen NVFP4
 
@@ -126,7 +126,7 @@ curl -N http://127.0.0.1:8000/v1/chat/completions \
        "max_tokens":512,"stream":true,"temperature":0}'
 ```
 
-**本地 dev bundle**（FlashRT 编译，非 CDN）：
+**本地 dev bundle**（FlashRT 编译，非 FlashHub）：
 
 ```bash
 export BUNDLE="$(pwd)/bundles/qwen_nvfp4"
@@ -160,7 +160,7 @@ Catalog 源文件：[`src/flashcli/catalog/models.yaml`](src/flashcli/catalog/mo
 | `flashcli models list` | Catalog 与本地缓存状态 |
 | `flashcli models envs [preset]` | 矩阵档位 vs 本机 GPU |
 | `flashcli doctor [--install]` | 环境 / GPU 预检 |
-| `flashcli bundle sync <preset>` | 预拉 runtime zip |
+| `flashcli bundle sync <preset>` | 从 FlashHub 预拉 bundle runtime |
 | `flashcli bundle validate PATH` | 布局与 native 矩阵校验 |
 
 **常用参数**：`--bundle PATH`、`--no-auto-install`、`--checkpoint`、`--quiet`
@@ -174,8 +174,8 @@ Qwen `serve` 要点：`--max-seq`、`--max-q-seq`（qwen3）、`--K`、`--max-ou
 ## 工作原理
 
 ```text
-models.yaml  →  bundle zip/path  →  activate（PYTHONPATH + lib/*.so）
-              →  pip（torch…）     →  HF 权重缓存  →  RunEngine / ServeEngine
+models.yaml  →  FlashHub repo  →  manifest + preflight  →  runtime/<env-key>/
+              →  bundle venv（python_abi）  →  HF 权重  →  RunEngine / ServeEngine
 ```
 
 序列图与模块图：[docs/architecture.zh-CN.md](docs/architecture.zh-CN.md)。
@@ -184,7 +184,7 @@ models.yaml  →  bundle zip/path  →  activate（PYTHONPATH + lib/*.so）
 
 | 路径 | 内容 |
 |------|------|
-| `~/.flashcli/bundles/<preset>/` | 解压后的 runtime zip |
+| `~/.flashcli/runtimes/<id>/` | sync 后的 bundle 根、`lib/`、venv |
 | `~/.flashcli/models/<preset>/checkpoint/` | 模型权重 |
 | `~/.cache/flash_rt/` | Pi0.5 PaliGemma tokenizer |
 

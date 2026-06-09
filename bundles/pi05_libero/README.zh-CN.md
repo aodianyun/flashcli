@@ -4,20 +4,16 @@
 
 Pi0.5 LIBERO VLA，权重 [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044)。
 
-**对外 preset**：`pi05_libero`（[`src/flashcli/catalog/models.yaml`](../../src/flashcli/catalog/models.yaml)）。用户端拉取**单个** CDN zip；flashcli 按本机 GPU + Python 在 `lib/` 中选匹配 `.so`。可用 `flashcli models envs pi05_libero` 查看本机环境键是否匹配。
+**对外 preset**：`pi05_libero`（[`src/flashcli/catalog/models.yaml`](../../src/flashcli/catalog/models.yaml)）。用户通过 FlashHub `bundle.repo` sync runtime；flashcli 按本机 GPU + CUDA 匹配 manifest 中的 `runtime` env key，并将 `.so` 装入 `lib/`。可用 `flashcli models envs pi05_libero` 查看本机环境键是否匹配。
 
-## 运行所需文件（zip 根目录）
-
-与实测一致，推理只需：
+## 运行所需文件（sync 后 bundle 根）
 
 ```text
 flashcli-bundle.json
 run.py
 _pi05_compat.py
-lib/
-  flash_rt_kernels-*-sm89-cu{124|130}-linux-x86_64-py{310|311|312}.so
-  flash_rt_fa2-*-....so
-flash_rt/                 # 裁剪后的 Python（无 .so）
+lib/                       # 本机 env 的 *.so（来自 runtime/<env-key>/）
+flash_rt/
 ```
 
 权重由 flashcli 下载到 `~/.flashcli/models/pi05_libero/checkpoint/`，**不**打进 bundle。
@@ -57,39 +53,7 @@ bash release.sh --clean
 
 `--clean` 会删除 `lib/`、`dist/`、`.build-matrix/`、`.native-cache/`。
 
-产物示例：`dist/flashcli-bundle-pi05-{abi}-sm89-multi-linux-x86_64-{时间戳}.zip`
-
-### 分步发布（宿主机已有 cu124 + cu130）
-
-```bash
-cd flashcli
-
-# 0) 可选：检查 Python / nvcc 布局
-bash scripts/build_release_matrix.sh --bundle pi05_libero --check-only
-
-# 1) 编矩阵（每条 CUDA 线 3 个 Python ABI，FA2 多架构，耗时较长）
-bash scripts/release_bundle.sh --bundle pi05_libero --clean --cuda-tag 124
-bash scripts/release_bundle.sh --bundle pi05_libero --cuda-tag 130
-
-# 2) 第二条 CUDA 线跑完会自动 finalize + pack；若只编了一条，补跑：
-bash scripts/build_release_matrix.sh --bundle pi05_libero --pack-only
-
-# 3) 校验
-flashcli bundle validate bundles/pi05_libero
-```
-
-无 Docker、双 CUDA 已在宿主机时可用 `--native`：
-
-```bash
-bash scripts/release_bundle.sh --bundle pi05_libero --native --clean
-```
-
-指定本地 FlashRT：
-
-```bash
-export FLASHRT_REPO=/path/to/FlashRT
-bash release.sh --clean --repo-root "$FLASHRT_REPO"
-```
+产物在 `dist/`（源码树 + `runtime/<env-key>/`）。
 
 ### 发布后
 
@@ -101,9 +65,9 @@ flashcli run pi05_libero \
   --benchmark 5
 ```
 
-2. **上传** `dist/*.zip` 到 CDN。
+2. **上传** `dist/` 到 FlashHub。
 
-3. **更新** [`src/flashcli/catalog/models.yaml`](../../src/flashcli/catalog/models.yaml) 中 `pi05_libero.bundle.zip` URL。
+3. **更新** [`models.yaml`](../../src/flashcli/catalog/models.yaml) 中 `pi05_libero.bundle.repo` 版本 URL。
 
 4. **SM89 验收**（如 RTX 4090）：
 

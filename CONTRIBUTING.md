@@ -53,17 +53,17 @@ pytest tests/
 ## Adding a new catalog preset / bundle
 
 1. Copy structure from `bundles/pi05_libero/` or `bundles/qwen_nvfp4/`.
-2. Add `flashcli-bundle.json`, `entry` modules, `release-matrix.env`, `_bundle_build.sh`.
+2. Add `flashcli-bundle.json` (format_version 3), `entry` modules, `release-matrix.env`, `_bundle_build.sh`.
 3. Follow [docs/model_bundle_standard.md](docs/model_bundle_standard.md).
 4. Build on **Linux + NVIDIA GPU** (see release checklist below).
 5. `flashcli bundle validate bundles/<name>`
 6. Smoke-test `flashcli run` / `flashcli serve` as applicable.
-7. Add preset to `models.yaml` with `bundle.zip`, `path`, or `git`.
+7. Add preset to `models.yaml` with `bundle.repo` (FlashHub URL) or local `path`.
 8. Update [README.md](README.md) and bundle README.
 
 ## Release bundle checklist (maintainers)
 
-Use this before uploading a new runtime zip to CDN and updating `models.yaml`.
+Use this before uploading a new version to FlashHub and updating `models.yaml`.
 
 ### Prerequisites
 
@@ -82,10 +82,10 @@ workspace/
 ```bash
 cd flashcli
 
-# Pi0.5 — sm89 × cu124 + cu130 × py310/311/312
+# Pi0.5 — sm89 × cu124 + cu130 × py312
 bash scripts/release_bundle.sh --bundle pi05_libero --clean
 
-# Qwen NVFP4 — sm120 × cu130 only × py310/311/312
+# Qwen NVFP4 — sm120 × cu130 only × py312
 bash scripts/release_bundle.sh --bundle qwen_nvfp4 --clean
 ```
 
@@ -97,29 +97,36 @@ bash scripts/run_bg.sh --name release-pi05 -- \
 bash scripts/run_bg.sh --name release-pi05 --tail
 ```
 
-Expected artifact name pattern:
+Expected output under `bundles/<name>/dist/`:
 
 ```text
-flashcli-bundle-{name}-{FlashRT_ABI}-sm{SM}-multi-linux-x86_64-{YYYYMMDD-HHMMSS}.zip
+flashcli-bundle.json, run.py, flash_rt/, ...
+runtime/<env-key>/*.so
 ```
 
 Details: [docs/runtime-matrix.md](docs/runtime-matrix.md).
 
 ### Validate before publish
 
-- [ ] `flashcli bundle validate bundles/<name>` passes (matrix + ABI probe)
-- [ ] `lib/` contains all cells declared in `release-matrix.env`
-- [ ] Zip includes runtime files only (no `build.sh`, README, or dev artifacts — see `RELEASE_PACK_FILES`)
+- [ ] `flashcli bundle validate bundles/<name>` passes
+- [ ] `dist/runtime/` contains all env keys declared in manifest
+- [ ] `dist/` has no dev artifacts (`build.sh`, README, … — see `RELEASE_PACK_FILES`)
 - [ ] `flashcli models envs <preset>` matches expected host keys on target GPUs
-- [ ] Smoke `flashcli run` / `flashcli serve` on at least one matrix cell (e.g. pi05 SM89+cu124, qwen SM120+cu130)
-- [ ] Upload zip to CDN; update `models.yaml` `bundle.zip` URL(s)
-- [ ] For qwen: both `qwen3-8b-nvfp4` and `qwen36-27b-nvfp4` share the **same** zip URL
+- [ ] Smoke `flashcli run` / `flashcli serve` on at least one matrix cell
+- [ ] Upload `dist/` to FlashHub; update `models.yaml` → `bundle.repo` version URL
+- [ ] For qwen: both presets share the **same** `bundle.repo`; differ by `bundle_variant`
+
+Example repo URL:
+
+```text
+https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero/1.0.2
+```
 
 ### Known matrix constraints
 
 | Bundle | Note |
 |--------|------|
-| `pi05_libero` | **SM89 only.** cu124 line: FA2 is sm_89 AOT. cu130 line: FA2 multi-arch; kernels sm_89. |
+| `pi05_libero` | **SM89** primary; cu124 FA2 is sm_89 AOT; cu130 FA2 multi-arch. |
 | `qwen_nvfp4` | **No cu124 line** — SM120/NVFP4 requires nvcc ≥ 12.8 (use `25.10-py3` container). |
 
 ## Reporting issues

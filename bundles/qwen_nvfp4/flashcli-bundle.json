@@ -1,21 +1,12 @@
 {
   "format": "flashcli-model-bundle",
-  "format_version": 2,
+  "format_version": 3,
   "name": "qwen_nvfp4",
   "description": "Qwen3-8B + Qwen3.6-27B NVFP4 (SM120) — single runtime, --model selects weights",
   "default_variant": "qwen3",
-  "capabilities": [
-    "run",
-    "serve"
-  ],
-  "framework": "torch",
-  "requires": {
-    "sm": [
-      "120"
-    ]
-  },
+  "python_abi": "312",
   "python_dependencies": {
-    "torch": "torch",
+    "torch": { "package": "torch", "index": "cu128" },
     "pip": [
       "numpy",
       "pyyaml",
@@ -26,19 +17,12 @@
       "pillow"
     ]
   },
-  "cuda": {
-    "cuda_tag": "130",
-    "recommended_torch_index": "cu128"
+  "runtime": {
+    "sm120-cu130-linux-x86_64-py312": "runtime/sm120-cu130-linux-x86_64-py312"
   },
   "entry": {
-    "run": {
-      "module": "run",
-      "attr": "RunEngine"
-    },
-    "serve": {
-      "module": "serve",
-      "attr": "ServeEngine"
-    }
+    "run": { "module": "run", "attr": "RunEngine" },
+    "serve": { "module": "serve", "attr": "ServeEngine" }
   },
   "variants": {
     "qwen3": {
@@ -49,10 +33,7 @@
         "repo": "kaitchup/Qwen3-8B-NVFP4",
         "revision": "main"
       },
-      "defaults": {
-        "max_seq": 2048,
-        "max_q_seq": 128
-      },
+      "defaults": { "max_seq": 2048, "max_q_seq": 128 },
       "serve": {
         "device": "cuda:0",
         "max_seq": 2048,
@@ -76,18 +57,13 @@
           "repo": "Qwen/Qwen3.6-27B-FP8",
           "revision": "main",
           "cache_name": "qwen36-27b-nvfp4/mtp_fp8",
-          "allow_patterns": [
-            "mtp.safetensors"
-          ]
+          "allow_patterns": ["mtp.safetensors"]
         }
       },
       "env": {
         "FLASHRT_QWEN36_MTP_CKPT_DIR": "{models_dir}/qwen36-27b-nvfp4/mtp_fp8"
       },
-      "defaults": {
-        "max_seq": 262208,
-        "K": 4
-      },
+      "defaults": { "max_seq": 262208, "K": 4 },
       "serve": {
         "device": "cuda:0",
         "max_seq": 262208,

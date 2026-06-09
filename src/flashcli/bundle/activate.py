@@ -7,12 +7,15 @@ from pathlib import Path
 
 from flashcli.bundle.manifest import (
     BundleManifest,
-    bundle_cuda_config,
-    bundle_python_root,
+    bundle_torch_index,
     check_bundle_python_abi,
 )
-from flashcli.deps import ensure_runtime_python_stack, bundle_python_stack_satisfied
-from flashcli.runtime.detect import torch_index_for_cuda_tag
+from flashcli.deps import (
+    bundle_python_stack_satisfied,
+    ensure_runtime_python_stack,
+    repair_bundle_python_stack,
+)
+from flashcli.runtime.bundle_venv import venv_python
 from flashcli.bundle.native import (
     ensure_bundle_importable,
     probe_native_python_abi,
@@ -29,24 +32,19 @@ def active_bundle() -> BundleManifest | None:
 def activate_bundle(
     bundle: BundleManifest,
     *,
+    runtime_id: str | None = None,
     install_python: bool = True,
     quiet: bool = False,
     force_python: bool = False,
 ) -> Path:
-    """Put bundle on PYTHONPATH, install inference deps, preload native modules."""
+    """Put bundle on sys.path, install inference deps in bundle venv, preload native."""
     global _ACTIVE_BUNDLE
-    python_root = bundle_python_root(bundle)
-    py_str = str(python_root.resolve())
-    os.environ["PYTHONPATH"] = py_str + (
-        os.pathsep + os.environ["PYTHONPATH"]
-        if os.environ.get("PYTHONPATH")
-        else ""
-    )
+    _ACTIVE_BUNDLE = bundle
     os.environ["FLASHCLI_ACTIVE_BUNDLE"] = str(bundle.bundle_root)
     os.environ["FLASHCLI_ACTIVE_RUNTIME"] = str(bundle.bundle_root)
-    _ACTIVE_BUNDLE = bundle
 
     bundle_root = bundle.bundle_root.resolve()
+    runtime_id = runtime_id or os.environ.get("FLASHCLI_RUNTIME_ID", "")
 
     from flashcli.runtime.detect import detect_gpu_or_raise
 
@@ -55,17 +53,22 @@ def activate_bundle(
     check_bundle_python_abi(bundle)
     probe_native_python_abi(bundle, gpu=gpu)
 
+    pip_python: Path | None = None
+    if runtime_id:
+        try:
+            pip_python = venv_python(runtime_id)
+        except FileNotFoundError:
+            pip_python = None
+
     if install_python:
-        cuda = bundle_cuda_config(bundle)
-        cuda_tag = str(cuda.get("cuda_tag", ""))
-        torch_index = str(cuda.get("recommended_torch_index", "")) or (
-            torch_index_for_cuda_tag(cuda_tag) if cuda_tag else "cu124"
+        torch_index = bundle_torch_index(bundle)
+        satisfied = (
+            pip_python is not None
+            and bundle_python_stack_satisfied(
+                bundle_root=bundle_root, python=pip_python
+            )
         )
-        if not force_python and bundle_python_stack_satisfied(
-            bundle_root=bundle_root
-        ):
-            pass
-        else:
+        if force_python or not satisfied:
             if not quiet:
                 print(
                     f"Installing bundle Python dependencies (torch/{torch_index}) ..."
@@ -73,22 +76,23 @@ def activate_bundle(
             ensure_runtime_python_stack(
                 bundle_root=bundle_root,
                 torch_index=torch_index,
+                python=pip_python,
                 quiet=quiet,
                 force=force_python,
             )
-        if not bundle_python_stack_satisfied(bundle_root=bundle_root):
+        if pip_python and not bundle_python_stack_satisfied(
+            bundle_root=bundle_root, python=pip_python
+        ):
             if not quiet:
                 print("Retrying bundle dependency install ...")
-            from flashcli.deps import repair_bundle_python_stack
-
             repair_bundle_python_stack(
                 bundle_root=bundle_root,
                 torch_index=torch_index,
+                python=pip_python,
                 quiet=quiet,
             )
 
     ensure_bundle_importable(bundle, gpu=gpu)
-
     return bundle_root
 
 
@@ -96,11 +100,5 @@ def resolve_torch_index_from_bundle() -> str | None:
     b = _ACTIVE_BUNDLE
     if b is None:
         return None
-    cuda = bundle_cuda_config(b)
-    idx = cuda.get("recommended_torch_index")
-    if idx:
-        return str(idx)
-    cuda_tag = str(cuda.get("cuda_tag", ""))
-    if cuda_tag:
-        return torch_index_for_cuda_tag(cuda_tag)
-    return None
+    idx = bundle_torch_index(b)
+    return idx if idx else None

@@ -34,9 +34,6 @@ def resolve_bundle_variant(
     """Return active variant key (``qwen3`` / ``qwen36``) for a multi-model bundle."""
     variants = bundle_variants(bundle)
     if not variants:
-        legacy = str(bundle.raw.get("variant", "")).strip()
-        if legacy:
-            return legacy
         if name and str(name).strip():
             return str(name).strip()
         return ""

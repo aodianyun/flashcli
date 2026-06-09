@@ -8,14 +8,14 @@
 ```bash
 cd /path/to/flashcli
 pip install -e .
-export BUNDLE="$(pwd)/bundles/qwen_nvfp4"   # local dev; omit to use CDN zip
+export BUNDLE="$(pwd)/bundles/qwen_nvfp4"   # local dev; omit for FlashHub sync
 ```
 
 ---
 
 ## 1. Build local bundle (dev)
 
-CDN zips ship `lib/*.so`. A source tree must be built first:
+After FlashHub sync, `lib/` contains this host's `.so`. A local source tree must be built first:
 
 ```bash
 export FLASHRT_REPO=/path/to/FlashRT
@@ -121,6 +121,6 @@ QWEN36_MAX_SEQ=262208 QWEN36_PORT=8000 \
 | `ImportError: flash_rt_kernels` | build bundle; check `lib/` matches SM/CUDA/Python |
 | `max_tokens must be <= N` | raise `--max-output-tokens` or lower request `max_tokens` |
 | slow first request | new graph bucket; retry is usually faster |
-| stale CDN runtime | `--bundle bundles/qwen_nvfp4` after local rebuild |
+| stale FlashHub runtime | `--bundle bundles/qwen_nvfp4` after local rebuild |
 
 Release: `bash scripts/release_bundle.sh --bundle qwen_nvfp4 --clean` → update both Qwen presets in `models.yaml`.

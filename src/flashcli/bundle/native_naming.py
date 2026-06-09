@@ -23,7 +23,7 @@ NATIVE_MODULE_BASES: tuple[str, ...] = (
     "flash_rt_fp4",
 )
 
-DEFAULT_NATIVE_LIB = "lib"
+DEFAULT_NATIVE_LIB = "lib"  # build-time staging only; runtime loads runtime/<env-key>/
 _REQUIRED_PI05_MODULES = ("flash_rt_kernels", "flash_rt_fa2")
 
 _ABI_SANITIZE = re.compile(r"[^a-zA-Z0-9._-]+")
@@ -47,7 +47,7 @@ class ParsedNativeTag:
 
 
 class NativeEnvironmentNotSupportedError(RuntimeError):
-    """No ``lib/*.so`` artifact matches this machine."""
+    """No ``runtime/<env-key>/*.so`` artifact matches this machine."""
 
     def __init__(
         self,
@@ -168,22 +168,23 @@ def bundle_native_lib_dir(bundle_root: Path, rel: str | None = None) -> Path:
     return (bundle_root.resolve() / sub).resolve()
 
 
-def bundle_uses_native_matrix(raw: dict) -> bool:
-    if raw.get("native_layout") == "matrix":
-        return True
-    if raw.get("native_matrix"):
-        return True
+def bundle_uses_runtime_matrix(raw: dict) -> bool:
+    return isinstance(raw.get("runtime"), dict) and bool(raw["runtime"])
+
+
+def native_dir_has_tagged_native_artifacts(native_dir: Path) -> bool:
+    """True when a native dir holds ``*-sm…-pyNNN.so`` files."""
+    if not native_dir.is_dir():
+        return False
+    for path in native_dir.glob("*.so"):
+        if parse_native_tag_from_filename(path.name) is not None:
+            return True
     return False
 
 
 def lib_dir_has_tagged_native_artifacts(lib_dir: Path) -> bool:
-    """True when ``lib/`` holds ``*-sm…-pyNNN.so`` files (multi-env matrix layout)."""
-    if not lib_dir.is_dir():
-        return False
-    for path in lib_dir.glob("*.so"):
-        if parse_native_tag_from_filename(path.name) is not None:
-            return True
-    return False
+    """Alias for :func:`native_dir_has_tagged_native_artifacts`."""
+    return native_dir_has_tagged_native_artifacts(lib_dir)
 
 
 def host_runtime_env_key(gpu: GpuInfo, *, python_minor: str | None = None) -> RuntimeEnvKey:
@@ -195,10 +196,10 @@ def _sm_artifact_compatible(
 ) -> bool:
     if artifact_sm == host_sm:
         return True
-    if not allowed_sm:
-        return False
-    allowed = {str(s).strip() for s in allowed_sm}
-    return host_sm in allowed and artifact_sm in allowed
+    if allowed_sm:
+        allowed = {str(s).strip() for s in allowed_sm}
+        return host_sm in allowed and artifact_sm in allowed
+    return True
 
 
 def score_native_tag(
@@ -218,7 +219,7 @@ def score_native_tag(
     if artifact.sm == host.sm:
         score += 10
     else:
-        score += 6  # e.g. host sm120 + artifact sm89 both in requires.sm
+        score += 6  # cross-sm within published runtime map
     if artifact.cuda_tag == host.cuda_tag:
         score += 5
     elif cuda_runtime_family(artifact.cuda_tag) == cuda_runtime_family(host.cuda_tag):
@@ -296,25 +297,27 @@ def resolve_native_modules_for_host(
     bundle_root: Path,
     gpu: GpuInfo,
     *,
+    native_dir_rel: str | None = None,
     native_lib_rel: str | None = None,
     allowed_sm: list[str] | None = None,
     required_modules: tuple[str, ...] = _REQUIRED_PI05_MODULES,
     python_minor: str | None = None,
 ) -> dict[str, Path]:
     """Pick one ``.so`` per required module for this host."""
-    lib_dir = bundle_native_lib_dir(bundle_root, native_lib_rel)
-    if not lib_dir.is_dir():
+    rel = native_dir_rel if native_dir_rel is not None else native_lib_rel
+    native_dir = bundle_native_lib_dir(bundle_root, rel)
+    if not native_dir.is_dir():
         raise NativeEnvironmentNotSupportedError(
             module_base=required_modules[0],
             wanted=host_runtime_env_key(gpu).catalog_name(),
-            lib_dir=lib_dir,
+            lib_dir=native_dir,
             available=[],
             gpu=gpu,
         )
     resolved: dict[str, Path] = {}
     for base in required_modules:
         resolved[base] = select_native_module_for_host(
-            lib_dir,
+            native_dir,
             base,
             gpu,
             allowed_sm=allowed_sm,

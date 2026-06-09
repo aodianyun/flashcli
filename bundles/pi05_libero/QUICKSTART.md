@@ -10,7 +10,7 @@
 ```bash
 cd /path/to/flashcli
 pip install -e .
-export BUNDLE="$(pwd)/bundles/pi05_libero"   # local dev; omit for CDN zip
+export BUNDLE="$(pwd)/bundles/pi05_libero"   # local dev; omit for FlashHub sync
 ```
 
 Check runtime cell for this host:

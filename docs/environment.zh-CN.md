@@ -11,7 +11,7 @@ flashcli 通过环境变量配置缓存路径、catalog、下载行为，以及�
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `FLASHCLI_HOME` | `~/.flashcli` | 缓存根目录。其下默认有 `bundles/`、`models/`、`cache/downloads/`。 |
-| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | 覆盖 runtime bundle（zip/git）缓存目录。 |
+| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | 覆盖旧版 bundle 缓存目录（legacy；新 runtime 在 `runtimes/`）。 |
 | `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | 覆盖 Hugging Face 权重缓存根目录（各 preset 一般为 `<dir>/<preset>/checkpoint/`）。 |
 | `FLASHCLI_MODELS_YAML` | （内置） | **覆盖 preset catalog 文件路径**。默认使用安装包内 `flashcli/catalog/models.yaml`（pip wheel 与 editable 相同）。指向的文件必须存在。 |
 
@@ -61,8 +61,10 @@ flashcli models list
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `FLASHCLI_SKIP_AUTO_INSTALL` | `0` | 设为 `1` 时，`flashcli run` / `serve` / `pull` **不**自动 pip 安装 flashcli 自身依赖（typer、huggingface_hub 等）。等价于命令行 `--no-auto-install`。 |
-| `FLASHCLI_SKIP_BUNDLE_ZIP` | `0` | 设为 `1` 时，**禁止**从 `models.yaml` 下载/解压 `bundle.zip`；若本地无缓存则报错。用于离线或仅使用 `--bundle` 本地目录。 |
-| `FLASHCLI_SKIP_BUNDLE_GIT` | `0` | 设为 `1` 时，**禁止** `git clone`/`fetch` bundle 仓库；若本地无缓存则报错。 |
+| `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | bundle runtime 缓存（bundle 根、`lib/`、venv）。 |
+| `FLASHCLI_IN_BUNDLE_VENV` | （内部） | `1` 表示当前进程已在 bundle venv 内。 |
+| `FLASHCLI_RUNTIME_ID` | （内部） | 当前激活的 runtime 标识。 |
+| `FLASHCLI_BUNDLE_ROOT` | （内部） | 当前 bundle 根目录。 |
 
 Bundle 的 Python 依赖（torch 等）由 `activate_bundle` 按 `flashcli-bundle.json` 的 `python_dependencies` 安装；与 `FLASHCLI_SKIP_AUTO_INSTALL` 无关（后者只影响 flashcli CLI 包依赖）。
 

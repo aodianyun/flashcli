@@ -1,4 +1,4 @@
-"""Load bundle native extension modules declared in ``flashcli-bundle.json``."""
+"""Load bundle native extension modules from ``runtime/<env-key>/``."""
 
 from __future__ import annotations
 
@@ -9,19 +9,14 @@ from typing import Any
 
 from flashcli.bundle.manifest import (
     BundleManifest,
-    bundle_modules,
-    bundle_native_lib_rel,
+    bundle_active_native_dir,
+    bundle_python_abi,
     bundle_python_root,
-    module_file_path,
 )
 from flashcli.bundle.native_naming import (
     NativeEnvironmentNotSupportedError,
-    bundle_native_lib_dir,
-    bundle_uses_native_matrix,
-    lib_dir_has_tagged_native_artifacts,
     logical_native_module_name,
     parse_native_tag_from_filename,
-    resolve_native_modules_for_host,
     select_native_module_for_host,
     select_native_module_ranked,
 )
@@ -44,18 +39,13 @@ def _load_extension_from_path(path: Path, module_name: str) -> Any:
     except ImportError as exc:
         msg = str(exc)
         if "Python version mismatch" in msg or "interpreter version is incompatible" in msg:
-            import sys
+            import sys as _sys
 
             raise RuntimeError(
                 f"Failed to load native module {path.name}: {exc}\n"
-                f"  Current interpreter: Python {sys.version_info.major}."
-                f"{sys.version_info.minor} ({sys.executable})\n"
-                "  This runtime bundle has no matching native build for this Python ABI "
-                "under lib/.\n"
-                "  Fixes:\n"
-                "  - Use a Python version listed in the bundle's native matrix, e.g.:\n"
-                "      FLASHCLI_PYTHON=python3.10 flashcli run <preset>\n"
-                "  - Or install a bundle build that includes your -pyNNN artifact."
+                f"  Current interpreter: Python {_sys.version_info.major}."
+                f"{_sys.version_info.minor} ({_sys.executable})\n"
+                "  Native modules must load in the bundle venv matching python_abi."
             ) from exc
         if (
             "libcublas" in msg
@@ -65,11 +55,8 @@ def _load_extension_from_path(path: Path, module_name: str) -> Any:
         ):
             raise RuntimeError(
                 f"Failed to load native module {path.name}: {exc}\n"
-                "  The selected .so was built against a CUDA user-space runtime missing on this host.\n"
-                "  Fixes:\n"
-                "  - Install CUDA libs matching the artifact (cu124 → CUDA 12.x, cu130 → CUDA 13.x)\n"
-                "  - Or set FLASHCLI_CUDA_TAG=130 (or 124) to pick another lib/ artifact\n"
-                "  - Ensure LD_LIBRARY_PATH includes your CUDA lib64 directory"
+                "  Install CUDA libs matching the artifact (cu124 → CUDA 12.x, cu130 → CUDA 13.x)\n"
+                "  Or set FLASHCLI_CUDA_TAG to pick another native build."
             ) from exc
         raise
 
@@ -82,44 +69,33 @@ def _cuda_runtime_load_error(exc: BaseException) -> bool:
     )
 
 
-def _allowed_sm(bundle: BundleManifest) -> list[str] | None:
-    req = bundle.raw.get("requires")
-    if not isinstance(req, dict):
-        return None
-    sm = req.get("sm")
-    if isinstance(sm, list):
-        return [str(x).strip() for x in sm if str(x).strip()]
-    if isinstance(sm, str) and sm.strip():
-        return [sm.strip()]
-    return None
-
-
-def _native_matrix_enabled(bundle: BundleManifest) -> bool:
-    lib = bundle_native_lib_dir(bundle.bundle_root, bundle_native_lib_rel(bundle))
-    if not lib.is_dir() or not any(lib.glob("*.so")):
-        return False
-    if bundle_uses_native_matrix(bundle.raw):
-        return True
-    # Shipped zips may include multi-ABI lib/ without native_layout in manifest.
-    return lib_dir_has_tagged_native_artifacts(lib)
-
-
-def _resolve_matrix_paths_loadable(
+def _resolve_host_native_paths(
     bundle: BundleManifest,
     gpu: GpuInfo,
 ) -> dict[str, Path]:
-    """Pick native modules; try ranked CUDA variants if libcublas load fails."""
-    lib = bundle_native_lib_dir(bundle.bundle_root, bundle_native_lib_rel(bundle))
-    allowed = _allowed_sm(bundle)
+    """Pick native modules for this host from ``runtime/<env-key>/``."""
+    native_dir = bundle_active_native_dir(bundle, gpu=gpu)
+    if not native_dir.is_dir() or not any(native_dir.glob("*.so")):
+        raise NativeEnvironmentNotSupportedError(
+            module_base="flash_rt_kernels",
+            wanted="",
+            lib_dir=native_dir,
+            available=[],
+            gpu=gpu,
+        )
+
+    python_minor = bundle_python_abi(bundle)
+
     kernels_ranked = select_native_module_ranked(
-        lib, "flash_rt_kernels", gpu, allowed_sm=allowed
+        native_dir, "flash_rt_kernels", gpu, allowed_sm=None, python_minor=python_minor
     )
     if not kernels_ranked:
-        return resolve_native_modules_for_host(
-            bundle.bundle_root,
-            gpu,
-            native_lib_rel=bundle_native_lib_rel(bundle),
-            allowed_sm=allowed,
+        raise NativeEnvironmentNotSupportedError(
+            module_base="flash_rt_kernels",
+            wanted=f"*py{python_minor}",
+            lib_dir=native_dir,
+            available=[],
+            gpu=gpu,
         )
 
     kernels_path: Path | None = None
@@ -140,7 +116,7 @@ def _resolve_matrix_paths_loadable(
     parsed = parse_native_tag_from_filename(kernels_path.name)
     paths: dict[str, Path] = {"flash_rt_kernels": kernels_path}
     fa2_ranked = select_native_module_ranked(
-        lib, "flash_rt_fa2", gpu, allowed_sm=allowed
+        native_dir, "flash_rt_fa2", gpu, allowed_sm=None, python_minor=python_minor
     )
     if parsed is not None:
         for fa2_path in fa2_ranked:
@@ -153,21 +129,11 @@ def _resolve_matrix_paths_loadable(
             ):
                 paths["flash_rt_fa2"] = fa2_path
                 break
-    if "flash_rt_fa2" not in paths:
+    if "flash_rt_fa2" not in paths and fa2_ranked:
         paths["flash_rt_fa2"] = select_native_module_for_host(
-            lib, "flash_rt_fa2", gpu, allowed_sm=allowed
+            native_dir, "flash_rt_fa2", gpu, allowed_sm=None, python_minor=python_minor
         )
     return paths
-
-
-def _resolve_host_native_paths(
-    bundle: BundleManifest,
-    gpu: GpuInfo | None = None,
-) -> dict[str, Path] | None:
-    if not _native_matrix_enabled(bundle):
-        return None
-    gpu = gpu or detect_gpu_or_raise()
-    return _resolve_matrix_paths_loadable(bundle, gpu)
 
 
 def _register_from_paths(paths: dict[str, Path]) -> list[str]:
@@ -195,119 +161,32 @@ def register_native_modules(
     *,
     gpu: GpuInfo | None = None,
 ) -> list[str]:
-    """Load native modules for this host (``lib/`` matrix or legacy ``modules[]``)."""
-    matrix_paths = _resolve_host_native_paths(bundle, gpu=gpu)
-    if matrix_paths is not None:
-        return _register_from_paths(matrix_paths)
-
-    py_root = bundle_python_root(bundle)
-    if (py_root / "flash_rt").is_dir():
-        import importlib
-
-        importlib.import_module("flash_rt")
-
-    loaded: list[str] = []
-    for entry in bundle_modules(bundle):
-        file_rel = str(entry.get("file", "")).strip()
-        if not file_rel or not file_rel.endswith(".so"):
-            continue
-        path = module_file_path(bundle, file_rel)
-        if not path.is_file():
-            if entry.get("optional"):
-                continue
-            raise FileNotFoundError(f"Native module file not found: {path}")
-        name = _so_basename_to_module_name(path.name)
-        mod = _load_extension_from_path(path, name)
-        sys.modules[name] = mod
-        loaded.append(name)
-        flash_rt_pkg = sys.modules.get("flash_rt")
-        if flash_rt_pkg is not None:
-            setattr(flash_rt_pkg, name, mod)
-            sys.modules[f"flash_rt.{name}"] = mod
-    return loaded
+    gpu = gpu or detect_gpu_or_raise()
+    return _register_from_paths(_resolve_host_native_paths(bundle, gpu))
 
 
 def verify_native_modules(bundle: BundleManifest, *, gpu: GpuInfo | None = None) -> None:
-    """Ensure required native modules exist for this host."""
-    try:
-        matrix_paths = _resolve_host_native_paths(bundle, gpu=gpu)
-    except NativeEnvironmentNotSupportedError:
-        raise
-    if matrix_paths is not None:
-        return
-
-    missing: list[str] = []
-    for entry in bundle_modules(bundle):
-        if entry.get("optional"):
-            continue
-        file_rel = str(entry.get("file", "")).strip()
-        if not file_rel:
-            continue
-        path = module_file_path(bundle, file_rel)
-        if not path.is_file():
-            missing.append(str(path))
-    if missing:
-        raise RuntimeError(
-            "Bundle native modules missing:\n  "
-            + "\n  ".join(missing)
-            + "\nRebuild the bundle on Linux+GPU (build.sh)."
-        )
+    gpu = gpu or detect_gpu_or_raise()
+    _resolve_host_native_paths(bundle, gpu)
 
 
 def _probe_so_file(path: Path) -> None:
-    """Trial-import a .so; undo sys.modules so a later register can run cleanly."""
     name = _so_basename_to_module_name(path.name)
     _load_extension_from_path(path, name)
     for key in (name, f"flash_rt.{name}"):
         sys.modules.pop(key, None)
 
 
-def _bundle_native_artifact_tag(bundle: BundleManifest) -> str | None:
-    build = bundle.raw.get("build") if isinstance(bundle.raw.get("build"), dict) else {}
-    tag = build.get("native_artifact_tag")
-    return str(tag).strip() if tag else None
-
-
 def probe_native_python_abi(bundle: BundleManifest, *, gpu: GpuInfo | None = None) -> None:
-    """Load one required .so before heavy pip installs — fail fast on ABI mismatch."""
     gpu = gpu or detect_gpu_or_raise()
-    try:
-        matrix_paths = _resolve_host_native_paths(bundle, gpu=gpu)
-    except NativeEnvironmentNotSupportedError:
-        raise
-    if matrix_paths is not None:
+    paths = _resolve_host_native_paths(bundle, gpu)
+    for path in paths.values():
+        _probe_so_file(path)
         return
-
-    if not bundle_modules(bundle):
-        root = bundle.bundle_root.resolve()
-        lib_rel = bundle_native_lib_rel(bundle)
-        lib = bundle_native_lib_dir(root, lib_rel)
-        if lib_dir_has_tagged_native_artifacts(lib):
-            allowed = _allowed_sm(bundle)
-            for base in ("flash_rt_kernels", "flash_rt_fa2"):
-                path = select_native_module_for_host(
-                    lib, base, gpu, allowed_sm=allowed
-                )
-                _probe_so_file(path)
-                return
-        return
-
-    for entry in bundle_modules(bundle):
-        if entry.get("optional"):
-            continue
-        file_rel = str(entry.get("file", "")).strip()
-        if not file_rel or not file_rel.endswith(".so"):
-            continue
-        path = module_file_path(bundle, file_rel)
-        if path.is_file():
-            _probe_so_file(path)
-            return
 
 
 def ensure_bundle_importable(bundle: BundleManifest, *, gpu: GpuInfo | None = None) -> None:
-    """Prepend bundle python root to ``sys.path`` and preload native modules."""
     py_str = str(bundle_python_root(bundle).resolve())
     if py_str not in sys.path:
         sys.path.insert(0, py_str)
-    if _native_matrix_enabled(bundle) or bundle_modules(bundle):
-        register_native_modules(bundle, gpu=gpu)
+    register_native_modules(bundle, gpu=gpu)

@@ -1,4 +1,4 @@
-"""Validate ``lib/`` native matrix completeness and Python ABI vs filename tags."""
+"""Validate ``runtime/<env-key>/`` native completeness and Python ABI vs filename tags."""
 
 from __future__ import annotations
 
@@ -9,12 +9,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from flashcli.bundle.manifest import BundleManifest, bundle_modules, bundle_native_lib_rel
+from flashcli.bundle.manifest import BundleManifest, bundle_runtime_map
 from flashcli.bundle.native_naming import (
     NATIVE_MODULE_BASES,
     ParsedNativeTag,
-    bundle_native_lib_dir,
-    bundle_uses_native_matrix,
     list_native_artifacts,
     logical_native_module_name,
     parse_native_tag_from_filename,
@@ -30,9 +28,6 @@ _ABI_MISMATCH_MARKERS = (
 _CUDA_LOAD_MARKERS = ("libcublas", "libcudart", "libcuda", "cannot open shared object")
 _ELF_BAD_MARKERS = ("invalid ELF", "not an ELF", "Exec format error")
 
-# Exit 0 = ABI OK (full import may fail on missing CUDA at validate time).
-# Exit 2 = Python ABI mismatch vs filename -pyNNN tag.
-# Other non-zero = corrupt / unreadable module.
 _PROBE_SCRIPT = """
 import importlib.util
 import sys
@@ -49,48 +44,15 @@ except ImportError as exc:
     if "Python version mismatch" in msg or "interpreter version is incompatible" in msg:
         print(msg, file=sys.stderr)
         raise SystemExit(2) from exc
-    # Extension init failed (CUDA libs, etc.) — not a wrong -pyNNN tag.
     raise SystemExit(0) from exc
 """
 
 
-def _required_module_bases(bundle: BundleManifest, lib_dir: Path) -> tuple[str, ...]:
-    """Modules that must exist for every matrix cell."""
+def _required_module_bases(_bundle: BundleManifest, native_dir: Path) -> tuple[str, ...]:
     bases: list[str] = ["flash_rt_kernels", "flash_rt_fa2"]
-    optional_fp4 = True
-    for entry in bundle_modules(bundle):
-        file_rel = str(entry.get("file", "")).strip()
-        if file_rel.startswith("lib/flash_rt_fp4") and not entry.get("optional"):
-            optional_fp4 = False
-            break
-    if not optional_fp4 or any(lib_dir.glob("flash_rt_fp4*.so")):
-        if "flash_rt_fp4" not in bases:
-            bases.append("flash_rt_fp4")
-    # SM120 Qwen: NVFP4 is inside kernels; do not require flash_rt_fp4.so.
-    requires = bundle.raw.get("requires")
-    sm_list: list[str] = []
-    if isinstance(requires, dict) and isinstance(requires.get("sm"), list):
-        sm_list = [str(s).strip() for s in requires["sm"] if str(s).strip()]
-    if sm_list == ["120"] and not any(lib_dir.glob("flash_rt_fp4*.so")):
-        bases = [b for b in bases if b != "flash_rt_fp4"]
+    if any(native_dir.glob("flash_rt_fp4*.so")):
+        bases.append("flash_rt_fp4")
     return tuple(bases)
-
-
-def _expected_matrix_cells(bundle: BundleManifest, lib_dir: Path) -> set[str]:
-    nm = bundle.raw.get("native_matrix")
-    if isinstance(nm, list) and nm:
-        return {str(x).strip() for x in nm if str(x).strip()}
-    arts = list_native_artifacts(lib_dir)
-    return {parsed.catalog_key() for parsed, _ in arts.get("flash_rt_kernels", [])}
-
-
-def _cells_present_in_lib(lib_dir: Path) -> set[str]:
-    arts = list_native_artifacts(lib_dir)
-    cells: set[str] = set()
-    for base in ("flash_rt_kernels", "flash_rt_fa2", "flash_rt_fp4"):
-        for parsed, _ in arts.get(base, []):
-            cells.add(parsed.catalog_key())
-    return cells
 
 
 def _find_artifact(
@@ -205,69 +167,52 @@ def probe_native_so_abi(path: Path, *, python_minor: str) -> str | None:
             f"(probe with {py}): {(proc.stderr or proc.stdout).strip()[:240]}"
         )
     if kind in ("cuda_runtime", "load_failed"):
-        # load_failed after exec_module is usually missing CUDA on the validate host.
         return None
     detail = (proc.stderr or proc.stdout).strip().replace("\n", " ")[:240]
     return f"{path.name}: failed to load with {py} ({kind}): {detail}"
 
 
-def validate_native_lib_matrix(bundle: BundleManifest) -> list[str]:
-    """Check ``lib/`` matrix completeness and consistent tags per environment cell."""
-    lib_dir = bundle_native_lib_dir(bundle.bundle_root, bundle_native_lib_rel(bundle))
-    if not lib_dir.is_dir():
-        return []
-
+def _validate_runtime_cell(
+    bundle: BundleManifest,
+    env_key: str,
+    native_dir: Path,
+) -> list[str]:
+    rel = native_dir.relative_to(bundle.bundle_root)
     errors: list[str] = []
-    arts = list_native_artifacts(lib_dir)
-    required = _required_module_bases(bundle, lib_dir)
+    if not native_dir.is_dir():
+        return [f"missing {rel}/ for runtime {env_key!r}"]
 
-    for path in sorted(lib_dir.glob("*.so")):
-        if parse_native_tag_from_filename(path.name) is None:
+    arts = list_native_artifacts(native_dir)
+    required = _required_module_bases(bundle, native_dir)
+
+    for path in sorted(native_dir.glob("*.so")):
+        parsed = parse_native_tag_from_filename(path.name)
+        if parsed is None:
             base = logical_native_module_name(path.name)
             if base not in NATIVE_MODULE_BASES and not path.name.startswith("libfmha"):
-                errors.append(f"lib/{path.name}: unrecognized native artifact filename")
-
-    if not bundle_uses_native_matrix(bundle.raw) and not _cells_present_in_lib(lib_dir):
-        return errors
-
-    expected_cells = _expected_matrix_cells(bundle, lib_dir)
-    lib_cells = _cells_present_in_lib(lib_dir)
-
-    if not expected_cells and not lib_cells:
-        return errors
-
-    if isinstance(bundle.raw.get("native_matrix"), list) and bundle.raw["native_matrix"]:
-        for cell in sorted(expected_cells - lib_cells):
+                errors.append(f"{rel}/{path.name}: unrecognized native artifact filename")
+            continue
+        if parsed.catalog_key() != env_key:
             errors.append(
-                f"native_matrix lists {cell!r} but lib/ has no matching "
-                f"flash_rt_kernels*-{cell}.so"
+                f"{rel}/{path.name}: filename tag {parsed.catalog_key()!r} "
+                f"does not match runtime cell {env_key!r}"
             )
 
-    cells_to_check = expected_cells or lib_cells
-    if not cells_to_check and any(lib_dir.glob("*.so")):
-        errors.append(
-            "lib/ contains .so files but no parseable matrix cells "
-            "(expected tags like *-sm120-cu130-linux-x86_64-py310.so)"
-        )
-        return errors
-
-    for cell in sorted(cells_to_check):
-        refs: list[tuple[str, ParsedNativeTag]] = []
-        for mod in required:
-            found = _find_artifact(arts, mod, cell)
-            if found is None:
-                errors.append(f"missing lib/{mod}-*-{cell}.so")
-                continue
-            parsed, _path = found
-            refs.append((mod, parsed))
-
-        if len(refs) < 2:
+    refs: list[tuple[str, ParsedNativeTag]] = []
+    for mod in required:
+        found = _find_artifact(arts, mod, env_key)
+        if found is None:
+            errors.append(f"missing {rel}/{mod}-*-{env_key}.so")
             continue
+        parsed, _path = found
+        refs.append((mod, parsed))
+
+    if len(refs) >= 2:
         _mod0, ref = refs[0]
         for mod, tag in refs[1:]:
             if tag.python_minor != ref.python_minor:
                 errors.append(
-                    f"{cell}: inconsistent python_abi — {refs[0][0]} -py{ref.python_minor} "
+                    f"{env_key}: inconsistent python_abi — {refs[0][0]} -py{ref.python_minor} "
                     f"vs {mod} -py{tag.python_minor}"
                 )
             if (
@@ -277,39 +222,94 @@ def validate_native_lib_matrix(bundle: BundleManifest) -> list[str]:
                 tag.arch,
             ) != (ref.sm, ref.cuda_tag, ref.os_name, ref.arch):
                 errors.append(
-                    f"{cell}: inconsistent platform tags between {refs[0][0]} and {mod} "
+                    f"{env_key}: inconsistent platform tags between {refs[0][0]} and {mod} "
                     f"(sm/cu/os/arch must match)"
                 )
             if tag.flashrt_abi != ref.flashrt_abi:
                 errors.append(
-                    f"{cell}: inconsistent FlashRT ABI segment "
+                    f"{env_key}: inconsistent FlashRT ABI segment "
                     f"({refs[0][0]} {tag.flashrt_abi!r} vs {mod} {ref.flashrt_abi!r})"
                 )
 
     return errors
 
 
-def validate_native_lib_abi(bundle: BundleManifest) -> list[str]:
-    """Probe-load each tagged ``lib/*.so`` with the Python version in its filename."""
-    lib_dir = bundle_native_lib_dir(bundle.bundle_root, bundle_native_lib_rel(bundle))
-    if not lib_dir.is_dir():
-        return []
+def validate_native_runtime_matrix(bundle: BundleManifest) -> list[str]:
+    """Check each manifest ``runtime/<env-key>/`` directory for required ``.so`` files."""
+    try:
+        runtime_map = bundle_runtime_map(bundle)
+    except ValueError as exc:
+        return [str(exc)]
 
     errors: list[str] = []
-    required = _required_module_bases(bundle, lib_dir)
-    arts = list_native_artifacts(lib_dir)
-
-    for mod in required:
-        for parsed, path in arts.get(mod, []):
-            err = probe_native_so_abi(path, python_minor=parsed.python_minor)
-            if err:
-                errors.append(err)
-
+    for env_key, rel_path in runtime_map.items():
+        native_dir = (bundle.bundle_root / rel_path.strip().lstrip("/")).resolve()
+        errors.extend(_validate_runtime_cell(bundle, env_key, native_dir))
     return errors
 
 
-def validate_native_lib(bundle: BundleManifest, *, probe_abi: bool = True) -> list[str]:
-    errors = validate_native_lib_matrix(bundle)
+def validate_native_runtime_abi(bundle: BundleManifest) -> list[str]:
+    """Probe-load each tagged ``runtime/<env-key>/*.so`` with its filename Python ABI."""
+    errors: list[str] = []
+    try:
+        runtime_map = bundle_runtime_map(bundle)
+    except ValueError:
+        return errors
+
+    for _env_key, rel_path in runtime_map.items():
+        native_dir = (bundle.bundle_root / rel_path.strip().lstrip("/")).resolve()
+        if not native_dir.is_dir():
+            continue
+        required = _required_module_bases(bundle, native_dir)
+        arts = list_native_artifacts(native_dir)
+        for mod in required:
+            for parsed, path in arts.get(mod, []):
+                err = probe_native_so_abi(path, python_minor=parsed.python_minor)
+                if err:
+                    errors.append(err)
+    return errors
+
+
+def validate_native_runtime(
+    bundle: BundleManifest,
+    *,
+    probe_abi: bool = True,
+    env_key: str | None = None,
+) -> list[str]:
+    if env_key is None:
+        errors = validate_native_runtime_matrix(bundle)
+        cells: list[tuple[str, Path]] = []
+        try:
+            for key, rel in bundle_runtime_map(bundle).items():
+                cells.append(
+                    (key, (bundle.bundle_root / rel.strip().lstrip("/")).resolve())
+                )
+        except ValueError:
+            cells = []
+    else:
+        try:
+            rel = bundle_runtime_map(bundle)[env_key]
+        except (ValueError, KeyError):
+            return validate_native_runtime_matrix(bundle)
+        native_dir = (bundle.bundle_root / rel.strip().lstrip("/")).resolve()
+        errors = _validate_runtime_cell(bundle, env_key, native_dir)
+        cells = [(env_key, native_dir)]
+
     if probe_abi:
-        errors.extend(validate_native_lib_abi(bundle))
+        for _key, native_dir in cells:
+            if not native_dir.is_dir():
+                continue
+            required = _required_module_bases(bundle, native_dir)
+            arts = list_native_artifacts(native_dir)
+            for mod in required:
+                for parsed, path in arts.get(mod, []):
+                    err = probe_native_so_abi(path, python_minor=parsed.python_minor)
+                    if err:
+                        errors.append(err)
     return errors
+
+
+# Backward-compatible aliases for tests / internal imports
+validate_native_lib = validate_native_runtime
+validate_native_lib_matrix = validate_native_runtime_matrix
+validate_native_lib_abi = validate_native_runtime_abi

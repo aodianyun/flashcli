@@ -1,4 +1,4 @@
-"""Parse flashcli-model-bundle manifests."""
+"""Parse flashcli-model-bundle manifests (format_version 3)."""
 
 from __future__ import annotations
 
@@ -6,13 +6,13 @@ import json
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from flashcli.bundle.runtime_env import host_python_minor
+if TYPE_CHECKING:
+    from flashcli.runtime.detect import GpuInfo
 
 BUNDLE_FORMAT = "flashcli-model-bundle"
-_LEGACY_MANIFEST = "manifest.json"
-RUNTIME_FORMAT = "flashrt-runtime-manifest"
+BUNDLE_FORMAT_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -35,7 +35,6 @@ class EntrySpec:
 class BundleManifest:
     bundle_root: Path
     name: str
-    runtime_dir: Path
     capabilities: list[str]
     entry_run: EntrySpec | None
     entry_serve: EntrySpec | None
@@ -48,68 +47,129 @@ class BundleManifest:
 
 def bundle_format_version(bundle: BundleManifest) -> int:
     try:
-        return int(bundle.raw.get("format_version", 1))
+        return int(bundle.raw.get("format_version", 0))
     except (TypeError, ValueError):
-        return 1
+        return 0
+
+
+def require_v3(bundle: BundleManifest) -> None:
+    if bundle.raw.get("format") != BUNDLE_FORMAT:
+        raise ValueError(
+            f"Unsupported bundle format: {bundle.raw.get('format')!r} "
+            f"(expected {BUNDLE_FORMAT!r})"
+        )
+    ver = bundle_format_version(bundle)
+    if ver != BUNDLE_FORMAT_VERSION:
+        raise ValueError(
+            f"Unsupported format_version {ver} (expected {BUNDLE_FORMAT_VERSION}). "
+            "Upgrade the bundle release or use a matching flashcli version."
+        )
 
 
 def bundle_python_root(bundle: BundleManifest) -> Path:
-    """Directory prepended to PYTHONPATH for ``entry`` imports."""
-    root = bundle.bundle_root.resolve()
-    if bundle_format_version(bundle) >= 2:
-        return root
-    legacy_py = bundle.runtime_dir / "python"
-    if legacy_py.is_dir():
-        return legacy_py.resolve()
-    return root
+    """Directory prepended to sys.path for ``entry`` imports."""
+    return bundle.bundle_root.resolve()
 
 
-def _legacy_runtime_manifest_path(bundle: BundleManifest) -> Path | None:
-    for candidate in (
-        bundle.runtime_dir / _LEGACY_MANIFEST,
-        bundle.bundle_root / "runtime" / _LEGACY_MANIFEST,
-    ):
-        if candidate.is_file():
-            return candidate
-    return None
+def bundle_python_abi(bundle: BundleManifest) -> str:
+    abi = str(bundle.raw.get("python_abi", "")).strip()
+    if not abi or not abi.isdigit() or len(abi) != 3:
+        raise ValueError(
+            f"Bundle {bundle.name!r} missing valid python_abi (expected e.g. '312')"
+        )
+    return abi
 
 
-def bundle_runtime_config(bundle: BundleManifest) -> dict[str, Any]:
-    """Runtime fields from merged ``flashcli-bundle.json`` or legacy ``manifest.json``."""
-    raw = bundle.raw
-    if isinstance(raw.get("python_dependencies"), dict) or raw.get("modules") is not None:
-        return raw
-    legacy = _legacy_runtime_manifest_path(bundle)
-    if legacy is not None:
-        return json.loads(legacy.read_text(encoding="utf-8"))
-    return raw
+def _runtime_map_from_raw(raw: dict[str, Any]) -> dict[str, str]:
+    """Read env_key → artifact path from ``runtime``."""
+    block = raw.get("runtime")
+    if not isinstance(block, dict) or not block:
+        raise ValueError("missing runtime map (env_key → runtime/<env-key>/ path)")
+    out = {
+        str(k).strip(): str(v).strip()
+        for k, v in block.items()
+        if str(k).strip() and str(v).strip()
+    }
+    if not out:
+        raise ValueError("runtime map is empty")
+    return out
 
 
-def bundle_modules(bundle: BundleManifest) -> list[dict[str, Any]]:
-    mods = bundle_runtime_config(bundle).get("modules")
-    if not isinstance(mods, list):
-        return []
-    return [m for m in mods if isinstance(m, dict)]
+def bundle_runtime_map(bundle: BundleManifest) -> dict[str, str]:
+    return _runtime_map_from_raw(bundle.raw)
 
 
-def bundle_native_lib_rel(bundle: BundleManifest) -> str:
-    """Relative path to multi-artifact native dir (always ``lib/``)."""
-    return "lib"
+def bundle_runtime_matrix(bundle: BundleManifest) -> list[str]:
+    return sorted(bundle_runtime_map(bundle))
 
 
-def bundle_cuda_config(bundle: BundleManifest) -> dict[str, Any]:
-    cuda = bundle_runtime_config(bundle).get("cuda")
-    return dict(cuda) if isinstance(cuda, dict) else {}
+def bundle_torch_index(bundle: BundleManifest) -> str:
+    """PyTorch wheel index name (e.g. ``cu128``) from ``python_dependencies.torch.index``."""
+    from flashcli.runtime.requirements_spec import parse_torch_dependency
+
+    py = bundle.raw.get("python_dependencies")
+    if isinstance(py, dict):
+        _, idx = parse_torch_dependency(py.get("torch", "torch"))
+        if idx:
+            return idx
+    return "cu124"
 
 
-def module_file_path(bundle: BundleManifest, file_rel: str) -> Path:
-    """Resolve ``modules[].file`` relative to bundle root (v2) or legacy runtime dir."""
-    rel = file_rel.strip().lstrip("/")
-    if bundle_format_version(bundle) >= 2:
-        return (bundle.bundle_root / rel).resolve()
-    if rel.startswith("lib/"):
-        return (bundle.runtime_dir / rel).resolve()
+def bundle_runtime_dir(bundle: BundleManifest, env_key: str) -> Path:
+    """Absolute path to ``runtime/<env-key>/`` (or manifest path) for one cell."""
+    runtime_map = bundle_runtime_map(bundle)
+    rel = str(runtime_map.get(env_key, "")).strip().lstrip("/")
+    if not rel:
+        raise ValueError(
+            f"Bundle {bundle.name!r} has no runtime path for env {env_key!r}"
+        )
     return (bundle.bundle_root / rel).resolve()
+
+
+def resolve_bundle_env_key(
+    bundle: BundleManifest,
+    *,
+    gpu: "GpuInfo | None" = None,
+) -> str:
+    """Match host GPU/CUDA/Python to a key in manifest ``runtime``."""
+    from flashcli.bundle.runtime_env import resolve_runtime_env_key, variant_dir_name
+    from flashcli.runtime.detect import detect_gpu_or_raise
+
+    gpu = gpu or detect_gpu_or_raise()
+    python_abi = bundle_python_abi(bundle)
+    host_key = variant_dir_name(gpu, python_minor=python_abi)
+    env_key = resolve_runtime_env_key(bundle_runtime_map(bundle), host_key)
+    if env_key is None:
+        matrix = bundle_runtime_matrix(bundle)
+        raise RuntimeError(
+            f"Bundle {bundle.name!r} does not support runtime environment {host_key!r}. "
+            f"Supported: {', '.join(matrix)}"
+        )
+    return env_key
+
+
+def bundle_active_native_dir(
+    bundle: BundleManifest,
+    *,
+    gpu: "GpuInfo | None" = None,
+    env_key: str | None = None,
+) -> Path:
+    """Native ``.so`` directory for this host (single ``runtime/<env-key>/``)."""
+    if env_key is None:
+        env_key = resolve_bundle_env_key(bundle, gpu=gpu)
+    return bundle_runtime_dir(bundle, env_key)
+
+
+def _capabilities_from_data(
+    entry_run: EntrySpec | None,
+    entry_serve: EntrySpec | None,
+) -> list[str]:
+    caps: list[str] = []
+    if entry_run is not None:
+        caps.append("run")
+    if entry_serve is not None:
+        caps.append("serve")
+    return caps
 
 
 def load_bundle_manifest(bundle_root: Path) -> BundleManifest:
@@ -120,45 +180,39 @@ def load_bundle_manifest(bundle_root: Path) -> BundleManifest:
             f"Model bundle missing flashcli-bundle.json: {path}"
         )
     data = json.loads(path.read_text(encoding="utf-8"))
-    if data.get("format") != BUNDLE_FORMAT:
-        raise ValueError(
-            f"Unsupported bundle format: {data.get('format')!r} "
-            f"(expected {BUNDLE_FORMAT!r})"
-        )
-    runtime_rel = str(data.get("runtime_dir", ".")).strip() or "."
-    if runtime_rel in (".", ""):
-        runtime_dir = root
-    else:
-        runtime_dir = (root / runtime_rel).resolve()
     entry = data.get("entry") or {}
-    caps = data.get("capabilities") or []
-    if not isinstance(caps, list):
-        caps = []
-    capabilities = [str(c) for c in caps]
-    return BundleManifest(
+    entry_run = EntrySpec.from_dict(entry.get("run") if isinstance(entry, dict) else None)
+    entry_serve = EntrySpec.from_dict(
+        entry.get("serve") if isinstance(entry, dict) else None
+    )
+    manifest = BundleManifest(
         bundle_root=root,
         name=str(data.get("name", root.name)),
-        runtime_dir=runtime_dir,
-        capabilities=capabilities,
-        entry_run=EntrySpec.from_dict(entry.get("run") if isinstance(entry, dict) else None),
-        entry_serve=EntrySpec.from_dict(
-            entry.get("serve") if isinstance(entry, dict) else None
-        ),
+        capabilities=_capabilities_from_data(entry_run, entry_serve),
+        entry_run=entry_run,
+        entry_serve=entry_serve,
         description=str(data.get("description", "")),
         raw=data,
     )
+    require_v3(manifest)
+    return manifest
 
 
-def load_runtime_manifest(runtime_dir: Path) -> dict[str, Any]:
-    """Legacy: read ``runtime/manifest.json`` only."""
-    path = runtime_dir / "manifest.json"
-    if not path.is_file():
-        raise FileNotFoundError(f"Runtime manifest missing: {path}")
-    data = json.loads(path.read_text(encoding="utf-8"))
-    fmt = data.get("format", "")
-    if fmt and fmt != RUNTIME_FORMAT:
-        raise ValueError(f"Unsupported runtime manifest format: {fmt!r}")
-    return data
+def load_bundle_manifest_data(data: dict[str, Any], *, bundle_root: Path) -> BundleManifest:
+    entry = data.get("entry") or {}
+    entry_run = EntrySpec.from_dict(entry.get("run") if isinstance(entry, dict) else None)
+    entry_serve = EntrySpec.from_dict(entry.get("serve") if isinstance(entry, dict) else None)
+    manifest = BundleManifest(
+        bundle_root=bundle_root,
+        name=str(data.get("name", bundle_root.name)),
+        capabilities=_capabilities_from_data(entry_run, entry_serve),
+        entry_run=entry_run,
+        entry_serve=entry_serve,
+        description=str(data.get("description", "")),
+        raw=data,
+    )
+    require_v3(manifest)
+    return manifest
 
 
 def _entry_module_path(bundle: BundleManifest, spec: EntrySpec) -> Path | None:
@@ -173,34 +227,42 @@ def validate_bundle_layout(
     bundle: BundleManifest,
     *,
     probe_abi: bool = False,
+    env_key: str | None = None,
 ) -> list[str]:
-    """Return validation errors (empty if OK). Supports v2 flat and legacy trees."""
+    """Return validation errors (empty if OK)."""
     errors: list[str] = []
     py_root = bundle_python_root(bundle)
-    if bundle_format_version(bundle) < 2:
-        if not bundle.runtime_dir.is_dir():
-            errors.append(f"runtime dir not found: {bundle.runtime_dir}")
-            return errors
 
-    cfg = bundle_runtime_config(bundle)
-    if bundle_format_version(bundle) >= 2:
-        if not isinstance(cfg.get("python_dependencies"), dict):
-            errors.append(
-                "flashcli-bundle.json missing python_dependencies "
-                "(merge runtime manifest into bundle json)"
-            )
-    else:
-        try:
-            if not isinstance(cfg.get("python_dependencies"), dict):
-                load_runtime_manifest(bundle.runtime_dir)
-        except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
-            errors.append(str(exc))
+    try:
+        require_v3(bundle)
+    except ValueError as exc:
+        errors.append(str(exc))
+        return errors
+
+    if not isinstance(bundle.raw.get("python_dependencies"), dict):
+        errors.append("flashcli-bundle.json missing python_dependencies")
+
+    try:
+        abi = bundle_python_abi(bundle)
+        matrix = bundle_runtime_matrix(bundle)
+        for cell in matrix:
+            if not cell.endswith(f"-py{abi}"):
+                errors.append(
+                    f"runtime key {cell!r} does not match python_abi={abi!r}"
+                )
+    except ValueError as exc:
+        errors.append(str(exc))
+
+    try:
+        bundle_runtime_map(bundle)
+    except ValueError as exc:
+        errors.append(str(exc))
 
     for cap, spec in (
         ("run", bundle.entry_run),
         ("serve", bundle.entry_serve),
     ):
-        if cap not in bundle.capabilities or spec is None:
+        if spec is None:
             continue
         mod_path = _entry_module_path(bundle, spec)
         if mod_path is None or not mod_path.is_file():
@@ -209,63 +271,28 @@ def validate_bundle_layout(
                 f"(module {spec.module!r} under {py_root})"
             )
 
-    if "run" in bundle.capabilities and bundle.entry_run is None:
-        errors.append("capabilities includes 'run' but entry.run is missing")
-    if "serve" in bundle.capabilities and bundle.entry_serve is None:
-        errors.append("capabilities includes 'serve' but entry.serve is missing")
-
-    for mod in bundle_modules(bundle):
-        file_rel = str(mod.get("file", "")).strip()
-        if not file_rel:
-            errors.append("modules[] entry missing file")
-            continue
-        if mod.get("optional"):
-            continue
-        path = module_file_path(bundle, file_rel)
-        if not path.is_file():
-            errors.append(f"required native module missing: {path}")
-
-    from flashcli.bundle.native_validate import validate_native_lib
+    from flashcli.bundle.native_validate import validate_native_runtime
     from flashcli.bundle.weights import validate_weights_spec
 
-    errors.extend(validate_native_lib(bundle, probe_abi=probe_abi))
+    errors.extend(validate_native_runtime(bundle, probe_abi=probe_abi, env_key=env_key))
     errors.extend(validate_weights_spec(bundle))
 
-    if bundle_format_version(bundle) >= 2:
-        from flashcli.bundle.assembly import describe_bundle_assembly_gaps
-
-        errors.extend(describe_bundle_assembly_gaps(bundle.bundle_root))
+    if not (bundle.bundle_root / "flash_rt").is_dir():
+        errors.append("missing flash_rt/ Python tree")
 
     return errors
 
 
 def check_bundle_python_abi(bundle: BundleManifest) -> None:
-    """Raise if the running interpreter does not match bundle ``python`` / ``python_abi``."""
-    cfg = bundle_runtime_config(bundle)
-    host_py = host_python_minor()
-    abi = str(cfg.get("python_abi", "")).strip()
-    if abi and abi not in ("multi",) and abi != host_py:
+    """Raise if the running interpreter does not match bundle ``python_abi``."""
+    abi = bundle_python_abi(bundle)
+    host = f"{sys.version_info.major}{sys.version_info.minor:02d}"
+    if abi != host:
+        major, minor = int(abi[0]), int(abi[1:])
         raise RuntimeError(
             f"Python ABI mismatch for bundle {bundle.name!r}: "
-            f"interpreter is 3.{host_py[1:] if len(host_py) >= 3 else host_py} "
-            f"({sys.executable}), but bundle python_abi={abi!r}. "
-            f"Use Python 3.{abi[1:]} or install the matching -py{abi} runtime zip."
-        )
-
-    req_py = str(cfg.get("python", "")).strip()
-    if not req_py:
-        return
-    try:
-        from packaging.specifiers import SpecifierSet
-        from packaging.version import Version
-    except ImportError:
-        return
-
-    ver = Version(
-        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    )
-    if ver not in SpecifierSet(req_py):
-        raise RuntimeError(
-            f"Python version {ver} does not satisfy bundle Requires-Python {req_py!r} "
-            f"({sys.executable})"
+            f"interpreter is 3.{host[1:]} ({sys.executable}), "
+            f"but bundle requires python_abi={abi!r} (Python 3.{minor}). "
+            f"flashcli should re-exec into the bundle venv automatically; "
+            f"if this persists, recreate the bundle runtime venv."
         )

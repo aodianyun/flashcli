@@ -11,7 +11,7 @@ Boolean flags: `1`, `true`, or `yes` (case-insensitive) enable the switch.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `FLASHCLI_HOME` | `~/.flashcli` | Cache root. Default subdirs: `bundles/`, `models/`, `cache/downloads/`. |
-| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | Override runtime bundle (zip/git) cache. |
+| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | Legacy bundle cache override (new runtimes live under `runtimes/`). |
 | `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | Override Hugging Face weights cache root (per preset usually `<dir>/<preset>/checkpoint/`). |
 | `FLASHCLI_MODELS_YAML` | (bundled) | **Override path to the preset catalog file.** Default: `flashcli/catalog/models.yaml` inside the installed package (same for pip wheel and editable installs). File must exist. |
 
@@ -58,8 +58,10 @@ Weight download behavior matches `hf download`; on failures, test the same `HF_E
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `FLASHCLI_SKIP_AUTO_INSTALL` | `0` | When `1`, `flashcli run` / `serve` / `pull` do **not** auto pip-install flashcli CLI deps (typer, huggingface_hub, …). Same as `--no-auto-install`. |
-| `FLASHCLI_SKIP_BUNDLE_ZIP` | `0` | When `1`, **do not** download/unpack `bundle.zip` from the catalog; fails if nothing is cached. For offline or `--bundle` only. |
-| `FLASHCLI_SKIP_BUNDLE_GIT` | `0` | When `1`, **do not** `git clone`/`fetch` bundle repos; fails if nothing is cached. |
+| `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | Bundle runtime cache (bundle root, `lib/`, venv). |
+| `FLASHCLI_IN_BUNDLE_VENV` | (internal) | `1` when the current process is already in the bundle venv. |
+| `FLASHCLI_RUNTIME_ID` | (internal) | Active runtime identifier. |
+| `FLASHCLI_BUNDLE_ROOT` | (internal) | Active bundle root directory. |
 
 Bundle Python deps (torch, etc.) are installed by `activate_bundle` from `flashcli-bundle.json` → `python_dependencies`; independent of `FLASHCLI_SKIP_AUTO_INSTALL`.
 
@@ -84,6 +86,7 @@ Bundle Python deps (torch, etc.) are installed by `activate_bundle` from `flashc
 |----------|-------------|
 | `FLASHCLI_ACTIVE_BUNDLE` | Absolute path of the active bundle root. |
 | `FLASHCLI_ACTIVE_RUNTIME` | Same as `FLASHCLI_ACTIVE_BUNDLE` (legacy alias). |
+| `FLASHCLI_BUNDLE_ROOT` | Same as active bundle root (set during re-exec). |
 | `PYTHONPATH` | Bundle root **prepended** for `entry` and `flash_rt` imports. |
 
 ## Related docs

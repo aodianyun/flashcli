@@ -69,14 +69,14 @@ def extra_weights_spec(
     *,
     variant: str | None = None,
 ) -> dict[str, Any]:
-    """Extra weights from ``extra_weights`` (legacy alias: ``extra_pull``)."""
+    """Extra weights from ``extra_weights``."""
     if has_bundle_variants(bundle):
         key = resolve_bundle_variant(bundle, variant)
         return variant_extra_weights(bundle, key)
     extra = bundle_dict(bundle, "extra_weights")
     if extra:
         return extra
-    return bundle_dict(bundle, "extra_pull")
+    return {}
 
 
 def post_pull_steps(bundle: BundleManifest) -> list[Any]:

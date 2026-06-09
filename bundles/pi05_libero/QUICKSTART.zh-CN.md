@@ -10,7 +10,7 @@
 ```bash
 cd /path/to/flashcli
 pip install -e .
-export BUNDLE="$(pwd)/bundles/pi05_libero"   # 本地 dev；省略则用 CDN zip
+export BUNDLE="$(pwd)/bundles/pi05_libero"   # 本地 dev；省略则走 FlashHub sync
 ```
 
 检查本机匹配哪档 runtime：
@@ -88,5 +88,5 @@ flashcli run pi05_libero --bundle "$BUNDLE" \
 
 ```bash
 bash scripts/release_bundle.sh --bundle pi05_libero --clean
-# → 上传 dist/*.zip → 更新 models.yaml 中 pi05_libero.bundle.zip
+# → 上传 dist/ 到 FlashHub → 更新 models.yaml 中 pi05_libero.bundle.repo
 ```

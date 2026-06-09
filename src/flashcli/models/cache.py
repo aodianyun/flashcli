@@ -73,22 +73,12 @@ def _load_bundle_for_preset(
     preset: Preset,
     *,
     bundle_path: Path | None = None,
-    bundle_ref: str | None = None,
-    bundle_version: str | None = None,
-    checkpoint: Path | None = None,
     quiet: bool = False,
 ) -> BundleManifest | None:
     if preset.engine != "model_bundle":
         return None
     try:
-        return load_preset_bundle(
-            preset,
-            bundle_override=bundle_path,
-            bundle_ref=bundle_ref or bundle_version,
-            checkpoint=checkpoint,
-            fetch_git=bundle_path is None,
-            quiet=quiet,
-        )
+        return load_preset_bundle(preset, bundle_override=bundle_path)
     except FileNotFoundError:
         return None
 
@@ -97,8 +87,6 @@ def ensure_model_cached(
     preset: str,
     *,
     bundle_path: Path | None = None,
-    bundle_ref: str | None = None,
-    bundle_version: str | None = None,
     checkpoint_override: Path | None = None,
     mtp_checkpoint_override: Path | None = None,
     model_variant: str | None = None,
@@ -110,8 +98,6 @@ def ensure_model_cached(
     bundle = _load_bundle_for_preset(
         p,
         bundle_path=bundle_path,
-        bundle_ref=bundle_ref or bundle_version,
-        checkpoint=checkpoint_override,
         quiet=quiet,
     )
 

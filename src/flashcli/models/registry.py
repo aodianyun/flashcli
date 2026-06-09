@@ -40,16 +40,10 @@ class Preset:
         path = str(bundle.get("path", "")).strip()
         if path:
             return f"bundle:path={path}"
-        zip_src = str(bundle.get("zip", "")).strip()
+        zip_src = str(bundle.get("repo", "")).strip()
         if zip_src:
             label = zip_src if len(zip_src) <= 72 else zip_src[:69] + "..."
-            return f"bundle:zip={label}"
-        git = bundle.get("git")
-        if isinstance(git, dict):
-            repo = str(git.get("repo", "")).strip()
-            if repo:
-                ref = str(git.get("ref", "main")).strip() or "main"
-                return f"bundle:git={repo}@{ref}"
+            return f"bundle:repo={label}"
         return self.name
 
 

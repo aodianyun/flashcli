@@ -8,14 +8,14 @@
 ```bash
 cd /path/to/flashcli
 pip install -e .
-export BUNDLE="$(pwd)/bundles/qwen_nvfp4"   # 本地 dev；省略则用 CDN zip
+export BUNDLE="$(pwd)/bundles/qwen_nvfp4"   # 本地 dev；省略则走 FlashHub sync
 ```
 
 ---
 
 ## 1. 本地 bundle 编译（dev 必做）
 
-CDN zip 已含 `lib/*.so`；源码树需先编译：
+FlashHub sync 后 `lib/` 已含本机 env 的 `.so`；本地源码树需先编译：
 
 ```bash
 export FLASHRT_REPO=/path/to/FlashRT
@@ -123,6 +123,6 @@ QWEN36_MAX_SEQ=262208 QWEN36_PORT=8000 \
 | `ImportError: flash_rt_kernels` | 未编译 bundle 或 `lib/` 与当前 SM/CUDA/Python 不匹配 |
 | `max_tokens must be <= N` | 提高 `--max-output-tokens`，或减小请求里的 `max_tokens` |
 | 首次请求很慢 | 新 `(prompt_len, max_tokens)` 触发 CUDA Graph capture；第二次通常快很多 |
-| CDN zip 行为旧 | 用 `--bundle bundles/qwen_nvfp4` 指向本地 rebuild 产物 |
+| FlashHub runtime 过旧 | 用 `--bundle bundles/qwen_nvfp4` 指向本地 rebuild 产物 |
 
-维护者发布：`bash scripts/release_bundle.sh --bundle qwen_nvfp4 --clean` → 更新 `models.yaml` 中两个 preset 的 `bundle.zip`。
+维护者发布：`bash scripts/release_bundle.sh --bundle qwen_nvfp4 --clean` → 上传 `dist/` 到 FlashHub → 更新两个 preset 的 `bundle.repo`。

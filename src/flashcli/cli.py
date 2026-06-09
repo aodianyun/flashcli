@@ -52,14 +52,9 @@ def _auto_install_flag(no_auto_install: bool) -> bool:
 
 
 def _bundle_torch_index(bundle) -> str:
-    from flashcli.bundle.manifest import bundle_cuda_config
-    from flashcli.runtime.detect import torch_index_for_cuda_tag
+    from flashcli.bundle.manifest import bundle_torch_index
 
-    cuda = bundle_cuda_config(bundle)
-    cuda_tag = str(cuda.get("cuda_tag", ""))
-    return str(cuda.get("recommended_torch_index", "")) or (
-        torch_index_for_cuda_tag(cuda_tag) if cuda_tag else "cu124"
-    )
+    return bundle_torch_index(bundle)
 
 
 def _retry_after_bundle_repair(
@@ -76,12 +71,18 @@ def _retry_after_bundle_repair(
         if not auto_install or bundle is None:
             raise
         from flashcli.deps import repair_bundle_python_stack
+        from flashcli.runtime.bundle_venv import venv_python
+        import os
+
+        runtime_id = os.environ.get("FLASHCLI_RUNTIME_ID", "")
+        py = venv_python(runtime_id) if runtime_id else None
 
         if not quiet:
             typer.echo("Missing bundle dependency; installing ...", err=True)
         repair_bundle_python_stack(
             bundle_root=bundle.bundle_root,
             torch_index=_bundle_torch_index(bundle),
+            python=py,
             quiet=quiet,
         )
         return action()
@@ -127,9 +128,7 @@ def doctor_main(
 
 @models_app.command("list")
 def models_list() -> None:
-    from flashcli.bundle.git import read_bundle_marker
-    from flashcli.bundle.ref import resolve_requested_git_ref
-    from flashcli.bundle.zip import is_preset_bundle_cached, zip_spec
+    from flashcli.bundle.marker import read_preset_marker
     from flashcli.runtime.detect import detect_gpu
 
     reg = PresetRegistry()
@@ -140,28 +139,11 @@ def models_list() -> None:
         if preset.bundle_variant:
             variant_tag = f", variant={preset.bundle_variant}"
         weights = "weights:cached" if model_cache.is_cached(name) else "weights:missing"
-        try:
-            has_zip = zip_spec(preset) is not None
-        except Exception as exc:
-            bundle_state = f"bundle:error ({exc})"
-            typer.echo(
-                f"{name}: {preset.description} [{bundle_state}{variant_tag}, {weights}]"
-            )
-            continue
-        if is_preset_bundle_cached(preset):
-            marker = read_bundle_marker(name) or {}
-            variant = marker.get("variant", "?")
-            if has_zip:
-                bundle_state = f"bundle:cached ({variant}, zip)"
-            else:
-                want_ref = resolve_requested_git_ref(preset)
-                ref = marker.get("git_ref") or marker.get("version", want_ref)
-                bundle_state = f"bundle:cached ({variant} @{ref})"
-        elif has_zip:
-            bundle_state = "bundle:missing (want zip)"
+        marker = read_preset_marker(name) or {}
+        if marker.get("bundle_root"):
+            bundle_state = f"bundle:cached ({marker.get('env_key', '?')})"
         else:
-            want_ref = resolve_requested_git_ref(preset)
-            bundle_state = f"bundle:missing (want @{want_ref})"
+            bundle_state = "bundle:missing"
         typer.echo(f"{name}: {preset.description} [{bundle_state}{variant_tag}, {weights}]")
 
 
@@ -171,119 +153,121 @@ def models_envs(
         None, help="Preset name (omit to show all presets)."
     ),
 ) -> None:
-    """List bundle environments in models.yaml and the current machine match."""
-    from flashcli.bundle.catalog import resolve_effective_bundle_cfg, variant_dir_name
-    from flashcli.bundle.manifest import load_bundle_manifest
-    from flashcli.bundle.native_naming import list_native_artifacts
-    from flashcli.bundle.resolve import _local_bundle_ready
-    from flashcli.bundle.runtime_env import host_python_minor
-    from flashcli.bundle.zip import zip_spec
+    """List bundle runtime support and the current machine match."""
+    from flashcli.bundle.catalog import raw_bundle_cfg, repo_url_for_preset
+    from flashcli.bundle.flashhub import download_manifest_from_repo
+    from flashcli.bundle.layout import is_bundle_root
+    from flashcli.bundle.manifest import bundle_runtime_matrix, bundle_python_abi, load_bundle_manifest
+    from flashcli.bundle.preflight import host_env_key
     from flashcli.runtime.detect import detect_gpu
+    from flashcli import config
 
     reg = PresetRegistry()
     names = [preset] if preset else reg.list_names()
     gpu = detect_gpu()
     if gpu is None:
         typer.echo("[!] No NVIDIA GPU detected; cannot match an environment.")
-    else:
-        typer.echo(
-            f"[i] This machine: {variant_dir_name(gpu)} "
-            f"({gpu.gpu_name or 'GPU'}, sm{gpu.sm}, cuda_tag={gpu.cuda_tag}, "
-            f"python={host_python_minor()})"
-        )
     typer.echo("")
     for name in names:
         p = reg.get(name)
         typer.echo(f"{name}:")
-        try:
-            cfg, runtime_env = resolve_effective_bundle_cfg(
-                p, gpu=gpu, require_gpu=False
-            )
-        except Exception as exc:
-            typer.echo(f"  catalog: error — {exc}")
-            continue
-        src = "zip" if cfg.get("zip") else "path" if cfg.get("path") else "git"
-        typer.echo(f"  catalog: single bundle ({src})")
-        if gpu is not None:
-            typer.echo(f"  runtime env: {runtime_env}")
+        cfg = raw_bundle_cfg(p)
+        src = "repo" if cfg.get("repo") else "path" if cfg.get("path") else "?"
+        typer.echo(f"  catalog: bundle source ({src})")
+        manifest = None
         path_str = str(cfg.get("path", "")).strip()
         if path_str:
-            from pathlib import Path
-
             root = Path(path_str).expanduser()
             if not root.is_absolute():
-                root = (config.package_root().parent / root).resolve()
-            if _local_bundle_ready(root):
+                root = (config.package_root() / root).resolve()
+            if is_bundle_root(root):
                 try:
                     manifest = load_bundle_manifest(root)
-                    matrix = manifest.raw.get("native_matrix")
-                    if isinstance(matrix, list) and matrix:
-                        typer.echo(f"  lib/: {len(matrix)} native env(s) in bundle")
-                        for key in matrix[:8]:
-                            typer.echo(f"    - {key}")
-                        if len(matrix) > 8:
-                            typer.echo(f"    ... +{len(matrix) - 8} more")
-                    elif (root / "lib").is_dir():
-                        arts = list_native_artifacts(root / "lib")
-                        keys = sorted(
-                            {
-                                parsed.catalog_key()
-                                for items in arts.values()
-                                for parsed, _ in items
-                            }
-                        )
-                        if keys:
-                            typer.echo(f"  lib/: {len(keys)} native env(s)")
-                            for key in keys[:8]:
-                                typer.echo(f"    - {key}")
                 except Exception as exc:
-                    typer.echo(f"  lib/: (unreadable) {exc}")
-        if gpu is not None and cfg.get("zip"):
+                    typer.echo(f"  manifest: error — {exc}")
+        elif cfg.get("repo"):
             try:
-                spec = zip_spec(p)
-                if spec:
-                    label = spec if len(spec) <= 60 else spec[:57] + "..."
-                    typer.echo(f"  zip: {label}")
-            except Exception:
-                pass
+                import tempfile
+
+                from flashcli.bundle.manifest import load_bundle_manifest_data
+
+                tmp = Path(tempfile.gettempdir()) / f"flashcli-manifest-{name}.json"
+                data = download_manifest_from_repo(str(cfg["repo"]), tmp, quiet=True)
+                manifest = load_bundle_manifest_data(data, bundle_root=Path("/tmp"))
+            except Exception as exc:
+                typer.echo(f"  manifest: error — {exc}")
+        if manifest is not None and gpu is not None:
+            try:
+                abi = bundle_python_abi(manifest)
+                env = host_env_key(gpu, abi)
+                matrix = bundle_runtime_matrix(manifest)
+                typer.echo(f"  this machine: {env} (python_abi={abi})")
+                typer.echo(f"  supported ({len(matrix)}):")
+                for key in matrix[:10]:
+                    mark = " ← match" if key == env else ""
+                    typer.echo(f"    - {key}{mark}")
+                if len(matrix) > 10:
+                    typer.echo(f"    ... +{len(matrix) - 10} more")
+            except Exception as exc:
+                typer.echo(f"  native envs: {exc}")
+        if cfg.get("repo"):
+            repo = str(cfg["repo"])
+            label = repo if len(repo) <= 72 else repo[:69] + "..."
+            typer.echo(f"  repo: {label}")
+        typer.echo("")
 
 
-@models_app.command("refs")
-def models_refs(
-    preset: str = typer.Argument(..., help="Model preset name."),
+@bundle_app.command("sync")
+def bundle_sync(
+    preset: str = typer.Argument(..., help="Model preset name from models.yaml."),
+    force: bool = typer.Option(False, "--force", help="Re-download manifest and artifacts."),
+    quiet: bool = typer.Option(False, "--quiet", "-q"),
 ) -> None:
-    """List declared and locally cached git refs for a preset's runtime bundle."""
-    from flashcli.bundle.git import (
-        list_bundle_refs_for_preset,
-        list_cached_refs,
-        read_bundle_marker,
-    )
-    from flashcli.bundle.ref import resolve_requested_git_ref
+    """Fetch bundle runtime from FlashHub (manifest-first, split artifacts)."""
+    from flashcli.bundle.preflight import BundleEnvironmentError
+    from flashcli.runtime.reexec import prepare_bundle_runtime
 
     p = PresetRegistry().get(preset)
-    typer.echo(f"{preset}: default ref {resolve_requested_git_ref(p)!r}")
-    catalog = list_bundle_refs_for_preset(p)
-    if catalog:
-        typer.echo("  catalog (models.yaml bundle.refs):")
-        for ref in catalog:
-            typer.echo(f"    - {ref}")
-    marker = read_bundle_marker(preset)
-    if marker:
-        active = marker.get("git_ref") or marker.get("version", "?")
-        typer.echo(
-            f"  active: @{active} -> {marker.get('bundle_root', '')}"
+    try:
+        _runtime_id, bundle_root = prepare_bundle_runtime(
+            p, quiet=quiet, force=force
         )
-    cached = list_cached_refs(preset)
-    if cached:
-        typer.echo(f"  local clones: {', '.join(cached)}")
+    except BundleEnvironmentError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(2) from exc
+    typer.echo(f"Synced bundle for {preset!r} -> {bundle_root}")
 
 
-@models_app.command("versions")
-def models_versions(
-    preset: str = typer.Argument(..., help="Model preset name."),
+@bundle_app.command("clean")
+def bundle_clean(
+    preset: Optional[str] = typer.Argument(
+        None, help="Preset name (omit to clean all cached runtimes)."
+    ),
+    all_runtimes: bool = typer.Option(
+        False, "--all", help="Remove all under ~/.flashcli/runtimes/."
+    ),
 ) -> None:
-    """Alias for ``flashcli models refs`` (legacy command name)."""
-    models_refs(preset)
+    """Remove cached bundle runtimes and venvs."""
+    import shutil
+
+    from flashcli import config
+    from flashcli.bundle.marker import read_preset_marker, runtime_dir
+
+    if all_runtimes or preset is None:
+        if config.RUNTIMES_DIR.is_dir():
+            shutil.rmtree(config.RUNTIMES_DIR)
+            typer.echo(f"Removed {config.RUNTIMES_DIR}")
+        return
+
+    marker = read_preset_marker(preset)
+    if marker and marker.get("runtime_id"):
+        rid = str(marker["runtime_id"])
+        path = runtime_dir(rid)
+        if path.is_dir():
+            shutil.rmtree(path)
+            typer.echo(f"Removed runtime {rid}")
+            return
+    typer.echo(f"No cached runtime for preset {preset!r}")
 
 
 @bundle_app.command("validate")
@@ -292,11 +276,15 @@ def bundle_validate(
     skip_abi_probe: bool = typer.Option(
         False,
         "--skip-abi-probe",
-        help="Skip loading each lib/*.so with its tagged Python (faster; matrix only).",
+        help="Skip loading each runtime/*.so with its tagged Python (faster; matrix only).",
     ),
 ) -> None:
-    """Validate bundle layout, lib/ matrix completeness, and native ABI vs filenames."""
-    from flashcli.bundle.manifest import load_bundle_manifest, validate_bundle_layout
+    """Validate bundle layout, runtime/<env-key>/ completeness, and native ABI vs filenames."""
+    from flashcli.bundle.manifest import (
+        bundle_runtime_matrix,
+        load_bundle_manifest,
+        validate_bundle_layout,
+    )
 
     bundle = load_bundle_manifest(path)
     errors = validate_bundle_layout(bundle, probe_abi=not skip_abi_probe)
@@ -314,12 +302,12 @@ def bundle_validate(
     except RuntimeError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(1) from exc
-    nm = bundle.raw.get("native_matrix")
-    if isinstance(nm, list) and nm:
+    nm = bundle_runtime_matrix(bundle)
+    if nm:
         detail = "ABI probed" if not skip_abi_probe else "matrix only"
         typer.echo(
             f"OK: bundle {bundle.name!r} at {bundle.bundle_root} "
-            f"(lib/ matrix: {len(nm)} env(s), {detail})"
+            f"(runtime map: {len(nm)} env(s), {detail})"
         )
     else:
         typer.echo(f"OK: bundle {bundle.name!r} at {bundle.bundle_root}")
@@ -345,37 +333,6 @@ def bundle_install(
     typer.echo("Bundle inference dependencies installed.")
 
 
-@bundle_app.command("sync")
-def bundle_sync(
-    preset: str = typer.Argument(..., help="Model preset name from models.yaml."),
-    bundle_ref: Optional[str] = typer.Option(
-        None,
-        "--bundle-ref",
-        "--bundle-version",
-        help="Git ref for runtime bundle (default: models.yaml bundle.git.ref).",
-    ),
-    force: bool = typer.Option(False, "--force", help="Re-fetch git repo and re-select variant."),
-    quiet: bool = typer.Option(False, "--quiet", "-q"),
-) -> None:
-    """Fetch or update the model runtime bundle (git or zip per models.yaml)."""
-    from flashcli.bundle.git import ensure_bundle_from_git
-    from flashcli.bundle.zip import ensure_bundle_from_zip, zip_spec
-
-    p = PresetRegistry().get(preset)
-    if zip_spec(p):
-        if bundle_ref:
-            typer.echo(
-                "Note: --bundle-ref is ignored for zip bundles.",
-                err=True,
-            )
-        root = ensure_bundle_from_zip(p, force=force, quiet=quiet)
-    else:
-        root = ensure_bundle_from_git(
-            p, bundle_ref=bundle_ref, force=force, quiet=quiet
-        )
-    typer.echo(f"Synced bundle for {preset!r} -> {root}")
-
-
 @app.command()
 def pull(
     preset: str = typer.Argument(..., help="Model preset name."),
@@ -385,13 +342,7 @@ def pull(
         exists=True,
         file_okay=False,
         dir_okay=True,
-        help="Override bundle root (default: git fetch per models.yaml).",
-    ),
-    bundle_ref: Optional[str] = typer.Option(
-        None,
-        "--bundle-ref",
-        "--bundle-version",
-        help="Git ref for runtime bundle (default: models.yaml bundle.git.ref).",
+        help="Override bundle root (local dev tree).",
     ),
     no_auto_install: bool = typer.Option(
         False,
@@ -401,17 +352,20 @@ def pull(
     quiet: bool = typer.Option(False, "--quiet", "-q"),
 ) -> None:
     """Download model weights (and sync runtime bundle if needed)."""
-    from flashcli.bundle.resolve import resolve_bundle_root
+    from flashcli.bundle.preflight import BundleEnvironmentError
+    from flashcli.runtime.reexec import prepare_bundle_runtime
 
     p = PresetRegistry().get(preset)
-    if bundle is None:
-        resolve_bundle_root(p, bundle_ref=bundle_ref, quiet=quiet)
+    try:
+        prepare_bundle_runtime(p, bundle_path=bundle, quiet=quiet)
+    except BundleEnvironmentError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(2) from exc
     if _auto_install_flag(no_auto_install):
         ensure_environment(install_flashcli=True, quiet=quiet)
     model_cache.ensure_model_cached(
         preset,
         bundle_path=bundle,
-        bundle_ref=bundle_ref,
         quiet=quiet,
     )
 
@@ -425,13 +379,7 @@ def run(
         exists=True,
         file_okay=False,
         dir_okay=True,
-        help="Override bundle root (default: auto from models.yaml git catalog).",
-    ),
-    bundle_ref: Optional[str] = typer.Option(
-        None,
-        "--bundle-ref",
-        "--bundle-version",
-        help="Git ref for runtime bundle (default: models.yaml bundle.git.ref).",
+        help="Override bundle root (default: FlashHub repo from models.yaml).",
     ),
     checkpoint: Optional[Path] = typer.Option(
         None,
@@ -492,8 +440,10 @@ def run(
     quiet: bool = typer.Option(False, "--quiet", "-q"),
 ) -> None:
     """Run inference using the preset's model bundle."""
+    from flashcli.bundle.preflight import BundleEnvironmentError
     from flashcli.bundle.variants import resolve_effective_model_variant
     from flashcli.engines.factory import BundleNotReadyError, activate_for_preset, create_run_engine
+    from flashcli.runtime.reexec import ensure_bundle_runtime_and_reexec
 
     p = PresetRegistry().get(preset)
 
@@ -501,10 +451,17 @@ def run(
         ensure_environment(install_flashcli=True, quiet=quiet)
 
     try:
+        ensure_bundle_runtime_and_reexec(
+            p, bundle_path=bundle, quiet=quiet
+        )
+    except BundleEnvironmentError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(2) from exc
+
+    try:
         activate_for_preset(
             p,
             bundle_path=bundle,
-            bundle_ref=bundle_ref,
             auto_install_python=_auto_install_flag(no_auto_install),
             quiet=quiet,
         )
@@ -523,7 +480,6 @@ def run(
         ckpt = model_cache.ensure_model_cached(
             preset,
             bundle_path=bundle,
-            bundle_ref=bundle_ref,
             checkpoint_override=checkpoint,
             mtp_checkpoint_override=mtp_checkpoint,
             model_variant=effective_variant,
@@ -543,7 +499,6 @@ def run(
             lambda: create_run_engine(
                 p,
                 bundle_path=bundle,
-                bundle_ref=bundle_ref,
                 checkpoint=Path(ckpt),
             ),
             bundle=active,
@@ -597,13 +552,7 @@ def serve(
         exists=True,
         file_okay=False,
         dir_okay=True,
-        help="Override bundle root (default: auto from models.yaml git catalog).",
-    ),
-    bundle_ref: Optional[str] = typer.Option(
-        None,
-        "--bundle-ref",
-        "--bundle-version",
-        help="Git ref for runtime bundle (default: models.yaml bundle.git.ref).",
+        help="Override bundle root (default: FlashHub repo from models.yaml).",
     ),
     port: int = typer.Option(8000, "--port"),
     host: str = typer.Option("0.0.0.0", "--host"),
@@ -658,8 +607,10 @@ def serve(
     quiet: bool = typer.Option(False, "--quiet", "-q"),
 ) -> None:
     """Serve unified OpenAI HTTP API via the preset model bundle."""
+    from flashcli.bundle.preflight import BundleEnvironmentError
     from flashcli.bundle.variants import resolve_effective_model_variant
     from flashcli.engines.factory import BundleNotReadyError, activate_for_preset, create_serve_engine
+    from flashcli.runtime.reexec import ensure_bundle_runtime_and_reexec
 
     p = PresetRegistry().get(preset)
 
@@ -667,10 +618,17 @@ def serve(
         ensure_environment(install_flashcli=True, quiet=quiet)
 
     try:
+        ensure_bundle_runtime_and_reexec(
+            p, bundle_path=bundle, quiet=quiet
+        )
+    except BundleEnvironmentError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(2) from exc
+
+    try:
         activate_for_preset(
             p,
             bundle_path=bundle,
-            bundle_ref=bundle_ref,
             auto_install_python=_auto_install_flag(no_auto_install),
             quiet=quiet,
         )
@@ -702,7 +660,6 @@ def serve(
         ckpt = model_cache.ensure_model_cached(
             preset,
             bundle_path=bundle,
-            bundle_ref=bundle_ref,
             checkpoint_override=checkpoint,
             mtp_checkpoint_override=mtp_checkpoint,
             model_variant=effective_variant,
@@ -732,7 +689,6 @@ def serve(
             lambda: create_serve_engine(
                 p,
                 bundle_path=bundle,
-                bundle_ref=bundle_ref,
                 checkpoint=Path(ckpt),
             ),
             bundle=active,

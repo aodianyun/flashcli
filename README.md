@@ -18,18 +18,18 @@ flashcli run pi05_libero --prompt "pick up the red block" --image /path/to/scene
 | Layer | Role |
 |-------|------|
 | **flashcli** | Distribution CLI — catalog, bundle fetch, env detection, deps, cache, HTTP gateway |
-| **Model Bundle** | Versioned artifact (`flashcli-bundle.json` + `lib/*.so` + Python entry) shipped per model family |
+| **Model Bundle** | Versioned artifact (`flashcli-bundle.json` + Python entry + per-env `runtime/` on FlashHub) |
 | **FlashRT** | Kernels and model frontends compiled into the bundle; not a pip dependency of flashcli |
 
-flashcli is intentionally thin: **inference code lives in the bundle**. The CLI activates the bundle on `PYTHONPATH`, selects the matching row from the bundle’s native matrix (`sm*-cu*-linux-x86_64-py*`), and delegates to each bundle’s `RunEngine` / `ServeEngine`.
+flashcli is intentionally thin: **inference code lives in the bundle**. The CLI syncs from FlashHub, preflights the host `runtime` env, creates a bundle venv, and delegates to each bundle’s `RunEngine` / `ServeEngine`.
 
 ---
 
 ## Why flashcli
 
-- **One command to first token** — `flashcli run <preset>` chains dependency install, CDN bundle download, weight pull, and inference.
-- **Environment-aware native selection** — multi-ABI zips (`lib/flash_rt_kernels-*-py310.so`, …); no manual `.so` picking. Use `flashcli models envs` to see what matches this host.
-- **Reproducible releases** — maintainers build matrix zips once; users consume pinned CDN URLs from [`models.yaml`](src/flashcli/catalog/models.yaml).
+- **One command to first token** — `flashcli run <preset>` chains dependency install, FlashHub bundle sync, weight pull, and inference.
+- **Split download by environment** — only this host’s `runtime/<env-key>/` is fetched; use `flashcli models envs` to see the env key.
+- **Reproducible releases** — maintainers upload `dist/` to FlashHub; users pin `bundle.repo` URLs in [`models.yaml`](src/flashcli/catalog/models.yaml).
 - **OpenAI-compatible serving** — Qwen NVFP4 presets expose `/v1/chat/completions`, streaming, tools, and session reuse via FlashRT `qwen36_agent`.
 - **Operator-friendly** — structured serve logs, `/health` with `inference_busy`, GPU batch-1 gate (503 when busy), `doctor` for preflight checks.
 - **Mirror-friendly** — Gitee install script, pip/HF mirror env vars; works in restricted networks with documented fallbacks.
@@ -40,17 +40,17 @@ flashcli is intentionally thin: **inference code lives in the bundle**. The CLI 
 
 | Preset | Task | GPU | CUDA line | Python | Capabilities |
 |--------|------|-----|-----------|--------|--------------|
-| [`pi05_libero`](bundles/pi05_libero/QUICKSTART.md) | Pi0.5 LIBERO VLA | **SM89** | cu124 or cu130 | 3.10–3.12 | `run` |
-| [`qwen3-8b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3-8B NVFP4 chat | **SM120** | **cu130 only** | 3.10–3.12 | `run`, `serve` |
-| [`qwen36-27b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **cu130 only** | 3.10–3.12 | `run`, `serve` |
+| [`pi05_libero`](bundles/pi05_libero/QUICKSTART.md) | Pi0.5 LIBERO VLA | **SM89** / **SM120** | cu124 or cu130 | **3.12** (bundle venv) | `run` |
+| [`qwen3-8b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3-8B NVFP4 chat | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
+| [`qwen36-27b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
 
 **Platform requirements**
 
 - Linux x86_64, NVIDIA driver with working `nvidia-smi`
 - **Containers**: NVIDIA CUDA runtime images (e.g. `nvcr.io/nvidia/pytorch:25.10-py3` for Qwen SM120), not plain `python:3.x`
-- **Network**: CDN bundle zip + Hugging Face weights on first run (Pi0.5 also needs Google Storage for PaliGemma tokenizer)
+- **Network**: FlashHub bundle sync + Hugging Face weights on first run (Pi0.5 also needs Google Storage for PaliGemma tokenizer)
 
-Qwen3 and Qwen3.6 share **one** runtime zip; catalog `bundle_variant` selects weights. Weights are **never** inside the zip — cached under `~/.flashcli/models/<preset>/`.
+Qwen3 and Qwen3.6 share **one** FlashHub repo; catalog `bundle_variant` selects weights. Weights are **never** inside the bundle — cached under `~/.flashcli/models/<preset>/`.
 
 ---
 
@@ -104,7 +104,7 @@ flashcli run pi05_libero \
   --image /path/to/base.jpg
 ```
 
-First run downloads the runtime zip (~bundle size), installs torch stack, and pulls ~7.5GB weights.
+First run syncs the FlashHub runtime, creates the bundle venv, installs the torch stack, and pulls ~7.5GB weights.
 
 ### 4. LLM — Qwen NVFP4
 
@@ -134,7 +134,7 @@ curl -N http://127.0.0.1:8000/v1/chat/completions \
        "max_tokens":512,"stream":true,"temperature":0}'
 ```
 
-**Local dev bundle** (rebuilt from FlashRT, not CDN):
+**Local dev bundle** (rebuilt from FlashRT, not FlashHub):
 
 ```bash
 export BUNDLE="$(pwd)/bundles/qwen_nvfp4"
@@ -168,7 +168,7 @@ Catalog source: [`src/flashcli/catalog/models.yaml`](src/flashcli/catalog/models
 | `flashcli models list` | Catalog + local cache status |
 | `flashcli models envs [preset]` | Native matrix cells vs this GPU |
 | `flashcli doctor [--install]` | Environment / GPU preflight |
-| `flashcli bundle sync <preset>` | Pre-fetch runtime zip |
+| `flashcli bundle sync <preset>` | Pre-fetch bundle runtime from FlashHub |
 | `flashcli bundle validate PATH` | Layout + native matrix check |
 
 **Common flags**: `--bundle PATH` (local bundle root), `--no-auto-install`, `--checkpoint`, `--quiet`
@@ -182,8 +182,8 @@ Qwen `serve` highlights: `--max-seq`, `--max-q-seq` (qwen3), `--K`, `--max-outpu
 ## How it works
 
 ```text
-models.yaml  →  bundle zip/path  →  activate (PYTHONPATH + lib/*.so)
-              →  pip (torch, …)   →  HF weights cache  →  RunEngine / ServeEngine
+models.yaml  →  FlashHub repo  →  manifest + preflight  →  runtime/<env-key>/
+              →  bundle venv (python_abi)  →  HF weights  →  RunEngine / ServeEngine
 ```
 
 Detailed sequence diagrams and module map: [docs/architecture.md](docs/architecture.md).
@@ -192,7 +192,7 @@ Detailed sequence diagrams and module map: [docs/architecture.md](docs/architect
 
 | Path | Contents |
 |------|----------|
-| `~/.flashcli/bundles/<preset>/` | Unpacked runtime zip |
+| `~/.flashcli/runtimes/<id>/` | Synced bundle root, `lib/`, and venv |
 | `~/.flashcli/models/<preset>/checkpoint/` | Model weights |
 | `~/.cache/flash_rt/` | Pi0.5 PaliGemma tokenizer (post-pull) |
 

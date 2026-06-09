@@ -19,24 +19,3 @@ def bundle_list(bundle: BundleManifest, key: str) -> list[Any]:
 
 def bundle_defaults(bundle: BundleManifest) -> dict[str, Any]:
     return bundle_dict(bundle, "defaults")
-
-
-def bundle_requires(bundle: BundleManifest) -> dict[str, Any]:
-    return bundle_dict(bundle, "requires")
-
-
-def bundle_allowed_sms(bundle: BundleManifest) -> set[str] | None:
-    sm_list = bundle_requires(bundle).get("sm")
-    if not isinstance(sm_list, list):
-        return None
-    return {str(s) for s in sm_list}
-
-
-def bundle_native_runtime(bundle: BundleManifest) -> bool:
-    """True when bundle declares native ``modules[]`` (legacy ``native_runtime`` ignored)."""
-    from flashcli.bundle.manifest import bundle_modules
-
-    if bundle_modules(bundle):
-        return True
-    raw = bundle.raw.get("native_runtime", True)
-    return raw is not False

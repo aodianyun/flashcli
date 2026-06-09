@@ -32,34 +32,36 @@ def describe_bundle_assembly_gaps(root: Path) -> list[str]:
             "(run: flashcli bundle build …)"
         )
 
-    lib_dir = root / "lib"
-    if not lib_dir.is_dir():
-        gaps.append("missing lib/ directory")
-    elif not any(lib_dir.glob("flash_rt_kernels*.so")):
-        gaps.append("no lib/flash_rt_kernels*-sm*-cu*-py*.so")
-
-    requires = data.get("requires") or {}
-    sm_req = requires.get("sm") if isinstance(requires, dict) else []
-    needs_fp4 = isinstance(sm_req, list) and any(str(s).strip() == "120" for s in sm_req)
-    caps = data.get("capabilities") if isinstance(data.get("capabilities"), list) else []
-
-    if lib_dir.is_dir() and not any(lib_dir.glob("flash_rt_fa2*.so")):
-        gaps.append("no lib/flash_rt_fa2*.so (required for FlashRT attention)")
-
-    # SM120 Qwen NVFP4 is in flash_rt_kernels; flash_rt_fp4.so is Thor/SM100-only.
-    if (
-        lib_dir.is_dir()
-        and needs_fp4
-        and not any(lib_dir.glob("flash_rt_kernels*.so"))
-    ):
-        gaps.append("no lib/flash_rt_kernels*.so (NVFP4 paths live in kernels on SM120)")
+    runtime = data.get("runtime")
+    if not isinstance(runtime, dict) or not runtime:
+        gaps.append("flashcli-bundle.json missing runtime map")
+    else:
+        has_kernels = False
+        for rel in runtime.values():
+            native_dir = root / str(rel).strip().lstrip("/")
+            if native_dir.is_dir() and any(native_dir.glob("flash_rt_kernels*.so")):
+                has_kernels = True
+            if native_dir.is_dir() and not any(native_dir.glob("flash_rt_fa2*.so")):
+                gaps.append(
+                    f"no flash_rt_fa2*.so under {str(rel).strip().lstrip('/')}/ "
+                    "(required for FlashRT attention)"
+                )
+        if not has_kernels:
+            gaps.append("no runtime/<env-key>/flash_rt_kernels*.so")
 
     stray = sorted(root.glob("flash_rt_*.so"))
     if stray:
         gaps.append(
-            f"native .so must be under lib/, not bundle root: "
+            f"native .so must be under runtime/<env-key>/, not bundle root: "
             f"{', '.join(p.name for p in stray[:3])}"
             + (" …" if len(stray) > 3 else "")
+        )
+
+    lib_dir = root / "lib"
+    if lib_dir.is_dir() and any(lib_dir.glob("*.so")):
+        gaps.append(
+            "lib/ contains .so files — use runtime/<env-key>/ only "
+            "(run scripts/pack_bundle.sh or release_bundle.sh)"
         )
 
     if not (root / "flash_rt").is_dir():
@@ -67,17 +69,9 @@ def describe_bundle_assembly_gaps(root: Path) -> list[str]:
 
     if not (root / "run.py").is_file():
         gaps.append("missing entry file run.py")
-    if "serve" in caps and not (root / "serve.py").is_file():
+    entry = data.get("entry") or {}
+    if isinstance(entry, dict) and entry.get("serve") and not (root / "serve.py").is_file():
         gaps.append("missing entry file serve.py")
-
-    modules = data.get("modules")
-    if isinstance(modules, list):
-        for entry in modules:
-            if not isinstance(entry, dict):
-                continue
-            file_rel = str(entry.get("file", "")).strip()
-            if file_rel.endswith(".so") and not file_rel.startswith("lib/"):
-                gaps.append(f"modules[].file must be under lib/: {file_rel!r}")
 
     return gaps
 
@@ -92,9 +86,9 @@ def format_bundle_not_ready_message(root: Path) -> str:
         lines.extend(
             [
                 "",
-                "Build (native artifacts go to lib/):",
+                "Build (matrix stages to lib/, then pack to runtime/<env-key>/):",
                 f"  bash {script} --repo-root /path/to/FlashRT -j \"$(nproc)\"",
-                f"  # or: bash {script} --repo-root /path/to/FlashRT --pack-only",
+                f"  bash scripts/pack_bundle.sh --bundle-dir {root.parent.name}/{root.name}",
                 f"  flashcli bundle validate {root}",
             ]
         )

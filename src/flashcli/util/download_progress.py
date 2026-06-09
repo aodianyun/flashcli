@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import sys
 from pathlib import Path
-from typing import BinaryIO, Mapping
+from typing import Any, BinaryIO, Mapping
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -128,3 +129,32 @@ def download_url_to_path(
         size = dest.stat().st_size
         print(f"Download complete ({format_bytes(size)}): {dest}", file=sys.stderr)
     return dest.stat().st_size
+
+
+def fetch_json_url(
+    url: str,
+    *,
+    quiet: bool = False,
+    headers: Mapping[str, str] | None = None,
+    timeout: float = 120,
+    label: str | None = None,
+    user_agent: str | None = None,
+) -> Any:
+    """GET *url* and parse JSON body."""
+    hdrs = dict(headers or {})
+    if user_agent:
+        hdrs.setdefault("User-Agent", user_agent)
+    hdrs.setdefault("Accept", "application/json")
+    req = Request(url, headers=hdrs)  # noqa: S310
+    display = label or url
+    if not quiet:
+        print(f"Fetching {display}", file=sys.stderr)
+    try:
+        with urlopen(req, timeout=timeout) as resp:
+            raw = resp.read()
+    except URLError as exc:
+        raise RuntimeError(f"Failed to fetch {url}: {exc}") from exc
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Invalid JSON from {url}: {exc}") from exc

@@ -1,297 +1,65 @@
-# flashcli 模型包标准（Model Bundle）
+# flashcli Model Bundle（format_version 3）
 
 <p align="right"><a href="model_bundle_standard.md">English</a> · <strong>简体中文</strong></p>
 
-第三方通过 **Model Bundle** 交付：一份 **`flashcli-bundle.json`**、**`entry` 推理模块**、可选 **FlashRT `.so` / `flash_rt` Python**。flashcli **仅**加载 bundle 并调用 `entry`，**不**在 flashcli 源码中实现具体 Run/Serve 逻辑。
+第三方通过 **Model Bundle** 交付推理 runtime。flashcli **仅**加载 bundle 并调用 `entry`，不在 flashcli 源码中实现模型逻辑。
 
-维护 flashcli 请参阅 [CONTRIBUTING.md](../CONTRIBUTING.md)。对外 catalog 见 [`models.yaml`](../src/flashcli/catalog/models.yaml)（`pi05_libero`、`qwen3-8b-nvfp4`、`qwen36-27b-nvfp4`）。
-
-每个 preset 在 **`models.yaml`** 中仅登记 **一个** bundle 源：顶层 **`bundle.zip` / `path` / `git`**。多环境 runtime 打在同一制品内（推荐：**单 zip + `lib/` 原生矩阵**）。详见 [runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md)。
-
-## 目录布局
-
-`{bundle_root}` 即运行时根（git checkout、`--bundle`、或 `~/.flashcli/bundles/...` 缓存）。除 `flashcli-bundle.json` 与 `entry` 指向的模块外，**无硬性子目录**。
+## 目录布局（运行时根）
 
 ```text
 {bundle_root}/
-├── flashcli-bundle.json    # 必须：entry、weights、python_dependencies、可选 native_matrix
-├── run.py                  # 示例：entry.run.module = "run"
-├── lib/                    # 可选（推荐）：带环境标签的 *.so（多环境矩阵）
-├── flash_rt/               # 可选：FlashRT Python（官方包推荐；包内勿重复放 .so）
-└── checkpoint/             # 可选：内嵌权重
+├── flashcli-bundle.json    # format_version: 3
+├── run.py / serve.py       # entry 模块
+├── flash_rt/               # FlashRT Python（不含 .so）
+└── runtime/<env-key>/       # 本机 env 的 *.so（FlashHub 按环境分包下载）
 ```
 
-**已发布参考（`pi05_libero`）** — 单个 CDN zip，内含 `lib/` 矩阵及：
+权重不在 bundle 内，由 `weights` 字段声明，缓存在 `~/.flashcli/models/<preset>/`。
 
-```text
-flashcli-bundle.json
-run.py
-_pi05_compat.py
-flash_rt/
-lib/
-  flash_rt_kernels-{abi}-sm89-cu124-linux-x86_64-py310.so
-  flash_rt_fa2-{abi}-sm89-cu124-linux-x86_64-py310.so
-  ...（cu130、py311、py312 等）
-```
-
-**第三方**：可仅 `run.py` + `modules[].file` 声明的 `.so`，或完整 `lib/` 矩阵；`.so` **只发布一份**，路径在 manifest 中声明即可。
-
-激活时 flashcli 将 **`bundle_root`** 加入 `PYTHONPATH`，安装 `python_dependencies`，并从 `lib/`（矩阵）或 `modules[]`（显式路径）加载原生扩展。
-
-## 权重
-
-在 `flashcli-bundle.json` 中声明（`models.yaml` **不**写权重）：
-
-1. **包内**：`{bundle_root}/checkpoint/`（`weights_dir` 可改名）
-2. **HuggingFace**：`weights.repo` / `revision`
-
-解析顺序：
-
-1. `--checkpoint`
-2. 包内 `{weights_dir}/` 已有文件
-3. `~/.flashcli/models/<preset>/checkpoint/`
-4. 按 `weights` 从 HuggingFace 下载
-
-## `flashcli-bundle.json`
-
-```json
-{
-  "format": "flashcli-model-bundle",
-  "format_version": 2,
-  "name": "my-model",
-  "description": "可选说明",
-  "weights_dir": "checkpoint",
-  "capabilities": ["run", "serve"],
-  "weights": {
-    "source": "huggingface",
-    "repo": "org/weights",
-    "revision": "main"
-  },
-  "defaults": {},
-  "serve": {},
-  "post_pull": [{ "tokenizer": "paligemma" }],
-  "entry": {
-    "run": { "module": "run", "attr": "RunEngine" },
-    "serve": { "module": "serve", "attr": "ServeEngine" }
-  },
-  "python": ">=3.10,<3.13",
-  "python_abi": "310",
-  "python_dependencies": {
-    "torch": "torch",
-    "pip": ["numpy", "transformers<4.56", "safetensors"],
-    "optional_groups": { "server": ["fastapi", "uvicorn"] }
-  },
-  "cuda": {
-    "cuda_tag": "124",
-    "recommended_torch_index": "cu124"
-  },
-  "native_layout": "matrix",
-  "native_matrix": ["sm89-cu124-linux-x86_64-py310"],
-  "modules": [
-    { "file": "flash_rt_kernels.so", "optional": false }
-  ]
-}
-```
-
-| 字段 | 说明 |
-|------|------|
-| `format_version` | 必须为 `2`（扁平 bundle 根） |
-| `capabilities` | `run`、`serve` |
-| `entry.run` / `entry.serve` | 相对 **bundle 根** PYTHONPATH 的模块 + 类名 |
-| `python_dependencies` | pip / torch |
-| `python` / `python_abi` | 解释器约束；不匹配时在激活阶段快速失败 |
-| `cuda` | `cuda_tag`、`recommended_torch_index` 等 |
-| `native_layout` / `native_matrix` | `native_layout: matrix` 时从 `lib/` 按本机环境选带标签 `.so` |
-| `modules` | 可选显式 `.so` 路径（相对 bundle 根）；无 `lib/` 矩阵时使用 |
-| `weights` / `extra_weights` | 主/附加权重下载 |
-| `defaults` / `serve` | 传给引擎的默认参数 |
-| `post_pull` | 拉权重后步骤（tokenizer 等） |
-| `requires.sm` | 可选：加载原生库时的 SM 白名单 |
-| `build` / `native_libs` | 构建脚本写入的快照元数据 |
-
-### 原生 `.so` 命名（`lib/` 矩阵）
-
-带标签制品格式：
-
-```text
-{模块}-{FlashRT_ABI}-sm{SM}-cu{CUDA}-{os}-{arch}-py{PY}.so
-```
-
-示例：`flash_rt_kernels-abc1234-sm89-cu124-linux-x86_64-py312.so`
-
-`flashcli run` 使用的环境键为 **`sm{SM}-cu{CUDA}-{os}-{arch}-py{PY}`**（含 Python ABI）。CUDA 仅在同一运行时大版本内模糊匹配（如 `cu124`↔`cu128`，**不会** `cu124`→`cu130`）。详见 [runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md)。
-
-### 示例：Pi0.5 VLA（已发布 — `pi05_libero`）
-
-```json
-{
-  "name": "pi05_libero",
-  "config": "pi05",
-  "framework": "torch",
-  "capabilities": ["run"],
-  "requires": { "sm": ["89"] },
-  "weights": {
-    "source": "huggingface",
-    "repo": "lerobot/pi05_libero_finetuned_v044",
-    "revision": "main"
-  },
-  "post_pull": [{ "tokenizer": "paligemma" }],
-  "entry": { "run": { "module": "run", "attr": "RunEngine" } },
-  "python_dependencies": { "torch": "torch", "pip": ["numpy", "pillow", "..."] }
-}
-```
-
-catalog 通过 `models.yaml` 的单个 `bundle.zip` 指向已组装制品；权重由 HF 拉取。维护者从源码构建见 [bundles/pi05_libero/README.zh-CN.md](../bundles/pi05_libero/README.zh-CN.md)。用户可用 `flashcli models envs pi05_libero` 查看本机环境键及 `lib/` 是否含匹配制品。
-
-### 示例：同类多模型 — 单 runtime + catalog 多 preset（Qwen NVFP4）
-
-工业上**同类模型共用一个 runtime 制品**（一份 `.so` + `flash_rt/`），差异只在权重与默认超参：
-
-| 层 | 职责 |
-|----|------|
-| **bundle**（`flashcli-bundle.json`） | `variants.qwen3` / `variants.qwen36`：权重 repo、`weights_dir`、`serve` 默认、`env` |
-| **catalog**（`models.yaml`） | 多个 preset 指向**同一** `bundle.path` 或 `bundle.zip`，用 **`bundle_variant`** 选型 |
-| **CLI** | `--model` 仅覆盖 catalog（调试/临时切换） |
+## catalog（models.yaml）
 
 ```yaml
-# models.yaml — 两个产品 preset，一个 zip
-qwen3-8b-nvfp4:
-  bundle_variant: qwen3
-  bundle:
-    zip: https://.../flashcli-bundle-qwen_nvfp4-{abi}-sm120-multi-linux-x86_64-{timestamp}.zip
-    # path: bundles/qwen_nvfp4
-
-qwen36-27b-nvfp4:
-  bundle_variant: qwen36
-  bundle:
-    zip: https://.../flashcli-bundle-qwen_nvfp4-{abi}-sm120-multi-linux-x86_64-{timestamp}.zip
-```
-
-```bash
-flashcli run qwen3-8b-nvfp4 --prompt "你好"      # 自动 variant=qwen3
-flashcli run qwen36-27b-nvfp4 --prompt "你好" --K 6
-flashcli run qwen3-8b-nvfp4 --model qwen36 ...  # 临时覆盖（不推荐常态）
-```
-
-发布构建：`bash scripts/release_bundle.sh --bundle qwen_nvfp4 --clean` → `bundles/qwen_nvfp4/dist/*.zip`（**一个** multi-env zip，**cu130 only**，勿按 preset 拆包）。本地单档：[`bundles/qwen_nvfp4/build.sh`](../bundles/qwen_nvfp4/build.sh)。
-
-## `entry` 入口约定
-
-- `entry.*.module` 相对于 **bundle 根**（如 `run` → `run.py`）。
-- 类实现 flashcli [`engines/base.py`](../src/flashcli/engines/base.py) 中的 `RunEngine` / `ServeEngine` 协议。
-- 可 `from flashcli.bundle.activate import active_bundle` 读取 `defaults` / `serve`。
-- 推理逻辑（`flash_rt`、`transformers`、裸 `.so` 算子等）**全部在 entry 模块内**。
-
-## flashcli 推理协议（宿主侧）
-
-bundle 内 entry 模块实现以下接口；flashcli `serve` 提供固定 HTTP 路由。
-
-### RunEngine
-
-| 方法 | 说明 |
-|------|------|
-| `load(checkpoint, preset, **opts)` | 加载模型 |
-| `predict(prompt=, images=, **kwargs)` | 返回 `ndarray` 或 `dict` |
-
-### ServeEngine
-
-| 方法 | 说明 |
-|------|------|
-| `load(...)` | 加载模型 |
-| `warmup(spec)` | 可选，如 `"32:128,128:256"` |
-| `model_id` | `/v1/models` 返回的 id |
-| `chat(request)` | 非流式 |
-| `chat_stream(request)` | 流式 |
-
-## Git bundle
-
-**版本 = git ref**（branch / tag / commit）。每个 ref 对应本地：
-
-```text
-~/.flashcli/bundles/<preset>/refs/<sanitized_ref>/
-~/.flashcli/bundles/<preset>/.flashcli_bundle.json
-```
-
-ref 优先级：`--bundle-ref` > `bundle.git.ref` > `refs[].default` > `main`。
-
-flashcli 在仓库根或子树中定位 `flashcli-bundle.json`；**原生环境在运行时**由 `lib/` 或 `modules[]` 选择，**不再**按 git 仓内 `variants/<env>/` 子目录切换。
-
-权重独立：`~/.flashcli/models/<preset>/checkpoint/`。
-
-## `src/flashcli/catalog/models.yaml`
-
-**仅** preset 名与 **每个 preset 一个** bundle 源（当前 `schema_version: 6`）。
-
-```yaml
-schema_version: 6
-
 models:
-  pi05_libero:
-    description: Pi0.5 LIBERO — ...
+  my-preset:
     bundle:
-      zip: https://cdn.example/.../flashcli-bundle-pi05-{abi}-sm89-multi-linux-x86_64-{timestamp}.zip
-      # path: bundles/pi05_libero   # 本地调试（须含本机匹配的 lib/*.so）
-      # git: { repo: "...", ref: main }
+      repo: https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/my_model/1.0.0
+      # path: bundles/my_bundle   # 本地开发
 ```
+
+- **`bundle.repo`** — FlashHub 语义化 API（`/api/v1/repos/{org}/{model}/{version}`），返回 `data.files[]`（`download_url`、`file_size`、`md5_hash`）。
+- **`bundle.path`** — 本地 bundle 目录（开发用）。
+- **`bundle_variant`** — 多 preset 共享同一 repo 时区分权重（如 Qwen3 / Qwen3.6）。
+
+同 repo 多 preset（如 qwen3 / qwen36）共享 runtime 与 venv，用 `bundle_variant` 区分权重。
+
+## flashcli-bundle.json（v3 必填）
 
 | 字段 | 说明 |
 |------|------|
-| `bundle.path` | 本地 bundle 目录（相对 flashcli 包根） |
-| `bundle.git` | 远程仓 + 默认 ref |
-| `bundle.zip` | 远程 URL 或本地 `.zip` |
-| `bundle.refs` | 可选 git ref 白名单 |
+| `format_version: 3` | 唯一支持版本 |
+| `description` | bundle 说明（推荐） |
+| `python_abi` | bundle 固定 Python ABI（如 `312` = 3.12） |
+| `runtime` | `{env_key: path}` — 路径通常为 `runtime/<env-key>/`（含该 env 的 `.so`） |
+| `entry` | `run` / `serve` 模块与类 |
+| `python_dependencies` | `torch`（可 `{package, index}`）+ `pip` |
 
-**已移除 `bundle.variants`** — 不要在 catalog 里按环境登记多个 zip。多环境请打进同一 zip 的 `lib/` 矩阵（见 [runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md)）。
+环境键：`sm{SM}-cu{CUDA}-{os}-{arch}-py{PY}`（PY 来自 `python_abi`）。能力由 `entry` 推断。
 
-Bundle 解析：`--bundle` > catalog 的 `zip` / `path` / `git` > 本地缓存 > 下载 / clone。
+## FlashHub 发布
 
-环境变量（`FLASHCLI_MODELS_YAML`、`FLASHCLI_HOME`、`HF_ENDPOINT` 等）见 [environment.zh-CN.md](environment.zh-CN.md)。
+`bash scripts/pack_bundle.sh --bundle-dir bundles/<name>` 产出：
 
-## 构建脚本（FlashRT 源码，Linux + GPU）
+- `dist/flashcli-bundle.json` + `run.py`、`flash_rt/` 等 bundle 源码树
+- `dist/runtime/<env-key>/` — 该 env 的 `flash_rt_*.so`
 
-矩阵配置：`bundles/<name>/release-matrix.env`。Bundle 专用 cmake：`bundles/<name>/_bundle_build.sh`。
+上传整个 `dist/` 到 FlashHub；catalog 填 `bundle.repo` 指向语义化版本 URL（如 `…/repos/flashcli-bundle/pi05_libero/1.0.2`）。
 
-**一键发布（推荐）：**
+## 运行时流程
 
-```bash
-cd flashcli
-bash scripts/release_bundle.sh --bundle pi05_libero --clean
-bash scripts/release_bundle.sh --bundle qwen_nvfp4 --clean
-```
+1. GET FlashHub 目录 → 下载 `flashcli-bundle.json`
+2. preflight：本机 env 是否匹配 `runtime` 中某一 key（可 fuzzy 匹配 sm/cuda）
+3. 下载 bundle 源码树 + 本 env 的 `runtime/<env-key>/` 制品
+4. 创建 `~/.flashcli/runtimes/<id>/venv`（Python = manifest.python_abi）
+5. re-exec 进入 bundle venv → activate → `entry`
 
-**分步（宿主机矩阵）：**
-
-```bash
-bash scripts/build_release_matrix.sh --bundle pi05_libero --check-only
-bash scripts/release_bundle.sh --bundle pi05_libero --cuda-tag 124   # 第二条线勿 --clean
-bash scripts/build_release_matrix.sh --bundle pi05_libero --pack-only
-```
-
-**单环境本地开发：**
-
-```bash
-cd bundles/pi05_libero
-bash build.sh --repo-root /path/to/FlashRT
-```
-
-Release zip 文件名含 FlashRT ABI + 时间戳，见 [runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md)。
-
-Qwen NVFP4：**仅 cu130**（需 nvcc 支持 sm_120/sm_120a）。见 [bundles/qwen_nvfp4/README.zh-CN.md](../bundles/qwen_nvfp4/README.zh-CN.md)。
-
-## 最小交付清单
-
-1. `flashcli-bundle.json`（`format_version: 2`，含 `entry`、`python_dependencies`、可选 `native_layout` / `modules` / `cuda`）
-2. `entry` 指向的 Python 模块（如 `run.py` + `RunEngine`）
-3. 可选：`lib/` 带标签 `.so` 矩阵 **或** `modules[].file` 列表
-4. 可选：`flash_rt/` Python 树
-5. 权重：`checkpoint/` 或 `weights.repo`
-
-## 验证
-
-```bash
-flashcli bundle validate /path/to/bundle
-flashcli run pi05_libero --bundle /path/to/bundle --image /path/to/base.jpg
-# serve 类 bundle 在验证通过后：
-# flashcli bundle install /path/to/bundle --profile serve
-# flashcli serve <preset> --bundle /path/to/bundle --port 8000
-```
+详见 [runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md)、[environment.zh-CN.md](environment.zh-CN.md)。

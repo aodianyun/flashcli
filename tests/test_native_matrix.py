@@ -7,18 +7,22 @@ from unittest.mock import patch
 import pytest
 
 from flashcli.bundle.manifest import load_bundle_manifest
-from flashcli.bundle.native import _native_matrix_enabled, probe_native_python_abi
+from flashcli.bundle.native import probe_native_python_abi
 from flashcli.bundle.native_naming import (
     NativeEnvironmentNotSupportedError,
     ParsedNativeTag,
-    lib_dir_has_tagged_native_artifacts,
+    host_runtime_env_key,
+    native_dir_has_tagged_native_artifacts,
     native_so_filename,
     parse_native_tag_suffix,
     resolve_native_modules_for_host,
     score_native_tag,
 )
-from flashcli.bundle.native_naming import host_runtime_env_key
 from flashcli.runtime.detect import GpuInfo
+
+CELL312 = "sm89-cu124-linux-x86_64-py312"
+CELL310 = "sm89-cu124-linux-x86_64-py310"
+RUNTIME312 = f"runtime/{CELL312}"
 
 
 def _gpu(sm: str = "89", cuda: str = "124") -> GpuInfo:
@@ -32,6 +36,12 @@ def _gpu(sm: str = "89", cuda: str = "124") -> GpuInfo:
     )
 
 
+def _runtime_dir(root: Path, cell: str) -> Path:
+    d = root / "runtime" / cell
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def test_parse_tag_suffix():
     t = parse_native_tag_suffix("abc-sm89-cu124-linux-x86_64-py312")
     assert t is not None
@@ -39,113 +49,98 @@ def test_parse_tag_suffix():
     assert t.python_minor == "312"
 
 
-def test_select_from_lib(tmp_path: Path):
-    lib = tmp_path / "lib"
-    lib.mkdir()
+def test_select_from_runtime(tmp_path: Path):
+    native = _runtime_dir(tmp_path, CELL312)
     tag = "dev-sm89-cu124-linux-x86_64-py312"
     for base in ("flash_rt_kernels", "flash_rt_fa2"):
-        (lib / native_so_filename(base, tag)).write_bytes(b"\x00")
+        (native / native_so_filename(base, tag)).write_bytes(b"\x00")
     tag310 = "dev-sm89-cu124-linux-x86_64-py310"
-    (lib / native_so_filename("flash_rt_kernels", tag310)).write_bytes(b"\x00")
-    (lib / native_so_filename("flash_rt_fa2", tag310)).write_bytes(b"\x00")
+    other = _runtime_dir(tmp_path, CELL310)
+    (other / native_so_filename("flash_rt_kernels", tag310)).write_bytes(b"\x00")
 
     resolved = resolve_native_modules_for_host(
         tmp_path,
         _gpu(),
+        native_dir_rel=RUNTIME312,
         allowed_sm=["89", "120"],
         python_minor="312",
     )
-    assert resolved["flash_rt_kernels"].parent.name == "lib"
+    assert resolved["flash_rt_kernels"].parent.name == CELL312
     assert resolved["flash_rt_kernels"].name.endswith("py312.so")
 
 
 def test_select_missing_fails(tmp_path: Path):
-    lib = tmp_path / "lib"
-    lib.mkdir()
+    native = _runtime_dir(tmp_path, "sm89-cu130-linux-x86_64-py310")
     tag = "dev-sm89-cu130-linux-x86_64-py310"
-    (lib / native_so_filename("flash_rt_kernels", tag)).write_bytes(b"\x00")
+    (native / native_so_filename("flash_rt_kernels", tag)).write_bytes(b"\x00")
     with pytest.raises(NativeEnvironmentNotSupportedError):
-        resolve_native_modules_for_host(tmp_path, _gpu(cuda="124"))
+        resolve_native_modules_for_host(
+            tmp_path, _gpu(cuda="124"), native_dir_rel="runtime/sm89-cu130-linux-x86_64-py310"
+        )
 
 
 def test_select_cu130_when_host_cuda_130(tmp_path: Path) -> None:
-    lib = tmp_path / "lib"
-    lib.mkdir()
     for cuda in ("124", "130"):
+        cell = f"sm89-cu{cuda}-linux-x86_64-py310"
+        native = _runtime_dir(tmp_path, cell)
         tag = f"dev-sm89-cu{cuda}-linux-x86_64-py310"
         for base in ("flash_rt_kernels", "flash_rt_fa2"):
-            (lib / native_so_filename(base, tag)).write_bytes(b"\x00")
+            (native / native_so_filename(base, tag)).write_bytes(b"\x00")
     resolved = resolve_native_modules_for_host(
-        tmp_path, _gpu(cuda="130"), python_minor="310"
+        tmp_path,
+        _gpu(cuda="130"),
+        native_dir_rel="runtime/sm89-cu130-linux-x86_64-py310",
+        python_minor="310",
     )
     assert "cu130" in resolved["flash_rt_kernels"].name
     assert "cu130" in resolved["flash_rt_fa2"].name
 
 
-def test_lib_dir_has_tagged_native_artifacts(tmp_path: Path) -> None:
-    lib = tmp_path / "lib"
-    lib.mkdir()
-    assert not lib_dir_has_tagged_native_artifacts(lib)
-    (lib / native_so_filename("flash_rt_kernels", "dev-sm120-cu130-linux-x86_64-py312")).write_bytes(
+def test_native_dir_has_tagged_native_artifacts(tmp_path: Path) -> None:
+    native = _runtime_dir(tmp_path, "sm120-cu130-linux-x86_64-py312")
+    assert not native_dir_has_tagged_native_artifacts(native)
+    (native / native_so_filename("flash_rt_kernels", "dev-sm120-cu130-linux-x86_64-py312")).write_bytes(
         b"\x00"
     )
-    assert lib_dir_has_tagged_native_artifacts(lib)
+    assert native_dir_has_tagged_native_artifacts(native)
 
 
-def _bundle_without_matrix_manifest(root: Path) -> None:
+def _v3_bundle(root: Path) -> None:
     root.mkdir(parents=True, exist_ok=True)
-    (root / "lib").mkdir()
     (root / "flash_rt").mkdir()
     (root / "run.py").write_text("# stub\n", encoding="utf-8")
+    cell = "sm120-cu130-linux-x86_64-py312"
+    native = _runtime_dir(root, cell)
+    tag = f"dev-{cell}"
+    for base in ("flash_rt_kernels", "flash_rt_fa2"):
+        (native / native_so_filename(base, tag)).write_bytes(b"\x00")
     data = {
         "format": "flashcli-model-bundle",
-        "format_version": 2,
+        "format_version": 3,
         "name": "qwen_nvfp4",
-        "capabilities": ["run"],
+        "python_abi": "312",
+        "runtime": {cell: f"runtime/{cell}"},
         "entry": {"run": {"module": "run", "attr": "RunEngine"}},
-        "python_dependencies": {"torch": "torch", "pip": []},
-        "requires": {"sm": ["120"]},
-        "weights": {"source": "huggingface", "repo": "test/model"},
+        "python_dependencies": {"torch": {"package": "torch", "index": "cu124"}, "pip": []},
     }
     (root / "flashcli-bundle.json").write_text(json.dumps(data), encoding="utf-8")
 
 
-def test_native_matrix_auto_detect_without_manifest(tmp_path: Path) -> None:
-    root = tmp_path / "bundle"
-    _bundle_without_matrix_manifest(root)
-    lib = root / "lib"
-    for py in ("310", "311", "312"):
-        tag = f"dev-sm120-cu130-linux-x86_64-py{py}"
-        for base in ("flash_rt_kernels", "flash_rt_fa2"):
-            (lib / native_so_filename(base, tag)).write_bytes(b"\x00")
-    bundle = load_bundle_manifest(root)
-    assert _native_matrix_enabled(bundle)
-
-
-@patch("flashcli.bundle.native_naming.host_python_minor", return_value="312")
 @patch("flashcli.bundle.native._probe_so_file")
-def test_probe_selects_host_python_abi_without_manifest(
-    mock_probe, _mock_py, tmp_path: Path
-) -> None:
+def test_probe_uses_manifest_python_abi(mock_probe, tmp_path: Path) -> None:
     root = tmp_path / "bundle"
-    _bundle_without_matrix_manifest(root)
-    lib = root / "lib"
-    for py in ("310", "311", "312"):
-        tag = f"dev-sm120-cu130-linux-x86_64-py{py}"
-        for base in ("flash_rt_kernels", "flash_rt_fa2"):
-            (lib / native_so_filename(base, tag)).write_bytes(b"\x00")
+    _v3_bundle(root)
     bundle = load_bundle_manifest(root)
     probe_native_python_abi(bundle, gpu=_gpu(sm="120", cuda="130"))
-    mock_probe.assert_called_once()
+    mock_probe.assert_called()
     assert mock_probe.call_args[0][0].name.endswith("py312.so")
 
 
 def test_sm120_uses_sm89_artifact(tmp_path: Path):
-    lib = tmp_path / "lib"
-    lib.mkdir()
+    native = _runtime_dir(tmp_path, CELL312)
     tag = "dev-sm89-cu124-linux-x86_64-py312"
-    (lib / native_so_filename("flash_rt_kernels", tag)).write_bytes(b"\x00")
-    (lib / native_so_filename("flash_rt_fa2", tag)).write_bytes(b"\x00")
+    (native / native_so_filename("flash_rt_kernels", tag)).write_bytes(b"\x00")
+    (native / native_so_filename("flash_rt_fa2", tag)).write_bytes(b"\x00")
     host = host_runtime_env_key(_gpu(sm="120", cuda="128"), python_minor="312")
     artifact = ParsedNativeTag("dev", "89", "124", "linux", "x86_64", "312")
     assert score_native_tag(artifact, host, allowed_sm=["89", "120"]) > 0

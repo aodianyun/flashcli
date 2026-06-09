@@ -18,6 +18,9 @@ MODELS_DIR = Path(
     os.environ.get("FLASHCLI_MODELS_DIR", FLASHCLI_HOME / "models")
 ).expanduser()
 CACHE_DIR = FLASHCLI_HOME / "cache" / "downloads"
+RUNTIMES_DIR = Path(
+    os.environ.get("FLASHCLI_RUNTIMES_DIR", FLASHCLI_HOME / "runtimes")
+).expanduser()
 CONFIG_FILE = FLASHCLI_HOME / "config.yaml"
 
 SKIP_AUTO_INSTALL_ENV = "FLASHCLI_SKIP_AUTO_INSTALL"

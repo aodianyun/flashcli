@@ -87,3 +87,46 @@ def cuda_runtime_family(cuda_tag: str) -> str:
     if tag.startswith("12") or tag in ("124", "128", "120"):
         return "12"
     return tag[:2] if len(tag) >= 2 else tag
+
+
+def score_env_key_match(artifact: RuntimeEnvKey, host: RuntimeEnvKey) -> int:
+    """Rank manifest ``runtime`` keys against this machine (higher = better)."""
+    if artifact.python_minor != host.python_minor:
+        return 0
+    if artifact.os_name != host.os_name or artifact.arch != host.arch:
+        return 0
+    score = 20
+    if artifact.sm == host.sm:
+        score += 10
+    else:
+        score += 6
+    if artifact.cuda_tag == host.cuda_tag:
+        score += 5
+    elif cuda_runtime_family(artifact.cuda_tag) == cuda_runtime_family(host.cuda_tag):
+        score += 3
+    return score
+
+
+def resolve_runtime_env_key(
+    runtime_map: dict[str, str],
+    host_key: str,
+) -> str | None:
+    """Pick the best ``runtime`` map key for *host_key* (exact or fuzzy)."""
+    if host_key in runtime_map:
+        return host_key
+    try:
+        host = parse_variant_key(host_key)
+    except ValueError:
+        return None
+    best_key: str | None = None
+    best_score = 0
+    for key in runtime_map:
+        try:
+            artifact = parse_variant_key(key)
+        except ValueError:
+            continue
+        score = score_env_key_match(artifact, host)
+        if score > best_score:
+            best_score = score
+            best_key = key
+    return best_key if best_score > 0 else None

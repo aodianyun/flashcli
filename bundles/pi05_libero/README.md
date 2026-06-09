@@ -4,21 +4,19 @@
 
 Pi0.5 LIBERO VLA; weights [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044).
 
-**Public preset**: `pi05_libero` ([`src/flashcli/catalog/models.yaml`](../../src/flashcli/catalog/models.yaml)). End users pull one CDN zip; flashcli selects the matching `lib/*.so` for this GPU + Python. Run `flashcli models envs pi05_libero` to check a match on this host.
+**Public preset**: `pi05_libero` ([`src/flashcli/catalog/models.yaml`](../../src/flashcli/catalog/models.yaml)). End users sync runtime from FlashHub via `bundle.repo`; flashcli matches manifest `runtime` env keys and installs `.so` under `lib/`. Run `flashcli models envs pi05_libero` to check a match on this host.
 
-## Files required to run inference (bundle root)
+## Files required to run inference (after sync)
 
 ```text
 flashcli-bundle.json
 run.py
 _pi05_compat.py
-lib/
-  flash_rt_kernels-*-sm89-cu{124|130}-linux-x86_64-py{310|311|312}.so
-  flash_rt_fa2-*-....so
-flash_rt/                 # trimmed Python tree (no .so inside)
+lib/                       # *.so for this host (from runtime/<env-key>/)
+flash_rt/
 ```
 
-Weights are downloaded by flashcli to `~/.flashcli/models/pi05_libero/checkpoint/`, not shipped in the zip.
+Weights are downloaded by flashcli to `~/.flashcli/models/pi05_libero/checkpoint/`, not shipped in the bundle.
 
 ## End users
 
@@ -68,9 +66,9 @@ Use `--native` instead of Docker when both CUDA toolkits are on the host.
 ### After release
 
 1. Smoke-test: `flashcli run pi05_libero --bundle bundles/pi05_libero --benchmark 5`
-2. Upload `dist/*.zip` to CDN
-3. Update `src/flashcli/catalog/models.yaml` → `pi05_libero.bundle.zip`
-4. Verify on **SM89** (e.g. RTX 4090)
+2. Upload `dist/` to FlashHub
+3. Update `src/flashcli/catalog/models.yaml` → `pi05_libero.bundle.repo`
+4. Verify on target GPU (e.g. RTX 4090 / SM89)
 
 ### Local single-env dev
 
@@ -85,7 +83,7 @@ See [docs/runtime-matrix.md](../../docs/runtime-matrix.md) for the full matrix l
 
 ### HuggingFace weight download fails (`LocalEntryNotFoundError`)
 
-The release zip is runtime-only; ~7.5GB weights are fetched from the Hub. In K8s or restricted networks, both `huggingface.co` and `hf-mirror.com` may fail with this error (usually DNS/firewall/proxy, not a missing repo).
+The bundle is runtime-only; ~7.5GB weights are fetched from the Hub. In K8s or restricted networks, both `huggingface.co` and `hf-mirror.com` may fail with this error (usually DNS/firewall/proxy, not a missing repo).
 
 ```bash
 rm -rf ~/.flashcli/models/pi05_libero/checkpoint

@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Merge runtime fields into flashcli-bundle.json (v2 flat bundle layout)."""
+"""Merge runtime fields into flashcli-bundle.json (format_version 3, split artifacts)."""
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
@@ -22,12 +21,8 @@ def _load_toml(path: Path) -> dict:
 
         return tomllib.loads(text)
     except ImportError:
-        try:
-            import tomli
-        except ImportError as exc:
-            raise SystemExit(
-                "tomllib (3.11+) or tomli required to read pyproject.toml"
-            ) from exc
+        import tomli
+
         return tomli.loads(text)
 
 
@@ -61,18 +56,12 @@ def _runtime_requirements_file(repo_root: Path) -> Path:
     return repo_root / "requirements" / "runtime-inference.txt"
 
 
-def extract_runtime_packages(repo_root: Path) -> tuple[str, list[str], dict[str, list[str]]]:
-    """Merge requirements/runtime-inference.txt + pyproject.toml [torch] extra."""
+def extract_runtime_packages(repo_root: Path) -> tuple[str, list[str]]:
     merged: list[str] = []
-
     req_file = _runtime_requirements_file(repo_root)
     if req_file.is_file():
         merged.extend(_parse_requirements_txt(req_file.read_text(encoding="utf-8")))
-    else:
-        print(f"Warning: {req_file} missing; falling back to pyproject.toml only", file=sys.stderr)
-
     pyproject = repo_root / "pyproject.toml"
-    optional: dict = {}
     if pyproject.is_file():
         data = _load_toml(pyproject)
         project = data.get("project", {})
@@ -80,7 +69,7 @@ def extract_runtime_packages(repo_root: Path) -> tuple[str, list[str], dict[str,
         merged.extend(project.get("dependencies", []))
         merged.extend(optional.get("torch", []))
     elif not merged:
-        raise FileNotFoundError(f"No {req_file} and no pyproject.toml under {repo_root}")
+        raise FileNotFoundError(f"No runtime requirements under {repo_root}")
 
     merged = _dedupe(merged)
     torch_spec = "torch"
@@ -91,36 +80,20 @@ def extract_runtime_packages(repo_root: Path) -> tuple[str, list[str], dict[str,
         else:
             pip_packages.append(spec)
 
-    optional_groups: dict[str, list[str]] = {}
-    if pyproject.is_file():
-        optional_groups = {
-            "server": list(optional.get("server", [])),
-        }
-
     present = {_req_name(p) for p in pip_packages}
     missing_required = sorted(_REQUIRED_PIP - present)
     if missing_required:
         raise SystemExit(
-            f"Required runtime packages missing from merged spec: {missing_required}\n"
-            f"Check {req_file} and {pyproject}"
+            f"Required runtime packages missing from merged spec: {missing_required}"
         )
-
-    return torch_spec, pip_packages, optional_groups
-
-
-def sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
+    return torch_spec, pip_packages
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path(os.environ.get("REPO_ROOT", ".")))
     parser.add_argument("--bundle-json", type=Path, required=True)
-    parser.add_argument("--lib-dir", type=Path, required=True, help="Directory containing *.so")
+    parser.add_argument("--lib-dir", type=Path, required=True)
     parser.add_argument("--runtime-version", required=True)
     parser.add_argument("--flashrt-tag", required=True)
     parser.add_argument("--git-commit", required=True)
@@ -140,17 +113,17 @@ def main() -> int:
     parser.add_argument(
         "--python-minor",
         required=True,
-        help="Native/Python ABI tag: 310, 311, 312 (Python 3.10/3.11/3.12)",
-    )
-    parser.add_argument(
-        "--native-artifact-tag",
-        default="",
-        help="Canonical tag: {flashrt_abi}-sm{SM}-cu{CUDA}-{os}-{arch}-py{PY}",
+        help="Single Python ABI for this bundle release: 310, 311, 312",
     )
     parser.add_argument(
         "--matrix-manifest",
         action="store_true",
-        help="Multi-env bundle: scan lib/, set native_layout=matrix",
+        help="Scan lib/ and emit runtime/ directory map",
+    )
+    parser.add_argument(
+        "--base-artifact",
+        default="base.tar.gz",
+        help="Relative path for base artifact in FlashHub repo",
     )
     args = parser.parse_args()
 
@@ -158,106 +131,62 @@ def main() -> int:
     bundle_path = args.bundle_json.resolve()
     repo_root = args.repo_root.resolve()
 
-    torch_spec, pip_packages, optional_groups = extract_runtime_packages(repo_root)
-    del optional_groups  # HTTP server extras belong to flashcli, not bundle zip.
+    torch_spec, pip_packages = extract_runtime_packages(repo_root)
 
     _src = Path(__file__).resolve().parents[1] / "src"
     if str(_src) not in sys.path:
         sys.path.insert(0, str(_src))
 
-    modules = []
-    native_matrix: list[str] = []
-    py_versions: list[tuple[int, int]] = []
+    py_minor = str(args.python_minor).strip()
+    if not py_minor.isdigit() or len(py_minor) != 3:
+        raise SystemExit(f"--python-minor must be 310/311/312, got {py_minor!r}")
+    major = int(py_minor[0])
+    minor = int(py_minor[1:])
+
+    runtime_artifacts: dict[str, str] = {}
 
     if args.matrix_manifest:
         from flashcli.bundle.native_naming import parse_native_tag_from_filename
 
         for so in sorted(lib_dir.glob("*.so")):
             parsed = parse_native_tag_from_filename(so.name)
-            if parsed and parsed.catalog_key() not in native_matrix:
-                native_matrix.append(parsed.catalog_key())
-            if parsed:
-                py_versions.append(
-                    (int(parsed.python_minor[0]), int(parsed.python_minor[1:]))
-                )
-            if so.name.startswith("libfmha_fp16"):
-                optional = True
-            elif so.name.startswith("flash_rt_fp4"):
-                optional = args.has_fp4 != "1"
-            else:
-                optional = False
-            modules.append(
-                {
-                    "file": f"lib/{so.name}",
-                    "sha256": sha256_file(so),
-                    "optional": optional,
-                }
-            )
-    else:
-        for so in sorted(lib_dir.glob("*.so")):
-            optional = so.name in ("flash_rt_fp4.so", "libfmha_fp16_strided.so")
-            modules.append(
-                {
-                    "file": so.name,
-                    "sha256": sha256_file(so),
-                    "optional": optional,
-                }
-            )
+            if parsed is None:
+                continue
+            cell = parsed.catalog_key()
+            if parsed.python_minor != py_minor:
+                continue
+            if cell not in runtime_artifacts:
+                runtime_artifacts[cell] = f"runtime/{cell}"
 
     bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
-    bundle["format_version"] = max(int(bundle.get("format_version", 1)), 2)
+    bundle["format"] = "flashcli-model-bundle"
+    bundle["format_version"] = 3
     bundle.pop("runtime_dir", None)
     bundle.pop("native_runtime", None)
-    py_minor = str(args.python_minor).strip()
-    if not py_minor.isdigit() or len(py_minor) != 3:
-        raise SystemExit(f"--python-minor must be 310/311/312, got {py_minor!r}")
-    major = int(py_minor[0])
-    minor = int(py_minor[1:])
-    if args.matrix_manifest and py_versions:
-        lo = min(py_versions)
-        hi = max(py_versions)
-        bundle["python_abi"] = "multi"
-        bundle["python"] = f">={lo[0]}.{lo[1]},<{hi[0]}.{hi[1] + 1}"
-        bundle["native_layout"] = "matrix"
-        bundle["native_matrix"] = sorted(native_matrix)
-    else:
-        bundle["python_abi"] = py_minor
-        bundle["python"] = f">={major}.{minor},<{major}.{minor + 1}"
+    bundle.pop("native_layout", None)
+    bundle.pop("modules", None)
+    bundle.pop("native_libs", None)
+    bundle.pop("native", None)
+    bundle.pop("native_matrix", None)
+    bundle.pop("artifacts", None)
+    bundle.pop("cuda", None)
+    bundle.pop("requires", None)
+    bundle.pop("capabilities", None)
+    bundle.pop("python", None)
+
+    bundle["python_abi"] = py_minor
     bundle["python_dependencies"] = {
-        "torch": torch_spec,
+        "torch": {"package": torch_spec, "index": args.torch_index},
         "pip": pip_packages,
     }
-    bundle["cuda"] = {
-        "cuda_tag": args.cuda_tag,
-        "build_toolkit": args.toolkit,
-        "min_driver_version": args.min_driver,
-        "min_cuda_runtime": args.toolkit,
-        "recommended_torch_index": args.torch_index,
-    }
-    bundle["modules"] = modules
-    native_tag = (args.native_artifact_tag or "").strip()
-    if not native_tag:
-        _src = Path(__file__).resolve().parents[1] / "src"
-        if str(_src) not in sys.path:
-            sys.path.insert(0, str(_src))
-        from flashcli.bundle.native_naming import native_artifact_tag, sanitize_flashrt_abi
-
-        abi = sanitize_flashrt_abi(args.flashrt_tag, git_commit=args.git_commit)
-        native_tag = native_artifact_tag(
-            flashrt_abi=abi,
-            sm=args.sm,
-            cuda_tag=args.cuda_tag,
-            os_name=args.os_name,
-            arch=args.cpuarch,
-            python_minor=py_minor,
-        )
+    if runtime_artifacts:
+        bundle["runtime"] = runtime_artifacts
     bundle["build"] = {
         "runtime_version": args.runtime_version,
         "flashrt_tag": args.flashrt_tag,
         "git_commit": args.git_commit,
         "git_ref": args.git_ref,
         "build_id": args.build_id,
-        "native_artifact_tag": native_tag,
         "target": {
             "sm": args.sm,
             "os": args.os_name,
@@ -270,12 +199,6 @@ def main() -> int:
             "nvfp4": args.has_fp4 == "1",
             "fmha": args.has_fmha == "1",
         },
-    }
-    bundle["native_libs"] = {
-        "flashrt_tag": args.flashrt_tag,
-        "build_id": args.build_id,
-        "git_commit": args.git_commit,
-        "modules": modules,
     }
 
     bundle_path.write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")

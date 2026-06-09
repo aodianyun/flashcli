@@ -1,9 +1,7 @@
-# Model catalog
+# Catalog source
 
-The preset catalog lives in a single file (also shipped inside the pip wheel):
+The preset catalog lives at [`src/flashcli/catalog/models.yaml`](../src/flashcli/catalog/models.yaml).
 
-**[`../src/flashcli/catalog/models.yaml`](../src/flashcli/catalog/models.yaml)**
+Edit that file to add presets or change each preset's `bundle.repo` (FlashHub URL) or local `path`.
 
-Edit that file to add presets or change each preset's `bundle.zip` / `path` / `git` source.
-
-Override at runtime: `export FLASHCLI_MODELS_YAML=/path/to/models.yaml` (see [docs/environment.zh-CN.md](../docs/environment.zh-CN.md)).
+See [docs/model_bundle_standard.md](../docs/model_bundle_standard.md).

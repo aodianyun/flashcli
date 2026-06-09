@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# Unified bundle pack: matrix verify + ABI probe + zip (FlashRT ABI + build timestamp in name).
-#
-#   bash scripts/pack_bundle.sh --bundle-dir bundles/pi05_libero --repo-root ../FlashRT
-#   cd bundles/qwen_nvfp4 && bash ../../scripts/pack_bundle.sh --repo-root ../../FlashRT
-#
+# Pack bundle release: bundle tree + per-env runtime/ directories for FlashHub.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,7 +26,7 @@ source "${SCRIPT_DIR}/lib/matrix_python.sh"
 BUNDLE_ARG=""
 BUNDLE_DIR=""
 REPO_ROOT="${FLASHRT_REPO:-}"
-OUTPUT=""
+OUTPUT_DIR=""
 SKIP_MATRIX_VERIFY=0
 OS_NAME="linux"
 ARCH="x86_64"
@@ -40,21 +36,14 @@ die() { log "ERROR: $*"; exit 1; }
 
 usage() {
   cat <<EOF
-Pack a bundle release zip (runtime files only).
+Pack split bundle artifacts for FlashHub (format_version 3).
 
-Archive name:
-  {ZIP_PREFIX}-{flashrt_abi}-sm{SM}-multi-{os}-{arch}-{YYYYMMDD-HHMMSS}.zip
+Outputs under dist/:
+  flashcli-bundle.json + bundle source tree (run.py, flash_rt/, …)
+  runtime/<env-key>/ — per-env native .so files
 
 Usage:
   bash scripts/pack_bundle.sh [OPTIONS]
-
-Options:
-  --bundle-dir DIR      Bundle directory (default: cwd if release-matrix.env present)
-  --bundle NAME         Bundle id (e.g. pi05_libero)
-  --repo-root DIR       FlashRT source (for version segment; default: auto-detect)
-  --output PATH         Output .zip path (default: bundle/dist/<archive>.zip)
-  --skip-matrix-verify  Skip lib/ matrix + ABI checks (dev only)
-  -h, --help
 EOF
 }
 
@@ -81,12 +70,19 @@ resolve_repo_root() {
   die "Set FLASHRT_REPO or pass --repo-root"
 }
 
+make_tar_gz() {
+  local src_dir="$1"
+  local out="$2"
+  rm -f "${out}"
+  tar -czf "${out}" -C "${src_dir}" .
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --bundle-dir) BUNDLE_DIR="$2"; shift 2 ;;
     --bundle) BUNDLE_ARG="$2"; shift 2 ;;
     --repo-root) REPO_ROOT="$2"; shift 2 ;;
-    --output) OUTPUT="$2"; shift 2 ;;
+    --output-dir) OUTPUT_DIR="$2"; shift 2 ;;
     --skip-matrix-verify) SKIP_MATRIX_VERIFY=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown option: $1" ;;
@@ -103,56 +99,99 @@ fi
 load_release_matrix_config "${BUNDLE_DIR}" || die "Invalid release-matrix.env"
 resolve_repo_root
 
+PYTHON_ABI="${RELEASE_PYTHON_ABI:-312}"
+PY_MINORS="${RELEASE_MATRIX_PY_MINORS:-${PYTHON_ABI}}"
 PACK_FILES="${RELEASE_PACK_FILES:-}"
 [[ -n "${PACK_FILES}" ]] || die "RELEASE_PACK_FILES not set in release-matrix.env"
 
 native_lib="${BUNDLE_DIR}/lib"
-[[ -d "${native_lib}" ]] || die "Missing lib/ (run release_bundle.sh or build_release_matrix.sh first)"
-
-shopt -s nullglob
-kernels_so=( "${native_lib}"/flash_rt_kernels*.so )
-fa2_so=( "${native_lib}"/flash_rt_fa2*.so )
-shopt -u nullglob
-[[ ${#kernels_so[@]} -ge 1 ]] || die "Missing lib/flash_rt_kernels*.so"
-[[ ${#fa2_so[@]} -ge 1 ]] || die "Missing lib/flash_rt_fa2*.so"
+[[ -d "${native_lib}" ]] || die "Missing lib/ (run release_bundle.sh first)"
 [[ -d "${BUNDLE_DIR}/flash_rt" ]] || die "Missing flash_rt/"
 
 if [[ "${SKIP_MATRIX_VERIFY}" -eq 0 ]]; then
   pack_verify_lib_matrix_and_abi \
     "${BUNDLE_DIR}" "${MATRIX_SM}" "${CUDA_TAGS}" "${OS_NAME}" "${ARCH}" "${PY_MINORS}"
-else
-  log "Skipping matrix verify (--skip-matrix-verify)"
 fi
 
-ARCHIVE_NAME="$(release_archive_basename "${ZIP_PREFIX}" "${REPO_ROOT}" "${MATRIX_SM}" "${OS_NAME}" "${ARCH}")"
+if [[ -z "${OUTPUT_DIR}" ]]; then
+  OUTPUT_DIR="${BUNDLE_DIR}/dist"
+else
+  OUTPUT_DIR="$(cd "${OUTPUT_DIR}" && pwd)"
+fi
+mkdir -p "${OUTPUT_DIR}/runtime"
+
 STAGE="$(mktemp -d)"
 trap 'rm -rf "${STAGE}"' EXIT
 
-STAGE_ROOT="${STAGE}/${ARCHIVE_NAME}"
-mkdir -p "${STAGE_ROOT}"
-
 for entry in ${PACK_FILES}; do
+  [[ "${entry}" != "lib" ]] || continue
   local_path="${BUNDLE_DIR}/${entry}"
   [[ -e "${local_path}" ]] || die "Missing pack file: ${entry}"
   if [[ -d "${local_path}" ]]; then
-    mkdir -p "${STAGE_ROOT}/${entry}"
-    cp -a "${local_path}/." "${STAGE_ROOT}/${entry}/"
+    mkdir -p "${OUTPUT_DIR}/${entry}"
+    cp -a "${local_path}/." "${OUTPUT_DIR}/${entry}/"
   else
-    cp -a "${local_path}" "${STAGE_ROOT}/"
+    cp -a "${local_path}" "${OUTPUT_DIR}/"
   fi
 done
+log "Copied bundle tree to ${OUTPUT_DIR}"
 
-if [[ -z "${OUTPUT}" ]]; then
-  mkdir -p "${BUNDLE_DIR}/dist"
-  OUTPUT="${BUNDLE_DIR}/dist/${ARCHIVE_NAME}.zip"
-else
-  OUTPUT="$(cd "$(dirname "${OUTPUT}")" && pwd)/$(basename "${OUTPUT}")"
-  mkdir -p "$(dirname "${OUTPUT}")"
-fi
+# Native cells: group .so by env key suffix *-pyNNN
+declare -A CELLS=()
+shopt -s nullglob
+for so in "${native_lib}"/*.so; do
+  base="$(basename "${so}")"
+  if [[ "${base}" =~ -py[0-9]{3}\.so$ ]]; then
+    cell="${base#flash_rt_kernels-}"
+    cell="${cell#flash_rt_fa2-}"
+    cell="${cell#flash_rt_fp4-}"
+    cell="${cell%.so}"
+    # cell is {abi}-sm..-pyNNN — extract catalog key via python helper
+    :
+  fi
+done
+shopt -u nullglob
 
-rm -f "${OUTPUT}"
-make_zip_archive "${STAGE}" "${ARCHIVE_NAME}" "${OUTPUT}" || die "Failed to create zip (install zip or use python3)"
+python3 - "${BUNDLE_DIR}" "${OUTPUT_DIR}" "${PYTHON_ABI}" "${FLASHCLI_ROOT}/src" <<'PY'
+import json
+import shutil
+import sys
+from pathlib import Path
 
-log "Created ${OUTPUT}"
-log "Contents:"
-list_zip_archive "${OUTPUT}" | sed 's/^/  /' >&2 || true
+bundle_dir = Path(sys.argv[1])
+out_dir = Path(sys.argv[2])
+py_abi = sys.argv[3]
+sys.path.insert(0, sys.argv[4])
+from flashcli.bundle.native_naming import parse_native_tag_from_filename
+
+lib = bundle_dir / "lib"
+manifest_path = bundle_dir / "flashcli-bundle.json"
+manifest = json.loads(manifest_path.read_text())
+cells: dict[str, list[Path]] = {}
+for so in sorted(lib.glob("*.so")):
+    parsed = parse_native_tag_from_filename(so.name)
+    if parsed is None or parsed.python_minor != py_abi:
+        continue
+    key = parsed.catalog_key()
+    cells.setdefault(key, []).append(so)
+
+runtime_map = {}
+for key, paths in sorted(cells.items()):
+    dest = out_dir / "runtime" / key
+    if dest.is_dir():
+        shutil.rmtree(dest)
+    dest.mkdir(parents=True)
+    for p in paths:
+        shutil.copy2(p, dest / p.name)
+    runtime_map[key] = f"runtime/{key}"
+    print(f"[pack] Created {dest} ({len(paths)} .so)", file=sys.stderr)
+
+manifest["format_version"] = 3
+manifest["python_abi"] = py_abi
+manifest["runtime"] = runtime_map
+manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+shutil.copy2(manifest_path, out_dir / "flashcli-bundle.json")
+print(f"[pack] Updated {manifest_path} and copied to {out_dir / 'flashcli-bundle.json'}", file=sys.stderr)
+PY
+
+log "FlashHub upload dir: ${OUTPUT_DIR}"

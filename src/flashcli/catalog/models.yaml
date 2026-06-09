@@ -1,31 +1,28 @@
-# flashcli preset catalog — one bundle.zip per preset; runtime picks lib/*.so by host env
+# flashcli preset catalog — FlashHub repo per preset; manifest-first split artifacts
 #
-# Release: bash scripts/release_bundle.sh --bundle <name>  or  bundles/<name>/release.sh
-# Zip URL pattern: flashcli-bundle-{name}-{FlashRT_ABI}-sm{SM}-multi-linux-x86_64-{timestamp}.zip
-# Docs: docs/runtime-matrix.md, docs/model_bundle_standard.md
+# Release: bash scripts/release_bundle.sh --bundle <name>
+# Docs: docs/model_bundle_standard.md, docs/runtime-matrix.md
 
-schema_version: 6
+schema_version: 7
 
 models:
 
   pi05_libero:
     description: Pi0.5 LIBERO — lerobot/pi05_libero_finetuned_v044 (SM89 / SM120)
     bundle:
-      zip: https://flashhub-cdn.aodianyun.com/repo/5/versions/6/flashcli-bundle-pi05-183b74b-sm89-multi-linux-x86_64-20260602-123541.zip
+      repo: https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero/1.0.2
       # path: bundles/pi05_libero
-      # git: xxx
 
-  # Same runtime zip as qwen36; bundle_variant selects weights (HF cache keyed by preset name)
   qwen3-8b-nvfp4:
     description: Qwen3-8B NVFP4 (SM120) — kaitchup/Qwen3-8B-NVFP4
     bundle_variant: qwen3
     bundle:
-      zip: https://flashhub-cdn.aodianyun.com/repo/6/versions/7/flashcli-bundle-qwen_nvfp4-ee6f916-sm120-multi-linux-x86_64-20260605-1708.zip
-      # path: bundles/qwen_nvfp4 
+      repo: https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/qwen_nvfp4:1.0.1
+      # path: bundles/qwen_nvfp4
 
   qwen36-27b-nvfp4:
     description: Qwen3.6-27B NVFP4 + MTP speculative decode (SM120)
     bundle_variant: qwen36
     bundle:
-      zip: https://flashhub-cdn.aodianyun.com/repo/6/versions/7/flashcli-bundle-qwen_nvfp4-ee6f916-sm120-multi-linux-x86_64-20260605-1708.zip
+      repo: https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/qwen_nvfp4:1.0.1
       # path: bundles/qwen_nvfp4

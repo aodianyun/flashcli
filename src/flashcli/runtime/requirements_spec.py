@@ -27,6 +27,7 @@ class RuntimeRequirementsSpec:
 
     pip_packages: list[str] = field(default_factory=list)
     torch_package: str = "torch"
+    torch_index: str = ""
     optional_groups: dict[str, list[str]] = field(default_factory=dict)
     source: str = "unknown"
 
@@ -78,13 +79,27 @@ def _dedupe_strings(items: list[str]) -> list[str]:
     return out
 
 
+def parse_torch_dependency(value: Any) -> tuple[str, str]:
+    """Return ``(pip_package_spec, torch_index)`` from manifest ``python_dependencies.torch``."""
+    if value is False or value is None:
+        return "", ""
+    if isinstance(value, dict):
+        pkg = str(value.get("package", "torch")).strip() or "torch"
+        idx = str(value.get("index", "")).strip()
+        return pkg, idx
+    if isinstance(value, str):
+        s = value.strip()
+        if s.lower() in ("", "skip", "none", "false"):
+            return "", ""
+        return s or "torch", ""
+    s = str(value).strip()
+    return (s, "") if s else ("torch", "")
+
+
 def _torch_package_from_manifest(value: Any) -> str:
     """Return pip torch spec, or empty string to skip torch install (stub bundles)."""
-    if value is False or value is None:
-        return ""
-    if isinstance(value, str) and value.strip().lower() in ("", "skip", "none", "false"):
-        return ""
-    return str(value).strip() or "torch"
+    pkg, _ = parse_torch_dependency(value)
+    return pkg
 
 
 def _split_torch(packages: list[str]) -> tuple[str, list[str]]:
@@ -154,7 +169,7 @@ def _spec_from_python_dependencies(
     if pip_from_txt:
         pip.extend(pip_from_txt)
     pip = _dedupe_strings(pip)
-    torch_spec = _torch_package_from_manifest(py.get("torch", "torch"))
+    torch_spec, torch_index = parse_torch_dependency(py.get("torch", "torch"))
     optional = py.get("optional_groups", {})
     if isinstance(optional, dict):
         groups = {str(k): list(v) for k, v in optional.items()}
@@ -164,6 +179,7 @@ def _spec_from_python_dependencies(
         return RuntimeRequirementsSpec(
             pip_packages=pip,
             torch_package=torch_spec,
+            torch_index=torch_index,
             optional_groups=groups,
             source=source,
         )
@@ -171,7 +187,7 @@ def _spec_from_python_dependencies(
 
 
 def load_from_bundle_root(bundle_root: Path) -> RuntimeRequirementsSpec:
-    """Load ``python_dependencies`` from merged ``flashcli-bundle.json`` (v2)."""
+    """Load ``python_dependencies`` from ``flashcli-bundle.json``."""
     bundle_root = bundle_root.resolve()
     bundle_json = bundle_root / "flashcli-bundle.json"
     if not bundle_json.is_file():
@@ -193,19 +209,6 @@ def load_from_bundle_root(bundle_root: Path) -> RuntimeRequirementsSpec:
         if spec is not None:
             return spec
 
-    legacy_manifest = bundle_root / "runtime" / "manifest.json"
-    if legacy_manifest.is_file():
-        manifest = json.loads(legacy_manifest.read_text(encoding="utf-8"))
-        py = manifest.get("python_dependencies")
-        if isinstance(py, dict):
-            spec = _spec_from_python_dependencies(
-                py,
-                source=f"manifest:{legacy_manifest}",
-                pip_from_txt=pip_from_txt,
-            )
-            if spec is not None:
-                return spec
-
     if pip_from_txt:
         torch_spec, pip_packages = _split_torch(pip_from_txt)
         return RuntimeRequirementsSpec(
@@ -216,41 +219,6 @@ def load_from_bundle_root(bundle_root: Path) -> RuntimeRequirementsSpec:
 
     raise FileNotFoundError(
         f"No python_dependencies in {bundle_json} and no requirements-runtime.txt"
-    )
-
-
-def load_from_runtime_dir(runtime_dir: Path) -> RuntimeRequirementsSpec:
-    """Legacy: load from ``runtime_dir/manifest.json``."""
-    runtime_dir = runtime_dir.resolve()
-    manifest_path = runtime_dir / "manifest.json"
-    req_path = runtime_dir / "requirements-runtime.txt"
-
-    pip_from_txt: list[str] = []
-    if req_path.is_file():
-        pip_from_txt = _parse_requirements_txt(req_path.read_text(encoding="utf-8"))
-
-    if manifest_path.is_file():
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        py = manifest.get("python_dependencies")
-        if isinstance(py, dict):
-            spec = _spec_from_python_dependencies(
-                py,
-                source=f"manifest:{manifest_path}",
-                pip_from_txt=pip_from_txt,
-            )
-            if spec is not None:
-                return spec
-
-    if pip_from_txt:
-        torch_spec, pip_packages = _split_torch(pip_from_txt)
-        return RuntimeRequirementsSpec(
-            pip_packages=pip_packages,
-            torch_package=torch_spec,
-            source=f"requirements-runtime.txt:{req_path}",
-        )
-
-    raise FileNotFoundError(
-        f"No python_dependencies in manifest and no requirements-runtime.txt under {runtime_dir}"
     )
 
 
@@ -308,16 +276,13 @@ def resolve_runtime_requirements(
     *,
     bundle_root: Path | None = None,
 ) -> RuntimeRequirementsSpec:
-    """Bundle ``flashcli-bundle.json`` first; legacy runtime dir; else FlashRT source tree."""
+    """Load deps from ``flashcli-bundle.json``, else FlashRT source tree fallback."""
     root = bundle_root or runtime_dir
     if root is not None and root.is_dir():
         try:
             return load_from_bundle_root(root)
         except FileNotFoundError:
-            try:
-                return load_from_runtime_dir(root)
-            except FileNotFoundError:
-                pass
+            pass
 
     for candidate in _flashrt_repo_candidates():
         if (candidate / "pyproject.toml").is_file() and (candidate / "flash_rt").is_dir():

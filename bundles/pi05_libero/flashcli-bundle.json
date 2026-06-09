@@ -1,37 +1,14 @@
 {
   "format": "flashcli-model-bundle",
-  "format_version": 2,
+  "format_version": 3,
   "name": "pi05_libero",
   "description": "Pi0.5 LIBERO VLA — HuggingFace lerobot/pi05_libero_finetuned_v044",
-  "weights_dir": "checkpoint",
-  "capabilities": ["run"],
-  "config": "pi05",
-  "framework": "torch",
-  "weights": {
-    "source": "huggingface",
-    "repo": "lerobot/pi05_libero_finetuned_v044",
-    "revision": "main"
-  },
-  "post_pull": [{ "tokenizer": "paligemma" }],
-  "defaults": {
-    "num_views": 2,
-    "autotune": 3,
-    "hardware": "auto",
-    "use_fp8": true
-  },
-  "requires": {
-    "sm": ["89", "120"]
-  },
   "entry": {
-    "run": {
-      "module": "run",
-      "attr": "RunEngine"
-    }
+    "run": { "module": "run", "attr": "RunEngine" }
   },
-  "python": ">=3.10,<3.13",
-  "python_abi": "310",
+  "python_abi": "312",
   "python_dependencies": {
-    "torch": "torch",
+    "torch": { "package": "torch", "index": "cu128" },
     "pip": [
       "numpy",
       "pyyaml",
@@ -42,9 +19,15 @@
       "pillow"
     ]
   },
-  "cuda": {
-    "cuda_tag": "128",
-    "recommended_torch_index": "cu128"
+  "weights": {
+    "source": "huggingface",
+    "repo": "lerobot/pi05_libero_finetuned_v044",
+    "revision": "main"
   },
-  "modules": []
+  "post_pull": [{ "tokenizer": "paligemma" }],
+  "runtime": {
+    "sm89-cu124-linux-x86_64-py312": "runtime/sm89-cu124-linux-x86_64-py312",
+    "sm89-cu130-linux-x86_64-py312": "runtime/sm89-cu130-linux-x86_64-py312",
+    "sm120-cu130-linux-x86_64-py312": "runtime/sm120-cu130-linux-x86_64-py312"
+  }
 }
