@@ -58,6 +58,8 @@ def prepare_bundle_runtime(
             )
 
     ensure_bundle_venv(runtime_id, manifest, quiet=quiet, force=force)
+    os.environ.setdefault("FLASHCLI_RUNTIME_ID", runtime_id)
+    os.environ.setdefault("FLASHCLI_BUNDLE_ROOT", str(bundle_root))
     return runtime_id, bundle_root
 
 

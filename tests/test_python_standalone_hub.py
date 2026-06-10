@@ -72,7 +72,7 @@ def test_standalone_download_urls_flashhub_first() -> None:
         filename="cpython-3.12.13+20260602-x86_64-unknown-linux-gnu-install_only.tar.gz",
         url="https://flashhub-cdn.aodianyun.com/repo/7/versions/9/20260602/x86_64-unknown-linux-gnu/cpython-3.12.13+20260602-x86_64-unknown-linux-gnu-install_only.tar.gz",
     )
-    urls = standalone_download_urls(asset)
+    urls = standalone_download_urls(asset, repo_url=None)
     assert urls[0][1] == "FlashHub"
     assert "github.com" in urls[-1][0]
 

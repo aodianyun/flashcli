@@ -10,6 +10,7 @@ from flashcli.bundle.activate import activate_bundle
 from flashcli.bundle.catalog import BundleCatalogError, raw_bundle_cfg, repo_url_for_preset
 from flashcli.bundle.layout import is_bundle_root
 from flashcli.bundle.manifest import BundleManifest, load_bundle_manifest, validate_bundle_layout
+from flashcli.bundle.marker import read_preset_marker
 from flashcli.models.registry import Preset
 
 
@@ -37,6 +38,14 @@ def resolve_bundle_root(
         if not is_bundle_root(root):
             raise FileNotFoundError(f"Bundle directory not found: {root}")
         return root
+
+    marker = read_preset_marker(preset.name)
+    if marker:
+        marker_root = str(marker.get("bundle_root", "")).strip()
+        if marker_root:
+            root = Path(marker_root).expanduser().resolve()
+            if is_bundle_root(root):
+                return root
 
     cfg = raw_bundle_cfg(preset)
     if cfg.get("path"):

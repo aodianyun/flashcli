@@ -45,13 +45,27 @@ def _manifest_cache_path(repo_url: str) -> Path:
     return config.CACHE_DIR / "python-standalone" / f"{key}-manifest.json"
 
 
-def _files_by_basename(index) -> dict[str, Any]:
-    out: dict[str, Any] = {}
+def _files_by_basename(index) -> dict[str, list[Any]]:
+    out: dict[str, list[Any]] = {}
     for entry in index.files:
         name = entry.path.strip("/").split("/")[-1]
         if name:
-            out[name] = entry
+            out.setdefault(name, []).append(entry)
     return out
+
+
+def flashhub_tarball_urls(index, filename: str) -> list[str]:
+    """All FlashHub CDN URLs for *filename* (handles duplicate path layouts)."""
+    seen: set[str] = set()
+    urls: list[str] = []
+    for entry in index.files:
+        if not str(entry.path).endswith(".tar.gz"):
+            continue
+        name = entry.path.strip("/").split("/")[-1]
+        if name == filename and entry.url not in seen:
+            seen.add(entry.url)
+            urls.append(entry.url)
+    return urls
 
 
 def enrich_manifest_from_index(manifest: dict[str, Any], index) -> dict[str, Any]:
@@ -67,13 +81,16 @@ def enrich_manifest_from_index(manifest: dict[str, Any], index) -> dict[str, Any
             continue
         row = dict(item)
         filename = str(row.get("filename") or Path(str(row.get("path", ""))).name)
-        entry = by_name.get(filename)
-        if entry is not None:
+        entries = by_name.get(filename) or []
+        if entries:
+            entry = entries[0]
             row["url"] = entry.url
             if entry.md5:
                 row["md5"] = entry.md5
             if entry.size is not None:
                 row["size"] = entry.size
+            if len(entries) > 1:
+                row["flashhub_urls"] = [e.url for e in entries]
         enriched.append(row)
     return {**manifest, "files": enriched}
 
@@ -183,8 +200,13 @@ def resolve_standalone_asset(
     return find_standalone_asset(py_minor, triplet, tag=release_tag, quiet=quiet)
 
 
-def standalone_download_urls(asset: StandaloneAsset) -> list[tuple[str, str]]:
-    """Ordered URLs: FlashHub CDN → GitHub → GitHub mirror."""
+def standalone_download_urls(
+    asset: StandaloneAsset,
+    *,
+    repo_url: str | None = None,
+    extra_flashhub_urls: list[str] | None = None,
+) -> list[tuple[str, str]]:
+    """Ordered URLs: FlashHub CDN (all known paths) → GitHub → GitHub mirror."""
     from flashcli.runtime.mirror import github_release_download_urls
 
     seen: set[str] = set()
@@ -196,11 +218,24 @@ def standalone_download_urls(asset: StandaloneAsset) -> list[tuple[str, str]]:
             seen.add(url)
             out.append((url, label))
 
-    if asset.url:
-        if _is_flashhub_url(asset.url):
-            add(asset.url, "FlashHub")
-        else:
-            add(asset.url, "manifest")
+    flashhub_candidates: list[str] = []
+    if extra_flashhub_urls:
+        flashhub_candidates.extend(extra_flashhub_urls)
+    if asset.url and _is_flashhub_url(asset.url):
+        flashhub_candidates.insert(0, asset.url)
+    if repo_url:
+        try:
+            from flashcli.bundle.flashhub import fetch_repo_index
+
+            index = fetch_repo_index(repo_url)
+            flashhub_candidates.extend(flashhub_tarball_urls(index, asset.filename))
+        except Exception:
+            pass
+    for i, url in enumerate(dict.fromkeys(flashhub_candidates)):
+        add(url, "FlashHub" if i == 0 else f"FlashHub alt{i}")
+
+    if asset.url and not _is_flashhub_url(asset.url):
+        add(asset.url, "manifest")
 
     github_base = f"{_github_download_base(asset.tag)}/{asset.filename}"
     for candidate, label in github_release_download_urls(github_base):
@@ -227,32 +262,60 @@ def download_standalone_asset(
     *,
     quiet: bool = False,
     timeout: float = 3600,
+    repo_url: str | None = None,
+    extra_flashhub_urls: list[str] | None = None,
 ) -> int:
     """Download tarball with FlashHub → GitHub → mirror fallback."""
     from flashcli.util.download_progress import download_url_to_path
 
     dest = dest.expanduser()
+    repo = repo_url if repo_url is not None else python_repo_url()
     last_error: Exception | None = None
     label = f"Python {asset.py_minor[0]}.{asset.py_minor[1:]} ({asset.tag})"
 
-    for url, source in standalone_download_urls(asset):
-        display = f"{label} [{source}]"
-        try:
-            nbytes = download_url_to_path(
-                url,
-                dest,
-                quiet=quiet,
-                label=display,
-                timeout=timeout,
-            )
-            if asset.md5:
-                _verify_md5(dest, asset.md5)
-            return nbytes
-        except RuntimeError as exc:
-            last_error = exc
-            dest.unlink(missing_ok=True)
-            if not quiet:
-                print(f"Download failed ({source}): {exc}", file=sys.stderr)
+    def attempt(*, refresh_flashhub: bool) -> int | None:
+        nonlocal last_error
+        if refresh_flashhub and repo:
+            try:
+                fetch_flashhub_manifest(repo, quiet=quiet, force=True)
+                from flashcli.bundle.flashhub import fetch_repo_index
+
+                fetch_repo_index(repo, use_cache=False)
+            except Exception as exc:
+                if not quiet:
+                    print(
+                        f"FlashHub manifest refresh failed: {exc}",
+                        file=sys.stderr,
+                    )
+        urls = standalone_download_urls(
+            asset,
+            repo_url=repo,
+            extra_flashhub_urls=extra_flashhub_urls,
+        )
+        for url, source in urls:
+            display = f"{label} [{source}]"
+            try:
+                nbytes = download_url_to_path(
+                    url,
+                    dest,
+                    quiet=quiet,
+                    label=display,
+                    timeout=timeout,
+                )
+                if asset.md5:
+                    _verify_md5(dest, asset.md5)
+                return nbytes
+            except RuntimeError as exc:
+                last_error = exc
+                dest.unlink(missing_ok=True)
+                if not quiet:
+                    print(f"Download failed ({source}): {exc}", file=sys.stderr)
+        return None
+
+    for refresh in (False, True):
+        got = attempt(refresh_flashhub=refresh)
+        if got is not None:
+            return got
 
     raise RuntimeError(
         f"Failed to download standalone Python {asset.filename}"
