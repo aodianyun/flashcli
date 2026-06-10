@@ -40,6 +40,13 @@ def test_hub_endpoint_env_sets_hf_endpoint(monkeypatch) -> None:
     assert "HF_ENDPOINT" not in os.environ
 
 
+def test_hf_cli_command_max_workers(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FLASHCLI_HF_MAX_WORKERS", "1")
+    with patch("flashcli.models.hf_hub.shutil.which", return_value="/usr/bin/hf"):
+        cmd = _hf_cli_command("org/model", tmp_path, revision="main", allow_patterns=None)
+    assert cmd[-2:] == ["--max-workers", "1"]
+
+
 def test_hf_cli_command_prefers_hf(tmp_path: Path) -> None:
     with patch("flashcli.models.hf_hub.shutil.which", return_value="/usr/bin/hf"):
         cmd = _hf_cli_command("org/model", tmp_path, revision="main", allow_patterns=None)
@@ -52,8 +59,8 @@ def test_apply_hub_timeouts_defaults(monkeypatch) -> None:
     monkeypatch.delenv("HF_HUB_DOWNLOAD_TIMEOUT", raising=False)
     monkeypatch.delenv("FLASHCLI_HF_ETAG_TIMEOUT", raising=False)
     env = apply_hub_timeouts({})
-    assert env["HF_HUB_ETAG_TIMEOUT"] == "5"
-    assert env["HF_HUB_DOWNLOAD_TIMEOUT"] == "5"
+    assert env["HF_HUB_ETAG_TIMEOUT"] == "30"
+    assert env["HF_HUB_DOWNLOAD_TIMEOUT"] == "300"
 
 
 def test_apply_hub_timeouts_respects_existing(monkeypatch) -> None:

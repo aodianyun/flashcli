@@ -42,10 +42,13 @@ flashcli models list
 | (automatic) | — | If `HF_ENDPOINT` is **not** set, flashcli tries official Hub first, then mirror (internally via `hf download`). |
 | `FLASHCLI_PREFER_HF_MIRROR` | `0` | When `1`, try mirror before official Hub. |
 | `HF_TOKEN` | (none) | Hugging Face token for gated repos (`hf auth login` or this variable). |
-| `HF_HUB_ETAG_TIMEOUT` | `5` | Hub CLI metadata/HEAD timeout (seconds); flashcli default 5 if unset. |
-| `HF_HUB_DOWNLOAD_TIMEOUT` | `5` | Hub CLI per-request timeout (seconds); flashcli default 5 if unset. |
-| `FLASHCLI_HF_ETAG_TIMEOUT` | `5` | Used only when `HF_HUB_ETAG_TIMEOUT` is unset. |
-| `FLASHCLI_HF_DOWNLOAD_TIMEOUT` | `5` | Used only when `HF_HUB_DOWNLOAD_TIMEOUT` is unset. |
+| `HF_HUB_ETAG_TIMEOUT` | `30` | Hub CLI metadata/HEAD timeout (seconds); flashcli default 30 if unset. |
+| `HF_HUB_DOWNLOAD_TIMEOUT` | `300` | Hub CLI per-request timeout (seconds); flashcli default 300 if unset. |
+| `FLASHCLI_HF_ETAG_TIMEOUT` | `30` | Used only when `HF_HUB_ETAG_TIMEOUT` is unset. |
+| `FLASHCLI_HF_DOWNLOAD_TIMEOUT` | `300` | Used only when `HF_HUB_DOWNLOAD_TIMEOUT` is unset. |
+| `FLASHCLI_HF_DOWNLOAD_RETRIES` | `3` | Retries per endpoint on transient failures (resume partial downloads). |
+| `FLASHCLI_HF_RETRY_DELAY` | `5` | Base delay (seconds) between retries; grows linearly up to 60s. |
+| `FLASHCLI_HF_MAX_WORKERS` | (Hub default) | Pass `--max-workers` to `hf download` (e.g. `1` on flaky networks). |
 | `FLASHCLI_HF_PROBE_TIMEOUT` | `3` | Timeout (seconds) for probing official Hub reachability before fallback. |
 | `FLASHCLI_SKIP_HF_PROBE` | `0` | When `1`, skip probe and still try official first (may be slower under blocked networks). |
 

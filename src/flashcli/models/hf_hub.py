@@ -35,19 +35,30 @@ def _hub_timeout_seconds(env_key: str, flashcli_key: str, default: str) -> str:
 
 
 def apply_hub_timeouts(env: dict[str, str] | None = None) -> dict[str, str]:
-    """Apply short Hub timeouts (official env: ``HF_HUB_*``; flashcli default 5s)."""
+    """Apply Hub timeouts (``HF_HUB_*``; flashcli defaults: etag 30s, download 300s)."""
     out = dict(env) if env is not None else os.environ.copy()
     out.setdefault(
         "HF_HUB_ETAG_TIMEOUT",
-        _hub_timeout_seconds("HF_HUB_ETAG_TIMEOUT", "FLASHCLI_HF_ETAG_TIMEOUT", "5"),
+        _hub_timeout_seconds("HF_HUB_ETAG_TIMEOUT", "FLASHCLI_HF_ETAG_TIMEOUT", "30"),
     )
     out.setdefault(
         "HF_HUB_DOWNLOAD_TIMEOUT",
         _hub_timeout_seconds(
-            "HF_HUB_DOWNLOAD_TIMEOUT", "FLASHCLI_HF_DOWNLOAD_TIMEOUT", "5"
+            "HF_HUB_DOWNLOAD_TIMEOUT", "FLASHCLI_HF_DOWNLOAD_TIMEOUT", "300"
         ),
     )
     return out
+
+
+def _hf_max_workers() -> int | None:
+    raw = os.environ.get("FLASHCLI_HF_MAX_WORKERS", "").strip()
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        return None
+    return value if value > 0 else None
 
 
 def _apply_flashcli_hub_timeouts() -> None:
@@ -231,6 +242,9 @@ def _hf_cli_command(
     if allow_patterns:
         for pattern in allow_patterns:
             cmd.extend(["--include", pattern])
+    max_workers = _hf_max_workers()
+    if max_workers is not None:
+        cmd.extend(["--max-workers", str(max_workers)])
     return cmd
 
 

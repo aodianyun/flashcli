@@ -43,10 +43,13 @@ flashcli models list
 | （自动） | — | 未设置 `HF_ENDPOINT` 时：先试官方 Hub，失败再试镜像（内部调用 `hf download`）。 |
 | `FLASHCLI_PREFER_HF_MIRROR` | `0` | 设为 `1` 时改为先镜像、再官方 Hub。 |
 | `HF_TOKEN` | （无） | Hugging Face 访问令牌；gated 模型需 `hf auth login` 或设置此变量。 |
-| `HF_HUB_ETAG_TIMEOUT` | `5` | Hub CLI：元数据/HEAD 超时（秒）；未设时 flashcli 默认 5。 |
-| `HF_HUB_DOWNLOAD_TIMEOUT` | `5` | Hub CLI：单次 HTTP 超时（秒）；未设时 flashcli 默认 5。 |
-| `FLASHCLI_HF_ETAG_TIMEOUT` | `5` | 仅当未设置 `HF_HUB_ETAG_TIMEOUT` 时生效。 |
-| `FLASHCLI_HF_DOWNLOAD_TIMEOUT` | `5` | 仅当未设置 `HF_HUB_DOWNLOAD_TIMEOUT` 时生效。 |
+| `HF_HUB_ETAG_TIMEOUT` | `30` | Hub CLI：元数据/HEAD 超时（秒）；未设时 flashcli 默认 30。 |
+| `HF_HUB_DOWNLOAD_TIMEOUT` | `300` | Hub CLI：单次 HTTP 超时（秒）；未设时 flashcli 默认 300。 |
+| `FLASHCLI_HF_ETAG_TIMEOUT` | `30` | 仅当未设置 `HF_HUB_ETAG_TIMEOUT` 时生效。 |
+| `FLASHCLI_HF_DOWNLOAD_TIMEOUT` | `300` | 仅当未设置 `HF_HUB_DOWNLOAD_TIMEOUT` 时生效。 |
+| `FLASHCLI_HF_DOWNLOAD_RETRIES` | `3` | 每个端点的重试次数；失败后会保留已下载文件并断点续传。 |
+| `FLASHCLI_HF_RETRY_DELAY` | `5` | 重试间隔基数（秒），线性递增，上限 60s。 |
+| `FLASHCLI_HF_MAX_WORKERS` | （Hub 默认） | 传给 `hf download` 的 `--max-workers`（网络不稳时可设为 `1`）。 |
 | `FLASHCLI_HF_PROBE_TIMEOUT` | `3` | 探测官方 Hub 是否可达（秒）；不可达则跳过官方、直接镜像。 |
 | `FLASHCLI_SKIP_HF_PROBE` | `0` | 设为 `1` 时不做探测，仍先试官方（`hf` 内部会慢重试）。 |
 

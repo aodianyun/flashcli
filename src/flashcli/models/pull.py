@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -52,7 +52,7 @@ def _prepare_download_dest(
     quiet: bool,
     allow_patterns: list[str] | None = None,
 ) -> None:
-    """Remove stale partial caches before a fresh Hub CLI download."""
+    """Ensure dest exists; keep partial Hub downloads so ``hf download`` can resume."""
     from flashcli.bundle.checkpoint import has_cached_weight_files
 
     if not dest.exists():
@@ -61,14 +61,35 @@ def _prepare_download_dest(
     if has_cached_weight_files(dest, allow_patterns):
         return
     try:
-        has_entries = any(dest.iterdir())
+        entry_count = sum(1 for _ in dest.iterdir())
     except OSError:
-        has_entries = False
-    if has_entries:
+        entry_count = 0
+    if entry_count:
         if not quiet:
-            print(f"Removing incomplete checkpoint cache: {dest}")
-        shutil.rmtree(dest)
+            print(
+                f"Resuming incomplete HuggingFace download "
+                f"({entry_count} cached entries): {dest}",
+                file=sys.stderr,
+            )
+        return
     dest.mkdir(parents=True, exist_ok=True)
+
+
+def _hf_download_retries() -> int:
+    raw = os.environ.get("FLASHCLI_HF_DOWNLOAD_RETRIES", "3").strip()
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 3
+
+
+def _hf_retry_sleep(attempt: int) -> float:
+    raw = os.environ.get("FLASHCLI_HF_RETRY_DELAY", "5").strip()
+    try:
+        base = max(0.0, float(raw))
+    except ValueError:
+        base = 5.0
+    return min(60.0, base * (attempt + 1))
 
 
 def _allow_patterns(spec: dict[str, Any]) -> list[str] | None:
@@ -108,28 +129,47 @@ def _download_huggingface(
         )
 
     errors: list[tuple[str, Exception]] = []
+    max_retries = _hf_download_retries()
     with suppress_hub_side_logs():
         for idx, ep in enumerate(endpoints):
             label = endpoint_label(ep)
-            try:
-                run_hf_cli_download(
-                    repo,
-                    dest,
-                    revision=rev,
-                    endpoint=ep,
-                    allow_patterns=patterns,
-                    quiet=quiet,
-                )
-                return
-            except Exception as exc:
-                errors.append((label, exc))
-                if idx + 1 < len(endpoints) and not quiet and hf_download_verbose():
-                    next_label = endpoint_label(endpoints[idx + 1])
+            last_exc: Exception | None = None
+            for attempt in range(max_retries):
+                try:
+                    run_hf_cli_download(
+                        repo,
+                        dest,
+                        revision=rev,
+                        endpoint=ep,
+                        allow_patterns=patterns,
+                        quiet=quiet,
+                    )
+                    if has_cached_weight_files(dest, patterns):
+                        return
+                    last_exc = RuntimeError(
+                        "Hub CLI exited successfully but checkpoint files are missing"
+                    )
+                except Exception as exc:
+                    last_exc = exc
+                if attempt + 1 >= max_retries:
+                    break
+                if not quiet:
                     print(
-                        f"HuggingFace download failed ({label}); "
-                        f"retrying via {next_label} ...",
+                        f"HuggingFace download failed ({label}), "
+                        f"retry {attempt + 2}/{max_retries} in "
+                        f"{_hf_retry_sleep(attempt):.0f}s ...",
                         file=sys.stderr,
                     )
+                time.sleep(_hf_retry_sleep(attempt))
+            if last_exc is not None:
+                errors.append((label, last_exc))
+            if idx + 1 < len(endpoints) and not quiet and hf_download_verbose():
+                next_label = endpoint_label(endpoints[idx + 1])
+                print(
+                    f"HuggingFace download failed ({label}); "
+                    f"retrying via {next_label} ...",
+                    file=sys.stderr,
+                )
 
     rev_note = f" revision={revision!r}" if revision else ""
     attempts = "\n".join(
@@ -148,7 +188,9 @@ def _download_huggingface(
         "  Checks:\n"
         "  - `hf download` or `huggingface-cli download` works with the same HF_ENDPOINT\n"
         "  - Gated repo: set HF_TOKEN or `hf auth login`\n"
-        "  - Stale cache: rm -rf the destination dir and retry\n"
+        "  - Partial download: re-run `flashcli pull` to resume (cache is kept)\n"
+        "  - Corrupt cache: rm -rf the destination dir and retry\n"
+        "  - Unstable network: export FLASHCLI_HF_MAX_WORKERS=1\n"
         "  - Local weights: flashcli run <preset> --checkpoint /path/to/ckpt"
         f"{hint}"
     )
