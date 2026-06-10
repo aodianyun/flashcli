@@ -29,11 +29,9 @@ flashcli models list
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `FLASHCLI_CUDA_TAG` | （自动） | 覆盖自动检测的 CUDA 用户态标签（`124` / `128` / `130`），用于从 bundle `lib/` 选择 `cu124` / `cu130` 等 `.so`。 |
+| `FLASHCLI_CUDA_TAG` | （自动） | 覆盖自动检测的 CUDA 用户态标签（`124` / `128` / `130`），用于从 bundle `runtime/` 选择 `cu124` / `cu130` 等 `.so`。 |
 | （自动） | — | 无 `nvcc` 时从 `nvidia-smi` 横幅 `CUDA Version: 13.0` 推断 `130`；SM89 不再默认 `124`。 |
-| `FLASHCLI_USE_MIRROR` | `0` | `install.sh --mirror` 会写入 `~/.flashcli/mirror.env`；`flashcli run` 装 torch/transformers 时自动走阿里云 PyPI + PyTorch 镜像。 |
-| `FLASHCLI_NO_MIRROR` | `0` | 设为 `1` 时强制关闭镜像（即使存在 `mirror.env`）。 |
-| `PIP_INDEX_URL` / `PIP_TRUSTED_HOST` | （自动） | PyPI 镜像；`flashcli run` 安装 bundle 依赖时会传给 pip。 |
+| `PIP_INDEX_URL` / `PIP_TRUSTED_HOST` | （自动） | PyPI 镜像；`flashcli run` 安装 bundle 依赖时会传给 pip（mirror 模式见下方行为开关）。 |
 
 `flashcli run` 会按 **sm + cuda + os + arch + Python** 在 bundle `lib/` 里自动选 `.so`；若 `libcublas.so.12` 缺失而驱动为 CUDA 13，请更新 flashcli 或设 `export FLASHCLI_CUDA_TAG=130`。
 
@@ -61,8 +59,20 @@ flashcli models list
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `FLASHCLI_SKIP_AUTO_INSTALL` | `0` | 设为 `1` 时，`flashcli run` / `serve` / `pull` **不**自动 pip 安装 flashcli 自身依赖（typer、huggingface_hub 等）。等价于命令行 `--no-auto-install`。 |
-| `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | bundle runtime 缓存（bundle 根、`lib/`、venv）。 |
-| `FLASHCLI_IN_BUNDLE_VENV` | （内部） | `1` 表示当前进程已在 bundle venv 内。 |
+| `FLASHCLI_USE_MIRROR` | `0` | 设为 `1` 或存在 `~/.flashcli/mirror.env` 时：PyPI/PyTorch 走阿里云、`hf-mirror.com`、bundle Python 下载走 GitHub 代理。`install.sh --mirror` 会写入。 |
+| `FLASHCLI_NO_MIRROR` | `0` | 设为 `1` 时忽略 mirror 模式（即使存在 `mirror.env`）。 |
+| `FLASHCLI_GIT_PROXY` | （mirror 默认） | GitHub 发布包下载代理（如 `https://mirror.ghproxy.com/`）。`--mirror` 会设置；设为 `0` 关闭。 |
+| `FLASHCLI_PREFER_GITHUB_MIRROR` | `0` | 设为 `1` 时优先 GitHub 代理再直连（mirror 模式默认如此）。 |
+| `FLASHCLI_AUTO_INSTALL_BUNDLE_PYTHON` | `1` | 设为 `1` 时，若 bundle 要求的 `python_abi`（如 3.12）本机不存在，则下载 **python-build-standalone** 到 `$FLASHCLI_HOME/python/`，用于创建 bundle venv。mirror 模式下走 GitHub 代理。**不会**修改系统 `/usr/bin/python3`。设为 `0` 关闭。 |
+| `FLASHCLI_PYTHON_ROOT` | `$FLASHCLI_HOME/python` | standalone Python 安装前缀（bundle 运行时）。矩阵构建可显式设为 `/opt/flashcli-python`。 |
+| `FLASHCLI_PYTHON_ENV` | `$FLASHCLI_HOME/python-runtime.env` | 自动安装后写入 `FLASHCLI_PY312_BIN=…` 等（下次解析时会加载）。 |
+| `FLASHCLI_PY312_BIN` | （自动） | 覆盖 bundle venv / native ABI 探测用的 Python 3.12 路径。另有 `FLASHCLI_PY310_BIN`、`FLASHCLI_PY311_BIN` 等。 |
+| `FLASHCLI_PYTHON_STANDALONE_TAG` | `20260602` | python-build-standalone 上游 release tag（GitHub fallback 用）。 |
+| `FLASHCLI_PYTHON_REPO` | [FlashHub 1.0.0](https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/python-standalone/1.0.0) | **优先**从此 FlashHub 仓库拉 `python-standalone.json` 与 tarball；失败再 GitHub → GitHub 代理。设为 `0` 跳过 FlashHub。 |
+| `FLASHCLI_PYTHON_STANDALONE_MANIFEST` | （无） | 本地 manifest 路径（FlashHub 不可用时的 fallback，在 GitHub 之前）。 |
+| `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | bundle runtime 缓存（bundle 根、`runtime/`、venv）。 |
+| `FLASHCLI_IN_BUNDLE_VENV` | （内部） | `1` 表示当前进程已在 bundle venv 的 infer 子进程内。 |
+| （infer bootstrap） | `$FLASHCLI_HOME/share/flashcli/{version}/{python_abi}/` | **不在 bundle venv 内**安装 flashcli；re-exec 时通过 `PYTHONPATH` 加载 `flashcli.runtime.infer`，按版本+ABI 共享一份。 |
 | `FLASHCLI_RUNTIME_ID` | （内部） | 当前激活的 runtime 标识。 |
 | `FLASHCLI_BUNDLE_ROOT` | （内部） | 当前 bundle 根目录。 |
 

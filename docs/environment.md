@@ -58,8 +58,20 @@ Weight download behavior matches `hf download`; on failures, test the same `HF_E
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `FLASHCLI_SKIP_AUTO_INSTALL` | `0` | When `1`, `flashcli run` / `serve` / `pull` do **not** auto pip-install flashcli CLI deps (typer, huggingface_hub, …). Same as `--no-auto-install`. |
-| `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | Bundle runtime cache (bundle root, `lib/`, venv). |
-| `FLASHCLI_IN_BUNDLE_VENV` | (internal) | `1` when the current process is already in the bundle venv. |
+| `FLASHCLI_USE_MIRROR` | `0` | When `1` or `~/.flashcli/mirror.env` exists: Aliyun PyPI/PyTorch, `hf-mirror.com`, and GitHub release proxy for bundle Python downloads. Set by `install.sh --mirror`. |
+| `FLASHCLI_NO_MIRROR` | `0` | When `1`, ignore mirror mode even if `mirror.env` exists. |
+| `FLASHCLI_GIT_PROXY` | (mirror default) | GitHub HTTPS proxy for release downloads (e.g. `https://mirror.ghproxy.com/`). `--mirror` sets this; `0` disables. |
+| `FLASHCLI_PREFER_GITHUB_MIRROR` | `0` | When `1`, try GitHub proxy before direct GitHub (also default when mirror mode is on). |
+| `FLASHCLI_AUTO_INSTALL_BUNDLE_PYTHON` | `1` | When `1`, if the bundle’s `python_abi` (e.g. 3.12) is missing, download **python-build-standalone** into `$FLASHCLI_HOME/python/` and use it for the bundle venv. Uses GitHub mirror when mirror mode is on. Does **not** modify system `/usr/bin/python3`. Set `0` to disable. |
+| `FLASHCLI_PYTHON_ROOT` | `$FLASHCLI_HOME/python` | Standalone Python install prefix (bundle runtime). Matrix builds may use `/opt/flashcli-python` when set explicitly. |
+| `FLASHCLI_PYTHON_ENV` | `$FLASHCLI_HOME/python-runtime.env` | Env file written with `FLASHCLI_PY312_BIN=…` after auto-install (sourced on next resolve). |
+| `FLASHCLI_PY312_BIN` | (auto) | Override path to Python 3.12 for bundle venv / native ABI probes. Also `FLASHCLI_PY310_BIN`, `FLASHCLI_PY311_BIN`, … |
+| `FLASHCLI_PYTHON_STANDALONE_TAG` | `20260602` | Upstream python-build-standalone release tag (GitHub fallback). |
+| `FLASHCLI_PYTHON_REPO` | [FlashHub 1.0.0](https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/python-standalone/1.0.0) | **Preferred** source for `python-standalone.json` + tarballs; on failure → GitHub → GitHub proxy. Set `0` to skip FlashHub. |
+| `FLASHCLI_PYTHON_STANDALONE_MANIFEST` | (none) | Local manifest path (fallback before GitHub when FlashHub fails). |
+| `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | Bundle runtime cache (bundle root, `runtime/`, venv). |
+| `FLASHCLI_IN_BUNDLE_VENV` | (internal) | `1` when the infer subprocess is running inside the bundle venv. |
+| (infer bootstrap) | `$FLASHCLI_HOME/share/flashcli/{version}/{python_abi}/` | flashcli is **not** pip-installed into bundle venvs; re-exec loads `flashcli.runtime.infer` via `PYTHONPATH` (one shared copy per version + ABI). |
 | `FLASHCLI_RUNTIME_ID` | (internal) | Active runtime identifier. |
 | `FLASHCLI_BUNDLE_ROOT` | (internal) | Active bundle root directory. |
 

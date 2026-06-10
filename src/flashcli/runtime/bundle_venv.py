@@ -6,11 +6,12 @@ import hashlib
 import json
 import os
 import subprocess
-import sys
 from pathlib import Path
-
-from flashcli import __version__, config
 from flashcli.bundle.manifest import BundleManifest, bundle_python_abi, bundle_torch_index
+from flashcli.bundle.marker import runtime_dir
+from flashcli.bundle.python_install import ensure_python_for_minor
+from flashcli.bundle.preflight import BundleEnvironmentError
+from flashcli.deps import ensure_runtime_python_stack
 
 
 def venv_path(runtime_id: str) -> Path:
@@ -35,7 +36,6 @@ def _manifest_fingerprint(manifest: BundleManifest, torch_index: str) -> str:
         "python_abi": bundle_python_abi(manifest),
         "torch_index": torch_index,
         "deps": manifest.raw.get("python_dependencies"),
-        "flashcli": __version__,
     }
     raw = json.dumps(payload, sort_keys=True)
     return hashlib.sha256(raw.encode()).hexdigest()
@@ -60,14 +60,21 @@ def ensure_bundle_venv(
     quiet: bool = False,
     force: bool = False,
 ) -> Path:
-    """Create or reuse bundle venv with manifest Python + inference deps + flashcli."""
+    """Create or reuse bundle venv with manifest Python + inference deps only."""
     python_abi = bundle_python_abi(manifest)
-    base_python = resolve_python_for_minor(python_abi)
+    try:
+        base_python = ensure_python_for_minor(python_abi, quiet=quiet)
+    except RuntimeError as exc:
+        raise BundleEnvironmentError(str(exc)) from exc
     if base_python is None:
         major, minor = int(python_abi[0]), int(python_abi[1:])
-        raise RuntimeError(
-            f"Python 3.{minor} not found for bundle {manifest.name!r}. "
-            f"Set FLASHCLI_PY{python_abi}_BIN=/path/to/python{major}.{minor}"
+        raise BundleEnvironmentError(
+            f"Cannot provision Python 3.{minor} for bundle {manifest.name!r} "
+            f"(python_abi={python_abi}).\n"
+            f"  Auto-install is disabled (FLASHCLI_AUTO_INSTALL_BUNDLE_PYTHON=0).\n"
+            f"  Install python{major}.{minor}, set "
+            f"FLASHCLI_PY{python_abi}_BIN=/path/to/python{major}.{minor}, "
+            f"or re-enable auto-install."
         )
 
     torch_index = bundle_torch_index(manifest)
@@ -97,17 +104,6 @@ def ensure_bundle_venv(
         quiet=quiet,
         force=True,
     )
-
-    from flashcli import config
-
-    pkg_root = config.package_root()
-    if (pkg_root / "pyproject.toml").is_file():
-        subprocess.run([str(py), "-m", "pip", "install", "-e", str(pkg_root)], check=True)
-    else:
-        subprocess.run(
-            [str(py), "-m", "pip", "install", f"flashcli=={__version__}"],
-            check=True,
-        )
 
     fp_path.write_text(fp + "\n", encoding="utf-8")
     return py

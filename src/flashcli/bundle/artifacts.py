@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 from pathlib import Path
 
 from flashcli.bundle.flashhub import (
@@ -65,16 +66,24 @@ def _download_repo_tree(
     force: bool,
 ) -> None:
     bundle_root.mkdir(parents=True, exist_ok=True)
-    for entry in index.files:
-        rel = entry.path.strip().lstrip("/")
-        if not rel or rel == "flashcli-bundle.json":
-            continue
-        if not _should_download_repo_file(
+    pending = [
+        entry
+        for entry in index.files
+        if (rel := entry.path.strip().lstrip("/"))
+        and rel != "flashcli-bundle.json"
+        and _should_download_repo_file(
             rel,
             runtime_map=runtime_map,
             selected_artifact_rel=selected_artifact_rel,
-        ):
-            continue
+        )
+    ]
+    if not quiet and pending:
+        print(
+            f"Downloading bundle source tree ({len(pending)} file(s)) …",
+            file=sys.stderr,
+        )
+    for entry in pending:
+        rel = entry.path.strip().lstrip("/")
         dest = bundle_root / rel
         download_repo_file(entry, dest, quiet=quiet, force=force)
 
@@ -159,6 +168,11 @@ def ensure_runtime_from_repo(
     )
 
     if not ready:
+        if not quiet:
+            print(
+                f"Syncing bundle from FlashHub ({repo_url}) …",
+                file=sys.stderr,
+            )
         if bundle_root.is_dir():
             shutil.rmtree(bundle_root, ignore_errors=True)
         bundle_root.mkdir(parents=True, exist_ok=True)

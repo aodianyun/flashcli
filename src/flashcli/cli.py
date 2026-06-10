@@ -51,60 +51,6 @@ def _auto_install_flag(no_auto_install: bool) -> bool:
     return not no_auto_install and not config.skip_auto_install()
 
 
-def _bundle_torch_index(bundle) -> str:
-    from flashcli.bundle.manifest import bundle_torch_index
-
-    return bundle_torch_index(bundle)
-
-
-def _retry_after_bundle_repair(
-    action,
-    *,
-    bundle,
-    auto_install: bool,
-    quiet: bool,
-):
-    """Run *action*; on ImportError auto-install missing bundle deps and retry once."""
-    try:
-        return action()
-    except ImportError:
-        if not auto_install or bundle is None:
-            raise
-        from flashcli.deps import repair_bundle_python_stack
-        from flashcli.runtime.bundle_venv import venv_python
-        import os
-
-        runtime_id = os.environ.get("FLASHCLI_RUNTIME_ID", "")
-        py = venv_python(runtime_id) if runtime_id else None
-
-        if not quiet:
-            typer.echo("Missing bundle dependency; installing ...", err=True)
-        repair_bundle_python_stack(
-            bundle_root=bundle.bundle_root,
-            torch_index=_bundle_torch_index(bundle),
-            python=py,
-            quiet=quiet,
-        )
-        return action()
-
-
-def _ensure_flashcli_serve_imports(*, auto_install: bool, quiet: bool) -> None:
-    """Verify flashcli HTTP stack (fastapi/uvicorn); auto-install on demand."""
-    try:
-        __import__("fastapi")
-        __import__("uvicorn")
-    except ImportError:
-        if not auto_install:
-            raise
-        from flashcli.deps import repair_flashcli_serve_stack
-
-        if not quiet:
-            typer.echo("Installing flashcli serve dependencies ...", err=True)
-        repair_flashcli_serve_stack(quiet=quiet)
-        __import__("fastapi")
-        __import__("uvicorn")
-
-
 @doctor_app.callback(invoke_without_command=True)
 def doctor_main(
     ctx: typer.Context,
@@ -198,10 +144,23 @@ def models_envs(
                 typer.echo(f"  manifest: error — {exc}")
         if manifest is not None and gpu is not None:
             try:
+                from flashcli.bundle.python_install import ensure_python_for_minor
+                import sys as _sys
+
                 abi = bundle_python_abi(manifest)
                 env = host_env_key(gpu, abi)
                 matrix = bundle_runtime_matrix(manifest)
+                py_bin = ensure_python_for_minor(abi, auto_install=False)
+                host_py = f"{_sys.version_info.major}.{_sys.version_info.minor}"
                 typer.echo(f"  this machine: {env} (python_abi={abi})")
+                if py_bin is not None:
+                    typer.echo(f"  python 3.{abi[1:]}: {py_bin}")
+                else:
+                    typer.echo(
+                        f"  python 3.{abi[1:]}: NOT FOUND "
+                        f"(host CLI is {host_py}; will auto-install on run, or set "
+                        f"FLASHCLI_PY{abi}_BIN / FLASHCLI_AUTO_INSTALL_BUNDLE_PYTHON=0)"
+                    )
                 typer.echo(f"  supported ({len(matrix)}):")
                 for key in matrix[:10]:
                     mark = " ← match" if key == env else ""
@@ -441,8 +400,6 @@ def run(
 ) -> None:
     """Run inference using the preset's model bundle."""
     from flashcli.bundle.preflight import BundleEnvironmentError
-    from flashcli.bundle.variants import resolve_effective_model_variant
-    from flashcli.engines.factory import BundleNotReadyError, activate_for_preset, create_run_engine
     from flashcli.runtime.reexec import ensure_bundle_runtime_and_reexec
 
     p = PresetRegistry().get(preset)
@@ -457,90 +414,6 @@ def run(
     except BundleEnvironmentError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(2) from exc
-
-    try:
-        activate_for_preset(
-            p,
-            bundle_path=bundle,
-            auto_install_python=_auto_install_flag(no_auto_install),
-            quiet=quiet,
-        )
-    except BundleNotReadyError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(BundleNotReadyError.exit_code) from exc
-
-    from flashcli.bundle.activate import active_bundle
-
-    active = active_bundle()
-    effective_variant = resolve_effective_model_variant(
-        p, active, cli_override=model
-    )
-
-    try:
-        ckpt = model_cache.ensure_model_cached(
-            preset,
-            bundle_path=bundle,
-            checkpoint_override=checkpoint,
-            mtp_checkpoint_override=mtp_checkpoint,
-            model_variant=effective_variant,
-            quiet=quiet,
-        )
-    except (NotImplementedError, FileNotFoundError, ValueError) as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
-
-    image_paths: list[Path] | None = None
-    if image:
-        image_paths = [Path(part.strip()) for part in image.split(",") if part.strip()]
-
-    auto_install = _auto_install_flag(no_auto_install)
-    try:
-        run_engine = _retry_after_bundle_repair(
-            lambda: create_run_engine(
-                p,
-                bundle_path=bundle,
-                checkpoint=Path(ckpt),
-            ),
-            bundle=active,
-            auto_install=auto_install,
-            quiet=quiet,
-        )
-    except ImportError as exc:
-        typer.echo(f"Cannot load run engine: {exc}", err=True)
-        raise typer.Exit(1) from exc
-    load_kw: dict = {
-        "num_views": num_views,
-        "hardware": hardware,
-        "autotune": autotune,
-    }
-    if K is not None:
-        load_kw["K"] = K
-    if effective_variant:
-        load_kw["model"] = effective_variant
-    run_engine.load(Path(ckpt), p, **{k: v for k, v in load_kw.items() if v is not None})
-    try:
-        actions = run_engine.predict(
-            prompt=prompt or "",
-            image_paths=image_paths,
-            benchmark=benchmark,
-            warmup_iters=warmup,
-            max_tokens=max_tokens,
-            echo=not quiet,
-        )
-        if not quiet and actions is not None:
-            if isinstance(actions, str):
-                if not (prompt or "").strip():
-                    typer.echo(actions)
-            elif isinstance(actions, dict) and actions.get("text") is not None:
-                pass
-            else:
-                typer.echo(f"Done. result type={type(actions).__name__}")
-    except FileNotFoundError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
-    except Exception as exc:
-        typer.echo(f"Inference failed: {exc}", err=True)
-        raise typer.Exit(1) from exc
 
 
 @app.command()
@@ -608,8 +481,6 @@ def serve(
 ) -> None:
     """Serve unified OpenAI HTTP API via the preset model bundle."""
     from flashcli.bundle.preflight import BundleEnvironmentError
-    from flashcli.bundle.variants import resolve_effective_model_variant
-    from flashcli.engines.factory import BundleNotReadyError, activate_for_preset, create_serve_engine
     from flashcli.runtime.reexec import ensure_bundle_runtime_and_reexec
 
     p = PresetRegistry().get(preset)
@@ -624,145 +495,6 @@ def serve(
     except BundleEnvironmentError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(2) from exc
-
-    try:
-        activate_for_preset(
-            p,
-            bundle_path=bundle,
-            auto_install_python=_auto_install_flag(no_auto_install),
-            quiet=quiet,
-        )
-    except BundleNotReadyError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(BundleNotReadyError.exit_code) from exc
-
-    from flashcli.bundle.activate import active_bundle
-
-    active = active_bundle()
-    auto_install = _auto_install_flag(no_auto_install)
-
-    try:
-        _ensure_flashcli_serve_imports(auto_install=auto_install, quiet=quiet)
-        from flashcli.serve.app import build_app
-    except ImportError as exc:
-        typer.echo(
-            f"Cannot load flashcli HTTP serve stack: {exc} "
-            "(reinstall flashcli: pip install -e .)",
-            err=True,
-        )
-        raise typer.Exit(1) from exc
-
-    effective_variant = resolve_effective_model_variant(
-        p, active, cli_override=model
-    )
-
-    try:
-        ckpt = model_cache.ensure_model_cached(
-            preset,
-            bundle_path=bundle,
-            checkpoint_override=checkpoint,
-            mtp_checkpoint_override=mtp_checkpoint,
-            model_variant=effective_variant,
-            quiet=quiet,
-        )
-    except (NotImplementedError, FileNotFoundError, ValueError) as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
-
-    from flashcli.bundle.variants import variant_serve_cfg
-
-    bundle_serve = (
-        variant_serve_cfg(active, effective_variant)
-        if active is not None
-        else {}
-    )
-
-    try:
-        _ensure_flashcli_serve_imports(auto_install=auto_install, quiet=quiet)
-        import uvicorn
-    except ImportError as exc:
-        typer.echo(f"Cannot load uvicorn: {exc}", err=True)
-        raise typer.Exit(1) from exc
-
-    try:
-        serve_engine = _retry_after_bundle_repair(
-            lambda: create_serve_engine(
-                p,
-                bundle_path=bundle,
-                checkpoint=Path(ckpt),
-            ),
-            bundle=active,
-            auto_install=auto_install,
-            quiet=quiet,
-        )
-    except ImportError as exc:
-        typer.echo(f"Cannot load serve engine: {exc}", err=True)
-        raise typer.Exit(1) from exc
-    opts: dict = {
-        "model_name": model_name,
-        "K": K,
-        "model": effective_variant,
-        "max_seq": max_seq,
-        "max_q_seq": max_q_seq,
-        "warmup_preset": warmup_preset,
-        "default_max_tokens": default_max_tokens,
-        "max_output_tokens": max_output_tokens,
-    }
-    opts = {k: v for k, v in opts.items() if v is not None}
-    serve_engine.load(Path(ckpt), p, **opts)
-
-    warm_spec: str | None = None
-    if warmup_preset or warmup or bundle_serve.get("warmup"):
-        if hasattr(serve_engine, "resolve_warmup"):
-            warm_spec = serve_engine.resolve_warmup(
-                preset=warmup_preset,
-                extra_spec=warmup,
-                bundle_default=str(bundle_serve.get("warmup", "")) or None
-                if warmup is None and warmup_preset is None
-                else None,
-            )
-        elif warmup:
-            warm_spec = warmup
-        elif bundle_serve.get("warmup"):
-            warm_spec = str(bundle_serve.get("warmup"))
-        elif warmup_preset:
-            typer.echo(
-                "This bundle does not support --warmup-preset; use --warmup instead.",
-                err=True,
-            )
-            raise typer.Exit(1)
-    if warm_spec:
-        serve_engine.warmup(warm_spec)
-
-    if not quiet:
-        typer.echo(
-            f"Serving {serve_engine.model_id} on http://{host}:{port} "
-            f"(unified flashcli API; logs=INFO, /health stays responsive)"
-        )
-
-    import logging
-    import os
-
-    serve_log_level = os.environ.get("FLASHCLI_SERVE_LOG_LEVEL", "INFO").upper()
-    logging.basicConfig(
-        level=getattr(logging, serve_log_level, logging.INFO),
-        format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        force=True,
-    )
-    uvicorn_log = os.environ.get("FLASHCLI_UVICORN_LOG_LEVEL", "info").lower()
-
-    try:
-        uvicorn.run(
-            build_app(serve_engine),
-            host=host,
-            port=port,
-            log_level=uvicorn_log,
-            access_log=True,
-        )
-    except Exception as exc:
-        typer.echo(f"Serve failed: {exc}", err=True)
-        raise typer.Exit(1) from exc
 
 
 if __name__ == "__main__":

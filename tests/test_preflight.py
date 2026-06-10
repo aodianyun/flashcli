@@ -19,6 +19,7 @@ def _gpu(**kwargs) -> GpuInfo:
         cuda_tag="130",
         os_name="linux",
         arch="x86_64",
+        recommended_torch_index="cu128",
     )
     defaults.update(kwargs)
     return GpuInfo(**defaults)
@@ -52,8 +53,8 @@ def test_preflight_match(tmp_path: Path, monkeypatch) -> None:
         bundle_root=root,
     )
     monkeypatch.setattr(
-        "flashcli.bundle.preflight.resolve_python_for_minor",
-        lambda _abi: Path("/usr/bin/python3.12"),
+        "flashcli.bundle.preflight.ensure_python_for_minor",
+        lambda _abi, **_: Path("/usr/bin/python3.12"),
     )
     result = run_preflight(manifest, gpu=_gpu())
     assert result.env_key == "sm120-cu130-linux-x86_64-py312"
@@ -66,4 +67,7 @@ def test_preflight_env_mismatch(tmp_path: Path) -> None:
         bundle_root=root,
     )
     with pytest.raises(BundleEnvironmentError, match="does not support"):
-        run_preflight(manifest, gpu=_gpu(sm="89", cuda_tag="124"))
+        run_preflight(
+            manifest,
+            gpu=_gpu(sm="89", cuda_tag="124", os_name="darwin", arch="arm64"),
+        )

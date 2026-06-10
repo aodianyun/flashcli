@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from flashcli.bundle.manifest import BundleManifest, bundle_runtime_map
+from flashcli.bundle.python_install import bundle_python_root, load_python_env_file
 from flashcli.bundle.native_naming import (
     NATIVE_MODULE_BASES,
     ParsedNativeTag,
@@ -66,12 +67,27 @@ def _find_artifact(
     return None
 
 
+def _python_roots() -> list[str]:
+    roots: list[str] = []
+    override = os.environ.get("FLASHCLI_PYTHON_ROOT", "").strip()
+    if override:
+        roots.append(override)
+    roots.append(str(bundle_python_root()))
+    roots.append("/opt/flashcli-python")
+    seen: set[str] = set()
+    out: list[str] = []
+    for root in roots:
+        if root and root not in seen:
+            seen.add(root)
+            out.append(root)
+    return out
+
+
 def _python_candidates(py_minor: str) -> list[str]:
     if not py_minor.isdigit() or len(py_minor) != 3:
         return []
     major, minor = py_minor[0], py_minor[1:]
     ver = f"python{major}.{minor}"
-    root = os.environ.get("FLASHCLI_PYTHON_ROOT", "/opt/flashcli-python")
     override = os.environ.get(f"FLASHCLI_PY{py_minor}_BIN", "").strip()
     out: list[str] = []
     if override:
@@ -81,14 +97,22 @@ def _python_candidates(py_minor: str) -> list[str]:
             ver,
             f"/usr/local/bin/{ver}",
             f"/usr/bin/{ver}",
-            f"{root}/{major}.{minor}/bin/{ver}",
-            f"/opt/python/{ver}/bin/{ver}",
         ]
     )
+    for root in _python_roots():
+        mm = f"{major}.{minor}"
+        out.extend(
+            [
+                f"{root}/{mm}/bin/{ver}",
+                f"{root}/{mm}/bin/python3",
+            ]
+        )
+    out.append(f"/opt/python/{ver}/bin/{ver}")
     return out
 
 
 def resolve_python_for_minor(py_minor: str) -> Path | None:
+    load_python_env_file()
     if host_python_minor() == py_minor:
         return Path(sys.executable)
     for cand in _python_candidates(py_minor):

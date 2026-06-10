@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -150,8 +151,12 @@ def download_repo_file(
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.is_file() and not force:
         if entry.md5 and _file_md5(dest) == entry.md5:
+            if not quiet:
+                print(f"Using cached {entry.path}", file=sys.stderr)
             return dest
         if not entry.md5:
+            if not quiet:
+                print(f"Using existing {entry.path}", file=sys.stderr)
             return dest
 
     download_url_to_path(

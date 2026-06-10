@@ -254,6 +254,9 @@ apply_mirror_endpoints() {
   if [ -z "${FLASHCLI_PREFER_HF_MIRROR:-}" ]; then
     export FLASHCLI_PREFER_HF_MIRROR=1
   fi
+  if [ -z "${FLASHCLI_GIT_PROXY:-}" ]; then
+    export FLASHCLI_GIT_PROXY="$DEFAULT_GIT_PROXY_PREFIX"
+  fi
 
   maybe_apply_default_git_proxy
   apply_os_package_mirrors
@@ -264,6 +267,7 @@ apply_mirror_endpoints() {
 
   info "[i] mirror: PIP_INDEX_URL=${PIP_INDEX_URL:-$MIRROR_PIP_INDEX_URL}"
   info "[i] mirror: HF_ENDPOINT=${HF_ENDPOINT:-$MIRROR_HF_ENDPOINT}"
+  info "[i] mirror: FLASHCLI_GIT_PROXY=${FLASHCLI_GIT_PROXY:-$DEFAULT_GIT_PROXY_PREFIX}"
   info "[i] mirror: get-pip → $(get_pip_bootstrap_url)"
 }
 
@@ -1800,8 +1804,9 @@ write_flashcli_mirror_env() {
     printf 'PIP_TRUSTED_HOST=%s\n' "${PIP_TRUSTED_HOST:-$MIRROR_PIP_TRUSTED_HOST}"
     printf 'HF_ENDPOINT=%s\n' "${HF_ENDPOINT:-$MIRROR_HF_ENDPOINT}"
     printf '%s\n' "FLASHCLI_PREFER_HF_MIRROR=1"
+    printf 'FLASHCLI_GIT_PROXY=%s\n' "${FLASHCLI_GIT_PROXY:-$DEFAULT_GIT_PROXY_PREFIX}"
   } > "${_home}/mirror.env"
-  info "Wrote ${_home}/mirror.env (flashcli run pip/HF will use mirrors)"
+  info "Wrote ${_home}/mirror.env (flashcli run pip/HF/GitHub downloads will use mirrors)"
 }
 
 # Verify flashcli works in parent shell (minimal PATH / no /usr/local/bin is common in containers).

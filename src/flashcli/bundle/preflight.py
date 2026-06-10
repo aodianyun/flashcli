@@ -10,7 +10,7 @@ from flashcli.bundle.manifest import (
     bundle_runtime_matrix,
     bundle_python_abi,
 )
-from flashcli.bundle.native_validate import resolve_python_for_minor
+from flashcli.bundle.python_install import ensure_python_for_minor
 from flashcli.bundle.runtime_env import resolve_runtime_env_key, variant_dir_name
 from flashcli.runtime.detect import GpuInfo, detect_gpu_or_raise
 
@@ -57,15 +57,19 @@ def run_preflight(
             "build that includes your environment."
         )
 
-    py = resolve_python_for_minor(python_abi)
+    try:
+        py = ensure_python_for_minor(python_abi)
+    except RuntimeError as exc:
+        raise BundleEnvironmentError(str(exc)) from exc
     if py is None:
         major, minor = int(python_abi[0]), int(python_abi[1:])
         raise BundleEnvironmentError(
             f"Cannot provision Python 3.{minor} for bundle {manifest.name!r} "
             f"(python_abi={python_abi}).\n"
-            f"  Install python{major}.{minor} on this host, or set "
-            f"FLASHCLI_PY{python_abi}_BIN=/path/to/python{major}.{minor}.\n"
-            f"  See: scripts/install_python_for_matrix.sh"
+            f"  Auto-install is disabled (FLASHCLI_AUTO_INSTALL_BUNDLE_PYTHON=0).\n"
+            f"  Install python{major}.{minor}, set "
+            f"FLASHCLI_PY{python_abi}_BIN=/path/to/python{major}.{minor}, "
+            f"or re-enable auto-install."
         )
 
     return PreflightResult(
