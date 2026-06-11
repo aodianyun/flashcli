@@ -22,7 +22,8 @@
   "weights": {
     "source": "huggingface",
     "repo": "lerobot/pi05_libero_finetuned_v044",
-    "revision": "main"
+    "revision": "main",
+    "require_norm_stats": true
   },
   "post_pull": [{ "tokenizer": "paligemma" }],
   "runtime": {

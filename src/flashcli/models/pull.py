@@ -51,6 +51,7 @@ def _prepare_download_dest(
     *,
     quiet: bool,
     allow_patterns: list[str] | None = None,
+    require_norm_stats: bool = False,
 ) -> None:
     """Ensure dest exists; keep partial Hub downloads so ``hf download`` can resume."""
     from flashcli.bundle.checkpoint import has_cached_weight_files
@@ -58,7 +59,9 @@ def _prepare_download_dest(
     if not dest.exists():
         dest.mkdir(parents=True, exist_ok=True)
         return
-    if has_cached_weight_files(dest, allow_patterns):
+    if has_cached_weight_files(
+        dest, allow_patterns, require_norm_stats=require_norm_stats
+    ):
         return
     try:
         entry_count = sum(1 for _ in dest.iterdir())
@@ -109,15 +112,24 @@ def _download_huggingface(
     if not repo:
         raise ValueError("HuggingFace weights spec requires non-empty 'repo'")
 
-    from flashcli.bundle.checkpoint import has_cached_weight_files
+    from flashcli.bundle.checkpoint import (
+        has_cached_weight_files,
+        weights_require_norm_stats,
+    )
 
     patterns = _allow_patterns(spec)
-    if has_cached_weight_files(dest, patterns):
+    require_ns = weights_require_norm_stats(spec)
+    if has_cached_weight_files(dest, patterns, require_norm_stats=require_ns):
         if not quiet:
             print(f"Weights already cached: {dest}", file=sys.stderr)
         return
 
-    _prepare_download_dest(dest, quiet=quiet, allow_patterns=patterns)
+    _prepare_download_dest(
+        dest,
+        quiet=quiet,
+        allow_patterns=patterns,
+        require_norm_stats=require_ns,
+    )
     revision = spec.get("revision")
     rev = str(revision) if revision else None
     endpoint, explicit = _hf_endpoint_configured(spec)
@@ -144,7 +156,9 @@ def _download_huggingface(
                         allow_patterns=patterns,
                         quiet=quiet,
                     )
-                    if has_cached_weight_files(dest, patterns):
+                    if has_cached_weight_files(
+                        dest, patterns, require_norm_stats=require_ns
+                    ):
                         return
                     last_exc = RuntimeError(
                         "Hub CLI exited successfully but checkpoint files are missing"

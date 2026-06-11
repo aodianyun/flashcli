@@ -7,7 +7,11 @@ from pathlib import Path
 from typing import Any
 
 from flashcli import config
-from flashcli.bundle.checkpoint import has_usable_checkpoint
+from flashcli.bundle.checkpoint import (
+    has_checkpoint_weight_files,
+    has_usable_checkpoint,
+    weights_require_norm_stats,
+)
 from flashcli.bundle.config import bundle_dict, bundle_list
 from flashcli.bundle.manifest import BundleManifest
 from flashcli.bundle.variants import (
@@ -35,11 +39,18 @@ def bundle_weights_dir(
     return (bundle.bundle_root / rel).resolve()
 
 
-def has_local_weights(path: Path) -> bool:
+def has_local_weights(
+    path: Path,
+    *,
+    weights_spec: dict[str, Any] | None = None,
+) -> bool:
     if not path.is_dir():
         return False
-    if has_usable_checkpoint(path):
+    require_ns = weights_require_norm_stats(weights_spec)
+    if has_usable_checkpoint(path, require_norm_stats=require_ns):
         return True
+    if require_ns and has_checkpoint_weight_files(path):
+        return False
     for entry in path.iterdir():
         if entry.name in _SKIP_WEIGHT_NAMES or entry.name.startswith("."):
             continue
@@ -188,9 +199,10 @@ def resolve_checkpoint(
     if checkpoint_override is not None:
         path = checkpoint_override.expanduser().resolve()
         return path if path.exists() else None
+    spec = weights_spec(bundle, variant=variant) if bundle is not None else {}
     if bundle is not None:
         local = bundle_weights_dir(bundle, variant=variant)
-        if has_local_weights(local):
+        if has_local_weights(local, weights_spec=spec):
             return local
     cache = config.MODELS_DIR / preset.name
     marker = cache / ".flashcli_model.json"
@@ -198,12 +210,12 @@ def resolve_checkpoint(
         try:
             data = json.loads(marker.read_text(encoding="utf-8"))
             ckpt = Path(str(data.get("checkpoint", ""))).expanduser()
-            if ckpt.is_dir() and has_local_weights(ckpt):
+            if ckpt.is_dir() and has_local_weights(ckpt, weights_spec=spec):
                 return ckpt.resolve()
         except json.JSONDecodeError:
             pass
     nested = cache / "checkpoint"
-    if has_local_weights(nested):
+    if has_local_weights(nested, weights_spec=spec):
         return nested.resolve()
     return None
 
@@ -231,8 +243,9 @@ def ensure_checkpoint(
             "flashcli-bundle.json via a resolved model bundle."
         )
 
+    spec = weights_spec(bundle, variant=variant)
     local = bundle_weights_dir(bundle, variant=variant)
-    if has_local_weights(local):
+    if has_local_weights(local, weights_spec=spec):
         if not quiet:
             print(f"Using bundle-local weights: {local}")
         apply_bundle_env(bundle, variant=variant)
@@ -247,7 +260,6 @@ def ensure_checkpoint(
         download_extra_weights(bundle, variant=variant, quiet=quiet)
         return existing
 
-    spec = weights_spec(bundle, variant=variant)
     cache_dir = config.MODELS_DIR / preset.name
     checkpoint_dir = cache_dir / "checkpoint"
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -267,10 +279,10 @@ def validate_weights_spec(bundle: BundleManifest) -> list[str]:
         from flashcli.bundle.variants import bundle_variants
 
         for name in sorted(bundle_variants(bundle)):
-            local = bundle_weights_dir(bundle, variant=name)
-            if has_local_weights(local):
-                continue
             spec = variant_weights_spec(bundle, name)
+            local = bundle_weights_dir(bundle, variant=name)
+            if has_local_weights(local, weights_spec=spec):
+                continue
             if not spec:
                 errors.append(
                     f"variants.{name}: no local {local.name}/ and no weights spec"
@@ -281,8 +293,9 @@ def validate_weights_spec(bundle: BundleManifest) -> list[str]:
                 errors.append(f"variants.{name}.weights.repo is required")
         return errors
 
+    spec = weights_spec(bundle)
     local = bundle_weights_dir(bundle)
-    if has_local_weights(local):
+    if has_local_weights(local, weights_spec=spec):
         return errors
 
     weights = bundle.raw.get("weights")
