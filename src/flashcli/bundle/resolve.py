@@ -87,7 +87,14 @@ def activate_for_preset(
     except (FileNotFoundError, BundleCatalogError) as exc:
         raise BundleNotReadyError(str(exc)) from exc
 
-    errors = validate_bundle_layout(bundle)
+    from flashcli.bundle.manifest import resolve_bundle_env_key
+
+    try:
+        env_key = resolve_bundle_env_key(bundle)
+    except RuntimeError as exc:
+        raise BundleNotReadyError(str(exc)) from exc
+
+    errors = validate_bundle_layout(bundle, env_key=env_key)
     if errors:
         raise BundleNotReadyError(
             "Invalid model bundle:\n  " + "\n  ".join(errors)

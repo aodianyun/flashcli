@@ -62,6 +62,18 @@ def test_matrix_missing_cell(tmp_path: Path) -> None:
     assert any("missing runtime/sm120-cu130-linux-x86_64-py311" in e for e in errs)
 
 
+def test_validate_bundle_layout_env_key_skips_other_cells(tmp_path: Path) -> None:
+    root = tmp_path / "b"
+    present = "sm89-cu124-linux-x86_64-py312"
+    missing = "sm89-cu130-linux-x86_64-py312"
+    bundle = _write_bundle(root, native_cells=[present, missing])
+    _write_runtime_cell(root, present)
+    errs = validate_bundle_layout(bundle, env_key=present)
+    assert not errs
+    errs_all = validate_bundle_layout(bundle)
+    assert any(missing in e for e in errs_all)
+
+
 def test_matrix_inconsistent_python_tag(tmp_path: Path) -> None:
     root = tmp_path / "b"
     cell = "sm120-cu130-linux-x86_64-py312"
