@@ -174,19 +174,28 @@ Qwen `serve` 要点：`--max-seq`、`--max-q-seq`（qwen3）、`--K`、`--max-ou
 ## 工作原理
 
 ```text
-models.yaml  →  FlashHub repo  →  manifest + preflight  →  runtime/<env-key>/
-              →  bundle venv（python_abi）  →  HF 权重  →  RunEngine / ServeEngine
+主机：install.sh → ~/.flashcli/venv（flashcli 只装一次）
+  pull/sync/权重 → 主机 Python
+
+run/serve：
+  models.yaml → FlashHub → manifest + preflight → runtime/<env-key>/
+  → bundle venv（python_abi、torch…）
+  → re-exec：bundle python -m flashcli.runtime.infer（PYTHONPATH = 主机 flashcli）
+  → activate bundle → HF 权重 → RunEngine / ServeEngine
 ```
 
-序列图与模块图：[docs/architecture.zh-CN.md](docs/architecture.zh-CN.md)。
+**不要**在 bundle venv 里 pip 安装 flashcli。详见 [docs/architecture.zh-CN.md](docs/architecture.zh-CN.md#主机-cli-与-bundle-infer必读)。
 
 **本机缓存**
 
 | 路径 | 内容 |
 |------|------|
-| `~/.flashcli/runtimes/<id>/` | sync 后的 bundle 根、`lib/`、venv |
+| `~/.flashcli/venv/` | 主机 CLI（flashcli 唯一安装位置） |
+| `~/.flashcli/runtimes/<id>/` | sync 后的 bundle 根、`lib/`、bundle venv |
 | `~/.flashcli/models/<preset>/checkpoint/` | 模型权重 |
 | `~/.cache/flash_rt/` | Pi0.5 PaliGemma tokenizer |
+
+已废弃（可删）：`~/.flashcli/share/flashcli/`。
 
 环境变量：[docs/environment.zh-CN.md](docs/environment.zh-CN.md)。
 

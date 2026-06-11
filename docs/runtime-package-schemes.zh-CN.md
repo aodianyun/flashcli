@@ -9,7 +9,8 @@
 | manifest-first | FlashHub 语义化 repo API（如 `…/repos/flashcli-bundle/pi05_libero/1.0.2`）→ 先拉 `flashcli-bundle.json` → preflight |
 | 分包下载 | FlashHub repo 源码树 + 本 env 的 `runtime/<env-key>/` |
 | 单 Python ABI | `python_abi` 固定；bundle venv 使用该版本 |
-| 依赖隔离 | `~/.flashcli/runtimes/<id>/venv/` 每 bundle 独立 |
-| 推理进程 | CLI venv 准备 runtime 后 **re-exec** 进 bundle venv |
+| 依赖隔离 | `~/.flashcli/runtimes/<id>/venv/` 每 bundle 独立（torch 等） |
+| 主机 flashcli | **只装一份**（主机 venv）；bundle infer 经 `PYTHONPATH` 加载，**不** pip 进 bundle venv |
+| 推理进程 | 主机 CLI 准备 runtime → **re-exec** `bundle_venv/python -m flashcli.runtime.infer` |
 
 详见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。

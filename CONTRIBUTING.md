@@ -45,10 +45,11 @@ pytest tests/
 
 1. **Scope** — Keep changes in `flashcli/`. Do not commit FlashRT source changes inside flashcli PRs.
 2. **No inference in CLI** — Do not add model-specific forward logic under `src/flashcli/`. Use bundle `entry` modules.
-3. **Catalog** — Edit `src/flashcli/catalog/models.yaml` only after a bundle is built and validated on real hardware.
-4. **Docs** — Update English docs when behavior or release workflow changes. Mirror important changes in `*.zh-CN.md` when applicable.
-5. **Comments** — New code comments and script headers in English.
-6. **Commits** — Clear, imperative subject lines; one logical change per commit when possible.
+3. **Single host flashcli install** — Do not `pip install flashcli` into bundle venvs or copy flashcli under `~/.flashcli/share/`. Bundle infer uses `PYTHONPATH` + `python -m flashcli.runtime.infer`. See [docs/architecture.md](docs/architecture.md#host-cli-vs-bundle-infer-important).
+4. **Catalog** — Edit `src/flashcli/catalog/models.yaml` only after a bundle is built and validated on real hardware.
+5. **Docs** — Update English docs when behavior or release workflow changes. Mirror important changes in `*.zh-CN.md` when applicable.
+6. **Comments** — New code comments and script headers in English.
+7. **Commits** — Clear, imperative subject lines; one logical change per commit when possible.
 
 ## Adding a new catalog preset / bundle
 

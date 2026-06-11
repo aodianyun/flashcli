@@ -60,6 +60,7 @@ models:
 2. preflight：本机 env 是否匹配 `runtime` 中某一 key（可 fuzzy 匹配 sm/cuda）
 3. 下载 bundle 源码树 + 本 env 的 `runtime/<env-key>/` 制品
 4. 创建 `~/.flashcli/runtimes/<id>/venv`（Python = manifest.python_abi）
-5. re-exec 进入 bundle venv → activate → `entry`
+5. re-exec：主机 CLI 执行 `bundle_venv/python -m flashcli.runtime.infer`，`PYTHONPATH` 指向**主机** flashcli（不在 bundle venv 再 pip 安装 flashcli）
+6. infer 内 activate bundle → 加载权重 → 调用 `entry`
 
 详见 [runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md)、[environment.zh-CN.md](environment.zh-CN.md)。

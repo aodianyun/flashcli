@@ -118,14 +118,29 @@ def _run_pip(
 
 
 def ensure_flashcli_core_stack(*, quiet: bool = False, force: bool = False) -> None:
+    ensure_bundle_infer_deps(quiet=quiet, force=force)
+
+
+def ensure_bundle_infer_deps(
+    *,
+    python: Path | None = None,
+    quiet: bool = False,
+    force: bool = False,
+) -> None:
+    """Install flashcli *dependencies* (typer, pyyaml, …) into the target interpreter.
+
+    Does **not** install the flashcli package — infer loads flashcli from the host
+    install via ``PYTHONPATH`` (see ``runtime/flashcli_shared.py``).
+    """
     to_install = [
-        p for p in FLASHCLI_CORE_PACKAGES if force or not _imports_ok(p)
+        p for p in FLASHCLI_CORE_PACKAGES if force or not _imports_ok(p, python=python)
     ]
     if not to_install:
         return
     if not quiet:
-        print(f"Installing flashcli dependencies: {', '.join(to_install)}")
-    _run_pip(to_install, quiet=quiet)
+        target = "bundle venv" if python is not None else "host"
+        print(f"Installing infer dependencies into {target}: {', '.join(to_install)}")
+    _run_pip(to_install, quiet=quiet, python=python)
 
 
 def ensure_flashcli_serve_stack(*, quiet: bool = False, force: bool = False) -> None:

@@ -86,7 +86,8 @@ Upload the entire `dist/` tree to FlashHub; set catalog `bundle.repo` to the sem
 2. **Preflight** — host env key must match a key in `runtime` (fuzzy sm/cuda allowed)
 3. Download bundle source tree + **only** this env’s `runtime/<env-key>/` artifacts
 4. Create `~/.flashcli/runtimes/<id>/venv` (`python_abi`)
-5. **Re-exec** into bundle venv → activate → `entry`
+5. **Re-exec** — host CLI runs `bundle_venv/python -m flashcli.runtime.infer` with `PYTHONPATH` pointing at the **host** flashcli install (not a second pip install of flashcli)
+6. Inside infer: **activate** bundle → load weights → call `entry`
 
 Command: `flashcli bundle sync <preset>` (or automatic on first `run` / `serve`).
 

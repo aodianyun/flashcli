@@ -7,7 +7,7 @@
 | [runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md) | **维护者**：原生矩阵（sm × CUDA × Python ABI）、发布流水线、zip 命名 |
 | [environment.zh-CN.md](environment.zh-CN.md) | 环境变量（路径、catalog、HF、开关） |
 | [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | Model Bundle 格式 — 第三方扩展与维护 |
-| [architecture.zh-CN.md](architecture.zh-CN.md) | 模块划分与运行时数据流 |
+| [architecture.zh-CN.md](architecture.zh-CN.md) | 模块划分、运行时数据流、**主机 CLI 与 bundle infer** |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | 贡献指南（英文）+ 发布 checklist |
 | [../README.zh-CN.md](../README.zh-CN.md) | 用户速查 |
 | [../bundles/README.zh-CN.md](../bundles/README.zh-CN.md) | 已发布 bundle 源码 |

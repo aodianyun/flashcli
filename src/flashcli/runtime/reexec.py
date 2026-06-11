@@ -1,4 +1,12 @@
-"""Re-exec into bundle venv infer entry (run/serve only)."""
+"""Re-exec into bundle venv infer entry (run/serve only).
+
+Host CLI (``cli.py``) prepares runtime + bundle venv, then execs:
+
+  bundle_venv/python -m flashcli.runtime.infer …
+
+with ``PYTHONPATH`` pointing at the **host** flashcli install. The flashcli
+package is never pip-installed into the bundle venv.
+"""
 
 from __future__ import annotations
 
@@ -11,13 +19,9 @@ from flashcli.bundle.catalog import raw_bundle_cfg, repo_url_for_preset
 from flashcli.bundle.preflight import BundleEnvironmentError
 from flashcli.bundle.manifest import bundle_python_abi, load_bundle_manifest
 from flashcli.models.registry import Preset
+from flashcli.deps import ensure_bundle_infer_deps
 from flashcli.runtime.bundle_venv import ensure_bundle_venv, in_bundle_venv, venv_python
-from flashcli.runtime.flashcli_shared import (
-    ensure_shared_flashcli_lib,
-    flashcli_pythonpath,
-    is_editable_flashcli,
-    prepend_pythonpath,
-)
+from flashcli.runtime.flashcli_shared import flashcli_pythonpath, prepend_pythonpath
 
 
 def _resolve_catalog_path(preset: Preset) -> Path | None:
@@ -90,8 +94,7 @@ def ensure_bundle_runtime_and_reexec(
     manifest = load_bundle_manifest(bundle_root)
     python_abi = bundle_python_abi(manifest)
 
-    if not is_editable_flashcli():
-        ensure_shared_flashcli_lib(py, python_abi, quiet=quiet, force=force)
+    ensure_bundle_infer_deps(python=py, quiet=quiet, force=force)
 
     env = os.environ.copy()
     env["FLASHCLI_IN_BUNDLE_VENV"] = "1"

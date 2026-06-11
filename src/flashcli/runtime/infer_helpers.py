@@ -46,31 +46,19 @@ def retry_after_bundle_repair(
 
 
 def ensure_flashcli_serve_imports(*, auto_install: bool, quiet: bool) -> None:
-    """Verify HTTP stack imports (fastapi/uvicorn) from infer bootstrap on PYTHONPATH."""
+    """Verify HTTP stack imports (fastapi/uvicorn) in the bundle venv."""
     try:
         __import__("fastapi")
         __import__("uvicorn")
     except ImportError as exc:
         if not auto_install:
             raise
-        from flashcli.runtime.flashcli_shared import (
-            editable_flashcli_src,
-            ensure_shared_flashcli_lib,
-        )
+        from flashcli.deps import ensure_bundle_infer_deps
         from flashcli.runtime.bundle_venv import venv_python
-        from flashcli.bundle.manifest import bundle_python_abi, load_bundle_manifest
 
-        bundle_root = os.environ.get("FLASHCLI_BUNDLE_ROOT", "").strip()
-        if not bundle_root:
-            raise ImportError(
-                "fastapi/uvicorn not available and FLASHCLI_BUNDLE_ROOT is unset"
-            ) from exc
-        manifest = load_bundle_manifest(Path(bundle_root))
-        python_abi = bundle_python_abi(manifest)
-        if editable_flashcli_src() is None:
-            runtime_id = os.environ.get("FLASHCLI_RUNTIME_ID", "")
-            py = venv_python(runtime_id) if runtime_id else None
-            if py is not None:
-                ensure_shared_flashcli_lib(py, python_abi, quiet=quiet, force=True)
+        runtime_id = os.environ.get("FLASHCLI_RUNTIME_ID", "")
+        py = venv_python(runtime_id) if runtime_id else None
+        if py is not None:
+            ensure_bundle_infer_deps(python=py, quiet=quiet, force=True)
         __import__("fastapi")
         __import__("uvicorn")

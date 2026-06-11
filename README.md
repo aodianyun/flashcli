@@ -182,19 +182,28 @@ Qwen `serve` highlights: `--max-seq`, `--max-q-seq` (qwen3), `--K`, `--max-outpu
 ## How it works
 
 ```text
-models.yaml  →  FlashHub repo  →  manifest + preflight  →  runtime/<env-key>/
-              →  bundle venv (python_abi)  →  HF weights  →  RunEngine / ServeEngine
+Host: install.sh → ~/.flashcli/venv (flashcli once)
+  pull/sync/weights → host Python
+
+run/serve:
+  models.yaml → FlashHub → manifest + preflight → runtime/<env-key>/
+  → bundle venv (python_abi, torch, …)
+  → re-exec: bundle python -m flashcli.runtime.infer  (PYTHONPATH = host flashcli)
+  → activate bundle → HF weights → RunEngine / ServeEngine
 ```
 
-Detailed sequence diagrams and module map: [docs/architecture.md](docs/architecture.md).
+**Do not** pip-install flashcli into bundle venvs. Details: [docs/architecture.md](docs/architecture.md#host-cli-vs-bundle-infer-important).
 
 **Local cache**
 
 | Path | Contents |
 |------|----------|
-| `~/.flashcli/runtimes/<id>/` | Synced bundle root, `lib/`, and venv |
+| `~/.flashcli/venv/` | Host CLI (single flashcli install) |
+| `~/.flashcli/runtimes/<id>/` | Synced bundle root, `lib/`, and bundle venv |
 | `~/.flashcli/models/<preset>/checkpoint/` | Model weights |
 | `~/.cache/flash_rt/` | Pi0.5 PaliGemma tokenizer (post-pull) |
+
+Legacy (safe to delete): `~/.flashcli/share/flashcli/`.
 
 Environment variables: [docs/environment.md](docs/environment.md) (`FLASHCLI_HOME`, `HF_ENDPOINT`, `FLASHRT_QWEN36_*`, …).
 

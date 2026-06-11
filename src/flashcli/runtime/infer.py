@@ -180,7 +180,7 @@ def execute_serve(
     except ImportError as exc:
         typer.echo(
             f"Cannot load flashcli HTTP serve stack: {exc} "
-            "(reinstall host flashcli or refresh infer bootstrap)",
+            "(reinstall host flashcli or run with bundle venv infer deps: typer, fastapi, uvicorn)",
             err=True,
         )
         raise typer.Exit(1) from exc
