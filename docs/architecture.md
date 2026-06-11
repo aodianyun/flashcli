@@ -29,11 +29,10 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 **Re-exec command** (inside bundle venv):
 
 ```text
-PYTHONPATH=<host flashcli src or site-packages>
-  bundle_venv/bin/python -m flashcli.runtime.infer run|serve …
+bundle_venv/bin/python /path/to/host/flashcli/runtime/infer_launch.py run|serve …
 ```
 
-Implementation: `runtime/reexec.py`, `runtime/infer.py`, `runtime/flashcli_shared.py` (`host_flashcli_pythonpath()`).
+``infer_launch.py`` inserts the host install into ``sys.path`` (also sets ``PYTHONPATH`` as backup). Implementation: `runtime/reexec.py`, `runtime/infer_launch.py`, `runtime/infer.py`.
 
 ### Do not (common mistakes)
 
@@ -124,6 +123,7 @@ See [model_bundle_standard.md](model_bundle_standard.md).
 | `bundle/activate.py` | PYTHONPATH, deps, preload `.so` |
 | `runtime/bundle_venv.py` | Create venv from `python_abi` |
 | `runtime/reexec.py` | Host prepare → re-exec into bundle venv |
+| `runtime/infer_launch.py` | Bootstrap: prepend host flashcli to `sys.path` |
 | `runtime/infer.py` | `run` / `serve` inside bundle venv |
 | `runtime/flashcli_shared.py` | Host `PYTHONPATH` for infer (no second flashcli install) |
 | `deps.py` | `ensure_bundle_infer_deps()` — typer/yaml/… into bundle venv only |

@@ -29,11 +29,10 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 **Re-exec 命令**（在 bundle venv 内）：
 
 ```text
-PYTHONPATH=<主机 flashcli 的 src 或 site-packages>
-  bundle_venv/bin/python -m flashcli.runtime.infer run|serve …
+bundle_venv/bin/python /path/to/host/flashcli/runtime/infer_launch.py run|serve …
 ```
 
-实现：`runtime/reexec.py`、`runtime/infer.py`、`runtime/flashcli_shared.py`（`host_flashcli_pythonpath()`）。
+``infer_launch.py`` 将主机安装路径插入 ``sys.path``（同时设置 ``PYTHONPATH`` 作备份）。实现：`runtime/reexec.py`、`runtime/infer_launch.py`、`runtime/infer.py`。
 
 ### 禁止事项（避免再次跑偏）
 
@@ -124,6 +123,7 @@ sequenceDiagram
 | `bundle/activate.py` | PYTHONPATH、依赖、预加载 `.so` |
 | `runtime/bundle_venv.py` | 按 `python_abi` 创建 venv |
 | `runtime/reexec.py` | 主机准备 → re-exec 进 bundle venv |
+| `runtime/infer_launch.py` | 启动器：prepend 主机 flashcli 到 `sys.path` |
 | `runtime/infer.py` | 在 bundle venv 内执行 `run` / `serve` |
 | `runtime/flashcli_shared.py` | 主机 `PYTHONPATH`，不二次安装 flashcli |
 | `deps.py` | `ensure_bundle_infer_deps()` — 仅 typer/yaml/… 进 bundle venv |

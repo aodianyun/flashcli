@@ -2,10 +2,11 @@
 
 Host CLI (``cli.py``) prepares runtime + bundle venv, then execs:
 
-  bundle_venv/python -m flashcli.runtime.infer …
+  bundle_venv/python /path/to/flashcli/runtime/infer_launch.py …
 
-with ``PYTHONPATH`` pointing at the **host** flashcli install. The flashcli
-package is never pip-installed into the bundle venv.
+``infer_launch.py`` prepends the host install to ``sys.path`` and runs
+``flashcli.runtime.infer``. The flashcli package is never pip-installed into the
+bundle venv.
 """
 
 from __future__ import annotations
@@ -101,10 +102,12 @@ def ensure_bundle_runtime_and_reexec(
     env["FLASHCLI_RUNTIME_ID"] = runtime_id
     env["FLASHCLI_BUNDLE_ROOT"] = str(bundle_root)
     env.pop("PYTHONPATH", None)
+    env.pop("PYTHONSAFEPATH", None)
     py_path = flashcli_pythonpath(python_abi=python_abi)
     if py_path:
         prepend_pythonpath(env, py_path)
     env["VIRTUAL_ENV"] = str(py.parent.parent)
 
-    argv = [str(py), "-m", "flashcli.runtime.infer", *sys.argv[1:]]
+    launcher = Path(__file__).resolve().parent / "infer_launch.py"
+    argv = [str(py), str(launcher), *sys.argv[1:]]
     os.execve(str(py), argv, env)

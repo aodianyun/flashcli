@@ -32,6 +32,11 @@ def host_flashcli_pythonpath() -> str:
     return str(installed_flashcli_pkg_dir().parent)
 
 
+def host_flashcli_sys_path_entry() -> Path:
+    """Same directory as :func:`host_flashcli_pythonpath`, as a :class:`Path`."""
+    return Path(host_flashcli_pythonpath())
+
+
 def flashcli_pythonpath(*, python_abi: str = "") -> str:
     """Alias kept for callers; host install is shared across bundle Python ABIs."""
     _ = python_abi
