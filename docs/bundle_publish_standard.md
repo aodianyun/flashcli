@@ -86,7 +86,7 @@ models:
       repo: https://flashhub…/qwen_nvfp4/1.0.1
 ```
 
-- **`bundle.repo`** — FlashHub semantic version URL (not a raw zip URL).
+- **`bundle.repo`** — FlashHub repo URL.
 - **`bundle_variant`** — only when the manifest defines `variants`; multiple presets may share one `repo`.
 
 ---

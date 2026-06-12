@@ -10,19 +10,19 @@ models:
   pi05_libero:
     description: Pi0.5 LIBERO — lerobot/pi05_libero_finetuned_v044 (SM89 only)
     bundle:
-      repo: https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero/1.0.3
+      repo: https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3
       # path: bundles/pi05_libero
 
   qwen3-8b-nvfp4:
     description: Qwen3-8B NVFP4 (SM120) — kaitchup/Qwen3-8B-NVFP4
     bundle_variant: qwen3
     bundle:
-      repo: https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/qwen_nvfp4:1.0.1
+      repo: https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/qwen_nvfp4:1.0.1
       # path: bundles/qwen_nvfp4
 
   qwen36-27b-nvfp4:
     description: Qwen3.6-27B NVFP4 + MTP speculative decode (SM120)
     bundle_variant: qwen36
     bundle:
-      repo: https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/qwen_nvfp4:1.0.1
+      repo: https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/qwen_nvfp4:1.0.1
       # path: bundles/qwen_nvfp4

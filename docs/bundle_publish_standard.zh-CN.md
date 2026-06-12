@@ -86,7 +86,7 @@ models:
       repo: https://flashhub…/qwen_nvfp4/1.0.1
 ```
 
-- **`bundle.repo`**：FlashHub 语义化版本 URL（非 zip 直链）。
+- **`bundle.repo`**：FlashHub 仓库地址 URL。
 - **`bundle_variant`**：仅当 manifest 含 `variants` 时使用；多个 preset 可共用同一 `repo`。
 
 ---
