@@ -23,7 +23,7 @@ FLASHCLI_CORE_PACKAGES = [
     "typer>=0.12",
     "pyyaml>=6.0",
     "packaging>=23.0",
-    "huggingface_hub>=0.26",
+    "huggingface_hub>=0.26,<1.0",
     "fastapi>=0.100",
     "uvicorn[standard]>=0.24",
 ]
@@ -53,8 +53,28 @@ def _module_available(name: str, *, python: Path | None = None) -> bool:
 def _imports_ok(spec: str, *, python: Path | None = None) -> bool:
     mod = import_name_for_requirement(spec)
     py = _pip_python(python)
+    script = f"""
+import importlib.metadata as md
+from packaging.requirements import Requirement
+
+spec = {spec!r}
+mod = {mod!r}
+req = Requirement(spec)
+try:
+    __import__(mod)
+except ImportError:
+    raise SystemExit(1)
+if req.specifier:
+    try:
+        ver = md.version(req.name)
+    except md.PackageNotFoundError:
+        raise SystemExit(1)
+    if ver not in req.specifier:
+        raise SystemExit(1)
+raise SystemExit(0)
+"""
     proc = subprocess.run(
-        [py, "-c", f"import {mod}"],
+        [py, "-c", script],
         capture_output=True,
         check=False,
     )

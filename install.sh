@@ -63,7 +63,7 @@ REQUIRES_PYTHON_MIN="3.10"
 MIN_PIP_VERSION="21.3"
 GET_PIP_URL="https://bootstrap.pypa.io/get-pip.py"
 # uvicorn[standard] passed separately (avoid sh word-split / glob on brackets)
-PYPROJECT_DEPS="typer>=0.12 pyyaml>=6.0 packaging>=23.0 huggingface_hub>=0.26 tqdm>=4.66 fastapi>=0.100"
+PYPROJECT_DEPS="typer>=0.12 pyyaml>=6.0 packaging>=23.0 huggingface_hub>=0.26,<1.0 tqdm>=4.66 fastapi>=0.100"
 PYPROJECT_DEPS_EXTRA="uvicorn[standard]>=0.24"
 # tomli>=2.0 only when python_version < '3.11' (handled in verify script)
 # Order: PATH defaults first (/usr/local before /usr), then versioned binaries.
@@ -1787,8 +1787,8 @@ def collect_errors() -> list[str]:
             )
         else:
             err(
-                "Hub CLI missing (need huggingface_hub>=0.26). "
-                "Fix: python -m pip install -U 'huggingface_hub>=0.26'"
+                "Hub CLI missing (need huggingface_hub>=0.26,<1.0). "
+                "Fix: python -m pip install -U 'huggingface_hub>=0.26,<1.0'"
             )
 
     return list(errors)
