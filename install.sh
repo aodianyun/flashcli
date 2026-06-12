@@ -1486,7 +1486,7 @@ _pip_install_flashcli_main() {
 
 # flashcli is installed with --no-deps (flashcli-bundle is git-only); install [project] deps here.
 install_flashcli_runtime_deps() {
-  info "Installing flashcli runtime dependencies ..."
+  info "Installing flashcli runtime dependencies (typer, fastapi, …) ..."
   set -- $PYPROJECT_DEPS "$PYPROJECT_DEPS_EXTRA"
   if [ -n "${FLASHCLI_PIP_USER_FLAG:-}" ]; then
     set -- "$@" --user
@@ -1517,6 +1517,10 @@ try_mirror_repo_fallback() {
 }
 
 install_flashcli() {
+  # Install runtime deps first so re-runs do not trigger pip "dependency conflicts"
+  # when flashcli (already in venv, --no-deps) is checked during flashcli-bundle install.
+  install_flashcli_runtime_deps
+
   bundle_spec="flashcli-bundle @ git+${REPO}@${REF}#subdirectory=flashcli-bundle"
   info "Installing protocol package: $bundle_spec"
   if ! _pip_install_flashcli_spec "$bundle_spec"; then
@@ -1540,7 +1544,6 @@ install_flashcli() {
   fi
 
   if _pip_install_flashcli_main; then
-    install_flashcli_runtime_deps
     info "[ok] pip install finished"
     return 0
   fi
@@ -1548,7 +1551,6 @@ install_flashcli() {
   if try_mirror_repo_fallback; then
     info "Retrying install: git+${REPO}@${REF} (--no-deps)"
     if _pip_install_flashcli_main; then
-      install_flashcli_runtime_deps
       info "[ok] pip install finished (mirror fallback)"
       return 0
     fi
@@ -1795,13 +1797,7 @@ def collect_errors() -> list[str]:
 def repair_once() -> None:
     repo = os.environ.get("FLASHCLI_INSTALL_REPO", "")
     ref = os.environ.get("FLASHCLI_INSTALL_REF", "main")
-    if repo:
-        print("[info] attempting automatic repair (flashcli-bundle from git) ...", file=sys.stderr)
-        if not pip_install(
-            f"flashcli-bundle @ git+{repo}@{ref}#subdirectory=flashcli-bundle"
-        ):
-            return
-    # Re-install [project] deps only — flashcli stays --no-deps (flashcli-bundle is git-only, not PyPI).
+    # Runtime deps before flashcli-bundle to avoid pip conflict noise on re-run.
     specs = []
     for raw in CANONICAL_DEPS:
         s = raw.strip().strip("'\"")
@@ -1813,9 +1809,14 @@ def repair_once() -> None:
             specs.append(s)
     if sys.version_info < (3, 11):
         specs.append("tomli>=2.0")
-    print("[info] attempting automatic repair (runtime deps + flashcli --no-deps) ...", file=sys.stderr)
+    print("[info] attempting automatic repair (runtime deps, flashcli-bundle, flashcli --no-deps) ...", file=sys.stderr)
     if not pip_install(*specs):
         return
+    if repo:
+        if not pip_install(
+            f"flashcli-bundle @ git+{repo}@{ref}#subdirectory=flashcli-bundle"
+        ):
+            return
     if not repo:
         return
     cmd = [

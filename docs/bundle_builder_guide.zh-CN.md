@@ -2,8 +2,11 @@
 
 <p align="right"><a href="bundle_builder_guide.md">English</a> · <strong>简体中文</strong></p>
 
-面向 **Model Bundle 构建方**：从环境安装、本地开发、矩阵编译、打包校验，到上传 FlashHub 与更新 catalog。  
-格式规范见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)；终端用户命令见各 bundle 的 `QUICKSTART.zh-CN.md`。
+面向 **Model Bundle 维护者（内部）**：环境安装、本地开发、矩阵编译、打包校验、FlashHub 上传与 catalog 更新。
+
+**对外 Bundle 发布标准**（manifest / entry / `.so` / FlashHub 目录，不含脚本）→ **[bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)**  
+
+格式摘要见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)；终端用户命令见各 bundle 的 `QUICKSTART.zh-CN.md`。
 
 ---
 
@@ -328,6 +331,7 @@ bundles/pi05_libero/dist/
 
 | 文档 | 内容 |
 |------|------|
+| [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) | **对外**发布标准：manifest、entry、.so、FlashHub 目录 |
 | [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | manifest 字段、options、variants |
 | [architecture.zh-CN.md](architecture.zh-CN.md) | 主机 CLI vs bundle venv vs flashcli-bundle |
 | [environment.zh-CN.md](environment.zh-CN.md) | 环境变量 |

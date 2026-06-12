@@ -4,7 +4,9 @@
 
 第三方通过 **Model Bundle** 交付推理 runtime。flashcli **仅**加载 bundle 并调用 `entry`，不在 flashcli 源码中实现模型逻辑。
 
-维护者见 **[bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md)** 与 [CONTRIBUTING.md](../CONTRIBUTING.md)；公开 catalog：[models.yaml](../src/flashcli/catalog/models.yaml)。
+**对外发布标准（目录、manifest、entry、.so 命名、FlashHub 结构）** → **[bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)**  
+
+内部维护（编译、打包、flashcli 命令）→ [bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md)；公开 catalog：[models.yaml](../src/flashcli/catalog/models.yaml)。
 
 ## 目录布局（运行时根）
 

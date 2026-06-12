@@ -21,4 +21,4 @@ bash scripts/release_bundle.sh --bundle pi05_libero --clean   # or qwen_nvfp4
 | [`pi05_libero/`](pi05_libero/) | `pi05_libero` | SM89 × cu124/cu130 × py312 |
 | [`qwen_nvfp4/`](qwen_nvfp4/) | `qwen3-8b-nvfp4`, `qwen36-27b-nvfp4` | SM120 × cu130 × py312 |
 
-Spec: [model_bundle_standard.md](../docs/model_bundle_standard.md)
+Spec: **[bundle_publish_standard.md](../docs/bundle_publish_standard.md)** · summary [model_bundle_standard.md](../docs/model_bundle_standard.md)

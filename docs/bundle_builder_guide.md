@@ -2,9 +2,11 @@
 
 <p align="right"><strong>English</strong> · <a href="bundle_builder_guide.zh-CN.md">简体中文</a></p>
 
-For **Model Bundle maintainers**: environment setup (with mirrors), local dev, matrix builds, validation, FlashHub upload, and catalog updates.
+For **Model Bundle maintainers (internal)**: environment setup, local dev, matrix builds, validation, FlashHub upload, and catalog updates.
 
-Format spec: [model_bundle_standard.md](model_bundle_standard.md). End-user commands: each bundle’s `QUICKSTART.md`.
+**External bundle publish standard** (manifest / entry / `.so` / FlashHub layout; no scripts) → **[bundle_publish_standard.md](bundle_publish_standard.md)**
+
+Format summary: [model_bundle_standard.md](model_bundle_standard.md). End-user commands: each bundle’s `QUICKSTART.md`.
 
 ---
 
@@ -96,6 +98,7 @@ See [model_bundle_standard.md](model_bundle_standard.md) and the [Chinese guide]
 
 ## 7. Related docs
 
+- [bundle_publish_standard.md](bundle_publish_standard.md) — external publish standard (manifest, entry, `.so`, FlashHub)
 - [runtime-matrix.md](runtime-matrix.md) — matrix details  
 - [architecture.md](architecture.md) — host CLI vs bundle venv  
 - [flashcli-bundle/README.md](../flashcli-bundle/README.md) — protocol package  

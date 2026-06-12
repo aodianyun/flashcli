@@ -4,7 +4,9 @@
 
 Third parties ship models as a **Model Bundle**: one **`flashcli-bundle.json`**, **`entry` inference modules**, and optional **FlashRT `.so` / `flash_rt` Python**. flashcli **only** loads the bundle and calls `entry`; it does **not** implement Run/Serve logic in flashcli source.
 
-Maintainers: **[bundle_builder_guide.md](bundle_builder_guide.md)** and [CONTRIBUTING.md](../CONTRIBUTING.md). Public catalog: [`models.yaml`](../src/flashcli/catalog/models.yaml).
+**External publish standard** (layout, manifest, entry, `.so` naming, FlashHub tree) → **[bundle_publish_standard.md](bundle_publish_standard.md)**
+
+Internal maintainer workflow (build, pack, flashcli commands) → [bundle_builder_guide.md](bundle_builder_guide.md). Public catalog: [`models.yaml`](../src/flashcli/catalog/models.yaml).
 
 ## Runtime layout (after sync)
 
