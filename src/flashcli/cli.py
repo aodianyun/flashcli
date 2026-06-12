@@ -393,11 +393,9 @@ def pull(
 
 @app.command(
     add_help_option=False,
-    context_settings={"ignore_unknown_options": True},
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
-def run(
-    preset: str = typer.Argument(..., help="Model preset name."),
-) -> None:
+def run() -> None:
     """Run inference using the preset's model bundle."""
     import sys
 
@@ -407,13 +405,18 @@ def run(
         format_run_help,
         parse_run_argv,
         resolve_manifest_for_preset,
+        resolve_preset_from_command_argv,
     )
     from flashcli.runtime.reexec import ensure_bundle_runtime_and_reexec
 
-    p = PresetRegistry().get(preset)
     try:
+        preset_name = resolve_preset_from_command_argv(sys.argv[1:], command="run")
+        p = PresetRegistry().get(preset_name)
         inv = parse_run_argv(sys.argv[1:], preset=p)
     except BundleOptionsError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+    except KeyError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
@@ -441,11 +444,9 @@ def run(
 
 @app.command(
     add_help_option=False,
-    context_settings={"ignore_unknown_options": True},
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
-def serve(
-    preset: str = typer.Argument(..., help="Model preset name."),
-) -> None:
+def serve() -> None:
     """Serve unified OpenAI HTTP API via the preset model bundle."""
     import sys
 
@@ -455,13 +456,18 @@ def serve(
         format_serve_help,
         parse_serve_argv,
         resolve_manifest_for_preset,
+        resolve_preset_from_command_argv,
     )
     from flashcli.runtime.reexec import ensure_bundle_runtime_and_reexec
 
-    p = PresetRegistry().get(preset)
     try:
+        preset_name = resolve_preset_from_command_argv(sys.argv[1:], command="serve")
+        p = PresetRegistry().get(preset_name)
         inv = parse_serve_argv(sys.argv[1:], preset=p)
     except BundleOptionsError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+    except KeyError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 

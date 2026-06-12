@@ -347,6 +347,26 @@ def test_validate_bundle_options_rejects_top_level_with_variants(tmp_path: Path)
     assert any("top-level run_options" in e for e in errs)
 
 
+def test_resolve_preset_from_command_argv() -> None:
+    from flashcli.bundle.bundle_options import (
+        BundleOptionsError,
+        resolve_preset_from_command_argv,
+    )
+
+    assert (
+        resolve_preset_from_command_argv(["run", "pi05_libero", "--help"], command="run")
+        == "pi05_libero"
+    )
+    assert (
+        resolve_preset_from_command_argv(["pi05_libero", "--prompt", "x"], command="run")
+        == "pi05_libero"
+    )
+    with pytest.raises(BundleOptionsError, match="PRESET --help"):
+        resolve_preset_from_command_argv(["run", "--help"], command="run")
+    with pytest.raises(BundleOptionsError, match="Expected preset name"):
+        resolve_preset_from_command_argv(["run", "--bundle", "/tmp"], command="run")
+
+
 def test_validate_repo_bundles() -> None:
     from pathlib import Path
 

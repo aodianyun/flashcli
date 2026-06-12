@@ -301,11 +301,9 @@ def execute_serve(
 @app.command(
     "run",
     add_help_option=False,
-    context_settings={"ignore_unknown_options": True},
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
-def infer_run(
-    preset: str = typer.Argument(..., help="Model preset name."),
-) -> None:
+def infer_run() -> None:
     import sys
 
     from flashcli.bundle.bundle_options import (
@@ -313,12 +311,17 @@ def infer_run(
         format_run_help,
         parse_run_argv,
         resolve_manifest_for_preset,
+        resolve_preset_from_command_argv,
     )
 
-    p = PresetRegistry().get(preset)
     try:
+        preset_name = resolve_preset_from_command_argv(sys.argv[1:], command="run")
+        p = PresetRegistry().get(preset_name)
         inv = parse_run_argv(sys.argv[1:], preset=p)
     except BundleOptionsError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+    except KeyError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
     if inv.help:
@@ -332,7 +335,7 @@ def infer_run(
         raise typer.Exit()
 
     execute_run(
-        preset,
+        preset_name,
         bundle=inv.bundle,
         checkpoint=inv.checkpoint,
         mtp_checkpoint=inv.mtp_checkpoint,
@@ -349,11 +352,9 @@ def infer_run(
 @app.command(
     "serve",
     add_help_option=False,
-    context_settings={"ignore_unknown_options": True},
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
-def infer_serve(
-    preset: str = typer.Argument(..., help="Model preset name."),
-) -> None:
+def infer_serve() -> None:
     import sys
 
     from flashcli.bundle.bundle_options import (
@@ -361,12 +362,17 @@ def infer_serve(
         format_serve_help,
         parse_serve_argv,
         resolve_manifest_for_preset,
+        resolve_preset_from_command_argv,
     )
 
-    p = PresetRegistry().get(preset)
     try:
+        preset_name = resolve_preset_from_command_argv(sys.argv[1:], command="serve")
+        p = PresetRegistry().get(preset_name)
         inv = parse_serve_argv(sys.argv[1:], preset=p)
     except BundleOptionsError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+    except KeyError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
     if inv.help:
@@ -380,7 +386,7 @@ def infer_serve(
         raise typer.Exit()
 
     execute_serve(
-        preset,
+        preset_name,
         bundle=inv.bundle,
         port=inv.port,
         host=inv.host,

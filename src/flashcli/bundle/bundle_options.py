@@ -41,6 +41,7 @@ __all__ = [
     "parse_run_argv",
     "parse_serve_argv",
     "resolve_manifest_for_preset",
+    "resolve_preset_from_command_argv",
     "resolve_options_variant",
     "run_option_defaults",
     "serve_option_defaults",
@@ -240,6 +241,34 @@ class ServeInvocation:
     quiet: bool = False
     bundle_options: dict[str, Any] | None = None
     option_specs: list[OptionSpec] | None = None
+
+
+def resolve_preset_from_command_argv(
+    argv: list[str],
+    *,
+    command: str,
+) -> str:
+    """Return preset name from ``flashcli run|serve`` argv (after the subcommand)."""
+    rest = list(argv)
+    if rest and rest[0] == command:
+        rest = rest[1:]
+    if not rest:
+        raise BundleOptionsError(
+            f"Usage: flashcli {command} PRESET [OPTIONS]\n"
+            f"Try 'flashcli {command} PRESET --help' for bundle-specific options."
+        )
+    preset_name = rest[0]
+    if preset_name in ("-h", "--help"):
+        raise BundleOptionsError(
+            f"Usage: flashcli {command} PRESET [OPTIONS]\n"
+            f"Try 'flashcli {command} PRESET --help' for bundle-specific options."
+        )
+    if preset_name.startswith("-"):
+        raise BundleOptionsError(
+            f"Expected preset name, got {preset_name!r}. "
+            f"Usage: flashcli {command} PRESET [OPTIONS]"
+        )
+    return preset_name
 
 
 def _peek_command_argv(
