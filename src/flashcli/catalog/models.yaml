@@ -10,7 +10,7 @@ models:
   pi05_libero:
     description: Pi0.5 LIBERO — lerobot/pi05_libero_finetuned_v044 (SM89 only)
     bundle:
-      repo: https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero/1.0.2
+      repo: https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero/1.0.3
       # path: bundles/pi05_libero
 
   qwen3-8b-nvfp4:
