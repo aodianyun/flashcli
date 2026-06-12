@@ -40,7 +40,7 @@ flashcli is intentionally thin: **inference code lives in the bundle**. The CLI 
 
 | Preset | Task | GPU | CUDA line | Python | Capabilities |
 |--------|------|-----|-----------|--------|--------------|
-| [`pi05_libero`](bundles/pi05_libero/QUICKSTART.md) | Pi0.5 LIBERO VLA | **SM89** / **SM120** | cu124 or cu130 | **3.12** (bundle venv) | `run` |
+| [`pi05_libero`](bundles/pi05_libero/QUICKSTART.md) | Pi0.5 LIBERO VLA | **SM89 only** | cu124 or cu130 | **3.12** (bundle venv) | `run` |
 | [`qwen3-8b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3-8B NVFP4 chat | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
 | [`qwen36-27b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
 

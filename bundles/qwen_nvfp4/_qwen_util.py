@@ -10,7 +10,6 @@ from flashcli.bundle.manifest import BundleManifest
 from flashcli.bundle.variants import (
     resolve_bundle_variant,
     variant_merged_load_options,
-    variant_serve_cfg,
 )
 from flashcli.engines.base import ChatRequest, ChatResult
 
@@ -25,11 +24,13 @@ def resolve_model_variant(bundle: BundleManifest, options: dict[str, Any]) -> st
 
 
 def serve_cfg(bundle: BundleManifest | None = None, variant: str | None = None) -> dict[str, Any]:
+    from flashcli.bundle.bundle_options import serve_option_defaults
+
     b = bundle or active_bundle()
     if b is None:
         return {}
     key = resolve_bundle_variant(b, variant)
-    return variant_serve_cfg(b, key)
+    return serve_option_defaults(b, variant=key)
 
 
 def parse_warmup_spec(spec: str | None) -> list[tuple[int, int]]:
@@ -316,23 +317,4 @@ def merge_load_options(
     **options: Any,
 ) -> dict[str, Any]:
     variant = resolve_model_variant(bundle, options)
-    merged = variant_merged_load_options(bundle, variant, **options)
-    merged.setdefault("device", "cuda:0")
-    merged.setdefault("max_seq", int(merged.get("max_seq", 2048)))
-    if variant == "qwen3":
-        merged.setdefault("max_q_seq", int(merged.get("max_q_seq", 128)))
-    if variant == "qwen36":
-        merged.setdefault("K", int(merged.get("K", 4)))
-        merged.setdefault("max_output_tokens", int(merged.get("max_output_tokens", 16384)))
-        merged.setdefault("default_max_tokens", int(merged.get("default_max_tokens", 2048)))
-        if options.get("K") is not None:
-            merged["K"] = int(options["K"])
-        if options.get("max_output_tokens") is not None:
-            merged["max_output_tokens"] = int(options["max_output_tokens"])
-        if options.get("default_max_tokens") is not None:
-            merged["default_max_tokens"] = int(options["default_max_tokens"])
-    if options.get("max_seq") is not None:
-        merged["max_seq"] = int(options["max_seq"])
-    if options.get("max_q_seq") is not None:
-        merged["max_q_seq"] = int(options["max_q_seq"])
-    return merged
+    return variant_merged_load_options(bundle, variant, **options)

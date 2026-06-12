@@ -2,7 +2,7 @@
 
 <p align="right"><a href="QUICKSTART.md">English</a></p>
 
-**环境**：Linux · NVIDIA **SM120** · CUDA **13.x** · Python **3.10–3.12**  
+**环境**：Linux · NVIDIA **SM120** · CUDA **13.x** · Python **3.12**（bundle venv；主机 CLI 3.10+）  
 **Preset**：`qwen3-8b-nvfp4` / `qwen36-27b-nvfp4`（共用同一 runtime zip，`bundle_variant` 区分权重）
 
 ```bash
@@ -43,10 +43,11 @@ flashcli pull qwen36-27b-nvfp4 --bundle "$BUNDLE"
 ## 3. 引擎层（无 HTTP）
 
 ```bash
-# flashcli run qwen3-8b-nvfp4 --prompt "Hello"
+flashcli run qwen3-8b-nvfp4 --help
+flashcli run qwen36-27b-nvfp4 --help
+
 flashcli run qwen3-8b-nvfp4 --bundle "$BUNDLE" --prompt "Hello" --max-tokens 64
 
-# flashcli run qwen36-27b-nvfp4 --prompt "Hello"
 flashcli run qwen36-27b-nvfp4 --bundle "$BUNDLE" --prompt "Hello" --max-tokens 64 --K 6
 ```
 
@@ -57,19 +58,20 @@ flashcli run qwen36-27b-nvfp4 --bundle "$BUNDLE" --prompt "Hello" --max-tokens 6
 **同一 GPU 同时只跑一个 serve。** qwen3 与 qwen36 需分别起停。
 
 ```bash
-# flashcli serve qwen3-8b-nvfp4 --host 0.0.0.0 --port 8000 --max-seq 2048 --max-q-seq 1024 --warmup-preset auto
-flashcli serve qwen3-8b-nvfp4 --bundle "$BUNDLE" --host 0.0.0.0 --port 8000 --max-seq 2048 --max-q-seq 1024 --warmup-preset auto
+flashcli serve qwen3-8b-nvfp4 --help
+flashcli serve qwen36-27b-nvfp4 --help
 
-# flashcli serve qwen36-27b-nvfp4 --host 0.0.0.0 --port 8000 --K 6 --max-seq 262208 --warmup-preset auto
-flashcli serve qwen36-27b-nvfp4 --bundle "$BUNDLE" --host 0.0.0.0 --port 8000 --K 6 --max-seq 262208 --warmup-preset auto
+flashcli serve qwen3-8b-nvfp4 --bundle "$BUNDLE" --host 0.0.0.0 --port 8000
+
+flashcli serve qwen36-27b-nvfp4 --bundle "$BUNDLE" --host 0.0.0.0 --port 8000 --K 6
 ```
 
-| 参数 | 默认 | 说明 |
-|------|------|------|
-| `--max-seq` | 262208 | prompt + 生成总上下文 |
-| `--max-output-tokens` | **16384** | 单次请求生成硬上限 |
-| `--default-max-tokens` | 2048 | 客户端未传 `max_tokens` 时 |
-| `--K` | 4（bundle） | MTP 投机步数；bench 常用 6 |
+| 参数 | qwen3 默认 | qwen36 默认 | 说明 |
+|------|------------|-------------|------|
+| `--max-seq` | 2048 | 262208 | prompt + 生成总上下文 |
+| `--max-output-tokens` | — | **16384** | 单次请求生成硬上限（qwen36 serve） |
+| `--default-max-tokens` | — | 2048 | 客户端未传 `max_tokens` 时（qwen36） |
+| `--K` | — | 4 | MTP 投机步数；bench 常用 6 |
 
 **可选 FlashRT 调参**（`flashcli serve` 通常不必设）：
 

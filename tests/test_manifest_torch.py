@@ -24,6 +24,25 @@ def test_parse_torch_dependency_string() -> None:
     assert idx == ""
 
 
+def test_bundle_torch_index_auto_from_env_key(tmp_path: Path) -> None:
+    data = {
+        "format": "flashcli-model-bundle",
+        "format_version": 3,
+        "name": "t",
+        "python_abi": "312",
+        "python_dependencies": {
+            "torch": {"package": "torch", "index": "auto"},
+            "pip": [],
+        },
+        "runtime": {
+            "sm89-cu124-linux-x86_64-py312": "runtime/sm89-cu124-linux-x86_64-py312",
+        },
+    }
+    manifest = load_bundle_manifest_data(data, bundle_root=tmp_path)
+    assert bundle_torch_index(manifest, env_key="sm89-cu124-linux-x86_64-py312") == "cu124"
+    assert bundle_torch_index(manifest, env_key="sm120-cu130-linux-x86_64-py312") == "cu128"
+
+
 def test_bundle_torch_index_from_python_dependencies(tmp_path: Path) -> None:
     data = {
         "format": "flashcli-model-bundle",

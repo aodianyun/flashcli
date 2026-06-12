@@ -4,11 +4,17 @@
   "name": "pi05_libero",
   "description": "Pi0.5 LIBERO VLA — HuggingFace lerobot/pi05_libero_finetuned_v044",
   "entry": {
-    "run": { "module": "run", "attr": "RunEngine" }
+    "run": {
+      "module": "run",
+      "attr": "RunEngine"
+    }
   },
   "python_abi": "312",
   "python_dependencies": {
-    "torch": { "package": "torch", "index": "cu128" },
+    "torch": {
+      "package": "torch",
+      "index": "auto"
+    },
     "pip": [
       "numpy",
       "pyyaml",
@@ -19,13 +25,67 @@
       "pillow"
     ]
   },
+  "run_options": [
+    {
+      "name": "prompt",
+      "type": "string",
+      "default": "pick up the red block and place it in the tray",
+      "help": "Natural-language task instruction for the robot policy.",
+      "phase": "predict"
+    },
+    {
+      "name": "image",
+      "type": "string",
+      "help": "Comma-separated RGB image paths (one per camera view).",
+      "phase": "predict"
+    },
+    {
+      "name": "num_views",
+      "type": "integer",
+      "default": 2,
+      "help": "Number of camera views (LIBERO uses 2).",
+      "phase": "load"
+    },
+    {
+      "name": "hardware",
+      "type": "string",
+      "default": "auto",
+      "help": "FlashRT backend: auto, rtx_sm89, rtx_sm120, thor.",
+      "phase": "load"
+    },
+    {
+      "name": "autotune",
+      "type": "integer",
+      "default": 3,
+      "help": "CUDA graph autotune trials (0 disables).",
+      "phase": "load"
+    },
+    {
+      "name": "use_fp8",
+      "type": "boolean",
+      "default": true,
+      "help": "Load policy weights in FP8 when supported.",
+      "phase": "load"
+    },
+    {
+      "name": "config",
+      "type": "string",
+      "default": "pi05",
+      "help": "FlashRT model config name.",
+      "phase": "load"
+    }
+  ],
   "weights": {
     "source": "huggingface",
     "repo": "lerobot/pi05_libero_finetuned_v044",
     "revision": "main",
     "require_norm_stats": true
   },
-  "post_pull": [{ "tokenizer": "paligemma" }],
+  "post_pull": [
+    {
+      "tokenizer": "paligemma"
+    }
+  ],
   "runtime": {
     "sm89-cu124-linux-x86_64-py312": "runtime/sm89-cu124-linux-x86_64-py312",
     "sm89-cu130-linux-x86_64-py312": "runtime/sm89-cu130-linux-x86_64-py312",

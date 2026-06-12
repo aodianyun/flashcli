@@ -2,11 +2,11 @@
   "format": "flashcli-model-bundle",
   "format_version": 3,
   "name": "qwen_nvfp4",
-  "description": "Qwen3-8B + Qwen3.6-27B NVFP4 (SM120) — single runtime, --model selects weights",
+  "description": "Qwen3-8B + Qwen3.6-27B NVFP4 (SM120) — single runtime, catalog bundle_variant selects weights",
   "default_variant": "qwen3",
   "python_abi": "312",
   "python_dependencies": {
-    "torch": { "package": "torch", "index": "cu128" },
+    "torch": { "package": "torch", "index": "auto" },
     "pip": [
       "numpy",
       "pyyaml",
@@ -33,15 +33,93 @@
         "repo": "kaitchup/Qwen3-8B-NVFP4",
         "revision": "main"
       },
-      "defaults": { "max_seq": 2048, "max_q_seq": 128 },
-      "serve": {
-        "device": "cuda:0",
-        "max_seq": 2048,
-        "max_q_seq": 128,
-        "warmup_preset": "auto",
-        "warmup": "32:128,128:256",
-        "model_name": "qwen3-8b-nvfp4"
-      }
+      "run_options": [
+        {
+          "name": "prompt",
+          "type": "string",
+          "default": "Hello!",
+          "help": "User message for chat completion.",
+          "phase": "predict"
+        },
+        {
+          "name": "max_tokens",
+          "type": "integer",
+          "default": 256,
+          "help": "Maximum new tokens to generate.",
+          "phase": "predict"
+        },
+        {
+          "name": "temperature",
+          "type": "float",
+          "default": 0.0,
+          "help": "Sampling temperature.",
+          "phase": "predict"
+        },
+        {
+          "name": "top_p",
+          "type": "float",
+          "default": 1.0,
+          "help": "Nucleus sampling top-p.",
+          "phase": "predict"
+        },
+        {
+          "name": "top_k",
+          "type": "integer",
+          "default": 0,
+          "help": "Top-k sampling (0 disables).",
+          "phase": "predict"
+        },
+        {
+          "name": "seed",
+          "type": "integer",
+          "help": "Random seed (optional).",
+          "phase": "predict"
+        }
+      ],
+      "serve_options": [
+        {
+          "name": "device",
+          "type": "string",
+          "default": "cuda:0",
+          "help": "Torch device for inference.",
+          "phase": "load"
+        },
+        {
+          "name": "max_seq",
+          "type": "integer",
+          "default": 2048,
+          "help": "KV / context length budget.",
+          "phase": "load"
+        },
+        {
+          "name": "max_q_seq",
+          "type": "integer",
+          "default": 128,
+          "help": "Max prefill chunk size.",
+          "phase": "load"
+        },
+        {
+          "name": "model_name",
+          "type": "string",
+          "default": "qwen3-8b-nvfp4",
+          "help": "OpenAI API model id exposed by serve.",
+          "phase": "load"
+        },
+        {
+          "name": "warmup_preset",
+          "type": "string",
+          "default": "auto",
+          "help": "Warmup bucket preset: auto|short|all|none.",
+          "phase": "warmup"
+        },
+        {
+          "name": "warmup",
+          "type": "string",
+          "default": "32:128,128:256",
+          "help": "Extra CUDA graph warmup shapes (batch:seq,...).",
+          "phase": "warmup"
+        }
+      ]
     },
     "qwen36": {
       "description": "Qwen3.6-27B NVFP4 + MTP — prithivMLmods/Qwen3.6-27B-NVFP4",
@@ -63,17 +141,121 @@
       "env": {
         "FLASHRT_QWEN36_MTP_CKPT_DIR": "{models_dir}/qwen36-27b-nvfp4/mtp_fp8"
       },
-      "defaults": { "max_seq": 262208, "K": 4 },
-      "serve": {
-        "device": "cuda:0",
-        "max_seq": 262208,
-        "K": 4,
-        "default_max_tokens": 2048,
-        "max_output_tokens": 16384,
-        "warmup_preset": "agent",
-        "warmup": "16:128,128:128",
-        "model_name": "qwen3.6-27b-nvfp4"
-      }
+      "run_options": [
+        {
+          "name": "prompt",
+          "type": "string",
+          "default": "Hello!",
+          "help": "User message for chat completion.",
+          "phase": "predict"
+        },
+        {
+          "name": "max_tokens",
+          "type": "integer",
+          "default": 256,
+          "help": "Maximum new tokens to generate.",
+          "phase": "predict"
+        },
+        {
+          "name": "temperature",
+          "type": "float",
+          "default": 0.0,
+          "help": "Sampling temperature.",
+          "phase": "predict"
+        },
+        {
+          "name": "top_p",
+          "type": "float",
+          "default": 1.0,
+          "help": "Nucleus sampling top-p.",
+          "phase": "predict"
+        },
+        {
+          "name": "top_k",
+          "type": "integer",
+          "default": 0,
+          "help": "Top-k sampling (0 disables).",
+          "phase": "predict"
+        },
+        {
+          "name": "seed",
+          "type": "integer",
+          "help": "Random seed (optional).",
+          "phase": "predict"
+        },
+        {
+          "name": "K",
+          "type": "integer",
+          "default": 4,
+          "help": "MTP speculative decoding K.",
+          "phase": "load"
+        }
+      ],
+      "serve_options": [
+        {
+          "name": "device",
+          "type": "string",
+          "default": "cuda:0",
+          "help": "Torch device for inference.",
+          "phase": "load"
+        },
+        {
+          "name": "max_seq",
+          "type": "integer",
+          "default": 262208,
+          "help": "KV / long-context budget.",
+          "phase": "load"
+        },
+        {
+          "name": "K",
+          "type": "integer",
+          "default": 4,
+          "help": "MTP speculative decoding K.",
+          "phase": "load"
+        },
+        {
+          "name": "default_max_tokens",
+          "type": "integer",
+          "default": 2048,
+          "help": "Default max_tokens when the client omits it.",
+          "phase": "load"
+        },
+        {
+          "name": "max_output_tokens",
+          "type": "integer",
+          "default": 16384,
+          "help": "Hard cap on generated tokens per request.",
+          "phase": "load"
+        },
+        {
+          "name": "model_name",
+          "type": "string",
+          "default": "qwen3.6-27b-nvfp4",
+          "help": "OpenAI API model id exposed by serve.",
+          "phase": "load"
+        },
+        {
+          "name": "warmup_preset",
+          "type": "string",
+          "default": "agent",
+          "help": "Warmup bucket preset: agent|short|long|all|none.",
+          "phase": "warmup"
+        },
+        {
+          "name": "warmup",
+          "type": "string",
+          "default": "16:128,128:128",
+          "help": "Extra CUDA graph warmup shapes (batch:seq,...).",
+          "phase": "warmup"
+        },
+        {
+          "name": "warmup_committed_max_prompt",
+          "type": "integer",
+          "default": 1024,
+          "help": "Committed max prompt length for qwen36 graph warmup.",
+          "phase": "warmup"
+        }
+      ]
     }
   }
 }

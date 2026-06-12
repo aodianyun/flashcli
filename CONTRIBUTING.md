@@ -55,12 +55,13 @@ pytest tests/
 
 1. Copy structure from `bundles/pi05_libero/` or `bundles/qwen_nvfp4/`.
 2. Add `flashcli-bundle.json` (format_version 3), `entry` modules, `release-matrix.env`, `_bundle_build.sh`.
-3. Follow [docs/model_bundle_standard.md](docs/model_bundle_standard.md).
-4. Build on **Linux + NVIDIA GPU** (see release checklist below).
-5. `flashcli bundle validate bundles/<name>`
-6. Smoke-test `flashcli run` / `flashcli serve` as applicable.
-7. Add preset to `models.yaml` with `bundle.repo` (FlashHub URL) or local `path`.
-8. Update [README.md](README.md) and bundle README.
+3. Declare bundle CLI flags in manifest **`run_options`** / **`serve_options`** (defaults per option; no top-level `defaults`). With **`variants`**, put options under each variant — never at the top level. Use `"torch": {"index": "auto"}` unless you truly need a fixed CUDA wheel line.
+4. Follow [docs/model_bundle_standard.md](docs/model_bundle_standard.md).
+5. Build on **Linux + NVIDIA GPU** (see release checklist below).
+6. `flashcli bundle validate bundles/<name>`
+7. Smoke-test `flashcli run PRESET --help`, `flashcli run` / `flashcli serve` as applicable.
+8. Add preset to `models.yaml` with `bundle.repo` (FlashHub URL) or local `path`.
+9. Update [README.md](README.md) and bundle README.
 
 ## Release bundle checklist (maintainers)
 
@@ -109,7 +110,8 @@ Details: [docs/runtime-matrix.md](docs/runtime-matrix.md).
 
 ### Validate before publish
 
-- [ ] `flashcli bundle validate bundles/<name>` passes
+- [ ] `flashcli bundle validate bundles/<name>` passes (includes `run_options` / `serve_options` layout)
+- [ ] `flashcli run <preset> --help` / `flashcli serve <preset> --help` show expected bundle flags
 - [ ] `dist/runtime/` contains all env keys declared in manifest
 - [ ] `dist/` has no dev artifacts (`build.sh`, README, … — see `RELEASE_PACK_FILES`)
 - [ ] `flashcli models envs <preset>` matches expected host keys on target GPUs
@@ -127,7 +129,7 @@ https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero/1.0.2
 
 | Bundle | Note |
 |--------|------|
-| `pi05_libero` | **SM89** primary; cu124 FA2 is sm_89 AOT; cu130 FA2 multi-arch. |
+| `pi05_libero` | **SM89 only**; cu124 FA2 is sm_89 AOT; cu130 FA2 multi-arch. No SM120 runtime cells. |
 | `qwen_nvfp4` | **No cu124 line** — SM120/NVFP4 requires nvcc ≥ 12.8 (use `25.10-py3` container). |
 
 ## Reporting issues

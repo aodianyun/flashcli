@@ -2,7 +2,7 @@
 
 <p align="right"><a href="QUICKSTART.zh-CN.md">简体中文</a></p>
 
-**Requires**: Linux · NVIDIA **SM120** · CUDA **13.x** · Python **3.10–3.12**  
+**Requires**: Linux · NVIDIA **SM120** · CUDA **13.x** · Python **3.12** (bundle venv; host CLI 3.10+)  
 **Presets**: `qwen3-8b-nvfp4` / `qwen36-27b-nvfp4` (one runtime zip; `bundle_variant` picks weights)
 
 ```bash
@@ -43,10 +43,11 @@ Restricted network: `export HF_ENDPOINT=https://hf-mirror.com`
 ## 3. Engine (`run`, no HTTP)
 
 ```bash
-# flashcli run qwen3-8b-nvfp4 --prompt "Hello"
+flashcli run qwen3-8b-nvfp4 --help
+flashcli run qwen36-27b-nvfp4 --help
+
 flashcli run qwen3-8b-nvfp4 --bundle "$BUNDLE" --prompt "Hello" --max-tokens 64
 
-# flashcli run qwen36-27b-nvfp4 --prompt "Hello"
 flashcli run qwen36-27b-nvfp4 --bundle "$BUNDLE" --prompt "Hello" --max-tokens 64 --K 6
 ```
 
@@ -57,19 +58,20 @@ flashcli run qwen36-27b-nvfp4 --bundle "$BUNDLE" --prompt "Hello" --max-tokens 6
 **One GPU → one `flashcli serve` at a time.** Stop qwen3 before starting qwen36.
 
 ```bash
-# flashcli serve qwen3-8b-nvfp4 --host 0.0.0.0 --port 8000 --max-seq 2048 --max-q-seq 1024 --warmup-preset auto
-flashcli serve qwen3-8b-nvfp4 --bundle "$BUNDLE" --host 0.0.0.0 --port 8000 --max-seq 2048 --max-q-seq 1024 --warmup-preset auto
+flashcli serve qwen3-8b-nvfp4 --help
+flashcli serve qwen36-27b-nvfp4 --help
 
-# flashcli serve qwen36-27b-nvfp4 --host 0.0.0.0 --port 8000 --K 6 --max-seq 262208 --warmup-preset auto
-flashcli serve qwen36-27b-nvfp4 --bundle "$BUNDLE" --host 0.0.0.0 --port 8000 --K 6 --max-seq 262208 --warmup-preset auto
+flashcli serve qwen3-8b-nvfp4 --bundle "$BUNDLE" --host 0.0.0.0 --port 8000
+
+flashcli serve qwen36-27b-nvfp4 --bundle "$BUNDLE" --host 0.0.0.0 --port 8000 --K 6
 ```
 
-| Flag | Default | Meaning |
-|------|---------|---------|
-| `--max-seq` | 262208 | total context (prompt + generation) |
-| `--max-output-tokens` | **16384** | hard cap per request |
-| `--default-max-tokens` | 2048 | when client omits `max_tokens` |
-| `--K` | 4 (bundle) | MTP speculative K; bench often uses 6 |
+| Flag | qwen3 default | qwen36 default | Meaning |
+|------|---------------|----------------|---------|
+| `--max-seq` | 2048 | 262208 | total context (prompt + generation) |
+| `--max-output-tokens` | — | **16384** | hard cap per request (qwen36 serve) |
+| `--default-max-tokens` | — | 2048 | when client omits `max_tokens` (qwen36) |
+| `--K` | — | 4 | MTP speculative K; bench often uses 6 |
 
 **Optional FlashRT tuning** (usually not needed for `flashcli serve`):
 

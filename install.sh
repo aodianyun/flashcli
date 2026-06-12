@@ -24,7 +24,7 @@
 #   FLASHCLI_PYTHON
 #   FLASHCLI_SKIP_GPU_CHECK=1   skip GPU probe (default: warn if missing, still install)
 #   FLASHCLI_REQUIRE_GPU=1      abort install when no NVIDIA GPU (default: install CLI anyway)
-#   FLASHCLI_SKIP_ENV_CHECK=1
+#   FLASHCLI_SKIP_APT_OS_PACKAGES=1  never run apt-get/dnf for zip/git/python (host broken repos)
 #   FLASHCLI_PIP_USER=auto|0|1
 #   FLASHCLI_QUIET=1
 #   FLASHCLI_NO_REPAIR=1          skip one automatic pip repair retry
@@ -54,6 +54,7 @@ MIRROR_HF_ENDPOINT="https://hf-mirror.com"
 MIRROR_GET_PIP_URL="https://mirrors.aliyun.com/pypi/get-pip/get-pip.py"
 DEFAULT_GIT_PROXY_PREFIX="https://mirror.ghproxy.com/"
 OS_MIRRORS_APPLIED=0
+APT_OS_PACKAGES_DISABLED=0
 
 # ---------------------------------------------------------------------------
 # pyproject.toml [project] — keep in sync with repo pyproject.toml
@@ -141,31 +142,80 @@ get_pip_bootstrap_url() {
 }
 
 # Best-effort rewrite of OS package sources to Aliyun (root, Linux). Idempotent.
-apply_apt_mirror() {
-  have_cmd apt-get || return 0
-  have_cmd sed || return 0
-  if grep -rq 'mirrors.aliyun.com' /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null; then
-    return 0
-  fi
-  info "[i] mirror: switching apt sources → mirrors.aliyun.com (backup: sources.list.flashcli-bak)"
+_apt_backup_sources_once() {
   if [ -f /etc/apt/sources.list ] && [ ! -f /etc/apt/sources.list.flashcli-bak ]; then
     cp -a /etc/apt/sources.list /etc/apt/sources.list.flashcli-bak 2>/dev/null || true
   fi
-  for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.list; do
-    [ -f "$f" ] || continue
-    sed -i \
-      -e 's|http://archive.ubuntu.com|https://mirrors.aliyun.com|g' \
-      -e 's|https://archive.ubuntu.com|https://mirrors.aliyun.com|g' \
-      -e 's|http://security.ubuntu.com|https://mirrors.aliyun.com|g' \
-      -e 's|https://security.ubuntu.com|https://mirrors.aliyun.com|g' \
-      -e 's|http://ports.ubuntu.com|https://mirrors.aliyun.com|g' \
-      -e 's|https://ports.ubuntu.com|https://mirrors.aliyun.com|g' \
-      -e 's|http://deb.debian.org|https://mirrors.aliyun.com|g' \
-      -e 's|https://deb.debian.org|https://mirrors.aliyun.com|g' \
-      -e 's|http://security.debian.org|https://mirrors.aliyun.com|g' \
-      -e 's|https://security.debian.org|https://mirrors.aliyun.com|g' \
-      "$f" 2>/dev/null || true
+}
+
+_apt_rewrite_mirror_urls_in_file() {
+  _f="$1"
+  [ -f "$_f" ] || return 0
+  sed -i \
+    -e 's|https\?://archive\.ubuntu\.com/ubuntu/|https://mirrors.aliyun.com/ubuntu/|g' \
+    -e 's|https\?://security\.ubuntu\.com/ubuntu/|https://mirrors.aliyun.com/ubuntu/|g' \
+    -e 's|https\?://ports\.ubuntu\.com/ubuntu-ports/|https://mirrors.aliyun.com/ubuntu-ports/|g' \
+    -e 's|https\?://archive\.ubuntu\.com/ubuntu|https://mirrors.aliyun.com/ubuntu|g' \
+    -e 's|https\?://security\.ubuntu\.com/ubuntu|https://mirrors.aliyun.com/ubuntu|g' \
+    -e 's|https\?://deb\.debian\.org/debian/|https://mirrors.aliyun.com/debian/|g' \
+    -e 's|https\?://security\.debian\.org/debian-security/|https://mirrors.aliyun.com/debian-security/|g' \
+    -e 's|https\?://deb\.debian\.org/debian|https://mirrors.aliyun.com/debian|g' \
+    -e 's|https\?://security\.debian\.org/debian-security|https://mirrors.aliyun.com/debian-security|g' \
+    "$_f" 2>/dev/null || true
+}
+
+apply_apt_mirror() {
+  have_cmd apt-get || return 0
+  have_cmd sed || return 0
+  _apt_backup_sources_once
+  if ! grep -rq 'mirrors.aliyun.com' /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null; then
+    info "[i] mirror: switching apt sources → mirrors.aliyun.com (backup: sources.list.flashcli-bak)"
+  else
+    info "[i] mirror: normalizing apt sources to mirrors.aliyun.com (incl. *.sources)"
+  fi
+  for _f in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+    _apt_rewrite_mirror_urls_in_file "$_f"
   done
+}
+
+apt_os_packages_skip() {
+  case "${FLASHCLI_SKIP_APT_OS_PACKAGES:-0}" in
+    1 | true | yes) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+warn_apt_gpg_repair() {
+  warn "apt repository metadata failed (often GPG signature / stale lists on Ubuntu)."
+  warn "  flashcli install can continue without OS packages (zip/git optional)."
+  warn "  To repair the host, try:"
+  warn "    rm -rf /var/lib/apt/lists/* && apt-get clean && apt-get update"
+  warn "  Or set FLASHCLI_SKIP_APT_OS_PACKAGES=1 to silence OS package attempts."
+}
+
+apt_get_update_safe() {
+  _log="${TMPDIR:-/tmp}/flashcli-apt-update-$$.log"
+  if apt-get update -qq >"$_log" 2>&1; then
+    rm -f "$_log" 2>/dev/null || true
+    return 0
+  fi
+  if grep -qiE 'GPG error|not signed|invalid signature|EXPKEYSIG|NO_PUBKEY' "$_log" 2>/dev/null; then
+    warn "apt update failed (GPG/signature) — clearing lists and retrying once ..."
+    rm -rf /var/lib/apt/lists/* 2>/dev/null || true
+    mkdir -p /var/lib/apt/lists/partial 2>/dev/null || true
+    apt-get clean -qq 2>/dev/null || apt-get clean 2>/dev/null || true
+    apply_apt_mirror
+    if apt-get update -qq >"$_log" 2>&1; then
+      rm -f "$_log" 2>/dev/null || true
+      return 0
+    fi
+  fi
+  if [ "$QUIET" != "1" ] && [ -f "$_log" ]; then
+    tail -n 6 "$_log" >&2 || true
+  fi
+  rm -f "$_log" 2>/dev/null || true
+  warn_apt_gpg_repair
+  return 1
 }
 
 apply_dnf_yum_mirror() {
@@ -576,9 +626,16 @@ try_auto_install_python() {
   fi
   info "Attempting OS package install for python3 + pip + git + zip + rsync ..."
   apply_os_package_mirrors
+  if [ "$APT_OS_PACKAGES_DISABLED" -eq 1 ] || apt_os_packages_skip; then
+    warn "Skipping OS python install (apt disabled or FLASHCLI_SKIP_APT_OS_PACKAGES=1)"
+    return 1
+  fi
   if have_cmd apt-get; then
-    apt-get update -qq && apt-get install -y python3 python3-pip python3-venv git zip rsync \
-      && return 0
+    if apt_get_update_safe && apt-get install -y python3 python3-pip python3-venv git zip rsync; then
+      return 0
+    fi
+    APT_OS_PACKAGES_DISABLED=1
+    return 1
   fi
   if have_cmd dnf; then
     dnf install -y python3 python3-pip python3-virtualenv git zip rsync 2>/dev/null \
@@ -1093,10 +1150,17 @@ Fix:
 install_os_packages() {
   [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ] || return 1
   [ $# -gt 0 ] || return 1
+  if apt_os_packages_skip || [ "$APT_OS_PACKAGES_DISABLED" -eq 1 ]; then
+    return 1
+  fi
   apply_os_package_mirrors
   if have_cmd apt-get; then
     info "Installing OS packages via apt: $*"
-    apt-get update -qq && apt-get install -y "$@" && return 0
+    if apt_get_update_safe && apt-get install -y "$@"; then
+      return 0
+    fi
+    APT_OS_PACKAGES_DISABLED=1
+    return 1
   fi
   if have_cmd dnf; then
     info "Installing OS packages via dnf: $*"
@@ -1129,6 +1193,44 @@ die_missing_host_tool() {
     printf '%s\n' "error: Or re-run as root so install.sh can install OS packages automatically." >&2
   fi
   exit 1
+}
+
+# Like ensure_host_tool but warn-only (FlashHub pull/run does not need zip/rsync on the host).
+ensure_host_tool_optional() {
+  _cmd="$1"
+  _pkg="${2:-$_cmd}"
+  if have_cmd "$_cmd"; then
+    case "$_cmd" in
+      zip)
+        info "[ok] zip: $(zip -v 2>/dev/null | head -n 1 || command -v zip)"
+        ;;
+      rsync)
+        info "[ok] rsync: $(rsync --version 2>/dev/null | head -n 1 || command -v rsync)"
+        ;;
+      *)
+        info "[ok] $_cmd: $(command -v "$_cmd")"
+        ;;
+    esac
+    return 0
+  fi
+  warn "$_cmd not found — optional for FlashHub install (needed to pack local bundle zips)."
+  if install_os_packages "$_pkg" && have_cmd "$_cmd"; then
+    case "$_cmd" in
+      zip)
+        info "[ok] zip: $(zip -v 2>/dev/null | head -n 1 || command -v zip) (installed)"
+        ;;
+      rsync)
+        info "[ok] rsync: $(rsync --version 2>/dev/null | head -n 1 || command -v rsync) (installed)"
+        ;;
+      *)
+        info "[ok] $_cmd: $(command -v "$_cmd") (installed)"
+        ;;
+    esac
+    return 0
+  fi
+  warn "Could not install ${_pkg} via OS package manager — continuing without it."
+  warn "  To add later: apt install -y ${_pkg}  (or dnf/apk equivalent)"
+  return 0
 }
 
 # Ensure a host CLI exists; auto-install OS package when root.
@@ -1168,8 +1270,8 @@ ensure_host_tool() {
 }
 
 ensure_zip_rsync() {
-  ensure_host_tool zip zip
-  ensure_host_tool rsync rsync
+  ensure_host_tool_optional zip zip
+  ensure_host_tool_optional rsync rsync
 }
 
 check_network() {

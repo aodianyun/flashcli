@@ -21,22 +21,6 @@ from _qwen_util import (
 )
 from _serve_backend import ServeChatBackend
 
-_VARIANT_DEFAULTS: dict[str, dict[str, Any]] = {
-    "qwen3": {
-        "max_seq": 2048,
-        "max_q_seq": 128,
-        "warmup_preset": "auto",
-    },
-    "qwen36": {
-        "max_seq": 262208,
-        "K": 4,
-        "warmup_preset": "agent",
-        "default_max_tokens": 2048,
-        "max_output_tokens": 16384,
-        "warmup_committed_max_prompt": 1024,
-    },
-}
-
 
 class ServeEngine:
     """Bundle entry for ``flashcli serve`` — delegates to a ``ServeChatBackend``."""
@@ -60,32 +44,23 @@ class ServeEngine:
             )
         opts = merge_load_options(bundle, **options)
         self._load_opts = dict(opts)
-        self._variant = str(opts.get("model_variant", "qwen3"))
-        defaults = _VARIANT_DEFAULTS.get(self._variant, {})
-        self._model_id = str(
-            opts.get("model_name")
-            or serve_cfg(bundle, self._variant).get("model_name")
-            or self._variant
-        )
+        self._variant = str(opts["model_variant"])
+        self._model_id = str(opts["model_name"])
 
         ckpt = str(checkpoint.expanduser().resolve())
-        device = str(opts.get("device", "cuda:0"))
+        device = str(opts["device"])
 
         if self._variant == "qwen36":
             self._backend = Qwen36AgentBackend.from_checkpoint(
                 checkpoint=ckpt,
                 device=device,
-                max_seq=int(opts.get("max_seq", defaults.get("max_seq", 262208))),
+                max_seq=int(opts["max_seq"]),
                 model_name=self._model_id,
-                K=int(opts.get("K", defaults.get("K", 4))),
+                K=int(opts["K"]),
                 route_min_seq=resolve_qwen36_route_min_seq(opts.get("route_min_seq")),
-                capsule_budget_bytes=int(opts.get("capsule_budget_bytes", 0)),
-                default_max_tokens=int(
-                    opts.get("default_max_tokens", defaults.get("default_max_tokens", 2048))
-                ),
-                max_output_tokens=int(
-                    opts.get("max_output_tokens", defaults.get("max_output_tokens", 16384))
-                ),
+                capsule_budget_bytes=int(opts.get("capsule_budget_bytes") or 0),
+                default_max_tokens=int(opts["default_max_tokens"]),
+                max_output_tokens=int(opts["max_output_tokens"]),
             )
             return
 
@@ -93,8 +68,8 @@ class ServeEngine:
             checkpoint=ckpt,
             device=device,
             model_name=self._model_id,
-            max_seq=int(opts.get("max_seq", defaults.get("max_seq", 2048))),
-            max_q_seq=int(opts.get("max_q_seq", defaults.get("max_q_seq", 128))),
+            max_seq=int(opts["max_seq"]),
+            max_q_seq=int(opts["max_q_seq"]),
         )
 
     def resolve_warmup(
@@ -104,17 +79,14 @@ class ServeEngine:
         extra_spec: str | None = None,
         bundle_default: str | None = None,
     ) -> str | None:
-        defaults = _VARIANT_DEFAULTS.get(self._variant, {})
-        max_seq = int(self._load_opts.get("max_seq", defaults.get("max_seq", 2048)))
-        max_q_seq = int(self._load_opts.get("max_q_seq", defaults.get("max_q_seq", 128)))
+        max_seq = int(self._load_opts["max_seq"])
+        max_q_seq = int(self._load_opts["max_q_seq"]) if "max_q_seq" in self._load_opts else 0
         if self._variant == "qwen36":
             max_q_seq = 0
-        preset = preset or str(
-            self._load_opts.get("warmup_preset") or defaults.get("warmup_preset") or "auto"
-        )
+        warmup_preset = preset or str(self._load_opts["warmup_preset"])
         return resolve_serve_warmup_spec(
             self._variant,
-            preset=preset,
+            preset=warmup_preset,
             max_seq=max_seq,
             max_q_seq=max_q_seq,
             extra_spec=extra_spec,
@@ -131,12 +103,7 @@ class ServeEngine:
             assert isinstance(self._backend, Qwen36AgentBackend)
             self._backend.warmup(
                 shapes,
-                committed_max_prompt=int(
-                    self._load_opts.get(
-                        "warmup_committed_max_prompt",
-                        _VARIANT_DEFAULTS["qwen36"]["warmup_committed_max_prompt"],
-                    )
-                ),
+                committed_max_prompt=int(self._load_opts["warmup_committed_max_prompt"]),
             )
             return
         self._backend.warmup(shapes)

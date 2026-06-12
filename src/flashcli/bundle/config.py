@@ -15,7 +15,3 @@ def bundle_dict(bundle: BundleManifest, key: str) -> dict[str, Any]:
 def bundle_list(bundle: BundleManifest, key: str) -> list[Any]:
     raw = bundle.raw.get(key)
     return list(raw) if isinstance(raw, list) else []
-
-
-def bundle_defaults(bundle: BundleManifest) -> dict[str, Any]:
-    return bundle_dict(bundle, "defaults")

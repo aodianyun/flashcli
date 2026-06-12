@@ -102,33 +102,15 @@ def variant_env(bundle: BundleManifest, variant: str) -> dict[str, str]:
     return {}
 
 
-def variant_defaults(bundle: BundleManifest, variant: str) -> dict[str, Any]:
-    merged: dict[str, Any] = {}
-    from flashcli.bundle.config import bundle_defaults
-
-    merged.update(bundle_defaults(bundle))
-    merged.update(variant_section(bundle, variant, "defaults"))
-    return merged
-
-
-def variant_serve_cfg(bundle: BundleManifest, variant: str) -> dict[str, Any]:
-    merged: dict[str, Any] = {}
-    from flashcli.bundle.config import bundle_dict
-
-    merged.update(bundle_dict(bundle, "serve"))
-    merged.update(variant_section(bundle, variant, "serve"))
-    return merged
-
-
 def variant_merged_load_options(
     bundle: BundleManifest,
     variant: str,
     **options: Any,
 ) -> dict[str, Any]:
-    merged: dict[str, Any] = {}
-    merged.update(variant_defaults(bundle, variant))
-    merged.update(variant_serve_cfg(bundle, variant))
-    merged.update(options)
+    from flashcli.bundle.bundle_options import serve_option_defaults
+
+    merged = serve_option_defaults(bundle, variant=variant)
+    merged.update({k: v for k, v in options.items() if v is not None})
     merged["model_variant"] = variant
     return merged
 

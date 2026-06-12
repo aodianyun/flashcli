@@ -61,7 +61,7 @@ def activate_bundle(
             pip_python = None
 
     if install_python:
-        torch_index = bundle_torch_index(bundle)
+        torch_index = bundle_torch_index(bundle, gpu=gpu)
         satisfied = (
             pip_python is not None
             and bundle_python_stack_satisfied(
@@ -100,5 +100,7 @@ def resolve_torch_index_from_bundle() -> str | None:
     b = _ACTIVE_BUNDLE
     if b is None:
         return None
-    idx = bundle_torch_index(b)
+    from flashcli.runtime.detect import detect_gpu
+
+    idx = bundle_torch_index(b, gpu=detect_gpu())
     return idx if idx else None

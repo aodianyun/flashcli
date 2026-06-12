@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 
@@ -30,19 +30,19 @@ def execute_run(
     bundle: Path | None = None,
     checkpoint: Path | None = None,
     mtp_checkpoint: Path | None = None,
-    prompt: str | None = "pick up the red block and place it in the tray",
-    max_tokens: int = 256,
-    K: int | None = None,
     model: str | None = None,
-    image: str | None = None,
-    num_views: int | None = None,
-    hardware: str | None = None,
-    autotune: int | None = None,
     benchmark: int = 0,
     warmup: int = 0,
     no_auto_install: bool = False,
     quiet: bool = False,
+    bundle_options: dict[str, Any] | None = None,
+    option_specs: list[Any] | None = None,
 ) -> None:
+    from flashcli.bundle.bundle_options import (
+        OptionSpec,
+        bundle_run_options,
+        split_run_options,
+    )
     from flashcli.bundle.variants import resolve_effective_model_variant
     from flashcli.engines.factory import BundleNotReadyError, activate_for_preset, create_run_engine
 
@@ -79,9 +79,17 @@ def execute_run(
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
+    specs: list[OptionSpec] = list(option_specs or [])
+    if not specs and active is not None:
+        specs = bundle_run_options(active, variant=effective_variant)
+    load_kw, predict_kw = split_run_options(bundle_options or {}, specs)
+
+    image = predict_kw.pop("image", None)
     image_paths: list[Path] | None = None
     if image:
-        image_paths = [Path(part.strip()) for part in image.split(",") if part.strip()]
+        image_paths = [
+            Path(part.strip()) for part in str(image).split(",") if part.strip()
+        ]
 
     auto_install = auto_install_flag(no_auto_install)
     try:
@@ -98,28 +106,26 @@ def execute_run(
         typer.echo(f"Cannot load run engine: {exc}", err=True)
         raise typer.Exit(1) from exc
 
-    load_kw: dict = {
-        "num_views": num_views,
-        "hardware": hardware,
-        "autotune": autotune,
-    }
-    if K is not None:
-        load_kw["K"] = K
     if effective_variant:
         load_kw["model"] = effective_variant
-    run_engine.load(Path(ckpt), p, **{k: v for k, v in load_kw.items() if v is not None})
+    run_engine.load(
+        Path(ckpt),
+        p,
+        **{k: v for k, v in load_kw.items() if v is not None},
+    )
+    prompt = str(predict_kw.pop("prompt", "") or "")
     try:
         actions = run_engine.predict(
-            prompt=prompt or "",
+            prompt=prompt,
             image_paths=image_paths,
             benchmark=benchmark,
             warmup_iters=warmup,
-            max_tokens=max_tokens,
             echo=not quiet,
+            **predict_kw,
         )
         if not quiet and actions is not None:
             if isinstance(actions, str):
-                if not (prompt or "").strip():
+                if not prompt.strip():
                     typer.echo(actions)
             elif isinstance(actions, dict) and actions.get("text") is not None:
                 pass
@@ -141,19 +147,19 @@ def execute_serve(
     host: str = "0.0.0.0",
     checkpoint: Path | None = None,
     mtp_checkpoint: Path | None = None,
-    warmup: str | None = None,
-    warmup_preset: str | None = None,
-    max_seq: int | None = None,
-    max_q_seq: int | None = None,
-    K: int | None = None,
-    default_max_tokens: int | None = None,
-    max_output_tokens: int | None = None,
     model: str | None = None,
-    model_name: str | None = None,
     no_auto_install: bool = False,
     quiet: bool = False,
+    bundle_options: dict[str, Any] | None = None,
+    option_specs: list[Any] | None = None,
 ) -> None:
-    from flashcli.bundle.variants import resolve_effective_model_variant, variant_serve_cfg
+    from flashcli.bundle.bundle_options import (
+        OptionSpec,
+        bundle_serve_options,
+        serve_option_defaults,
+        split_serve_options,
+    )
+    from flashcli.bundle.variants import resolve_effective_model_variant
     from flashcli.engines.factory import BundleNotReadyError, activate_for_preset, create_serve_engine
 
     p = PresetRegistry().get(preset)
@@ -202,8 +208,12 @@ def execute_serve(
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
+    specs: list[OptionSpec] = list(option_specs or [])
+    if not specs and active is not None:
+        specs = bundle_serve_options(active, variant=effective_variant)
+    load_kw, warmup_kw = split_serve_options(bundle_options or {}, specs)
     bundle_serve = (
-        variant_serve_cfg(active, effective_variant)
+        serve_option_defaults(active, variant=effective_variant)
         if active is not None
         else {}
     )
@@ -229,31 +239,26 @@ def execute_serve(
         typer.echo(f"Cannot load serve engine: {exc}", err=True)
         raise typer.Exit(1) from exc
 
-    opts: dict = {
-        "model_name": model_name,
-        "K": K,
-        "model": effective_variant,
-        "max_seq": max_seq,
-        "max_q_seq": max_q_seq,
-        "warmup_preset": warmup_preset,
-        "default_max_tokens": default_max_tokens,
-        "max_output_tokens": max_output_tokens,
-    }
+    opts = dict(load_kw)
+    if effective_variant:
+        opts["model"] = effective_variant
     opts = {k: v for k, v in opts.items() if v is not None}
     serve_engine.load(Path(ckpt), p, **opts)
 
-    warm_spec: str | None = None
+    warmup_preset = warmup_kw.get("warmup_preset")
+    warmup = warmup_kw.get("warmup")
     if warmup_preset or warmup or bundle_serve.get("warmup"):
+        warm_spec: str | None = None
         if hasattr(serve_engine, "resolve_warmup"):
             warm_spec = serve_engine.resolve_warmup(
-                preset=warmup_preset,
-                extra_spec=warmup,
+                preset=str(warmup_preset) if warmup_preset is not None else None,
+                extra_spec=str(warmup) if warmup is not None else None,
                 bundle_default=str(bundle_serve.get("warmup", "")) or None
                 if warmup is None and warmup_preset is None
                 else None,
             )
         elif warmup:
-            warm_spec = warmup
+            warm_spec = str(warmup)
         elif bundle_serve.get("warmup"):
             warm_spec = str(bundle_serve.get("warmup"))
         elif warmup_preset:
@@ -262,8 +267,8 @@ def execute_serve(
                 err=True,
             )
             raise typer.Exit(1)
-    if warm_spec:
-        serve_engine.warmup(warm_spec)
+        if warm_spec:
+            serve_engine.warmup(warm_spec)
 
     if not quiet:
         typer.echo(
@@ -293,98 +298,99 @@ def execute_serve(
         raise typer.Exit(1) from exc
 
 
-@app.command("run")
+@app.command(
+    "run",
+    add_help_option=False,
+    context_settings={"ignore_unknown_options": True},
+)
 def infer_run(
     preset: str = typer.Argument(..., help="Model preset name."),
-    bundle: Optional[Path] = typer.Option(
-        None,
-        "--bundle",
-        exists=True,
-        file_okay=False,
-        dir_okay=True,
-    ),
-    checkpoint: Optional[Path] = typer.Option(None, "--checkpoint", exists=False),
-    mtp_checkpoint: Optional[Path] = typer.Option(None, "--mtp-checkpoint"),
-    prompt: Optional[str] = typer.Option(
-        "pick up the red block and place it in the tray",
-        "--prompt",
-    ),
-    max_tokens: int = typer.Option(256, "--max-tokens"),
-    K: Optional[int] = typer.Option(None, "--K"),
-    model: Optional[str] = typer.Option(None, "--model"),
-    image: Optional[str] = typer.Option(None, "--image"),
-    num_views: Optional[int] = typer.Option(None, "--num-views"),
-    hardware: Optional[str] = typer.Option(None, "--hardware"),
-    autotune: Optional[int] = typer.Option(None, "--autotune"),
-    benchmark: int = typer.Option(0, "--benchmark"),
-    warmup: int = typer.Option(0, "--warmup"),
-    no_auto_install: bool = typer.Option(False, "--no-auto-install"),
-    quiet: bool = typer.Option(False, "--quiet", "-q"),
 ) -> None:
+    import sys
+
+    from flashcli.bundle.bundle_options import (
+        BundleOptionsError,
+        format_run_help,
+        parse_run_argv,
+        resolve_manifest_for_preset,
+    )
+
+    p = PresetRegistry().get(preset)
+    try:
+        inv = parse_run_argv(sys.argv[1:], preset=p)
+    except BundleOptionsError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+    if inv.help:
+        try:
+            manifest = resolve_manifest_for_preset(p, bundle_path=inv.bundle)
+            specs = inv.option_specs or []
+            typer.echo(format_run_help(p, manifest, specs))
+        except FileNotFoundError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(1) from exc
+        raise typer.Exit()
+
     execute_run(
         preset,
-        bundle=bundle,
-        checkpoint=checkpoint,
-        mtp_checkpoint=mtp_checkpoint,
-        prompt=prompt,
-        max_tokens=max_tokens,
-        K=K,
-        model=model,
-        image=image,
-        num_views=num_views,
-        hardware=hardware,
-        autotune=autotune,
-        benchmark=benchmark,
-        warmup=warmup,
-        no_auto_install=no_auto_install,
-        quiet=quiet,
+        bundle=inv.bundle,
+        checkpoint=inv.checkpoint,
+        mtp_checkpoint=inv.mtp_checkpoint,
+        model=inv.model,
+        benchmark=inv.benchmark,
+        warmup=inv.warmup,
+        no_auto_install=inv.no_auto_install,
+        quiet=inv.quiet,
+        bundle_options=inv.bundle_options,
+        option_specs=inv.option_specs,
     )
 
 
-@app.command("serve")
+@app.command(
+    "serve",
+    add_help_option=False,
+    context_settings={"ignore_unknown_options": True},
+)
 def infer_serve(
     preset: str = typer.Argument(..., help="Model preset name."),
-    bundle: Optional[Path] = typer.Option(
-        None,
-        "--bundle",
-        exists=True,
-        file_okay=False,
-        dir_okay=True,
-    ),
-    port: int = typer.Option(8000, "--port"),
-    host: str = typer.Option("0.0.0.0", "--host"),
-    checkpoint: Optional[Path] = typer.Option(None, "--checkpoint"),
-    mtp_checkpoint: Optional[Path] = typer.Option(None, "--mtp-checkpoint"),
-    warmup: Optional[str] = typer.Option(None, "--warmup"),
-    warmup_preset: Optional[str] = typer.Option(None, "--warmup-preset"),
-    max_seq: Optional[int] = typer.Option(None, "--max-seq"),
-    max_q_seq: Optional[int] = typer.Option(None, "--max-q-seq"),
-    K: Optional[int] = typer.Option(None, "--K"),
-    default_max_tokens: Optional[int] = typer.Option(None, "--default-max-tokens"),
-    max_output_tokens: Optional[int] = typer.Option(None, "--max-output-tokens"),
-    model: Optional[str] = typer.Option(None, "--model"),
-    model_name: Optional[str] = typer.Option(None, "--model-name"),
-    no_auto_install: bool = typer.Option(False, "--no-auto-install"),
-    quiet: bool = typer.Option(False, "--quiet", "-q"),
 ) -> None:
+    import sys
+
+    from flashcli.bundle.bundle_options import (
+        BundleOptionsError,
+        format_serve_help,
+        parse_serve_argv,
+        resolve_manifest_for_preset,
+    )
+
+    p = PresetRegistry().get(preset)
+    try:
+        inv = parse_serve_argv(sys.argv[1:], preset=p)
+    except BundleOptionsError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+    if inv.help:
+        try:
+            manifest = resolve_manifest_for_preset(p, bundle_path=inv.bundle)
+            specs = inv.option_specs or []
+            typer.echo(format_serve_help(p, manifest, specs))
+        except FileNotFoundError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(1) from exc
+        raise typer.Exit()
+
     execute_serve(
         preset,
-        bundle=bundle,
-        port=port,
-        host=host,
-        checkpoint=checkpoint,
-        mtp_checkpoint=mtp_checkpoint,
-        warmup=warmup,
-        warmup_preset=warmup_preset,
-        max_seq=max_seq,
-        max_q_seq=max_q_seq,
-        K=K,
-        default_max_tokens=default_max_tokens,
-        max_output_tokens=max_output_tokens,
-        model=model,
-        model_name=model_name,
-        no_auto_install=no_auto_install,
-        quiet=quiet,
+        bundle=inv.bundle,
+        port=inv.port,
+        host=inv.host,
+        checkpoint=inv.checkpoint,
+        mtp_checkpoint=inv.mtp_checkpoint,
+        model=inv.model,
+        no_auto_install=inv.no_auto_install,
+        quiet=inv.quiet,
+        bundle_options=inv.bundle_options,
+        option_specs=inv.option_specs,
     )
 
 

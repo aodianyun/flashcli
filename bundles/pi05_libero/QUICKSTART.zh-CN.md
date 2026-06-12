@@ -2,7 +2,7 @@
 
 <p align="right"><a href="QUICKSTART.md">English</a></p>
 
-**环境**：Linux · NVIDIA GPU（**仅 SM89**，如 RTX 4090 / 4060 Ti Ada）· Python **3.10–3.12**  
+**环境**：Linux · NVIDIA GPU（**仅 SM89**，如 RTX 4090 / 4060 Ti Ada）· Python **3.12**（bundle venv；主机 CLI 3.10+）  
 **Preset**：`pi05_libero` · 权重 [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044)（~7.5GB，不进 zip）
 
 > **SM120 / Blackwell**（如 RTX 5090、PRO 5000）**暂不支持**。SM120 请用 [`qwen_nvfp4`](../qwen_nvfp4/QUICKSTART.zh-CN.md) 系列 preset。
@@ -45,6 +45,9 @@ bash bundles/pi05_libero/build.sh --repo-root "$FLASHRT_REPO" --fa2-native-only
 export HF_ENDPOINT=https://hf-mirror.com
 
 flashcli pull pi05_libero --bundle "$BUNDLE"
+
+# bundle 参数见 manifest run_options；默认值在 flashcli-bundle.json
+flashcli run pi05_libero --help
 
 flashcli run pi05_libero --bundle "$BUNDLE" \
   --prompt "pick up the red block and place it in the tray" \

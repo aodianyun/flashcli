@@ -12,6 +12,7 @@ from flashcli.bundle.marker import runtime_dir
 from flashcli.bundle.python_install import ensure_python_for_minor
 from flashcli.bundle.preflight import BundleEnvironmentError
 from flashcli.deps import ensure_runtime_python_stack
+from flashcli.runtime.detect import detect_gpu
 
 
 def venv_path(runtime_id: str) -> Path:
@@ -77,7 +78,7 @@ def ensure_bundle_venv(
             f"or re-enable auto-install."
         )
 
-    torch_index = bundle_torch_index(manifest)
+    torch_index = bundle_torch_index(manifest, gpu=detect_gpu())
     fp = _manifest_fingerprint(manifest, torch_index)
     fp_path = fingerprint_path(runtime_id)
     venv = venv_path(runtime_id)

@@ -103,15 +103,38 @@ def bundle_runtime_matrix(bundle: BundleManifest) -> list[str]:
     return sorted(bundle_runtime_map(bundle))
 
 
-def bundle_torch_index(bundle: BundleManifest) -> str:
-    """PyTorch wheel index name (e.g. ``cu128``) from ``python_dependencies.torch.index``."""
+def bundle_torch_index(
+    bundle: BundleManifest,
+    *,
+    env_key: str | None = None,
+    gpu: "GpuInfo | None" = None,
+) -> str:
+    """Resolve PyTorch wheel index (``cu124`` / ``cu128``) for bundle venv install.
+
+    Manifest ``python_dependencies.torch.index`` may be explicit (``cu124``) or
+    ``auto`` / omitted — then index follows the matched runtime env key or GPU.
+    """
+    from flashcli.bundle.runtime_env import parse_variant_key
+    from flashcli.runtime.detect import GpuInfo, detect_gpu, torch_index_for_cuda_tag
     from flashcli.runtime.requirements_spec import parse_torch_dependency
 
     py = bundle.raw.get("python_dependencies")
+    idx = ""
     if isinstance(py, dict):
         _, idx = parse_torch_dependency(py.get("torch", "torch"))
-        if idx:
-            return idx
+
+    if idx and idx.lower() != "auto":
+        return idx
+
+    if env_key:
+        try:
+            return torch_index_for_cuda_tag(parse_variant_key(env_key).cuda_tag)
+        except ValueError:
+            pass
+
+    gpu = gpu or detect_gpu()
+    if gpu is not None:
+        return gpu.recommended_torch_index
     return "cu124"
 
 
@@ -273,9 +296,11 @@ def validate_bundle_layout(
 
     from flashcli.bundle.native_validate import validate_native_runtime
     from flashcli.bundle.weights import validate_weights_spec
+    from flashcli.bundle.bundle_options import validate_bundle_options
 
     errors.extend(validate_native_runtime(bundle, probe_abi=probe_abi, env_key=env_key))
     errors.extend(validate_weights_spec(bundle))
+    errors.extend(validate_bundle_options(bundle))
 
     if not (bundle.bundle_root / "flash_rt").is_dir():
         errors.append("missing flash_rt/ Python tree")

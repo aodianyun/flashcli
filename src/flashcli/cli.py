@@ -329,168 +329,96 @@ def pull(
     )
 
 
-@app.command()
+@app.command(
+    add_help_option=False,
+    context_settings={"ignore_unknown_options": True},
+)
 def run(
     preset: str = typer.Argument(..., help="Model preset name."),
-    bundle: Optional[Path] = typer.Option(
-        None,
-        "--bundle",
-        exists=True,
-        file_okay=False,
-        dir_okay=True,
-        help="Override bundle root (default: FlashHub repo from models.yaml).",
-    ),
-    checkpoint: Optional[Path] = typer.Option(
-        None,
-        "--checkpoint",
-        exists=False,
-        help="Override checkpoint directory (skip cache/download).",
-    ),
-    mtp_checkpoint: Optional[Path] = typer.Option(
-        None,
-        "--mtp-checkpoint",
-        help="Override MTP weights dir (Qwen3.6; sets FLASHRT_QWEN36_MTP_CKPT_DIR).",
-    ),
-    prompt: Optional[str] = typer.Option(
-        "pick up the red block and place it in the tray",
-        "--prompt",
-        help="Task / chat user prompt.",
-    ),
-    max_tokens: int = typer.Option(
-        256,
-        "--max-tokens",
-        help="Max new tokens for LLM presets (Qwen).",
-    ),
-    K: Optional[int] = typer.Option(
-        None,
-        "--K",
-        help="MTP speculative K for Qwen3.6 run.",
-    ),
-    model: Optional[str] = typer.Option(
-        None,
-        "--model",
-        help="Override catalog bundle_variant (e.g. qwen3, qwen36).",
-    ),
-    image: Optional[str] = typer.Option(
-        None, "--image", help="Comma-separated image paths (one per view)."
-    ),
-    num_views: Optional[int] = typer.Option(
-        None, "--num-views", help="Override preset default camera views."
-    ),
-    hardware: Optional[str] = typer.Option(
-        None,
-        "--hardware",
-        help="Backend: auto, rtx_sm89, rtx_sm120, thor.",
-    ),
-    autotune: Optional[int] = typer.Option(
-        None, "--autotune", help="CUDA graph autotune trials (0=off, 3=default)."
-    ),
-    benchmark: int = typer.Option(0, "--benchmark", help="Timed iterations after first predict."),
-    warmup: int = typer.Option(
-        0,
-        "--warmup",
-        help="Extra predict iterations before --benchmark (not CUDA graph warmup; graph warmup runs on load).",
-    ),
-    no_auto_install: bool = typer.Option(
-        False,
-        "--no-auto-install",
-        help="Do not auto-install bundle Python deps.",
-    ),
-    quiet: bool = typer.Option(False, "--quiet", "-q"),
 ) -> None:
     """Run inference using the preset's model bundle."""
+    import sys
+
     from flashcli.bundle.preflight import BundleEnvironmentError
+    from flashcli.bundle.bundle_options import (
+        BundleOptionsError,
+        format_run_help,
+        parse_run_argv,
+        resolve_manifest_for_preset,
+    )
     from flashcli.runtime.reexec import ensure_bundle_runtime_and_reexec
 
     p = PresetRegistry().get(preset)
+    try:
+        inv = parse_run_argv(sys.argv[1:], preset=p)
+    except BundleOptionsError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
 
-    if _auto_install_flag(no_auto_install):
-        ensure_environment(install_flashcli=True, quiet=quiet)
+    if inv.help:
+        try:
+            manifest = resolve_manifest_for_preset(p, bundle_path=inv.bundle)
+            specs = inv.option_specs or []
+            typer.echo(format_run_help(p, manifest, specs))
+        except FileNotFoundError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(1) from exc
+        raise typer.Exit()
+
+    if _auto_install_flag(inv.no_auto_install):
+        ensure_environment(install_flashcli=True, quiet=inv.quiet)
 
     try:
         ensure_bundle_runtime_and_reexec(
-            p, bundle_path=bundle, quiet=quiet
+            p, bundle_path=inv.bundle, quiet=inv.quiet
         )
     except BundleEnvironmentError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(2) from exc
 
 
-@app.command()
+@app.command(
+    add_help_option=False,
+    context_settings={"ignore_unknown_options": True},
+)
 def serve(
     preset: str = typer.Argument(..., help="Model preset name."),
-    bundle: Optional[Path] = typer.Option(
-        None,
-        "--bundle",
-        exists=True,
-        file_okay=False,
-        dir_okay=True,
-        help="Override bundle root (default: FlashHub repo from models.yaml).",
-    ),
-    port: int = typer.Option(8000, "--port"),
-    host: str = typer.Option("0.0.0.0", "--host"),
-    checkpoint: Optional[Path] = typer.Option(
-        None,
-        "--checkpoint",
-        help="Override checkpoint directory.",
-    ),
-    mtp_checkpoint: Optional[Path] = typer.Option(
-        None,
-        "--mtp-checkpoint",
-        help="Override MTP weights dir (sets env vars from preset).",
-    ),
-    warmup: Optional[str] = typer.Option(
-        None,
-        "--warmup",
-        help='Extra graph warmup shapes, e.g. "32:128,128:256".',
-    ),
-    warmup_preset: Optional[str] = typer.Option(
-        None,
-        "--warmup-preset",
-        help="Warmup bucket preset (bundle-specific; qwen3: auto|short|all|none; qwen36: agent|short|long|all|none).",
-    ),
-    max_seq: Optional[int] = typer.Option(
-        None,
-        "--max-seq",
-        help="KV / context budget (qwen36 long ctx e.g. 262208).",
-    ),
-    max_q_seq: Optional[int] = typer.Option(
-        None,
-        "--max-q-seq",
-        help="Max prefill chunk (qwen3 only, default from bundle).",
-    ),
-    K: Optional[int] = typer.Option(None, "--K", help="MTP speculative K (Qwen3.6)."),
-    default_max_tokens: Optional[int] = typer.Option(
-        None,
-        "--default-max-tokens",
-        help="Default max_tokens when the client omits it (qwen36 only, default 2048).",
-    ),
-    max_output_tokens: Optional[int] = typer.Option(
-        None,
-        "--max-output-tokens",
-        help="Hard cap on generated tokens per request (qwen36 only, default 16384).",
-    ),
-    model: Optional[str] = typer.Option(
-        None,
-        "--model",
-        help="Override catalog bundle_variant (e.g. qwen3, qwen36).",
-    ),
-    model_name: Optional[str] = typer.Option(None, "--model-name"),
-    no_auto_install: bool = typer.Option(False, "--no-auto-install"),
-    quiet: bool = typer.Option(False, "--quiet", "-q"),
 ) -> None:
     """Serve unified OpenAI HTTP API via the preset model bundle."""
+    import sys
+
     from flashcli.bundle.preflight import BundleEnvironmentError
+    from flashcli.bundle.bundle_options import (
+        BundleOptionsError,
+        format_serve_help,
+        parse_serve_argv,
+        resolve_manifest_for_preset,
+    )
     from flashcli.runtime.reexec import ensure_bundle_runtime_and_reexec
 
     p = PresetRegistry().get(preset)
+    try:
+        inv = parse_serve_argv(sys.argv[1:], preset=p)
+    except BundleOptionsError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
 
-    if _auto_install_flag(no_auto_install):
-        ensure_environment(install_flashcli=True, quiet=quiet)
+    if inv.help:
+        try:
+            manifest = resolve_manifest_for_preset(p, bundle_path=inv.bundle)
+            specs = inv.option_specs or []
+            typer.echo(format_serve_help(p, manifest, specs))
+        except FileNotFoundError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(1) from exc
+        raise typer.Exit()
+
+    if _auto_install_flag(inv.no_auto_install):
+        ensure_environment(install_flashcli=True, quiet=inv.quiet)
 
     try:
         ensure_bundle_runtime_and_reexec(
-            p, bundle_path=bundle, quiet=quiet
+            p, bundle_path=inv.bundle, quiet=inv.quiet
         )
     except BundleEnvironmentError as exc:
         typer.echo(str(exc), err=True)

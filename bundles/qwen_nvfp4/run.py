@@ -1,4 +1,4 @@
-"""Unified Qwen NVFP4 RunEngine — ``--model qwen3|qwen36`` selects backend."""
+"""Unified Qwen NVFP4 RunEngine — catalog ``bundle_variant`` selects backend."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from flashcli.bundle.activate import active_bundle
+from flashcli.bundle.bundle_options import option_value, run_option_defaults
 from flashcli.engines.base import ChatMessage, ChatRequest
 from flashcli.models.registry import Preset
 
@@ -18,15 +19,18 @@ from serve import ServeEngine
 class RunEngine:
     def __init__(self) -> None:
         self._serve = ServeEngine()
+        self._run_defaults: dict[str, Any] = {}
 
     def load(self, checkpoint: Path, preset: Preset, **options: Any) -> None:
         self._serve.load(checkpoint, preset, **options)
+        bundle = active_bundle()
+        if bundle is not None:
+            self._run_defaults = run_option_defaults(
+                bundle, variant=self._serve._variant
+            )
         warm = options.get("warmup")
-        if warm is None:
-            bundle = active_bundle()
-            if bundle is not None:
-                variant = str(options.get("model") or options.get("variant") or "")
-                warm = serve_cfg(bundle, variant or None).get("warmup")
+        if warm is None and bundle is not None:
+            warm = serve_cfg(bundle, self._serve._variant).get("warmup")
         if warm:
             self._serve.warmup(str(warm))
 
@@ -41,24 +45,28 @@ class RunEngine:
         if self._serve._backend is None:
             raise RuntimeError("RunEngine.load() not called")
 
-        max_tokens = int(kwargs.get("max_tokens", 256))
+        merged = {"prompt": prompt, **kwargs}
+        d = self._run_defaults
+        max_tokens = int(option_value("max_tokens", merged, d))
         echo = bool(kwargs.get("echo", True))
         benchmark = int(kwargs.get("benchmark", 0))
         warmup_iters = int(kwargs.get("warmup_iters", 0))
         variant = self._serve._variant
+        prompt_text = str(option_value("prompt", merged, d) or "")
 
+        seed = option_value("seed", merged, d)
         req = ChatRequest(
             messages=[
                 ChatMessage(
                     role="user",
-                    content=(prompt or "Hello!").strip() or "Hello!",
+                    content=prompt_text.strip() or str(d.get("prompt") or ""),
                 )
             ],
             max_tokens=max_tokens,
-            temperature=float(kwargs.get("temperature", 0.0)),
-            top_p=float(kwargs.get("top_p", 1.0)),
-            top_k=int(kwargs.get("top_k", 0)),
-            seed=int(kwargs["seed"]) if kwargs.get("seed") is not None else None,
+            temperature=float(option_value("temperature", merged, d)),
+            top_p=float(option_value("top_p", merged, d)),
+            top_k=int(option_value("top_k", merged, d)),
+            seed=int(seed) if seed is not None else None,
         )
 
         async def _one() -> dict[str, Any]:

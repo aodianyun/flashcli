@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 
 from flashcli.bundle.activate import active_bundle
-from flashcli.bundle.config import bundle_defaults
+from flashcli.bundle.bundle_options import option_value, run_option_defaults
 from flashcli.models.registry import Preset
 
 import _pi05_compat
@@ -53,6 +53,9 @@ class RunEngine:
         self._model: Any = None
         self._defaults: dict[str, Any] = {}
 
+    def _opt(self, overrides: dict[str, Any], name: str) -> Any:
+        return option_value(name, overrides, self._defaults)
+
     def load(self, checkpoint: Path, preset: Preset, **options: Any) -> None:
         del preset
         bundle = active_bundle()
@@ -60,7 +63,7 @@ class RunEngine:
             raise RuntimeError(
                 "No active bundle; activate bundle runtime before RunEngine.load()"
             )
-        self._defaults = bundle_defaults(bundle)
+        self._defaults = run_option_defaults(bundle)
 
         _pi05_compat.prepare_flash_rt_kernels(quiet=True)
 
@@ -71,13 +74,11 @@ class RunEngine:
             framework=str(
                 options.get("framework") or bundle.raw.get("framework", "torch")
             ),
-            num_views=int(options.get("num_views") or self._defaults.get("num_views", 2)),
-            autotune=int(options.get("autotune") or self._defaults.get("autotune", 3)),
-            config=str(options.get("config") or bundle.raw.get("config", "pi05")),
-            hardware=str(options.get("hardware") or self._defaults.get("hardware", "auto")),
-            use_fp8=bool(
-                options.get("use_fp8", self._defaults.get("use_fp8", True))
-            ),
+            num_views=int(self._opt(options, "num_views")),
+            autotune=int(self._opt(options, "autotune")),
+            config=str(self._opt(options, "config")),
+            hardware=str(self._opt(options, "hardware")),
+            use_fp8=bool(self._opt(options, "use_fp8")),
         )
 
     def predict(
@@ -90,10 +91,11 @@ class RunEngine:
     ) -> np.ndarray:
         if self._model is None:
             raise RuntimeError("RunEngine.load() not called")
+        merged = {"prompt": prompt, **kwargs}
+        num_views = int(self._opt(merged, "num_views"))
+        prompt_text = str(self._opt(merged, "prompt") or "")
         if image_paths:
-            num_views = int(kwargs.get("num_views") or self._defaults.get("num_views", 2))
             images = load_images_from_paths(image_paths, num_views=num_views)
         if not images:
-            num_views = int(kwargs.get("num_views") or self._defaults.get("num_views", 2))
             images = placeholder_images(num_views)
-        return self._model.predict(images=images, prompt=prompt)
+        return self._model.predict(images=images, prompt=prompt_text)
