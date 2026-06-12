@@ -244,10 +244,79 @@ def repair_bundle_python_stack(
     )
 
 
+def _load_persisted_install_env() -> None:
+    """Apply ``~/.flashcli/install.env`` (written by ``install.sh``) if present."""
+    import os
+
+    from flashcli import config
+
+    path = config.FLASHCLI_HOME / "install.env"
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key = key.strip()
+        val = val.strip().strip('"').strip("'")
+        if key and val:
+            os.environ.setdefault(key, val)
+
+
+def _pip_spec_from_direct_url(
+    dist_name: str,
+    *,
+    subdirectory: str | None = None,
+) -> str | None:
+    """Rebuild a pip git/editable spec from ``direct_url.json`` (git installs)."""
+    import json
+
+    try:
+        from importlib.metadata import distribution
+
+        data = json.loads(distribution(dist_name).read_text("direct_url.json"))
+    except (ImportError, OSError, KeyError, TypeError, json.JSONDecodeError):
+        return None
+
+    pkg = dist_name.replace("_", "-")
+    vcs = data.get("vcs_info") if isinstance(data.get("vcs_info"), dict) else {}
+    if isinstance(vcs, dict) and vcs.get("vcs") == "git":
+        url = str(data.get("url", "")).strip()
+        if not url:
+            return None
+        ref = str(
+            vcs.get("requested_revision") or vcs.get("commit_id") or "main"
+        ).strip()
+        sub = subdirectory or str(data.get("subdirectory") or "").strip()
+        spec = f"git+{url}@{ref}"
+        if sub:
+            spec += f"#subdirectory={sub}"
+        return f"{pkg} @ {spec}"
+
+    dir_info = data.get("dir_info") if isinstance(data.get("dir_info"), dict) else {}
+    if dir_info.get("editable"):
+        url = str(data.get("url", "")).strip()
+        if not url:
+            return None
+        root = Path(url).expanduser().resolve()
+        sub = subdirectory or str(data.get("subdirectory") or "").strip()
+        if sub:
+            candidate = root / sub
+            if (candidate / "pyproject.toml").is_file():
+                root = candidate
+        if (root / "pyproject.toml").is_file():
+            return str(root)
+    return None
+
+
 def flashcli_bundle_pip_spec() -> str:
-    """Pip spec matching the host ``flashcli-bundle`` install (supports editable)."""
+    """Pip spec for installing ``flashcli-bundle`` into a bundle venv."""
+    import os
+
     import flashcli_bundle
-    from importlib.metadata import PackageNotFoundError, version
+
+    _load_persisted_install_env()
 
     pkg_dir = Path(flashcli_bundle.__file__).resolve().parent
     src_root = pkg_dir.parent
@@ -256,10 +325,27 @@ def flashcli_bundle_pip_spec() -> str:
         text = (repo_root / "pyproject.toml").read_text(encoding="utf-8")
         if 'name = "flashcli-bundle"' in text:
             return str(repo_root)
-    try:
-        return f"flashcli-bundle=={version('flashcli-bundle')}"
-    except PackageNotFoundError:
-        return "flashcli-bundle>=0.1.0"
+
+    spec = _pip_spec_from_direct_url("flashcli-bundle")
+    if spec:
+        return spec
+
+    spec = _pip_spec_from_direct_url("flashcli", subdirectory="flashcli-bundle")
+    if spec:
+        if spec.startswith("flashcli @ "):
+            return "flashcli-bundle @ " + spec.split(" @ ", 1)[1]
+        return spec
+
+    repo = os.environ.get("FLASHCLI_INSTALL_REPO", "").strip()
+    ref = os.environ.get("FLASHCLI_INSTALL_REF", "main").strip() or "main"
+    if repo:
+        return f"flashcli-bundle @ git+{repo}@{ref}#subdirectory=flashcli-bundle"
+
+    raise RuntimeError(
+        "Cannot resolve flashcli-bundle install source for bundle venv. "
+        "Reinstall flashcli from git (install.sh) or set "
+        "FLASHCLI_INSTALL_REPO / FLASHCLI_INSTALL_REF (or ~/.flashcli/install.env)."
+    )
 
 
 def ensure_flashcli_bundle_in_venv(

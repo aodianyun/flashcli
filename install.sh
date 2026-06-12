@@ -1932,6 +1932,16 @@ write_flashcli_mirror_env() {
   info "Wrote ${_home}/mirror.env (flashcli run pip/HF/GitHub downloads will use mirrors)"
 }
 
+write_flashcli_install_env() {
+  _home="${FLASHCLI_HOME:-${HOME:-/root}/.flashcli}"
+  mkdir -p "$_home"
+  {
+    printf 'FLASHCLI_INSTALL_REPO=%s\n' "$REPO"
+    printf 'FLASHCLI_INSTALL_REF=%s\n' "$REF"
+  } > "${_home}/install.env"
+  info "Wrote ${_home}/install.env (git source for flashcli-bundle in bundle venvs)"
+}
+
 # Verify flashcli works in parent shell (minimal PATH / no /usr/local/bin is common in containers).
 verify_cli_usable() {
   cli="$(flashcli_script_path || true)"
@@ -1951,6 +1961,7 @@ verify_cli_usable() {
 
   persist_path_config "$cli_dir"
   write_flashcli_mirror_env
+  write_flashcli_install_env
 
   resolved="$(command -v flashcli 2>/dev/null || true)"
   if [ -z "$resolved" ]; then
