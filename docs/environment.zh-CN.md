@@ -55,7 +55,7 @@ flashcli models list
 
 权重下载与 `hf download` 相同；失败时请先用相同 `HF_ENDPOINT` 手动试一次 CLI。
 
-`install.sh` / `pip install flashcli` 会安装 `huggingface_hub>=0.26`（提供 `hf` / `huggingface-cli`），安装后校验 Hub CLI；若脚本目录不在 PATH，flashcli 仍会回退到 `python -m huggingface_hub.cli.hf`。
+`install.sh` / `auto_install.sh` 从 git 安装 `flashcli-bundle`，再装 `flashcli`（`--no-deps`）与运行时依赖（含 `huggingface_hub>=0.26`，提供 `hf` / `huggingface-cli`）。
 
 ## 行为开关
 

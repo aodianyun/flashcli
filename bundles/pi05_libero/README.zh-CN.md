@@ -23,7 +23,7 @@ flash_rt/
 命令速查见 **[QUICKSTART.zh-CN.md](QUICKSTART.zh-CN.md)**。
 
 ```bash
-pip install flashcli
+curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
 flashcli run pi05_libero --prompt "..." --image /path/to/base.jpg
 ```
 

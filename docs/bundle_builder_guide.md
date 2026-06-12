@@ -13,7 +13,7 @@ Format spec: [model_bundle_standard.md](model_bundle_standard.md). End-user comm
 | Role | Goal | Install |
 |------|------|---------|
 | **Bundle builder** | Edit `run.py` / manifest, compile FlashRT, publish | `pip install -e ./flashcli-bundle -e .` + FlashRT + Docker/GPU |
-| **End user** | `flashcli run <preset>` | `install.sh` or `pip install flashcli` |
+| **End user** | `flashcli run <preset>` | `install.sh` / `auto_install.sh` (git: flashcli-bundle + flashcli) |
 
 Entry modules import **`flashcli_bundle` only** — not the full `flashcli` CLI package.
 

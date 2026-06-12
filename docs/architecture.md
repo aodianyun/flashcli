@@ -22,8 +22,8 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 
 | What | Where it lives | Installed how |
 |------|----------------|---------------|
-| `flashcli` CLI + infer modules | Host only (`~/.flashcli/venv` or editable `src/`) | `install.sh` / `pip install flashcli` **once** |
-| **`flashcli-bundle`** (protocol, manifest options) | Bundle venv | `pip install flashcli-bundle` (same version as host flashcli) |
+| `flashcli` CLI + infer modules | Host only (`~/.flashcli/venv` or editable `src/`) | `install.sh` / `auto_install.sh` **once** |
+| **`flashcli-bundle`** (protocol, manifest options) | Host + bundle venv | Git: `flashcli-bundle @ git+…#subdirectory=flashcli-bundle` (see `install.sh`, `~/.flashcli/install.env`) |
 | Bundle inference stack (torch, numpy, …) | `~/.flashcli/runtimes/<id>/venv/` | From `flashcli-bundle.json` → `python_dependencies` |
 | Infer helper deps (typer, pyyaml, fastapi, …) | Same bundle venv, **only if missing** | `ensure_bundle_infer_deps()` — **not** the flashcli package |
 

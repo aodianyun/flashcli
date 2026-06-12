@@ -2,9 +2,24 @@
 
 Minimal Python package for **Model Bundle** authors and runtime entry modules (`run.py`, `serve.py`).
 
+**Not published on PyPI.** Install from this git repo (subdirectory) or editable checkout only.
+
 ## Install
 
-**End users** — installed automatically with flashcli (`install.sh` or `pip install flashcli`).
+**End users** — `install.sh` / `auto_install.sh` install `flashcli-bundle` from git, then `flashcli` with `--no-deps`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
+# mirror: ... | sh -s -- --mirror
+```
+
+Manual equivalent:
+
+```bash
+pip install "flashcli-bundle @ git+https://github.com/aodianyun/flashcli.git@main#subdirectory=flashcli-bundle"
+pip install --no-deps "flashcli @ git+https://github.com/aodianyun/flashcli.git@main"
+pip install typer pyyaml packaging huggingface_hub tqdm fastapi 'uvicorn[standard]'
+```
 
 **Bundle authors / monorepo dev:**
 
@@ -14,13 +29,13 @@ pip install -e ./flashcli-bundle
 pip install -e .
 ```
 
-**From git (without full flashcli checkout):**
+**From git (protocol package only):**
 
 ```bash
 pip install "flashcli-bundle @ git+https://github.com/aodianyun/flashcli.git@main#subdirectory=flashcli-bundle"
 ```
 
-PyPI publish is optional; git subdirectory install is enough for internal teams.
+Bundle venvs get the same git spec via `~/.flashcli/install.env` (`FLASHCLI_INSTALL_REPO` / `FLASHCLI_INSTALL_REF`) or the host install’s `direct_url.json`.
 
 ## Usage in bundle entry code
 

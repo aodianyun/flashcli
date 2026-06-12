@@ -85,6 +85,7 @@ curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh 
 
 ```bash
 git clone https://github.com/aodianyun/flashcli.git && cd flashcli
+pip install -e ./flashcli-bundle
 pip install -e .
 ```
 

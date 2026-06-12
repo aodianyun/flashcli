@@ -22,8 +22,8 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 
 | 内容 | 位置 | 安装方式 |
 |------|------|----------|
-| `flashcli` CLI + infer 模块 | 仅主机（`~/.flashcli/venv` 或 editable `src/`） | `install.sh` / `pip install flashcli`，**只装一次** |
-| **`flashcli-bundle`**（协议、manifest options） | bundle venv | `pip install flashcli-bundle`（与 host 同版本） |
+| `flashcli` CLI + infer 模块 | 仅主机（`~/.flashcli/venv` 或 editable `src/`） | `install.sh` / `auto_install.sh`，**只装一次** |
+| **`flashcli-bundle`**（协议、manifest options） | 主机 + bundle venv | Git：`flashcli-bundle @ git+…#subdirectory=flashcli-bundle`（见 `install.sh`、`~/.flashcli/install.env`） |
 | 推理栈（torch、numpy…） | `~/.flashcli/runtimes/<id>/venv/` | `flashcli-bundle.json` → `python_dependencies` |
 | infer 辅助依赖（typer、pyyaml、fastapi…） | 同上 bundle venv，**缺啥装啥** | `ensure_bundle_infer_deps()` — **不含** flashcli 包本身 |
 

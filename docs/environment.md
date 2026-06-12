@@ -54,7 +54,7 @@ flashcli models list
 
 Weight download behavior matches `hf download`; on failures, test the same `HF_ENDPOINT` manually with Hub CLI.
 
-`install.sh` and `pip install flashcli` install `huggingface_hub>=0.26` (`hf` / `huggingface-cli`). Post-install verification also checks Hub CLI availability; if scripts dir is not on `PATH`, flashcli falls back to `python -m huggingface_hub.cli.hf`.
+`install.sh` / `auto_install.sh` install `flashcli-bundle` from git, then `flashcli` (`--no-deps`) and runtime deps including `huggingface_hub>=0.26` (`hf` / `huggingface-cli`). Post-install verification also checks Hub CLI availability; if scripts dir is not on `PATH`, flashcli falls back to `python -m huggingface_hub.cli.hf`.
 
 ## Behavior switches
 

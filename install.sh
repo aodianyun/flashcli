@@ -62,7 +62,9 @@ APT_OS_PACKAGES_DISABLED=0
 REQUIRES_PYTHON_MIN="3.10"
 MIN_PIP_VERSION="21.3"
 GET_PIP_URL="https://bootstrap.pypa.io/get-pip.py"
-PYPROJECT_DEPS="typer>=0.12 pyyaml>=6.0 packaging>=23.0 huggingface_hub>=0.26 tqdm>=4.66 fastapi>=0.100 'uvicorn[standard]>=0.24'"
+# uvicorn[standard] passed separately (avoid sh word-split / glob on brackets)
+PYPROJECT_DEPS="typer>=0.12 pyyaml>=6.0 packaging>=23.0 huggingface_hub>=0.26 tqdm>=4.66 fastapi>=0.100"
+PYPROJECT_DEPS_EXTRA="uvicorn[standard]>=0.24"
 # tomli>=2.0 only when python_version < '3.11' (handled in verify script)
 # Order: PATH defaults first (/usr/local before /usr), then versioned binaries.
 PYTHON_CANDIDATES="python python3 \
@@ -1482,6 +1484,24 @@ _pip_install_flashcli_main() {
   do_pip_install "$@"
 }
 
+# flashcli is installed with --no-deps (flashcli-bundle is git-only); install [project] deps here.
+install_flashcli_runtime_deps() {
+  info "Installing flashcli runtime dependencies ..."
+  set -- $PYPROJECT_DEPS "$PYPROJECT_DEPS_EXTRA"
+  if [ -n "${FLASHCLI_PIP_USER_FLAG:-}" ]; then
+    set -- "$@" --user
+  fi
+  do_pip_install "$@" \
+    || die "cannot install flashcli runtime dependencies (typer, fastapi, …) — check pip/network errors above"
+  if run_py -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" 2>/dev/null; then
+    :
+  else
+    do_pip_install "tomli>=2.0" \
+      || die "cannot install tomli>=2.0 (required for Python < 3.11)"
+  fi
+  info "[ok] runtime dependencies installed"
+}
+
 try_mirror_repo_fallback() {
   [ "$REPO_FROM_USER" -eq 1 ] && return 1
   case "$REPO" in
@@ -1520,6 +1540,7 @@ install_flashcli() {
   fi
 
   if _pip_install_flashcli_main; then
+    install_flashcli_runtime_deps
     info "[ok] pip install finished"
     return 0
   fi
@@ -1527,6 +1548,7 @@ install_flashcli() {
   if try_mirror_repo_fallback; then
     info "Retrying install: git+${REPO}@${REF} (--no-deps)"
     if _pip_install_flashcli_main; then
+      install_flashcli_runtime_deps
       info "[ok] pip install finished (mirror fallback)"
       return 0
     fi
@@ -1549,7 +1571,7 @@ verify_and_repair_pyproject() {
   export FLASHCLI_INSTALL_REPO="$REPO"
   export FLASHCLI_INSTALL_REF="$REF"
   export FLASHCLI_NO_REPAIR="${FLASHCLI_NO_REPAIR:-0}"
-  export FLASHCLI_PYPROJECT_DEPS="$PYPROJECT_DEPS"
+  export FLASHCLI_PYPROJECT_DEPS="$PYPROJECT_DEPS $PYPROJECT_DEPS_EXTRA"
 
   if "$PYTHON" - <<'PY'
 import os
@@ -1681,6 +1703,20 @@ def collect_errors() -> list[str]:
 
     print(f"[ok] flashcli {version('flashcli')}", file=sys.stderr)
 
+    try:
+        import flashcli_bundle  # noqa: F401
+
+        print(f"[ok] flashcli-bundle {version('flashcli-bundle')}", file=sys.stderr)
+    except ImportError as exc:
+        err(
+            "flashcli-bundle not installed (git-only, not PyPI). "
+            "Re-run install.sh or: pip install "
+            f"'flashcli-bundle @ git+{os.environ.get('FLASHCLI_INSTALL_REPO', '<repo>')}"
+            f"@{os.environ.get('FLASHCLI_INSTALL_REF', 'main')}#subdirectory=flashcli-bundle'"
+            f" ({exc})"
+        )
+        return list(errors)
+
     req_py = dist.metadata.get("Requires-Python") or ">=3.10"
     try:
         spec_py = SpecifierSet(req_py)
@@ -1757,9 +1793,18 @@ def collect_errors() -> list[str]:
 
 
 def repair_once() -> None:
-    # Re-install canonical [project] deps from embedded list + flashcli
+    repo = os.environ.get("FLASHCLI_INSTALL_REPO", "")
+    ref = os.environ.get("FLASHCLI_INSTALL_REF", "main")
+    if repo:
+        print("[info] attempting automatic repair (flashcli-bundle from git) ...", file=sys.stderr)
+        if not pip_install(
+            f"flashcli-bundle @ git+{repo}@{ref}#subdirectory=flashcli-bundle"
+        ):
+            return
+    # Re-install [project] deps only — flashcli stays --no-deps (flashcli-bundle is git-only, not PyPI).
     specs = []
-    for s in CANONICAL_DEPS:
+    for raw in CANONICAL_DEPS:
+        s = raw.strip().strip("'\"")
         if not s:
             continue
         if s.startswith("packaging"):
@@ -1768,11 +1813,28 @@ def repair_once() -> None:
             specs.append(s)
     if sys.version_info < (3, 11):
         specs.append("tomli>=2.0")
-    repo = os.environ.get("FLASHCLI_INSTALL_REPO", "")
-    ref = os.environ.get("FLASHCLI_INSTALL_REF", "main")
-    specs.append(f"git+{repo}@{ref}")
-    print("[info] attempting automatic repair (pip install deps + flashcli) ...", file=sys.stderr)
-    pip_install(*specs)
+    print("[info] attempting automatic repair (runtime deps + flashcli --no-deps) ...", file=sys.stderr)
+    if not pip_install(*specs):
+        return
+    if not repo:
+        return
+    cmd = [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--upgrade",
+        "--force-reinstall",
+        "--no-deps",
+        f"git+{repo}@{ref}",
+    ]
+    if PIP_USER:
+        cmd.append("--user")
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        err(
+            f"pip install --no-deps flashcli failed:\n{(r.stderr or r.stdout or '').strip()}"
+        )
 
 
 errors = collect_errors()
@@ -1787,8 +1849,18 @@ if errors:
     repo = os.environ.get("FLASHCLI_INSTALL_REPO", "")
     ref = os.environ.get("FLASHCLI_INSTALL_REF", "main")
     print("error: manual fix:", file=sys.stderr)
-    print(f"error:   {sys.executable} -m pip install --force-reinstall 'git+{repo}@{ref}'", file=sys.stderr)
-    print(f"error:   {sys.executable} -m pip install {' '.join(CANONICAL_DEPS)}", file=sys.stderr)
+    if repo:
+        print(
+            f"error:   {sys.executable} -m pip install "
+            f"'flashcli-bundle @ git+{repo}@{ref}#subdirectory=flashcli-bundle'",
+            file=sys.stderr,
+        )
+    print(
+        f"error:   {sys.executable} -m pip install --force-reinstall --no-deps 'git+{repo}@{ref}'",
+        file=sys.stderr,
+    )
+    _deps = " ".join(s.strip().strip("'\"") for s in CANONICAL_DEPS if s.strip())
+    print(f"error:   {sys.executable} -m pip install {_deps}", file=sys.stderr)
     raise SystemExit(1)
 
 print("[ok] pyproject.toml [project] satisfied", file=sys.stderr)

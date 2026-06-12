@@ -23,9 +23,11 @@ Weights are downloaded by flashcli to `~/.flashcli/models/pi05_libero/checkpoint
 See **[QUICKSTART.md](QUICKSTART.md)** for copy-paste commands.
 
 ```bash
-pip install flashcli
+curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
 flashcli run pi05_libero --prompt "..." --image /path/to/base.jpg
 ```
+
+See **[QUICKSTART.md](QUICKSTART.md)** for copy-paste commands.
 
 ## Maintainers: release bundle
 

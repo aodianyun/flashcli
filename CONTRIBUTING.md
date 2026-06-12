@@ -47,7 +47,7 @@ pytest tests/
 
 1. **Scope** — Keep changes in `flashcli/`. Do not commit FlashRT source changes inside flashcli PRs.
 2. **No inference in CLI** — Do not add model-specific forward logic under `src/flashcli/`. Use bundle `entry` modules.
-3. **Host CLI vs bundle venv** — Do not `pip install flashcli` into bundle venvs. Bundle venvs install **`flashcli-bundle`** only; infer re-exec uses host flashcli for `runtime.infer`. See [docs/architecture.md](docs/architecture.md#host-cli-vs-bundle-infer-important).
+3. **Host CLI vs bundle venv** — Do not `pip install flashcli` into bundle venvs. Bundle venvs install **`flashcli-bundle`** from git only (see `deps.flashcli_bundle_pip_spec`); infer re-exec uses host flashcli for `runtime.infer`. See [docs/architecture.md](docs/architecture.md#host-cli-vs-bundle-infer-important).
 4. **Catalog** — Edit `src/flashcli/catalog/models.yaml` only after a bundle is built and validated on real hardware.
 5. **Docs** — Update English docs when behavior or release workflow changes. Mirror important changes in `*.zh-CN.md` when applicable.
 6. **Comments** — New code comments and script headers in English.
@@ -57,7 +57,7 @@ pytest tests/
 
 1. Copy structure from `bundles/pi05_libero/` or `bundles/qwen_nvfp4/`.
 2. Add `flashcli-bundle.json` (format_version 3, **protocol_version 1**), `entry` modules, `release-matrix.env`, `_bundle_build.sh`.
-3. Declare bundle CLI flags in manifest **`run_options`** / **`serve_options`**. Entry modules import protocol/helpers from **`flashcli_bundle`** (`pip install flashcli-bundle`), not from the full `flashcli` CLI package.
+3. Declare bundle CLI flags in manifest **`run_options`** / **`serve_options`**. Entry modules import protocol/helpers from **`flashcli_bundle`** (installed via git `flashcli-bundle` subdirectory or `pip install -e ./flashcli-bundle`), not from the full `flashcli` CLI package.
 4. Follow [docs/model_bundle_standard.md](docs/model_bundle_standard.md).
 5. Build on **Linux + NVIDIA GPU** (see release checklist below).
 6. `flashcli bundle validate bundles/<name>`

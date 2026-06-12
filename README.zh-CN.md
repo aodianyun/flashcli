@@ -79,6 +79,7 @@ curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
 
 ```bash
 git clone https://github.com/aodianyun/flashcli.git && cd flashcli
+pip install -e ./flashcli-bundle
 pip install -e .
 ```
 
