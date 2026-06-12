@@ -7,10 +7,13 @@ import logging
 import time
 from typing import Any, AsyncIterator, Iterator
 
-from flashcli_bundle.openai_compat import resolve_enable_thinking, sse_lines_to_chat_chunks
+from flashcli_bundle.openai_compat import (
+    format_enable_thinking_resolved,
+    resolve_enable_thinking,
+    sse_lines_to_chat_chunks,
+)
 from flashcli_bundle.protocol import ChatChunk, ChatRequest, ChatResult
 from _flashrt_qwen36_agent import import_qwen36_agent_modules
-from flashcli.serve.request_log import format_enable_thinking_resolved
 
 from _qwen36_thinking import Qwen36ThinkingStreamSplitter, enable_thinking_from_request
 from _serve_backend import bridge_sync_chunk_iterator

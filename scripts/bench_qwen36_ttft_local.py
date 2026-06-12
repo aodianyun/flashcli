@@ -232,6 +232,9 @@ def main() -> int:
     br = str(bundle_root)
     if br not in sys.path:
         sys.path.insert(0, br)
+    scripts_dir = str(Path(__file__).resolve().parent)
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
 
     print("[ttft-local] building prompt …", file=sys.stderr, flush=True)
     messages = _build_messages(args)

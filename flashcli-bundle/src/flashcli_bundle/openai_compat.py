@@ -24,6 +24,12 @@ def parse_bool_field(value: Any) -> bool | None:
     return None
 
 
+def format_enable_thinking_resolved(value: bool, source: str | None) -> str:
+    """Log fragment after ``resolve_enable_thinking`` (source None → default)."""
+    src = source if source else "default"
+    return f"enable_thinking={str(value).lower()}(src={src})"
+
+
 def resolve_enable_thinking(
     body: dict[str, Any],
     *,

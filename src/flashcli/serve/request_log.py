@@ -9,6 +9,7 @@ from typing import Any
 from flashcli_bundle.openai_compat import (
     DEFAULT_ENABLE_THINKING,
     apply_enable_thinking_to_openai_payload,
+    format_enable_thinking_resolved,
     parse_bool_field as _parse_bool_field,
     resolve_enable_thinking,
 )
@@ -71,12 +72,6 @@ def format_enable_thinking(body: dict[str, Any]) -> str:
     """Compact log fragment from the **client** body (call before payload injection)."""
     value, source = resolve_enable_thinking(body)
     return format_enable_thinking_resolved(value, source)
-
-
-def format_enable_thinking_resolved(value: bool, source: str | None) -> str:
-    """Log fragment after ``resolve_enable_thinking`` (source None → default)."""
-    src = source if source else "default"
-    return f"enable_thinking={str(value).lower()}(src={src})"
 
 
 def summarize_messages(messages: list[Any]) -> str:
