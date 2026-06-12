@@ -75,10 +75,8 @@ def doctor_main(
 @models_app.command("list")
 def models_list() -> None:
     from flashcli.bundle.marker import read_preset_marker
-    from flashcli.runtime.detect import detect_gpu
 
     reg = PresetRegistry()
-    gpu = detect_gpu()
     for name in reg.list_names():
         preset = reg.get(name)
         variant_tag = ""
@@ -93,6 +91,59 @@ def models_list() -> None:
         typer.echo(f"{name}: {preset.description} [{bundle_state}{variant_tag}, {weights}]")
 
 
+@models_app.command("show")
+def models_show(
+    preset: str = typer.Argument(..., help="Preset name from models.yaml."),
+) -> None:
+    """Show catalog bundle source, cached runtime, and install paths (debugging)."""
+    import sys
+
+    from flashcli.bundle.catalog import raw_bundle_cfg
+    from flashcli.bundle.marker import read_preset_marker, read_runtime_marker
+    from flashcli.bundle.runtime_id import runtime_id_from_repo
+
+    p = PresetRegistry().get(preset)
+    cfg = raw_bundle_cfg(p)
+
+    typer.echo(f"flashcli: {__version__} ({sys.executable})")
+    typer.echo(f"catalog: {config.MODELS_YAML}")
+    typer.echo(f"preset: {preset}")
+    typer.echo(f"description: {p.description}")
+    if p.bundle_variant:
+        typer.echo(f"bundle_variant: {p.bundle_variant}")
+
+    repo = str(cfg.get("repo", "")).strip()
+    path = str(cfg.get("path", "")).strip()
+    if repo:
+        typer.echo(f"catalog repo: {repo}")
+        typer.echo(f"expected runtime_id: {runtime_id_from_repo(repo, preset)}")
+    if path:
+        typer.echo(f"catalog path: {path}")
+
+    marker = read_preset_marker(preset) or {}
+    if marker:
+        typer.echo("cached preset marker:")
+        for key in ("repo", "runtime_id", "bundle_root", "env_key", "source", "path"):
+            val = marker.get(key)
+            if val:
+                typer.echo(f"  {key}: {val}")
+        cached_repo = str(marker.get("repo", "")).strip()
+        if repo and cached_repo and cached_repo != repo:
+            typer.echo(
+                f"  [!] catalog repo differs from cache — "
+                f"run: flashcli bundle sync {preset} --force"
+            )
+        rid = str(marker.get("runtime_id", "")).strip()
+        if rid:
+            runtime_marker = read_runtime_marker(rid) or {}
+            if runtime_marker.get("manifest_sha256"):
+                typer.echo(f"  manifest_sha256: {runtime_marker['manifest_sha256']}")
+    else:
+        typer.echo("cached preset marker: (none — run flashcli run/serve or bundle sync)")
+
+    typer.echo(f"weights: {'cached' if model_cache.is_cached(preset) else 'missing'}")
+
+
 @models_app.command("envs")
 def models_envs(
     preset: Optional[str] = typer.Argument(
@@ -104,6 +155,7 @@ def models_envs(
     from flashcli.bundle.flashhub import download_manifest_from_repo
     from flashcli.bundle.layout import is_bundle_root
     from flashcli.bundle.manifest import bundle_runtime_matrix, bundle_python_abi, load_bundle_manifest
+    from flashcli.bundle.marker import read_preset_marker
     from flashcli.bundle.preflight import host_env_key
     from flashcli.runtime.detect import detect_gpu
     from flashcli import config
@@ -113,6 +165,7 @@ def models_envs(
     gpu = detect_gpu()
     if gpu is None:
         typer.echo("[!] No NVIDIA GPU detected; cannot match an environment.")
+    typer.echo(f"catalog file: {config.MODELS_YAML}")
     typer.echo("")
     for name in names:
         p = reg.get(name)
@@ -171,8 +224,17 @@ def models_envs(
                 typer.echo(f"  native envs: {exc}")
         if cfg.get("repo"):
             repo = str(cfg["repo"])
-            label = repo if len(repo) <= 72 else repo[:69] + "..."
-            typer.echo(f"  repo: {label}")
+            typer.echo(f"  repo: {repo}")
+            marker = read_preset_marker(name) or {}
+            cached_repo = str(marker.get("repo", "")).strip()
+            if cached_repo:
+                typer.echo(f"  cached repo: {cached_repo}")
+                if cached_repo != repo:
+                    typer.echo(
+                        f"  [!] catalog repo changed — run: flashcli bundle sync {name} --force"
+                    )
+            if marker.get("runtime_id"):
+                typer.echo(f"  cached runtime_id: {marker['runtime_id']}")
         typer.echo("")
 
 

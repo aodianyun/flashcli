@@ -679,14 +679,12 @@ do_pip_install() {
     set -- --root-user-action=ignore "$@"
   fi
   _run_pip() {
-    if [ "$QUIET" = "1" ]; then
-      run_py -m pip install "$@" >"$_log" 2>&1
-    elif have_cmd tee; then
-      run_py -m pip install "$@" 2>&1 | tee "$_log" >&2
-    else
-      run_py -m pip install "$@" >"$_log" 2>&1
-      cat "$_log" >&2
+    if run_py -m pip install "$@" >"$_log" 2>&1; then
+      [ "$QUIET" = "1" ] || cat "$_log" >&2
+      return 0
     fi
+    [ "$QUIET" = "1" ] || cat "$_log" >&2
+    return 1
   }
   if [ -n "$_break" ]; then
     if _run_pip $_break "$@"; then
@@ -1472,6 +1470,18 @@ _pip_install_flashcli_spec() {
   do_pip_install "$@"
 }
 
+# flashcli-bundle is not on PyPI; install it from git first, then flashcli with --no-deps.
+_pip_install_flashcli_main() {
+  _spec="git+${REPO}@${REF}"
+  set -- --upgrade --force-reinstall --no-deps
+  if [ "$PIP_INSTALL_USER" = "1" ]; then
+    set -- "$@" --user
+  fi
+  [ "$QUIET" = "1" ] && set -- "$@" -q
+  set -- "$@" "$_spec"
+  do_pip_install "$@"
+}
+
 try_mirror_repo_fallback() {
   [ "$REPO_FROM_USER" -eq 1 ] && return 1
   case "$REPO" in
@@ -1501,29 +1511,28 @@ install_flashcli() {
 
   spec="git+${REPO}@${REF}"
   if [ "$PIP_INSTALL_USER" = "1" ]; then
-    info "Installing $spec → $(pip_scripts_dir 1) (pip --user; may take a few minutes) ..."
+    info "Installing $spec (--no-deps) → $(pip_scripts_dir 1) (pip --user; may take a few minutes) ..."
   elif [ -n "${VIRTUAL_ENV:-}" ]; then
-    info "Installing $spec → $(pip_scripts_dir 0) (venv; may take a few minutes) ..."
+    info "Installing $spec (--no-deps) → $(pip_scripts_dir 0) (venv; may take a few minutes) ..."
   else
     cleanup_stale_user_install
-    info "Installing $spec → $(pip_scripts_dir 0) (system site; may take a few minutes) ..."
+    info "Installing $spec (--no-deps) → $(pip_scripts_dir 0) (system site; may take a few minutes) ..."
   fi
 
-  if _pip_install_flashcli_spec "$spec"; then
+  if _pip_install_flashcli_main; then
     info "[ok] pip install finished"
     return 0
   fi
 
   if try_mirror_repo_fallback; then
-    spec="git+${REPO}@${REF}"
-    info "Retrying install: $spec"
-    if _pip_install_flashcli_spec "$spec"; then
+    info "Retrying install: git+${REPO}@${REF} (--no-deps)"
+    if _pip_install_flashcli_main; then
       info "[ok] pip install finished (mirror fallback)"
       return 0
     fi
   fi
 
-  die "pip install failed for git+${REPO}@${REF}.
+  die "pip install failed for git+${REPO}@${REF} (--no-deps; flashcli-bundle must be installed first).
 Reason: git clone or pip dependency install failed (network, firewall, disk, or git auth).
 Fix:
   ./install.sh --mirror

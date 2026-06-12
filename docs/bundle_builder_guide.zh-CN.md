@@ -315,6 +315,7 @@ bundles/pi05_libero/dist/
 | 现象 | 处理 |
 |------|------|
 | `protocol_version` 校验失败 | 升级主机 `pip install -e ./flashcli-bundle -e .`；manifest 写 `"protocol_version": 1` |
+| 更新了 `models.yaml` 但 run 仍用旧 bundle | 看输出里的 `runtime_id` 与 `repo`；`flashcli doctor` / `flashcli models envs pi05_libero` 对比 catalog 与 cached repo。catalog 未生效时重装或设 `FLASHCLI_MODELS_YAML`。然后 `flashcli bundle sync PRESET --force` |
 | bundle venv 缺 `flashcli_bundle` | 删 `~/.flashcli/runtimes/<id>/` 重跑；或 `flashcli run` 触发 venv 重建 |
 | `pip install flashcli` 失败（缺 flashcli-bundle） | 确保 clone 的 repo 含 `flashcli-bundle/` 子目录；或用 `install.sh` |
 | HF 权重失败 | `export HF_ENDPOINT=https://hf-mirror.com` 后 `flashcli pull` |

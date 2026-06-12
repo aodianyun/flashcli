@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import sys
 from pathlib import Path
+from typing import Any
 
 from flashcli.bundle.flashhub import (
     RepoIndex,
@@ -88,6 +90,45 @@ def _download_repo_tree(
         download_repo_file(entry, dest, quiet=quiet, force=force)
 
 
+def _manifest_staging_path(repo_url: str) -> Path:
+    key = hashlib.sha256(repo_url.strip().encode()).hexdigest()[:16]
+    return config.CACHE_DIR / "repo-staging" / f"{key}-manifest.json"
+
+
+def _runtime_is_ready(
+    *,
+    bundle_root: Path,
+    manifest_cache: Path,
+    marker: dict[str, Any],
+    repo_url: str,
+    env_key: str,
+    artifact_rel: str,
+    force: bool,
+) -> bool:
+    """True when cached bundle tree matches catalog repo + remote manifest + native artifacts."""
+    if force:
+        return False
+    if marker.get("env_key") != env_key:
+        return False
+    if marker.get("repo_url") != repo_url:
+        return False
+    if not is_bundle_root(bundle_root):
+        return False
+    if not (bundle_root / "flash_rt").is_dir():
+        return False
+    if not _runtime_has_kernels(bundle_root, artifact_rel):
+        return False
+    local_manifest = bundle_root / "flashcli-bundle.json"
+    if not local_manifest.is_file():
+        return False
+    try:
+        if local_manifest.read_bytes() != manifest_cache.read_bytes():
+            return False
+    except OSError:
+        return False
+    return True
+
+
 def runtime_layout(runtime_id: str) -> dict[str, Path]:
     from flashcli.bundle.marker import runtime_dir
 
@@ -136,9 +177,10 @@ def ensure_runtime_from_repo(
 
     layout_cache = config.CACHE_DIR / "repo-staging"
     layout_cache.mkdir(parents=True, exist_ok=True)
-    manifest_cache = layout_cache / f"{hash(repo_url) & 0xFFFFFFFF:08x}-manifest.json"
+    manifest_cache = _manifest_staging_path(repo_url)
     download_repo_file(manifest_entry, manifest_cache, quiet=quiet, force=force)
     manifest_data = json.loads(manifest_cache.read_text(encoding="utf-8"))
+    manifest_sha256 = hashlib.sha256(manifest_cache.read_bytes()).hexdigest()
 
     runtime_id = runtime_id_from_repo(repo_url, str(manifest_data.get("name", preset.name)))
     layout = runtime_layout(runtime_id)
@@ -158,13 +200,14 @@ def ensure_runtime_from_repo(
 
     marker = read_runtime_marker(runtime_id) or {}
     bundle_root = layout["bundle_root"]
-    ready = (
-        not force
-        and marker.get("env_key") == preflight.env_key
-        and marker.get("repo_url") == repo_url
-        and is_bundle_root(bundle_root)
-        and (bundle_root / "flash_rt").is_dir()
-        and _runtime_has_kernels(bundle_root, artifact_rel)
+    ready = _runtime_is_ready(
+        bundle_root=bundle_root,
+        manifest_cache=manifest_cache,
+        marker=marker,
+        repo_url=repo_url,
+        env_key=preflight.env_key,
+        artifact_rel=artifact_rel,
+        force=force,
     )
 
     if not ready:
@@ -213,6 +256,7 @@ def ensure_runtime_from_repo(
         {
             "runtime_id": runtime_id,
             "repo_url": repo_url,
+            "manifest_sha256": manifest_sha256,
             "env_key": preflight.env_key,
             "host_env_key": preflight.host_env_key,
             "python_abi": preflight.python_abi,
@@ -234,7 +278,7 @@ def ensure_runtime_from_repo(
     if not quiet:
         print(
             f"Bundle runtime ready: {bundle_root} "
-            f"(runtime {preflight.env_key}, id {runtime_id})"
+            f"(runtime {preflight.env_key}, id {runtime_id}, repo {repo_url})"
         )
 
     return runtime_id, bundle_root, manifest, preflight

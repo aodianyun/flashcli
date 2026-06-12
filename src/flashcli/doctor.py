@@ -88,6 +88,35 @@ def run_check(*, quiet: bool = False) -> int:
 
     if not quiet and config.FLASHCLI_HOME.is_dir():
         print(f"     Home: {config.FLASHCLI_HOME}")
+    print(f"[ok] flashcli {__version__} ({__import__('sys').executable})")
+    print(f"[ok] Catalog: {config.MODELS_YAML}")
+    try:
+        from flashcli.bundle.catalog import raw_bundle_cfg
+        from flashcli.bundle.marker import read_preset_marker
+        from flashcli.models.registry import PresetRegistry
+
+        for name in PresetRegistry().list_names():
+            preset = PresetRegistry().get(name)
+            cfg = raw_bundle_cfg(preset)
+            repo = str(cfg.get("repo", "")).strip()
+            if not repo:
+                continue
+            marker = read_preset_marker(name) or {}
+            cached_repo = str(marker.get("repo", "")).strip()
+            rid = str(marker.get("runtime_id", "")).strip()
+            line = f"     {name}: {repo}"
+            if rid:
+                line += f" (cached id {rid})"
+            print(line)
+            if cached_repo and cached_repo != repo:
+                print(
+                    f"[!] {name}: cached bundle repo differs from catalog — "
+                    f"run: flashcli bundle sync {name} --force"
+                )
+                issues += 1
+    except Exception as exc:
+        if not quiet:
+            print(f"[i] Could not read catalog repos: {exc}")
     return issues
 
 
