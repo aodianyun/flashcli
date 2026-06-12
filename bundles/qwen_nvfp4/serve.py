@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, AsyncIterator, Iterator
 
-from flashcli.bundle.activate import active_bundle
-from flashcli.engines.base import ChatChunk, ChatRequest, ChatResult
-from flashcli.models.registry import Preset
+from flashcli_bundle.context import active_bundle
+from flashcli_bundle.preset import Preset
+from flashcli_bundle.protocol import ChatChunk, ChatRequest, ChatResult
 
 from _backend_qwen3 import Qwen3Backend
 from _backend_qwen36_agent import Qwen36AgentBackend

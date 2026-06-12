@@ -1487,6 +1487,18 @@ try_mirror_repo_fallback() {
 }
 
 install_flashcli() {
+  bundle_spec="flashcli-bundle @ git+${REPO}@${REF}#subdirectory=flashcli-bundle"
+  info "Installing protocol package: $bundle_spec"
+  if ! _pip_install_flashcli_spec "$bundle_spec"; then
+    if try_mirror_repo_fallback; then
+      bundle_spec="flashcli-bundle @ git+${REPO}@${REF}#subdirectory=flashcli-bundle"
+      info "Retrying protocol install: $bundle_spec"
+      _pip_install_flashcli_spec "$bundle_spec" || die "pip install failed for $bundle_spec"
+    else
+      die "pip install failed for $bundle_spec (flashcli-bundle subdirectory missing in repo?)"
+    fi
+  fi
+
   spec="git+${REPO}@${REF}"
   if [ "$PIP_INSTALL_USER" = "1" ]; then
     info "Installing $spec → $(pip_scripts_dir 1) (pip --user; may take a few minutes) ..."

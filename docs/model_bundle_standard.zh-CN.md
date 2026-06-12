@@ -4,7 +4,7 @@
 
 第三方通过 **Model Bundle** 交付推理 runtime。flashcli **仅**加载 bundle 并调用 `entry`，不在 flashcli 源码中实现模型逻辑。
 
-维护者见 [CONTRIBUTING.md](../CONTRIBUTING.md)；公开 catalog：[models.yaml](../src/flashcli/catalog/models.yaml)。
+维护者见 **[bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md)** 与 [CONTRIBUTING.md](../CONTRIBUTING.md)；公开 catalog：[models.yaml](../src/flashcli/catalog/models.yaml)。
 
 ## 目录布局（运行时根）
 
@@ -37,7 +37,8 @@ models:
 
 | 字段 | 说明 |
 |------|------|
-| `format_version: 3` | 唯一支持版本 |
+| `format_version: 3` | 唯一支持的 manifest schema 版本 |
+| `protocol_version: 1` | **flashcli-bundle** API 版本（**必填**；须与已安装的 `flashcli-bundle` 一致） |
 | `name` | bundle 标识 |
 | `description` | bundle 说明（推荐） |
 | `python_abi` | bundle 固定 Python ABI（如 `312` = 3.12） |
@@ -140,7 +141,7 @@ SM120；`run` + `serve`；options 写在各 variant 下（见仓库 `bundles/qwe
 
 - `entry.*.module` 相对 bundle 根目录，在 `PYTHONPATH` 上。
 - 实现 `RunEngine` / `ServeEngine`。
-- bundle 内通过 `run_option_defaults()` / `serve_option_defaults()` 读取 manifest 默认值；运行时合并 CLI/调用方传入值请用 `option_value()`。**不要**在 `run.py` / `serve.py` 里写死与 manifest 重复的默认值。
+- bundle 内通过 **`flashcli_bundle`**（pip 包 `flashcli-bundle`）的 `run_option_defaults()` / `serve_option_defaults()` / `option_value()` 读取 manifest 默认值。**不要**在 `run.py` / `serve.py` 里写死与 manifest 重复的默认值。
 - 推理逻辑全部在 bundle 内。
 
 ## 校验

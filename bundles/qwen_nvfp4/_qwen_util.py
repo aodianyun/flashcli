@@ -5,13 +5,14 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from flashcli.bundle.activate import active_bundle
-from flashcli.bundle.manifest import BundleManifest
-from flashcli.bundle.variants import (
+from flashcli_bundle.context import active_bundle
+from flashcli_bundle.manifest import BundleManifest
+from flashcli_bundle.options import serve_option_defaults
+from flashcli_bundle.protocol import ChatRequest, ChatResult
+from flashcli_bundle.variants import (
     resolve_bundle_variant,
     variant_merged_load_options,
 )
-from flashcli.engines.base import ChatRequest, ChatResult
 
 
 def resolve_model_variant(bundle: BundleManifest, options: dict[str, Any]) -> str:
@@ -24,8 +25,6 @@ def resolve_model_variant(bundle: BundleManifest, options: dict[str, Any]) -> st
 
 
 def serve_cfg(bundle: BundleManifest | None = None, variant: str | None = None) -> dict[str, Any]:
-    from flashcli.bundle.bundle_options import serve_option_defaults
-
     b = bundle or active_bundle()
     if b is None:
         return {}
@@ -272,7 +271,7 @@ def agent_result_to_chat(
 
 def chat_request_to_openai_body(req: ChatRequest) -> dict[str, Any]:
     """Build an OpenAI-shaped body for FlashRT ``request_from_openai`` helpers."""
-    from flashcli.serve.request_log import apply_enable_thinking_to_openai_payload
+    from flashcli_bundle.openai_compat import apply_enable_thinking_to_openai_payload
 
     payload: dict[str, Any] = {
         "messages": messages_from_request(req),

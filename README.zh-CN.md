@@ -195,8 +195,6 @@ run/serve：
 | `~/.flashcli/models/<preset>/checkpoint/` | 模型权重 |
 | `~/.cache/flash_rt/` | Pi0.5 PaliGemma tokenizer |
 
-已废弃（可删）：`~/.flashcli/share/flashcli/`。
-
 环境变量：[docs/environment.zh-CN.md](docs/environment.zh-CN.md)。
 
 ---
@@ -205,6 +203,7 @@ run/serve：
 
 | 文档 | 读者 |
 |------|------|
+| **[docs/bundle_builder_guide.zh-CN.md](docs/bundle_builder_guide.zh-CN.md)** | **Bundle 构建者**（镜像、逐步 build、发布） |
 | [docs/README.zh-CN.md](docs/README.zh-CN.md) | 文档索引 |
 | [docs/environment.zh-CN.md](docs/environment.zh-CN.md) | 安装参数、环境变量、镜像 |
 | [docs/runtime-matrix.zh-CN.md](docs/runtime-matrix.zh-CN.md) | Native 矩阵与发布构建 |

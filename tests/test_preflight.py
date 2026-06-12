@@ -29,6 +29,7 @@ def _manifest(tmp_path: Path) -> Path:
     data = {
         "format": "flashcli-model-bundle",
         "format_version": 3,
+        "protocol_version": 1,
         "name": "test",
         "python_abi": "312",
         "runtime": {

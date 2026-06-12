@@ -117,6 +117,7 @@ def _v3_bundle(root: Path) -> None:
     data = {
         "format": "flashcli-model-bundle",
         "format_version": 3,
+        "protocol_version": 1,
         "name": "qwen_nvfp4",
         "python_abi": "312",
         "runtime": {cell: f"runtime/{cell}"},

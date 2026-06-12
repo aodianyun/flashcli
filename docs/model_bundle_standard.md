@@ -4,7 +4,7 @@
 
 Third parties ship models as a **Model Bundle**: one **`flashcli-bundle.json`**, **`entry` inference modules**, and optional **FlashRT `.so` / `flash_rt` Python**. flashcli **only** loads the bundle and calls `entry`; it does **not** implement Run/Serve logic in flashcli source.
 
-Maintainers: see [CONTRIBUTING.md](../CONTRIBUTING.md). Public catalog: [`models.yaml`](../src/flashcli/catalog/models.yaml).
+Maintainers: **[bundle_builder_guide.md](bundle_builder_guide.md)** and [CONTRIBUTING.md](../CONTRIBUTING.md). Public catalog: [`models.yaml`](../src/flashcli/catalog/models.yaml).
 
 ## Runtime layout (after sync)
 
@@ -37,7 +37,8 @@ models:
 
 | Field | Description |
 |-------|-------------|
-| `format_version: 3` | Only supported version |
+| `format_version: 3` | Only supported manifest schema version |
+| `protocol_version: 1` | **flashcli-bundle** API version (**required**; must match installed `flashcli-bundle`) |
 | `name` | Bundle id (matches directory / release name) |
 | `description` | Human-readable summary (recommended) |
 | `python_abi` | Fixed Python ABI for this bundle (e.g. `312` = 3.12); bundle venv uses this interpreter |
@@ -215,7 +216,7 @@ See [runtime-matrix.md](runtime-matrix.md), [environment.md](environment.md).
 
 - `entry.*.module` is relative to bundle root on `PYTHONPATH`.
 - Classes implement `RunEngine` / `ServeEngine` ([`engines/base.py`](../src/flashcli/engines/base.py)).
-- Read defaults via `run_option_defaults()` / `serve_option_defaults()` and resolve per-call overrides with `option_value()` from `flashcli.bundle.bundle_options` inside the bundle venv (infer subprocess has flashcli on `PYTHONPATH`). Do **not** duplicate literal defaults in `run.py` / `serve.py`.
+- Read defaults via `run_option_defaults()` / `serve_option_defaults()` and `option_value()` from **`flashcli_bundle`** (pip package `flashcli-bundle`). Do **not** duplicate literal defaults in `run.py` / `serve.py`.
 - All inference logic stays inside the bundle.
 
 ## Validation

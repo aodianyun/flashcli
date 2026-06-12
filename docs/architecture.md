@@ -12,7 +12,7 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 2. **Minimal catalog** — `models.yaml` has preset names and `bundle.repo` (or local `path`).
 3. **Manifest-first + split download** — fetch manifest → preflight against `runtime` keys → download only this host’s `runtime/<env-key>/`.
 4. **Fixed Python ABI** — one venv per bundle (`python_abi`); CLI **re-execs** into that venv after prepare.
-5. **Single host flashcli install** — the CLI package is **never** pip-installed into bundle venvs; bundle Python loads it via `PYTHONPATH` (see below).
+5. **Single host flashcli install** — the CLI package is **never** pip-installed into bundle venvs; bundle venvs install **`flashcli-bundle`** only (protocol + manifest). Host flashcli loads via `PYTHONPATH` for `runtime.infer` (see below).
 6. **One command** — `flashcli run <preset>` chains sync → deps → weights → `post_pull` → inference.
 
 ## Host CLI vs bundle infer (important)
@@ -23,6 +23,7 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 | What | Where it lives | Installed how |
 |------|----------------|---------------|
 | `flashcli` CLI + infer modules | Host only (`~/.flashcli/venv` or editable `src/`) | `install.sh` / `pip install flashcli` **once** |
+| **`flashcli-bundle`** (protocol, manifest options) | Bundle venv | `pip install flashcli-bundle` (same version as host flashcli) |
 | Bundle inference stack (torch, numpy, …) | `~/.flashcli/runtimes/<id>/venv/` | From `flashcli-bundle.json` → `python_dependencies` |
 | Infer helper deps (typer, pyyaml, fastapi, …) | Same bundle venv, **only if missing** | `ensure_bundle_infer_deps()` — **not** the flashcli package |
 
@@ -37,8 +38,7 @@ bundle_venv/bin/python /path/to/host/flashcli/runtime/infer_launch.py run|serve 
 ### Do not (common mistakes)
 
 - **Do not** `pip install flashcli` into the bundle venv — dev versions are often absent from PyPI.
-- **Do not** add a second copy under `~/.flashcli/share/flashcli/` — that path was an abandoned experiment; safe to delete if present.
-- **Do not** duplicate flashcli per `python_abi` — host `PYTHONPATH` is shared; only bundle **deps** may differ by ABI.
+- **Do not** duplicate flashcli per `python_abi` — host `sys.path` bootstrap is shared; only bundle **deps** may differ by ABI.
 
 During `activate_bundle()`, `PYTHONPATH` also prepends the **bundle root** so `entry` and `flash_rt` import correctly (separate from host flashcli on `PYTHONPATH` during re-exec).
 
@@ -96,8 +96,6 @@ sequenceDiagram
 ├── cache/repo-index/        # FlashHub listing cache
 └── models/<preset>/checkpoint/
 ```
-
-**Removed / deprecated:** `~/.flashcli/share/flashcli/` — no longer used; delete if left over from older builds.
 
 ## Bundle layout (after sync)
 

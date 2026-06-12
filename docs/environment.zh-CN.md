@@ -92,8 +92,6 @@ Bundle 的 Python 依赖（torch 等）由 `activate_bundle` 按 `flashcli-bundl
 | torch / transformers 等 | bundle venv | manifest 的 `python_dependencies` |
 | infer 用的 typer、pyyaml、fastapi 等 | bundle venv（缺失时） | 仅 `ensure_bundle_infer_deps()` — **绝不**在此 `pip install flashcli` |
 
-**已废弃目录（有则删除）：** `~/.flashcli/share/flashcli/` — 旧版按版本/ABI 复制 flashcli，当前代码不再使用。
-
 **两层 `PYTHONPATH`：**
 
 1. **Re-exec**（`runtime/reexec.py`）：prepend 主机 flashcli，使 bundle venv 能 `python -m flashcli.runtime.infer`。

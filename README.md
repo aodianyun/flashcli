@@ -203,8 +203,6 @@ run/serve:
 | `~/.flashcli/models/<preset>/checkpoint/` | Model weights |
 | `~/.cache/flash_rt/` | Pi0.5 PaliGemma tokenizer (post-pull) |
 
-Legacy (safe to delete): `~/.flashcli/share/flashcli/`.
-
 Environment variables: [docs/environment.md](docs/environment.md) (`FLASHCLI_HOME`, `HF_ENDPOINT`, `FLASHRT_QWEN36_*`, …).
 
 ---
@@ -213,6 +211,7 @@ Environment variables: [docs/environment.md](docs/environment.md) (`FLASHCLI_HOM
 
 | Document | Audience |
 |----------|----------|
+| **[docs/bundle_builder_guide.md](docs/bundle_builder_guide.md)** | **Bundle builders** — mirrors, step-by-step build & release |
 | [docs/README.md](docs/README.md) | Full doc index |
 | [docs/environment.md](docs/environment.md) | Install flags, env vars, mirrors |
 | [docs/runtime-matrix.md](docs/runtime-matrix.md) | Native matrix & release builds |

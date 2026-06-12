@@ -18,7 +18,7 @@ def _flashrt_repo_roots() -> list[Path]:
     if env_root:
         roots.append(Path(env_root))
     try:
-        from flashcli.bundle.activate import active_bundle
+        from flashcli_bundle.context import active_bundle
 
         bundle = active_bundle()
         if bundle is not None:
@@ -42,7 +42,7 @@ def _flashrt_repo_roots() -> list[Path]:
 
 
 def _bundle_qwen36_agent_dir() -> Path | None:
-    from flashcli.bundle.activate import active_bundle
+    from flashcli_bundle.context import active_bundle
 
     bundle = active_bundle()
     if bundle is None:

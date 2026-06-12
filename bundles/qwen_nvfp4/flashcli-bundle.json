@@ -1,6 +1,7 @@
 {
   "format": "flashcli-model-bundle",
   "format_version": 3,
+  "protocol_version": 1,
   "name": "qwen_nvfp4",
   "description": "Qwen3-8B + Qwen3.6-27B NVFP4 (SM120) — single runtime, catalog bundle_variant selects weights",
   "default_variant": "qwen3",

@@ -2,26 +2,24 @@
 
 <p align="right"><a href="README.md">English</a> · <strong>简体中文</strong></p>
 
-flashcli Model Bundle 的参考实现与发布源码。终端用户通过 `models.yaml` → `bundle.repo`（FlashHub）安装 runtime，而非直接使用本目录。
+flashcli Model Bundle 参考实现与发布源码。终端用户通过 FlashHub（`models.yaml` → `bundle.repo`）安装，不直接使用本目录。
 
-## 对外发布
+## 构建与发布（维护者）
+
+**完整逐步说明** → **[docs/bundle_builder_guide.zh-CN.md](../docs/bundle_builder_guide.zh-CN.md)**  
+（环境镜像、本地 build、release 流水线、FlashHub 上传、catalog 更新）
+
+```bash
+cd flashcli
+pip install -e ./flashcli-bundle -e .
+bash scripts/release_bundle.sh --bundle pi05_libero --clean   # 或 qwen_nvfp4
+```
+
+## 已发布 bundle
 
 | 目录 | Preset | Runtime 矩阵 |
 |------|--------|----------------|
 | [`pi05_libero/`](pi05_libero/) | `pi05_libero` | SM89 × cu124/cu130 × py312 |
-| [`qwen_nvfp4/`](qwen_nvfp4/) | `qwen3-8b-nvfp4`、`qwen36-27b-nvfp4` | SM120 × **仅 cu130** × py312；一个 repo，`bundle_variant` 选权重 |
+| [`qwen_nvfp4/`](qwen_nvfp4/) | `qwen3-8b-nvfp4`、`qwen36-27b-nvfp4` | SM120 × cu130 × py312 |
 
-## 维护者发布
-
-```bash
-cd flashcli
-bash scripts/release_bundle.sh --bundle pi05_libero --clean   # 或 qwen_nvfp4
-```
-
-产物：`bundles/<name>/dist/`（源码树 + `runtime/<env-key>/`）→ 上传 FlashHub → 更新 [`models.yaml`](../src/flashcli/catalog/models.yaml) 中 `bundle.repo`。
-
-Hook 契约：[`scripts/lib/bundle_hooks.sh`](../scripts/lib/bundle_hooks.sh)。完整流程：[docs/runtime-matrix.zh-CN.md](../docs/runtime-matrix.zh-CN.md)。
-
-## 新增 bundle
-
-复制 `pi05_libero` 或 `qwen_nvfp4` 的目录结构，并遵循 [docs/model_bundle_standard.zh-CN.md](../docs/model_bundle_standard.zh-CN.md) 与 [CONTRIBUTING.md](../CONTRIBUTING.md)。
+格式规范：[model_bundle_standard.zh-CN.md](../docs/model_bundle_standard.zh-CN.md)

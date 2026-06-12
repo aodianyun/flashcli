@@ -28,6 +28,7 @@ def _pi05_manifest(tmp_path: Path):
     data = {
         "format": "flashcli-model-bundle",
         "format_version": 3,
+        "protocol_version": 1,
         "name": "pi05_libero",
         "description": "Pi0.5 test",
         "python_abi": "312",
@@ -103,6 +104,7 @@ def test_variant_run_options_are_per_variant_only(tmp_path: Path) -> None:
     data = {
         "format": "flashcli-model-bundle",
         "format_version": 3,
+        "protocol_version": 1,
         "name": "q",
         "python_abi": "312",
         "entry": {"run": {"module": "run", "attr": "RunEngine"}},
@@ -130,6 +132,7 @@ def test_reject_top_level_run_options_when_variants_exist(tmp_path: Path) -> Non
     data = {
         "format": "flashcli-model-bundle",
         "format_version": 3,
+        "protocol_version": 1,
         "name": "q",
         "python_abi": "312",
         "entry": {"run": {"module": "run", "attr": "RunEngine"}},
@@ -183,6 +186,7 @@ def test_serve_options_split_by_phase(tmp_path: Path) -> None:
     data = {
         "format": "flashcli-model-bundle",
         "format_version": 3,
+        "protocol_version": 1,
         "name": "q",
         "python_abi": "312",
         "entry": {"serve": {"module": "serve", "attr": "ServeEngine"}},
@@ -222,6 +226,7 @@ def test_format_serve_help(tmp_path: Path) -> None:
     data = {
         "format": "flashcli-model-bundle",
         "format_version": 3,
+        "protocol_version": 1,
         "name": "q",
         "description": "Qwen test",
         "python_abi": "312",
@@ -258,6 +263,7 @@ def test_parse_serve_argv_help(tmp_path: Path, monkeypatch) -> None:
         {
             "format": "flashcli-model-bundle",
             "format_version": 3,
+        "protocol_version": 1,
             "name": "q",
             "python_abi": "312",
             "entry": {"serve": {"module": "serve", "attr": "ServeEngine"}},
@@ -320,6 +326,7 @@ def test_validate_bundle_options_rejects_top_level_with_variants(tmp_path: Path)
     data = {
         "format": "flashcli-model-bundle",
         "format_version": 3,
+        "protocol_version": 1,
         "name": "q",
         "python_abi": "312",
         "entry": {

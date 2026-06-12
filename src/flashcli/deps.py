@@ -180,6 +180,8 @@ def ensure_runtime_python_stack(
     """pip install bundle inference stack into the bundle venv interpreter."""
     if bundle_root is None:
         raise ValueError("bundle_root is required")
+    if python is not None:
+        ensure_flashcli_bundle_in_venv(python=python, quiet=quiet, force=force)
     spec = resolve_runtime_requirements(bundle_root=bundle_root)
 
     if not force and not _missing_runtime_imports(spec, python=python):
@@ -240,3 +242,39 @@ def repair_bundle_python_stack(
         quiet=quiet,
         force=True,
     )
+
+
+def flashcli_bundle_pip_spec() -> str:
+    """Pip spec matching the host ``flashcli-bundle`` install (supports editable)."""
+    import flashcli_bundle
+    from importlib.metadata import PackageNotFoundError, version
+
+    pkg_dir = Path(flashcli_bundle.__file__).resolve().parent
+    src_root = pkg_dir.parent
+    repo_root = src_root.parent
+    if src_root.name == "src" and (repo_root / "pyproject.toml").is_file():
+        text = (repo_root / "pyproject.toml").read_text(encoding="utf-8")
+        if 'name = "flashcli-bundle"' in text:
+            return str(repo_root)
+    try:
+        return f"flashcli-bundle=={version('flashcli-bundle')}"
+    except PackageNotFoundError:
+        return "flashcli-bundle>=0.1.0"
+
+
+def ensure_flashcli_bundle_in_venv(
+    *,
+    python: Path,
+    quiet: bool = False,
+    force: bool = False,
+) -> None:
+    """Install ``flashcli-bundle`` into the bundle venv (protocol + manifest helpers)."""
+    if not force and _module_available("flashcli_bundle", python=python):
+        return
+    spec = flashcli_bundle_pip_spec()
+    if not quiet:
+        print(f"Installing flashcli-bundle into bundle venv ({spec}) ...")
+    if Path(spec).is_dir():
+        _run_pip(["-e", spec], quiet=quiet, python=python)
+    else:
+        _run_pip([spec], quiet=quiet, python=python)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, AsyncIterator
 
-from flashcli.engines.base import ChatChunk, ChatRequest, ChatResult
+from flashcli_bundle.protocol import ChatChunk, ChatRequest, ChatResult
 
 from _flashrt_qwen3 import import_qwen3_engine_class
 from _qwen_util import messages_from_request

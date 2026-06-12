@@ -15,16 +15,17 @@ One **SM120 NVFP4** FlashHub repo; catalog presets select weights via `bundle_va
 
 ## Release build (maintainers)
 
-Requires **Linux + Docker + GPU** (default `nvcr.io/nvidia/pytorch:25.10-py3`) or `--native` with CUDA 13. **No cu124 line.**
+Full step-by-step guide: **[docs/bundle_builder_guide.md](../../docs/bundle_builder_guide.md)**.
+
+Requires **Linux + Docker + GPU** (default `nvcr.io/nvidia/pytorch:25.10-py3`) or `--native` with CUDA 13. Matrix: **sm120 × cu130 × py312**.
 
 ```bash
 cd flashcli
+pip install -e ./flashcli-bundle -e .
 bash scripts/release_bundle.sh --bundle qwen_nvfp4 --clean
 ```
 
 Upload `dist/` to FlashHub; update **both** Qwen presets in `models.yaml` with the same `bundle.repo` URL.
-
-See [README.zh-CN.md](README.zh-CN.md) and [docs/runtime-matrix.md](../../docs/runtime-matrix.md).
 
 ## Run
 

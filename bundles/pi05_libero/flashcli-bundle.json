@@ -1,6 +1,7 @@
 {
   "format": "flashcli-model-bundle",
   "format_version": 3,
+  "protocol_version": 1,
   "name": "pi05_libero",
   "description": "Pi0.5 LIBERO VLA — HuggingFace lerobot/pi05_libero_finetuned_v044",
   "entry": {

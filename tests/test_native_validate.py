@@ -36,6 +36,7 @@ def _write_bundle(
     data = {
         "format": "flashcli-model-bundle",
         "format_version": 3,
+        "protocol_version": 1,
         "name": "test_bundle",
         "python_abi": "312",
         "entry": {"run": {"module": "run", "attr": "RunEngine"}},

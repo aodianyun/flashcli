@@ -15,8 +15,8 @@ _STAGED_FILE = "qwen3_openai.py"
 
 
 def _bundle_serve_py() -> Path | None:
-    from flashcli.bundle.activate import active_bundle
-    from flashcli.bundle.manifest import bundle_format_version
+    from flashcli_bundle.context import active_bundle
+    from flashcli_bundle.manifest import bundle_format_version
 
     bundle = active_bundle()
     if bundle is None:
@@ -36,7 +36,7 @@ def _flashrt_repo_roots() -> list[Path]:
     if env_root:
         roots.append(Path(env_root))
     try:
-        from flashcli.bundle.activate import active_bundle
+        from flashcli_bundle.context import active_bundle
 
         bundle = active_bundle()
         if bundle is not None:

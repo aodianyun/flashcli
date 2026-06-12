@@ -29,55 +29,24 @@ flashcli run pi05_libero --prompt "..." --image /path/to/base.jpg
 
 ## Maintainers: release bundle
 
-**Supported GPU**: **SM89 only** (Ada, e.g. RTX 4090). SM120 / Blackwell is not supported in this release line.
+Full step-by-step guide: **[docs/bundle_builder_guide.md](../../docs/bundle_builder_guide.md)** (mirrors, local build, matrix release, FlashHub upload).
 
-### FA2 build (matrix)
-
-| CUDA line | FA2 |
-|-----------|-----|
-| **cu124** (nvcc 12.4) | sm_89 AOT only (`FA2_ARCH_NATIVE_ONLY`) |
-| **cu130** (nvcc 13.x) | sm_80 + sm_120 + PTX (multi-arch FA2 in cu130 cells; **kernels remain sm_89**) |
-
-Do not publish cu130 builds with `--fa2-native-only`. Local SM89-only dev: `build.sh --fa2-native-only`.
-
-### One-command release (recommended)
-
-Linux host with **Docker + NVIDIA GPU**:
-
-```bash
-cd flashcli/bundles/pi05_libero
-bash release.sh --clean
-```
-
-Output example: `dist/flashcli-bundle-pi05-{abi}-sm89-multi-linux-x86_64-{timestamp}.zip`
-
-### Step-by-step (host with cu124 + cu130)
+**Supported GPU**: **SM89 only** (Ada, e.g. RTX 4090).
 
 ```bash
 cd flashcli
-bash scripts/build_release_matrix.sh --bundle pi05_libero --check-only
-bash scripts/release_bundle.sh --bundle pi05_libero --clean --cuda-tag 124
-bash scripts/release_bundle.sh --bundle pi05_libero --cuda-tag 130
+pip install -e ./flashcli-bundle -e .
+bash scripts/release_bundle.sh --bundle pi05_libero --clean
+```
+
+Matrix: **sm89 × cu124/cu130 × py312** (`release-matrix.env`). Local single-env dev:
+
+```bash
+bash bundles/pi05_libero/build.sh --repo-root /path/to/FlashRT
 flashcli bundle validate bundles/pi05_libero
 ```
 
-Use `--native` instead of Docker when both CUDA toolkits are on the host.
-
-### After release
-
-1. Smoke-test: `flashcli run pi05_libero --bundle bundles/pi05_libero --benchmark 5`
-2. Upload `dist/` to FlashHub
-3. Update `src/flashcli/catalog/models.yaml` → `pi05_libero.bundle.repo`
-4. Verify on target GPU (e.g. RTX 4090 / SM89)
-
-### Local single-env dev
-
-```bash
-bash build.sh --repo-root /path/to/FlashRT
-flashcli bundle validate .
-```
-
-See [docs/runtime-matrix.md](../../docs/runtime-matrix.md) for the full matrix layout.
+FA2 build strategy: [docs/runtime-matrix.md](../../docs/runtime-matrix.md).
 
 ## Troubleshooting
 

@@ -1,4 +1,4 @@
-"""Bundle-declared CLI options: ``run_options`` and ``serve_options``."""
+"""CLI argv parsing for bundle-declared ``run_options`` / ``serve_options``."""
 
 from __future__ import annotations
 
@@ -6,302 +6,48 @@ import argparse
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
-from flashcli.bundle.manifest import BundleManifest, load_bundle_manifest, load_bundle_manifest_data
-from flashcli.bundle.variants import has_bundle_variants, preset_bundle_variant
+from flashcli_bundle.manifest import BundleManifest, load_bundle_manifest, load_bundle_manifest_data
+from flashcli_bundle.options import (
+    BundleOptionsError,
+    OptionSpec,
+    bundle_run_options,
+    bundle_run_options_for_help,
+    bundle_serve_options,
+    bundle_serve_options_for_help,
+    option_value,
+    resolve_options_variant,
+    run_option_defaults,
+    serve_option_defaults,
+    split_run_options,
+    split_serve_options,
+    validate_bundle_options,
+)
 from flashcli.models.registry import Preset
 
-OptionPhase = Literal["load", "predict", "warmup"]
-OPTIONS_KEY = Literal["run_options", "serve_options"]
-
-
-class BundleOptionsError(ValueError):
-    """Invalid or missing ``run_options`` / ``serve_options`` in manifest."""
-
-
-@dataclass(frozen=True)
-class OptionSpec:
-    name: str
-    flag: str
-    type: str
-    help: str
-    phase: OptionPhase = "predict"
-    default: Any = None
-    variant: str | None = None
-
-    def argparse_type(self) -> type | Any:
-        if self.type == "integer":
-            return int
-        if self.type == "float":
-            return float
-        if self.type == "boolean":
-            return _parse_bool
-        return str
-
-
-def _parse_bool(value: str) -> bool:
-    text = str(value).strip().lower()
-    if text in ("1", "true", "yes", "on"):
-        return True
-    if text in ("0", "false", "no", "off"):
-        return False
-    raise argparse.ArgumentTypeError(f"expected boolean, got {value!r}")
-
-
-def _parse_option_dict(
-    raw: dict[str, Any],
-    *,
-    variant: str | None = None,
-    valid_phases: frozenset[str],
-    default_phase: str,
-) -> OptionSpec | None:
-    name = str(raw.get("name", "")).strip()
-    if not name:
-        return None
-    flag = str(raw.get("flag", name.replace("_", "-"))).strip().lstrip("-")
-    opt_type = str(raw.get("type", "string")).strip().lower()
-    if opt_type not in ("string", "integer", "float", "boolean"):
-        opt_type = "string"
-    phase = str(raw.get("phase", default_phase)).strip().lower()
-    if phase not in valid_phases:
-        phase = default_phase
-    help_text = str(raw.get("help", "")).strip()
-    default = raw.get("default", argparse.SUPPRESS)
-    return OptionSpec(
-        name=name,
-        flag=flag,
-        type=opt_type,
-        help=help_text,
-        phase=phase,  # type: ignore[arg-type]
-        default=default,
-        variant=variant,
-    )
-
-
-def _options_from_list(
-    raw: list[Any],
-    *,
-    variant: str | None = None,
-    valid_phases: frozenset[str],
-    default_phase: str,
-) -> list[OptionSpec]:
-    out: list[OptionSpec] = []
-    for item in raw:
-        if isinstance(item, dict):
-            spec = _parse_option_dict(
-                item,
-                variant=variant,
-                valid_phases=valid_phases,
-                default_phase=default_phase,
-            )
-            if spec is not None:
-                out.append(spec)
-    return out
-
-
-_RUN_PHASES = frozenset({"load", "predict"})
-_SERVE_PHASES = frozenset({"load", "warmup"})
-
-
-def _options_for_variant(
-    bundle: BundleManifest,
-    variant: str,
-    key: OPTIONS_KEY,
-) -> list[OptionSpec]:
-    from flashcli.bundle.variants import bundle_variants
-
-    variants = bundle_variants(bundle)
-    block = variants.get(variant, {}).get(key)
-    if isinstance(block, list):
-        if key == "run_options":
-            return _options_from_list(
-                block, variant=variant, valid_phases=_RUN_PHASES, default_phase="predict"
-            )
-        return _options_from_list(
-            block, variant=variant, valid_phases=_SERVE_PHASES, default_phase="load"
-        )
-    return []
-
-
-def _reject_top_level_options_with_variants(bundle: BundleManifest, key: OPTIONS_KEY) -> None:
-    if not has_bundle_variants(bundle):
-        return
-    raw = bundle.raw.get(key)
-    if isinstance(raw, list) and raw:
-        raise BundleOptionsError(
-            f"Bundle {bundle.name!r} defines variants; {key} must be declared "
-            f"under each variant, not at bundle root."
-        )
-
-
-def resolve_options_variant(
-    bundle: BundleManifest,
-    preset: Preset,
-    *,
-    cli_model: str | None = None,
-) -> str | None:
-    """Variant key for option lookup (None when bundle has no variants)."""
-    if not has_bundle_variants(bundle):
-        return None
-
-    from flashcli.bundle.variants import bundle_variants, resolve_bundle_variant
-
-    override = (cli_model or preset_bundle_variant(preset) or "").strip()
-    if override:
-        return resolve_bundle_variant(bundle, override)
-
-    default = str(bundle.raw.get("default_variant", "")).strip()
-    if default:
-        return resolve_bundle_variant(bundle, default)
-
-    keys = ", ".join(sorted(bundle_variants(bundle)))
-    raise BundleOptionsError(
-        f"Bundle {bundle.name!r} has variants ({keys}); set catalog bundle_variant, "
-        f"pass --model, or define default_variant."
-    )
-
-
-def _bundle_options(
-    bundle: BundleManifest,
-    key: OPTIONS_KEY,
-    *,
-    variant: str | None = None,
-) -> list[OptionSpec]:
-    _reject_top_level_options_with_variants(bundle, key)
-
-    if has_bundle_variants(bundle):
-        if not variant:
-            raise BundleOptionsError(
-                f"Bundle {bundle.name!r} has variants; variant is required for {key}."
-            )
-        return _options_for_variant(bundle, variant, key)
-
-    if key == "run_options":
-        valid_phases, default_phase = _RUN_PHASES, "predict"
-    else:
-        valid_phases, default_phase = _SERVE_PHASES, "load"
-
-    raw = bundle.raw.get(key)
-    if isinstance(raw, list):
-        return _options_from_list(
-            raw, valid_phases=valid_phases, default_phase=default_phase
-        )
-    return []
-
-
-def bundle_run_options(
-    bundle: BundleManifest,
-    *,
-    variant: str | None = None,
-) -> list[OptionSpec]:
-    return _bundle_options(bundle, "run_options", variant=variant)
-
-
-def bundle_serve_options(
-    bundle: BundleManifest,
-    *,
-    variant: str | None = None,
-) -> list[OptionSpec]:
-    return _bundle_options(bundle, "serve_options", variant=variant)
-
-
-def _option_defaults(specs: list[OptionSpec]) -> dict[str, Any]:
-    out: dict[str, Any] = {}
-    for spec in specs:
-        if spec.default is not argparse.SUPPRESS:
-            out[spec.name] = spec.default
-    return out
-
-
-def run_option_defaults(
-    bundle: BundleManifest,
-    *,
-    variant: str | None = None,
-) -> dict[str, Any]:
-    return _option_defaults(bundle_run_options(bundle, variant=variant))
-
-
-def serve_option_defaults(
-    bundle: BundleManifest,
-    *,
-    variant: str | None = None,
-) -> dict[str, Any]:
-    return _option_defaults(bundle_serve_options(bundle, variant=variant))
-
-
-def option_value(
-    name: str,
-    overrides: dict[str, Any],
-    defaults: dict[str, Any],
-) -> Any:
-    """Resolve one manifest option: explicit override wins, then manifest default."""
-    if name in overrides and overrides[name] is not None:
-        return overrides[name]
-    return defaults.get(name)
-
-
-def validate_bundle_options(bundle: BundleManifest) -> list[str]:
-    """Validate ``run_options`` / ``serve_options`` layout rules."""
-    from flashcli.bundle.variants import bundle_variants
-
-    errors: list[str] = []
-    has_run = bundle.entry_run is not None
-    has_serve = bundle.entry_serve is not None
-    multi = has_bundle_variants(bundle)
-
-    if multi:
-        for key in ("run_options", "serve_options"):
-            block = bundle.raw.get(key)
-            if isinstance(block, list) and block:
-                errors.append(
-                    f"top-level {key} is not allowed when variants are defined; "
-                    f"declare options under each variants.<name>."
-                )
-        for name, block in sorted(bundle_variants(bundle).items()):
-            if has_run:
-                ro = block.get("run_options")
-                if not isinstance(ro, list) or not ro:
-                    errors.append(
-                        f"variants.{name} missing run_options (required for entry.run)"
-                    )
-                else:
-                    for spec in bundle_run_options(bundle, variant=name):
-                        if not spec.help:
-                            errors.append(
-                                f"variants.{name}.run_options.{spec.name} missing help"
-                            )
-            if has_serve:
-                so = block.get("serve_options")
-                if not isinstance(so, list) or not so:
-                    errors.append(
-                        f"variants.{name} missing serve_options (required for entry.serve)"
-                    )
-                else:
-                    for spec in bundle_serve_options(bundle, variant=name):
-                        if not spec.help:
-                            errors.append(
-                                f"variants.{name}.serve_options.{spec.name} missing help"
-                            )
-    else:
-        if has_run:
-            ro = bundle.raw.get("run_options")
-            if not isinstance(ro, list) or not ro:
-                errors.append("missing top-level run_options (required for entry.run)")
-            else:
-                for spec in bundle_run_options(bundle):
-                    if not spec.help:
-                        errors.append(f"run_options.{spec.name} missing help")
-        if has_serve:
-            so = bundle.raw.get("serve_options")
-            if not isinstance(so, list) or not so:
-                errors.append("missing top-level serve_options (required for entry.serve)")
-            else:
-                for spec in bundle_serve_options(bundle):
-                    if not spec.help:
-                        errors.append(f"serve_options.{spec.name} missing help")
-
-    return errors
+__all__ = [
+    "BundleOptionsError",
+    "OptionSpec",
+    "RunInvocation",
+    "ServeInvocation",
+    "bundle_run_options",
+    "bundle_run_options_for_help",
+    "bundle_serve_options",
+    "bundle_serve_options_for_help",
+    "format_run_help",
+    "format_serve_help",
+    "option_value",
+    "parse_run_argv",
+    "parse_serve_argv",
+    "resolve_manifest_for_preset",
+    "resolve_options_variant",
+    "run_option_defaults",
+    "serve_option_defaults",
+    "split_run_options",
+    "split_serve_options",
+    "validate_bundle_options",
+]
 
 
 def resolve_manifest_for_preset(
@@ -309,7 +55,6 @@ def resolve_manifest_for_preset(
     *,
     bundle_path: Path | None = None,
 ) -> BundleManifest:
-    """Load ``flashcli-bundle.json`` for help/parse (no runtime download)."""
     from flashcli import config
     from flashcli.bundle.catalog import raw_bundle_cfg, repo_url_for_preset
     from flashcli.bundle.flashhub import download_manifest_from_repo
@@ -351,88 +96,6 @@ def resolve_manifest_for_preset(
     data = download_manifest_from_repo(repo_url_for_preset(preset), tmp, quiet=True)
     root = Path(cached_root) if cached_root else tmp.parent
     return load_bundle_manifest_data(data, bundle_root=root)
-
-
-def split_run_options(
-    values: dict[str, Any],
-    specs: list[OptionSpec],
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    by_name = {s.name: s for s in specs}
-    load_kw: dict[str, Any] = {}
-    predict_kw: dict[str, Any] = {}
-    for key, value in values.items():
-        spec = by_name.get(key)
-        if spec is None:
-            continue
-        if spec.phase == "load":
-            load_kw[key] = value
-        else:
-            predict_kw[key] = value
-    return load_kw, predict_kw
-
-
-def split_serve_options(
-    values: dict[str, Any],
-    specs: list[OptionSpec],
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    by_name = {s.name: s for s in specs}
-    load_kw: dict[str, Any] = {}
-    warmup_kw: dict[str, Any] = {}
-    for key, value in values.items():
-        spec = by_name.get(key)
-        if spec is None:
-            continue
-        if spec.phase == "warmup":
-            warmup_kw[key] = value
-        else:
-            load_kw[key] = value
-    return load_kw, warmup_kw
-
-
-def _add_spec_to_parser(parser: argparse.ArgumentParser, spec: OptionSpec) -> None:
-    flag = f"--{spec.flag}"
-    kwargs: dict[str, Any] = {"dest": spec.name, "help": spec.help}
-    if spec.type == "boolean":
-        kwargs["type"] = _parse_bool
-        kwargs["nargs"] = "?"
-        kwargs["const"] = True
-        if spec.default is not argparse.SUPPRESS:
-            kwargs["default"] = spec.default
-        else:
-            kwargs["default"] = argparse.SUPPRESS
-    else:
-        kwargs["type"] = spec.argparse_type()
-        if spec.default is not argparse.SUPPRESS:
-            kwargs["default"] = spec.default
-        else:
-            kwargs["default"] = argparse.SUPPRESS
-    parser.add_argument(flag, **kwargs)
-
-
-def _options_for_help(
-    bundle: BundleManifest,
-    key: OPTIONS_KEY,
-    *,
-    variant: str | None = None,
-) -> list[OptionSpec]:
-    getter = bundle_run_options if key == "run_options" else bundle_serve_options
-    return getter(bundle, variant=variant)
-
-
-def bundle_run_options_for_help(
-    bundle: BundleManifest,
-    *,
-    variant: str | None = None,
-) -> list[OptionSpec]:
-    return _options_for_help(bundle, "run_options", variant=variant)
-
-
-def bundle_serve_options_for_help(
-    bundle: BundleManifest,
-    *,
-    variant: str | None = None,
-) -> list[OptionSpec]:
-    return _options_for_help(bundle, "serve_options", variant=variant)
 
 
 COMMON_RUN_OPTIONS_HELP: list[tuple[str, str]] = [
@@ -575,6 +238,28 @@ def _peek_command_argv(
     if ns.preset is None and argv and not argv[0].startswith("-"):
         preset_name = argv[0]
     return preset_name, ns.bundle or bundle_path, ns.model
+
+
+def _add_spec_to_parser(parser: argparse.ArgumentParser, spec: OptionSpec) -> None:
+    from flashcli_bundle.options import parse_bool_arg
+
+    flag = f"--{spec.flag}"
+    kwargs: dict[str, Any] = {"dest": spec.name, "help": spec.help}
+    if spec.type == "boolean":
+        kwargs["type"] = parse_bool_arg
+        kwargs["nargs"] = "?"
+        kwargs["const"] = True
+        if spec.default is not argparse.SUPPRESS:
+            kwargs["default"] = spec.default
+        else:
+            kwargs["default"] = argparse.SUPPRESS
+    else:
+        kwargs["type"] = spec.argparse_type()
+        if spec.default is not argparse.SUPPRESS:
+            kwargs["default"] = spec.default
+        else:
+            kwargs["default"] = argparse.SUPPRESS
+    parser.add_argument(flag, **kwargs)
 
 
 def _build_run_parser(preset_name: str, specs: list[OptionSpec]) -> argparse.ArgumentParser:

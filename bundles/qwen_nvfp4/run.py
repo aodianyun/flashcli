@@ -7,10 +7,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-from flashcli.bundle.activate import active_bundle
-from flashcli.bundle.bundle_options import option_value, run_option_defaults
-from flashcli.engines.base import ChatMessage, ChatRequest
-from flashcli.models.registry import Preset
+from flashcli_bundle.context import active_bundle
+from flashcli_bundle.options import option_value, run_option_defaults
+from flashcli_bundle.preset import Preset
+from flashcli_bundle.protocol import ChatMessage, ChatRequest
 
 from _qwen_util import run_async, serve_cfg, usage_from_qwen36_engine
 from serve import ServeEngine

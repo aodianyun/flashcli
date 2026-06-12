@@ -29,70 +29,24 @@ flashcli run pi05_libero --prompt "..." --image /path/to/base.jpg
 
 ## 维护者：发布 bundle
 
-**支持 GPU**：**仅 SM89**（Ada，如 RTX 4090）。SM120 / Blackwell 暂不在此 release 线支持范围内。
+完整逐步说明见 **[docs/bundle_builder_guide.zh-CN.md](../../docs/bundle_builder_guide.zh-CN.md)**（镜像安装、本地 build、矩阵发布、FlashHub 上传）。
 
-### FA2 编译（矩阵）
-
-| CUDA 线 | FA2 |
-|---------|-----|
-| **cu124**（nvcc 12.4） | 仅 sm_89 AOT（`FA2_ARCH_NATIVE_ONLY`） |
-| **cu130**（nvcc 13.x） | sm_80 + sm_120 + PTX（cu130 格内 FA2 多架构；**kernels 仍为 sm_89**） |
-
-本地单卡 SM89 加速：`build.sh --fa2-native-only`（**不可用于发布**）。
-
-### 一键发布（推荐）
-
-宿主机需 **Linux + Docker + NVIDIA GPU**（矩阵在容器内编译）。自动 clone/update FlashRT、双 CUDA 线（cu124/cu130）× Python 3.10/3.11/3.12、写 manifest、打 zip：
+**支持 GPU**：**仅 SM89**（Ada，如 RTX 4090）。
 
 ```bash
-cd flashcli/bundles/pi05_libero
-bash release.sh --clean
+cd flashcli
+pip install -e ./flashcli-bundle -e .
+bash scripts/release_bundle.sh --bundle pi05_libero --clean
 ```
 
-等价：`bash scripts/release_bundle.sh --bundle pi05_libero --clean`
-
-`--clean` 会删除 `lib/`、`dist/`、`.build-matrix/`、`.native-cache/`。
-
-产物在 `dist/`（源码树 + `runtime/<env-key>/`）。
-
-### 发布后
-
-1. **本机抽测**（有对应 GPU 时）：
+矩阵：**sm89 × cu124/cu130 × py312**（见 `release-matrix.env`）。本地单环境：
 
 ```bash
-flashcli run pi05_libero \
-  --bundle "$(pwd)/bundles/pi05_libero" \
-  --benchmark 5
+bash bundles/pi05_libero/build.sh --repo-root /path/to/FlashRT
+flashcli bundle validate bundles/pi05_libero
 ```
 
-2. **上传** `dist/` 到 FlashHub。
-
-3. **更新** [`models.yaml`](../../src/flashcli/catalog/models.yaml) 中 `pi05_libero.bundle.repo` 版本 URL。
-
-4. **SM89 验收**（如 RTX 4090）：
-
-```bash
-flashcli models envs pi05_libero
-flashcli run pi05_libero --benchmark 5
-```
-
-### 本地单环境开发
-
-不跑完整矩阵，只编当前机子的一个 cu×py 档：
-
-```bash
-cd flashcli/bundles/pi05_libero
-bash build.sh --repo-root /path/to/FlashRT
-flashcli bundle validate .
-```
-
-仅本机 SM89、加快 FA2 编译：
-
-```bash
-bash build.sh --repo-root /path/to/FlashRT --fa2-native-only
-```
-
-矩阵维度见 `release-matrix.env`（sm89 × cu124/cu130 × py310/311/312）。细节：[docs/runtime-matrix.zh-CN.md](../../docs/runtime-matrix.zh-CN.md)、[scripts/lib/bundle_hooks.sh](../../scripts/lib/bundle_hooks.sh)。
+FA2 编译策略见 [docs/runtime-matrix.zh-CN.md](../../docs/runtime-matrix.zh-CN.md)。
 
 ## 排错
 

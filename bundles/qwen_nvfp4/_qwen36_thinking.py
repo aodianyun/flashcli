@@ -15,7 +15,8 @@ import logging
 import re
 from typing import Iterator
 
-from flashcli.engines.base import ChatRequest
+from flashcli_bundle.protocol import ChatRequest
+from flashcli_bundle.openai_compat import resolve_enable_thinking
 
 log = logging.getLogger(__name__)
 
@@ -31,8 +32,6 @@ _THINKING_BLOCK_RE = re.compile(
 
 
 def enable_thinking_from_request(req: ChatRequest) -> bool:
-    from flashcli.serve.request_log import resolve_enable_thinking
-
     return resolve_enable_thinking(dict(req.extras or {}))[0]
 
 

@@ -42,16 +42,17 @@ qwen_nvfp4/
 
 ## 发布构建（维护者）
 
+完整逐步说明见 **[docs/bundle_builder_guide.zh-CN.md](../../docs/bundle_builder_guide.zh-CN.md)**。
+
 **SM120 × cu130 × py312**（见 `release-matrix.env`）。
 
 ```bash
-cd flashcli/bundles/qwen_nvfp4
-bash release.sh --clean
+cd flashcli
+pip install -e ./flashcli-bundle -e .
+bash scripts/release_bundle.sh --bundle qwen_nvfp4 --clean
 ```
 
 上传 `dist/` 到 FlashHub → 更新 `models.yaml` 中两个 preset 的 **`bundle.repo`**（同一 URL）。
-
-详见 [docs/runtime-matrix.zh-CN.md](../../docs/runtime-matrix.zh-CN.md#qwen_nvfp4-sm120--cu130)。
 
 ## 运行
 

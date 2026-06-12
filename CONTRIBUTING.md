@@ -14,6 +14,7 @@ Thank you for contributing. This project is intended for open source on GitHub. 
 
 ```text
 flashcli/
+├── flashcli-bundle/        # Bundle protocol package (flashcli_bundle)
 ├── src/flashcli/           # CLI, catalog, bundle loader (no model forward passes)
 ├── bundles/                  # Model bundle sources + release-matrix.env
 ├── scripts/                  # Shared release pipeline
@@ -24,12 +25,13 @@ FlashRT/                      # Sibling clone — inference kernels (build input
 
 flashcli **distributes and loads** Model Bundles; inference lives in bundle `entry` modules and FlashRT.
 
-See [docs/runtime-matrix.md](docs/runtime-matrix.md) and [docs/model_bundle_standard.md](docs/model_bundle_standard.md) for bundle format and release workflow.
+See [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md), [docs/runtime-matrix.md](docs/runtime-matrix.md), and [docs/model_bundle_standard.md](docs/model_bundle_standard.md) for the full build/release workflow.
 
 ## Development setup
 
 ```bash
 cd flashcli
+pip install -e ./flashcli-bundle   # bundle protocol (required)
 pip install -e ".[dev]"   # or: pip install -e .
 flashcli doctor
 flashcli models list
@@ -45,7 +47,7 @@ pytest tests/
 
 1. **Scope** — Keep changes in `flashcli/`. Do not commit FlashRT source changes inside flashcli PRs.
 2. **No inference in CLI** — Do not add model-specific forward logic under `src/flashcli/`. Use bundle `entry` modules.
-3. **Single host flashcli install** — Do not `pip install flashcli` into bundle venvs or copy flashcli under `~/.flashcli/share/`. Bundle infer uses `PYTHONPATH` + `python -m flashcli.runtime.infer`. See [docs/architecture.md](docs/architecture.md#host-cli-vs-bundle-infer-important).
+3. **Host CLI vs bundle venv** — Do not `pip install flashcli` into bundle venvs. Bundle venvs install **`flashcli-bundle`** only; infer re-exec uses host flashcli for `runtime.infer`. See [docs/architecture.md](docs/architecture.md#host-cli-vs-bundle-infer-important).
 4. **Catalog** — Edit `src/flashcli/catalog/models.yaml` only after a bundle is built and validated on real hardware.
 5. **Docs** — Update English docs when behavior or release workflow changes. Mirror important changes in `*.zh-CN.md` when applicable.
 6. **Comments** — New code comments and script headers in English.
@@ -54,8 +56,8 @@ pytest tests/
 ## Adding a new catalog preset / bundle
 
 1. Copy structure from `bundles/pi05_libero/` or `bundles/qwen_nvfp4/`.
-2. Add `flashcli-bundle.json` (format_version 3), `entry` modules, `release-matrix.env`, `_bundle_build.sh`.
-3. Declare bundle CLI flags in manifest **`run_options`** / **`serve_options`** (defaults per option; no top-level `defaults`). With **`variants`**, put options under each variant — never at the top level. Use `"torch": {"index": "auto"}` unless you truly need a fixed CUDA wheel line.
+2. Add `flashcli-bundle.json` (format_version 3, **protocol_version 1**), `entry` modules, `release-matrix.env`, `_bundle_build.sh`.
+3. Declare bundle CLI flags in manifest **`run_options`** / **`serve_options`**. Entry modules import protocol/helpers from **`flashcli_bundle`** (`pip install flashcli-bundle`), not from the full `flashcli` CLI package.
 4. Follow [docs/model_bundle_standard.md](docs/model_bundle_standard.md).
 5. Build on **Linux + NVIDIA GPU** (see release checklist below).
 6. `flashcli bundle validate bundles/<name>`
@@ -110,6 +112,7 @@ Details: [docs/runtime-matrix.md](docs/runtime-matrix.md).
 
 ### Validate before publish
 
+- [ ] `protocol_version` matches installed `flashcli-bundle`
 - [ ] `flashcli bundle validate bundles/<name>` passes (includes `run_options` / `serve_options` layout)
 - [ ] `flashcli run <preset> --help` / `flashcli serve <preset> --help` show expected bundle flags
 - [ ] `dist/runtime/` contains all env keys declared in manifest

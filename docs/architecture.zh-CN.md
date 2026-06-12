@@ -12,7 +12,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 2. **catalog 极简** — `models.yaml` 仅含 preset 名与 `bundle.repo`（或本地 `path`）。
 3. **manifest-first + 分包下载** — 先拉 manifest → preflight 匹配 `runtime` env key → 只下载本 env 的 `runtime/<env-key>/`。
 4. **固定 Python ABI** — 每个 bundle 一个 venv（`python_abi`）；CLI 准备完成后 **re-exec** 进 bundle venv。
-5. **主机只装一份 flashcli** — **绝不**向 bundle venv pip 安装 flashcli；bundle Python 通过 `PYTHONPATH` 加载主机上的包（见下节）。
+5. **主机只装一份 flashcli** — **绝不**向 bundle venv pip 安装 flashcli CLI；bundle venv 只装 **`flashcli-bundle`**（协议层）。`runtime.infer` 仍通过主机 `PYTHONPATH` 加载（见下节）。
 6. **一条命令** — `flashcli run <preset>` 串联：sync → 依赖 → 权重 → `post_pull` → 推理。
 
 ## 主机 CLI 与 bundle infer（必读）
@@ -23,6 +23,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 | 内容 | 位置 | 安装方式 |
 |------|------|----------|
 | `flashcli` CLI + infer 模块 | 仅主机（`~/.flashcli/venv` 或 editable `src/`） | `install.sh` / `pip install flashcli`，**只装一次** |
+| **`flashcli-bundle`**（协议、manifest options） | bundle venv | `pip install flashcli-bundle`（与 host 同版本） |
 | 推理栈（torch、numpy…） | `~/.flashcli/runtimes/<id>/venv/` | `flashcli-bundle.json` → `python_dependencies` |
 | infer 辅助依赖（typer、pyyaml、fastapi…） | 同上 bundle venv，**缺啥装啥** | `ensure_bundle_infer_deps()` — **不含** flashcli 包本身 |
 
@@ -37,8 +38,7 @@ bundle_venv/bin/python /path/to/host/flashcli/runtime/infer_launch.py run|serve 
 ### 禁止事项（避免再次跑偏）
 
 - **不要**在 bundle venv 里 `pip install flashcli` — dev 版本通常不在 PyPI。
-- **不要**再维护 `~/.flashcli/share/flashcli/` — 已废弃的中间方案，有残留可 `rm -rf`。
-- **不要**按 `python_abi` 再复制一份 flashcli — 主机 `PYTHONPATH` 共用即可；按 ABI 变化的只有 bundle **依赖**。
+- **不要**按 `python_abi` 再复制一份 flashcli — 主机 `sys.path` 引导共用即可；按 ABI 变化的只有 bundle **依赖**。
 
 `activate_bundle()` 还会把 **bundle 根目录** prepend 到 `PYTHONPATH`，以便 `import entry` / `flash_rt`（与 re-exec 时加载主机 flashcli 是两层不同用途）。
 
@@ -96,8 +96,6 @@ sequenceDiagram
 ├── cache/repo-index/        # FlashHub listing 缓存
 └── models/<preset>/checkpoint/
 ```
-
-**已废弃：** `~/.flashcli/share/flashcli/` — 旧版 infer 复制目录，可安全删除。
 
 ## Bundle 布局（sync 后）
 

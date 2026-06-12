@@ -28,6 +28,7 @@ def test_bundle_torch_index_auto_from_env_key(tmp_path: Path) -> None:
     data = {
         "format": "flashcli-model-bundle",
         "format_version": 3,
+        "protocol_version": 1,
         "name": "t",
         "python_abi": "312",
         "python_dependencies": {
@@ -47,6 +48,7 @@ def test_bundle_torch_index_from_python_dependencies(tmp_path: Path) -> None:
     data = {
         "format": "flashcli-model-bundle",
         "format_version": 3,
+        "protocol_version": 1,
         "name": "t",
         "python_abi": "312",
         "python_dependencies": {
@@ -65,6 +67,7 @@ def test_bundle_runtime_matrix_from_runtime_map(tmp_path: Path) -> None:
     data = {
         "format": "flashcli-model-bundle",
         "format_version": 3,
+        "protocol_version": 1,
         "name": "t",
         "python_abi": "312",
         "python_dependencies": {"torch": "torch", "pip": []},

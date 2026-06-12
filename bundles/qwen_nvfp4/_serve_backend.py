@@ -8,7 +8,7 @@ import queue as thread_queue
 import threading
 from typing import Any, AsyncIterator, Protocol, runtime_checkable
 
-from flashcli.engines.base import ChatChunk, ChatRequest, ChatResult
+from flashcli_bundle.protocol import ChatChunk, ChatRequest, ChatResult
 
 log = logging.getLogger(__name__)
 

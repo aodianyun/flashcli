@@ -5,11 +5,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from flashcli.bundle.manifest import (
-    BundleManifest,
-    bundle_torch_index,
-    check_bundle_python_abi,
-)
+from flashcli_bundle.context import active_bundle, set_active_bundle
+from flashcli_bundle.manifest import BundleManifest
+
+from flashcli.bundle.manifest import bundle_torch_index, check_bundle_python_abi
 from flashcli.deps import (
     bundle_python_stack_satisfied,
     ensure_runtime_python_stack,
@@ -22,12 +21,6 @@ from flashcli.bundle.native import (
     verify_native_modules,
 )
 
-_ACTIVE_BUNDLE: BundleManifest | None = None
-
-
-def active_bundle() -> BundleManifest | None:
-    return _ACTIVE_BUNDLE
-
 
 def activate_bundle(
     bundle: BundleManifest,
@@ -38,10 +31,7 @@ def activate_bundle(
     force_python: bool = False,
 ) -> Path:
     """Put bundle on sys.path, install inference deps in bundle venv, preload native."""
-    global _ACTIVE_BUNDLE
-    _ACTIVE_BUNDLE = bundle
-    os.environ["FLASHCLI_ACTIVE_BUNDLE"] = str(bundle.bundle_root)
-    os.environ["FLASHCLI_ACTIVE_RUNTIME"] = str(bundle.bundle_root)
+    set_active_bundle(bundle)
 
     bundle_root = bundle.bundle_root.resolve()
     runtime_id = runtime_id or os.environ.get("FLASHCLI_RUNTIME_ID", "")
@@ -97,10 +87,15 @@ def activate_bundle(
 
 
 def resolve_torch_index_from_bundle() -> str | None:
-    b = _ACTIVE_BUNDLE
+    from flashcli_bundle.context import active_bundle as _active
+
+    b = _active()
     if b is None:
         return None
     from flashcli.runtime.detect import detect_gpu
 
     idx = bundle_torch_index(b, gpu=detect_gpu())
     return idx if idx else None
+
+
+__all__ = ["activate_bundle", "active_bundle", "resolve_torch_index_from_bundle"]

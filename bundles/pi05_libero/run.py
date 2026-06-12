@@ -7,9 +7,9 @@ from typing import Any
 
 import numpy as np
 
-from flashcli.bundle.activate import active_bundle
-from flashcli.bundle.bundle_options import option_value, run_option_defaults
-from flashcli.models.registry import Preset
+from flashcli_bundle.context import active_bundle
+from flashcli_bundle.options import option_value, run_option_defaults
+from flashcli_bundle.preset import Preset
 
 import _pi05_compat
 

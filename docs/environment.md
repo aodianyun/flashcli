@@ -91,8 +91,6 @@ See [architecture.md](architecture.md#host-cli-vs-bundle-infer-important) for th
 | Bundle torch / transformers / … | Bundle venv | From manifest `python_dependencies` |
 | typer, pyyaml, fastapi, … for infer | Bundle venv if missing | `ensure_bundle_infer_deps()` only — **never** `pip install flashcli` here |
 
-**Deprecated path (remove if present):** `~/.flashcli/share/flashcli/` — older builds copied flashcli per version/ABI; current code does not use it.
-
 **Two `PYTHONPATH` layers:**
 
 1. **Re-exec** (`runtime/reexec.py`): prepend host flashcli so `python -m flashcli.runtime.infer` works inside bundle venv.

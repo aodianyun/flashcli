@@ -17,7 +17,7 @@ def test_host_path_site_packages_layout(tmp_path: Path) -> None:
 
     infer_launch._LAUNCH = launch.resolve()
     infer_launch._PKG = infer_launch._LAUNCH.parent.parent
-    assert infer_launch._host_sys_path_entry() == site.resolve()
+    assert infer_launch._host_flashcli_sys_path() == site.resolve()
 
 
 def test_host_path_editable_layout(tmp_path: Path) -> None:
@@ -30,7 +30,7 @@ def test_host_path_editable_layout(tmp_path: Path) -> None:
 
     infer_launch._LAUNCH = launch.resolve()
     infer_launch._PKG = infer_launch._LAUNCH.parent.parent
-    assert infer_launch._host_sys_path_entry() == (repo / "src").resolve()
+    assert infer_launch._host_flashcli_sys_path() == (repo / "src").resolve()
 
 
 def test_main_prepends_path(monkeypatch, tmp_path: Path) -> None:
@@ -48,6 +48,7 @@ def test_main_prepends_path(monkeypatch, tmp_path: Path) -> None:
         seen["path"] = list(infer_launch.sys.path)
         seen["name"] = [name]
 
+    monkeypatch.setattr(infer_launch, "_ensure_bundle_protocol_package", lambda: None)
     monkeypatch.setattr(infer_launch.sys, "path", [])
     monkeypatch.setattr(infer_launch.runpy, "run_module", fake_run_module)
     infer_launch.main()

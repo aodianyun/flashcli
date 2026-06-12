@@ -105,8 +105,8 @@ usage() {
 Build and pack a flashcli model bundle release zip (multi-env lib/).
 
 Bundles declare matrix in bundles/<name>/release-matrix.env:
-  pi05_libero   sm89  × cu124/cu130 × py310/311/312
-  qwen_nvfp4    sm120 × cu130 × py310/311/312
+  pi05_libero   sm89  × cu124/cu130 × py312
+  qwen_nvfp4    sm120 × cu130 × py312
 
 FlashRT (default — auto clone/update):
   url: ${_BUILTIN_FLASHRT_GIT_URL}

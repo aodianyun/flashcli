@@ -9,25 +9,16 @@ from typing import Any
 import yaml
 
 from flashcli import config
+from flashcli_bundle.preset import Preset as BundlePreset
 
 
 @dataclass
-class Preset:
-    name: str
-    raw: dict[str, Any]
+class Preset(BundlePreset):
+    """Catalog preset; extends :mod:`flashcli_bundle.preset` with host metadata."""
 
     @property
     def engine(self) -> str:
         return str(self.raw.get("engine", "model_bundle"))
-
-    @property
-    def bundle_variant(self) -> str | None:
-        """Logical model key when several presets share one runtime bundle."""
-        for key in ("bundle_variant", "variant", "model_variant", "model"):
-            value = self.raw.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-        return None
 
     @property
     def description(self) -> str:

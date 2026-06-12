@@ -78,7 +78,7 @@ def test_parse_flashhub_api_error() -> None:
 def test_download_manifest_mock(tmp_path: Path, monkeypatch) -> None:
     from flashcli.bundle import flashhub
 
-    manifest = {"format": "flashcli-model-bundle", "format_version": 3, "name": "t"}
+    manifest = {"format": "flashcli-model-bundle", "format_version": 3, "protocol_version": 1, "name": "t"}
     payload = {
         "code": 0,
         "message": "success",
