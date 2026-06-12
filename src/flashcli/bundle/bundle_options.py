@@ -50,6 +50,21 @@ __all__ = [
 ]
 
 
+def _catalog_repo_url(cfg: dict[str, Any]) -> str:
+    return str(cfg.get("repo", "")).strip()
+
+
+def _try_load_bundle_manifest(root: Path) -> BundleManifest | None:
+    from flashcli.bundle.layout import is_bundle_root
+
+    if not is_bundle_root(root):
+        return None
+    try:
+        return load_bundle_manifest(root)
+    except ValueError:
+        return None
+
+
 def resolve_manifest_for_preset(
     preset: Preset,
     *,
@@ -76,13 +91,17 @@ def resolve_manifest_for_preset(
             return load_bundle_manifest(root)
 
     marker = read_preset_marker(preset.name) or {}
+    catalog_repo = _catalog_repo_url(cfg)
+    marker_repo = str(marker.get("repo", "")).strip()
     cached_root = str(marker.get("bundle_root", "")).strip()
-    if cached_root:
-        root = Path(cached_root).expanduser().resolve()
-        if is_bundle_root(root):
-            return load_bundle_manifest(root)
+    cache_repo_matches = not catalog_repo or not marker_repo or marker_repo == catalog_repo
 
-    repo = str(cfg.get("repo", "")).strip()
+    if cached_root and cache_repo_matches:
+        manifest = _try_load_bundle_manifest(Path(cached_root).expanduser().resolve())
+        if manifest is not None:
+            return manifest
+
+    repo = catalog_repo
     if not repo:
         if bundle_path is not None:
             raise FileNotFoundError(f"Bundle root not found: {bundle_path}")

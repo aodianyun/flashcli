@@ -357,3 +357,97 @@ def test_validate_repo_bundles() -> None:
     for name in ("pi05_libero", "qwen_nvfp4"):
         manifest = load_bundle_manifest(root / name / "flashcli-bundle.json")
         assert validate_bundle_options(manifest) == [], name
+
+
+def test_resolve_manifest_skips_stale_cached_repo(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import json
+
+    from flashcli.bundle.bundle_options import resolve_manifest_for_preset
+    from flashcli.bundle.marker import write_preset_marker
+
+    monkeypatch.setattr("flashcli.config.BUNDLES_DIR", tmp_path / "bundles")
+    bundle_root = tmp_path / "cached"
+    bundle_root.mkdir()
+    old_manifest = {
+        "format": "flashcli-model-bundle",
+        "format_version": 3,
+        "name": "pi05_libero",
+        "python_abi": "312",
+        "entry": {"run": {"module": "run", "attr": "RunEngine"}},
+        "runtime": {"sm89-cu130-linux-x86_64-py312": "runtime/x"},
+    }
+    (bundle_root / "flashcli-bundle.json").write_text(
+        json.dumps(old_manifest), encoding="utf-8"
+    )
+    write_preset_marker(
+        "pi05_libero",
+        {
+            "repo": "https://flashhub.example/pi05/1.0.2",
+            "bundle_root": str(bundle_root),
+            "runtime_id": "pi05_libero-old",
+        },
+    )
+
+    fresh = dict(old_manifest)
+    fresh["protocol_version"] = 1
+
+    preset = Preset(
+        name="pi05_libero",
+        raw={
+            "description": "test",
+            "bundle": {"repo": "https://flashhub.example/pi05/1.0.3"},
+        },
+    )
+
+    monkeypatch.setattr(
+        "flashcli.bundle.bundle_options.download_manifest_from_repo",
+        lambda _repo, _dest, **kw: fresh,
+    )
+
+    manifest = resolve_manifest_for_preset(preset)
+    assert manifest.raw.get("protocol_version") == 1
+
+
+def test_resolve_manifest_skips_cache_missing_protocol_version(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import json
+
+    from flashcli.bundle.bundle_options import resolve_manifest_for_preset
+    from flashcli.bundle.marker import write_preset_marker
+
+    monkeypatch.setattr("flashcli.config.BUNDLES_DIR", tmp_path / "bundles")
+    repo = "https://flashhub.example/pi05/1.0.3"
+    bundle_root = tmp_path / "cached"
+    bundle_root.mkdir()
+    old_manifest = {
+        "format": "flashcli-model-bundle",
+        "format_version": 3,
+        "name": "pi05_libero",
+        "python_abi": "312",
+        "entry": {"run": {"module": "run", "attr": "RunEngine"}},
+        "runtime": {"sm89-cu130-linux-x86_64-py312": "runtime/x"},
+    }
+    (bundle_root / "flashcli-bundle.json").write_text(
+        json.dumps(old_manifest), encoding="utf-8"
+    )
+    write_preset_marker(
+        "pi05_libero",
+        {"repo": repo, "bundle_root": str(bundle_root), "runtime_id": "pi05_libero-x"},
+    )
+
+    fresh = dict(old_manifest)
+    fresh["protocol_version"] = 1
+    preset = Preset(
+        name="pi05_libero",
+        raw={"description": "test", "bundle": {"repo": repo}},
+    )
+    monkeypatch.setattr(
+        "flashcli.bundle.bundle_options.download_manifest_from_repo",
+        lambda _repo, _dest, **kw: fresh,
+    )
+
+    manifest = resolve_manifest_for_preset(preset)
+    assert manifest.raw.get("protocol_version") == 1
