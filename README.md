@@ -7,8 +7,8 @@
 One install, one preset name — flashcli resolves the right native runtime for your GPU, fetches a versioned **Model Bundle**, installs Python dependencies, caches Hugging Face weights, and runs **`run`** (engine) or **`serve`** (OpenAI-compatible HTTP) without hand-wiring FlashRT, CUDA tags, or pip matrices.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
-flashcli run pi05_libero --prompt "pick up the red block" --image /path/to/scene.jpg
+curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
+flashcli run pi05_libero
 ```
 
 ---

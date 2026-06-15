@@ -7,8 +7,8 @@
 安装一次、记住 preset 名称即可：flashcli 按 GPU 解析原生 runtime、拉取版本化 **Model Bundle**、安装 Python 依赖、缓存 Hugging Face 权重，并执行 **`run`**（引擎推理）或 **`serve`**（OpenAI 兼容 HTTP），无需手工拼接 FlashRT、CUDA 线与 pip 矩阵。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
-flashcli run pi05_libero --prompt "pick up the red block" --image /path/to/scene.jpg
+curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
+flashcli run pi05_libero
 ```
 
 ---
