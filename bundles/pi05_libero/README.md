@@ -45,7 +45,7 @@ Pre-download on a reachable host, then `flashcli run pi05_libero --bundle bundle
 
 ### `no kernel image is available for execution on the device`
 
-Usually **wrong GPU** (SM120 is not supported) or a **CUDA cell mismatch** on SM89. Run `flashcli models envs pi05_libero` — expect `sm89-cu124-*` or `sm89-cu130-*`.
+Usually **wrong GPU/CUDA cell** or a **stale FlashHub runtime**. Run `flashcli models envs pi05_libero` — expect `sm89-cu124-*`, `sm89-cu130-*`, or `sm120-cu130-*`.
 
 ### `'GemmRunner' object has no attribute 'fp8_nt_dev'`
 

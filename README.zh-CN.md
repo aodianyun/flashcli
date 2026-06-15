@@ -40,7 +40,7 @@ flashcli 刻意保持轻薄：**推理代码在 bundle 内**。CLI 从 FlashHub 
 
 | Preset | 任务 | GPU | CUDA 线 | Python | 能力 |
 |--------|------|-----|---------|--------|------|
-| [`pi05_libero`](bundles/pi05_libero/QUICKSTART.zh-CN.md) | Pi0.5 LIBERO VLA | **仅 SM89** | cu124 或 cu130 | **3.12**（bundle venv） | `run` |
+| [`pi05_libero`](bundles/pi05_libero/QUICKSTART.zh-CN.md) | Pi0.5 LIBERO VLA | **SM89**、**SM120** | cu124（SM89）· cu130 | **3.12**（bundle venv） | `run` |
 | [`qwen3-8b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) | Qwen3-8B NVFP4 对话 | **SM120** | **仅 cu130** | **3.12** | `run`, `serve` |
 | [`qwen36-27b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **仅 cu130** | **3.12** | `run`, `serve` |
 

@@ -10,7 +10,7 @@
 
 | Bundle | SM | CUDA 线 | Python ABI | Native 模块 |
 |--------|-----|---------|------------|-------------|
-| `pi05_libero` | **89** | cu124、cu130 | **3.12**（`python_abi: 312`） | `flash_rt_kernels`, `flash_rt_fa2` |
+| `pi05_libero` | **89**、**120** | cu124（SM89）、cu130 | **3.12**（`python_abi: 312`） | `flash_rt_kernels`, `flash_rt_fa2` |
 | `qwen_nvfp4` | **120** | **仅 cu130** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2` |
 
 OS / arch：**linux-x86_64**。配置见 `bundles/<name>/release-matrix.env`。
@@ -57,12 +57,13 @@ https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.
 
 ### FA2（pi05_libero）
 
-**SM89** 主线；manifest 可含 sm120 runtime 档供扩展。
+**SM89 + SM120**；manifest 含 `sm89-cu124`、`sm89-cu130`、`sm120-cu130` runtime 档。
 
-| CUDA 线 | FA2 策略 |
-|---------|----------|
-| **cu124** | `FA2_ARCH_NATIVE_ONLY` → sm_89 AOT |
-| **cu130** | FA2 多架构；kernels 仍为 sm_89 |
+| CUDA 线 | FA2 / 内核策略 |
+|---------|----------------|
+| **cu124**（SM89） | `FA2_ARCH_NATIVE_ONLY` → sm_89 AOT |
+| **cu130**（SM89） | FA2 多架构；kernels 为 sm_89 |
+| **cu130**（SM120） | cu130 矩阵 pass 交叉编译 sm120 单元 |
 
 ## 矩阵构建（通用脚本）
 
@@ -93,7 +94,7 @@ bash build.sh --repo-root "$FLASHRT_REPO"
 | `flashcli bundle sync` | FlashHub API → manifest → preflight → 下载源码树 + 本 env `runtime/` |
 | `flashcli run` | bundle venv 装 torch → 从 `runtime/<env-key>/` 加载 `.so` → 权重 → `entry` |
 
-本机环境键示例：`sm89-cu124-linux-x86_64-py312`  
+本机环境键示例：`sm89-cu124-linux-x86_64-py312`、`sm120-cu130-linux-x86_64-py312`  
 查看匹配：`flashcli models envs pi05_libero`
 
 **不要**用与 manifest `python_abi` 不一致的系统 Python 跑 bundle（会在 venv / preflight 阶段失败）。

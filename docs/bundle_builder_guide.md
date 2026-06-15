@@ -38,7 +38,7 @@ export PIP_TRUSTED_HOST=mirrors.aliyun.com
 
 | Bundle | GPU | CUDA |
 |--------|-----|------|
-| `pi05_libero` | SM89 only | cu124 or cu130 |
+| `pi05_libero` | SM89, SM120 | cu124 (SM89) · cu130 |
 | `qwen_nvfp4` | SM120 | cu130 only |
 
 ---

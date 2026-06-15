@@ -36,7 +36,7 @@ from flashcli_bundle.preset import Preset
 
 | Bundle | GPU | CUDA 用户态 | 说明 |
 |--------|-----|-------------|------|
-| `pi05_libero` | **SM89**（Ada，如 4090 / 4060 Ti） | cu124 或 cu130 | 不支持 SM120 |
+| `pi05_libero` | **SM89**（Ada）、**SM120**（Blackwell） | cu124（SM89）· cu130 | SM120 用 `sm120-cu130` 单元 |
 | `qwen_nvfp4` | **SM120**（Blackwell） | **仅 cu130** | NVFP4 需 nvcc ≥ 12.8 |
 
 ### 软件
@@ -323,7 +323,7 @@ bundles/pi05_libero/dist/
 | bundle venv 缺 `flashcli_bundle` | 删 `~/.flashcli/runtimes/<id>/` 重跑；或 `flashcli run` 触发 venv 重建 |
 | `pip install flashcli` 缺 flashcli-bundle / typer 等 | **勿**裸 `pip install flashcli`（PyPI 无 flashcli-bundle）。用 `install.sh`，或手动：`pip install 'flashcli-bundle @ git+…#subdirectory=flashcli-bundle'` 再 `pip install --no-deps 'flashcli @ git+…'` |
 | HF 权重失败 | `export HF_ENDPOINT=https://hf-mirror.com` 后 `flashcli pull` |
-| pi05 在 SM120 上报错 | pi05 **仅 SM89**；Blackwell 用 qwen preset |
+| pi05 `NativeEnvironmentNotSupportedError` | 确认 manifest 含本机 env key（含 `sm120-cu130`）；`flashcli bundle sync pi05_libero --force` |
 | qwen 在 cu124 上编译失败 | qwen **仅 cu130**；用 25.10-py3 容器 |
 
 ---

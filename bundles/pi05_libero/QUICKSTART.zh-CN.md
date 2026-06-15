@@ -2,10 +2,8 @@
 
 <p align="right"><a href="QUICKSTART.md">English</a></p>
 
-**环境**：Linux · NVIDIA GPU（**仅 SM89**，如 RTX 4090 / 4060 Ti Ada）· Python **3.12**（bundle venv；主机 CLI 3.10+）  
+**环境**：Linux · NVIDIA **SM89**（Ada）或 **SM120**（Blackwell）· CUDA **12.4+**（SM89）或 **13.x**（SM120）· Python **3.12**（bundle venv；主机 CLI 3.10+）  
 **Preset**：`pi05_libero` · 权重 [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044)（~7.5GB，不进 zip）
-
-> **SM120 / Blackwell**（如 RTX 5090、PRO 5000）**暂不支持**。SM120 请用 [`qwen_nvfp4`](../qwen_nvfp4/QUICKSTART.zh-CN.md) 系列 preset。
 
 ```bash
 cd /path/to/flashcli
@@ -17,7 +15,7 @@ export BUNDLE="$(pwd)/bundles/pi05_libero"   # 本地 dev；省略则走 FlashHu
 
 ```bash
 flashcli models envs pi05_libero
-# 期望 sm89-cu124-* 或 sm89-cu130-*（与本机 CUDA 用户态一致）
+# 期望 sm89-cu124-*、sm89-cu130-* 或 sm120-cu130-*（与本机 GPU + CUDA 用户态一致）
 ```
 
 ---
@@ -87,7 +85,7 @@ flashcli run pi05_libero --bundle "$BUNDLE" \
 | 现象 | 处理 |
 |------|------|
 | `LocalEntryNotFoundError` | 网络/DNS；设 `HF_ENDPOINT`，或预下载后 `--checkpoint` |
-| `NativeEnvironmentNotSupportedError` / SM120 | pi05 **仅 SM89**；换 Ada 显卡，或 Blackwell 上用 Qwen |
-| `no kernel image...` | GPU/CUDA 格不匹配；在 SM89 上执行 `flashcli models envs pi05_libero` |
+| `NativeEnvironmentNotSupportedError` | GPU/CUDA 格不在 manifest；执行 `flashcli models envs pi05_libero` 并 sync 新版 bundle |
+| `no kernel image...` | GPU/CUDA 格不匹配；在本机执行 `flashcli models envs pi05_libero` |
 | `'GemmRunner'... fp8_nt_dev` | 更新 FlashRT 并重编，或 bundle 内 `_pi05_compat.py` shim |
 | `FvkContext is already registered` | 升级 flashcli |

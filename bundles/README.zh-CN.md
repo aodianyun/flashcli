@@ -8,7 +8,7 @@ FlashHub 上的 bundle 参考源码。终端用户通过 catalog 的 `bundle.rep
 
 | 目录 | Preset | GPU / CUDA |
 |------|--------|------------|
-| [`pi05_libero/`](pi05_libero/) | `pi05_libero` | **SM89** · cu124 或 cu130 |
+| [`pi05_libero/`](pi05_libero/) | `pi05_libero` | **SM89** · cu124/cu130 · **SM120** · cu130 |
 | [`qwen_nvfp4/`](qwen_nvfp4/) | `qwen3-8b-nvfp4`、`qwen36-27b-nvfp4` | **SM120** · 仅 cu130 |
 
 Bundle 规范：[bundle_publish_standard.zh-CN.md](../docs/bundle_publish_standard.zh-CN.md) · catalog 流程：[model_bundle_standard.zh-CN.md](../docs/model_bundle_standard.zh-CN.md)

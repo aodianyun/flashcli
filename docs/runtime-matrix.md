@@ -10,7 +10,7 @@ How maintainers build **multi CUDA / SM native artifacts** and publish via **Fla
 
 | Bundle | SM | CUDA lines | Python ABI | Native modules |
 |--------|-----|------------|------------|----------------|
-| `pi05_libero` | **89** | cu124, cu130 | **3.12** (`python_abi: 312`) | `flash_rt_kernels`, `flash_rt_fa2` |
+| `pi05_libero` | **89**, **120** | cu124 (SM89), cu130 | **3.12** (`python_abi: 312`) | `flash_rt_kernels`, `flash_rt_fa2` |
 | `qwen_nvfp4` | **120** | **cu130 only** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2` |
 
 OS / arch: **linux-x86_64**. Config: `bundles/<name>/release-matrix.env`.
@@ -78,11 +78,11 @@ bash build.sh --repo-root /path/to/FlashRT
 
 ## pi05_libero
 
-**GPU**: SM89 (Ada). FA2: cu124 = sm_89 AOT; cu130 = multi-arch FA2, sm_89 kernels.
+**GPU**: SM89 (Ada) and SM120 (Blackwell). **CUDA**: cu124 (SM89 only); cu130 (SM89 + SM120 — cu130 matrix pass also cross-builds `sm120-cu130`).
+
+Host keys: `sm89-cu124-linux-x86_64-py312`, `sm89-cu130-linux-x86_64-py312`, `sm120-cu130-linux-x86_64-py312`. Check: `flashcli models envs pi05_libero`.
 
 Upload `dist/` to FlashHub; update `pi05_libero.bundle.repo`.
-
-Check host key: `flashcli models envs pi05_libero`.
 
 ---
 

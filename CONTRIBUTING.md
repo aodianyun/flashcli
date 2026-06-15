@@ -75,7 +75,7 @@ Before updating [`models.yaml`](src/flashcli/catalog/models.yaml) `bundle.repo`:
 - [ ] `flashcli bundle validate bundles/<name>` and smoke `run` / `serve` on target GPU
 - [ ] Qwen: both presets share the same `bundle.repo`; differ by `bundle_variant` only
 
-Matrix constraints: pi05 **SM89 only**; qwen **cu130 / SM120 only** — see runtime-matrix doc.
+Matrix constraints: pi05 **SM89 + SM120** (cu124 on SM89; cu130 on both); qwen **cu130 / SM120 only** — see runtime-matrix doc.
 
 ## Reporting issues
 

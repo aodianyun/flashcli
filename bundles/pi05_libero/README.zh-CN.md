@@ -65,7 +65,7 @@ flashcli run pi05_libero --bundle bundles/pi05_libero \
 
 ### `no kernel image is available for execution on the device`
 
-多为 **GPU 不符**（SM120 暂不支持）或 SM89 上 **CUDA 格不匹配**。执行 `flashcli models envs pi05_libero`，应匹配 `sm89-cu124-*` 或 `sm89-cu130-*`。
+多为 **GPU/CUDA 格不匹配** 或 **FlashHub runtime 过旧**。执行 `flashcli models envs pi05_libero`，应匹配 `sm89-cu124-*`、`sm89-cu130-*` 或 `sm120-cu130-*`。
 
 ### `'GemmRunner' object has no attribute 'fp8_nt_dev'`
 

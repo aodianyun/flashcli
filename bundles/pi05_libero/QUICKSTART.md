@@ -2,10 +2,8 @@
 
 <p align="right"><a href="QUICKSTART.zh-CN.md">简体中文</a></p>
 
-**Requires**: Linux · NVIDIA GPU (**SM89** only, e.g. RTX 4090 / 4060 Ti Ada) · Python **3.12** (bundle venv; host CLI 3.10+)  
+**Requires**: Linux · NVIDIA **SM89** (Ada) or **SM120** (Blackwell) · CUDA **12.4+** (SM89) or **13.x** (SM120) · Python **3.12** (bundle venv; host CLI 3.10+)  
 **Preset**: `pi05_libero` · weights [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) (~7.5GB, not in zip)
-
-> **SM120 / Blackwell** (e.g. RTX 5090, PRO 5000) is **not supported** yet. Use [`qwen_nvfp4`](../qwen_nvfp4/QUICKSTART.md) presets on SM120.
 
 ```bash
 cd /path/to/flashcli
@@ -17,7 +15,7 @@ Check runtime cell for this host:
 
 ```bash
 flashcli models envs pi05_libero
-# expect sm89-cu124-* or sm89-cu130-* matching your CUDA userland
+# expect sm89-cu124-*, sm89-cu130-*, or sm120-cu130-* matching your GPU + CUDA userland
 ```
 
 ---
@@ -86,7 +84,7 @@ flashcli run pi05_libero --bundle "$BUNDLE" \
 | Symptom | Fix |
 |---------|-----|
 | `LocalEntryNotFoundError` | network/DNS; set `HF_ENDPOINT` or `--checkpoint` |
-| `NativeEnvironmentNotSupportedError` / SM120 | pi05 is **SM89 only**; use an Ada GPU or try Qwen on Blackwell |
-| `no kernel image...` | wrong GPU or CUDA cell; run `flashcli models envs pi05_libero` on SM89 |
+| `NativeEnvironmentNotSupportedError` | GPU/CUDA cell not in manifest; run `flashcli models envs pi05_libero` and sync a current bundle |
+| `no kernel image...` | wrong GPU or CUDA cell; run `flashcli models envs pi05_libero` on this host |
 | `'GemmRunner'... fp8_nt_dev` | rebuild FlashRT or use `_pi05_compat.py` |
 | `FvkContext is already registered` | upgrade flashcli |
