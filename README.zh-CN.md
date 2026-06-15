@@ -2,7 +2,7 @@
 
 <p align="right"><a href="README.md">English</a> · <strong>简体中文</strong></p>
 
-**面向 NVIDIA GPU 的 [FlashRT](https://github.com/flashrt-ai/FlashRT) 推理分发 CLI。**
+**用于分发与运行 [FlashRT](https://github.com/flashrt-project/FlashRT) 推理的生产级 CLI。**
 
 安装一次、记住 preset 名称即可：flashcli 按 GPU 解析原生 runtime、拉取版本化 **Model Bundle**、安装 Python 依赖、缓存 Hugging Face 权重，并执行 **`run`**（引擎推理）或 **`serve`**（OpenAI 兼容 HTTP），无需手工拼接 FlashRT、CUDA 线与 pip 矩阵。
 

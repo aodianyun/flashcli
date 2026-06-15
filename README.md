@@ -2,7 +2,7 @@
 
 <p align="right"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
 
-**Production CLI for shipping [FlashRT](https://github.com/flashrt-ai/FlashRT) inference to NVIDIA GPUs.**
+**Production CLI for shipping [FlashRT](https://github.com/flashrt-project/FlashRT) inference.**
 
 One install, one preset name — flashcli resolves the right native runtime for your GPU, fetches a versioned **Model Bundle**, installs Python dependencies, caches Hugging Face weights, and runs **`run`** (engine) or **`serve`** (OpenAI-compatible HTTP) without hand-wiring FlashRT, CUDA tags, or pip matrices.
 
