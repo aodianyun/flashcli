@@ -29,7 +29,7 @@ flashcli models list
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FLASHCLI_CUDA_TAG` | (auto-detect) | Override detected CUDA userland tag (`124` / `128` / `130`) used to select `lib/*.so` such as `cu124` / `cu130`. |
+| `FLASHCLI_CUDA_TAG` | (auto-detect) | Override detected CUDA userland tag (`124` / `128` / `130`) used to pick native `.so` under `runtime/<env-key>/`. |
 | (automatic) | — | If `nvcc` is missing, flashcli infers from `nvidia-smi` banner (`CUDA Version: 13.0` → `130`); SM89 no longer hard-defaults to `124`. |
 
 `flashcli run` selects native `.so` by **sm + cuda + os + arch + Python**. If `libcublas.so.12` is missing on CUDA 13 hosts, update flashcli or set `export FLASHCLI_CUDA_TAG=130`.
@@ -82,19 +82,7 @@ Bundle Python deps (torch, etc.) are installed by `activate_bundle` from `flashc
 
 ## Host CLI vs bundle infer
 
-See [architecture.md](architecture.md#host-cli-vs-bundle-infer-important) for the full diagram. Summary:
-
-| Process | Python | flashcli package |
-|---------|--------|-------------------|
-| `flashcli pull`, `bundle sync`, host `doctor` | Host venv (`~/.flashcli/venv`) | Imported normally from host install |
-| `flashcli run`, `serve` (after re-exec) | Bundle venv (`runtimes/<id>/venv/`) | Via `PYTHONPATH` → host install (`src/` or site-packages) |
-| Bundle torch / transformers / … | Bundle venv | From manifest `python_dependencies` |
-| typer, pyyaml, fastapi, … for infer | Bundle venv if missing | `ensure_bundle_infer_deps()` only — **never** `pip install flashcli` here |
-
-**Two `PYTHONPATH` layers:**
-
-1. **Re-exec** (`runtime/reexec.py`): prepend host flashcli so `python -m flashcli.runtime.infer` works inside bundle venv.
-2. **Activate** (`bundle/activate.py`): prepend bundle root so `entry` and `flash_rt` import inside infer.
+See [architecture.md](architecture.md#host-cli-vs-bundle-infer-important). Do **not** `pip install flashcli` into bundle venvs.
 
 ## Model / preset related
 
@@ -123,5 +111,5 @@ See [architecture.md](architecture.md#host-cli-vs-bundle-infer-important) for th
 ## Related docs
 
 - [README.md](../README.md) — quick start and cache layout
-- [model_bundle_standard.md](model_bundle_standard.md) — catalog and bundle format
+- [model_bundle_standard.md](model_bundle_standard.md) — catalog + runtime flow
 - [src/flashcli/catalog/models.yaml](../src/flashcli/catalog/models.yaml) — single catalog source file

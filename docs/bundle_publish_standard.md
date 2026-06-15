@@ -398,6 +398,5 @@ At load time, pybind import names remain `flash_rt_kernels`, `flash_rt_fa2`, etc
 | Doc | Content |
 |-----|---------|
 | [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) | 简体中文 |
-| [model_bundle_standard.md](model_bundle_standard.md) | Complementary runtime flow summary |
+| [model_bundle_standard.md](model_bundle_standard.md) | Catalog fields + end-user runtime flow |
 | [flashcli-bundle/README.md](../flashcli-bundle/README.md) | `flashcli_bundle` Python API |
-| [bundle_builder_guide.md](bundle_builder_guide.md) | Internal: build, pack, CI, flashcli commands |

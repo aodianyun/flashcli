@@ -3,7 +3,7 @@
 <p align="right"><a href="QUICKSTART.zh-CN.md">简体中文</a></p>
 
 **Requires**: Linux · NVIDIA **SM120** · CUDA **13.x** · Python **3.12** (bundle venv; host CLI 3.10+)  
-**Presets**: `qwen3-8b-nvfp4` / `qwen36-27b-nvfp4` (one runtime zip; `bundle_variant` picks weights)
+**Presets**: `qwen3-8b-nvfp4` / `qwen36-27b-nvfp4` (one FlashHub repo; `bundle_variant` picks weights)
 
 ```bash
 cd /path/to/flashcli
@@ -15,15 +15,18 @@ export BUNDLE="$(pwd)/bundles/qwen_nvfp4"   # local dev; omit for FlashHub sync
 
 ## 1. Build local bundle (dev)
 
-After FlashHub sync, `lib/` contains this host's `.so`. A local source tree must be built first:
+FlashHub sync puts `.so` under `runtime/<env-key>/`. Local `build.sh` stages to `lib/` first; copy into the matching runtime cell before validate/run:
 
 ```bash
 export FLASHRT_REPO=/path/to/FlashRT
 bash bundles/qwen_nvfp4/build.sh --repo-root "$FLASHRT_REPO" -j "$(nproc)"
+ENV_KEY="$(python3 -c "import json; print(next(iter(json.load(open('bundles/qwen_nvfp4/flashcli-bundle.json'))['runtime'])))")"
+mkdir -p "bundles/qwen_nvfp4/${ENV_KEY}"
+cp bundles/qwen_nvfp4/lib/*.so "bundles/qwen_nvfp4/${ENV_KEY}/"
 flashcli bundle validate "$BUNDLE"
 ```
 
-Missing `lib/flash_rt_kernels*.so` → `ImportError: flash_rt_kernels` at serve time.
+Missing `runtime/<env-key>/flash_rt_kernels*.so` → `ImportError: flash_rt_kernels` at serve time.
 
 ---
 
@@ -120,9 +123,7 @@ QWEN36_MAX_SEQ=262208 QWEN36_PORT=8000 \
 
 | Symptom | Fix |
 |---------|-----|
-| `ImportError: flash_rt_kernels` | build bundle; check `lib/` matches SM/CUDA/Python |
+| `ImportError: flash_rt_kernels` | build bundle; ensure `runtime/<env-key>/` has `.so` for this SM/CUDA/Python |
 | `max_tokens must be <= N` | raise `--max-output-tokens` or lower request `max_tokens` |
 | slow first request | new graph bucket; retry is usually faster |
 | stale FlashHub runtime | `--bundle bundles/qwen_nvfp4` after local rebuild |
-
-Release: `bash scripts/release_bundle.sh --bundle qwen_nvfp4 --clean` → update both Qwen presets in `models.yaml`.

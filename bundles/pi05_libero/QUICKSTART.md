@@ -24,9 +24,14 @@ flashcli models envs pi05_libero
 
 ## 1. Build local bundle (dev)
 
+`build.sh` stages `.so` to `lib/`; copy into the matching `runtime/<env-key>/` (from manifest after build) before validate/run:
+
 ```bash
 export FLASHRT_REPO=/path/to/FlashRT
 bash bundles/pi05_libero/build.sh --repo-root "$FLASHRT_REPO" -j "$(nproc)"
+ENV_KEY="$(python3 -c "import json; print(next(iter(json.load(open('bundles/pi05_libero/flashcli-bundle.json'))['runtime'])))")"
+mkdir -p "bundles/pi05_libero/${ENV_KEY}"
+cp bundles/pi05_libero/lib/*.so "bundles/pi05_libero/${ENV_KEY}/"
 flashcli bundle validate "$BUNDLE"
 ```
 
@@ -85,5 +90,3 @@ flashcli run pi05_libero --bundle "$BUNDLE" \
 | `no kernel image...` | wrong GPU or CUDA cell; run `flashcli models envs pi05_libero` on SM89 |
 | `'GemmRunner'... fp8_nt_dev` | rebuild FlashRT or use `_pi05_compat.py` |
 | `FvkContext is already registered` | upgrade flashcli |
-
-Release: `bash scripts/release_bundle.sh --bundle pi05_libero --clean` → upload zip → update `models.yaml`.

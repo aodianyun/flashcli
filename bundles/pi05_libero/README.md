@@ -4,7 +4,7 @@
 
 Pi0.5 LIBERO VLA; weights [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044).
 
-**Public preset**: `pi05_libero` ([`src/flashcli/catalog/models.yaml`](../../src/flashcli/catalog/models.yaml)). End users sync runtime from FlashHub via `bundle.repo`; flashcli matches manifest `runtime` env keys and installs `.so` under `lib/`. Run `flashcli models envs pi05_libero` to check a match on this host.
+**Public preset**: `pi05_libero` ([`src/flashcli/catalog/models.yaml`](../../src/flashcli/catalog/models.yaml)). End users sync runtime from FlashHub via `bundle.repo`; flashcli matches manifest `runtime` env keys and loads `.so` from `runtime/<env-key>/`. Run `flashcli models envs pi05_libero` to check a match on this host.
 
 ## Files required to run inference (after sync)
 
@@ -12,8 +12,8 @@ Pi0.5 LIBERO VLA; weights [lerobot/pi05_libero_finetuned_v044](https://huggingfa
 flashcli-bundle.json
 run.py
 _pi05_compat.py
-lib/                       # *.so for this host (from runtime/<env-key>/)
 flash_rt/
+runtime/<env-key>/         # *.so for this host
 ```
 
 Weights are downloaded by flashcli to `~/.flashcli/models/pi05_libero/checkpoint/`, not shipped in the bundle.
@@ -26,29 +26,6 @@ See **[QUICKSTART.md](QUICKSTART.md)** for copy-paste commands.
 curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
 flashcli run pi05_libero --prompt "..." --image /path/to/base.jpg
 ```
-
-See **[QUICKSTART.md](QUICKSTART.md)** for copy-paste commands.
-
-## Maintainers: release bundle
-
-Full step-by-step guide: **[docs/bundle_builder_guide.md](../../docs/bundle_builder_guide.md)** (mirrors, local build, matrix release, FlashHub upload).
-
-**Supported GPU**: **SM89 only** (Ada, e.g. RTX 4090).
-
-```bash
-cd flashcli
-pip install -e ./flashcli-bundle -e .
-bash scripts/release_bundle.sh --bundle pi05_libero --clean
-```
-
-Matrix: **sm89 × cu124/cu130 × py312** (`release-matrix.env`). Local single-env dev:
-
-```bash
-bash bundles/pi05_libero/build.sh --repo-root /path/to/FlashRT
-flashcli bundle validate bundles/pi05_libero
-```
-
-FA2 build strategy: [docs/runtime-matrix.md](../../docs/runtime-matrix.md).
 
 ## Troubleshooting
 

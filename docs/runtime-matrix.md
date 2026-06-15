@@ -2,7 +2,9 @@
 
 <p align="right"><strong>English</strong> · <a href="runtime-matrix.zh-CN.md">简体中文</a></p>
 
-How maintainers build **multi CUDA / SM native artifacts** and publish via **FlashHub**. End users run `flashcli bundle sync`; flashcli downloads the bundle tree plus **only** this host’s `runtime/<env-key>/` — not a monolithic zip of every environment.
+> **Internal maintainer doc** — index from [CONTRIBUTING.md](../CONTRIBUTING.md) only; not listed in public README / `docs/README.md`.
+
+How maintainers build **multi CUDA / SM native artifacts** and publish via **FlashHub**.
 
 ## Overview
 
@@ -28,7 +30,7 @@ dist/
     ...
 ```
 
-At runtime, matching `.so` files are installed under `lib/` in the cached bundle root.
+At runtime, flashcli loads matching `.so` files directly from `runtime/<env-key>/` in the cached bundle root (no copy to `lib/`).
 
 Each catalog preset has one **`bundle.repo`** in [`models.yaml`](../src/flashcli/catalog/models.yaml) (`schema_version: 7`) — a semantic FlashHub URL.
 
@@ -99,7 +101,7 @@ Host key example: `sm120-cu130-linux-x86_64-py312`.
 | Stage | Behavior |
 |-------|----------|
 | `flashcli bundle sync` | FlashHub API → manifest → preflight → source tree + this env’s `runtime/` |
-| `flashcli run` | bundle venv installs torch → load `lib/*.so` → weights → `entry` |
+| `flashcli run` | bundle venv installs torch → load `runtime/<env-key>/*.so` → weights → `entry` |
 
 Do not use a system Python that mismatches manifest `python_abi`.
 
@@ -112,3 +114,5 @@ flashcli run pi05_libero \
 ```
 
 Catalog and bundle format: [model_bundle_standard.md](model_bundle_standard.md).
+
+Local dev trees need `.so` under the manifest’s `runtime/<env-key>/` (`build.sh` → `lib/`, then stage to `runtime/`; see bundle QUICKSTART).

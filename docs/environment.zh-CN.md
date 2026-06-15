@@ -33,7 +33,7 @@ flashcli models list
 | （自动） | — | 无 `nvcc` 时从 `nvidia-smi` 横幅 `CUDA Version: 13.0` 推断 `130`；SM89 不再默认 `124`。 |
 | `PIP_INDEX_URL` / `PIP_TRUSTED_HOST` | （自动） | PyPI 镜像；`flashcli run` 安装 bundle 依赖时会传给 pip（mirror 模式见下方行为开关）。 |
 
-`flashcli run` 会按 **sm + cuda + os + arch + Python** 在 bundle `lib/` 里自动选 `.so`；若 `libcublas.so.12` 缺失而驱动为 CUDA 13，请更新 flashcli 或设 `export FLASHCLI_CUDA_TAG=130`。
+`flashcli run` 会按 **sm + cuda + os + arch + Python** 从 bundle 的 `runtime/<env-key>/` 加载 `.so`；若 `libcublas.so.12` 缺失而驱动为 CUDA 13，请更新 flashcli 或设 `export FLASHCLI_CUDA_TAG=130`。
 
 ## 下载与 Hugging Face
 
@@ -83,19 +83,7 @@ Bundle 的 Python 依赖（torch 等）由 `activate_bundle` 按 `flashcli-bundl
 
 ## 主机 CLI 与 bundle infer
 
-完整说明见 [architecture.zh-CN.md](architecture.zh-CN.md#主机-cli-与-bundle-infer必读)。摘要：
-
-| 阶段 | Python | flashcli 包 |
-|------|--------|-------------|
-| `pull`、`bundle sync`、主机 `doctor` | 主机 venv（`~/.flashcli/venv`） | 正常从主机安装 import |
-| `run` / `serve`（re-exec 之后） | bundle venv（`runtimes/<id>/venv/`） | 经 `PYTHONPATH` 指向主机安装（`src/` 或 site-packages） |
-| torch / transformers 等 | bundle venv | manifest 的 `python_dependencies` |
-| infer 用的 typer、pyyaml、fastapi 等 | bundle venv（缺失时） | 仅 `ensure_bundle_infer_deps()` — **绝不**在此 `pip install flashcli` |
-
-**两层 `PYTHONPATH`：**
-
-1. **Re-exec**（`runtime/reexec.py`）：prepend 主机 flashcli，使 bundle venv 能 `python -m flashcli.runtime.infer`。
-2. **Activate**（`bundle/activate.py`）：prepend bundle 根目录，使 infer 内能 `import entry` / `flash_rt`。
+见 [architecture.zh-CN.md](architecture.zh-CN.md#主机-cli-与-bundle-infer必读)。**不要**在 bundle venv 内 `pip install flashcli`。
 
 ## 模型与 preset 相关
 
@@ -125,5 +113,5 @@ Bundle 的 Python 依赖（torch 等）由 `activate_bundle` 按 `flashcli-bundl
 ## 相关文档
 
 - [README.zh-CN.md](../README.zh-CN.md) — 快速开始与本机缓存路径
-- [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) — catalog 与 `flashcli-bundle.json`
+- [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) — catalog + 运行时流程
 - [src/flashcli/catalog/models.yaml](../src/flashcli/catalog/models.yaml) — preset catalog 唯一源文件

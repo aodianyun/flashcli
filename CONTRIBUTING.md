@@ -18,14 +18,14 @@ flashcli/
 ├── src/flashcli/           # CLI, catalog, bundle loader (no model forward passes)
 ├── bundles/                  # Model bundle sources + release-matrix.env
 ├── scripts/                  # Shared release pipeline
-└── docs/                     # Public documentation
+└── docs/                     # User-facing documentation (maintainer docs: see CONTRIBUTING)
 
 FlashRT/                      # Sibling clone — inference kernels (build input only)
 ```
 
 flashcli **distributes and loads** Model Bundles; inference lives in bundle `entry` modules and FlashRT.
 
-See [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md), [docs/runtime-matrix.md](docs/runtime-matrix.md), and [docs/model_bundle_standard.md](docs/model_bundle_standard.md) for the full build/release workflow.
+**Maintainers:** build/release workflow → [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md) · [docs/bundle_builder_guide.zh-CN.md](docs/bundle_builder_guide.zh-CN.md) · [docs/runtime-matrix.md](docs/runtime-matrix.md) (linked from this file only).
 
 ## Development setup
 
@@ -58,7 +58,7 @@ pytest tests/
 1. Copy structure from `bundles/pi05_libero/` or `bundles/qwen_nvfp4/`.
 2. Add `flashcli-bundle.json` (format_version 3, **protocol_version 1**), `entry` modules, `release-matrix.env`, `_bundle_build.sh`.
 3. Declare bundle CLI flags in manifest **`run_options`** / **`serve_options`**. Entry modules import protocol/helpers from **`flashcli_bundle`** (installed via git `flashcli-bundle` subdirectory or `pip install -e ./flashcli-bundle`), not from the full `flashcli` CLI package.
-4. Follow [docs/model_bundle_standard.md](docs/model_bundle_standard.md).
+4. Follow [docs/bundle_publish_standard.md](docs/bundle_publish_standard.md) (manifest / entry spec).
 5. Build on **Linux + NVIDIA GPU** (see release checklist below).
 6. `flashcli bundle validate bundles/<name>`
 7. Smoke-test `flashcli run PRESET --help`, `flashcli run` / `flashcli serve` as applicable.
@@ -67,73 +67,15 @@ pytest tests/
 
 ## Release bundle checklist (maintainers)
 
-Use this before uploading a new version to FlashHub and updating `models.yaml`.
+**Full steps:** [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md) (English summary) · [docs/bundle_builder_guide.zh-CN.md](docs/bundle_builder_guide.zh-CN.md) (complete, 中文) · matrix reference [docs/runtime-matrix.md](docs/runtime-matrix.md).
 
-### Prerequisites
+Before updating [`models.yaml`](src/flashcli/catalog/models.yaml) `bundle.repo`:
 
-- Linux x86_64 host with Docker + NVIDIA GPU (or `--native` with correct CUDA toolkits on host)
-- Sufficient disk for matrix builds and Docker images
-- Workspace layout:
+- [ ] `bash scripts/release_bundle.sh --bundle <name> --clean` → upload `dist/` to FlashHub
+- [ ] `flashcli bundle validate bundles/<name>` and smoke `run` / `serve` on target GPU
+- [ ] Qwen: both presets share the same `bundle.repo`; differ by `bundle_variant` only
 
-```text
-workspace/
-├── flashcli/
-└── FlashRT/          # auto-cloned by release_bundle.sh if missing
-```
-
-### Build
-
-```bash
-cd flashcli
-
-# Pi0.5 — sm89 × cu124 + cu130 × py312
-bash scripts/release_bundle.sh --bundle pi05_libero --clean
-
-# Qwen NVFP4 — sm120 × cu130 only × py312
-bash scripts/release_bundle.sh --bundle qwen_nvfp4 --clean
-```
-
-Optional background run with log:
-
-```bash
-bash scripts/run_bg.sh --name release-pi05 -- \
-  bash scripts/release_bundle.sh --bundle pi05_libero --clean
-bash scripts/run_bg.sh --name release-pi05 --tail
-```
-
-Expected output under `bundles/<name>/dist/`:
-
-```text
-flashcli-bundle.json, run.py, flash_rt/, ...
-runtime/<env-key>/*.so
-```
-
-Details: [docs/runtime-matrix.md](docs/runtime-matrix.md).
-
-### Validate before publish
-
-- [ ] `protocol_version` matches installed `flashcli-bundle`
-- [ ] `flashcli bundle validate bundles/<name>` passes (includes `run_options` / `serve_options` layout)
-- [ ] `flashcli run <preset> --help` / `flashcli serve <preset> --help` show expected bundle flags
-- [ ] `dist/runtime/` contains all env keys declared in manifest
-- [ ] `dist/` has no dev artifacts (`build.sh`, README, … — see `RELEASE_PACK_FILES`)
-- [ ] `flashcli models envs <preset>` matches expected host keys on target GPUs
-- [ ] Smoke `flashcli run` / `flashcli serve` on at least one matrix cell
-- [ ] Upload `dist/` to FlashHub; update `models.yaml` → `bundle.repo` version URL
-- [ ] For qwen: both presets share the **same** `bundle.repo`; differ by `bundle_variant`
-
-Example repo URL (match [`models.yaml`](../src/flashcli/catalog/models.yaml)):
-
-```text
-https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3
-```
-
-### Known matrix constraints
-
-| Bundle | Note |
-|--------|------|
-| `pi05_libero` | **SM89 only**; cu124 FA2 is sm_89 AOT; cu130 FA2 multi-arch. No SM120 runtime cells. |
-| `qwen_nvfp4` | **No cu124 line** — SM120/NVFP4 requires nvcc ≥ 12.8 (use `25.10-py3` container). |
+Matrix constraints: pi05 **SM89 only**; qwen **cu130 / SM120 only** — see runtime-matrix doc.
 
 ## Reporting issues
 

@@ -3,7 +3,7 @@
 <p align="right"><a href="QUICKSTART.md">English</a></p>
 
 **环境**：Linux · NVIDIA **SM120** · CUDA **13.x** · Python **3.12**（bundle venv；主机 CLI 3.10+）  
-**Preset**：`qwen3-8b-nvfp4` / `qwen36-27b-nvfp4`（共用同一 runtime zip，`bundle_variant` 区分权重）
+**Preset**：`qwen3-8b-nvfp4` / `qwen36-27b-nvfp4`（共用同一 FlashHub repo，`bundle_variant` 区分权重）
 
 ```bash
 cd /path/to/flashcli
@@ -15,15 +15,18 @@ export BUNDLE="$(pwd)/bundles/qwen_nvfp4"   # 本地 dev；省略则走 FlashHub
 
 ## 1. 本地 bundle 编译（dev 必做）
 
-FlashHub sync 后 `lib/` 已含本机 env 的 `.so`；本地源码树需先编译：
+FlashHub sync 后 `.so` 在 `runtime/<env-key>/`。本地 `build.sh` 先产出到 `lib/`，需 staging 到对应 runtime 目录再 validate/run：
 
 ```bash
 export FLASHRT_REPO=/path/to/FlashRT
 bash bundles/qwen_nvfp4/build.sh --repo-root "$FLASHRT_REPO" -j "$(nproc)"
+ENV_KEY="$(python3 -c "import json; print(next(iter(json.load(open('bundles/qwen_nvfp4/flashcli-bundle.json'))['runtime'])))")"
+mkdir -p "bundles/qwen_nvfp4/${ENV_KEY}"
+cp bundles/qwen_nvfp4/lib/*.so "bundles/qwen_nvfp4/${ENV_KEY}/"
 flashcli bundle validate "$BUNDLE"
 ```
 
-缺 `lib/flash_rt_kernels*.so` 时 serve 会报 `ImportError: flash_rt_kernels`。
+缺 `runtime/<env-key>/flash_rt_kernels*.so` 时 serve 会报 `ImportError: flash_rt_kernels`。
 
 ---
 
@@ -122,9 +125,7 @@ QWEN36_MAX_SEQ=262208 QWEN36_PORT=8000 \
 
 | 现象 | 处理 |
 |------|------|
-| `ImportError: flash_rt_kernels` | 未编译 bundle 或 `lib/` 与当前 SM/CUDA/Python 不匹配 |
+| `ImportError: flash_rt_kernels` | 未编译或未 staging；确认 `runtime/<env-key>/` 含本机 SM/CUDA/Python 的 `.so` |
 | `max_tokens must be <= N` | 提高 `--max-output-tokens`，或减小请求里的 `max_tokens` |
 | 首次请求很慢 | 新 `(prompt_len, max_tokens)` 触发 CUDA Graph capture；第二次通常快很多 |
 | FlashHub runtime 过旧 | 用 `--bundle bundles/qwen_nvfp4` 指向本地 rebuild 产物 |
-
-维护者发布：`bash scripts/release_bundle.sh --bundle qwen_nvfp4 --clean` → 上传 `dist/` 到 FlashHub → 更新两个 preset 的 `bundle.repo`。

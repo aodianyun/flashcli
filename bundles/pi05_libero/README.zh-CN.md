@@ -4,7 +4,7 @@
 
 Pi0.5 LIBERO VLA，权重 [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044)。
 
-**对外 preset**：`pi05_libero`（[`src/flashcli/catalog/models.yaml`](../../src/flashcli/catalog/models.yaml)）。用户通过 FlashHub `bundle.repo` sync runtime；flashcli 按本机 GPU + CUDA 匹配 manifest 中的 `runtime` env key，并将 `.so` 装入 `lib/`。可用 `flashcli models envs pi05_libero` 查看本机环境键是否匹配。
+**对外 preset**：`pi05_libero`（[`src/flashcli/catalog/models.yaml`](../../src/flashcli/catalog/models.yaml)）。用户通过 FlashHub `bundle.repo` sync runtime；flashcli 按本机 GPU + CUDA 匹配 manifest 中的 `runtime` env key，并从 `runtime/<env-key>/` 加载 `.so`。可用 `flashcli models envs pi05_libero` 查看本机环境键是否匹配。
 
 ## 运行所需文件（sync 后 bundle 根）
 
@@ -12,8 +12,8 @@ Pi0.5 LIBERO VLA，权重 [lerobot/pi05_libero_finetuned_v044](https://huggingfa
 flashcli-bundle.json
 run.py
 _pi05_compat.py
-lib/                       # 本机 env 的 *.so（来自 runtime/<env-key>/）
 flash_rt/
+runtime/<env-key>/         # 本机 env 的 *.so
 ```
 
 权重由 flashcli 下载到 `~/.flashcli/models/pi05_libero/checkpoint/`，**不**打进 bundle。
@@ -27,32 +27,11 @@ curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh 
 flashcli run pi05_libero --prompt "..." --image /path/to/base.jpg
 ```
 
-## 维护者：发布 bundle
-
-完整逐步说明见 **[docs/bundle_builder_guide.zh-CN.md](../../docs/bundle_builder_guide.zh-CN.md)**（镜像安装、本地 build、矩阵发布、FlashHub 上传）。
-
-**支持 GPU**：**仅 SM89**（Ada，如 RTX 4090）。
-
-```bash
-cd flashcli
-pip install -e ./flashcli-bundle -e .
-bash scripts/release_bundle.sh --bundle pi05_libero --clean
-```
-
-矩阵：**sm89 × cu124/cu130 × py312**（见 `release-matrix.env`）。本地单环境：
-
-```bash
-bash bundles/pi05_libero/build.sh --repo-root /path/to/FlashRT
-flashcli bundle validate bundles/pi05_libero
-```
-
-FA2 编译策略见 [docs/runtime-matrix.zh-CN.md](../../docs/runtime-matrix.zh-CN.md)。
-
 ## 排错
 
 ### HuggingFace 权重下载失败（`LocalEntryNotFoundError`）
 
-bundle zip 只含 runtime；约 7.5GB 权重需从 Hub 拉取。K8s/内网若无法访问 `huggingface.co` 与 `hf-mirror.com`，会报此错误（多为网络/DNS/代理，而非仓库不存在）。
+bundle 仅含 runtime；约 7.5GB 权重需从 Hub 拉取。K8s/内网若无法访问 `huggingface.co` 与 `hf-mirror.com`，会报此错误（多为网络/DNS/代理，而非仓库不存在）。
 
 flashcli 下载权重与官方 CLI 相同：设置 `HF_ENDPOINT` 后调用 `hf download`（或 `huggingface-cli download`）。**请先** `export HF_ENDPOINT=https://hf-mirror.com`，再执行 `flashcli pull/run`。
 

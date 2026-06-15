@@ -61,7 +61,7 @@ Qwen3 and Qwen3.6 share **one** FlashHub repo; catalog `bundle_variant` selects 
 | **2026-06** | Production-grade **Qwen3.6 chat serving** — faster real-world replies (early stop on end-of-text), true streaming, longer outputs, and a lighter install path for HTTP + inference |
 | **2026-05** | **Qwen NVFP4 on Blackwell (SM120)** joins the catalog with one-command `run` and OpenAI-compatible `serve`; reproducible multi-GPU release bundles |
 
-Full history: `git log`. Release checklist: [CONTRIBUTING.md](CONTRIBUTING.md).
+Full history: `git log`.
 
 ---
 
@@ -155,7 +155,7 @@ Step-by-step per bundle: **[qwen_nvfp4 QUICKSTART](bundles/qwen_nvfp4/QUICKSTART
 | `qwen3-8b-nvfp4` | [kaitchup/Qwen3-8B-NVFP4](https://huggingface.co/kaitchup/Qwen3-8B-NVFP4) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md) |
 | `qwen36-27b-nvfp4` | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4) + [MTP](https://huggingface.co/Qwen/Qwen3.6-27B-FP8) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md) |
 
-Catalog source: [`src/flashcli/catalog/models.yaml`](src/flashcli/catalog/models.yaml). Bundle spec: [docs/bundle_publish_standard.md](docs/bundle_publish_standard.md) · summary [docs/model_bundle_standard.md](docs/model_bundle_standard.md).
+Catalog source: [`src/flashcli/catalog/models.yaml`](src/flashcli/catalog/models.yaml).
 
 ---
 
@@ -200,7 +200,7 @@ run/serve:
 | Path | Contents |
 |------|----------|
 | `~/.flashcli/venv/` | Host CLI (single flashcli install) |
-| `~/.flashcli/runtimes/<id>/` | Synced bundle root, `lib/`, and bundle venv |
+| `~/.flashcli/runtimes/<id>/` | Synced bundle root (`runtime/<env-key>/`, entry tree), bundle venv |
 | `~/.flashcli/models/<preset>/checkpoint/` | Model weights |
 | `~/.cache/flash_rt/` | Pi0.5 PaliGemma tokenizer (post-pull) |
 
@@ -210,23 +210,18 @@ Environment variables: [docs/environment.md](docs/environment.md) (`FLASHCLI_HOM
 
 ## Documentation
 
-| Document | Audience |
-|----------|----------|
-| **[docs/bundle_builder_guide.md](docs/bundle_builder_guide.md)** | **Bundle builders** — mirrors, step-by-step build & release |
-| [docs/README.md](docs/README.md) | Full doc index |
-| [docs/environment.md](docs/environment.md) | Install flags, env vars, mirrors |
-| [docs/runtime-matrix.md](docs/runtime-matrix.md) | Native matrix & release builds |
-| **[docs/bundle_publish_standard.md](docs/bundle_publish_standard.md)** | External bundle authors — full manifest / entry spec |
-| **[docs/bundle_builder_guide.md](docs/bundle_builder_guide.md)** | Bundle builders — build & release |
-| [docs/model_bundle_standard.md](docs/model_bundle_standard.md) | Catalog + runtime flow summary |
-| [docs/architecture.md](docs/architecture.md) | Modules & data flow |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Contribute & release checklist |
-| [FlashRT](https://github.com/flashrt-ai/FlashRT) | Kernels, precision, model docs |
+| Role | Read in order |
+|------|----------------|
+| **End user** | This README → [pi05_libero QUICKSTART](bundles/pi05_libero/QUICKSTART.md) or [qwen_nvfp4 QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md) → [environment.md](docs/environment.md) |
+| **Catalog integrator** | [`models.yaml`](src/flashcli/catalog/models.yaml) → [model_bundle_standard.md](docs/model_bundle_standard.md) |
+| **Bundle author** | [bundle_publish_standard.md](docs/bundle_publish_standard.md) → [flashcli-bundle/README.md](flashcli-bundle/README.md) |
+
+How host CLI, bundle venv, and FlashHub sync work: [architecture.md](docs/architecture.md). Full index: [docs/README.md](docs/README.md).
 
 ---
 
 ## Contributing & license
 
-Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). For bundle maintainers: `bash scripts/release_bundle.sh --bundle <name> --clean`.
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 **License**: Apache-2.0 ([`pyproject.toml`](pyproject.toml))

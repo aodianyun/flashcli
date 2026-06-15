@@ -24,9 +24,14 @@ flashcli models envs pi05_libero
 
 ## 1. 本地 bundle 编译（dev）
 
+`build.sh` 先将 `.so` 产出到 `lib/`；validate/run 前需复制到 manifest 里对应的 `runtime/<env-key>/`：
+
 ```bash
 export FLASHRT_REPO=/path/to/FlashRT
 bash bundles/pi05_libero/build.sh --repo-root "$FLASHRT_REPO" -j "$(nproc)"
+ENV_KEY="$(python3 -c "import json; print(next(iter(json.load(open('bundles/pi05_libero/flashcli-bundle.json'))['runtime'])))")"
+mkdir -p "bundles/pi05_libero/${ENV_KEY}"
+cp bundles/pi05_libero/lib/*.so "bundles/pi05_libero/${ENV_KEY}/"
 flashcli bundle validate "$BUNDLE"
 ```
 
@@ -86,10 +91,3 @@ flashcli run pi05_libero --bundle "$BUNDLE" \
 | `no kernel image...` | GPU/CUDA 格不匹配；在 SM89 上执行 `flashcli models envs pi05_libero` |
 | `'GemmRunner'... fp8_nt_dev` | 更新 FlashRT 并重编，或 bundle 内 `_pi05_compat.py` shim |
 | `FvkContext is already registered` | 升级 flashcli |
-
-维护者发布：
-
-```bash
-bash scripts/release_bundle.sh --bundle pi05_libero --clean
-# → 上传 dist/ 到 FlashHub → 更新 models.yaml 中 pi05_libero.bundle.repo
-```

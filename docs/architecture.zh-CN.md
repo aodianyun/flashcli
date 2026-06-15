@@ -92,7 +92,7 @@ sequenceDiagram
 ~/.flashcli/
 ├── venv/                    # 主机 CLI（flashcli 只装此处）
 ├── python/                  # 可选：standalone Python，供 bundle venv 使用
-├── runtimes/<id>/           # bundle 根 + lib/ + venv/
+├── runtimes/<id>/           # sync 后的 bundle 根 + bundle venv
 ├── cache/repo-index/        # FlashHub listing 缓存
 └── models/<preset>/checkpoint/
 ```
@@ -103,8 +103,8 @@ sequenceDiagram
 {bundle_root}/
 ├── flashcli-bundle.json
 ├── run.py
-├── lib/                       # 本机 env 的 *.so
-└── flash_rt/
+├── flash_rt/
+└── runtime/<env-key>/       # 本机 native *.so（就地加载，不拷贝到 lib/）
 ```
 
 详见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
@@ -140,5 +140,5 @@ sequenceDiagram
 
 ## 相关文档
 
-- [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) — 包格式与 catalog
-- [runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md) — 发布矩阵与 FlashHub 上传
+- [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) — catalog + 运行时流程
+- [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) — manifest 与 entry 规范

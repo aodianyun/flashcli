@@ -398,6 +398,5 @@ flash_rt_fp4-v1.2.0-sm120-cu130-linux-x86_64-py312.so
 | 文档 | 内容 |
 |------|------|
 | [bundle_publish_standard.md](bundle_publish_standard.md) | 英文版 |
-| [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | 与本文互补的运行时流程摘要 |
+| [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | catalog 字段 + 终端用户运行时流程 |
 | [flashcli-bundle/README.md](../flashcli-bundle/README.md) | `flashcli_bundle` Python API |
-| [bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md) | 内部：编译、打包、CI、flashcli 命令 |

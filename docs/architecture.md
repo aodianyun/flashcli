@@ -92,7 +92,7 @@ sequenceDiagram
 ~/.flashcli/
 ├── venv/                    # host CLI (flashcli installed once)
 ├── python/                  # optional standalone Pythons for bundle venv base
-├── runtimes/<id>/           # bundle root + lib/ + venv/
+├── runtimes/<id>/           # synced bundle root + bundle venv
 ├── cache/repo-index/        # FlashHub listing cache
 └── models/<preset>/checkpoint/
 ```
@@ -103,8 +103,8 @@ sequenceDiagram
 {bundle_root}/
 ├── flashcli-bundle.json
 ├── run.py
-├── lib/                       # *.so for this host
-└── flash_rt/
+├── flash_rt/
+└── runtime/<env-key>/       # native *.so for this host (loaded in place)
 ```
 
 See [model_bundle_standard.md](model_bundle_standard.md).
@@ -140,5 +140,5 @@ Pinned URLs: [`models.yaml`](../src/flashcli/catalog/models.yaml).
 
 ## Related docs
 
-- [model_bundle_standard.md](model_bundle_standard.md) — bundle format and catalog
-- [runtime-matrix.md](runtime-matrix.md) — release matrix and FlashHub publish
+- [model_bundle_standard.md](model_bundle_standard.md) — catalog + runtime flow
+- [bundle_publish_standard.md](bundle_publish_standard.md) — manifest and entry spec

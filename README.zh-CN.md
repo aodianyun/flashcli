@@ -61,7 +61,7 @@ Qwen3 与 Qwen3.6 **共用** 同一 FlashHub repo；catalog 用 `bundle_variant`
 | **2026-06** | **Qwen3.6 对话服务**达到生产可用 — 回复更快（遇结束符即停）、真流式输出、更长单次生成，HTTP 与推理安装更省心 |
 | **2026-05** | **Blackwell（SM120）Qwen NVFP4** 入库 — 一条命令 `run` / OpenAI 兼容 `serve`；可复现的多环境发布包 |
 
-完整历史见 `git log`；发布 checklist：[CONTRIBUTING.md](CONTRIBUTING.md)。
+完整历史见 `git log`。
 
 ---
 
@@ -147,7 +147,7 @@ flashcli serve qwen36-27b-nvfp4 --bundle "$BUNDLE" --port 8000 --K 6 --max-seq 2
 | `qwen3-8b-nvfp4` | [kaitchup/Qwen3-8B-NVFP4](https://huggingface.co/kaitchup/Qwen3-8B-NVFP4) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) |
 | `qwen36-27b-nvfp4` | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4) + [MTP](https://huggingface.co/Qwen/Qwen3.6-27B-FP8) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) |
 
-Catalog 源文件：[`src/flashcli/catalog/models.yaml`](src/flashcli/catalog/models.yaml)。Bundle 规范：[docs/bundle_publish_standard.zh-CN.md](docs/bundle_publish_standard.zh-CN.md) · 摘要 [docs/model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md)。
+Catalog 源文件：[`src/flashcli/catalog/models.yaml`](src/flashcli/catalog/models.yaml)。
 
 ---
 
@@ -192,7 +192,7 @@ run/serve：
 | 路径 | 内容 |
 |------|------|
 | `~/.flashcli/venv/` | 主机 CLI（flashcli 唯一安装位置） |
-| `~/.flashcli/runtimes/<id>/` | sync 后的 bundle 根、`lib/`、bundle venv |
+| `~/.flashcli/runtimes/<id>/` | sync 后的 bundle 根（`runtime/<env-key>/`、entry 树）、bundle venv |
 | `~/.flashcli/models/<preset>/checkpoint/` | 模型权重 |
 | `~/.cache/flash_rt/` | Pi0.5 PaliGemma tokenizer |
 
@@ -202,23 +202,18 @@ run/serve：
 
 ## 文档
 
-| 文档 | 读者 |
-|------|------|
-| **[docs/bundle_builder_guide.zh-CN.md](docs/bundle_builder_guide.zh-CN.md)** | **Bundle 构建者**（镜像、逐步 build、发布） |
-| [docs/README.zh-CN.md](docs/README.zh-CN.md) | 文档索引 |
-| [docs/environment.zh-CN.md](docs/environment.zh-CN.md) | 安装参数、环境变量、镜像 |
-| [docs/runtime-matrix.zh-CN.md](docs/runtime-matrix.zh-CN.md) | Native 矩阵与发布构建 |
-| **[docs/bundle_publish_standard.zh-CN.md](docs/bundle_publish_standard.zh-CN.md)** | manifest / entry 完整规范 |
-| **[docs/bundle_builder_guide.zh-CN.md](docs/bundle_builder_guide.zh-CN.md)** | Bundle 构建者 — 编译与发布 |
-| [docs/model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md) | catalog + 运行时流程摘要 |
-| [docs/architecture.zh-CN.md](docs/architecture.zh-CN.md) | 模块与数据流 |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献与发布 checklist |
-| [FlashRT](https://github.com/flashrt-ai/FlashRT) | 内核与模型文档 |
+| 角色 | 阅读顺序 |
+|------|----------|
+| **终端用户** | 本 README → [pi05_libero 快速上手](bundles/pi05_libero/QUICKSTART.zh-CN.md) 或 [qwen_nvfp4 快速上手](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) → [environment.zh-CN.md](docs/environment.zh-CN.md) |
+| **Catalog 集成方** | [`models.yaml`](src/flashcli/catalog/models.yaml) → [model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md) |
+| **Bundle 作者** | [bundle_publish_standard.zh-CN.md](docs/bundle_publish_standard.zh-CN.md) → [flashcli-bundle/README.md](flashcli-bundle/README.md) |
+
+主机 CLI、bundle venv、FlashHub sync 原理：[architecture.zh-CN.md](docs/architecture.zh-CN.md)。完整索引：[docs/README.zh-CN.md](docs/README.zh-CN.md)。
 
 ---
 
 ## 贡献与许可
 
-欢迎贡献 — 见 [CONTRIBUTING.md](CONTRIBUTING.md)。Bundle 维护者：`bash scripts/release_bundle.sh --bundle <name> --clean`。
+欢迎贡献 — 见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 **许可证**：Apache-2.0（[`pyproject.toml`](pyproject.toml)）

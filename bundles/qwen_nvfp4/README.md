@@ -6,26 +6,12 @@ One **SM120 NVFP4** FlashHub repo; catalog presets select weights via `bundle_va
 
 ## Layout
 
-`format_version: 3` manifest with `runtime: { env_key: path }`. Native `.so` under `runtime/<env-key>/` on publish; after sync, installed to `lib/`. Matrix: **sm120 × cu130 × py312**. Weights are **not** in the bundle — pulled from Hugging Face per preset.
+`format_version: 3` manifest with `runtime: { env_key: path }`. Native `.so` live under `runtime/<env-key>/` on FlashHub and after sync; flashcli loads them in place. Requires **SM120 × cu130 × Python 3.12** (bundle venv). Weights are **not** in the bundle — pulled from Hugging Face per preset.
 
 | variant | weights | MTP (qwen36 only) |
 |---------|---------|-------------------|
 | `qwen3` | [kaitchup/Qwen3-8B-NVFP4](https://huggingface.co/kaitchup/Qwen3-8B-NVFP4) | — |
 | `qwen36` | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4) | `mtp.safetensors` from [Qwen/Qwen3.6-27B-FP8](https://huggingface.co/Qwen/Qwen3.6-27B-FP8) |
-
-## Release build (maintainers)
-
-Full step-by-step guide: **[docs/bundle_builder_guide.md](../../docs/bundle_builder_guide.md)**.
-
-Requires **Linux + Docker + GPU** (default `nvcr.io/nvidia/pytorch:25.10-py3`) or `--native` with CUDA 13. Matrix: **sm120 × cu130 × py312**.
-
-```bash
-cd flashcli
-pip install -e ./flashcli-bundle -e .
-bash scripts/release_bundle.sh --bundle qwen_nvfp4 --clean
-```
-
-Upload `dist/` to FlashHub; update **both** Qwen presets in `models.yaml` with the same `bundle.repo` URL.
 
 ## Run
 

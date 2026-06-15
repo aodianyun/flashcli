@@ -2,7 +2,9 @@
 
 <p align="right"><a href="runtime-matrix.md">English</a> · <strong>简体中文</strong></p>
 
-维护者如何构建 **多 CUDA / SM 环境** 的原生制品，并通过 **FlashHub** 发布。终端用户通过 `bundle.repo` + `flashcli bundle sync` 拉取；**只下载本机 env 的 `runtime/<env-key>/`**，不再下载含全部 env 的单体 zip。
+> **内部维护者文档** — 仅从 [CONTRIBUTING.md](../CONTRIBUTING.md) 索引；不在对外 README / `docs/README` 中列出。
+
+维护者如何构建 **多 CUDA / SM 环境** 的原生制品，并通过 **FlashHub** 发布。
 
 ## 矩阵概览
 
@@ -29,7 +31,7 @@ dist/
       ...
 ```
 
-运行时 flashcli 将匹配 env 的 `.so` 安装到 bundle 根下的 `lib/`。
+运行时 flashcli 直接从缓存 bundle 根下的 `runtime/<env-key>/` 加载匹配 env 的 `.so`（不会拷贝到 `lib/`）。
 
 每个 preset 在 `models.yaml` 中一个 **`bundle.repo`**（`schema_version: 7`），指向 FlashHub 语义化 URL。
 
@@ -89,7 +91,7 @@ bash build.sh --repo-root "$FLASHRT_REPO"
 | 阶段 | 行为 |
 |------|------|
 | `flashcli bundle sync` | FlashHub API → manifest → preflight → 下载源码树 + 本 env `runtime/` |
-| `flashcli run` | bundle venv 装 torch → `lib/` 加载 `.so` → 权重 → `entry` |
+| `flashcli run` | bundle venv 装 torch → 从 `runtime/<env-key>/` 加载 `.so` → 权重 → `entry` |
 
 本机环境键示例：`sm89-cu124-linux-x86_64-py312`  
 查看匹配：`flashcli models envs pi05_libero`
@@ -104,7 +106,7 @@ flashcli run pi05_libero \
   --image /path/to.jpg
 ```
 
-本地 dev 树需含 `lib/` 或对应 `runtime/<env-key>/` 下的 `.so`。
+本地 dev 树需在 manifest 对应的 `runtime/<env-key>/` 下有 `.so`（`build.sh` 先产出到 `lib/`，再 staging 到 `runtime/`；见各 bundle QUICKSTART）。
 
 ---
 
