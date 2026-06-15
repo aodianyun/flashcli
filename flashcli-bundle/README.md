@@ -53,4 +53,4 @@ Manifest field:
 
 Must match `flashcli_bundle.version.PROTOCOL_VERSION` in the installed package.
 
-See [docs/bundle_builder_guide.md](../docs/bundle_builder_guide.md) (full build/release walkthrough) and [docs/model_bundle_standard.md](../docs/model_bundle_standard.md).
+See [docs/bundle_publish_standard.md](../docs/bundle_publish_standard.md) (external publish spec), [docs/bundle_builder_guide.md](../docs/bundle_builder_guide.md) (build/release), and [docs/model_bundle_standard.md](../docs/model_bundle_standard.md) (catalog + runtime flow summary).

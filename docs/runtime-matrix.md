@@ -44,7 +44,11 @@ Each catalog preset has one **`bundle.repo`** in [`models.yaml`](../src/flashcli
 2. Upload the full `dist/` tree to FlashHub
 3. Update `bundle.repo` version URL in `models.yaml`
 
-Example: `https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero/1.0.2`
+Example (see [`models.yaml`](../src/flashcli/catalog/models.yaml)):
+
+```text
+https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3
+```
 
 ## Shared release pipeline
 

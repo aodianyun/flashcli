@@ -14,7 +14,7 @@
 
 | 角色 | 目标 | 需要装什么 |
 |------|------|------------|
-| **Bundle 构建者** | 改 `run.py` / `flashcli-bundle.json`，编译 FlashRT，发布 zip | flashcli + flashcli-bundle（editable）+ FlashRT + Docker/GPU |
+| **Bundle 构建者** | 改 `run.py` / `flashcli-bundle.json`，编译 FlashRT，发布到 FlashHub | flashcli + flashcli-bundle（editable）+ FlashRT + Docker/GPU |
 | **终端用户** | `flashcli run <preset>` | `install.sh` / `auto_install.sh`（git 安装 flashcli-bundle + flashcli） |
 
 Bundle **entry 代码只 import `flashcli_bundle`**，不要 import `flashcli` CLI 包：
@@ -209,7 +209,6 @@ bash scripts/release_bundle.sh --bundle qwen_nvfp4 --clean
 | **4. 写入 `runtime/`** | 按 env key 分目录：`runtime/sm89-cu124-linux-x86_64-py312/` 等 | native 制品 |
 | **5. `pack_bundle.sh`** | 复制 entry、`flash_rt/`、刷新 manifest `runtime` map | `dist/` 源码树 |
 | **6. 校验** | ABI / layout / manifest options / protocol | 失败则 exit |
-| **7. 打 zip** | `dist/flashcli-bundle-<name>-*.zip` | 上传 FlashHub 用 |
 
 `--clean`：删除 `lib/`、`dist/`、`.build-matrix/` 等，避免脏缓存。
 
@@ -236,7 +235,7 @@ bundles/pi05_libero/dist/
 └── ...
 ```
 
-**不要**把 `build.sh`、`.build-matrix/`、开发 README 打进 zip（由 `RELEASE_PACK_FILES` 控制）。
+**不要**把 `build.sh`、`.build-matrix/`、开发 README 打进 `dist/`（由 `RELEASE_PACK_FILES` 控制）。
 
 ---
 
@@ -252,11 +251,11 @@ bundles/pi05_libero/dist/
 
 ## 8. 上传 FlashHub 与更新 catalog
 
-1. 将 **`dist/` 整个目录**（或 zip 解压后的等价树）上传到 FlashHub。
+1. 将 **`dist/` 整个目录**上传到 FlashHub。
 2. 获得语义化 URL，例如：
 
    ```text
-   https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero/1.0.3
+   https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3
    ```
 
 3. 编辑 `src/flashcli/catalog/models.yaml`：
@@ -265,7 +264,7 @@ bundles/pi05_libero/dist/
    pi05_libero:
      description: ...
      bundle:
-       repo: https://flashhub.../pi05_libero/1.0.3
+       repo: https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3
    ```
 
 4. Qwen 两个 preset **共用同一 `bundle.repo`**，用 `bundle_variant` 区分：
@@ -274,12 +273,12 @@ bundles/pi05_libero/dist/
    qwen3-8b-nvfp4:
      bundle_variant: qwen3
      bundle:
-       repo: https://flashhub.../qwen_nvfp4/1.0.x
+       repo: https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/qwen_nvfp4:1.0.1
 
    qwen36-27b-nvfp4:
      bundle_variant: qwen36
      bundle:
-       repo: https://flashhub.../qwen_nvfp4/1.0.x
+       repo: https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/qwen_nvfp4:1.0.1
    ```
 
 5. 用户侧：`install.sh` 更新 flashcli 后，自动从新 `bundle.repo` sync。

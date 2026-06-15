@@ -26,12 +26,12 @@ Weights are **not** in the bundle; declared in `weights` and cached under `~/.fl
 models:
   my-preset:
     bundle:
-      repo: https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/my_model/1.0.0
+      repo: https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/my_model:1.0.0
       # path: bundles/my_bundle   # local dev
     # bundle_variant: qwen3        # when several presets share one repo
 ```
 
-- **`bundle.repo`** — FlashHub semantic API (`/api/v1/repos/{org}/{model}/{version}`). Response includes `data.files[]` with `download_url`, `file_size`, `md5_hash`.
+- **`bundle.repo`** — FlashHub semantic API. Catalog uses `flashhub-api.aodianyun.com` with `model:version` (colon). Response includes `data.files[]` with `download_url`, `file_size`, `md5_hash`.
 - **`bundle.path`** — local bundle tree for development.
 - **`bundle_variant`** — when several presets share one repo (e.g. Qwen3 vs Qwen3.6 weights).
 
@@ -113,80 +113,7 @@ qwen36-27b-nvfp4:
 
 Variant block fields (typical): `description`, `weights`, `weights_dir`, `extra_weights`, `env`, `run_options`, `serve_options`.
 
-### Example — single preset (`pi05_libero`)
-
-SM89 only; `run` entry; top-level `run_options`:
-
-```json
-{
-  "format": "flashcli-model-bundle",
-  "format_version": 3,
-  "name": "pi05_libero",
-  "python_abi": "312",
-  "entry": { "run": { "module": "run", "attr": "RunEngine" } },
-  "python_dependencies": {
-    "torch": { "package": "torch", "index": "auto" },
-    "pip": ["numpy", "transformers<4.56", "pillow"]
-  },
-  "run_options": [
-    {
-      "name": "prompt",
-      "type": "string",
-      "default": "pick up the red block and place it in the tray",
-      "help": "Natural-language task instruction.",
-      "phase": "predict"
-    },
-    {
-      "name": "num_views",
-      "type": "integer",
-      "default": 2,
-      "help": "Number of camera views.",
-      "phase": "load"
-    }
-  ],
-  "weights": {
-    "source": "huggingface",
-    "repo": "lerobot/pi05_libero_finetuned_v044",
-    "revision": "main"
-  },
-  "runtime": {
-    "sm89-cu124-linux-x86_64-py312": "runtime/sm89-cu124-linux-x86_64-py312",
-    "sm89-cu130-linux-x86_64-py312": "runtime/sm89-cu130-linux-x86_64-py312"
-  }
-}
-```
-
-### Example — variants (`qwen_nvfp4`)
-
-SM120; `run` + `serve`; options under each variant:
-
-```json
-{
-  "format_version": 3,
-  "name": "qwen_nvfp4",
-  "default_variant": "qwen3",
-  "python_abi": "312",
-  "entry": {
-    "run": { "module": "run", "attr": "RunEngine" },
-    "serve": { "module": "serve", "attr": "ServeEngine" }
-  },
-  "variants": {
-    "qwen3": {
-      "weights": { "source": "huggingface", "repo": "kaitchup/Qwen3-8B-NVFP4" },
-      "run_options": [ { "name": "prompt", "default": "Hello!", "help": "…", "phase": "predict" } ],
-      "serve_options": [ { "name": "max_seq", "type": "integer", "default": 2048, "help": "…", "phase": "load" } ]
-    },
-    "qwen36": {
-      "weights": { "source": "huggingface", "repo": "prithivMLmods/Qwen3.6-27B-NVFP4" },
-      "run_options": [ { "name": "K", "type": "integer", "default": 4, "help": "MTP K", "phase": "load" } ],
-      "serve_options": [ { "name": "max_seq", "type": "integer", "default": 262208, "help": "…", "phase": "load" } ]
-    }
-  },
-  "runtime": {
-    "sm120-cu130-linux-x86_64-py312": "runtime/sm120-cu130-linux-x86_64-py312"
-  }
-}
-```
+Full manifest examples: [bundle_publish_standard.md](bundle_publish_standard.md) §3.8 and repo files `bundles/pi05_libero/flashcli-bundle.json`, `bundles/qwen_nvfp4/flashcli-bundle.json`.
 
 ## FlashHub publish
 
@@ -217,7 +144,7 @@ See [runtime-matrix.md](runtime-matrix.md), [environment.md](environment.md).
 ## `entry` contract
 
 - `entry.*.module` is relative to bundle root on `PYTHONPATH`.
-- Classes implement `RunEngine` / `ServeEngine` ([`engines/base.py`](../src/flashcli/engines/base.py)).
+- Classes implement `RunEngine` / `ServeEngine` from **`flashcli_bundle.protocol`** (see [flashcli-bundle/README.md](../flashcli-bundle/README.md)).
 - Read defaults via `run_option_defaults()` / `serve_option_defaults()` and `option_value()` from **`flashcli_bundle`** (pip package `flashcli-bundle`). Do **not** duplicate literal defaults in `run.py` / `serve.py`.
 - All inference logic stays inside the bundle.
 

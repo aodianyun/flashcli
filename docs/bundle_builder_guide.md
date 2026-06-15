@@ -79,12 +79,19 @@ bash scripts/release_bundle.sh --bundle pi05_libero --clean
 |-------|---------|
 | Read `release-matrix.env` | SM × CUDA × py312 matrix |
 | FlashRT clone/build | Native `.so` per env |
-| `runtime/<env-key>/` | Split native artifacts |
-| `pack_bundle.sh` | `dist/` source tree + refreshed manifest |
+| `runtime/<env-key>/` | Split native artifacts under `dist/` |
+| `pack_bundle.sh` | Bundle source tree + refreshed manifest |
 | Validate | layout, options, `protocol_version` |
-| Zip | Upload to FlashHub |
 
-Output: `bundles/<name>/dist/` → upload → set `models.yaml` → `bundle.repo`.
+Output: `bundles/<name>/dist/` → upload tree to FlashHub → set `models.yaml` → `bundle.repo`.
+
+Background run:
+
+```bash
+bash scripts/run_bg.sh --name release-pi05 -- \
+  bash scripts/release_bundle.sh --bundle pi05_libero --clean
+bash scripts/run_bg.sh --name release-pi05 --tail
+```
 
 ---
 
@@ -92,11 +99,27 @@ Output: `bundles/<name>/dist/` → upload → set `models.yaml` → `bundle.repo
 
 Required: `format_version: 3`, **`protocol_version: 1`**, `python_abi: "312"`, `run_options`/`serve_options`, `torch.index: "auto"`.
 
-See [model_bundle_standard.md](model_bundle_standard.md) and the [Chinese guide](bundle_builder_guide.zh-CN.md) for the full step-by-step walkthrough.
+Field reference: [bundle_publish_standard.md](bundle_publish_standard.md). Step-by-step (Chinese): [bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md).
 
 ---
 
-## 7. Related docs
+## 7. Pre-publish checklist
+
+- [ ] `flashcli bundle validate bundles/<name>` passes
+- [ ] `dist/runtime/` contains all env keys in manifest
+- [ ] `protocol_version` matches installed `flashcli-bundle`
+- [ ] Smoke `flashcli run` / `serve` on target GPU
+- [ ] Upload `dist/` to FlashHub; update `bundle.repo` in `models.yaml`
+
+Example repo URL:
+
+```text
+https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3
+```
+
+---
+
+## 8. Related docs
 
 - [bundle_publish_standard.md](bundle_publish_standard.md) — external publish standard (manifest, entry, `.so`, FlashHub)
 - [runtime-matrix.md](runtime-matrix.md) — matrix details  

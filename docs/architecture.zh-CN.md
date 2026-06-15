@@ -132,11 +132,13 @@ sequenceDiagram
 
 | Preset | 能力 | bundle 源 |
 |--------|------|-----------|
-| `pi05_libero` | `run` | FlashHub `…/pi05_libero/1.0.2` |
-| `qwen3-8b-nvfp4` | `run`, `serve` | 与 qwen36 共享 repo，`bundle_variant: qwen3` |
-| `qwen36-27b-nvfp4` | `run`, `serve` | 与 qwen3 共享 repo，`bundle_variant: qwen36` |
+| `pi05_libero` | `run` | FlashHub `…/pi05_libero:1.0.3` |
+| `qwen3-8b-nvfp4` | `run`, `serve` | 共享 repo `…/qwen_nvfp4:1.0.1`，`bundle_variant: qwen3` |
+| `qwen36-27b-nvfp4` | `run`, `serve` | 共享 repo `…/qwen_nvfp4:1.0.1`，`bundle_variant: qwen36` |
+
+固定 URL 见 [`models.yaml`](../src/flashcli/catalog/models.yaml)。
 
 ## 相关文档
 
 - [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) — 包格式与 catalog
-- [runtime-package-schemes.zh-CN.md](runtime-package-schemes.zh-CN.md) — 已实施的分包方案
+- [runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md) — 发布矩阵与 FlashHub 上传

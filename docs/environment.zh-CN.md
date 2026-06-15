@@ -10,8 +10,8 @@ flashcli 通过环境变量配置缓存路径、catalog、下载行为，以及�
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `FLASHCLI_HOME` | `~/.flashcli` | 缓存根目录。其下默认有 `bundles/`、`models/`、`cache/downloads/`。 |
-| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | 覆盖旧版 bundle 缓存目录（legacy；新 runtime 在 `runtimes/`）。 |
+| `FLASHCLI_HOME` | `~/.flashcli` | 缓存根目录。默认子目录：`runtimes/`、`models/`、`cache/`。旧版：`bundles/`（v3 之前的 zip 缓存）。 |
+| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | 旧版 bundle 缓存路径。新 sync 使用 `FLASHCLI_RUNTIMES_DIR` / `runtimes/`。 |
 | `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | 覆盖 Hugging Face 权重缓存根目录（各 preset 一般为 `<dir>/<preset>/checkpoint/`）。 |
 | `FLASHCLI_MODELS_YAML` | （内置） | **覆盖 preset catalog 文件路径**。默认使用安装包内 `flashcli/catalog/models.yaml`（pip wheel 与 editable 相同）。指向的文件必须存在。 |
 

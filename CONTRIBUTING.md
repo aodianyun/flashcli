@@ -122,10 +122,10 @@ Details: [docs/runtime-matrix.md](docs/runtime-matrix.md).
 - [ ] Upload `dist/` to FlashHub; update `models.yaml` → `bundle.repo` version URL
 - [ ] For qwen: both presets share the **same** `bundle.repo`; differ by `bundle_variant`
 
-Example repo URL:
+Example repo URL (match [`models.yaml`](../src/flashcli/catalog/models.yaml)):
 
 ```text
-https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero/1.0.2
+https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3
 ```
 
 ### Known matrix constraints

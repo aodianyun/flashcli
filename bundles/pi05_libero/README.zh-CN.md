@@ -82,7 +82,7 @@ flashcli run pi05_libero --bundle bundles/pi05_libero \
   --checkpoint ./checkpoint --image /path/to.jpg
 ```
 
-`--bundle` 应指向含 `flashcli-bundle.json` 的目录（如 `bundles/pi05_libero` 或解压后的 `dist/flashcli-bundle-pi05-*`），不是 zip 文件本身。
+`--bundle` 应指向含 `flashcli-bundle.json` 的目录（如 `bundles/pi05_libero` 或 `bundles/pi05_libero/dist/`）。
 
 ### `no kernel image is available for execution on the device`
 

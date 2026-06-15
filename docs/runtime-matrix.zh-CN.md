@@ -47,10 +47,10 @@ dist/
 2. 上传 `dist/` 整棵树到 FlashHub
 3. 更新 [`models.yaml`](../src/flashcli/catalog/models.yaml) 中 `bundle.repo` 版本 URL
 
-示例：
+示例（与 [`models.yaml`](../src/flashcli/catalog/models.yaml) 一致）：
 
 ```text
-https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero/1.0.2
+https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3
 ```
 
 ### FA2（pi05_libero）

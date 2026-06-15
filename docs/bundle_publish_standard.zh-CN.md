@@ -79,11 +79,11 @@ qwen_nvfp4/
 models:
   my-preset:
     bundle:
-      repo: https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/my_model/1.0.0
+      repo: https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/my_model:1.0.0
   qwen3-8b-nvfp4:
     bundle_variant: qwen3          # 对应 manifest variants.qwen3
     bundle:
-      repo: https://flashhub…/qwen_nvfp4/1.0.1
+      repo: https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/qwen_nvfp4:1.0.1
 ```
 
 - **`bundle.repo`**：FlashHub 仓库地址 URL。

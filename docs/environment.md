@@ -10,8 +10,8 @@ Boolean flags: `1`, `true`, or `yes` (case-insensitive) enable the switch.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FLASHCLI_HOME` | `~/.flashcli` | Cache root. Default subdirs: `bundles/`, `models/`, `cache/downloads/`. |
-| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | Legacy bundle cache override (new runtimes live under `runtimes/`). |
+| `FLASHCLI_HOME` | `~/.flashcli` | Cache root. Default subdirs: `runtimes/`, `models/`, `cache/`. Legacy: `bundles/` (pre-v3 zip cache). |
+| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | Legacy bundle cache override. New syncs use `FLASHCLI_RUNTIMES_DIR` / `runtimes/`. |
 | `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | Override Hugging Face weights cache root (per preset usually `<dir>/<preset>/checkpoint/`). |
 | `FLASHCLI_MODELS_YAML` | (bundled) | **Override path to the preset catalog file.** Default: `flashcli/catalog/models.yaml` inside the installed package (same for pip wheel and editable installs). File must exist. |
 

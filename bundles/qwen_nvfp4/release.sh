@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-command CDN release (see scripts/release_bundle.sh).
+# One-command FlashHub release (see scripts/release_bundle.sh).
 #
 #   bash release.sh
 #   bash release.sh --clean

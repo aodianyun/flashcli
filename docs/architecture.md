@@ -132,11 +132,13 @@ See [model_bundle_standard.md](model_bundle_standard.md).
 
 | Preset | capabilities | bundle source |
 |--------|--------------|---------------|
-| `pi05_libero` | `run` | FlashHub `…/pi05_libero/1.0.2` |
-| `qwen3-8b-nvfp4` | `run`, `serve` | shared repo with qwen36, `bundle_variant: qwen3` |
-| `qwen36-27b-nvfp4` | `run`, `serve` | shared repo with qwen3, `bundle_variant: qwen36` |
+| `pi05_libero` | `run` | FlashHub `…/pi05_libero:1.0.3` |
+| `qwen3-8b-nvfp4` | `run`, `serve` | shared repo `…/qwen_nvfp4:1.0.1`, `bundle_variant: qwen3` |
+| `qwen36-27b-nvfp4` | `run`, `serve` | shared repo `…/qwen_nvfp4:1.0.1`, `bundle_variant: qwen36` |
+
+Pinned URLs: [`models.yaml`](../src/flashcli/catalog/models.yaml).
 
 ## Related docs
 
 - [model_bundle_standard.md](model_bundle_standard.md) — bundle format and catalog
-- [runtime-package-schemes.md](runtime-package-schemes.md) — implemented split-download scheme
+- [runtime-matrix.md](runtime-matrix.md) — release matrix and FlashHub publish

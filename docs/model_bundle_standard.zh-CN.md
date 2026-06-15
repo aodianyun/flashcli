@@ -26,12 +26,12 @@
 models:
   my-preset:
     bundle:
-      repo: https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/my_model/1.0.0
+      repo: https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/my_model:1.0.0
       # path: bundles/my_bundle   # 本地开发
     # bundle_variant: qwen3        # 多 preset 共用同一 repo 时
 ```
 
-- **`bundle.repo`** — FlashHub 语义化 API，返回 `data.files[]`（`download_url`、`file_size`、`md5_hash`）。
+- **`bundle.repo`** — FlashHub 语义化 API。catalog 使用 `flashhub-api.aodianyun.com`，版本写为 `model:version`（冒号）。返回 `data.files[]`（`download_url`、`file_size`、`md5_hash`）。
 - **`bundle.path`** — 本地 bundle 目录（开发用）。
 - **`bundle_variant`** — 多 preset 共享同一 repo 时区分权重（如 Qwen3 / Qwen3.6）。
 
@@ -92,33 +92,7 @@ catalog 中多个 preset 指向同一 `bundle.repo`，用 `bundle_variant` 区�
 
 variant 块常见字段：`description`、`weights`、`weights_dir`、`extra_weights`、`env`、`run_options`、`serve_options`。
 
-### 示例 — 单 preset（pi05_libero）
-
-仅 SM89；只有 `run`；顶层 `run_options`：
-
-```json
-{
-  "format_version": 3,
-  "name": "pi05_libero",
-  "python_abi": "312",
-  "entry": { "run": { "module": "run", "attr": "RunEngine" } },
-  "python_dependencies": {
-    "torch": { "package": "torch", "index": "auto" }
-  },
-  "run_options": [
-    { "name": "prompt", "default": "…", "help": "…", "phase": "predict" },
-    { "name": "num_views", "type": "integer", "default": 2, "help": "…", "phase": "load" }
-  ],
-  "runtime": {
-    "sm89-cu124-linux-x86_64-py312": "runtime/sm89-cu124-linux-x86_64-py312",
-    "sm89-cu130-linux-x86_64-py312": "runtime/sm89-cu130-linux-x86_64-py312"
-  }
-}
-```
-
-### 示例 — variants（qwen_nvfp4）
-
-SM120；`run` + `serve`；options 写在各 variant 下（见仓库 `bundles/qwen_nvfp4/flashcli-bundle.json`）。
+完整 manifest 示例见 [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) §3.8 与仓库内 `bundles/pi05_libero/flashcli-bundle.json`、`bundles/qwen_nvfp4/flashcli-bundle.json`。
 
 ## FlashHub 发布
 

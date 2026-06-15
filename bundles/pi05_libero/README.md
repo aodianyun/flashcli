@@ -64,7 +64,7 @@ flashcli pull pi05_libero
 
 Pre-download on a reachable host, then `flashcli run pi05_libero --bundle bundles/pi05_libero --checkpoint ./checkpoint --image ...`.
 
-`--bundle` must be a directory containing `flashcli-bundle.json` (e.g. `bundles/pi05_libero` or an extracted `dist/flashcli-bundle-pi05-*` folder), not the `.zip` file.
+`--bundle` must be a directory containing `flashcli-bundle.json` (e.g. `bundles/pi05_libero` or `bundles/pi05_libero/dist/`), not a `.zip` archive.
 
 ### `no kernel image is available for execution on the device`
 

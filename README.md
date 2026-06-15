@@ -155,7 +155,7 @@ Step-by-step per bundle: **[qwen_nvfp4 QUICKSTART](bundles/qwen_nvfp4/QUICKSTART
 | `qwen3-8b-nvfp4` | [kaitchup/Qwen3-8B-NVFP4](https://huggingface.co/kaitchup/Qwen3-8B-NVFP4) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md) |
 | `qwen36-27b-nvfp4` | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4) + [MTP](https://huggingface.co/Qwen/Qwen3.6-27B-FP8) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md) |
 
-Catalog source: [`src/flashcli/catalog/models.yaml`](src/flashcli/catalog/models.yaml). Bundle format: [docs/model_bundle_standard.md](docs/model_bundle_standard.md).
+Catalog source: [`src/flashcli/catalog/models.yaml`](src/flashcli/catalog/models.yaml). Bundle spec: [docs/bundle_publish_standard.md](docs/bundle_publish_standard.md) · summary [docs/model_bundle_standard.md](docs/model_bundle_standard.md).
 
 ---
 
@@ -216,7 +216,9 @@ Environment variables: [docs/environment.md](docs/environment.md) (`FLASHCLI_HOM
 | [docs/README.md](docs/README.md) | Full doc index |
 | [docs/environment.md](docs/environment.md) | Install flags, env vars, mirrors |
 | [docs/runtime-matrix.md](docs/runtime-matrix.md) | Native matrix & release builds |
-| [docs/model_bundle_standard.md](docs/model_bundle_standard.md) | Bundle schema (authors) |
+| **[docs/bundle_publish_standard.md](docs/bundle_publish_standard.md)** | External bundle authors — full manifest / entry spec |
+| **[docs/bundle_builder_guide.md](docs/bundle_builder_guide.md)** | Bundle builders — build & release |
+| [docs/model_bundle_standard.md](docs/model_bundle_standard.md) | Catalog + runtime flow summary |
 | [docs/architecture.md](docs/architecture.md) | Modules & data flow |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribute & release checklist |
 | [FlashRT](https://github.com/flashrt-ai/FlashRT) | Kernels, precision, model docs |

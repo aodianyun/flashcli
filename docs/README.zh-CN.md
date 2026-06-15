@@ -6,7 +6,7 @@
 |------|------|
 | **[bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)** | **对外** Bundle 作者：manifest、entry、.so、FlashHub 目录 |
 | **[bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md)** | **Bundle 构建者（内部）**：镜像、逐步 build、发布 FlashHub |
-| [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | manifest 格式（`run_options`、variants、`protocol_version`） |
+| [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | catalog + 运行时流程摘要（字段细节见 publish standard） |
 | [runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md) | GPU/CUDA/Python 矩阵与 release 脚本 |
 | [architecture.zh-CN.md](architecture.zh-CN.md) | 主机 CLI、bundle venv、`flashcli-bundle` |
 | [environment.zh-CN.md](environment.zh-CN.md) | 环境变量 |

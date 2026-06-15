@@ -147,7 +147,7 @@ flashcli serve qwen36-27b-nvfp4 --bundle "$BUNDLE" --port 8000 --K 6 --max-seq 2
 | `qwen3-8b-nvfp4` | [kaitchup/Qwen3-8B-NVFP4](https://huggingface.co/kaitchup/Qwen3-8B-NVFP4) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) |
 | `qwen36-27b-nvfp4` | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4) + [MTP](https://huggingface.co/Qwen/Qwen3.6-27B-FP8) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) |
 
-Catalog 源文件：[`src/flashcli/catalog/models.yaml`](src/flashcli/catalog/models.yaml)。Bundle 规范：[docs/model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md)。
+Catalog 源文件：[`src/flashcli/catalog/models.yaml`](src/flashcli/catalog/models.yaml)。Bundle 规范：[docs/bundle_publish_standard.zh-CN.md](docs/bundle_publish_standard.zh-CN.md) · 摘要 [docs/model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md)。
 
 ---
 
@@ -208,7 +208,9 @@ run/serve：
 | [docs/README.zh-CN.md](docs/README.zh-CN.md) | 文档索引 |
 | [docs/environment.zh-CN.md](docs/environment.zh-CN.md) | 安装参数、环境变量、镜像 |
 | [docs/runtime-matrix.zh-CN.md](docs/runtime-matrix.zh-CN.md) | Native 矩阵与发布构建 |
-| [docs/model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md) | Bundle 规范 |
+| **[docs/bundle_publish_standard.zh-CN.md](docs/bundle_publish_standard.zh-CN.md)** | manifest / entry 完整规范 |
+| **[docs/bundle_builder_guide.zh-CN.md](docs/bundle_builder_guide.zh-CN.md)** | Bundle 构建者 — 编译与发布 |
+| [docs/model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md) | catalog + 运行时流程摘要 |
 | [docs/architecture.zh-CN.md](docs/architecture.zh-CN.md) | 模块与数据流 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献与发布 checklist |
 | [FlashRT](https://github.com/flashrt-ai/FlashRT) | 内核与模型文档 |
