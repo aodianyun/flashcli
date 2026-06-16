@@ -62,7 +62,11 @@ flashcli models list
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `FLASHCLI_SKIP_AUTO_INSTALL` | `0` | 设为 `1` 时，`flashcli run` / `serve` / `pull` **不**自动 pip 安装 flashcli 自身依赖（typer、huggingface_hub 等）。等价于命令行 `--no-auto-install`。 |
-| `FLASHCLI_USE_MIRROR` | `0` | 设为 `1` 或存在 `~/.flashcli/mirror.env` 时：PyPI/PyTorch 走阿里云、`hf-mirror.com`、bundle Python 下载走 GitHub 代理。`install.sh --mirror` 会写入。 |
+| `FLASHCLI_USE_MIRROR` | `0` | 设为 `1` 或存在 `~/.flashcli/mirror.env` 时：使用 `install.sh --mirror` 探测到的 PyPI 镜像、PyTorch 走阿里云、`hf-mirror.com`、bundle Python 下载走 GitHub 代理。 |
+| `FLASHCLI_PIP_MIRROR` | （无） | 固定 PyPI 镜像：`tuna`、`aliyun`、`tencent`、`ustc`、`huawei`（跳过探测）。同 `install.sh --pip-mirror`。 |
+| `FLASHCLI_PIP_MIRROR_PROBE` | `1` | 设为 `0` 时，`--mirror` 不做 wheel 下载探测（默认清华）。 |
+| `FLASHCLI_PIP_MIRROR_PROBE_TIMEOUT` | `10` | 每个镜像探测超时（秒）。 |
+| `FLASHCLI_PIP_MIRROR_PROBE_PACKAGE` | `packaging` | 探测时下载的 PEP 503 包名（真实 `.whl`）。 |
 | `FLASHCLI_NO_MIRROR` | `0` | 设为 `1` 时忽略 mirror 模式（即使存在 `mirror.env`）。 |
 | `FLASHCLI_GIT_PROXY` | （mirror 默认） | GitHub 发布包下载代理（如 `https://mirror.ghproxy.com/`）。`--mirror` 会设置；设为 `0` 关闭。 |
 | `FLASHCLI_PREFER_GITHUB_MIRROR` | `0` | 设为 `1` 时优先 GitHub 代理再直连（mirror 模式默认如此）。 |

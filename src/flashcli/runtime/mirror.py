@@ -11,8 +11,8 @@ from flashcli.config import FLASHCLI_HOME
 
 MIRROR_ENV_FILE = "mirror.env"
 
-MIRROR_PIP_INDEX_URL = "https://mirrors.aliyun.com/pypi/simple/"
-MIRROR_PIP_TRUSTED_HOST = "mirrors.aliyun.com"
+MIRROR_PIP_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple/"
+MIRROR_PIP_TRUSTED_HOST = "pypi.tuna.tsinghua.edu.cn"
 MIRROR_HF_ENDPOINT = "https://hf-mirror.com"
 MIRROR_TORCH_INDEX_BASE = "https://mirrors.aliyun.com/pytorch-wheels"
 DEFAULT_GIT_PROXY_PREFIX = "https://mirror.ghproxy.com/"
