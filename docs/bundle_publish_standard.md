@@ -357,10 +357,12 @@ Supported `module_base` values (longest prefix match first):
 
 | module_base | Required |
 |-------------|----------|
-| `flash_rt_kernels` | **yes** |
-| `flash_rt_fa2` | **yes** (FlashRT attention) |
+| `flash_rt_kernels` | as present in directory |
+| `flash_rt_fa2` | as present (FlashRT attention) |
 | `flash_rt_fp4` | as needed (NVFP4 / FP4 paths) |
 | `libfmha_fp16_strided` | as needed (extra FMHA in some bundles) |
+
+Each `runtime/<env-key>/` directory must contain **at least one** recognizable tagged `.so`. Which modules are required is determined by **files in that directory** (no duplicate manifest field needed).
 
 Examples:
 
@@ -375,7 +377,7 @@ At load time, pybind import names remain `flash_rt_kernels`, `flash_rt_fa2`, etc
 ### 5.4 Matrix publishing notes
 
 - Each supported `(SM, CUDA, python_abi)` combination gets **one** env key directory.
-- All env key directories in a bundle should expose the same set of `module_base` modules (e.g. kernels + fa2, optionally fp4).
+- Env key directories in a bundle **should** expose the same `module_base` set (e.g. kernels + fa2, or kernels only).
 - `python_abi` is a **single** value in the manifest; every env key’s `-py{PY}` suffix must match it.
 
 ---
@@ -385,7 +387,7 @@ At load time, pybind import names remain `flash_rt_kernels`, `flash_rt_fa2`, etc
 - [ ] `format_version: 3`, `protocol_version: 1`
 - [ ] `flashcli-bundle.json` at publish root
 - [ ] Every `entry.*.module` has a matching `{module}.py` and class name
-- [ ] Every `runtime` key has a directory with `flash_rt_kernels*.so` and `flash_rt_fa2*.so`
+- [ ] Every `runtime` key has a directory with **at least one** recognizable tagged native `.so`
 - [ ] No stray `.so` at bundle root or under `lib/`
 - [ ] `flash_rt/` Python tree present
 - [ ] With `variants`: no top-level `run_options` / `serve_options` / `weights`; each variant complete

@@ -14,6 +14,7 @@ from flashcli.bundle.python_install import bundle_python_root, load_python_env_f
 from flashcli.bundle.native_naming import (
     NATIVE_MODULE_BASES,
     ParsedNativeTag,
+    discover_native_module_bases,
     list_native_artifacts,
     logical_native_module_name,
     parse_native_tag_from_filename,
@@ -50,10 +51,8 @@ except ImportError as exc:
 
 
 def _required_module_bases(_bundle: BundleManifest, native_dir: Path) -> tuple[str, ...]:
-    bases: list[str] = ["flash_rt_kernels", "flash_rt_fa2"]
-    if any(native_dir.glob("flash_rt_fp4*.so")):
-        bases.append("flash_rt_fp4")
-    return tuple(bases)
+    """Modules declared by ``*.so`` files under ``runtime/<env-key>/``."""
+    return discover_native_module_bases(native_dir)
 
 
 def _find_artifact(
@@ -208,6 +207,12 @@ def _validate_runtime_cell(
 
     arts = list_native_artifacts(native_dir)
     required = _required_module_bases(bundle, native_dir)
+    if not required:
+        errors.append(
+            f"{rel}/ has no recognized native .so artifacts "
+            f"(expected tagged files such as flash_rt_kernels-*-{env_key}.so)"
+        )
+        return errors
 
     for path in sorted(native_dir.glob("*.so")):
         parsed = parse_native_tag_from_filename(path.name)

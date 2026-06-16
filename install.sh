@@ -18,6 +18,9 @@
 # Optional env:
 #   FLASHCLI_INSTALL_REPO / FLASHCLI_INSTALL_REF   (default: main @ GitHub)
 #   FLASHCLI_USE_MIRROR=1   China-friendly mirrors: pip/HF/git + apt/yum/dnf/apk (root)
+#   FLASHCLI_PIP_MIRROR=tuna     Pin PyPI mirror (tuna|aliyun|tencent|ustc|huawei); skips probe
+#   FLASHCLI_PIP_MIRROR_PROBE=0  With --mirror, skip PyPI probe (keep Tsinghua default)
+#   FLASHCLI_PIP_MIRROR_PROBE_TIMEOUT=5  Per-mirror probe timeout (seconds)
 #   FLASHCLI_OS_MIRROR=0    With --mirror, skip rewriting OS package-manager sources
 #   FLASHCLI_GIT_PROXY=URL   Opt-in GitHub fetch proxy (e.g. https://mirror.ghproxy.com/)
 #   FLASHCLI_GIT_TIMEOUT=25  Timeout (seconds) for git ls-remote during preflight
@@ -42,17 +45,21 @@ REPO="${FLASHCLI_INSTALL_REPO:-$DEFAULT_REPO}"
 REF="${FLASHCLI_INSTALL_REF:-main}"
 QUIET="${FLASHCLI_QUIET:-0}"
 USE_MIRROR="${FLASHCLI_USE_MIRROR:-0}"
+PIP_MIRROR_CHOICE="${FLASHCLI_PIP_MIRROR:-}"
 REPO_FROM_USER=0
 if [ -n "${FLASHCLI_INSTALL_REPO:-}" ]; then
   REPO_FROM_USER=1
 fi
 
-# Alternate endpoints when --mirror / FLASHCLI_USE_MIRROR=1
-MIRROR_PIP_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/"
-MIRROR_PIP_TRUSTED_HOST="mirrors.aliyun.com"
+# Alternate endpoints when --mirror / FLASHCLI_USE_MIRROR=1 (PyPI default: Tsinghua)
+MIRROR_PIP_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple/"
+MIRROR_PIP_TRUSTED_HOST="pypi.tuna.tsinghua.edu.cn"
 MIRROR_HF_ENDPOINT="https://hf-mirror.com"
-MIRROR_GET_PIP_URL="https://mirrors.aliyun.com/pypi/get-pip/get-pip.py"
+# Only Aliyun hosts get-pip.py reliably; index may come from another mirror.
+MIRROR_GET_PIP_URL="https://mirrors.aliyun.com/pypi/get-pip.py"
+MIRROR_PIP_LABEL="tuna"
 DEFAULT_GIT_PROXY_PREFIX="https://mirror.ghproxy.com/"
+PYPI_MIRROR_PROBE_TIMEOUT="${FLASHCLI_PIP_MIRROR_PROBE_TIMEOUT:-5}"
 OS_MIRRORS_APPLIED=0
 APT_OS_PACKAGES_DISABLED=0
 
@@ -100,7 +107,8 @@ Options:
   -q, --quiet             Less output
   --ref REF, --branch REF   Git ref (branch/tag/commit). Default: main
   --repo URL, --git-url URL Git remote for pip install (GitHub, Gitee, self-hosted, …)
-  --mirror                  Use China-friendly mirrors (pip/HF/git; root: apt/yum/dnf/apk too)
+  --mirror                  Use China-friendly mirrors (probe PyPI; pip/HF/git; root: apt/yum/dnf/apk)
+  --pip-mirror, --pypi-mirror NAME  Pin PyPI mirror (tuna|aliyun|tencent|ustc|huawei); skips probe
   --global, --no-mirror     Disable mirror endpoints (force direct official endpoints)
   --gitee                   Shortcut: --repo https://gitee.com/aodiansoft/flashcli.git
   --github                  Shortcut: --repo https://github.com/aodianyun/flashcli.git
@@ -108,6 +116,9 @@ Options:
 Environment (override flags):
   FLASHCLI_INSTALL_REPO, FLASHCLI_INSTALL_REF
   FLASHCLI_USE_MIRROR=1
+  FLASHCLI_PIP_MIRROR=tuna    Pin PyPI mirror (also via --pip-mirror); skips probe
+  FLASHCLI_PIP_MIRROR_PROBE=0  With --mirror, skip PyPI probe (Tsinghua default)
+  FLASHCLI_PIP_MIRROR_PROBE_TIMEOUT=5
   FLASHCLI_OS_MIRROR=0      With --mirror, do not rewrite apt/yum/dnf/apk sources
   FLASHCLI_GIT_PROXY=URL    Opt-in GitHub proxy (default --mirror uses Gitee for official repo)
   FLASHCLI_GIT_TIMEOUT=25   git ls-remote timeout during preflight (seconds)
@@ -124,6 +135,8 @@ Examples:
   ./install.sh --global
   ./install.sh --ref develop
   ./install.sh --mirror --ref main
+  ./install.sh --mirror --pip-mirror tuna
+  ./install.sh --pip-mirror aliyun --repo https://gitee.com/aodiansoft/flashcli.git
   ./install.sh --gitee --ref main
   ./install.sh --repo https://gitee.com/aodiansoft/flashcli.git --ref main
   FLASHCLI_USE_MIRROR=1 ./install.sh --repo https://gitee.com/aodiansoft/flashcli.git
@@ -146,11 +159,13 @@ os_mirror_enabled() {
 }
 
 get_pip_bootstrap_url() {
-  if mirror_mode_enabled && [ -z "${GET_PIP_URL_OVERRIDE:-}" ]; then
-    printf '%s\n' "$MIRROR_GET_PIP_URL"
-  else
-    printf '%s\n' "${GET_PIP_URL_OVERRIDE:-$GET_PIP_URL}"
+  if [ -z "${GET_PIP_URL_OVERRIDE:-}" ]; then
+    if mirror_mode_enabled || [ -n "${PIP_MIRROR_CHOICE:-}" ]; then
+      printf '%s\n' "$MIRROR_GET_PIP_URL"
+      return 0
+    fi
   fi
+  printf '%s\n' "${GET_PIP_URL_OVERRIDE:-$GET_PIP_URL}"
 }
 
 # Best-effort rewrite of OS package sources to Aliyun (root, Linux). Idempotent.
@@ -302,14 +317,174 @@ apply_os_package_mirrors() {
   OS_MIRRORS_APPLIED=1
 }
 
+pypi_mirror_probe_enabled() {
+  mirror_mode_enabled || return 1
+  [ -n "${PIP_MIRROR_CHOICE:-}" ] && return 1
+  case "${FLASHCLI_PIP_MIRROR_PROBE:-1}" in
+    0|false|no|off) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+normalize_pypi_mirror_label() {
+  _raw="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  case "$_raw" in
+    tuna|tsinghua|qinghua|清华) printf '%s\n' "tuna" ;;
+    aliyun|阿里) printf '%s\n' "aliyun" ;;
+    tencent|腾讯) printf '%s\n' "tencent" ;;
+    ustc|中科大) printf '%s\n' "ustc" ;;
+    huawei|华为) printf '%s\n' "huawei" ;;
+    *) return 1 ;;
+  esac
+}
+
+apply_pypi_mirror_label() {
+  _label="$(normalize_pypi_mirror_label "$1")" || return 1
+  MIRROR_PIP_LABEL="$_label"
+  case "$_label" in
+    tuna)
+      MIRROR_PIP_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple/"
+      MIRROR_PIP_TRUSTED_HOST="pypi.tuna.tsinghua.edu.cn"
+      ;;
+    aliyun)
+      MIRROR_PIP_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/"
+      MIRROR_PIP_TRUSTED_HOST="mirrors.aliyun.com"
+      ;;
+    tencent)
+      MIRROR_PIP_INDEX_URL="https://mirrors.cloud.tencent.com/pypi/simple/"
+      MIRROR_PIP_TRUSTED_HOST="mirrors.cloud.tencent.com"
+      ;;
+    ustc)
+      MIRROR_PIP_INDEX_URL="https://mirrors.ustc.edu.cn/pypi/web/simple/"
+      MIRROR_PIP_TRUSTED_HOST="mirrors.ustc.edu.cn"
+      ;;
+    huawei)
+      MIRROR_PIP_INDEX_URL="https://mirrors.huaweicloud.com/repository/pypi/simple/"
+      MIRROR_PIP_TRUSTED_HOST="mirrors.huaweicloud.com"
+      ;;
+    *) return 1 ;;
+  esac
+  return 0
+}
+
+# Probe {index}pip/ — total time (curl) or wall clock (wget). Lower is better.
+_http_probe_total_seconds() {
+  _url="$1"
+  if have_cmd curl; then
+    curl -fsSL --connect-timeout 3 --max-time "$PYPI_MIRROR_PROBE_TIMEOUT" \
+      -o /dev/null -w '%{time_total}' "$_url" 2>/dev/null
+    return $?
+  fi
+  if have_cmd wget; then
+    _start="$(date +%s 2>/dev/null || echo 0)"
+    wget -q --timeout="$PYPI_MIRROR_PROBE_TIMEOUT" -O /dev/null "$_url" 2>/dev/null || return 1
+    _end="$(date +%s 2>/dev/null || echo 0)"
+    printf '%s\n' "$((_end - _start))"
+    return 0
+  fi
+  return 1
+}
+
+_probe_pypi_candidate() {
+  _label="$1"
+  _index="$2"
+  _host="$3"
+  _priority="$4"
+  _out="$5"
+  _probe_url="${_index}pip/"
+  _t="$(_http_probe_total_seconds "$_probe_url")" || return 0
+  [ -n "$_t" ] || return 0
+  printf '%s|%s|%s|%s|%s\n' "$_t" "$_priority" "$_label" "$_index" "$_host" > "$_out"
+}
+
+# Parallel probe of common China PyPI mirrors; pick fastest (tie-break: priority, Tsinghua first).
+probe_fastest_pypi_mirror() {
+  have_cmd curl || have_cmd wget || return 0
+
+  _tmpdir="${TMPDIR:-/tmp}/flashcli-pypi-probe-$$"
+  mkdir -p "$_tmpdir" || return 0
+  _jobs=0
+
+  for _entry in \
+    "tuna|https://pypi.tuna.tsinghua.edu.cn/simple/|pypi.tuna.tsinghua.edu.cn|1" \
+    "tencent|https://mirrors.cloud.tencent.com/pypi/simple/|mirrors.cloud.tencent.com|2" \
+    "aliyun|https://mirrors.aliyun.com/pypi/simple/|mirrors.aliyun.com|3" \
+    "ustc|https://mirrors.ustc.edu.cn/pypi/web/simple/|mirrors.ustc.edu.cn|4" \
+    "huawei|https://mirrors.huaweicloud.com/repository/pypi/simple/|mirrors.huaweicloud.com|5"
+  do
+    _label="${_entry%%|*}"
+    _rest="${_entry#*|}"
+    _index="${_rest%%|*}"
+    _rest="${_rest#*|}"
+    _host="${_rest%%|*}"
+    _priority="${_rest#*|}"
+    _probe_pypi_candidate "$_label" "$_index" "$_host" "$_priority" "${_tmpdir}/${_label}" &
+    _jobs=$((_jobs + 1))
+  done
+  wait
+
+  _best=""
+  if [ "$_jobs" -gt 0 ]; then
+    _best="$(cat "$_tmpdir"/* 2>/dev/null | sort -t'|' -k1,1n -k2,2n | head -n 1 || true)"
+  fi
+  rm -rf "$_tmpdir" 2>/dev/null || true
+
+  if [ -z "$_best" ]; then
+    warn "mirror: PyPI probe found no reachable mirror — using Tsinghua default"
+    apply_pypi_mirror_label "tuna" || true
+    return 0
+  fi
+
+  _t="${_best%%|*}"
+  _rest="${_best#*|}"
+  _rest="${_rest#*|}"
+  MIRROR_PIP_LABEL="${_rest%%|*}"
+  _rest="${_rest#*|}"
+  MIRROR_PIP_INDEX_URL="${_rest%%|*}"
+  MIRROR_PIP_TRUSTED_HOST="${_rest#*|}"
+  info "[i] mirror: PyPI probe → ${MIRROR_PIP_LABEL} (${_t}s, ${MIRROR_PIP_INDEX_URL})"
+}
+
+configure_pypi_mirror() {
+  [ -n "${PIP_INDEX_URL:-}" ] && return 0
+
+  if [ -n "${PIP_MIRROR_CHOICE:-}" ]; then
+    apply_pypi_mirror_label "$PIP_MIRROR_CHOICE" \
+      || die "unknown PyPI mirror: $PIP_MIRROR_CHOICE (try: tuna, aliyun, tencent, ustc, huawei)"
+    info "[i] pip: using mirror ${MIRROR_PIP_LABEL} (${MIRROR_PIP_INDEX_URL})"
+    return 0
+  fi
+
+  if pypi_mirror_probe_enabled; then
+    probe_fastest_pypi_mirror
+    return 0
+  fi
+
+  apply_pypi_mirror_label "tuna" || true
+}
+
 # Apply mirror endpoints unless the user already exported overrides.
 apply_mirror_endpoints() {
+  if mirror_mode_enabled || [ -n "${PIP_MIRROR_CHOICE:-}" ]; then
+    configure_pypi_mirror
+
+    if [ -z "${PIP_INDEX_URL:-}" ]; then
+      export PIP_INDEX_URL="$MIRROR_PIP_INDEX_URL"
+      export PIP_TRUSTED_HOST="$MIRROR_PIP_TRUSTED_HOST"
+    fi
+    if [ -z "${PIP_DEFAULT_TIMEOUT:-}" ]; then
+      export PIP_DEFAULT_TIMEOUT=120
+    fi
+
+    info "[i] pip: PIP_INDEX_URL=${PIP_INDEX_URL:-$MIRROR_PIP_INDEX_URL}"
+    if [ -n "${PIP_MIRROR_CHOICE:-}" ] && ! mirror_mode_enabled; then
+      info "[i] pip mirror only (add --mirror for HF/git/OS mirrors)"
+      return 0
+    fi
+  fi
+
   mirror_mode_enabled || return 0
 
-  if [ -z "${PIP_INDEX_URL:-}" ]; then
-    export PIP_INDEX_URL="$MIRROR_PIP_INDEX_URL"
-    export PIP_TRUSTED_HOST="$MIRROR_PIP_TRUSTED_HOST"
-  fi
   if [ -z "${HF_ENDPOINT:-}" ]; then
     export HF_ENDPOINT="$MIRROR_HF_ENDPOINT"
   fi
@@ -323,11 +498,6 @@ apply_mirror_endpoints() {
   maybe_apply_default_git_proxy
   apply_os_package_mirrors
 
-  if [ -z "${PIP_DEFAULT_TIMEOUT:-}" ]; then
-    export PIP_DEFAULT_TIMEOUT=120
-  fi
-
-  info "[i] mirror: PIP_INDEX_URL=${PIP_INDEX_URL:-$MIRROR_PIP_INDEX_URL}"
   info "[i] mirror: HF_ENDPOINT=${HF_ENDPOINT:-$MIRROR_HF_ENDPOINT}"
   info "[i] mirror: FLASHCLI_GIT_PROXY=${FLASHCLI_GIT_PROXY:-$DEFAULT_GIT_PROXY_PREFIX}"
   info "[i] mirror: get-pip → $(get_pip_bootstrap_url)"
@@ -392,6 +562,11 @@ parse_args() {
       --mirror)
         USE_MIRROR=1
         shift
+        ;;
+      --pip-mirror|--pypi-mirror)
+        [ $# -ge 2 ] || die "$1 requires a mirror name (tuna|aliyun|tencent|ustc|huawei)"
+        PIP_MIRROR_CHOICE="$2"
+        shift 2
         ;;
       --global|--no-mirror)
         USE_MIRROR=0
@@ -2152,10 +2327,12 @@ print_success() {
     fi
   fi
   if mirror_mode_enabled; then
-    printf '%s\n' "  (mirror: pip/HF/git + get-pip; ref=${REF})"
+    printf '%s\n' "  (mirror: PyPI=${MIRROR_PIP_LABEL:-tuna}, HF/git + get-pip; ref=${REF})"
     if os_mirror_enabled && [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ]; then
       printf '%s\n' "  (mirror: apt/yum/dnf/apk → mirrors.aliyun.com when applicable)"
     fi
+  elif [ -n "${PIP_MIRROR_CHOICE:-}" ]; then
+    printf '%s\n' "  (pip mirror: ${MIRROR_PIP_LABEL:-tuna}; ref=${REF})"
   fi
   printf '%s\n' "  (source: ${REPO} @ ${REF})"
   printf '%s\n' '' 'Next steps:'
@@ -2192,6 +2369,7 @@ main() {
   export FLASHCLI_INSTALL_REPO="$REPO"
   export FLASHCLI_INSTALL_REF="$REF"
   export FLASHCLI_USE_MIRROR="$USE_MIRROR"
+  export FLASHCLI_PIP_MIRROR="${PIP_MIRROR_CHOICE:-}"
   export FLASHCLI_REQUIRES_PYTHON_MIN="$REQUIRES_PYTHON_MIN"
   install_flashcli
   verify_and_repair_pyproject

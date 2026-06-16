@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from flashcli.bundle.native_naming import discover_native_module_bases
+
 
 def bundle_build_script(root: Path) -> Path | None:
     script = root.resolve() / "build.sh"
@@ -36,18 +38,26 @@ def describe_bundle_assembly_gaps(root: Path) -> list[str]:
     if not isinstance(runtime, dict) or not runtime:
         gaps.append("flashcli-bundle.json missing runtime map")
     else:
-        has_kernels = False
+        has_native = False
         for rel in runtime.values():
             native_dir = root / str(rel).strip().lstrip("/")
-            if native_dir.is_dir() and any(native_dir.glob("flash_rt_kernels*.so")):
-                has_kernels = True
-            if native_dir.is_dir() and not any(native_dir.glob("flash_rt_fa2*.so")):
+            if not native_dir.is_dir():
+                continue
+            modules = discover_native_module_bases(native_dir)
+            if modules:
+                has_native = True
+            elif any(native_dir.glob("*.so")):
                 gaps.append(
-                    f"no flash_rt_fa2*.so under {str(rel).strip().lstrip('/')}/ "
-                    "(required for FlashRT attention)"
+                    f"no recognized native .so under {str(rel).strip().lstrip('/')}/ "
+                    "(expected tagged flash_rt_* artifacts)"
                 )
-        if not has_kernels:
-            gaps.append("no runtime/<env-key>/flash_rt_kernels*.so")
+            else:
+                gaps.append(
+                    f"no native .so under {str(rel).strip().lstrip('/')}/ "
+                    "(runtime/<env-key>/ must contain at least one module)"
+                )
+        if not has_native:
+            gaps.append("no runtime/<env-key>/ with recognized native .so artifacts")
 
     stray = sorted(root.glob("flash_rt_*.so"))
     if stray:

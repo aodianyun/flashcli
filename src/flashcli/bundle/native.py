@@ -15,9 +15,8 @@ from flashcli.bundle.manifest import (
 )
 from flashcli.bundle.native_naming import (
     NativeEnvironmentNotSupportedError,
+    discover_native_module_bases,
     logical_native_module_name,
-    parse_native_tag_from_filename,
-    select_native_module_for_host,
     select_native_module_ranked,
 )
 from flashcli.runtime.detect import GpuInfo, detect_gpu_or_raise
@@ -69,13 +68,40 @@ def _cuda_runtime_load_error(exc: BaseException) -> bool:
     )
 
 
+def _select_loadable_module(
+    native_dir: Path,
+    module_base: str,
+    gpu: GpuInfo,
+    *,
+    python_minor: str,
+) -> Path | None:
+    ranked = select_native_module_ranked(
+        native_dir, module_base, gpu, allowed_sm=None, python_minor=python_minor
+    )
+    if not ranked:
+        return None
+    last_exc: BaseException | None = None
+    for candidate in ranked:
+        try:
+            _probe_so_file(candidate)
+            return candidate
+        except (ImportError, RuntimeError) as exc:
+            last_exc = exc
+            if not _cuda_runtime_load_error(exc):
+                raise
+    if last_exc is not None:
+        raise last_exc
+    return None
+
+
 def _resolve_host_native_paths(
     bundle: BundleManifest,
     gpu: GpuInfo,
 ) -> dict[str, Path]:
     """Pick native modules for this host from ``runtime/<env-key>/``."""
     native_dir = bundle_active_native_dir(bundle, gpu=gpu)
-    if not native_dir.is_dir() or not any(native_dir.glob("*.so")):
+    present = discover_native_module_bases(native_dir)
+    if not native_dir.is_dir() or not present:
         raise NativeEnvironmentNotSupportedError(
             module_base="flash_rt_kernels",
             wanted="",
@@ -85,53 +111,21 @@ def _resolve_host_native_paths(
         )
 
     python_minor = bundle_python_abi(bundle)
+    paths: dict[str, Path] = {}
+    for module_base in present:
+        selected = _select_loadable_module(
+            native_dir, module_base, gpu, python_minor=python_minor
+        )
+        if selected is not None:
+            paths[module_base] = selected
 
-    kernels_ranked = select_native_module_ranked(
-        native_dir, "flash_rt_kernels", gpu, allowed_sm=None, python_minor=python_minor
-    )
-    if not kernels_ranked:
+    if not paths:
         raise NativeEnvironmentNotSupportedError(
-            module_base="flash_rt_kernels",
+            module_base=present[0],
             wanted=f"*py{python_minor}",
             lib_dir=native_dir,
             available=[],
             gpu=gpu,
-        )
-
-    kernels_path: Path | None = None
-    last_exc: BaseException | None = None
-    for candidate in kernels_ranked:
-        try:
-            _probe_so_file(candidate)
-            kernels_path = candidate
-            break
-        except (ImportError, RuntimeError) as exc:
-            last_exc = exc
-            if not _cuda_runtime_load_error(exc):
-                raise
-    if kernels_path is None:
-        assert last_exc is not None
-        raise last_exc
-
-    parsed = parse_native_tag_from_filename(kernels_path.name)
-    paths: dict[str, Path] = {"flash_rt_kernels": kernels_path}
-    fa2_ranked = select_native_module_ranked(
-        native_dir, "flash_rt_fa2", gpu, allowed_sm=None, python_minor=python_minor
-    )
-    if parsed is not None:
-        for fa2_path in fa2_ranked:
-            fa2_parsed = parse_native_tag_from_filename(fa2_path.name)
-            if (
-                fa2_parsed is not None
-                and fa2_parsed.cuda_tag == parsed.cuda_tag
-                and fa2_parsed.python_minor == parsed.python_minor
-                and fa2_parsed.sm == parsed.sm
-            ):
-                paths["flash_rt_fa2"] = fa2_path
-                break
-    if "flash_rt_fa2" not in paths and fa2_ranked:
-        paths["flash_rt_fa2"] = select_native_module_for_host(
-            native_dir, "flash_rt_fa2", gpu, allowed_sm=None, python_minor=python_minor
         )
     return paths
 

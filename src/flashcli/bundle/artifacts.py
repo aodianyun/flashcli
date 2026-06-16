@@ -28,6 +28,7 @@ from flashcli.bundle.marker import (
     write_runtime_marker,
 )
 from flashcli.bundle.preflight import PreflightResult, run_preflight
+from flashcli.bundle.native_naming import discover_native_module_bases
 from flashcli.bundle.runtime_id import runtime_id_from_path, runtime_id_from_repo
 from flashcli import config
 from flashcli.models.registry import Preset
@@ -116,7 +117,7 @@ def _runtime_is_ready(
         return False
     if not (bundle_root / "flash_rt").is_dir():
         return False
-    if not _runtime_has_kernels(bundle_root, artifact_rel):
+    if not _runtime_has_native_modules(bundle_root, artifact_rel):
         return False
     local_manifest = bundle_root / "flashcli-bundle.json"
     if not local_manifest.is_file():
@@ -157,9 +158,9 @@ def _download_artifact(
     download_repo_file(entry, dest, quiet=quiet, force=force)
 
 
-def _runtime_has_kernels(bundle_root: Path, artifact_rel: str) -> bool:
+def _runtime_has_native_modules(bundle_root: Path, artifact_rel: str) -> bool:
     native_dir = bundle_root / artifact_rel.strip().lstrip("/")
-    return native_dir.is_dir() and any(native_dir.glob("flash_rt_kernels*.so"))
+    return bool(discover_native_module_bases(native_dir))
 
 
 def ensure_runtime_from_repo(
@@ -230,7 +231,7 @@ def ensure_runtime_from_repo(
             force=force,
         )
 
-        if not _runtime_has_kernels(bundle_root, artifact_rel):
+        if not _runtime_has_native_modules(bundle_root, artifact_rel):
             artifact_local = bundle_root / artifact_rel
             if not artifact_local.is_file() and not artifact_local.is_dir():
                 artifact_cache = layout["cache"] / Path(artifact_rel).name
@@ -245,9 +246,10 @@ def ensure_runtime_from_repo(
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(artifact_cache, dest)
 
-        if not _runtime_has_kernels(bundle_root, artifact_rel):
+        if not _runtime_has_native_modules(bundle_root, artifact_rel):
             raise FileNotFoundError(
-                f"Missing flash_rt_kernels*.so under {artifact_rel!r} after sync"
+                f"Missing native .so under {artifact_rel!r} after sync "
+                f"(expected tagged flash_rt_* artifacts for this env key)"
             )
         manifest = load_bundle_manifest(bundle_root)
 
@@ -300,9 +302,9 @@ def ensure_runtime_from_path(
     runtime_id = runtime_id_from_path(str(bundle_path), manifest.name)
 
     native_dir = bundle_runtime_dir(manifest, preflight.env_key)
-    if not native_dir.is_dir() or not any(native_dir.glob("flash_rt_kernels*.so")):
+    if not discover_native_module_bases(native_dir):
         raise FileNotFoundError(
-            f"Local bundle {bundle_path} missing flash_rt_kernels*.so under "
+            f"Local bundle {bundle_path} missing native .so under "
             f"{native_dir.relative_to(bundle_path)!s} for {preflight.env_key!r}. "
             f"Run pack/release or build into runtime/{preflight.env_key}/."
         )

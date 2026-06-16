@@ -24,7 +24,6 @@ NATIVE_MODULE_BASES: tuple[str, ...] = (
 )
 
 DEFAULT_NATIVE_LIB = "lib"  # build-time staging only; runtime loads runtime/<env-key>/
-_REQUIRED_PI05_MODULES = ("flash_rt_kernels", "flash_rt_fa2")
 
 _ABI_SANITIZE = re.compile(r"[^a-zA-Z0-9._-]+")
 _PY_TAIL_RE = re.compile(r"-py(3\d{2})$")
@@ -161,6 +160,22 @@ def parse_native_tag_from_filename(filename: str) -> ParsedNativeTag | None:
         if stem.startswith(prefix):
             return parse_native_tag_suffix(stem[len(prefix) :])
     return None
+
+
+def discover_native_module_bases(native_dir: Path) -> tuple[str, ...]:
+    """Return ``module_base`` names present in ``runtime/<env-key>/`` from ``*.so`` files."""
+    if not native_dir.is_dir():
+        return ()
+    seen: set[str] = set()
+    for path in sorted(native_dir.glob("*.so")):
+        base = logical_native_module_name(path.name)
+        if base in NATIVE_MODULE_BASES or base.startswith("libfmha"):
+            seen.add(base)
+    ordered = [b for b in NATIVE_MODULE_BASES if b in seen]
+    for base in sorted(seen):
+        if base not in ordered:
+            ordered.append(base)
+    return tuple(ordered)
 
 
 def bundle_native_lib_dir(bundle_root: Path, rel: str | None = None) -> Path:
@@ -300,22 +315,31 @@ def resolve_native_modules_for_host(
     native_dir_rel: str | None = None,
     native_lib_rel: str | None = None,
     allowed_sm: list[str] | None = None,
-    required_modules: tuple[str, ...] = _REQUIRED_PI05_MODULES,
+    required_modules: tuple[str, ...] | None = None,
     python_minor: str | None = None,
 ) -> dict[str, Path]:
-    """Pick one ``.so`` per required module for this host."""
+    """Pick one ``.so`` per module present in the runtime cell (or *required_modules*)."""
     rel = native_dir_rel if native_dir_rel is not None else native_lib_rel
     native_dir = bundle_native_lib_dir(bundle_root, rel)
     if not native_dir.is_dir():
         raise NativeEnvironmentNotSupportedError(
-            module_base=required_modules[0],
+            module_base="flash_rt_kernels",
+            wanted=host_runtime_env_key(gpu).catalog_name(),
+            lib_dir=native_dir,
+            available=[],
+            gpu=gpu,
+        )
+    modules = required_modules if required_modules is not None else discover_native_module_bases(native_dir)
+    if not modules:
+        raise NativeEnvironmentNotSupportedError(
+            module_base="flash_rt_kernels",
             wanted=host_runtime_env_key(gpu).catalog_name(),
             lib_dir=native_dir,
             available=[],
             gpu=gpu,
         )
     resolved: dict[str, Path] = {}
-    for base in required_modules:
+    for base in modules:
         resolved[base] = select_native_module_for_host(
             native_dir,
             base,

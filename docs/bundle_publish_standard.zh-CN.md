@@ -357,10 +357,12 @@ sm{SM}-cu{CUDA}-{os}-{arch}-py{PY}
 
 | module_base | 必要性 |
 |-------------|--------|
-| `flash_rt_kernels` | **必填** |
-| `flash_rt_fa2` | **必填**（FlashRT attention） |
+| `flash_rt_kernels` | 按需（目录内有则校验/加载） |
+| `flash_rt_fa2` | 按需（FlashRT attention） |
 | `flash_rt_fp4` | 按需（NVFP4 等 FP4 路径） |
 | `libfmha_fp16_strided` | 按需（部分 bundle 额外 FMHA） |
+
+每个 `runtime/<env-key>/` 目录 **至少含一个** 可识别的 tagged `.so`；具体需要哪些模块由 **该目录内的文件列表** 决定（不必在 manifest 重复声明）。
 
 示例：
 
@@ -375,7 +377,7 @@ flash_rt_fp4-v1.2.0-sm120-cu130-linux-x86_64-py312.so
 ### 5.4 矩阵发布建议
 
 - 每个支持的 `(SM, CUDA, python_abi)` 组合对应 **一个** env key 目录。
-- 同一 bundle 内各 env key 目录中的 `module_base` 集合应一致（例如都含 kernels + fa2，或再加 fp4）。
+- 同一 bundle 内各 env key 目录中的 `module_base` 集合 **建议一致**（例如都含 kernels + fa2，或仅 kernels）。
 - `python_abi` 在 manifest 中为 **单一** 值；各 env key 的 `-py{PY}` 后缀须与之相同。
 
 ---
@@ -385,7 +387,7 @@ flash_rt_fp4-v1.2.0-sm120-cu130-linux-x86_64-py312.so
 - [ ] `format_version: 3`、`protocol_version: 1`
 - [ ] `flashcli-bundle.json` 位于发布根目录
 - [ ] `entry` 指向的 `{module}.py` 均存在且类名匹配
-- [ ] `runtime` 每个 key 在包内均有目录，且含 `flash_rt_kernels*.so` 与 `flash_rt_fa2*.so`
+- [ ] `runtime` 每个 key 在包内均有目录，且含 **至少一个** 可识别的 tagged native `.so`
 - [ ] 无 stray `.so` 在 bundle 根或 `lib/`
 - [ ] 存在 `flash_rt/` Python 树
 - [ ] 有 `variants` 时无顶层 `run_options`/`serve_options`/`weights`；各 variant 配置完整

@@ -110,3 +110,23 @@ def test_abi_probe_invoked_per_module(tmp_path: Path) -> None:
     ) as mock_probe:
         validate_native_runtime_abi(bundle)
         assert mock_probe.call_count >= 2
+
+
+def test_kernels_only_runtime_cell_passes(tmp_path: Path) -> None:
+    root = tmp_path / "b"
+    cell = "sm120-cu130-linux-x86_64-py312"
+    bundle = _write_bundle(root, native_cells=[cell])
+    native = root / "runtime" / cell
+    native.mkdir(parents=True)
+    (native / native_so_filename("flash_rt_kernels", f"dev-{cell}")).write_bytes(b"\x7fELF")
+    errs = validate_native_runtime_matrix(bundle)
+    assert not errs
+
+
+def test_empty_runtime_cell_fails(tmp_path: Path) -> None:
+    root = tmp_path / "b"
+    cell = "sm120-cu130-linux-x86_64-py312"
+    bundle = _write_bundle(root, native_cells=[cell])
+    (root / "runtime" / cell).mkdir(parents=True)
+    errs = validate_native_runtime_matrix(bundle)
+    assert any("no recognized native" in e for e in errs)
