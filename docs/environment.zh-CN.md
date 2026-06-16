@@ -75,7 +75,7 @@ flashcli models list
 | `FLASHCLI_PYTHON_STANDALONE_MANIFEST` | （无） | 本地 manifest 路径（FlashHub 不可用时的 fallback，在 GitHub 之前）。 |
 | `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | bundle runtime 缓存（bundle 根、`runtime/`、venv）。 |
 | `FLASHCLI_IN_BUNDLE_VENV` | （内部） | `1` 表示当前进程已在 bundle venv 的 infer 子进程内。 |
-| （infer re-exec） | 主机安装 + bundle venv | **flashcli 只装一份**（主机 venv）；bundle venv 的 Python 通过 `PYTHONPATH` 加载主机上的 `flashcli`，执行 `python -m flashcli.runtime.infer`。bundle venv 内只会 pip 安装 infer 的**依赖**（typer、pyyaml 等），不会安装 flashcli 包本身。 |
+| （infer re-exec） | 主机安装 + bundle venv | **flashcli 只装一份**（主机 venv）；bundle venv 的 Python 通过 `PYTHONPATH` 加载主机上的 `flashcli`，执行 `python -m flashcli.runtime.infer`。bundle venv 内只会 pip 安装 infer 的**依赖**（typer、pyyaml、fastapi 等），**不会**安装 `huggingface_hub` 或 flashcli 包本身。 |
 | `FLASHCLI_RUNTIME_ID` | （内部） | 当前激活的 runtime 标识。 |
 | `FLASHCLI_BUNDLE_ROOT` | （内部） | 当前 bundle 根目录。 |
 

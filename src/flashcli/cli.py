@@ -51,6 +51,50 @@ def _auto_install_flag(no_auto_install: bool) -> bool:
     return not no_auto_install and not config.skip_auto_install()
 
 
+def _ensure_host_weights_before_reexec(
+    preset: Preset,
+    *,
+    bundle: Path | None,
+    checkpoint: Path | None,
+    mtp_checkpoint: Path | None,
+    model: str | None,
+    quiet: bool,
+) -> None:
+    """Prepare bundle runtime and pull weights on the host CLI (before re-exec)."""
+    from flashcli.bundle.preflight import BundleEnvironmentError
+    from flashcli.bundle.resolve import load_preset_bundle
+    from flashcli.bundle.variants import resolve_effective_model_variant
+    from flashcli.runtime.reexec import prepare_bundle_runtime
+
+    try:
+        prepare_bundle_runtime(preset, bundle_path=bundle, quiet=quiet)
+    except BundleEnvironmentError:
+        raise
+
+    model_variant = model
+    try:
+        manifest = load_preset_bundle(preset, bundle_override=bundle)
+        model_variant = resolve_effective_model_variant(
+            preset, manifest, cli_override=model
+        )
+    except FileNotFoundError:
+        pass
+
+    try:
+        model_cache.ensure_model_cached(
+            preset.name,
+            bundle_path=bundle,
+            checkpoint_override=checkpoint,
+            mtp_checkpoint_override=mtp_checkpoint,
+            model_variant=model_variant,
+            quiet=quiet,
+            download=True,
+        )
+    except FileNotFoundError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+
+
 @doctor_app.callback(invoke_without_command=True)
 def doctor_main(
     ctx: typer.Context,
@@ -434,6 +478,14 @@ def run() -> None:
         ensure_environment(install_flashcli=True, quiet=inv.quiet)
 
     try:
+        _ensure_host_weights_before_reexec(
+            p,
+            bundle=inv.bundle,
+            checkpoint=inv.checkpoint,
+            mtp_checkpoint=inv.mtp_checkpoint,
+            model=inv.model,
+            quiet=inv.quiet,
+        )
         ensure_bundle_runtime_and_reexec(
             p, bundle_path=inv.bundle, quiet=inv.quiet
         )
@@ -485,6 +537,14 @@ def serve() -> None:
         ensure_environment(install_flashcli=True, quiet=inv.quiet)
 
     try:
+        _ensure_host_weights_before_reexec(
+            p,
+            bundle=inv.bundle,
+            checkpoint=inv.checkpoint,
+            mtp_checkpoint=inv.mtp_checkpoint,
+            model=inv.model,
+            quiet=inv.quiet,
+        )
         ensure_bundle_runtime_and_reexec(
             p, bundle_path=inv.bundle, quiet=inv.quiet
         )

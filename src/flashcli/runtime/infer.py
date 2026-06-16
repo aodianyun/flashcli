@@ -74,6 +74,7 @@ def execute_run(
             mtp_checkpoint_override=mtp_checkpoint,
             model_variant=effective_variant,
             quiet=quiet,
+            download=False,
         )
     except (NotImplementedError, FileNotFoundError, ValueError) as exc:
         typer.echo(str(exc), err=True)
@@ -203,6 +204,7 @@ def execute_serve(
             mtp_checkpoint_override=mtp_checkpoint,
             model_variant=effective_variant,
             quiet=quiet,
+            download=False,
         )
     except (NotImplementedError, FileNotFoundError, ValueError) as exc:
         typer.echo(str(exc), err=True)

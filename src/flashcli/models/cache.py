@@ -91,8 +91,18 @@ def ensure_model_cached(
     mtp_checkpoint_override: Path | None = None,
     model_variant: str | None = None,
     quiet: bool = False,
+    download: bool = True,
 ) -> Path:
-    """Return checkpoint directory, downloading from HF when missing."""
+    """Return checkpoint directory.
+
+    When *download* is True (host CLI), fetch from Hugging Face if missing.
+    When False (bundle infer), only resolve bundle-local paths and cache hits.
+    """
+    if download and os.environ.get("FLASHCLI_IN_BUNDLE_VENV") == "1":
+        raise RuntimeError(
+            "Weight download is only supported on the host flashcli CLI. "
+            f"Run: flashcli pull {preset}"
+        )
     reg = PresetRegistry()
     p = reg.get(preset)
     bundle = _load_bundle_for_preset(
@@ -124,6 +134,7 @@ def ensure_model_cached(
         checkpoint_override=None,
         variant=model_variant,
         quiet=quiet,
+        download=download,
     )
     _apply_mtp_env(
         bundle,

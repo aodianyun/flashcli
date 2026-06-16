@@ -18,7 +18,7 @@ Manual equivalent:
 ```bash
 pip install "flashcli-bundle @ git+https://github.com/aodianyun/flashcli.git@main#subdirectory=flashcli-bundle"
 pip install --no-deps "flashcli @ git+https://github.com/aodianyun/flashcli.git@main"
-pip install typer pyyaml packaging 'huggingface_hub>=0.26,<1.0' tqdm fastapi 'uvicorn[standard]'
+pip install typer pyyaml packaging 'huggingface_hub>=0.26' tqdm fastapi 'uvicorn[standard]'
 ```
 
 **Bundle authors / monorepo dev:**

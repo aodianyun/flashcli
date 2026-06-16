@@ -23,9 +23,12 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 | What | Where it lives | Installed how |
 |------|----------------|---------------|
 | `flashcli` CLI + infer modules | Host only (`~/.flashcli/venv` or editable `src/`) | `install.sh` / `auto_install.sh` **once** |
+| **`huggingface_hub`** (Hub CLI, weight pull) | **Host only** | `pyproject.toml` — **not** installed into bundle venv |
 | **`flashcli-bundle`** (protocol, manifest options) | Host + bundle venv | Git: `flashcli-bundle @ git+…#subdirectory=flashcli-bundle` (see `install.sh`, `~/.flashcli/install.env`) |
-| Bundle inference stack (torch, numpy, …) | `~/.flashcli/runtimes/<id>/venv/` | From `flashcli-bundle.json` → `python_dependencies` |
-| Infer helper deps (typer, pyyaml, fastapi, …) | Same bundle venv, **only if missing** | `ensure_bundle_infer_deps()` — **not** the flashcli package |
+| Bundle inference stack (torch, transformers, …) | `~/.flashcli/runtimes/<id>/venv/` | From `flashcli-bundle.json` → `python_dependencies` |
+| Infer helper deps (typer, pyyaml, fastapi, …) | Same bundle venv, **only if missing** | `ensure_bundle_infer_deps()` — **no** `huggingface_hub`; not the flashcli package |
+
+**Dependency isolation:** Host and bundle venvs are separate. flashcli never pins `transformers` or caps `huggingface_hub` for the bundle stack — bundle `python_dependencies` (e.g. `transformers<4.56`) resolve their own transitive deps inside the bundle venv. Weight download (`flashcli pull`, or auto-pull before `run`/`serve`) runs on the **host** only; the bundle infer subprocess resolves cached or bundle-local paths only.
 
 **Re-exec command** (inside bundle venv):
 
@@ -124,8 +127,8 @@ See [model_bundle_standard.md](model_bundle_standard.md).
 | `runtime/infer_launch.py` | Bootstrap: prepend host flashcli to `sys.path` |
 | `runtime/infer.py` | `run` / `serve` inside bundle venv |
 | `runtime/flashcli_shared.py` | Host `PYTHONPATH` for infer (no second flashcli install) |
-| `deps.py` | `ensure_bundle_infer_deps()` — typer/yaml/… into bundle venv only |
-| `models/cache.py` | Weights + `post_pull` |
+| `deps.py` | Host vs bundle pip lists; `ensure_bundle_infer_deps()` — typer/yaml/… into bundle venv only (no hub) |
+| `models/cache.py` | Host weight pull + cache; bundle infer resolve-only |
 | `engines/loader.py` | Load `entry` |
 
 ## Current catalog

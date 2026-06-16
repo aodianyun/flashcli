@@ -74,7 +74,7 @@ Weight download behavior matches `hf download`; on failures, test the same `HF_E
 | `FLASHCLI_PYTHON_STANDALONE_MANIFEST` | (none) | Local manifest path (fallback before GitHub when FlashHub fails). |
 | `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | Bundle runtime cache (bundle root, `runtime/`, venv). |
 | `FLASHCLI_IN_BUNDLE_VENV` | (internal) | `1` when the infer subprocess is running inside the bundle venv. |
-| (infer re-exec) | host install + bundle venv | Host flashcli is installed once; bundle venv Python runs `python -m flashcli.runtime.infer` with `PYTHONPATH` pointing at the host install (`src/` or site-packages). Only infer **dependencies** (typer, pyyaml, …) may be pip-installed into the bundle venv — not flashcli itself. |
+| (infer re-exec) | host install + bundle venv | Host flashcli is installed once; bundle venv Python runs `python -m flashcli.runtime.infer` with `PYTHONPATH` pointing at the host install (`src/` or site-packages). Only infer **dependencies** (typer, pyyaml, fastapi, …) may be pip-installed into the bundle venv — **not** `huggingface_hub`, not flashcli itself. |
 | `FLASHCLI_RUNTIME_ID` | (internal) | Active runtime identifier. |
 | `FLASHCLI_BUNDLE_ROOT` | (internal) | Active bundle root directory. |
 

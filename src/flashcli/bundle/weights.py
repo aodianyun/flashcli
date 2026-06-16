@@ -134,11 +134,27 @@ def _extra_dest(
     return config.MODELS_DIR / cache_name
 
 
+def _weights_missing_error(preset: Preset) -> FileNotFoundError:
+    return FileNotFoundError(
+        f"Model weights for preset {preset.name!r} are not available "
+        "(no bundle-local checkpoint and nothing in the flashcli cache).\n"
+        f"Run on the host CLI: flashcli pull {preset.name}"
+    )
+
+
+def _extra_weights_missing_error(key: str, dest: Path) -> FileNotFoundError:
+    return FileNotFoundError(
+        f"Extra weights {key!r} are not cached at {dest}.\n"
+        "Run on the host CLI: flashcli pull <preset>"
+    )
+
+
 def download_extra_weights(
     bundle: BundleManifest | None,
     *,
     variant: str | None = None,
     quiet: bool = False,
+    download: bool = True,
 ) -> None:
     if bundle is None:
         return
@@ -156,8 +172,15 @@ def download_extra_weights(
         source = str(spec.get("source", "huggingface")).lower()
         if source != "huggingface":
             raise NotImplementedError(f"Unsupported extra weights source: {source!r}")
-        from flashcli.models.pull import _download_huggingface
+        from flashcli.bundle.checkpoint import has_cached_weight_files, weights_require_norm_stats
+        from flashcli.models.pull import _allow_patterns, _download_huggingface
 
+        patterns = _allow_patterns(spec)
+        require_ns = weights_require_norm_stats(spec)
+        if has_cached_weight_files(dest, patterns, require_norm_stats=require_ns):
+            continue
+        if not download:
+            raise _extra_weights_missing_error(key, dest)
         _download_huggingface(spec, dest, quiet=quiet)
 
 
@@ -227,8 +250,9 @@ def ensure_checkpoint(
     checkpoint_override: Path | None = None,
     variant: str | None = None,
     quiet: bool = False,
+    download: bool = True,
 ) -> Path:
-    """Resolve checkpoint: override → bundle-local → cache → download."""
+    """Resolve checkpoint: override → bundle-local → cache → (host) download."""
     if checkpoint_override is not None:
         path = checkpoint_override.expanduser().resolve()
         if not path.exists():
@@ -249,7 +273,7 @@ def ensure_checkpoint(
         if not quiet:
             print(f"Using bundle-local weights: {local}")
         apply_bundle_env(bundle, variant=variant)
-        download_extra_weights(bundle, variant=variant, quiet=quiet)
+        download_extra_weights(bundle, variant=variant, quiet=quiet, download=download)
         return local
 
     existing = resolve_checkpoint(preset, bundle=bundle, variant=variant)
@@ -257,14 +281,17 @@ def ensure_checkpoint(
         if not quiet:
             print(f"Using cached weights: {existing}")
         apply_bundle_env(bundle, variant=variant)
-        download_extra_weights(bundle, variant=variant, quiet=quiet)
+        download_extra_weights(bundle, variant=variant, quiet=quiet, download=download)
         return existing
+
+    if not download:
+        raise _weights_missing_error(preset)
 
     cache_dir = config.MODELS_DIR / preset.name
     checkpoint_dir = cache_dir / "checkpoint"
     cache_dir.mkdir(parents=True, exist_ok=True)
     download_merged_weights(spec, checkpoint_dir, quiet=quiet)
-    download_extra_weights(bundle, variant=variant, quiet=quiet)
+    download_extra_weights(bundle, variant=variant, quiet=quiet, download=True)
     from flashcli.models.pull import _write_marker
 
     _write_marker(cache_dir, preset.name, checkpoint_dir)

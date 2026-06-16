@@ -23,9 +23,12 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 | 内容 | 位置 | 安装方式 |
 |------|------|----------|
 | `flashcli` CLI + infer 模块 | 仅主机（`~/.flashcli/venv` 或 editable `src/`） | `install.sh` / `auto_install.sh`，**只装一次** |
+| **`huggingface_hub`**（Hub CLI、拉权重） | **仅主机** | `pyproject.toml` — **不**装进 bundle venv |
 | **`flashcli-bundle`**（协议、manifest options） | 主机 + bundle venv | Git：`flashcli-bundle @ git+…#subdirectory=flashcli-bundle`（见 `install.sh`、`~/.flashcli/install.env`） |
-| 推理栈（torch、numpy…） | `~/.flashcli/runtimes/<id>/venv/` | `flashcli-bundle.json` → `python_dependencies` |
-| infer 辅助依赖（typer、pyyaml、fastapi…） | 同上 bundle venv，**缺啥装啥** | `ensure_bundle_infer_deps()` — **不含** flashcli 包本身 |
+| 推理栈（torch、transformers…） | `~/.flashcli/runtimes/<id>/venv/` | `flashcli-bundle.json` → `python_dependencies` |
+| infer 辅助依赖（typer、pyyaml、fastapi…） | 同上 bundle venv，**缺啥装啥** | `ensure_bundle_infer_deps()` — **不含** `huggingface_hub`；不含 flashcli 包本身 |
+
+**依赖隔离：** 主机与 bundle venv 相互独立。flashcli 不为 bundle 栈 pin `transformers` 或限制 `huggingface_hub` 版本 — bundle 的 `python_dependencies`（如 `transformers<4.56`）在 bundle venv 内自行解析传递依赖。权重下载（`flashcli pull`，或 `run`/`serve` 前自动 pull）仅在**主机**执行；bundle infer 子进程只解析缓存或 bundle 本地路径。
 
 **Re-exec 命令**（在 bundle venv 内）：
 
@@ -124,8 +127,8 @@ sequenceDiagram
 | `runtime/infer_launch.py` | 启动器：prepend 主机 flashcli 到 `sys.path` |
 | `runtime/infer.py` | 在 bundle venv 内执行 `run` / `serve` |
 | `runtime/flashcli_shared.py` | 主机 `PYTHONPATH`，不二次安装 flashcli |
-| `deps.py` | `ensure_bundle_infer_deps()` — 仅 typer/yaml/… 进 bundle venv |
-| `models/cache.py` | 权重 + `post_pull` |
+| `deps.py` | 主机 / bundle pip 列表；`ensure_bundle_infer_deps()` — 仅 typer/yaml/… 进 bundle venv（无 hub） |
+| `models/cache.py` | 主机拉权重 + 缓存；bundle infer 仅解析路径 |
 | `engines/loader.py` | 加载 `entry` |
 
 ## 当前 catalog

@@ -5,20 +5,23 @@ from __future__ import annotations
 import subprocess
 import sys
 
-from flashcli.deps import _imports_ok
+from flashcli.deps import FLASHCLI_BUNDLE_INFER_PACKAGES, FLASHCLI_HOST_PACKAGES, _imports_ok
 
 
-def test_imports_ok_rejects_huggingface_hub_1x_for_transformers_compat() -> None:
-    """transformers<4.56 needs huggingface-hub<1.0; 1.x must not count as satisfied."""
-    spec = "huggingface_hub>=0.26,<1.0"
+def test_host_packages_include_huggingface_hub() -> None:
+    assert any("huggingface_hub" in p for p in FLASHCLI_HOST_PACKAGES)
+
+
+def test_bundle_infer_packages_exclude_huggingface_hub() -> None:
+    joined = " ".join(FLASHCLI_BUNDLE_INFER_PACKAGES).lower()
+    assert "huggingface_hub" not in joined
+
+
+def test_imports_ok_accepts_huggingface_hub_1x_on_host() -> None:
+    """Host CLI allows huggingface-hub 1.x (independent from bundle transformers)."""
+    spec = "huggingface_hub>=0.26"
     proc = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "show",
-            "huggingface-hub",
-        ],
+        [sys.executable, "-m", "pip", "show", "huggingface-hub"],
         capture_output=True,
         text=True,
         check=False,
@@ -26,9 +29,13 @@ def test_imports_ok_rejects_huggingface_hub_1x_for_transformers_compat() -> None
     if proc.returncode != 0:
         return  # skip when hub not installed in test env
     version_line = next(
-        (ln.split(":", 1)[1].strip() for ln in proc.stdout.splitlines() if ln.startswith("Version:")),
+        (
+            ln.split(":", 1)[1].strip()
+            for ln in proc.stdout.splitlines()
+            if ln.startswith("Version:")
+        ),
         "",
     )
     if not version_line.startswith("1."):
         return
-    assert _imports_ok(spec) is False
+    assert _imports_ok(spec) is True

@@ -34,9 +34,10 @@ def test_mtp_download_skipped_when_cached(monkeypatch, tmp_path: Path) -> None:
     mock_dl.assert_not_called()
 
 
-def test_mtp_incomplete_cache_is_cleaned_before_download(
+def test_mtp_incomplete_cache_is_resumed_before_download(
     monkeypatch, tmp_path: Path
 ) -> None:
+    """Incomplete cache (.cache only) is kept so ``hf download`` can resume."""
     monkeypatch.setenv("HF_ENDPOINT", "https://hf-mirror.com")
     dest = tmp_path / "mtp_fp8"
     dest.mkdir()
@@ -46,8 +47,13 @@ def test_mtp_incomplete_cache_is_cleaned_before_download(
         "allow_patterns": ["mtp.safetensors"],
     }
 
-    with patch("flashcli.models.pull.run_hf_cli_download"):
+    with patch("flashcli.models.pull.run_hf_cli_download") as mock_dl:
+        def _write_weights(*_args, **_kwargs) -> None:
+            (dest / "mtp.safetensors").write_bytes(b"fake")
+
+        mock_dl.side_effect = _write_weights
         _download_huggingface(spec, dest, quiet=True)
 
     assert dest.is_dir()
-    assert not (dest / ".cache").exists()
+    assert (dest / ".cache").exists()
+    mock_dl.assert_called_once()

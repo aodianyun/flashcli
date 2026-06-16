@@ -70,13 +70,13 @@ REQUIRES_PYTHON_MIN="3.10"
 MIN_PIP_VERSION="21.3"
 GET_PIP_URL="https://bootstrap.pypa.io/get-pip.py"
 # Keep in sync with pyproject.toml [project].dependencies — one spec per line for verify/repair.
-# Do NOT space-join specs with commas (e.g. huggingface_hub>=0.26,<1.0 breaks under word-split).
+# Do NOT space-join specs with commas (e.g. "pkg>=1.0,<2.0" breaks under word-split).
 _flashcli_pyproject_deps_list() {
   cat <<'EOF'
 typer>=0.12
 pyyaml>=6.0
 packaging>=23.0
-huggingface_hub>=0.26,<1.0
+huggingface_hub>=0.26
 tqdm>=4.66
 fastapi>=0.100
 uvicorn[standard]>=0.24
@@ -1676,7 +1676,7 @@ install_flashcli_runtime_deps() {
     'typer>=0.12' \
     'pyyaml>=6.0' \
     'packaging>=23.0' \
-    'huggingface_hub>=0.26,<1.0' \
+    'huggingface_hub>=0.26' \
     'tqdm>=4.66' \
     'fastapi>=0.100' \
     'uvicorn[standard]>=0.24'
@@ -1691,32 +1691,7 @@ install_flashcli_runtime_deps() {
     do_pip_install --upgrade "tomli>=2.0" \
       || die "cannot install tomli>=2.0 (required for Python < 3.11)"
   fi
-  ensure_huggingface_hub_compat
   info "[ok] runtime dependencies installed"
-}
-
-# transformers<4.56 (bundle) requires huggingface-hub<1.0; downgrade if a 1.x wheel is present.
-ensure_huggingface_hub_compat() {
-  _rc=0
-  run_py - <<'PY' || _rc=$?
-from importlib.metadata import version
-from packaging.requirements import Requirement
-
-req = Requirement("huggingface_hub>=0.26,<1.0")
-try:
-    ver = version("huggingface-hub")
-except Exception:
-    raise SystemExit(1)
-raise SystemExit(0 if ver in req.specifier else 2)
-PY
-  [ "$_rc" -eq 0 ] && return 0
-  info "Aligning huggingface_hub to >=0.26,<1.0 (transformers compatibility) ..."
-  set -- 'huggingface_hub>=0.26,<1.0'
-  if [ -n "${FLASHCLI_PIP_USER_FLAG:-}" ]; then
-    set -- "$@" --user
-  fi
-  do_pip_install --upgrade --force-reinstall "$@" \
-    || die "cannot install huggingface_hub>=0.26,<1.0 — check pip/network errors above"
 }
 
 try_mirror_repo_fallback() {
@@ -2008,8 +1983,8 @@ def collect_errors() -> list[str]:
             )
         else:
             err(
-                "Hub CLI missing (need huggingface_hub>=0.26,<1.0). "
-                "Fix: python -m pip install -U 'huggingface_hub>=0.26,<1.0'"
+                "Hub CLI missing (need huggingface_hub>=0.26). "
+                "Fix: python -m pip install -U 'huggingface_hub>=0.26'"
             )
 
     return list(errors)
@@ -2033,31 +2008,6 @@ def repair_once() -> None:
     print("[info] attempting automatic repair (runtime deps, flashcli-bundle, flashcli --no-deps) ...", file=sys.stderr)
     if not pip_install(*specs):
         return
-    # Force huggingface-hub below 1.x when an incompatible 1.x release is installed.
-    try:
-        from importlib.metadata import version as _pkg_version
-        from packaging.requirements import Requirement as _Requirement
-
-        _hf_req = _Requirement("huggingface_hub>=0.26,<1.0")
-        _hf_ver = _pkg_version("huggingface-hub")
-        if _hf_ver not in _hf_req.specifier:
-            print(
-                "[info] downgrading huggingface_hub to >=0.26,<1.0 (transformers compatibility) ...",
-                file=sys.stderr,
-            )
-            cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall"]
-            if PIP_USER:
-                cmd.append("--user")
-            cmd.append("huggingface_hub>=0.26,<1.0")
-            r = subprocess.run(cmd, capture_output=True, text=True)
-            if r.returncode != 0:
-                err(
-                    "pip install huggingface_hub>=0.26,<1.0 failed:\n"
-                    f"{(r.stderr or r.stdout or '').strip()}"
-                )
-                return
-    except Exception:
-        pass
     if repo:
         if not pip_install(
             f"flashcli-bundle @ git+{repo}@{ref}#subdirectory=flashcli-bundle"

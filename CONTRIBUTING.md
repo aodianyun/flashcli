@@ -47,7 +47,7 @@ pytest tests/
 
 1. **Scope** — Keep changes in `flashcli/`. Do not commit FlashRT source changes inside flashcli PRs.
 2. **No inference in CLI** — Do not add model-specific forward logic under `src/flashcli/`. Use bundle `entry` modules.
-3. **Host CLI vs bundle venv** — Do not `pip install flashcli` into bundle venvs. Bundle venvs install **`flashcli-bundle`** from git only (see `deps.flashcli_bundle_pip_spec`); infer re-exec uses host flashcli for `runtime.infer`. See [docs/architecture.md](docs/architecture.md#host-cli-vs-bundle-infer-important).
+3. **Host CLI vs bundle venv** — Do not `pip install flashcli` into bundle venvs. Bundle venvs install **`flashcli-bundle`** from git only (see `deps.flashcli_bundle_pip_spec`); infer re-exec uses host flashcli for `runtime.infer`. **`huggingface_hub` is host-only** (weight pull); bundle `python_dependencies` are independent. See [docs/architecture.md](docs/architecture.md#host-cli-vs-bundle-infer-important).
 4. **Catalog** — Edit `src/flashcli/catalog/models.yaml` only after a bundle is built and validated on real hardware.
 5. **Docs** — Update English docs when behavior or release workflow changes. Mirror important changes in `*.zh-CN.md` when applicable.
 6. **Comments** — New code comments and script headers in English.

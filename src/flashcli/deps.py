@@ -19,21 +19,34 @@ from flashcli.runtime.requirements_spec import (
     resolve_runtime_requirements,
 )
 
-FLASHCLI_CORE_PACKAGES = [
+FLASHCLI_HOST_PACKAGES = [
+    # Host CLI only (pull, Hub CLI, catalog). Not copied into bundle venv.
     "typer>=0.12",
     "pyyaml>=6.0",
     "packaging>=23.0",
-    "huggingface_hub>=0.26,<1.0",
+    "huggingface_hub>=0.26",
     "fastapi>=0.100",
     "uvicorn[standard]>=0.24",
 ]
+
+# Installed into bundle venv for ``runtime.infer`` (typer/serve stack only).
+# No huggingface_hub — weights are pulled on the host before re-exec.
+FLASHCLI_BUNDLE_INFER_PACKAGES = [
+    "typer>=0.12",
+    "pyyaml>=6.0",
+    "packaging>=23.0",
+    "fastapi>=0.100",
+    "uvicorn[standard]>=0.24",
+]
+
+FLASHCLI_CORE_PACKAGES = FLASHCLI_HOST_PACKAGES
 
 FLASHCLI_SERVE_PACKAGES = [
     "fastapi>=0.100",
     "uvicorn[standard]>=0.24",
 ]
 
-FLASHCLI_PACKAGES = FLASHCLI_CORE_PACKAGES
+FLASHCLI_PACKAGES = FLASHCLI_HOST_PACKAGES
 
 
 def _pip_python(python: Path | None) -> str:
@@ -96,7 +109,7 @@ def _missing_runtime_imports(
 
 
 def flashcli_core_stack_satisfied() -> bool:
-    return not _missing_imports(FLASHCLI_CORE_PACKAGES)
+    return not _missing_imports(FLASHCLI_HOST_PACKAGES)
 
 
 def flashcli_serve_stack_satisfied() -> bool:
@@ -147,14 +160,21 @@ def ensure_bundle_infer_deps(
     quiet: bool = False,
     force: bool = False,
 ) -> None:
-    """Install flashcli *dependencies* (typer, pyyaml, …) into the target interpreter.
+    """Install flashcli infer helper deps into the target interpreter.
+
+    Host (``python=None``): full CLI stack including ``huggingface_hub``.
+    Bundle venv (``python=…``): typer/fastapi/uvicorn only — weights are pulled
+    on the host before re-exec (see ``models.cache.ensure_model_cached``).
 
     Does **not** install the flashcli package — infer loads flashcli from the host
     install via ``PYTHONPATH`` (see ``runtime/flashcli_shared.py``).
     """
-    to_install = [
-        p for p in FLASHCLI_CORE_PACKAGES if force or not _imports_ok(p, python=python)
-    ]
+    packages = (
+        FLASHCLI_BUNDLE_INFER_PACKAGES
+        if python is not None
+        else FLASHCLI_HOST_PACKAGES
+    )
+    to_install = [p for p in packages if force or not _imports_ok(p, python=python)]
     if not to_install:
         return
     if not quiet:
