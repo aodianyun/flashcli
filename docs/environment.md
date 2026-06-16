@@ -63,9 +63,10 @@ Weight download behavior matches `hf download`; on failures, test the same `HF_E
 | `FLASHCLI_SKIP_AUTO_INSTALL` | `0` | When `1`, `flashcli run` / `serve` / `pull` do **not** auto pip-install flashcli CLI deps (typer, huggingface_hub, …). Same as `--no-auto-install`. |
 | `FLASHCLI_USE_MIRROR` | `0` | When `1` or `~/.flashcli/mirror.env` exists: probed China PyPI mirror (from `install.sh --mirror`), Aliyun PyTorch wheels, `hf-mirror.com`, and GitHub release proxy for bundle Python downloads. |
 | `FLASHCLI_PIP_MIRROR` | (none) | Pin PyPI mirror: `tuna`, `aliyun`, `tencent`, `ustc`, `huawei` (skips probe). Same as `install.sh --pip-mirror`. |
-| `FLASHCLI_PIP_MIRROR_PROBE` | `1` | When `0`, skip wheel-download probe under `--mirror` (use Tsinghua default). |
-| `FLASHCLI_PIP_MIRROR_PROBE_TIMEOUT` | `10` | Per-mirror probe timeout (seconds). |
-| `FLASHCLI_PIP_MIRROR_PROBE_PACKAGE` | `packaging` | PEP 503 project used to fetch a real `.whl` during probe. |
+| `FLASHCLI_PIP_MIRROR_PROBE` | `0` | Default: **Tsinghua (tuna)** without probing. Set `1` or use `install.sh --mirror --pip-probe` to benchmark mirrors (5 MiB sample). |
+| `FLASHCLI_PIP_MIRROR_PROBE_TIMEOUT` | `30` | Per-mirror probe timeout (seconds). |
+| `FLASHCLI_PIP_MIRROR_PROBE_SAMPLE_BYTES` | `5242880` | Bytes downloaded per mirror during probe (HTTP Range). |
+| `FLASHCLI_PIP_MIRROR_PROBE_PACKAGE` | `numpy` | PEP 503 package used for large-wheel throughput probe. |
 | `FLASHCLI_NO_MIRROR` | `0` | When `1`, ignore mirror mode even if `mirror.env` exists. |
 | `FLASHCLI_GIT_PROXY` | (mirror default) | GitHub HTTPS proxy for release downloads (e.g. `https://mirror.ghproxy.com/`). `--mirror` sets this; `0` disables. |
 | `FLASHCLI_PREFER_GITHUB_MIRROR` | `0` | When `1`, try GitHub proxy before direct GitHub (also default when mirror mode is on). |

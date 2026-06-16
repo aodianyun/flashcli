@@ -19,9 +19,11 @@
 #   FLASHCLI_INSTALL_REPO / FLASHCLI_INSTALL_REF   (default: main @ GitHub)
 #   FLASHCLI_USE_MIRROR=1   China-friendly mirrors: pip/HF/git + apt/yum/dnf/apk (root)
 #   FLASHCLI_PIP_MIRROR=tuna     Pin PyPI mirror (tuna|aliyun|tencent|ustc|huawei); skips probe
-#   FLASHCLI_PIP_MIRROR_PROBE=0  With --mirror, skip PyPI probe (keep Tsinghua default)
-#   FLASHCLI_PIP_MIRROR_PROBE_TIMEOUT=10  Per-mirror probe timeout (seconds; wheel download)
-#   FLASHCLI_PIP_MIRROR_PROBE_MIN_BYTES=8192  Min bytes for a valid download probe
+#   FLASHCLI_PIP_MIRROR_PROBE=0  Default: Tsinghua (tuna). Set 1 or use install.sh --pip-probe to benchmark.
+#   FLASHCLI_PIP_MIRROR_PROBE_TIMEOUT=30  Per-mirror probe timeout (seconds)
+#   FLASHCLI_PIP_MIRROR_PROBE_SAMPLE_BYTES=5242880  Bytes to download per mirror (HTTP Range)
+#   FLASHCLI_PIP_MIRROR_PROBE_MIN_BYTES=1048576  Min bytes for a valid throughput sample
+#   FLASHCLI_PIP_MIRROR_PROBE_PACKAGE=numpy  PEP 503 project for large-wheel probe
 #   FLASHCLI_OS_MIRROR=0    With --mirror, skip rewriting OS package-manager sources
 #   FLASHCLI_GIT_PROXY=URL   Opt-in GitHub fetch proxy (e.g. https://mirror.ghproxy.com/)
 #   FLASHCLI_GIT_TIMEOUT=25  Timeout (seconds) for git ls-remote during preflight
@@ -47,6 +49,7 @@ REF="${FLASHCLI_INSTALL_REF:-main}"
 QUIET="${FLASHCLI_QUIET:-0}"
 USE_MIRROR="${FLASHCLI_USE_MIRROR:-0}"
 PIP_MIRROR_CHOICE="${FLASHCLI_PIP_MIRROR:-}"
+PIP_MIRROR_PROBE="${FLASHCLI_PIP_MIRROR_PROBE:-0}"
 REPO_FROM_USER=0
 if [ -n "${FLASHCLI_INSTALL_REPO:-}" ]; then
   REPO_FROM_USER=1
@@ -60,9 +63,10 @@ MIRROR_HF_ENDPOINT="https://hf-mirror.com"
 MIRROR_GET_PIP_URL="https://mirrors.aliyun.com/pypi/get-pip.py"
 MIRROR_PIP_LABEL="tuna"
 DEFAULT_GIT_PROXY_PREFIX="https://mirror.ghproxy.com/"
-PYPI_MIRROR_PROBE_TIMEOUT="${FLASHCLI_PIP_MIRROR_PROBE_TIMEOUT:-10}"
-PYPI_MIRROR_PROBE_MIN_BYTES="${FLASHCLI_PIP_MIRROR_PROBE_MIN_BYTES:-8192}"
-PYPI_PROBE_PACKAGE="${FLASHCLI_PIP_MIRROR_PROBE_PACKAGE:-packaging}"
+PYPI_MIRROR_PROBE_TIMEOUT="${FLASHCLI_PIP_MIRROR_PROBE_TIMEOUT:-30}"
+PYPI_MIRROR_PROBE_SAMPLE_BYTES="${FLASHCLI_PIP_MIRROR_PROBE_SAMPLE_BYTES:-5242880}"
+PYPI_MIRROR_PROBE_MIN_BYTES="${FLASHCLI_PIP_MIRROR_PROBE_MIN_BYTES:-1048576}"
+PYPI_PROBE_PACKAGE="${FLASHCLI_PIP_MIRROR_PROBE_PACKAGE:-numpy}"
 OS_MIRRORS_APPLIED=0
 APT_OS_PACKAGES_DISABLED=0
 
@@ -110,7 +114,8 @@ Options:
   -q, --quiet             Less output
   --ref REF, --branch REF   Git ref (branch/tag/commit). Default: main
   --repo URL, --git-url URL Git remote for pip install (GitHub, Gitee, self-hosted, …)
-  --mirror                  Use China-friendly mirrors (wheel-download PyPI probe; pip/HF/git; root: apt/yum/dnf/apk)
+  --mirror                  Use China-friendly mirrors (default PyPI: Tsinghua; pip/HF/git; root: apt/yum/dnf/apk)
+  --pip-probe               With --mirror, benchmark PyPI mirrors (5 MiB sample download; opt-in)
   --pip-mirror, --pypi-mirror NAME  Pin PyPI mirror (tuna|aliyun|tencent|ustc|huawei); skips probe
   --global, --no-mirror     Disable mirror endpoints (force direct official endpoints)
   --gitee                   Shortcut: --repo https://gitee.com/aodiansoft/flashcli.git
@@ -120,8 +125,9 @@ Environment (override flags):
   FLASHCLI_INSTALL_REPO, FLASHCLI_INSTALL_REF
   FLASHCLI_USE_MIRROR=1
   FLASHCLI_PIP_MIRROR=tuna    Pin PyPI mirror (also via --pip-mirror); skips probe
-  FLASHCLI_PIP_MIRROR_PROBE=0  With --mirror, skip PyPI probe (Tsinghua default)
-  FLASHCLI_PIP_MIRROR_PROBE_TIMEOUT=10
+  FLASHCLI_PIP_MIRROR_PROBE=0  Default: Tsinghua. Set 1 or pass --pip-probe to benchmark mirrors.
+  FLASHCLI_PIP_MIRROR_PROBE_TIMEOUT=30
+  FLASHCLI_PIP_MIRROR_PROBE_SAMPLE_BYTES=5242880
   FLASHCLI_OS_MIRROR=0      With --mirror, do not rewrite apt/yum/dnf/apk sources
   FLASHCLI_GIT_PROXY=URL    Opt-in GitHub proxy (default --mirror uses Gitee for official repo)
   FLASHCLI_GIT_TIMEOUT=25   git ls-remote timeout during preflight (seconds)
@@ -323,7 +329,7 @@ apply_os_package_mirrors() {
 pypi_mirror_probe_enabled() {
   mirror_mode_enabled || return 1
   [ -n "${PIP_MIRROR_CHOICE:-}" ] && return 1
-  case "${FLASHCLI_PIP_MIRROR_PROBE:-1}" in
+  case "${PIP_MIRROR_PROBE}" in
     0|false|no|off) return 1 ;;
     *) return 0 ;;
   esac
@@ -394,6 +400,8 @@ pypi_pep503_probe_wheel_url() {
   _html="$(curl -fsSL --connect-timeout 3 --max-time "$PYPI_MIRROR_PROBE_TIMEOUT" \
     "$_page" 2>/dev/null)" || return 1
   _href="$(printf '%s' "$_html" | sed -n 's/.*href="\([^"]*\.whl\)[#"].*/\1/p' \
+    | grep -E '(none-any|manylinux.*x86_64)\.whl$' | tail -n 1)"
+  [ -n "$_href" ] || _href="$(printf '%s' "$_html" | sed -n 's/.*href="\([^"]*\.whl\)[#"].*/\1/p' \
     | grep 'none-any\.whl$' | tail -n 1)"
   [ -n "$_href" ] || _href="$(printf '%s' "$_html" | sed -n 's/.*href="\([^"]*\.whl\)[#"].*/\1/p' | tail -n 1)"
   [ -n "$_href" ] || return 1
@@ -422,19 +430,22 @@ PY
   return 1
 }
 
-# Download a URL; print total seconds when at least min_bytes were received.
-_http_probe_download_seconds() {
+# Download a fixed-size sample (HTTP Range when supported); print "seconds|bytes".
+_http_probe_sample_result() {
   _url="$1"
-  _min_bytes="${2:-$PYPI_MIRROR_PROBE_MIN_BYTES}"
+  _sample_bytes="${2:-$PYPI_MIRROR_PROBE_SAMPLE_BYTES}"
+  _min_bytes="${3:-$PYPI_MIRROR_PROBE_MIN_BYTES}"
+  _range_end=$((_sample_bytes - 1))
   if have_cmd curl; then
-    _raw="$(curl -fsSL --connect-timeout 3 --max-time "$PYPI_MIRROR_PROBE_TIMEOUT" \
+    _raw="$(curl -fsSL --connect-timeout 5 --max-time "$PYPI_MIRROR_PROBE_TIMEOUT" \
+      -r "0-${_range_end}" \
       -o /dev/null -w '%{time_total}\n%{size_download}' "$_url" 2>/dev/null)" || return 1
     _time="${_raw%%$'\n'*}"
     _bytes="${_raw#*$'\n'}"
     [ -n "$_time" ] && [ -n "$_bytes" ] || return 1
     _bytes_int="${_bytes%%.*}"
     [ "${_bytes_int:-0}" -ge "$_min_bytes" ] 2>/dev/null || return 1
-    printf '%s\n' "$_time"
+    printf '%s|%s\n' "$_time" "$_bytes_int"
     return 0
   fi
   if have_cmd wget; then
@@ -448,7 +459,7 @@ _http_probe_download_seconds() {
     _bytes_int="$(wc -c < "$_tmp" 2>/dev/null | tr -d ' ')"
     rm -f "$_tmp" 2>/dev/null || true
     [ "${_bytes_int:-0}" -ge "$_min_bytes" ] 2>/dev/null || return 1
-    printf '%s\n' "$((_end - _start))"
+    printf '%s|%s\n' "$((_end - _start))" "$_bytes_int"
     return 0
   fi
   return 1
@@ -461,12 +472,14 @@ _probe_pypi_candidate() {
   _priority="$4"
   _out="$5"
   _probe_url="$(pypi_pep503_probe_wheel_url "$_index")" || return 0
-  _t="$(_http_probe_download_seconds "$_probe_url")" || return 0
-  [ -n "$_t" ] || return 0
-  printf '%s|%s|%s|%s|%s\n' "$_t" "$_priority" "$_label" "$_index" "$_host" > "$_out"
+  _sample="$(_http_probe_sample_result "$_probe_url")" || return 0
+  _t="${_sample%%|*}"
+  _bytes="${_sample#*|}"
+  [ -n "$_t" ] && [ -n "$_bytes" ] || return 0
+  printf '%s|%s|%s|%s|%s|%s\n' "$_t" "$_priority" "$_label" "$_index" "$_host" "$_bytes" > "$_out"
 }
 
-# Parallel probe of common China PyPI mirrors; pick fastest wheel download (tie-break: priority).
+# Parallel probe of common China PyPI mirrors; pick highest throughput (tie-break: priority).
 probe_fastest_pypi_mirror() {
   have_cmd curl || have_cmd wget || return 0
 
@@ -506,12 +519,23 @@ probe_fastest_pypi_mirror() {
 
   _t="${_best%%|*}"
   _rest="${_best#*|}"
+  _priority="${_rest%%|*}"
   _rest="${_rest#*|}"
   MIRROR_PIP_LABEL="${_rest%%|*}"
   _rest="${_rest#*|}"
   MIRROR_PIP_INDEX_URL="${_rest%%|*}"
-  MIRROR_PIP_TRUSTED_HOST="${_rest#*|}"
-  info "[i] mirror: PyPI wheel probe → ${MIRROR_PIP_LABEL} (${_t}s, ${MIRROR_PIP_INDEX_URL})"
+  _rest="${_rest#*|}"
+  MIRROR_PIP_TRUSTED_HOST="${_rest%%|*}"
+  _bytes="${_rest#*|}"
+  _mbps=""
+  if have_cmd awk && [ -n "$_t" ] && [ -n "$_bytes" ]; then
+    _mbps="$(awk "BEGIN {printf \"%.1f\", ${_bytes} / ${_t} / 1048576}")"
+  fi
+  if [ -n "$_mbps" ]; then
+    info "[i] mirror: PyPI throughput probe → ${MIRROR_PIP_LABEL} (~${_mbps} MiB/s, ${MIRROR_PIP_INDEX_URL})"
+  else
+    info "[i] mirror: PyPI throughput probe → ${MIRROR_PIP_LABEL} (${_t}s, ${MIRROR_PIP_INDEX_URL})"
+  fi
 }
 
 configure_pypi_mirror() {
@@ -530,6 +554,7 @@ configure_pypi_mirror() {
   fi
 
   apply_pypi_mirror_label "tuna" || true
+  info "[i] pip: default mirror ${MIRROR_PIP_LABEL} (${MIRROR_PIP_INDEX_URL}) — use --pip-probe to benchmark or --pip-mirror to pin"
 }
 
 # Apply mirror endpoints unless the user already exported overrides.
@@ -630,6 +655,10 @@ parse_args() {
         ;;
       --mirror)
         USE_MIRROR=1
+        shift
+        ;;
+      --pip-probe)
+        PIP_MIRROR_PROBE=1
         shift
         ;;
       --pip-mirror|--pypi-mirror)
@@ -2389,6 +2418,7 @@ main() {
   export FLASHCLI_INSTALL_REF="$REF"
   export FLASHCLI_USE_MIRROR="$USE_MIRROR"
   export FLASHCLI_PIP_MIRROR="${PIP_MIRROR_CHOICE:-}"
+  export FLASHCLI_PIP_MIRROR_PROBE="${PIP_MIRROR_PROBE}"
   export FLASHCLI_REQUIRES_PYTHON_MIN="$REQUIRES_PYTHON_MIN"
   install_flashcli
   verify_and_repair_pyproject
