@@ -126,3 +126,17 @@ def run_check(*, quiet: bool = False) -> int:
         if not quiet:
             print(f"[i] Could not list cached presets: {exc}")
     return issues
+
+
+def run_install(
+    *,
+    quiet: bool = False,
+    force: bool = False,
+) -> None:
+    ensure_environment(
+        install_flashcli=True,
+        quiet=quiet,
+        force=force,
+    )
+    if not quiet:
+        print("flashcli environment install complete.")
