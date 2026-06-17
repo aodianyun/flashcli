@@ -14,10 +14,9 @@ def test_bundle_spec_ignores_optional_server_group() -> None:
     assert spec.all_packages() == ["torch", "numpy"]
 
 
-def test_packages_for_profile_is_inference_only() -> None:
+def test_pip_packages_for_bundle_is_inference_only() -> None:
     spec = RuntimeRequirementsSpec(
         pip_packages=["numpy", "transformers<4.56"],
         optional_groups={"server": ["fastapi", "uvicorn"]},
     )
-    assert spec.packages_for_profile("serve") == ["numpy", "transformers<4.56"]
-    assert spec.packages_for_profile("default") == ["numpy", "transformers<4.56"]
+    assert spec.pip_packages_for_bundle() == ["numpy", "transformers<4.56"]

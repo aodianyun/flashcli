@@ -50,6 +50,8 @@ flashcli models list
 | `FLASHCLI_HF_MAX_WORKERS` | (Hub default) | Pass `--max-workers` to `hf download` (e.g. `1` on flaky networks). |
 | `FLASHCLI_HF_PROBE_TIMEOUT` | `3` | Timeout (seconds) for probing official Hub reachability before fallback. |
 | `FLASHCLI_SKIP_HF_PROBE` | `0` | When `1`, skip probe and still try official first (may be slower under blocked networks). |
+| `FLASHCLI_DISABLE_XET` | (unset) | When not `0`/`false`, mirror downloads set `HF_HUB_DISABLE_XET=1` (avoids xet on hf-mirror.com). |
+| `FLASHCLI_HF_VERBOSE` | `0` | When `1`, print Hub CLI download commands and progress details. |
 
 Weight download behavior matches `hf download`; on failures, test the same `HF_ENDPOINT` manually with Hub CLI.
 
@@ -108,10 +110,23 @@ See [architecture.md](architecture.md#host-cli-vs-bundle-infer-important). Do **
 
 `env` blocks in `flashcli-bundle.json` can set process env at activation (`{models_dir}`, `{bundle_root}` placeholders).
 
-## Development
+## Infer / serve (bundle venv)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `FLASHCLI_SERVE_LOG_LEVEL` | `INFO` | Application log level for `flashcli serve`. |
+| `FLASHCLI_UVICORN_LOG_LEVEL` | `info` | Uvicorn access/error log level. |
+| `FLASHCLI_SERVE_BUSY_TIMEOUT_SEC` | `0` | Max seconds to wait when the engine is busy (`0` = no limit). |
+
+## Development and debugging
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FLASHCLI_DEBUG` | (unset) | When set, print full tracebacks for CLI errors. |
+| `FLASHCLI_INSTALL_REPO` / `FLASHCLI_INSTALL_REF` | (from `install.env`) | Git source for `flashcli-bundle` when installing into bundle venvs. |
+| `FLASHCLI_REFRESH_RELEASE_CACHE` | (unset) | When `1`, refresh cached python-build-standalone GitHub release JSON. |
+| `FLASHCLI_PYTHON_RELEASE_CACHE` | `~/.flashcli/python/.cache` | Cache dir for standalone Python release index JSON. |
+| `GITHUB_TOKEN` / `GH_TOKEN` | (none) | Optional token for GitHub API when fetching python-build-standalone releases. |
 | `FLASHRT_REPO_ROOT` | (auto-detect) | FlashRT source repo root. Fallback when resolving `python_dependencies` from FlashRT `pyproject.toml` (`runtime/requirements_spec.py`). Useful in a FlashRT + flashcli monorepo. |
 
 ## Set by flashcli at runtime (informational)
@@ -125,5 +140,6 @@ See [architecture.md](architecture.md#host-cli-vs-bundle-infer-important). Do **
 ## Related docs
 
 - [README.md](../README.md) — quick start and cache layout
-- [model_bundle_standard.md](model_bundle_standard.md) — preset ref + runtime flow
+- [architecture.md](architecture.md) — host / protocol / infer flow
+- [module_layers.md](module_layers.md) — module placement rules
 - [model_bundle_standard.md](model_bundle_standard.md) — preset ref and runtime flow

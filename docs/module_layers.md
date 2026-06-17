@@ -20,7 +20,7 @@ infer only → flashcli_bundle/infer/
 both       → flashcli_bundle/ (protocol, dependencies = [])
 ```
 
-**Re-export is not a reason to add protocol code.** Thin re-exports exist only for stable import paths. If only one layer needs the logic, implement it in that layer — do not land it in protocol first.
+**Re-export is not a reason to add protocol code.** Thin re-exports exist only for stable import paths. If only one layer needs the logic, implement it in that layer.
 
 **Protocol must not contain** (even with `dependencies = []`):
 
@@ -31,16 +31,7 @@ both       → flashcli_bundle/ (protocol, dependencies = [])
 
 - `activate_core.py`, `cache.py`, `post_pull.py`, resolve paths in `weights.py` / `resolve.py`
 
-### Known migration backlog (Phase 2 complete)
-
-| Module / API | Status |
-|--------------|--------|
-| ~~`python_paths.py`~~ | ✅ `src/flashcli/bundle/python_paths.py` |
-| ~~`resolve_python_for_minor`~~ | ✅ `src/flashcli/bundle/python_resolve.py` |
-| ~~GitHub release download~~ | ✅ `src/flashcli/runtime/mirror_github.py` |
-| ~~Weight download orchestration~~ | ✅ `src/flashcli/bundle/weights.py` (protocol resolve-only) |
-
-New protocol modules require imports from **both** host and infer trees.
+**Host-only modules** (examples, not exhaustive): `python_paths.py`, `python_resolve.py`, `runtime/mirror_github.py`, `bundle/weights.py` (HF download), `models/hf_hub.py`, `models/pull.py`, `bundle/artifacts.py`, `runtime/reexec.py`.
 
 ## Layer overview
 
@@ -118,7 +109,10 @@ Structural rules live in `tests/test_architecture_layers.py`:
 - Infer extra includes serve stack, excludes `huggingface_hub`
 - Listed re-export modules must not duplicate protocol implementations
 - `Preset` exposes `engine` and `description`
-- **Placement rule:** new protocol modules must be imported from both host and infer; `HOST_ONLY_PROTOCOL_MODULES` allowlist must not grow
+- **Placement rule:** new protocol modules must be imported from both host and infer
+- `HOST_ONLY_PROTOCOL_MODULES` allowlist must not grow
 - Infer `runtime/mirror` must not re-export GitHub release download APIs
+- Infer must not import `flashcli`; protocol must not import `huggingface_hub`
+- Obsolete compatibility shims must stay deleted (see `tests/test_architecture_layers.py`)
 
 See also [architecture.md](architecture.md) for runtime flow and directory layout.

@@ -24,10 +24,6 @@ HF_MIRROR_ENDPOINT = "https://hf-mirror.com"
 HF_OFFICIAL_ENDPOINT = "https://huggingface.co"
 
 
-def bootstrap_default_hf_endpoint() -> None:
-    """Backward-compatible no-op (use ``export HF_ENDPOINT=...`` + ``hf download``)."""
-
-
 def _hub_timeout_seconds(env_key: str, flashcli_key: str, default: str) -> str:
     if os.environ.get(env_key, "").strip():
         return os.environ[env_key].strip()
@@ -69,20 +65,6 @@ def _apply_flashcli_hub_timeouts() -> None:
             "HF_HUB_DOWNLOAD_TIMEOUT",
         ):
             os.environ[key] = value
-
-
-def _ensure_hub_download_patches() -> None:
-    """Backward-compatible no-op (downloads use Hub CLI + HF_ENDPOINT)."""
-
-
-def sync_hub_constants(endpoint: str) -> str:
-    """Set ``HF_ENDPOINT`` env only (legacy helper for scripts/tests)."""
-    ep = endpoint.strip().rstrip("/") if endpoint else HF_OFFICIAL_ENDPOINT
-    if endpoint.strip():
-        os.environ["HF_ENDPOINT"] = ep
-    else:
-        os.environ.pop("HF_ENDPOINT", None)
-    return ep
 
 
 def _prefer_mirror_hub_first() -> bool:

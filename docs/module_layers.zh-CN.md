@@ -31,18 +31,9 @@
 - `cache.py` / `weights.py` — resolve 共享；HF **下载实现**应在 host
 - `post_pull.py` — run/pull 后 host 与 infer 都可能触发
 
-**Re-export 不是放 protocol 的理由：** host/infer 仅为兼容旧 import 路径而 re-export protocol；若逻辑只在一层使用，应直接放在该层，而不是先进 protocol 再 re-export。
+**Re-export 不是放 protocol 的理由：** host/infer 的薄 re-export 仅为稳定 import 路径；若逻辑只在一层使用，应直接放在该层。
 
-## 已知待迁回（protocol 略偏重）
-
-以下项已于 Phase 2 迁回 host；新增 host/infer 专有逻辑请直接放在对应层，勿再进入 protocol。
-
-| 模块 / 符号 | 状态 |
-|-------------|------|
-| ~~`python_paths.py`~~ | ✅ `src/flashcli/bundle/python_paths.py` |
-| ~~`resolve_python_for_minor`~~ | ✅ `src/flashcli/bundle/python_resolve.py`（protocol 探针用 infer-safe 默认解析） |
-| ~~GitHub release 下载~~ | ✅ `src/flashcli/runtime/mirror_github.py` |
-| ~~`weights.py` 下载编排~~ | ✅ `src/flashcli/bundle/weights.py`（protocol 仅 resolve） |
+**Host 专有模块示例**（非穷举）：`python_paths.py`、`python_resolve.py`、`runtime/mirror_github.py`、`bundle/weights.py`（HF 下载）、`models/hf_hub.py`、`models/pull.py`、`bundle/artifacts.py`、`runtime/reexec.py`。
 
 ## 分层概览
 
@@ -66,7 +57,9 @@ Host 与 infer **不得**相互 import。
 - Host 不 import `flashcli_bundle.infer`
 - Protocol `dependencies = []`
 - Infer extra 含 serve 栈、不含 `huggingface_hub`
-- `HOST_ONLY_PROTOCOL_MODULES` 白名单不得扩大（已知 host 专有遗留）
+- `HOST_ONLY_PROTOCOL_MODULES` 白名单不得扩大
 - Infer `runtime/mirror` 不得 re-export GitHub release 下载 API
+- Infer 不得 import `flashcli`；protocol 不得 import `huggingface_hub`
+- 过时兼容 shim（如 `infer/config.py`、`bundle/standalone_release.py`）不得恢复
 
 详见 [architecture.zh-CN.md](architecture.zh-CN.md)。

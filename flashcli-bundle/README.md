@@ -13,12 +13,12 @@ curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh 
 # mirror: ... | sh -s -- --mirror
 ```
 
-Manual equivalent:
+Manual equivalent (host CLI venv only — **do not** install these into bundle venvs):
 
 ```bash
 pip install "flashcli-bundle @ git+https://github.com/aodianyun/flashcli.git@main#subdirectory=flashcli-bundle"
 pip install --no-deps "flashcli @ git+https://github.com/aodianyun/flashcli.git@main"
-pip install typer pyyaml packaging 'huggingface_hub>=0.26' tqdm
+# flashcli pulls host deps (typer, huggingface_hub, …) via install.sh / deps.ensure_flashcli_core_stack
 ```
 
 **Bundle authors / monorepo dev:**

@@ -35,20 +35,11 @@ class RuntimeRequirementsSpec:
         """Inference-only pip packages declared by the bundle manifest."""
         return _dedupe_strings(list(self.pip_packages))
 
-    def packages_for_profile(self, profile: str = "default") -> list[str]:
-        """Backward-compatible alias — bundle deps do not vary by CLI command."""
-        del profile
-        return self.pip_packages_for_bundle()
-
     def all_packages(self) -> list[str]:
         pkgs = list(self.pip_packages_for_bundle())
         if self.torch_package.strip():
             pkgs.insert(0, self.torch_package)
         return _dedupe_strings(pkgs)
-
-    def all_packages_for_profile(self, profile: str = "default") -> list[str]:
-        del profile
-        return self.all_packages()
 
 
 def _load_toml(path: Path) -> dict:
@@ -304,7 +295,7 @@ def write_runtime_requirements_artifacts(
 ) -> None:
     """Write requirements-runtime.txt and optional manifest fields."""
     stage_dir = stage_dir.resolve()
-    lines = spec.packages_for_profile("default")
+    lines = spec.pip_packages_for_bundle()
     (stage_dir / "requirements-runtime.txt").write_text(
         "\n".join(lines) + ("\n" if lines else ""),
         encoding="utf-8",

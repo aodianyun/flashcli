@@ -51,6 +51,8 @@ flashcli models list
 | `FLASHCLI_HF_MAX_WORKERS` | （Hub 默认） | 传给 `hf download` 的 `--max-workers`（网络不稳时可设为 `1`）。 |
 | `FLASHCLI_HF_PROBE_TIMEOUT` | `3` | 探测官方 Hub 是否可达（秒）；不可达则跳过官方、直接镜像。 |
 | `FLASHCLI_SKIP_HF_PROBE` | `0` | 设为 `1` 时不做探测，仍先试官方（`hf` 内部会慢重试）。 |
+| `FLASHCLI_DISABLE_XET` | （未设置） | 非 `0`/`false` 时，走镜像下载会设 `HF_HUB_DISABLE_XET=1`（hf-mirror 上避免 xet）。 |
+| `FLASHCLI_HF_VERBOSE` | `0` | 设为 `1` 时打印 Hub CLI 下载命令与进度细节。 |
 
 权重下载与 `hf download` 相同；失败时请先用相同 `HF_ENDPOINT` 手动试一次 CLI。
 
@@ -109,11 +111,24 @@ Bundle 的 Python 依赖（torch 等）由 `activate_bundle` 按 `flashcli-bundl
 
 `flashcli-bundle.json` 中的 `env:` 块可在激活 bundle 时写入进程环境（支持 `{models_dir}`、`{bundle_root}` 占位符）。
 
-## 开发与维护
+## Infer / serve（bundle venv）
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `FLASHRT_REPO_ROOT` | （自动探测） | FlashRT 源码仓库根目录。在无法从 bundle 的 `flashcli-bundle.json` 解析 `python_dependencies` 时，用于回退读取 FlashRT 的 `pyproject.toml`（见 `runtime/requirements_spec.py`）。本地开发 FlashRT + flashcli  monorepo 时偶尔需要。 |
+| `FLASHCLI_SERVE_LOG_LEVEL` | `INFO` | `flashcli serve` 应用日志级别。 |
+| `FLASHCLI_UVICORN_LOG_LEVEL` | `info` | Uvicorn 访问/错误日志级别。 |
+| `FLASHCLI_SERVE_BUSY_TIMEOUT_SEC` | `0` | 引擎忙碌时最长等待秒数（`0` = 不限制）。 |
+
+## 开发与调试
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `FLASHCLI_DEBUG` | （未设置） | 设置后 CLI 错误打印完整 traceback。 |
+| `FLASHCLI_INSTALL_REPO` / `FLASHCLI_INSTALL_REF` | （来自 `install.env`） | bundle venv 安装 `flashcli-bundle` 时的 git 源。 |
+| `FLASHCLI_REFRESH_RELEASE_CACHE` | （未设置） | 设为 `1` 时刷新 python-build-standalone 的 GitHub release JSON 缓存。 |
+| `FLASHCLI_PYTHON_RELEASE_CACHE` | `~/.flashcli/python/.cache` | standalone Python release 索引 JSON 缓存目录。 |
+| `GITHUB_TOKEN` / `GH_TOKEN` | （无） | 拉取 python-build-standalone release 时可选 GitHub API token。 |
+| `FLASHRT_REPO_ROOT` | （自动探测） | FlashRT 源码仓库根目录。在无法从 bundle 的 `flashcli-bundle.json` 解析 `python_dependencies` 时，用于回退读取 FlashRT 的 `pyproject.toml`（见 `runtime/requirements_spec.py`）。本地 FlashRT + flashcli monorepo 时偶尔需要。 |
 
 ## 运行时由 flashcli 设置（只读 / 调试）
 
@@ -128,4 +143,6 @@ Bundle 的 Python 依赖（torch 等）由 `activate_bundle` 按 `flashcli-bundl
 ## 相关文档
 
 - [README.zh-CN.md](../README.zh-CN.md) — 快速开始与本机缓存路径
+- [architecture.zh-CN.md](architecture.zh-CN.md) — host / protocol / infer 流程
+- [module_layers.zh-CN.md](module_layers.zh-CN.md) — 模块归属规则
 - [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) — preset ref 与运行时流程

@@ -289,9 +289,3 @@ def validate_native_runtime(
                     if err:
                         errors.append(err)
     return errors
-
-
-# Backward-compatible aliases for tests / internal imports
-validate_native_lib = validate_native_runtime
-validate_native_lib_matrix = validate_native_runtime_matrix
-validate_native_lib_abi = validate_native_runtime_abi

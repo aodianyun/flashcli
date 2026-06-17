@@ -104,6 +104,41 @@ def test_host_tree_never_imports_infer() -> None:
     assert not offenders, "\n".join(offenders)
 
 
+def test_infer_tree_never_imports_flashcli() -> None:
+    forbidden = "flashcli"
+    infer_root = FLASHCLI_BUNDLE / "src" / "flashcli_bundle" / "infer"
+    offenders: list[str] = []
+    for path in infer_root.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == forbidden or alias.name.startswith(forbidden + "."):
+                        offenders.append(
+                            f"{path.relative_to(infer_root)}: import {alias.name}"
+                        )
+            elif isinstance(node, ast.ImportFrom):
+                if node.module and (
+                    node.module == forbidden or node.module.startswith(forbidden + ".")
+                ):
+                    offenders.append(
+                        f"{path.relative_to(infer_root)}: from {node.module}"
+                    )
+    assert not offenders, "\n".join(offenders)
+
+
+def test_protocol_tree_never_imports_huggingface_hub() -> None:
+    proto_root = FLASHCLI_BUNDLE / "src" / "flashcli_bundle"
+    offenders: list[str] = []
+    for path in proto_root.rglob("*.py"):
+        if "infer" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        if "huggingface_hub" in text or "huggingface-hub" in text:
+            offenders.append(str(path.relative_to(ROOT)))
+    assert not offenders, "\n".join(offenders)
+
+
 def test_infer_bundle_subpackage_has_no_duplicate_protocol_stubs() -> None:
     """Protocol modules must live under flashcli_bundle/, not infer/bundle/ stubs."""
     stub_names = {
@@ -166,24 +201,45 @@ def test_openai_compat_has_no_http_stack_imports() -> None:
         "src/flashcli/serve",
         "src/flashcli/engines",
         "src/flashcli/bundle/bundle_options.py",
+        "src/flashcli/bundle/standalone_release.py",
+        "flashcli-bundle/src/flashcli_bundle/infer/config.py",
     ],
 )
 def test_removed_host_infer_shims_absent(rel: str) -> None:
     path = ROOT / rel
-    assert not path.exists(), f"Obsolete host shim still present: {rel}"
+    assert not path.exists(), f"Obsolete shim still present: {rel}"
 
 
-# --- Phase A: re-export contract + module ownership ---
+# --- Thin re-exports and host-only wrappers ---
 
 HOST_REEXPORT_FILES: dict[str, str] = {
     "models/preset_ref.py": "flashcli_bundle.preset_ref",
+    "models/registry.py": "flashcli_bundle.preset",
     "bundle/marker.py": "flashcli_bundle.marker",
+    "bundle/layout.py": "flashcli_bundle.layout",
+    "bundle/catalog.py": "flashcli_bundle.catalog",
+    "bundle/checkpoint.py": "flashcli_bundle.checkpoint",
+    "bundle/config.py": "flashcli_bundle.bundle_config",
+    "bundle/flashhub.py": "flashcli_bundle.flashhub",
+    "bundle/native.py": "flashcli_bundle.native",
+    "bundle/native_naming.py": "flashcli_bundle.native_naming",
+    "bundle/variants.py": "flashcli_bundle.variants",
     "util/download_progress.py": "flashcli_bundle.util.download_progress",
-    "runtime/mirror.py": "flashcli_bundle.runtime.mirror",
     "runtime/detect.py": "flashcli_bundle.runtime.detect",
     "runtime/requirements_spec.py": "flashcli_bundle.runtime.requirements_spec",
     "models/post_pull.py": "flashcli_bundle.post_pull",
     "bundle/resolve.py": "flashcli_bundle.resolve",
+}
+
+HOST_WRAPPER_FILES: dict[str, tuple[str, ...]] = {
+    "bundle/manifest.py": ("flashcli_bundle.manifest", "flashcli.bundle.python_resolve"),
+    "bundle/native_validate.py": (
+        "flashcli_bundle.native_validate",
+        "flashcli.bundle.python_resolve",
+    ),
+    "bundle/weights.py": ("flashcli_bundle", "flashcli.models.pull"),
+    "models/cache.py": ("flashcli_bundle import cache", "flashcli.bundle.weights"),
+    "runtime/mirror.py": ("flashcli.runtime.mirror_github", "flashcli_bundle.runtime.mirror"),
 }
 
 INFER_REEXPORT_FILES: dict[str, str] = {
@@ -224,9 +280,16 @@ def test_host_modules_are_protocol_reexports(rel: str, prefix: str) -> None:
         f"from flashcli_bundle import {prefix.rsplit('.', 1)[-1]}",
     )
     assert any(p in text for p in import_patterns), f"{rel} must re-export from {prefix}"
-    assert _is_reexport_module(text, prefix) or rel == "models/cache.py", (
-        f"{rel} must be a thin re-export (or host wrapper for cache)"
-    )
+    assert _is_reexport_module(text, prefix), f"{rel} must be a thin re-export"
+
+
+@pytest.mark.parametrize("rel,markers", HOST_WRAPPER_FILES.items())
+def test_host_wrapper_modules_inject_host_deps(rel: str, markers: tuple[str, ...]) -> None:
+    path = HOST_SRC / rel
+    assert path.is_file(), f"missing host wrapper {rel}"
+    text = path.read_text(encoding="utf-8")
+    for marker in markers:
+        assert marker in text, f"{rel} must import or wrap {marker}"
 
 
 @pytest.mark.parametrize("rel,prefix", INFER_REEXPORT_FILES.items())
@@ -271,13 +334,36 @@ def test_protocol_modules_import_without_serve_or_hf() -> None:
 def test_host_cache_is_thin_wrapper() -> None:
     text = (HOST_SRC / "models" / "cache.py").read_text(encoding="utf-8")
     assert "flashcli_bundle.cache" in text or "flashcli_bundle import cache" in text
+    assert "ensure_checkpoint_fn" in text
     assert "def preset_cache_dir" not in text
     assert "def _read_marker" not in text
 
 
+def test_protocol_weights_download_requires_host(tmp_path: Path) -> None:
+    from flashcli_bundle.manifest import BundleManifest
+    from flashcli_bundle.preset import Preset
+    from flashcli_bundle.weights import ensure_checkpoint
+
+    root = tmp_path / "bundle"
+    root.mkdir()
+    bundle = BundleManifest(
+        bundle_root=root,
+        name="demo",
+        capabilities=["run"],
+        entry_run=None,
+        entry_serve=None,
+        raw={
+            "weights": {"source": "huggingface", "repo": "org/model", "revision": "main"},
+        },
+    )
+    preset = Preset(name="demo/x:1.0.0", raw={"engine": "model_bundle"})
+    with pytest.raises(RuntimeError, match="host flashcli CLI"):
+        ensure_checkpoint(preset, bundle, download=True)
+
+
 # --- Module placement: host/infer-only logic must not grow in protocol ---
 
-# Host-only modules still under flashcli_bundle/ (migration backlog — do not add).
+# Host-only modules must not reappear under flashcli_bundle/ (protocol root).
 HOST_ONLY_PROTOCOL_MODULES = frozenset()
 
 HOST_ONLY_MIRROR_SYMBOLS = frozenset({
