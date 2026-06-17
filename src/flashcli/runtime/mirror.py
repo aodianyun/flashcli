@@ -25,14 +25,16 @@ def _truthy(raw: str | None) -> bool:
 
 
 def mirror_enabled() -> bool:
-    if _truthy(os.environ.get("FLASHCLI_USE_MIRROR")):
-        return True
     if _truthy(os.environ.get("FLASHCLI_NO_MIRROR")):
         return False
+    if _truthy(os.environ.get("FLASHCLI_USE_MIRROR")):
+        return True
     return FLASHCLI_HOME.joinpath(MIRROR_ENV_FILE).is_file()
 
 
 def _load_mirror_env_file() -> None:
+    if _truthy(os.environ.get("FLASHCLI_NO_MIRROR")):
+        return
     path = FLASHCLI_HOME / MIRROR_ENV_FILE
     if not path.is_file():
         return
@@ -51,6 +53,9 @@ def apply_mirror_env() -> None:
     """Load ``~/.flashcli/mirror.env`` and default mirror URLs (idempotent)."""
     global _APPLIED
     if _APPLIED:
+        return
+    if _truthy(os.environ.get("FLASHCLI_NO_MIRROR")):
+        _APPLIED = True
         return
     _load_mirror_env_file()
     if mirror_enabled():
@@ -74,6 +79,8 @@ def _git_proxy_disabled() -> bool:
 
 def _prefer_github_mirror_first() -> bool:
     apply_mirror_env()
+    if _truthy(os.environ.get("FLASHCLI_NO_MIRROR")):
+        return False
     if _git_proxy_disabled():
         return False
     if _truthy(os.environ.get("FLASHCLI_PREFER_GITHUB_MIRROR")):

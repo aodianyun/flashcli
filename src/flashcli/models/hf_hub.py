@@ -86,6 +86,12 @@ def sync_hub_constants(endpoint: str) -> str:
 
 
 def _prefer_mirror_hub_first() -> bool:
+    if os.environ.get("FLASHCLI_NO_MIRROR", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
+        return False
     return os.environ.get("FLASHCLI_PREFER_HF_MIRROR", "").strip().lower() in (
         "1",
         "true",

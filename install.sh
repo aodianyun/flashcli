@@ -2435,16 +2435,29 @@ run_post_install_tests() {
     tests/test_deps_flashcli_bundle.py
   "
 
-  _pytest_env="FLASHCLI_NO_MIRROR=1"
   if [ "$RUN_TESTS" = "1" ]; then
     info "Running full pytest suite under ${_src}/tests ..."
-    if ! ( cd "${_src}" && env ${_pytest_env} run_py -m pytest tests -q --tb=line ); then
+    if ! (
+      cd "${_src}"
+      unset HF_ENDPOINT FLASHCLI_USE_MIRROR FLASHCLI_PREFER_HF_MIRROR \
+        FLASHCLI_PREFER_GITHUB_MIRROR FLASHCLI_GIT_PROXY PIP_INDEX_URL PIP_TRUSTED_HOST \
+        2>/dev/null || true
+      export FLASHCLI_NO_MIRROR=1
+      run_py -m pytest tests -q --tb=line
+    ); then
       die "post-install pytest failed (full suite). Re-run: cd ${_src} && pytest tests/"
     fi
   else
     info "Running core pytest subset ..."
-    # shellcheck disable=SC2086
-    if ! ( cd "${_src}" && env ${_pytest_env} run_py -m pytest ${_core_tests} -q --tb=line ); then
+    if ! (
+      cd "${_src}"
+      unset HF_ENDPOINT FLASHCLI_USE_MIRROR FLASHCLI_PREFER_HF_MIRROR \
+        FLASHCLI_PREFER_GITHUB_MIRROR FLASHCLI_GIT_PROXY PIP_INDEX_URL PIP_TRUSTED_HOST \
+        2>/dev/null || true
+      export FLASHCLI_NO_MIRROR=1
+      # shellcheck disable=SC2086
+      run_py -m pytest ${_core_tests} -q --tb=line
+    ); then
       die "post-install pytest failed (core subset). Re-run with --run-tests for full suite."
     fi
   fi
