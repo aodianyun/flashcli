@@ -140,7 +140,7 @@ def _v3_bundle(root: Path) -> None:
     (root / "flashcli-bundle.json").write_text(json.dumps(data), encoding="utf-8")
 
 
-@patch("flashcli.bundle.native._probe_so_file")
+@patch("flashcli_bundle.native._probe_so_file")
 def test_probe_uses_manifest_python_abi(mock_probe, tmp_path: Path) -> None:
     root = tmp_path / "bundle"
     _v3_bundle(root)

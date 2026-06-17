@@ -46,11 +46,12 @@ def test_ensure_checkpoint_resolve_only_raises_without_cache(tmp_path: Path) -> 
         },
     )
     preset = Preset(
-        name="test_preset",
+        name="flashcli-bundle/test:1.0.0",
         raw={"engine": "model_bundle", "bundle": {"local_root": str(bundle_root)}},
+        cache_key="test/1.0.0",
     )
 
-    with pytest.raises(FileNotFoundError, match="flashcli pull test_preset"):
+    with pytest.raises(FileNotFoundError, match="flashcli pull flashcli-bundle/test:1.0.0"):
         ensure_checkpoint(preset, bundle, download=False)
 
 

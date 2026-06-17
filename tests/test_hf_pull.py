@@ -23,7 +23,11 @@ def test_hf_official_first_by_default(monkeypatch, tmp_path: Path) -> None:
 
     with patch("flashcli.models.pull.filter_download_endpoints", lambda eps, **_: eps):
         with patch("flashcli.models.pull.run_hf_cli_download", fake_cli):
-            _download_huggingface(spec, tmp_path / "ckpt", quiet=True)
+            with patch(
+                "flashcli.bundle.checkpoint.has_cached_weight_files",
+                side_effect=[False, True],
+            ):
+                _download_huggingface(spec, tmp_path / "ckpt", quiet=True)
 
     assert calls == [""]
 
@@ -37,7 +41,11 @@ def test_hf_mirror_when_hf_endpoint_set(monkeypatch, tmp_path: Path) -> None:
         calls.append(kwargs.get("endpoint", ""))
 
     with patch("flashcli.models.pull.run_hf_cli_download", fake_cli):
-        _download_huggingface(spec, tmp_path / "ckpt", quiet=True)
+        with patch(
+            "flashcli.bundle.checkpoint.has_cached_weight_files",
+            side_effect=[False, True],
+        ):
+            _download_huggingface(spec, tmp_path / "ckpt", quiet=True)
 
     assert calls == [HF_MIRROR_ENDPOINT]
 
@@ -55,9 +63,14 @@ def test_hf_official_falls_back_to_mirror(monkeypatch, tmp_path: Path) -> None:
 
     with patch("flashcli.models.pull.filter_download_endpoints", lambda eps, **_: eps):
         with patch("flashcli.models.pull.run_hf_cli_download", fake_cli):
-            _download_huggingface(spec, tmp_path / "ckpt", quiet=True)
+            with patch(
+                "flashcli.bundle.checkpoint.has_cached_weight_files",
+                side_effect=[False, True],
+            ):
+                _download_huggingface(spec, tmp_path / "ckpt", quiet=True)
 
-    assert calls == ["", HF_MIRROR_ENDPOINT]
+    assert calls[:3] == ["", "", ""]
+    assert calls[3] == HF_MIRROR_ENDPOINT
 
 
 def test_hf_preserves_incomplete_cache_for_resume(monkeypatch, tmp_path: Path) -> None:
@@ -68,7 +81,11 @@ def test_hf_preserves_incomplete_cache_for_resume(monkeypatch, tmp_path: Path) -
     spec = {"repo": "org/model"}
 
     with patch("flashcli.models.pull.run_hf_cli_download") as mock_dl:
-        _download_huggingface(spec, dest, quiet=True)
+        with patch(
+            "flashcli.bundle.checkpoint.has_cached_weight_files",
+            side_effect=[False, False, True],
+        ):
+            _download_huggingface(spec, dest, quiet=True)
 
     mock_dl.assert_called_once()
     assert (dest / ".cache").exists()
@@ -90,7 +107,7 @@ def test_hf_retries_same_endpoint(monkeypatch, tmp_path: Path) -> None:
     with patch("flashcli.models.pull.run_hf_cli_download", fake_cli):
         with patch(
             "flashcli.bundle.checkpoint.has_cached_weight_files",
-            side_effect=[False, False, False, True],
+            side_effect=[False, True],
         ):
             _download_huggingface(spec, tmp_path / "ckpt", quiet=True)
 

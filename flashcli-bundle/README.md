@@ -6,7 +6,7 @@ Minimal Python package for **Model Bundle** authors and runtime entry modules (`
 
 ## Install
 
-**End users** — `install.sh` / `auto_install.sh` install `flashcli-bundle` from git, then `flashcli` with `--no-deps`:
+**End users** — `install.sh` installs `flashcli-bundle` on the host and `flashcli-bundle[infer]` in bundle venvs:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
@@ -18,24 +18,24 @@ Manual equivalent:
 ```bash
 pip install "flashcli-bundle @ git+https://github.com/aodianyun/flashcli.git@main#subdirectory=flashcli-bundle"
 pip install --no-deps "flashcli @ git+https://github.com/aodianyun/flashcli.git@main"
-pip install typer pyyaml packaging 'huggingface_hub>=0.26' tqdm fastapi 'uvicorn[standard]'
+pip install typer pyyaml packaging 'huggingface_hub>=0.26' tqdm
 ```
 
 **Bundle authors / monorepo dev:**
 
 ```bash
 # same git repo as flashcli
-pip install -e ./flashcli-bundle
+pip install -e "./flashcli-bundle[infer]"
 pip install -e .
 ```
 
-**From git (protocol package only):**
+**From git (protocol + infer runtime):**
 
 ```bash
-pip install "flashcli-bundle @ git+https://github.com/aodianyun/flashcli.git@main#subdirectory=flashcli-bundle"
+pip install "flashcli-bundle[infer] @ git+https://github.com/aodianyun/flashcli.git@main#subdirectory=flashcli-bundle"
 ```
 
-Bundle venvs get the same git spec via `~/.flashcli/install.env` (`FLASHCLI_INSTALL_REPO` / `FLASHCLI_INSTALL_REF`) or the host install’s `direct_url.json`.
+Bundle venvs pip-install `flashcli-bundle[infer]` via `ensure_flashcli_bundle_in_venv()` (see `~/.flashcli/install.env` for git source).
 
 ## Usage in bundle entry code
 

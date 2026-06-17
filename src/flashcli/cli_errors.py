@@ -9,10 +9,10 @@ from urllib.parse import unquote, urlparse
 
 import typer
 
-from flashcli.bundle.bundle_options import BundleOptionsError
+from flashcli_bundle.options import BundleOptionsError
 from flashcli.bundle.catalog import BundleCatalogError
 from flashcli.bundle.preflight import BundleEnvironmentError
-from flashcli.engines.factory import BundleNotReadyError
+from flashcli_bundle.errors import BundleNotReadyError
 
 _HTTP_CODE_RE = re.compile(r"HTTP Error (\d+)", re.I)
 _FLASHHUB_REF_RE = re.compile(

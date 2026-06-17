@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-from flashcli.engines.base import ChatMessage, ChatRequest
+from flashcli_bundle.protocol import ChatMessage, ChatRequest
 
 
 def _qwen36_thinking():

@@ -78,11 +78,22 @@ Weight download behavior matches `hf download`; on failures, test the same `HF_E
 | `FLASHCLI_PYTHON_STANDALONE_MANIFEST` | (none) | Local manifest path (fallback before GitHub when FlashHub fails). |
 | `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | Bundle runtime cache (bundle root, `runtime/`, venv). |
 | `FLASHCLI_IN_BUNDLE_VENV` | (internal) | `1` when the infer subprocess is running inside the bundle venv. |
-| (infer re-exec) | host install + bundle venv | Host flashcli is installed once; bundle venv Python runs `python -m flashcli.runtime.infer` with `PYTHONPATH` pointing at the host install (`src/` or site-packages). Only infer **dependencies** (typer, pyyaml, fastapi, …) may be pip-installed into the bundle venv — **not** `huggingface_hub`, not flashcli itself. |
+| (infer re-exec) | bundle venv | Bundle venv pip-installs **`flashcli-bundle[infer]`** and runs `python -m flashcli_bundle.infer`. Does **not** load host `flashcli` or `huggingface_hub`. |
 | `FLASHCLI_RUNTIME_ID` | (internal) | Active runtime identifier. |
 | `FLASHCLI_BUNDLE_ROOT` | (internal) | Active bundle root directory. |
 
 Bundle Python deps (torch, etc.) are installed by `activate_bundle` from `flashcli-bundle.json` → `python_dependencies`; independent of `FLASHCLI_SKIP_AUTO_INSTALL`.
+
+## Dependency layers (pip)
+
+| Layer | Where installed | Package / source | Purpose |
+|-------|-----------------|------------------|---------|
+| Host CLI | `~/.flashcli/venv` | `flashcli` (`pyproject.toml`) | typer, huggingface_hub, sync/pull |
+| Protocol | Host venv | `flashcli-bundle` (no extras) | manifest, options, native validation |
+| Infer runtime | Bundle venv | `flashcli-bundle[infer]` | `python -m flashcli_bundle.infer`, fastapi/uvicorn |
+| Model stack | Bundle venv | `flashcli-bundle.json` → `python_dependencies` | torch, transformers, … |
+
+Host **must not** `import flashcli_bundle.infer`. Bundle venv **must not** `pip install flashcli`.
 
 ## Host CLI vs bundle infer
 
@@ -108,9 +119,8 @@ See [architecture.md](architecture.md#host-cli-vs-bundle-infer-important). Do **
 | Variable | Description |
 |----------|-------------|
 | `FLASHCLI_ACTIVE_BUNDLE` | Absolute path of the active bundle root. |
-| `FLASHCLI_ACTIVE_RUNTIME` | Same as `FLASHCLI_ACTIVE_BUNDLE` (legacy alias). |
-| `FLASHCLI_BUNDLE_ROOT` | Same as active bundle root (set during re-exec). |
-| `PYTHONPATH` | **Activate:** bundle root prepended for `entry` / `flash_rt`. **Re-exec:** host flashcli prepended first so infer runs in bundle venv (see [architecture.md](architecture.md#host-cli-vs-bundle-infer-important)). |
+| `FLASHCLI_BUNDLE_ROOT` | Active bundle root (set during re-exec). |
+| `PYTHONPATH` | **Activate:** bundle root prepended for `entry` / `flash_rt`. **Re-exec:** host `flashcli` is not on `PYTHONPATH`. |
 
 ## Related docs
 

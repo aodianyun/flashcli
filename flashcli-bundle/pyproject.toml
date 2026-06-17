@@ -4,12 +4,22 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flashcli-bundle"
-version = "0.1.0"
+version = "0.2.0"
 description = "flashcli Model Bundle protocol — manifest, options, and engine types for bundle authors."
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 dependencies = []
+
+[project.optional-dependencies]
+infer = [
+    "typer>=0.12",
+    "pyyaml>=6.0",
+    "packaging>=23.0",
+    "fastapi>=0.100",
+    "uvicorn[standard]>=0.24",
+    "tqdm>=4.66",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

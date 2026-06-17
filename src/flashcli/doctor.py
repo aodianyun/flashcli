@@ -6,7 +6,6 @@ from flashcli import __version__, config
 from flashcli.deps import (
     bundle_python_stack_satisfied,
     flashcli_core_stack_satisfied,
-    flashcli_serve_stack_satisfied,
 )
 from flashcli.env import ensure_environment
 from flashcli.models.hf_hub import hub_cli_on_path
@@ -26,18 +25,9 @@ def run_check(*, quiet: bool = False) -> int:
         print(f"     Recommended torch index: {gpu.recommended_torch_index}")
 
     if flashcli_core_stack_satisfied():
-        print("[ok] flashcli core dependencies (typer, huggingface_hub, …)")
+        print("[ok] flashcli host dependencies (typer, huggingface_hub, flashcli-bundle protocol)")
     else:
-        print("[!] flashcli core dependencies incomplete. Run: flashcli doctor --install")
-        issues += 1
-
-    if flashcli_serve_stack_satisfied():
-        print("[ok] flashcli serve dependencies (fastapi, uvicorn)")
-    else:
-        print(
-            "[!] flashcli serve dependencies incomplete "
-            "(needed for `flashcli serve`). Run: flashcli doctor --install"
-        )
+        print("[!] flashcli host dependencies incomplete. Run: flashcli doctor --install")
         issues += 1
 
     hf_cli = hub_cli_on_path()

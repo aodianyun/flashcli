@@ -2,11 +2,9 @@
 
 Host CLI (``cli.py``) prepares runtime + bundle venv, then execs:
 
-  bundle_venv/python /path/to/flashcli/runtime/infer_launch.py …
+  bundle_venv/python -m flashcli_bundle.infer run|serve …
 
-``infer_launch.py`` prepends :func:`host_flashcli_import_root` (host ``flashcli`` only)
-and runs ``flashcli.runtime.infer``. The flashcli package is never pip-installed into the
-bundle venv.
+The bundle venv pip-installs ``flashcli-bundle[infer]``; no host ``flashcli`` import.
 """
 
 from __future__ import annotations
@@ -18,11 +16,10 @@ from pathlib import Path
 from flashcli.bundle.artifacts import ensure_runtime_from_path, ensure_runtime_from_repo
 from flashcli.bundle.catalog import raw_bundle_cfg, repo_url_for_preset
 from flashcli.bundle.preflight import BundleEnvironmentError
-from flashcli.bundle.manifest import bundle_python_abi, load_bundle_manifest
+from flashcli.bundle.manifest import load_bundle_manifest
+from flashcli.deps import ensure_flashcli_bundle_in_venv
 from flashcli.models.registry import Preset
-from flashcli.deps import ensure_bundle_infer_deps
 from flashcli.runtime.bundle_venv import ensure_bundle_venv, in_bundle_venv, venv_python
-from flashcli.runtime.flashcli_shared import flashcli_pythonpath, prepend_pythonpath
 
 
 def _resolve_local_root(preset: Preset) -> Path | None:
@@ -75,7 +72,7 @@ def ensure_bundle_runtime_and_reexec(
     quiet: bool = False,
     force: bool = False,
 ) -> None:
-    """Prepare runtime + venv; re-exec into ``flashcli.runtime.infer`` unless already there."""
+    """Prepare runtime + venv; re-exec into ``flashcli_bundle.infer`` unless already there."""
     try:
         runtime_id, bundle_root = prepare_bundle_runtime(
             preset,
@@ -92,10 +89,9 @@ def ensure_bundle_runtime_and_reexec(
         return
 
     py = venv_python(runtime_id)
-    manifest = load_bundle_manifest(bundle_root)
-    python_abi = bundle_python_abi(manifest)
-
-    ensure_bundle_infer_deps(python=py, quiet=quiet, force=force)
+    ensure_flashcli_bundle_in_venv(
+        python=py, quiet=quiet, force=force, extras=("infer",)
+    )
 
     env = os.environ.copy()
     env["FLASHCLI_IN_BUNDLE_VENV"] = "1"
@@ -103,11 +99,7 @@ def ensure_bundle_runtime_and_reexec(
     env["FLASHCLI_BUNDLE_ROOT"] = str(bundle_root)
     env.pop("PYTHONPATH", None)
     env.pop("PYTHONSAFEPATH", None)
-    py_path = flashcli_pythonpath(python_abi=python_abi)
-    if py_path:
-        prepend_pythonpath(env, py_path)
     env["VIRTUAL_ENV"] = str(py.parent.parent)
 
-    launcher = Path(__file__).resolve().parent / "infer_launch.py"
-    argv = [str(py), str(launcher), *sys.argv[1:]]
+    argv = [str(py), "-m", "flashcli_bundle.infer", *sys.argv[1:]]
     os.execve(str(py), argv, env)

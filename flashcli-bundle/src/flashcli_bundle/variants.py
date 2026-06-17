@@ -99,3 +99,55 @@ def preset_bundle_variant(preset: Preset) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
+
+
+def variant_extra_weights(bundle: BundleManifest, variant: str) -> dict[str, Any]:
+    extra = variant_section(bundle, variant, "extra_weights")
+    if extra:
+        return extra
+    if not has_bundle_variants(bundle):
+        from flashcli_bundle.bundle_config import bundle_dict
+
+        return bundle_dict(bundle, "extra_weights")
+    return {}
+
+
+def variant_env(bundle: BundleManifest, variant: str) -> dict[str, str]:
+    env = variant_section(bundle, variant, "env")
+    if env:
+        return {str(k): str(v) for k, v in env.items()}
+    if not has_bundle_variants(bundle):
+        from flashcli_bundle.bundle_config import bundle_dict
+
+        merged = bundle_dict(bundle, "env")
+        return {str(k): str(v) for k, v in merged.items()}
+    return {}
+
+
+def validate_required_variant(preset: Preset, bundle: BundleManifest) -> None:
+    if not has_bundle_variants(bundle):
+        return
+    variant = preset_bundle_variant(preset)
+    if variant:
+        resolve_bundle_variant(bundle, variant)
+        return
+    keys = ", ".join(sorted(bundle_variants(bundle)))
+    raise BundleVariantError(
+        f"Bundle {bundle.name!r} has multiple variants; add @variant to the preset ref "
+        f"(choose from: {keys}). "
+        f"Example: flashcli-bundle/{bundle.name}:VERSION@qwen36"
+    )
+
+
+def resolve_effective_model_variant(
+    preset: Preset,
+    bundle: BundleManifest | None = None,
+) -> str | None:
+    catalog = preset_bundle_variant(preset)
+    if catalog:
+        if bundle is not None and has_bundle_variants(bundle):
+            resolve_bundle_variant(bundle, catalog)
+        return catalog
+    if bundle is not None and has_bundle_variants(bundle):
+        validate_required_variant(preset, bundle)
+    return None

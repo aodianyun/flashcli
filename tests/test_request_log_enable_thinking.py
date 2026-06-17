@@ -1,7 +1,7 @@
 """Tests for enable_thinking resolution in flashcli serve request logs."""
 
-from flashcli.engines.base import ChatMessage, ChatRequest
-from flashcli.serve.request_log import (
+from flashcli_bundle.protocol import ChatMessage, ChatRequest
+from flashcli_bundle.infer.serve.request_log import (
     DEFAULT_ENABLE_THINKING,
     apply_enable_thinking_to_openai_payload,
     format_enable_thinking,
@@ -55,7 +55,7 @@ def test_resolve_enable_thinking_explicit_false():
 
 def test_parse_extras_without_serve_injection_keeps_default_source():
     """Serve must not inject enable_thinking before parse (bundle logs src=default)."""
-    from flashcli.serve.openai_bridge import parse_chat_completions_body
+    from flashcli_bundle.infer.serve.openai_bridge import parse_chat_completions_body
 
     req = parse_chat_completions_body(
         {

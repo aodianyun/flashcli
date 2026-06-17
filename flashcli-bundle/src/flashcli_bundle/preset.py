@@ -12,6 +12,7 @@ class Preset:
 
     name: str
     raw: dict[str, Any] = field(default_factory=dict)
+    cache_key: str = ""
 
     @property
     def bundle_variant(self) -> str | None:

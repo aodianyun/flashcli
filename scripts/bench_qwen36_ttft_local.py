@@ -154,7 +154,7 @@ def _build_messages(args: argparse.Namespace) -> list[dict]:
 async def _run_full_generate(engine, messages, max_tokens: int) -> dict:
     import time
 
-    from flashcli.engines.base import ChatMessage, ChatRequest
+    from flashcli_bundle.protocol import ChatMessage, ChatRequest
 
     req = ChatRequest(
         messages=[ChatMessage(role=str(m["role"]), content=m.get("content")) for m in messages],

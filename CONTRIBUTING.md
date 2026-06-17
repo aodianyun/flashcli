@@ -31,8 +31,10 @@ flashcli **distributes and loads** Model Bundles; inference lives in bundle `ent
 
 ```bash
 cd flashcli
-pip install -e ./flashcli-bundle   # bundle protocol (required)
-pip install -e ".[dev]"   # or: pip install -e .
+pip install -e "./flashcli-bundle"   # protocol (host CLI)
+pip install -e ".[dev]"            # flashcli host CLI
+# To run infer module tests locally:
+pip install -e "./flashcli-bundle[infer]"
 flashcli doctor
 flashcli models list
 ```
@@ -47,15 +49,14 @@ pytest tests/
 
 1. **Scope** — Keep changes in `flashcli/`. Do not commit FlashRT source changes inside flashcli PRs.
 2. **No inference in CLI** — Do not add model-specific forward logic under `src/flashcli/`. Use bundle `entry` modules.
-3. **Host CLI vs bundle venv (invariants)** — See [docs/architecture.md](docs/architecture.md#host-cli-vs-bundle-infer-important) and ``runtime/isolation.py``.
+3. **Host CLI vs bundle venv (invariants)** — See [docs/architecture.md](docs/architecture.md#host-cli-vs-bundle-infer-important).
 
-   | Allowed in bundle venv | Host only (never bundle venv / never bundle ``sys.path``) |
+   | Allowed in bundle venv | Host only (never bundle venv) |
    |--------------------------|-----------------------------------------------------------|
-   | ``flashcli-bundle`` (protocol) | ``flashcli`` CLI package (pip) |
+   | ``flashcli-bundle[infer]`` | ``flashcli`` CLI package (pip) |
    | ``python_dependencies`` from manifest (torch, transformers, …) | ``huggingface_hub`` (weight pull) |
-   | Infer helpers: typer, pyyaml, fastapi, uvicorn (`FLASHCLI_BUNDLE_INFER_PACKAGES`) | Host ``site-packages`` on ``PYTHONPATH`` |
 
-   Bundle re-exec may load **host** ``flashcli.runtime.infer`` via ``host_flashcli_import_root()`` only (shim or editable ``src/``). Tests in ``test_flashcli_shared.py``, ``test_infer_launch.py``, ``test_host_bundle_isolation.py`` enforce this — **do not** prepend ``site-packages`` or add host deps to bundle manifests to paper over leaks.
+   Bundle re-exec runs ``python -m flashcli_bundle.infer`` inside the bundle venv. Tests: ``test_reexec_argv.py``, ``test_flashcli_bundle_infer.py``. **Do not** prepend host ``site-packages`` or pip-install ``flashcli`` into bundle venvs.
 
 4. **Preset refs** — Document new FlashHub refs in README / bundle QUICKSTART after upload; no bundled catalog file.
 5. **Docs** — Update English docs when behavior or release workflow changes. Mirror important changes in `*.zh-CN.md` when applicable.

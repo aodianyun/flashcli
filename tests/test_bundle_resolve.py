@@ -10,13 +10,14 @@ from flashcli.bundle.resolve import resolve_bundle_root
 from flashcli.models.registry import Preset
 
 
-def _fake_preset(name: str = "pi05_libero") -> Preset:
+def _fake_preset(name: str = "flashcli-bundle/pi05_libero:1.0.0") -> Preset:
     return Preset(
         name=name,
         raw={
             "engine": "model_bundle",
             "bundle": {"repo": "https://example.test/bundle/1.0.0"},
         },
+        cache_key="pi05_libero/1.0.0",
     )
 
 

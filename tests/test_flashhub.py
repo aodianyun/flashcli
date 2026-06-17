@@ -79,30 +79,21 @@ def test_download_manifest_mock(tmp_path: Path, monkeypatch) -> None:
     from flashcli.bundle import flashhub
 
     manifest = {"format": "flashcli-model-bundle", "format_version": 3, "protocol_version": 1, "name": "t"}
-    payload = {
-        "code": 0,
-        "message": "success",
-        "data": {
-            "files": [
-                {
-                    "download_url": "https://flashhub-cdn.example.com/repo/1/versions/2/flashcli-bundle.json",
-                    "file_name": "flashcli-bundle.json",
-                    "file_size": 100,
-                }
-            ]
-        },
-    }
-
-    def fake_fetch(url: str, **kwargs):
-        if "api/v1/repos" in url:
-            return payload
-        return manifest
 
     def fake_download(entry, dest, **kwargs):
         dest.write_text(json.dumps(manifest), encoding="utf-8")
         return dest
 
-    monkeypatch.setattr(flashhub, "fetch_json_url", fake_fetch)
+    monkeypatch.setattr(flashhub, "fetch_repo_index", lambda repo_url, **kwargs: flashhub.RepoIndex(
+        repo_url=repo_url,
+        files=[
+            flashhub.RepoFile(
+                path="flashcli-bundle.json",
+                url="https://flashhub-cdn.example.com/repo/1/versions/2/flashcli-bundle.json",
+                size=100,
+            )
+        ],
+    ))
     monkeypatch.setattr(flashhub, "download_repo_file", fake_download)
     out = tmp_path / "m.json"
     data = flashhub.download_manifest_from_repo(

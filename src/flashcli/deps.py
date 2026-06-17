@@ -20,33 +20,13 @@ from flashcli.runtime.requirements_spec import (
 )
 
 FLASHCLI_HOST_PACKAGES = [
-    # Host CLI only (pull, Hub CLI, catalog). Not copied into bundle venv.
+    # Host CLI only (pull, Hub CLI, sync). Serve HTTP stack lives in bundle venv [infer].
     "typer>=0.12",
     "pyyaml>=6.0",
     "packaging>=23.0",
     "huggingface_hub>=0.26",
-    "fastapi>=0.100",
-    "uvicorn[standard]>=0.24",
+    "tqdm>=4.66",
 ]
-
-# Installed into bundle venv for ``runtime.infer`` (typer/serve stack only).
-# No huggingface_hub — weights are pulled on the host before re-exec.
-FLASHCLI_BUNDLE_INFER_PACKAGES = [
-    "typer>=0.12",
-    "pyyaml>=6.0",
-    "packaging>=23.0",
-    "fastapi>=0.100",
-    "uvicorn[standard]>=0.24",
-]
-
-FLASHCLI_CORE_PACKAGES = FLASHCLI_HOST_PACKAGES
-
-FLASHCLI_SERVE_PACKAGES = [
-    "fastapi>=0.100",
-    "uvicorn[standard]>=0.24",
-]
-
-FLASHCLI_PACKAGES = FLASHCLI_HOST_PACKAGES
 
 
 def _pip_python(python: Path | None) -> str:
@@ -112,16 +92,8 @@ def flashcli_core_stack_satisfied() -> bool:
     return not _missing_imports(FLASHCLI_HOST_PACKAGES)
 
 
-def flashcli_serve_stack_satisfied() -> bool:
+def flashcli_stack_satisfied() -> bool:
     return flashcli_core_stack_satisfied()
-
-
-def flashcli_stack_satisfied(*, include_serve: bool = False) -> bool:
-    if not flashcli_core_stack_satisfied():
-        return False
-    if include_serve and not flashcli_serve_stack_satisfied():
-        return False
-    return True
 
 
 def bundle_python_stack_satisfied(
@@ -151,7 +123,17 @@ def _run_pip(
 
 
 def ensure_flashcli_core_stack(*, quiet: bool = False, force: bool = False) -> None:
-    ensure_bundle_infer_deps(quiet=quiet, force=force)
+    """Install host CLI pip deps and ``flashcli-bundle`` (protocol only)."""
+    to_install = [p for p in FLASHCLI_HOST_PACKAGES if force or not _imports_ok(p)]
+    if to_install:
+        if not quiet:
+            print(f"Installing flashcli host dependencies: {', '.join(to_install)}")
+        _run_pip(to_install, quiet=quiet)
+    host_py = Path(sys.executable)
+    if force or not _module_available("flashcli_bundle", python=host_py):
+        ensure_flashcli_bundle_in_venv(
+            python=host_py, quiet=quiet, force=force, extras=()
+        )
 
 
 def ensure_bundle_infer_deps(
@@ -160,53 +142,16 @@ def ensure_bundle_infer_deps(
     quiet: bool = False,
     force: bool = False,
 ) -> None:
-    """Install flashcli infer helper deps into the target interpreter.
-
-    Host (``python=None``): full CLI stack including ``huggingface_hub``.
-    Bundle venv (``python=…``): typer/fastapi/uvicorn only — weights are pulled
-    on the host before re-exec (see ``models.cache.ensure_model_cached``).
-
-    Does **not** install the flashcli package — infer loads flashcli from the host
-    install via ``PYTHONPATH`` (see ``runtime/flashcli_shared.py``).
-    """
-    packages = (
-        FLASHCLI_BUNDLE_INFER_PACKAGES
-        if python is not None
-        else FLASHCLI_HOST_PACKAGES
+    """Install ``flashcli-bundle[infer]`` into the bundle venv interpreter."""
+    if python is None:
+        raise ValueError("python is required for ensure_bundle_infer_deps")
+    ensure_flashcli_bundle_in_venv(
+        python=python, quiet=quiet, force=force, extras=("infer",)
     )
-    to_install = [p for p in packages if force or not _imports_ok(p, python=python)]
-    if not to_install:
-        return
-    if not quiet:
-        target = "bundle venv" if python is not None else "host"
-        print(f"Installing infer dependencies into {target}: {', '.join(to_install)}")
-    _run_pip(to_install, quiet=quiet, python=python)
 
 
-def ensure_flashcli_serve_stack(*, quiet: bool = False, force: bool = False) -> None:
-    to_install = [
-        p for p in FLASHCLI_SERVE_PACKAGES if force or not _imports_ok(p)
-    ]
-    if not to_install:
-        return
-    if not quiet:
-        print(f"Installing flashcli serve dependencies: {', '.join(to_install)}")
-    _run_pip(to_install, quiet=quiet)
-
-
-def ensure_flashcli_stack(
-    *,
-    quiet: bool = False,
-    force: bool = False,
-    include_serve: bool = False,
-) -> None:
+def ensure_flashcli_stack(*, quiet: bool = False, force: bool = False) -> None:
     ensure_flashcli_core_stack(quiet=quiet, force=force)
-    if include_serve:
-        ensure_flashcli_serve_stack(quiet=quiet, force=force)
-
-
-def repair_flashcli_serve_stack(*, quiet: bool = False) -> None:
-    ensure_flashcli_serve_stack(quiet=quiet, force=True)
 
 
 def ensure_runtime_python_stack(
@@ -221,7 +166,9 @@ def ensure_runtime_python_stack(
     if bundle_root is None:
         raise ValueError("bundle_root is required")
     if python is not None:
-        ensure_flashcli_bundle_in_venv(python=python, quiet=quiet, force=force)
+        ensure_flashcli_bundle_in_venv(
+            python=python, quiet=quiet, force=force, extras=("infer",)
+        )
     spec = resolve_runtime_requirements(bundle_root=bundle_root)
 
     if not force and not _missing_runtime_imports(spec, python=python):
@@ -350,7 +297,7 @@ def _pip_spec_from_direct_url(
     return None
 
 
-def flashcli_bundle_pip_spec() -> str:
+def flashcli_bundle_pip_spec(*, extras: tuple[str, ...] = ()) -> str:
     """Pip spec for installing ``flashcli-bundle`` into a bundle venv."""
     import os
 
@@ -358,28 +305,34 @@ def flashcli_bundle_pip_spec() -> str:
 
     _load_persisted_install_env()
 
+    extra_suffix = f"[{','.join(extras)}]" if extras else ""
     pkg_dir = Path(flashcli_bundle.__file__).resolve().parent
     src_root = pkg_dir.parent
     repo_root = src_root.parent
     if src_root.name == "src" and (repo_root / "pyproject.toml").is_file():
         text = (repo_root / "pyproject.toml").read_text(encoding="utf-8")
         if 'name = "flashcli-bundle"' in text:
+            if extras:
+                return f"{repo_root}[{','.join(extras)}]"
             return str(repo_root)
 
     spec = _pip_spec_from_direct_url("flashcli-bundle")
+    if spec and extras:
+        if spec.startswith("flashcli-bundle @ "):
+            return f"flashcli-bundle{extra_suffix} @ " + spec.split(" @ ", 1)[1]
     if spec:
         return spec
 
     spec = _pip_spec_from_direct_url("flashcli", subdirectory="flashcli-bundle")
     if spec:
         if spec.startswith("flashcli @ "):
-            return "flashcli-bundle @ " + spec.split(" @ ", 1)[1]
+            return f"flashcli-bundle{extra_suffix} @ " + spec.split(" @ ", 1)[1]
         return spec
 
     repo = os.environ.get("FLASHCLI_INSTALL_REPO", "").strip()
     ref = os.environ.get("FLASHCLI_INSTALL_REF", "main").strip() or "main"
     if repo:
-        return f"flashcli-bundle @ git+{repo}@{ref}#subdirectory=flashcli-bundle"
+        return f"flashcli-bundle{extra_suffix} @ git+{repo}@{ref}#subdirectory=flashcli-bundle"
 
     raise RuntimeError(
         "Cannot resolve flashcli-bundle install source for bundle venv. "
@@ -388,19 +341,39 @@ def flashcli_bundle_pip_spec() -> str:
     )
 
 
+def _infer_module_available(*, python: Path) -> bool:
+    proc = subprocess.run(
+        [
+            str(python),
+            "-c",
+            "import importlib.util; "
+            "raise SystemExit(0 if importlib.util.find_spec('flashcli_bundle.infer') else 1)",
+        ],
+        capture_output=True,
+        check=False,
+    )
+    return proc.returncode == 0
+
+
 def ensure_flashcli_bundle_in_venv(
     *,
     python: Path,
     quiet: bool = False,
     force: bool = False,
+    extras: tuple[str, ...] = ("infer",),
 ) -> None:
-    """Install ``flashcli-bundle`` into the bundle venv (protocol + manifest helpers)."""
-    if not force and _module_available("flashcli_bundle", python=python):
-        return
-    spec = flashcli_bundle_pip_spec()
+    """Install ``flashcli-bundle`` (and optional extras) into the bundle venv."""
+    want_infer = "infer" in extras
+    if not force:
+        if want_infer and _infer_module_available(python=python):
+            return
+        if not want_infer and _module_available("flashcli_bundle", python=python):
+            return
+    spec = flashcli_bundle_pip_spec(extras=extras)
+    extra_label = f"[{','.join(extras)}]" if extras else ""
     if not quiet:
-        print(f"Installing flashcli-bundle into bundle venv ({spec}) ...")
-    if Path(spec).is_dir():
+        print(f"Installing flashcli-bundle{extra_label} into bundle venv ({spec}) ...")
+    if " @ " not in spec:
         _run_pip(["-e", spec], quiet=quiet, python=python)
     else:
         _run_pip([spec], quiet=quiet, python=python)

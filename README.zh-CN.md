@@ -181,7 +181,7 @@ Qwen `serve` 要点：`--max-seq`、`--max-q-seq`（qwen3）、`--K`、`--max-ou
 run/serve：
   ref → FlashHub → manifest + preflight → runtime/<env-key>/
   → bundle venv（python_abi、torch…）
-  → re-exec：bundle python -m flashcli.runtime.infer（PYTHONPATH = 主机 flashcli）
+  → re-exec：bundle python -m flashcli_bundle.infer
   → activate bundle → HF 权重 → RunEngine / ServeEngine
 ```
 

@@ -1,16 +1,14 @@
 """Resolve model bundle path from preset ref and CLI overrides."""
 
-from __future__ import annotations
+from flashcli_bundle.manifest import BundleManifest, load_bundle_manifest
+from flashcli_bundle.preset import Preset
+from flashcli_bundle.layout import is_bundle_root
+
+from flashcli.bundle.marker import read_preset_marker
+from flashcli.bundle.catalog import BundleCatalogError, repo_url_for_preset
 
 import os
 from pathlib import Path
-
-from flashcli.bundle.activate import activate_bundle
-from flashcli.bundle.catalog import BundleCatalogError, repo_url_for_preset
-from flashcli.bundle.layout import is_bundle_root
-from flashcli.bundle.manifest import BundleManifest, load_bundle_manifest, validate_bundle_layout
-from flashcli.bundle.marker import read_preset_marker
-from flashcli.models.registry import Preset
 
 
 def resolve_bundle_root(
@@ -18,19 +16,16 @@ def resolve_bundle_root(
     *,
     bundle_override: Path | None = None,
 ) -> Path:
-    """Return absolute bundle root (requires prior runtime prepare + reexec)."""
     env_root = os.environ.get("FLASHCLI_BUNDLE_ROOT", "").strip()
     if env_root:
         root = Path(env_root).expanduser().resolve()
         if is_bundle_root(root):
             return root
-
     if bundle_override is not None:
         root = bundle_override.expanduser().resolve()
         if not is_bundle_root(root):
             raise FileNotFoundError(f"Bundle directory not found: {root}")
         return root
-
     marker = read_preset_marker(preset)
     if marker:
         marker_root = str(marker.get("bundle_root", "")).strip()
@@ -38,8 +33,7 @@ def resolve_bundle_root(
             root = Path(marker_root).expanduser().resolve()
             if is_bundle_root(root):
                 return root
-
-    repo_url_for_preset(preset)  # validate ref
+    repo_url_for_preset(preset)
     if not env_root:
         raise FileNotFoundError(
             f"No bundle runtime for preset {preset.name!r}. "
@@ -57,40 +51,4 @@ def load_preset_bundle(
     return load_bundle_manifest(root)
 
 
-def activate_for_preset(
-    preset: Preset,
-    *,
-    bundle_path: Path | None = None,
-    auto_install_python: bool = True,
-    quiet: bool = False,
-    force_python: bool = False,
-) -> BundleManifest:
-    from flashcli.engines.factory import BundleNotReadyError
-
-    try:
-        bundle = load_preset_bundle(preset, bundle_override=bundle_path)
-    except (FileNotFoundError, BundleCatalogError) as exc:
-        raise BundleNotReadyError(str(exc)) from exc
-
-    from flashcli.bundle.manifest import resolve_bundle_env_key
-
-    try:
-        env_key = resolve_bundle_env_key(bundle)
-    except RuntimeError as exc:
-        raise BundleNotReadyError(str(exc)) from exc
-
-    errors = validate_bundle_layout(bundle, env_key=env_key)
-    if errors:
-        raise BundleNotReadyError(
-            "Invalid model bundle:\n  " + "\n  ".join(errors)
-        )
-
-    runtime_id = os.environ.get("FLASHCLI_RUNTIME_ID")
-    activate_bundle(
-        bundle,
-        runtime_id=runtime_id,
-        install_python=auto_install_python,
-        quiet=quiet,
-        force_python=force_python,
-    )
-    return bundle
+__all__ = ["load_preset_bundle", "resolve_bundle_root"]

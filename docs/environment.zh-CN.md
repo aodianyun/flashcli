@@ -79,11 +79,22 @@ flashcli models list
 | `FLASHCLI_PYTHON_STANDALONE_MANIFEST` | （无） | 本地 manifest 路径（FlashHub 不可用时的 fallback，在 GitHub 之前）。 |
 | `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | bundle runtime 缓存（bundle 根、`runtime/`、venv）。 |
 | `FLASHCLI_IN_BUNDLE_VENV` | （内部） | `1` 表示当前进程已在 bundle venv 的 infer 子进程内。 |
-| （infer re-exec） | 主机安装 + bundle venv | **flashcli 只装一份**（主机 venv）；bundle venv 的 Python 通过 `PYTHONPATH` 加载主机上的 `flashcli`，执行 `python -m flashcli.runtime.infer`。bundle venv 内只会 pip 安装 infer 的**依赖**（typer、pyyaml、fastapi 等），**不会**安装 `huggingface_hub` 或 flashcli 包本身。 |
+| （infer re-exec） | bundle venv | bundle venv pip 安装 **`flashcli-bundle[infer]`**，执行 `python -m flashcli_bundle.infer`。**不**加载主机 `flashcli`，**不**安装 `huggingface_hub`。 |
 | `FLASHCLI_RUNTIME_ID` | （内部） | 当前激活的 runtime 标识。 |
 | `FLASHCLI_BUNDLE_ROOT` | （内部） | 当前 bundle 根目录。 |
 
 Bundle 的 Python 依赖（torch 等）由 `activate_bundle` 按 `flashcli-bundle.json` 的 `python_dependencies` 安装；与 `FLASHCLI_SKIP_AUTO_INSTALL` 无关（后者只影响 flashcli CLI 包依赖）。
+
+## Pip 依赖分层
+
+| 层级 | 安装位置 | 包 / 来源 | 用途 |
+|------|----------|-----------|------|
+| Host CLI | `~/.flashcli/venv` | `flashcli`（`pyproject.toml`） | typer、huggingface_hub、sync/pull |
+| Protocol | 主机 venv | `flashcli-bundle`（无 extras） | manifest、options、native 校验 |
+| Infer runtime | Bundle venv | `flashcli-bundle[infer]` | `python -m flashcli_bundle.infer`、fastapi/uvicorn |
+| Model stack | Bundle venv | `flashcli-bundle.json` → `python_dependencies` | torch、transformers… |
+
+主机**禁止** `import flashcli_bundle.infer`。Bundle venv **禁止** `pip install flashcli`。
 
 ## 主机 CLI 与 bundle infer
 
@@ -111,8 +122,8 @@ Bundle 的 Python 依赖（torch 等）由 `activate_bundle` 按 `flashcli-bundl
 | 变量 | 说明 |
 |------|------|
 | `FLASHCLI_ACTIVE_BUNDLE` | 当前激活的 bundle 根目录绝对路径。 |
-| `FLASHCLI_ACTIVE_RUNTIME` | 与 `FLASHCLI_ACTIVE_BUNDLE` 相同（兼容旧名）。 |
-| `PYTHONPATH` | **Activate** 时 prepend bundle 根目录（`entry` / `flash_rt`）。**Re-exec** 时先 prepend 主机 flashcli（见 [architecture.zh-CN.md](architecture.zh-CN.md#主机-cli-与-bundle-infer必读)）。 |
+| `FLASHCLI_BUNDLE_ROOT` | 当前 bundle 根目录（re-exec 时设置）。 |
+| `PYTHONPATH` | **Activate：** prepend bundle 根目录以便 `import entry` / `flash_rt`。**Re-exec：** 不加载主机 `flashcli`。 |
 
 ## 相关文档
 

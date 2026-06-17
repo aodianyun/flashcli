@@ -5,16 +5,17 @@ from __future__ import annotations
 import subprocess
 import sys
 
-from flashcli.deps import FLASHCLI_BUNDLE_INFER_PACKAGES, FLASHCLI_HOST_PACKAGES, _imports_ok
+from flashcli.deps import FLASHCLI_HOST_PACKAGES, _imports_ok
 
 
 def test_host_packages_include_huggingface_hub() -> None:
     assert any("huggingface_hub" in p for p in FLASHCLI_HOST_PACKAGES)
 
 
-def test_bundle_infer_packages_exclude_huggingface_hub() -> None:
-    joined = " ".join(FLASHCLI_BUNDLE_INFER_PACKAGES).lower()
-    assert "huggingface_hub" not in joined
+def test_host_packages_exclude_bundle_stack_pins() -> None:
+    joined = " ".join(FLASHCLI_HOST_PACKAGES).lower()
+    assert "transformers" not in joined
+    assert "torch" not in joined
 
 
 def test_imports_ok_accepts_huggingface_hub_1x_on_host() -> None:

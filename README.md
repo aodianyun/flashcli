@@ -189,7 +189,7 @@ Host: install.sh → ~/.flashcli/venv (flashcli once)
 run/serve:
   ref → FlashHub → manifest + preflight → runtime/<env-key>/
   → bundle venv (python_abi, torch, …)
-  → re-exec: bundle python -m flashcli.runtime.infer  (PYTHONPATH = host flashcli)
+  → re-exec: bundle python -m flashcli_bundle.infer
   → activate bundle → HF weights → RunEngine / ServeEngine
 ```
 

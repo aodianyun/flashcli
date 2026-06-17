@@ -3,7 +3,7 @@
 FlashRT ``qwen36_agent`` currently returns one visible ``text`` stream. For
 thinking mode the model emits a closing tag before the user-facing answer
 (``</think>`` or ``</thought>``; opening tag is often in prefill).
-This module is **bundle-local** — ``flashcli.serve`` only forwards
+This module is **bundle-local** — ``flashcli_bundle.infer.serve`` only forwards
 ``ChatResult.reasoning_content`` / ``ChatChunk.reasoning_delta`` when the bundle
 sets them. When FlashRT grows native reasoning SSE, replace the implementation
 here and keep the serve contract unchanged.

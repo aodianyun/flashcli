@@ -302,7 +302,7 @@ bundles/pi05_libero/dist/
 | `protocol_version` 校验失败 | 升级主机 `pip install -e ./flashcli-bundle -e .`；manifest 写 `"protocol_version": 1` |
 | run 仍用旧 bundle | 看输出里的 `runtime_id` 与 `repo`；`flashcli doctor` / `flashcli models envs <ref>` 对比 cached repo。然后 `flashcli bundle sync <ref> --force` |
 | bundle venv 缺 `flashcli_bundle` | 删 `~/.flashcli/runtimes/<id>/` 重跑；或 `flashcli run` 触发 venv 重建 |
-| `pip install flashcli` 缺 flashcli-bundle / typer 等 | **勿**裸 `pip install flashcli`（PyPI 无 flashcli-bundle）。用 `install.sh`，或手动：`pip install 'flashcli-bundle @ git+…#subdirectory=flashcli-bundle'` 再 `pip install --no-deps 'flashcli @ git+…'` |
+| `pip install flashcli` 缺 flashcli-bundle / typer 等 | **勿**裸 `pip install flashcli`（PyPI 无 flashcli-bundle）。用 `install.sh`，或手动：`pip install 'flashcli-bundle[infer] @ git+…#subdirectory=flashcli-bundle'` 再 `pip install --no-deps 'flashcli @ git+…'` |
 | HF 权重失败 | `export HF_ENDPOINT=https://hf-mirror.com` 后 `flashcli pull` |
 | pi05 `NativeEnvironmentNotSupportedError` | 确认 manifest 含本机 env key（含 `sm120-cu130`）；`flashcli bundle sync flashcli-bundle/pi05_libero:1.0.3 --force` |
 | qwen 在 cu124 上编译失败 | qwen **仅 cu130**；用 25.10-py3 容器 |

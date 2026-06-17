@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flashcli"
-version = "0.2.2.2026.6.17"
-description = "FlashRT distribution CLI — model bundles, inference, serve."
+version = "0.3.1.2026.6.17"
+description = "FlashRT distribution CLI — model bundles, sync, and bundle runtime host."
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
@@ -16,8 +16,6 @@ dependencies = [
     "huggingface_hub>=0.26",
     "tqdm>=4.66",
     "tomli>=2.0; python_version < '3.11'",
-    "fastapi>=0.100",
-    "uvicorn[standard]>=0.24",
 ]
 
 [project.optional-dependencies]

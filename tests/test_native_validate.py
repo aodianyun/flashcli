@@ -40,6 +40,15 @@ def _write_bundle(
         "name": "test_bundle",
         "python_abi": "312",
         "entry": {"run": {"module": "run", "attr": "RunEngine"}},
+        "run_options": [
+            {
+                "name": "prompt",
+                "type": "string",
+                "default": "",
+                "help": "Prompt text.",
+                "phase": "predict",
+            }
+        ],
         "python_dependencies": {"torch": {"package": "torch", "index": "cu124"}, "pip": []},
         "weights": {"source": "huggingface", "repo": "org/model", "revision": "main"},
         "runtime": native_art,
@@ -89,7 +98,7 @@ def test_matrix_inconsistent_python_tag(tmp_path: Path) -> None:
     assert any("does not match runtime cell" in e or "inconsistent python_abi" in e for e in errs)
 
 
-@patch("flashcli.bundle.native_validate.probe_native_so_abi", return_value=None)
+@patch("flashcli_bundle.native_validate.probe_native_so_abi", return_value=None)
 def test_validate_bundle_layout_calls_abi_probe(mock_probe, tmp_path: Path) -> None:
     root = tmp_path / "b"
     cell = "sm120-cu130-linux-x86_64-py312"
@@ -106,7 +115,7 @@ def test_abi_probe_invoked_per_module(tmp_path: Path) -> None:
     bundle = _write_bundle(root, native_cells=[cell])
     _write_runtime_cell(root, cell)
     with patch(
-        "flashcli.bundle.native_validate.probe_native_so_abi", return_value=None
+        "flashcli_bundle.native_validate.probe_native_so_abi", return_value=None
     ) as mock_probe:
         validate_native_runtime_abi(bundle)
         assert mock_probe.call_count >= 2

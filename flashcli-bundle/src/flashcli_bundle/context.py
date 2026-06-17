@@ -19,8 +19,6 @@ def set_active_bundle(bundle: BundleManifest | None) -> None:
     _ACTIVE_BUNDLE = bundle
     if bundle is None:
         os.environ.pop("FLASHCLI_ACTIVE_BUNDLE", None)
-        os.environ.pop("FLASHCLI_ACTIVE_RUNTIME", None)
         return
     root = str(bundle.bundle_root.resolve())
     os.environ["FLASHCLI_ACTIVE_BUNDLE"] = root
-    os.environ["FLASHCLI_ACTIVE_RUNTIME"] = root

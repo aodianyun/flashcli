@@ -12,7 +12,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 2. **Preset ref** — 用户使用 `namespace/bundle:version[@variant]`；`FLASHCLI_FLASHHUB_API` 配置 API 基址。
 3. **manifest-first + 分包下载** — 先拉 manifest → preflight 匹配 `runtime` env key → 只下载本 env 的 `runtime/<env-key>/`。
 4. **固定 Python ABI** — 每个 bundle 一个 venv（`python_abi`）；CLI 准备完成后 **re-exec** 进 bundle venv。
-5. **主机只装一份 flashcli** — **绝不**向 bundle venv pip 安装 flashcli CLI；bundle venv 只装 **`flashcli-bundle`**（协议层）。re-exec 仅通过 ``host_flashcli_import_root()`` 加载主机 ``runtime.infer``（见下节）。
+5. **主机只装一份 flashcli** — 主机 venv 仅 pip **`flashcli-bundle`**（协议）；bundle venv pip **`flashcli-bundle[infer]`**。主机代码**禁止** `import flashcli_bundle.infer`。
 6. **一条命令** — `flashcli run <preset>` 串联：sync → 依赖 → 权重 → `post_pull` → 推理。
 
 ## 主机 CLI 与 bundle infer（必读）
@@ -22,29 +22,39 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 
 | 内容 | 位置 | 安装方式 |
 |------|------|----------|
-| `flashcli` CLI + infer 模块 | 仅主机（`~/.flashcli/venv` 或 editable `src/`） | `install.sh` / `auto_install.sh`，**只装一次** |
+| `flashcli` CLI | 仅主机（`~/.flashcli/venv` 或 editable `src/`） | `install.sh` / `auto_install.sh` |
 | **`huggingface_hub`**（Hub CLI、拉权重） | **仅主机** | `pyproject.toml` — **不**装进 bundle venv |
-| **`flashcli-bundle`**（协议、manifest options） | 主机 + bundle venv | Git：`flashcli-bundle @ git+…#subdirectory=flashcli-bundle`（见 `install.sh`、`~/.flashcli/install.env`） |
+| **`flashcli-bundle`**（协议） | 仅主机 | Git：`flashcli-bundle @ git+…#subdirectory=flashcli-bundle` |
+| **`flashcli-bundle[infer]`** | 仅 bundle venv | 同上，带 `[infer]` extra |
 | 推理栈（torch、transformers…） | `~/.flashcli/runtimes/<id>/venv/` | `flashcli-bundle.json` → `python_dependencies` |
-| infer 辅助依赖（typer、pyyaml、fastapi…） | 同上 bundle venv，**缺啥装啥** | `ensure_bundle_infer_deps()` — **不含** `huggingface_hub`；不含 flashcli 包本身 |
 
 **依赖隔离：** 主机与 bundle venv 相互独立。flashcli 不为 bundle 栈 pin `transformers` 或限制 `huggingface_hub` 版本 — bundle 的 `python_dependencies`（如 `transformers<4.56`）在 bundle venv 内自行解析传递依赖。权重下载（`flashcli pull`，或 `run`/`serve` 前自动 pull）仅在**主机**执行；bundle infer 子进程只解析缓存或 bundle 本地路径。
+
+### Pip 依赖分层
+
+| 层级 | Venv | 安装方式 | 禁止 |
+|------|------|----------|------|
+| `flashcli` | 主机 | `pyproject.toml` | import `flashcli_bundle.infer` |
+| `flashcli-bundle` | 主机 | `install.sh`（无 extras） | — |
+| `flashcli-bundle[infer]` | Bundle | `ensure_flashcli_bundle_in_venv(..., extras=("infer",))` | import 主机 `flashcli` |
+| Manifest `python_dependencies` | Bundle | `activate_bundle` / `bundle install` | pin 主机 `huggingface_hub` |
+
+结构测试：`tests/test_architecture_layers.py`。
 
 **Re-exec 命令**（在 bundle venv 内）：
 
 ```text
-bundle_venv/bin/python /path/to/host/flashcli/runtime/infer_launch.py run|serve …
+bundle_venv/bin/python -m flashcli_bundle.infer run|serve …
 ```
 
-``infer_launch.py`` 通过 ``host_flashcli_import_root()`` 只暴露主机 ``flashcli`` 包（``$FLASHCLI_HOME/host-import/`` symlink 或 editable ``src/``），**绝不** prepend 主机 ``site-packages``。启动时 ``runtime/isolation.validate_host_import_root`` 校验。实现：`runtime/reexec.py`、`runtime/infer_launch.py`、`runtime/flashcli_shared.py`。
+bundle venv **不** prepend 主机 `PYTHONPATH`，**不** import 主机 `flashcli`。实现：`runtime/reexec.py`、`flashcli-bundle` 的 `flashcli_bundle.infer` 包。
 
 ### 禁止事项（避免再次跑偏）
 
-- **不要**在 bundle venv 里 `pip install flashcli` — dev 版本通常不在 PyPI。
-- **不要**按 `python_abi` 再复制一份 flashcli — 主机 `sys.path` 引导共用即可；按 ABI 变化的只有 bundle **依赖**。
-- **不要**把主机 ``site-packages`` 放进 bundle 进程的 ``PYTHONPATH`` / ``sys.path`` — 只需能 ``import flashcli``；否则主机的 ``huggingface_hub`` 1.x 会被 bundle ``transformers`` 的 metadata 检查看到（实现 bug，非设计）。
+- **不要**在 bundle venv 里 `pip install flashcli` — infer 在 `flashcli-bundle[infer]` 中。
+- **不要**把主机 ``site-packages`` 或主机 ``flashcli`` 放进 bundle 进程的 ``PYTHONPATH`` — 否则主机的 ``huggingface_hub`` 1.x 会泄漏到 bundle（实现 bug，非设计）。
 
-`activate_bundle()` 还会把 **bundle 根目录** prepend 到 `PYTHONPATH`，以便 `import entry` / `flash_rt`（与 re-exec 时加载主机 flashcli 是两层不同用途）。
+`activate_bundle()` 还会把 **bundle 根目录** prepend 到 `PYTHONPATH`，以便 `import entry` / `flash_rt`。
 
 ## 与 FlashRT 的边界
 
@@ -66,7 +76,7 @@ flashcli **不** pip 依赖 `flash-rt`。`import flash_rt` 仅在 `activate_bund
 sequenceDiagram
   participant U as 用户
   participant CLI as cli（主机 venv）
-  participant Infer as runtime.infer
+  participant Infer as flashcli_bundle.infer
   participant FH as bundle.flashhub
   participant Art as bundle.artifacts
   participant Venv as runtime.bundle_venv
@@ -80,8 +90,8 @@ sequenceDiagram
   FH-->>Art: files[] + download_url
   Art->>Art: manifest + preflight + 下载 runtime/
   Art->>Venv: 创建 bundle venv + torch 依赖
-  CLI->>Infer: re-exec: bundle python -m flashcli.runtime.infer
-  Note over Infer: PYTHONPATH = 主机 flashcli 安装路径
+  CLI->>Infer: re-exec: bundle python -m flashcli_bundle.infer
+  Note over Infer: bundle venv: flashcli-bundle[infer] only
   Infer->>Act: activate_bundle
   Infer->>Cache: ensure_model_cached + post_pull
   Infer->>Ldr: entry.run.RunEngine
@@ -126,11 +136,9 @@ sequenceDiagram
 | `bundle/resolve.py` | 本地 path / 已 sync 缓存 |
 | `bundle/activate.py` | PYTHONPATH、依赖、预加载 `.so` |
 | `runtime/bundle_venv.py` | 按 `python_abi` 创建 venv |
-| `runtime/reexec.py` | 主机准备 → re-exec 进 bundle venv |
-| `runtime/infer_launch.py` | 启动器：prepend 主机 flashcli 到 `sys.path` |
-| `runtime/infer.py` | 在 bundle venv 内执行 `run` / `serve` |
-| `runtime/flashcli_shared.py` | 主机 `PYTHONPATH`，不二次安装 flashcli |
-| `deps.py` | 主机 / bundle pip 列表；`ensure_bundle_infer_deps()` — 仅 typer/yaml/… 进 bundle venv（无 hub） |
+| `runtime/reexec.py` | 主机准备 → re-exec：`python -m flashcli_bundle.infer` |
+| `flashcli_bundle.infer` | 在 bundle venv 内执行 `run` / `serve`（`flashcli-bundle[infer]`） |
+| `deps.py` | 主机 pip + `flashcli-bundle`；bundle venv 经 `ensure_flashcli_bundle_in_venv(..., extras=("infer",))` |
 | `models/cache.py` | 主机拉权重 + 缓存；bundle infer 仅解析路径 |
 | `engines/loader.py` | 加载 `entry` |
 

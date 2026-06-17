@@ -50,6 +50,8 @@ QUIET="${FLASHCLI_QUIET:-0}"
 USE_MIRROR="${FLASHCLI_USE_MIRROR:-0}"
 PIP_MIRROR_CHOICE="${FLASHCLI_PIP_MIRROR:-}"
 PIP_MIRROR_PROBE="${FLASHCLI_PIP_MIRROR_PROBE:-0}"
+RUN_TESTS="${FLASHCLI_RUN_TESTS:-0}"
+RUN_CORE_TESTS="${FLASHCLI_RUN_CORE_TESTS:-0}"
 REPO_FROM_USER=0
 if [ -n "${FLASHCLI_INSTALL_REPO:-}" ]; then
   REPO_FROM_USER=1
@@ -85,8 +87,6 @@ pyyaml>=6.0
 packaging>=23.0
 huggingface_hub>=0.26
 tqdm>=4.66
-fastapi>=0.100
-uvicorn[standard]>=0.24
 EOF
 }
 # tomli>=2.0 only when python_version < '3.11' (handled in verify script)
@@ -120,6 +120,8 @@ Options:
   --global, --no-mirror     Disable mirror endpoints (force direct official endpoints)
   --gitee                   Shortcut: --repo https://gitee.com/aodiansoft/flashcli.git
   --github                  Shortcut: --repo https://github.com/aodianyun/flashcli.git
+  --run-core-tests          After install, clone source and run core pytest subset
+  --run-tests               After install, clone source and run full pytest suite
 
 Environment (override flags):
   FLASHCLI_INSTALL_REPO, FLASHCLI_INSTALL_REF
@@ -135,6 +137,8 @@ Environment (override flags):
   FLASHCLI_USE_VENV=0             Install to system/user site instead of ~/.flashcli/venv (default: venv)
   FLASHCLI_REQUIRE_GPU=1          Abort when no NVIDIA GPU (default: warn and continue)
   FLASHCLI_SKIP_GPU_CHECK=1       Skip GPU probe entirely
+  FLASHCLI_RUN_TESTS=1            Same as --run-tests
+  FLASHCLI_RUN_CORE_TESTS=1       Same as --run-core-tests
   PIP_INDEX_URL, HF_ENDPOINT  Override mirror defaults
 
 Examples:
@@ -678,6 +682,14 @@ parse_args() {
       --github)
         REPO="$DEFAULT_REPO_GITHUB"
         REPO_FROM_USER=1
+        shift
+        ;;
+      --run-tests)
+        RUN_TESTS=1
+        shift
+        ;;
+      --run-core-tests)
+        RUN_CORE_TESTS=1
         shift
         ;;
       --)
@@ -1769,20 +1781,18 @@ _pip_install_flashcli_main() {
 
 # flashcli is installed with --no-deps (flashcli-bundle is git-only); install [project] deps here.
 install_flashcli_runtime_deps() {
-  info "Installing flashcli runtime dependencies (typer, fastapi, …) ..."
+  info "Installing flashcli host runtime dependencies (typer, huggingface_hub, …) ..."
   set -- \
     'typer>=0.12' \
     'pyyaml>=6.0' \
     'packaging>=23.0' \
     'huggingface_hub>=0.26' \
-    'tqdm>=4.66' \
-    'fastapi>=0.100' \
-    'uvicorn[standard]>=0.24'
+    'tqdm>=4.66'
   if [ -n "${FLASHCLI_PIP_USER_FLAG:-}" ]; then
     set -- "$@" --user
   fi
   do_pip_install --upgrade "$@" \
-    || die "cannot install flashcli runtime dependencies (typer, fastapi, …) — check pip/network errors above"
+    || die "cannot install flashcli host runtime dependencies — check pip/network errors above"
   if run_py -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" 2>/dev/null; then
     :
   else
@@ -2151,7 +2161,7 @@ if errors:
     if repo:
         print(
             f"error:   {sys.executable} -m pip install "
-            f"'flashcli-bundle @ git+{repo}@{ref}#subdirectory=flashcli-bundle'",
+            f"'flashcli-bundle[infer] @ git+{repo}@{ref}#subdirectory=flashcli-bundle'",
             file=sys.stderr,
         )
     print(
@@ -2368,6 +2378,78 @@ Fix: export PATH=\"${cli_dir}:\$PATH\" && hash -r"
   fi
 }
 
+# Optional post-install pytest (requires git clone of source tree; tests are not in the wheel).
+run_post_install_tests() {
+  if [ "$RUN_TESTS" != "1" ] && [ "$RUN_CORE_TESTS" != "1" ]; then
+    return 0
+  fi
+  have_cmd git || die "post-install tests require git (clone ${REPO} @ ${REF})"
+
+  _home="${FLASHCLI_HOME:-${HOME:-/root}/.flashcli}"
+  _src="${_home}/test-src"
+  info "Post-install tests: preparing source checkout at ${_src} ..."
+
+  if [ -d "${_src}/.git" ]; then
+    git -C "${_src}" fetch --depth 1 origin "${REF}" >/dev/null 2>&1 \
+      || git -C "${_src}" fetch --depth 1 "${REPO}" "${REF}" >/dev/null 2>&1 \
+      || true
+    git -C "${_src}" checkout "${REF}" >/dev/null 2>&1 \
+      || git -C "${_src}" checkout FETCH_HEAD >/dev/null 2>&1 \
+      || die "cannot checkout ${REF} in ${_src}"
+  else
+    rm -rf "${_src}" 2>/dev/null || true
+    if git clone --depth 1 --branch "${REF}" "${REPO}" "${_src}" >/dev/null 2>&1; then
+      :
+    elif git clone --depth 1 "${REPO}" "${_src}" >/dev/null 2>&1; then
+      git -C "${_src}" fetch --depth 1 origin "${REF}" >/dev/null 2>&1 \
+        || git -C "${_src}" fetch --depth 1 "${REPO}" "${REF}" >/dev/null 2>&1 \
+        || die "git fetch ${REF} failed for post-install tests"
+      git -C "${_src}" checkout FETCH_HEAD >/dev/null 2>&1 \
+        || die "git checkout ${REF} failed for post-install tests"
+    else
+      die "git clone ${REPO} failed (needed for post-install tests)"
+    fi
+  fi
+
+  [ -d "${_src}/tests" ] || die "tests/ missing in ${_src} — wrong ref or incomplete clone?"
+  [ -f "${_src}/pyproject.toml" ] || die "pyproject.toml missing in ${_src}"
+
+  info "Installing pytest and editable flashcli for test run ..."
+  do_pip_install --upgrade pytest \
+    || die "cannot install pytest for post-install tests"
+  do_pip_install --upgrade -e "${_src}/flashcli-bundle" \
+    || die "editable flashcli-bundle install failed for post-install tests"
+  do_pip_install --upgrade --force-reinstall --no-deps -e "${_src}" \
+    || die "editable flashcli install failed for post-install tests"
+
+  _core_tests="
+    tests/test_preset_ref.py
+    tests/test_reexec_argv.py
+    tests/test_flashcli_bundle_infer.py
+    tests/test_deps_imports_ok.py
+    tests/test_cli_errors.py
+    tests/test_infer_cli.py
+    tests/test_version.py
+    tests/test_hf_hub.py
+    tests/test_preset_validate.py
+    tests/test_deps_flashcli_bundle.py
+  "
+
+  if [ "$RUN_TESTS" = "1" ]; then
+    info "Running full pytest suite under ${_src}/tests ..."
+    if ! ( cd "${_src}" && run_py -m pytest tests -q --tb=line ); then
+      die "post-install pytest failed (full suite). Re-run: cd ${_src} && pytest tests/"
+    fi
+  else
+    info "Running core pytest subset ..."
+    # shellcheck disable=SC2086
+    if ! ( cd "${_src}" && run_py -m pytest ${_core_tests} -q --tb=line ); then
+      die "post-install pytest failed (core subset). Re-run with --run-tests for full suite."
+    fi
+  fi
+  info "[ok] post-install tests passed"
+}
+
 print_success() {
   [ "$QUIET" = "1" ] && return 0
   printf '\n%s\n' 'flashcli installed successfully.'
@@ -2427,6 +2509,7 @@ main() {
   install_flashcli
   verify_and_repair_pyproject
   verify_cli_usable
+  run_post_install_tests
   print_success
 }
 

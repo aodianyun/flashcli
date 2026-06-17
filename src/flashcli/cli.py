@@ -498,36 +498,25 @@ def run() -> None:
     """Run inference using the preset's model bundle."""
     import sys
 
-    from flashcli.bundle.bundle_options import (
-        BundleOptionsError,
-        format_run_help,
-        parse_run_argv,
-        resolve_manifest_for_preset,
-        resolve_run_from_argv,
-    )
+    from flashcli.bundle.run_argv import peel_host_run_flags, resolve_run_from_argv
     from flashcli.runtime.reexec import ensure_bundle_runtime_and_reexec
 
+    flags = peel_host_run_flags(sys.argv[1:], command="run")
     p, default_bundle = resolve_run_from_argv(sys.argv[1:], command="run")
-    inv = parse_run_argv(sys.argv[1:], preset=p, bundle_path=default_bundle)
 
-    if inv.help:
-        manifest = resolve_manifest_for_preset(p, bundle_path=inv.bundle)
-        specs = inv.option_specs or []
-        typer.echo(format_run_help(p, manifest, specs))
-        raise typer.Exit()
+    if _auto_install_flag(flags.no_auto_install):
+        ensure_environment(install_flashcli=True, quiet=flags.quiet)
 
-    if _auto_install_flag(inv.no_auto_install):
-        ensure_environment(install_flashcli=True, quiet=inv.quiet)
-
-    _ensure_host_weights_before_reexec(
-        p,
-        bundle=inv.bundle,
-        checkpoint=inv.checkpoint,
-        mtp_checkpoint=inv.mtp_checkpoint,
-        quiet=inv.quiet,
-    )
+    if not flags.wants_help:
+        _ensure_host_weights_before_reexec(
+            p,
+            bundle=default_bundle,
+            checkpoint=flags.checkpoint,
+            mtp_checkpoint=flags.mtp_checkpoint,
+            quiet=flags.quiet,
+        )
     ensure_bundle_runtime_and_reexec(
-        p, bundle_path=inv.bundle, quiet=inv.quiet
+        p, bundle_path=default_bundle, quiet=flags.quiet
     )
 
 
@@ -540,35 +529,25 @@ def serve() -> None:
     """Serve unified OpenAI HTTP API via the preset model bundle."""
     import sys
 
-    from flashcli.bundle.bundle_options import (
-        format_serve_help,
-        parse_serve_argv,
-        resolve_manifest_for_preset,
-        resolve_run_from_argv,
-    )
+    from flashcli.bundle.run_argv import peel_host_run_flags, resolve_run_from_argv
     from flashcli.runtime.reexec import ensure_bundle_runtime_and_reexec
 
+    flags = peel_host_run_flags(sys.argv[1:], command="serve")
     p, default_bundle = resolve_run_from_argv(sys.argv[1:], command="serve")
-    inv = parse_serve_argv(sys.argv[1:], preset=p, bundle_path=default_bundle)
 
-    if inv.help:
-        manifest = resolve_manifest_for_preset(p, bundle_path=inv.bundle)
-        specs = inv.option_specs or []
-        typer.echo(format_serve_help(p, manifest, specs))
-        raise typer.Exit()
+    if _auto_install_flag(flags.no_auto_install):
+        ensure_environment(install_flashcli=True, quiet=flags.quiet)
 
-    if _auto_install_flag(inv.no_auto_install):
-        ensure_environment(install_flashcli=True, quiet=inv.quiet)
-
-    _ensure_host_weights_before_reexec(
-        p,
-        bundle=inv.bundle,
-        checkpoint=inv.checkpoint,
-        mtp_checkpoint=inv.mtp_checkpoint,
-        quiet=inv.quiet,
-    )
+    if not flags.wants_help:
+        _ensure_host_weights_before_reexec(
+            p,
+            bundle=default_bundle,
+            checkpoint=flags.checkpoint,
+            mtp_checkpoint=flags.mtp_checkpoint,
+            quiet=flags.quiet,
+        )
     ensure_bundle_runtime_and_reexec(
-        p, bundle_path=inv.bundle, quiet=inv.quiet
+        p, bundle_path=default_bundle, quiet=flags.quiet
     )
 
 

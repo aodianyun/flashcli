@@ -22,8 +22,6 @@ _CACHE_SEGMENT_RE = re.compile(r"[^\w.\-+]+")
 
 @dataclass(frozen=True)
 class PresetRef:
-    """Parsed preset reference."""
-
     ref: str
     repo_url: str
     variant: str | None
@@ -43,7 +41,6 @@ def cache_key_from_coordinates(
     version: str,
     variant: str | None = None,
 ) -> str:
-    """Return ``bundle/version`` or ``bundle/version@variant`` (relative cache path)."""
     b = _cache_segment(bundle)
     v = _cache_segment(version)
     if variant:
@@ -52,7 +49,6 @@ def cache_key_from_coordinates(
 
 
 def _bundle_version_from_ref_body(body: str) -> tuple[str, str]:
-    """Extract ``(bundle, version)`` from a short ref body or FlashHub URL."""
     if body.startswith("http://") or body.startswith("https://"):
         path = urlparse(body.rstrip("/")).path.rstrip("/")
         for part in reversed(path.split("/")):
@@ -69,7 +65,6 @@ def _bundle_version_from_ref_body(body: str) -> tuple[str, str]:
 
 
 def cache_key(ref: str) -> str:
-    """Filesystem cache path (under ``models/`` and ``bundles/``) for a canonical ref."""
     body, variant = _split_variant(ref.strip())
     if body.startswith("local:"):
         bundle_name = body.split(":", 1)[1].strip()
@@ -84,7 +79,6 @@ def cache_key(ref: str) -> str:
 
 
 def parse_bundle_path_arg(raw: str) -> tuple[str, str | None]:
-    """Split ``PATH`` or ``PATH@variant`` (local positional ref)."""
     return _split_variant(raw)
 
 
@@ -102,7 +96,6 @@ def _split_variant(raw: str) -> tuple[str, str | None]:
 
 
 def is_flashhub_ref(raw: str) -> bool:
-    """True when *raw* looks like a FlashHub ref, not a local bundle path."""
     body, _ = _split_variant(raw)
     if body.startswith("http://") or body.startswith("https://"):
         return True
@@ -117,13 +110,12 @@ def resolve_bundle_root(path: Path) -> Path:
 
 
 def _is_bundle_root(path: Path) -> bool:
-    from flashcli.bundle.layout import is_bundle_root
+    from flashcli_bundle.layout import is_bundle_root
 
     return is_bundle_root(path)
 
 
 def resolve_local_bundle_preset(root: Path, variant: str | None) -> Preset:
-    """Build a preset for local bundle dev (no FlashHub repo URL)."""
     root = root.expanduser().resolve()
     if not _is_bundle_root(root):
         raise ValueError(f"Not a bundle root: {root}")
@@ -137,30 +129,17 @@ def resolve_local_bundle_preset(root: Path, variant: str | None) -> Preset:
 
 
 def resolve_run_target(positional: str | None) -> tuple[Preset, Path | None]:
-    """Resolve preset + bundle path for ``run`` / ``serve`` / ``pull``.
-
-    Local dev (positional path must contain ``flashcli-bundle.json``)::
-
-        flashcli run bundles/qwen_nvfp4@qwen36
-
-    FlashHub::
-
-        flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
-    """
     if not positional:
         raise ValueError(
             "Usage: flashcli run REF[@variant]\n"
             f"Examples:\n  {_REF_EXAMPLES}"
         )
-
     path_str, variant = parse_bundle_path_arg(positional)
     local_root = resolve_bundle_root(Path(path_str))
     if _is_bundle_root(local_root):
         return resolve_local_bundle_preset(local_root, variant), local_root
-
     if is_flashhub_ref(path_str):
         return resolve_preset(positional), None
-
     raise ValueError(
         f"{positional!r} is not a local bundle root (missing flashcli-bundle.json) "
         f"and not a valid FlashHub ref.\n"
@@ -176,8 +155,6 @@ def _repo_url_from_body(body: str) -> str:
         raise ValueError(
             f"Invalid preset ref {body!r}. Expected:\n"
             f"  namespace/bundle:version[@variant]\n"
-            f"  https://…/namespace/bundle:version[@variant]\n"
-            f"  bundles/my_bundle[@variant]  (local dev)\n"
             f"Examples:\n  {_REF_EXAMPLES}"
         )
     namespace, bundle, version = match.groups()
@@ -186,7 +163,6 @@ def _repo_url_from_body(body: str) -> str:
 
 
 def parse_preset_ref(raw: str) -> PresetRef:
-    """Parse a preset ref string into repo URL, optional variant, and cache key."""
     body, variant = _split_variant(raw)
     repo_url = _repo_url_from_body(body)
     if body.startswith("http://") or body.startswith("https://"):
@@ -202,7 +178,6 @@ def parse_preset_ref(raw: str) -> PresetRef:
 
 
 def resolve_preset(raw: str) -> Preset:
-    """Build a :class:`Preset` from a FlashHub ref string."""
     parsed = parse_preset_ref(raw)
     raw_cfg: dict = {"bundle": {"repo": parsed.repo_url}}
     if parsed.variant:
@@ -211,13 +186,11 @@ def resolve_preset(raw: str) -> Preset:
 
 
 def preset_cache_key(preset: Preset) -> str:
-    """Return the relative cache path for *preset* (``bundle/version[@variant]``)."""
     if preset.cache_key:
         return preset.cache_key
     return cache_key(preset.name)
 
 
 def preset_cache_path(preset: Preset, *, root: Path | None = None) -> Path:
-    """Absolute cache directory for *preset* under *root* (default ``MODELS_DIR``)."""
     base = root if root is not None else config.MODELS_DIR
     return base / preset_cache_key(preset)

@@ -15,8 +15,8 @@ def test_openai_bridge_import_without_fastapi(monkeypatch) -> None:
         return real_import(name, package)
 
     monkeypatch.setattr(importlib, "import_module", fake_import)
-    sys.modules.pop("flashcli.serve.openai_bridge", None)
-    sys.modules.pop("flashcli.serve", None)
+    sys.modules.pop("flashcli_bundle.infer.serve.openai_bridge", None)
+    sys.modules.pop("flashcli_bundle.infer.serve", None)
 
-    mod = importlib.import_module("flashcli.serve.openai_bridge")
+    mod = importlib.import_module("flashcli_bundle.infer.serve.openai_bridge")
     assert callable(mod.sse_lines_to_chat_chunks)
