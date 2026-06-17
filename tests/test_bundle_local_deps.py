@@ -33,3 +33,24 @@ def test_requirement_import_satisfied_with_bundle_root(tmp_path: Path) -> None:
         python=sys.executable,
         bundle_root=tmp_path,
     )
+
+
+def test_bundle_local_satisfied_even_if_init_imports_missing_pip_deps(
+    tmp_path: Path,
+) -> None:
+    """Venv setup runs before all pip deps; bundle modules must not be imported early."""
+    pkg = tmp_path / "melband_roformer_infer"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("import numpy  # not installed yet\n", encoding="utf-8")
+    assert requirement_import_satisfied(
+        "melband_roformer_infer",
+        python=sys.executable,
+        bundle_root=tmp_path,
+    )
+
+
+def test_bundle_provides_module_finds_src_layout(tmp_path: Path) -> None:
+    pkg = tmp_path / "src" / "melband_roformer_infer"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    assert bundle_provides_module(tmp_path, "melband-roformer-infer")

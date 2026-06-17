@@ -316,13 +316,33 @@ def top_level_import_name(spec: str) -> str:
     return import_name_for_requirement(spec).split(".", 1)[0]
 
 
-def bundle_provides_module(bundle_root: Path, spec: str) -> bool:
-    """True when *bundle_root* ships a top-level module for this pip spec."""
-    root = bundle_root.expanduser().resolve()
+def _module_name_candidates(spec: str) -> list[str]:
+    """Import name and normalized PyPI name variants for filesystem lookup."""
     top = top_level_import_name(spec)
-    if (root / top).is_dir():
-        return True
-    return (root / f"{top}.py").is_file()
+    req = _req_name(spec)
+    out: list[str] = []
+    for candidate in (top, req, req.replace("-", "_"), req.replace("_", "-")):
+        if candidate and candidate not in out:
+            out.append(candidate)
+    return out
+
+
+def bundle_provides_module(bundle_root: Path, spec: str) -> bool:
+    """True when *bundle_root* ships this module (directory or .py on PYTHONPATH)."""
+    root = bundle_root.expanduser().resolve()
+    if not root.is_dir():
+        return False
+    prefixes = ("", "src", "lib", "vendor", "packages")
+    for top in _module_name_candidates(spec):
+        for prefix in prefixes:
+            base = root / prefix if prefix else root
+            if not base.is_dir():
+                continue
+            if (base / top).is_dir():
+                return True
+            if (base / f"{top}.py").is_file():
+                return True
+    return False
 
 
 def pythonpath_env(bundle_root: Path | None) -> dict[str, str]:
@@ -343,25 +363,19 @@ def requirement_import_satisfied(
     python: Path | str,
     bundle_root: Path | None = None,
 ) -> bool:
-    """True when *spec* imports in *python* (bundle root prepended to PYTHONPATH)."""
+    """True when *spec* is available for the bundle venv.
+
+    Bundle-shipped modules are detected on disk only — do not import them here,
+    because their ``__init__.py`` may require pip deps not installed yet.
+    """
     import subprocess
+
+    if bundle_root is not None and bundle_provides_module(bundle_root, spec):
+        return True
 
     mod = import_name_for_requirement(spec)
     py = str(python)
     env = pythonpath_env(bundle_root)
-
-    if bundle_root is not None and bundle_provides_module(bundle_root, spec):
-        proc = subprocess.run(
-            [
-                py,
-                "-c",
-                f"import importlib; importlib.import_module({mod!r})",
-            ],
-            env=env,
-            capture_output=True,
-            check=False,
-        )
-        return proc.returncode == 0
 
     script = f"""
 import importlib.metadata as md
