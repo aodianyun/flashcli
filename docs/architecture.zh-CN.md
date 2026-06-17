@@ -12,7 +12,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 2. **Preset ref** — 用户使用 `namespace/bundle:version[@variant]`；`FLASHCLI_FLASHHUB_API` 配置 API 基址。
 3. **manifest-first + 分包下载** — 先拉 manifest → preflight 匹配 `runtime` env key → 只下载本 env 的 `runtime/<env-key>/`。
 4. **固定 Python ABI** — 每个 bundle 一个 venv（`python_abi`）；CLI 准备完成后 **re-exec** 进 bundle venv。
-5. **主机只装一份 flashcli** — **绝不**向 bundle venv pip 安装 flashcli CLI；bundle venv 只装 **`flashcli-bundle`**（协议层）。`runtime.infer` 仍通过主机 `PYTHONPATH` 加载（见下节）。
+5. **主机只装一份 flashcli** — **绝不**向 bundle venv pip 安装 flashcli CLI；bundle venv 只装 **`flashcli-bundle`**（协议层）。re-exec 仅通过 ``host_flashcli_import_root()`` 加载主机 ``runtime.infer``（见下节）。
 6. **一条命令** — `flashcli run <preset>` 串联：sync → 依赖 → 权重 → `post_pull` → 推理。
 
 ## 主机 CLI 与 bundle infer（必读）
@@ -36,12 +36,13 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 bundle_venv/bin/python /path/to/host/flashcli/runtime/infer_launch.py run|serve …
 ```
 
-``infer_launch.py`` 将主机安装路径插入 ``sys.path``（同时设置 ``PYTHONPATH`` 作备份）。实现：`runtime/reexec.py`、`runtime/infer_launch.py`、`runtime/infer.py`。
+``infer_launch.py`` 通过 ``host_flashcli_import_root()`` 只暴露主机 ``flashcli`` 包（``$FLASHCLI_HOME/host-import/`` symlink 或 editable ``src/``），**绝不** prepend 主机 ``site-packages``。启动时 ``runtime/isolation.validate_host_import_root`` 校验。实现：`runtime/reexec.py`、`runtime/infer_launch.py`、`runtime/flashcli_shared.py`。
 
 ### 禁止事项（避免再次跑偏）
 
 - **不要**在 bundle venv 里 `pip install flashcli` — dev 版本通常不在 PyPI。
 - **不要**按 `python_abi` 再复制一份 flashcli — 主机 `sys.path` 引导共用即可；按 ABI 变化的只有 bundle **依赖**。
+- **不要**把主机 ``site-packages`` 放进 bundle 进程的 ``PYTHONPATH`` / ``sys.path`` — 只需能 ``import flashcli``；否则主机的 ``huggingface_hub`` 1.x 会被 bundle ``transformers`` 的 metadata 检查看到（实现 bug，非设计）。
 
 `activate_bundle()` 还会把 **bundle 根目录** prepend 到 `PYTHONPATH`，以便 `import entry` / `flash_rt`（与 re-exec 时加载主机 flashcli 是两层不同用途）。
 

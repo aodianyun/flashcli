@@ -47,7 +47,16 @@ pytest tests/
 
 1. **Scope** — Keep changes in `flashcli/`. Do not commit FlashRT source changes inside flashcli PRs.
 2. **No inference in CLI** — Do not add model-specific forward logic under `src/flashcli/`. Use bundle `entry` modules.
-3. **Host CLI vs bundle venv** — Do not `pip install flashcli` into bundle venvs. Bundle venvs install **`flashcli-bundle`** from git only (see `deps.flashcli_bundle_pip_spec`); infer re-exec uses host flashcli for `runtime.infer`. **`huggingface_hub` is host-only** (weight pull); bundle `python_dependencies` are independent. See [docs/architecture.md](docs/architecture.md#host-cli-vs-bundle-infer-important).
+3. **Host CLI vs bundle venv (invariants)** — See [docs/architecture.md](docs/architecture.md#host-cli-vs-bundle-infer-important) and ``runtime/isolation.py``.
+
+   | Allowed in bundle venv | Host only (never bundle venv / never bundle ``sys.path``) |
+   |--------------------------|-----------------------------------------------------------|
+   | ``flashcli-bundle`` (protocol) | ``flashcli`` CLI package (pip) |
+   | ``python_dependencies`` from manifest (torch, transformers, …) | ``huggingface_hub`` (weight pull) |
+   | Infer helpers: typer, pyyaml, fastapi, uvicorn (`FLASHCLI_BUNDLE_INFER_PACKAGES`) | Host ``site-packages`` on ``PYTHONPATH`` |
+
+   Bundle re-exec may load **host** ``flashcli.runtime.infer`` via ``host_flashcli_import_root()`` only (shim or editable ``src/``). Tests in ``test_flashcli_shared.py``, ``test_infer_launch.py``, ``test_host_bundle_isolation.py`` enforce this — **do not** prepend ``site-packages`` or add host deps to bundle manifests to paper over leaks.
+
 4. **Preset refs** — Document new FlashHub refs in README / bundle QUICKSTART after upload; no bundled catalog file.
 5. **Docs** — Update English docs when behavior or release workflow changes. Mirror important changes in `*.zh-CN.md` when applicable.
 6. **Comments** — New code comments and script headers in English.

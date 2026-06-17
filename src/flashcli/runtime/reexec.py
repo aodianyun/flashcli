@@ -4,8 +4,8 @@ Host CLI (``cli.py``) prepares runtime + bundle venv, then execs:
 
   bundle_venv/python /path/to/flashcli/runtime/infer_launch.py …
 
-``infer_launch.py`` prepends the host install to ``sys.path`` and runs
-``flashcli.runtime.infer``. The flashcli package is never pip-installed into the
+``infer_launch.py`` prepends :func:`host_flashcli_import_root` (host ``flashcli`` only)
+and runs ``flashcli.runtime.infer``. The flashcli package is never pip-installed into the
 bundle venv.
 """
 

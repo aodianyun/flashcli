@@ -7,40 +7,21 @@ from pathlib import Path
 from flashcli.runtime import infer_launch
 
 
-def test_host_path_site_packages_layout(tmp_path: Path) -> None:
-    site = tmp_path / "site-packages"
-    pkg = site / "flashcli"
-    launch = pkg / "runtime" / "infer_launch.py"
-    launch.parent.mkdir(parents=True)
-    launch.write_text("", encoding="utf-8")
-    (pkg / "__init__.py").write_text("", encoding="utf-8")
-
-    infer_launch._LAUNCH = launch.resolve()
-    infer_launch._PKG = infer_launch._LAUNCH.parent.parent
-    assert infer_launch._host_flashcli_sys_path() == site.resolve()
-
-
-def test_host_path_editable_layout(tmp_path: Path) -> None:
-    repo = tmp_path / "flashcli"
-    src = repo / "src" / "flashcli"
-    launch = src / "runtime" / "infer_launch.py"
-    launch.parent.mkdir(parents=True)
-    launch.write_text("", encoding="utf-8")
-    (repo / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
-
-    infer_launch._LAUNCH = launch.resolve()
-    infer_launch._PKG = infer_launch._LAUNCH.parent.parent
-    assert infer_launch._host_flashcli_sys_path() == (repo / "src").resolve()
-
-
-def test_main_prepends_path(monkeypatch, tmp_path: Path) -> None:
+def test_main_uses_host_import_shim_not_site_packages(monkeypatch, tmp_path: Path) -> None:
     site = tmp_path / "site-packages"
     pkg = site / "flashcli"
     launch = pkg / "runtime" / "infer_launch.py"
     launch.parent.mkdir(parents=True)
     launch.touch()
-    infer_launch._LAUNCH = launch.resolve()
-    infer_launch._PKG = infer_launch._LAUNCH.parent.parent
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (site / "huggingface_hub").mkdir()
+
+    home = tmp_path / "home"
+    import flashcli.runtime.flashcli_shared as shared
+
+    monkeypatch.setattr(shared.config, "FLASHCLI_HOME", home)
+    monkeypatch.setattr(shared, "installed_flashcli_package_root", lambda: pkg.resolve())
+    monkeypatch.setattr(shared, "editable_flashcli_src", lambda: None)
 
     seen: dict[str, list[str]] = {}
 
@@ -52,5 +33,8 @@ def test_main_prepends_path(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(infer_launch.sys, "path", [])
     monkeypatch.setattr(infer_launch.runpy, "run_module", fake_run_module)
     infer_launch.main()
+
+    shim = (home / "host-import").resolve()
     assert seen["name"] == ["flashcli.runtime.infer"]
-    assert seen["path"][0] == str(site.resolve())
+    assert seen["path"][0] == str(shim)
+    assert seen["path"][0] != str(site.resolve())
