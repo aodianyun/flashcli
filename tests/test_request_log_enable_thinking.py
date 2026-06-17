@@ -1,13 +1,13 @@
 """Tests for enable_thinking resolution in flashcli serve request logs."""
 
-from flashcli_bundle.protocol import ChatMessage, ChatRequest
-from flashcli_bundle.infer.serve.request_log import (
+from flashcli_bundle.openai_compat import (
     DEFAULT_ENABLE_THINKING,
     apply_enable_thinking_to_openai_payload,
     format_enable_thinking,
     resolve_enable_thinking,
     summarize_chat_body,
 )
+from flashcli_bundle.protocol import ChatMessage, ChatRequest
 
 
 def test_resolve_enable_thinking_defaults_true():

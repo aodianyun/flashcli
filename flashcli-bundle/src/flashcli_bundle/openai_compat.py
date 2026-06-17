@@ -53,6 +53,82 @@ def apply_enable_thinking_to_openai_payload(payload: dict[str, Any]) -> bool:
     return value
 
 
+def _truncate(text: str, max_len: int) -> str:
+    text = text.replace("\n", "\\n").replace("\r", "")
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1] + "…"
+
+
+def _content_summary(content: Any) -> str:
+    if content is None:
+        return "empty"
+    if isinstance(content, str):
+        n = len(content)
+        preview = _truncate(content, 72)
+        return f"chars={n} preview={preview!r}"
+    if isinstance(content, list):
+        kinds: list[str] = []
+        for part in content[:6]:
+            if isinstance(part, dict):
+                kinds.append(str(part.get("type", "part")))
+            else:
+                kinds.append(type(part).__name__)
+        extra = f"+{len(content) - 6}" if len(content) > 6 else ""
+        return f"parts={len(content)} types=[{','.join(kinds)}{extra}]"
+    return f"type={type(content).__name__}"
+
+
+def format_enable_thinking(body: dict[str, Any]) -> str:
+    """Compact log fragment from the **client** body (call before payload injection)."""
+    value, source = resolve_enable_thinking(body)
+    return format_enable_thinking_resolved(value, source)
+
+
+def summarize_messages(messages: list[Any]) -> str:
+    if not messages:
+        return "messages=0"
+    parts: list[str] = []
+    for i, raw in enumerate(messages):
+        if not isinstance(raw, dict):
+            parts.append(f"{i}:?")
+            continue
+        role = str(raw.get("role", "?"))
+        seg = f"{i}:{role}:{_content_summary(raw.get('content'))}"
+        if raw.get("tool_calls"):
+            seg += f" tool_calls={len(raw['tool_calls'])}"
+        parts.append(seg)
+    return f"messages={len(messages)} [" + "; ".join(parts) + "]"
+
+
+def summarize_chat_body(
+    body: dict[str, Any],
+    *,
+    thinking_log: str | None = None,
+) -> str:
+    messages = body.get("messages")
+    msg_part = (
+        summarize_messages(messages)
+        if isinstance(messages, list)
+        else "messages=invalid"
+    )
+    stream = parse_bool_field(body.get("stream"))
+    bits = [
+        msg_part,
+        f"max_tokens={body.get('max_tokens', 256)}",
+        f"stream={stream if stream is not None else False}",
+        f"temperature={body.get('temperature', 0.0)}",
+    ]
+    if body.get("tools"):
+        bits.append(f"tools={len(body['tools'])}")
+    if body.get("stop") is not None:
+        bits.append(f"stop={body.get('stop')!r}")
+    if body.get("seed") is not None:
+        bits.append(f"seed={body.get('seed')}")
+    bits.append(thinking_log if thinking_log else format_enable_thinking(body))
+    return " | ".join(bits)
+
+
 def sse_lines_to_chat_chunks(lines: Iterator[str]) -> Iterator[ChatChunk]:
     for line in lines:
         if not line.startswith("data: "):

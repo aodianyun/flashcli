@@ -2417,8 +2417,8 @@ run_post_install_tests() {
   info "Installing pytest and editable flashcli for test run ..."
   do_pip_install --upgrade pytest \
     || die "cannot install pytest for post-install tests"
-  do_pip_install --upgrade -e "${_src}/flashcli-bundle" \
-    || die "editable flashcli-bundle install failed for post-install tests"
+  do_pip_install --upgrade -e "${_src}/flashcli-bundle[infer]" \
+    || die "editable flashcli-bundle[infer] install failed for post-install tests"
   do_pip_install --upgrade --force-reinstall --no-deps -e "${_src}" \
     || die "editable flashcli install failed for post-install tests"
 

@@ -151,6 +151,15 @@ def test_run_help_module_uses_protocol_only() -> None:
     assert "flashcli_bundle.help_text" in text
 
 
+def test_openai_compat_has_no_http_stack_imports() -> None:
+    text = (FLASHCLI_BUNDLE / "src" / "flashcli_bundle" / "openai_compat.py").read_text(
+        encoding="utf-8"
+    )
+    assert "starlette" not in text
+    assert "fastapi" not in text
+    assert "uvicorn" not in text
+
+
 @pytest.mark.parametrize(
     "rel",
     [
