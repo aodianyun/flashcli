@@ -310,3 +310,100 @@ def write_runtime_requirements_artifacts(
 def import_name_for_requirement(spec: str) -> str:
     name = _req_name(spec)
     return _IMPORT_NAMES.get(name, re.sub(r"[-.]", "_", name))
+
+
+def top_level_import_name(spec: str) -> str:
+    return import_name_for_requirement(spec).split(".", 1)[0]
+
+
+def bundle_provides_module(bundle_root: Path, spec: str) -> bool:
+    """True when *bundle_root* ships a top-level module for this pip spec."""
+    root = bundle_root.expanduser().resolve()
+    top = top_level_import_name(spec)
+    if (root / top).is_dir():
+        return True
+    return (root / f"{top}.py").is_file()
+
+
+def pythonpath_env(bundle_root: Path | None) -> dict[str, str]:
+    import os
+
+    env = os.environ.copy()
+    if bundle_root is None:
+        return env
+    root = str(bundle_root.expanduser().resolve())
+    prev = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = root + (os.pathsep + prev if prev else "")
+    return env
+
+
+def requirement_import_satisfied(
+    spec: str,
+    *,
+    python: Path | str,
+    bundle_root: Path | None = None,
+) -> bool:
+    """True when *spec* imports in *python* (bundle root prepended to PYTHONPATH)."""
+    import subprocess
+
+    mod = import_name_for_requirement(spec)
+    py = str(python)
+    env = pythonpath_env(bundle_root)
+
+    if bundle_root is not None and bundle_provides_module(bundle_root, spec):
+        proc = subprocess.run(
+            [
+                py,
+                "-c",
+                f"import importlib; importlib.import_module({mod!r})",
+            ],
+            env=env,
+            capture_output=True,
+            check=False,
+        )
+        return proc.returncode == 0
+
+    script = f"""
+import importlib.metadata as md
+from packaging.requirements import Requirement
+
+spec = {spec!r}
+mod = {mod!r}
+req = Requirement(spec)
+try:
+    __import__(mod)
+except ImportError:
+    raise SystemExit(1)
+if req.specifier:
+    try:
+        ver = md.version(req.name)
+    except md.PackageNotFoundError:
+        raise SystemExit(1)
+    if ver not in req.specifier:
+        raise SystemExit(1)
+raise SystemExit(0)
+"""
+    proc = subprocess.run(
+        [py, "-c", script],
+        env=env,
+        capture_output=True,
+        check=False,
+    )
+    return proc.returncode == 0
+
+
+def requirement_needs_pip_install(
+    spec: str,
+    *,
+    python: Path | str,
+    bundle_root: Path | None = None,
+    force: bool = False,
+) -> bool:
+    """False for bundle-local modules (PYTHONPATH at runtime, not PyPI)."""
+    if force:
+        return True
+    if bundle_root is not None and bundle_provides_module(bundle_root, spec):
+        return False
+    return not requirement_import_satisfied(
+        spec, python=python, bundle_root=bundle_root
+    )

@@ -16,6 +16,8 @@ from flashcli.runtime.mirror import (
 from flashcli.runtime.requirements_spec import (
     RuntimeRequirementsSpec,
     import_name_for_requirement,
+    requirement_import_satisfied,
+    requirement_needs_pip_install,
     resolve_runtime_requirements,
 )
 
@@ -43,35 +45,15 @@ def _module_available(name: str, *, python: Path | None = None) -> bool:
     return proc.returncode == 0
 
 
-def _imports_ok(spec: str, *, python: Path | None = None) -> bool:
-    mod = import_name_for_requirement(spec)
-    py = _pip_python(python)
-    script = f"""
-import importlib.metadata as md
-from packaging.requirements import Requirement
-
-spec = {spec!r}
-mod = {mod!r}
-req = Requirement(spec)
-try:
-    __import__(mod)
-except ImportError:
-    raise SystemExit(1)
-if req.specifier:
-    try:
-        ver = md.version(req.name)
-    except md.PackageNotFoundError:
-        raise SystemExit(1)
-    if ver not in req.specifier:
-        raise SystemExit(1)
-raise SystemExit(0)
-"""
-    proc = subprocess.run(
-        [py, "-c", script],
-        capture_output=True,
-        check=False,
+def _imports_ok(
+    spec: str,
+    *,
+    python: Path | None = None,
+    bundle_root: Path | None = None,
+) -> bool:
+    return requirement_import_satisfied(
+        spec, python=_pip_python(python), bundle_root=bundle_root
     )
-    return proc.returncode == 0
 
 
 def _missing_imports(packages: list[str], *, python: Path | None = None) -> list[str]:
@@ -79,11 +61,14 @@ def _missing_imports(packages: list[str], *, python: Path | None = None) -> list
 
 
 def _missing_runtime_imports(
-    spec: RuntimeRequirementsSpec, *, python: Path | None = None
+    spec: RuntimeRequirementsSpec,
+    *,
+    python: Path | None = None,
+    bundle_root: Path | None = None,
 ) -> list[str]:
     missing: list[str] = []
     for pkg in spec.all_packages():
-        if not _imports_ok(pkg, python=python):
+        if not _imports_ok(pkg, python=python, bundle_root=bundle_root):
             missing.append(pkg)
     return missing
 
@@ -103,7 +88,7 @@ def bundle_python_stack_satisfied(
         spec = resolve_runtime_requirements(bundle_root=bundle_root)
     except RuntimeError:
         return False
-    return len(_missing_runtime_imports(spec, python=python)) == 0
+    return len(_missing_runtime_imports(spec, python=python, bundle_root=bundle_root)) == 0
 
 
 def _run_pip(
@@ -171,7 +156,9 @@ def ensure_runtime_python_stack(
         )
     spec = resolve_runtime_requirements(bundle_root=bundle_root)
 
-    if not force and not _missing_runtime_imports(spec, python=python):
+    if not force and not _missing_runtime_imports(
+        spec, python=python, bundle_root=bundle_root
+    ):
         return
 
     if not quiet:
@@ -179,7 +166,14 @@ def ensure_runtime_python_stack(
 
     if spec.torch_package.strip():
         index_url = resolve_torch_index_url(torch_index)
-        if not _imports_ok(spec.torch_package, python=python) or force:
+        if (
+            requirement_needs_pip_install(
+                spec.torch_package,
+                python=_pip_python(python),
+                bundle_root=bundle_root,
+                force=force,
+            )
+        ):
             if not quiet:
                 print(f"Installing {spec.torch_package} from {index_url} ...")
             torch_args = [spec.torch_package, "--index-url", index_url]
@@ -192,7 +186,14 @@ def ensure_runtime_python_stack(
             _run_pip(torch_args, quiet=quiet, use_pypi_mirror=False, python=python)
 
     to_install = [
-        p for p in spec.pip_packages if force or not _imports_ok(p, python=python)
+        p
+        for p in spec.pip_packages
+        if requirement_needs_pip_install(
+            p,
+            python=_pip_python(python),
+            bundle_root=bundle_root,
+            force=force,
+        )
     ]
 
     if to_install:
@@ -200,12 +201,27 @@ def ensure_runtime_python_stack(
             print(f"Installing bundle runtime dependencies: {', '.join(to_install)}")
         _run_pip(to_install, quiet=quiet, python=python)
 
-    missing = _missing_runtime_imports(spec, python=python)
+    missing = _missing_runtime_imports(
+        spec, python=python, bundle_root=bundle_root
+    )
     if missing:
-        if not quiet:
-            print(f"Retrying missing bundle imports: {', '.join(missing)}")
-        _run_pip(missing, quiet=quiet, python=python)
-        missing = _missing_runtime_imports(spec, python=python)
+        pip_retry = [
+            p
+            for p in missing
+            if requirement_needs_pip_install(
+                p,
+                python=_pip_python(python),
+                bundle_root=bundle_root,
+                force=True,
+            )
+        ]
+        if pip_retry:
+            if not quiet:
+                print(f"Retrying missing bundle imports: {', '.join(pip_retry)}")
+            _run_pip(pip_retry, quiet=quiet, python=python)
+        missing = _missing_runtime_imports(
+            spec, python=python, bundle_root=bundle_root
+        )
     if missing:
         names = ", ".join(import_name_for_requirement(p) for p in missing)
         raise RuntimeError(
