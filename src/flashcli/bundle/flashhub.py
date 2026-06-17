@@ -128,13 +128,17 @@ def fetch_repo_index(repo_url: str, *, use_cache: bool = True) -> RepoIndex:
         except (json.JSONDecodeError, RuntimeError, ValueError, TypeError):
             pass
 
+    from flashcli.cli_errors import flashhub_error_from_fetch
     from flashcli.util.download_progress import fetch_json_url
 
-    payload = fetch_json_url(
-        repo_url,
-        label=f"FlashHub repo ({repo_url[:64]}…)",
-        user_agent=f"flashcli/{__version__}",
-    )
+    try:
+        payload = fetch_json_url(
+            repo_url,
+            label=f"FlashHub repo ({repo_url[:64]}…)",
+            user_agent=f"flashcli/{__version__}",
+        )
+    except RuntimeError as exc:
+        raise flashhub_error_from_fetch(repo_url, exc) from exc
     cache.parent.mkdir(parents=True, exist_ok=True)
     cache.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return _parse_index_payload(payload, repo_url=repo_url)

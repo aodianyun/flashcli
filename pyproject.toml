@@ -25,8 +25,8 @@ dependencies = [
 dev = ["flash-rt[torch,server]"]
 
 [project.scripts]
-flashcli = "flashcli.cli:app"
-flash = "flashcli.cli:app"
+flashcli = "flashcli.cli:main"
+flash = "flashcli.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

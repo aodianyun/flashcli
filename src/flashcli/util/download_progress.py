@@ -7,7 +7,7 @@ import shutil
 import sys
 from pathlib import Path
 from typing import Any, BinaryIO, Mapping
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 _DEFAULT_CHUNK = 1024 * 1024
@@ -117,6 +117,11 @@ def download_url_to_path(
                 label=display,
                 quiet=quiet,
             )
+    except HTTPError as exc:
+        partial.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"Failed to download {url}: HTTP Error {exc.code}: {exc.reason}"
+        ) from exc
     except URLError as exc:
         partial.unlink(missing_ok=True)
         raise RuntimeError(f"Failed to download {url}: {exc}") from exc
@@ -152,6 +157,10 @@ def fetch_json_url(
     try:
         with urlopen(req, timeout=timeout) as resp:
             raw = resp.read()
+    except HTTPError as exc:
+        raise RuntimeError(
+            f"Failed to fetch {url}: HTTP Error {exc.code}: {exc.reason}"
+        ) from exc
     except URLError as exc:
         raise RuntimeError(f"Failed to fetch {url}: {exc}") from exc
     try:

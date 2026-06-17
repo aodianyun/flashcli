@@ -2,30 +2,52 @@
 
 from __future__ import annotations
 
+import functools
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional, TypeVar
 
 import typer
 
 from flashcli import __version__, config
+from flashcli.cli_errors import handle_cli_error
 from flashcli.doctor import run_check, run_install
 from flashcli.env import ensure_environment
 from flashcli.models import cache as model_cache
 from flashcli.models.registry import Preset
 
+_F = TypeVar("_F", bound=Callable[..., None])
+
 app = typer.Typer(
     name="flashcli",
     help="FlashRT distribution CLI — model bundles, inference, serve.",
     no_args_is_help=True,
+    pretty_exceptions_enable=False,
 )
-doctor_app = typer.Typer(help="Diagnose and install environment.")
-models_app = typer.Typer(help="Model presets and cache.")
-bundle_app = typer.Typer(help="Model bundle utilities.")
+doctor_app = typer.Typer(help="Diagnose and install environment.", pretty_exceptions_enable=False)
+models_app = typer.Typer(help="Model presets and cache.", pretty_exceptions_enable=False)
+bundle_app = typer.Typer(help="Model bundle utilities.", pretty_exceptions_enable=False)
 app.add_typer(doctor_app, name="doctor")
 app.add_typer(models_app, name="models")
 app.add_typer(bundle_app, name="bundle")
 
 _REF_HELP = "FlashHub ref or local bundle path PATH[@variant]"
+
+
+def cli_command(fn: _F) -> _F:
+    """Print concise errors for expected failures; propagate unexpected ones."""
+
+    @functools.wraps(fn)
+    def wrapper(*args: object, **kwargs: object) -> None:
+        try:
+            fn(*args, **kwargs)
+        except typer.Exit:
+            raise
+        except KeyboardInterrupt:
+            raise typer.Exit(130) from None
+        except Exception as exc:
+            handle_cli_error(exc)
+
+    return wrapper  # type: ignore[return-value]
 
 
 def _version_callback(value: bool | None) -> None:
@@ -56,11 +78,7 @@ def _auto_install_flag(no_auto_install: bool) -> bool:
 def _resolve_ref_arg(ref: str) -> tuple[Preset, Path | None]:
     from flashcli.models.preset_ref import resolve_run_target
 
-    try:
-        return resolve_run_target(ref)
-    except ValueError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
+    return resolve_run_target(ref)
 
 
 def _ensure_host_weights_before_reexec(
@@ -101,9 +119,8 @@ def _ensure_host_weights_before_reexec(
             quiet=quiet,
             download=True,
         )
-    except FileNotFoundError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
+    except FileNotFoundError:
+        raise
 
 
 @doctor_app.callback(invoke_without_command=True)
@@ -160,6 +177,7 @@ def models_list() -> None:
 
 
 @models_app.command("show")
+@cli_command
 def models_show(
     preset: str = typer.Argument(..., help=_REF_HELP),
 ) -> None:
@@ -314,6 +332,7 @@ def models_envs(
 
 
 @bundle_app.command("sync")
+@cli_command
 def bundle_sync(
     preset: str = typer.Argument(..., help=_REF_HELP),
     force: bool = typer.Option(False, "--force", help="Re-download manifest and artifacts."),
@@ -335,9 +354,8 @@ def bundle_sync(
         _runtime_id, bundle_root = prepare_bundle_runtime(
             p, quiet=quiet, force=force
         )
-    except BundleEnvironmentError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(2) from exc
+    except BundleEnvironmentError:
+        raise
     typer.echo(f"Synced bundle for {preset!r} -> {bundle_root}")
 
 
@@ -374,6 +392,7 @@ def bundle_clean(
 
 
 @bundle_app.command("validate")
+@cli_command
 def bundle_validate(
     path: Path = typer.Argument(..., exists=True, file_okay=False, dir_okay=True),
     skip_abi_probe: bool = typer.Option(
@@ -402,9 +421,8 @@ def bundle_validate(
 
         _gpu = detect_gpu()
         verify_native_modules(bundle, gpu=_gpu)
-    except RuntimeError as exc:
-        typer.echo(f"ERROR: {exc}", err=True)
-        raise typer.Exit(1) from exc
+    except RuntimeError:
+        raise
     nm = bundle_runtime_matrix(bundle)
     if nm:
         detail = "ABI probed" if not skip_abi_probe else "matrix only"
@@ -417,6 +435,7 @@ def bundle_validate(
 
 
 @bundle_app.command("install")
+@cli_command
 def bundle_install(
     path: Path = typer.Argument(..., exists=True, file_okay=False, dir_okay=True),
     force: bool = typer.Option(False, "--force"),
@@ -437,6 +456,7 @@ def bundle_install(
 
 
 @app.command()
+@cli_command
 def pull(
     ref: str = typer.Argument(..., help=_REF_HELP),
     no_auto_install: bool = typer.Option(
@@ -447,26 +467,17 @@ def pull(
     quiet: bool = typer.Option(False, "--quiet", "-q"),
 ) -> None:
     """Download model weights (and sync runtime bundle if needed)."""
-    from flashcli.bundle.preflight import BundleEnvironmentError
     from flashcli.bundle.preset_validate import validate_preset_before_sync
     from flashcli.bundle.variants import resolve_effective_model_variant
     from flashcli.models.preset_ref import resolve_run_target
     from flashcli.runtime.reexec import prepare_bundle_runtime
 
-    try:
-        p, bundle_path = resolve_run_target(ref)
-    except ValueError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
+    p, bundle_path = resolve_run_target(ref)
 
-    try:
-        manifest = validate_preset_before_sync(
-            p, bundle_path=bundle_path, quiet=quiet
-        )
-        prepare_bundle_runtime(p, bundle_path=bundle_path, quiet=quiet)
-    except BundleEnvironmentError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(2) from exc
+    manifest = validate_preset_before_sync(
+        p, bundle_path=bundle_path, quiet=quiet
+    )
+    prepare_bundle_runtime(p, bundle_path=bundle_path, quiet=quiet)
     if _auto_install_flag(no_auto_install):
         ensure_environment(install_flashcli=True, quiet=quiet)
     model_variant = resolve_effective_model_variant(p, manifest)
@@ -482,11 +493,11 @@ def pull(
     add_help_option=False,
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
+@cli_command
 def run() -> None:
     """Run inference using the preset's model bundle."""
     import sys
 
-    from flashcli.bundle.preflight import BundleEnvironmentError
     from flashcli.bundle.bundle_options import (
         BundleOptionsError,
         format_run_help,
@@ -496,56 +507,40 @@ def run() -> None:
     )
     from flashcli.runtime.reexec import ensure_bundle_runtime_and_reexec
 
-    try:
-        p, default_bundle = resolve_run_from_argv(sys.argv[1:], command="run")
-        inv = parse_run_argv(sys.argv[1:], preset=p, bundle_path=default_bundle)
-    except BundleOptionsError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
-    except ValueError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
+    p, default_bundle = resolve_run_from_argv(sys.argv[1:], command="run")
+    inv = parse_run_argv(sys.argv[1:], preset=p, bundle_path=default_bundle)
 
     if inv.help:
-        try:
-            manifest = resolve_manifest_for_preset(p, bundle_path=inv.bundle)
-            specs = inv.option_specs or []
-            typer.echo(format_run_help(p, manifest, specs))
-        except FileNotFoundError as exc:
-            typer.echo(str(exc), err=True)
-            raise typer.Exit(1) from exc
+        manifest = resolve_manifest_for_preset(p, bundle_path=inv.bundle)
+        specs = inv.option_specs or []
+        typer.echo(format_run_help(p, manifest, specs))
         raise typer.Exit()
 
     if _auto_install_flag(inv.no_auto_install):
         ensure_environment(install_flashcli=True, quiet=inv.quiet)
 
-    try:
-        _ensure_host_weights_before_reexec(
-            p,
-            bundle=inv.bundle,
-            checkpoint=inv.checkpoint,
-            mtp_checkpoint=inv.mtp_checkpoint,
-            quiet=inv.quiet,
-        )
-        ensure_bundle_runtime_and_reexec(
-            p, bundle_path=inv.bundle, quiet=inv.quiet
-        )
-    except BundleEnvironmentError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(2) from exc
+    _ensure_host_weights_before_reexec(
+        p,
+        bundle=inv.bundle,
+        checkpoint=inv.checkpoint,
+        mtp_checkpoint=inv.mtp_checkpoint,
+        quiet=inv.quiet,
+    )
+    ensure_bundle_runtime_and_reexec(
+        p, bundle_path=inv.bundle, quiet=inv.quiet
+    )
 
 
 @app.command(
     add_help_option=False,
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
+@cli_command
 def serve() -> None:
     """Serve unified OpenAI HTTP API via the preset model bundle."""
     import sys
 
-    from flashcli.bundle.preflight import BundleEnvironmentError
     from flashcli.bundle.bundle_options import (
-        BundleOptionsError,
         format_serve_help,
         parse_serve_argv,
         resolve_manifest_for_preset,
@@ -553,44 +548,34 @@ def serve() -> None:
     )
     from flashcli.runtime.reexec import ensure_bundle_runtime_and_reexec
 
-    try:
-        p, default_bundle = resolve_run_from_argv(sys.argv[1:], command="serve")
-        inv = parse_serve_argv(sys.argv[1:], preset=p, bundle_path=default_bundle)
-    except BundleOptionsError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
-    except ValueError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
+    p, default_bundle = resolve_run_from_argv(sys.argv[1:], command="serve")
+    inv = parse_serve_argv(sys.argv[1:], preset=p, bundle_path=default_bundle)
 
     if inv.help:
-        try:
-            manifest = resolve_manifest_for_preset(p, bundle_path=inv.bundle)
-            specs = inv.option_specs or []
-            typer.echo(format_serve_help(p, manifest, specs))
-        except FileNotFoundError as exc:
-            typer.echo(str(exc), err=True)
-            raise typer.Exit(1) from exc
+        manifest = resolve_manifest_for_preset(p, bundle_path=inv.bundle)
+        specs = inv.option_specs or []
+        typer.echo(format_serve_help(p, manifest, specs))
         raise typer.Exit()
 
     if _auto_install_flag(inv.no_auto_install):
         ensure_environment(install_flashcli=True, quiet=inv.quiet)
 
-    try:
-        _ensure_host_weights_before_reexec(
-            p,
-            bundle=inv.bundle,
-            checkpoint=inv.checkpoint,
-            mtp_checkpoint=inv.mtp_checkpoint,
-            quiet=inv.quiet,
-        )
-        ensure_bundle_runtime_and_reexec(
-            p, bundle_path=inv.bundle, quiet=inv.quiet
-        )
-    except BundleEnvironmentError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(2) from exc
+    _ensure_host_weights_before_reexec(
+        p,
+        bundle=inv.bundle,
+        checkpoint=inv.checkpoint,
+        mtp_checkpoint=inv.mtp_checkpoint,
+        quiet=inv.quiet,
+    )
+    ensure_bundle_runtime_and_reexec(
+        p, bundle_path=inv.bundle, quiet=inv.quiet
+    )
+
+
+def main() -> None:
+    """Console entry: disable Rich tracebacks for expected CLI failures."""
+    app()
 
 
 if __name__ == "__main__":
-    app()
+    main()
