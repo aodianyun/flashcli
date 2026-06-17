@@ -2045,10 +2045,11 @@ def collect_errors() -> list[str]:
         check_import(name)
 
     expected = "flashcli.cli:app"
+    alt_expected = "flashcli.cli:main"
     found = {
         ep.name
         for ep in entry_points(group="console_scripts")
-        if ep.name in ("flashcli", "flash") and ep.value == expected
+        if ep.name in ("flashcli", "flash") and ep.value in (expected, alt_expected)
     }
     missing = {"flashcli", "flash"} - found
     if missing:
@@ -2056,8 +2057,11 @@ def collect_errors() -> list[str]:
 
     try:
         from flashcli.cli import app  # noqa: F401
-    except Exception as exc:
-        err(f"flashcli.cli import failed: {exc}")
+    except ImportError as exc:
+        try:
+            from flashcli.cli import main  # noqa: F401
+        except ImportError:
+            err(f"flashcli.cli import failed: {exc}")
 
     reconcile_packaging_with_nvidia_stack()
     check_pip_conflicts()
