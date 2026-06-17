@@ -128,3 +128,4 @@ QWEN36_MAX_SEQ=262208 QWEN36_PORT=8000 \
 | `max_tokens must be <= N` | raise `--max-output-tokens` or lower request `max_tokens` |
 | slow first request | new graph bucket; retry is usually faster |
 | stale FlashHub runtime | use local path `bundles/qwen_nvfp4@qwen36` after local rebuild |
+| remove all local cache | `flashcli bundle clean "$BUNDLE@qwen3" --full`; everything: `flashcli bundle clean --full` |

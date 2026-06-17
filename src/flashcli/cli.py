@@ -364,16 +364,42 @@ def bundle_clean(
     preset: Optional[str] = typer.Argument(
         None, help=f"Preset ref (omit to clean all cached runtimes). {_REF_HELP}"
     ),
-    all_runtimes: bool = typer.Option(
-        False, "--all", help="Remove all under ~/.flashcli/runtimes/."
+    all_cached: bool = typer.Option(
+        False,
+        "--all",
+        help="With no ref: remove all runtimes (default) or all bundle data when --full.",
+    ),
+    full: bool = typer.Option(
+        False,
+        "--full",
+        help="Also remove Hugging Face weights, preset marker, and extra_weights caches.",
+    ),
+    flashhub_cache: bool = typer.Option(
+        False,
+        "--flashhub-cache",
+        help="With --full: also remove FlashHub repo-index JSON.",
     ),
 ) -> None:
-    """Remove cached bundle runtimes and venvs."""
+    """Remove cached bundle runtimes (default) or all local bundle data with --full."""
     import shutil
 
     from flashcli.bundle.marker import read_preset_marker, runtime_dir
+    from flashcli.bundle.purge import clean_all_cached, clean_preset_cache
 
-    if all_runtimes or preset is None:
+    if full:
+        if preset is None:
+            removed = clean_all_cached(include_flashhub_cache=flashhub_cache)
+        else:
+            p, _bundle_path = _resolve_ref_arg(preset)
+            removed = clean_preset_cache(p, include_flashhub_cache=flashhub_cache)
+        if not removed:
+            typer.echo("No cached bundle data to remove.")
+            return
+        for path in removed:
+            typer.echo(f"Removed {path}")
+        return
+
+    if all_cached or preset is None:
         if config.RUNTIMES_DIR.is_dir():
             shutil.rmtree(config.RUNTIMES_DIR)
             typer.echo(f"Removed {config.RUNTIMES_DIR}")

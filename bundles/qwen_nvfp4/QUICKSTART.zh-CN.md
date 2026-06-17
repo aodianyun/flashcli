@@ -130,3 +130,4 @@ QWEN36_MAX_SEQ=262208 QWEN36_PORT=8000 \
 | `max_tokens must be <= N` | 提高 `--max-output-tokens`，或减小请求里的 `max_tokens` |
 | 首次请求很慢 | 新 `(prompt_len, max_tokens)` 触发 CUDA Graph capture；第二次通常快很多 |
 | FlashHub runtime 过旧 | 本地 rebuild 后用 `flashcli run bundles/qwen_nvfp4@qwen36`（或 `$BUNDLE@qwen36`） |
+| 完全删除本机缓存 | `flashcli bundle clean "$BUNDLE@qwen3" --full`；全部：`flashcli bundle clean --full` |
