@@ -3,7 +3,7 @@
 <p align="right"><a href="QUICKSTART.zh-CN.md">简体中文</a></p>
 
 **Requires**: Linux · NVIDIA **SM89** (Ada) or **SM120** (Blackwell) · CUDA **12.4+** (SM89) or **13.x** (SM120) · Python **3.12** (bundle venv; host CLI 3.10+)  
-**Preset**: `pi05_libero` · weights [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) (~7.5GB, not in zip)
+**Ref**: `flashcli-bundle/pi05_libero:1.0.3` · weights [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) (~7.5GB, not in zip)
 
 ```bash
 cd /path/to/flashcli
@@ -14,7 +14,7 @@ export BUNDLE="$(pwd)/bundles/pi05_libero"   # local dev; omit for FlashHub sync
 Check runtime cell for this host:
 
 ```bash
-flashcli models envs pi05_libero
+flashcli models envs flashcli-bundle/pi05_libero:1.0.3
 # expect sm89-cu124-*, sm89-cu130-*, or sm120-cu130-* matching your GPU + CUDA userland
 ```
 
@@ -46,22 +46,22 @@ bash bundles/pi05_libero/build.sh --repo-root "$FLASHRT_REPO" --fa2-native-only
 ```bash
 export HF_ENDPOINT=https://hf-mirror.com   # if needed
 
-flashcli pull pi05_libero --bundle "$BUNDLE"
+flashcli pull "$BUNDLE"
 
 # Bundle-specific flags (defaults from flashcli-bundle.json run_options):
-flashcli run pi05_libero --help
+flashcli run "$BUNDLE" --help
 
-flashcli run pi05_libero --bundle "$BUNDLE" \
+flashcli run "$BUNDLE" \
   --prompt "pick up the red block and place it in the tray" \
   --image /path/to/base.jpg
 ```
 
-Weights cache: `~/.flashcli/models/pi05_libero/checkpoint/`
+Weights cache: `~/.flashcli/models/pi05_libero/1.0.3/checkpoint/` (see `flashcli models show "$BUNDLE"`)
 
 Use a local checkpoint:
 
 ```bash
-flashcli run pi05_libero --bundle "$BUNDLE" \
+flashcli run "$BUNDLE" \
   --checkpoint /path/to/checkpoint \
   --image /path/to/base.jpg
 ```
@@ -71,7 +71,7 @@ flashcli run pi05_libero --bundle "$BUNDLE" \
 ## 3. Benchmark
 
 ```bash
-flashcli run pi05_libero --bundle "$BUNDLE" \
+flashcli run "$BUNDLE" \
   --prompt "pick up the red block and place it in the tray" \
   --image /path/to/base.jpg \
   --benchmark 5
@@ -84,7 +84,7 @@ flashcli run pi05_libero --bundle "$BUNDLE" \
 | Symptom | Fix |
 |---------|-----|
 | `LocalEntryNotFoundError` | network/DNS; set `HF_ENDPOINT` or `--checkpoint` |
-| `NativeEnvironmentNotSupportedError` | GPU/CUDA cell not in manifest; run `flashcli models envs pi05_libero` and sync a current bundle |
-| `no kernel image...` | wrong GPU or CUDA cell; run `flashcli models envs pi05_libero` on this host |
+| `NativeEnvironmentNotSupportedError` | GPU/CUDA cell not in manifest; run `flashcli models envs flashcli-bundle/pi05_libero:1.0.3` and sync a current bundle |
+| `no kernel image...` | wrong GPU or CUDA cell; run `flashcli models envs flashcli-bundle/pi05_libero:1.0.3` on this host |
 | `'GemmRunner'... fp8_nt_dev` | rebuild FlashRT or use `_pi05_compat.py` |
 | `FvkContext is already registered` | upgrade flashcli |

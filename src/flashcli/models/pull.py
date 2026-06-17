@@ -17,6 +17,7 @@ from flashcli.models.hf_hub import (
     filter_download_endpoints,
     run_hf_cli_download,
 )
+from flashcli.models.preset_ref import preset_cache_key
 from flashcli.models.registry import Preset
 from flashcli.util.hub_quiet import hf_download_verbose, suppress_hub_side_logs
 
@@ -232,7 +233,7 @@ def _write_marker(cache_dir: Path, preset_name: str, checkpoint_dir: Path) -> No
 
 def download_preset(preset: Preset, *, quiet: bool = False) -> Path:
     """Download main weights (+ extra_pull) for *preset* into the model cache."""
-    cache_dir = config.MODELS_DIR / preset.name
+    cache_dir = config.MODELS_DIR / preset_cache_key(preset)
     checkpoint_dir = cache_dir / "checkpoint"
     cache_dir.mkdir(parents=True, exist_ok=True)
 

@@ -15,7 +15,7 @@ External specification for **third-party bundle authors**: directory layout, `fl
 | **protocol_version** | `flashcli-bundle` protocol API version; currently **1** |
 | **Weights** | **Not** shipped in the bundle; declared in the manifest (e.g. Hugging Face) and fetched on first run by end users |
 
-End users resolve bundles via `bundle.repo` in the catalog. flashcli downloads `flashcli-bundle.json` first, matches the host GPU/CUDA/Python against `runtime` env keys, then downloads only the matching `runtime/<env-key>/` tree.
+End users resolve bundles via inline ref strings (`flashcli-bundle/<name>:<version>[@variant]`). flashcli downloads `flashcli-bundle.json` first, matches the host GPU/CUDA/Python against `runtime` env keys, then downloads only the matching `runtime/<env-key>/` tree.
 
 ---
 
@@ -45,7 +45,7 @@ my_bundle/                              ← upload root (version directory conte
 
 ### 2.2 Multiple presets sharing one repo (example: qwen_nvfp4)
 
-Same repo, same **`entry`**; catalog `bundle_variant` selects weights and options from each variant block:
+Same repo, same **`entry`**; `@variant` in the ref selects weights and options from each variant block:
 
 ```text
 qwen_nvfp4/
@@ -73,21 +73,27 @@ qwen_nvfp4/
 | Dev-only files outside runtime needs (`build.sh`, `.build-matrix/`, non-runtime `dist/` artifacts) | Not required at inference time |
 | Model weight checkpoints | Declared in manifest `weights` / variant `weights`; fetched externally |
 
-### 2.4 Catalog integration (for integrators)
+### 2.4 Preset refs (for integrators)
 
-```yaml
-models:
-  my-preset:
-    bundle:
-      repo: https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/my_model:1.0.0
-  qwen3-8b-nvfp4:
-    bundle_variant: qwen3          # maps to manifest variants.qwen3
-    bundle:
-      repo: https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/qwen_nvfp4:1.0.1
+Users pass an inline ref string — no bundled catalog file:
+
+```text
+flashcli-bundle/<name>:<version>[@variant]
 ```
 
-- **`bundle.repo`** — FlashHub repo URL.
-- **`bundle_variant`** — only when the manifest defines `variants`; multiple presets may share one `repo`.
+Examples:
+
+```bash
+flashcli run flashcli-bundle/pi05_libero:1.0.3
+flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen3
+flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
+```
+
+- **Single-variant bundle** — ref is `namespace/bundle:version` only.
+- **Multi-variant bundle** — users **must** include `@variant` in the ref.
+- **Local dev** — `flashcli run bundles/qwen_nvfp4@qwen36` (directory must contain `flashcli-bundle.json`).
+
+Full syntax: [model_bundle_standard.md](model_bundle_standard.md).
 
 ---
 
@@ -110,7 +116,6 @@ models:
 | `serve_options` | conditional | Required when there is no `variants` and `serve` is supported |
 | `weights` | conditional | Weight source for a single-preset bundle |
 | `variants` | conditional | Required when multiple presets share one repo (see §3.3) |
-| `default_variant` | recommended | Default variant name when `variants` is present |
 | `post_pull` | no | Hooks after weight download (e.g. tokenizer setup) |
 
 ### 3.2 `entry`
@@ -197,7 +202,7 @@ The **only** source of default values for bundle-specific CLI flags; end-user `-
 | `phase` | no | **run**: `load` → `load()` or `predict` → `predict()`; **serve**: `load` or `warmup` |
 | `flag` | no | Long CLI name (without `--`); default is `name` with `_` → `-` |
 
-**Not declared in the manifest** (provided by flashcli): e.g. `--bundle`, `--checkpoint`, `--host`, `--port`.
+**Not declared in the manifest** (provided by flashcli): e.g. `--checkpoint`, `--host`, `--port`.
 
 ### 3.7 `runtime`
 

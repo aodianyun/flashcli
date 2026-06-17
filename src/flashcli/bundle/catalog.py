@@ -1,4 +1,4 @@
-"""Resolve bundle sources from models.yaml."""
+"""Resolve bundle sources from preset refs."""
 
 from __future__ import annotations
 
@@ -17,11 +17,11 @@ __all__ = [
     "variant_dir_name",
 ]
 
-_SOURCE_KEYS = frozenset({"repo", "path"})
+_SOURCE_KEYS = frozenset({"repo"})
 
 
 class BundleCatalogError(RuntimeError):
-    """Invalid or missing bundle configuration in models.yaml."""
+    """Invalid or missing bundle configuration in preset ref."""
 
 
 def raw_bundle_cfg(preset: Preset) -> dict[str, Any]:
@@ -34,8 +34,8 @@ def repo_url_for_preset(preset: Preset) -> str:
     repo = str(raw.get("repo", "")).strip()
     if not repo:
         raise BundleCatalogError(
-            f"Preset {preset.name!r} has no bundle.repo in models.yaml. "
-            "Set bundle.repo to the FlashHub directory URL, or bundle.path for local dev."
+            f"Preset {preset.name!r} has no bundle.repo. "
+            "Use a FlashHub ref such as flashcli-bundle/pi05_libero:1.0.3"
         )
     return repo
 
@@ -57,8 +57,8 @@ def resolve_effective_bundle_cfg(
     raw = raw_bundle_cfg(preset)
     if not any(str(raw.get(k, "")).strip() for k in _SOURCE_KEYS):
         raise BundleCatalogError(
-            f"Preset {preset.name!r} has no bundle source in models.yaml. "
-            "Set bundle.repo (FlashHub) or bundle.path (local dev)."
+            f"Preset {preset.name!r} has no bundle.repo. "
+            "Use a FlashHub ref or a local bundle path (e.g. bundles/my_bundle@variant)."
         )
 
     if require_gpu:

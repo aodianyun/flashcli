@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 
 from flashcli._version import __version__
@@ -25,47 +24,17 @@ CONFIG_FILE = FLASHCLI_HOME / "config.yaml"
 
 SKIP_AUTO_INSTALL_ENV = "FLASHCLI_SKIP_AUTO_INSTALL"
 
+_DEFAULT_FLASHHUB_API = "https://flashhub-api.aodianyun.com/api/v1/repos"
+
+FLASHHUB_API_BASE = os.environ.get("FLASHCLI_FLASHHUB_API", _DEFAULT_FLASHHUB_API).strip().rstrip(
+    "/"
+) or _DEFAULT_FLASHHUB_API
+
 _PKG_DIR = Path(__file__).resolve().parent
-_CATALOG_YAML = _PKG_DIR / "catalog" / "models.yaml"
-
-
-def _share_models_yaml_candidates() -> list[Path]:
-    if sys.platform == "win32":
-        return []
-    return [
-        Path("/usr/share/flashcli/models/models.yaml"),
-        Path("/usr/share/flashcli/models.yaml"),
-    ]
-
-
-def _resolve_models_yaml() -> Path:
-    """Locate the bundled preset catalog (single source: ``flashcli/catalog/models.yaml``)."""
-    override = os.environ.get("FLASHCLI_MODELS_YAML", "").strip()
-    if override:
-        path = Path(override).expanduser()
-        if path.is_file():
-            return path.resolve()
-        raise FileNotFoundError(
-            f"FLASHCLI_MODELS_YAML points to a missing file: {path}"
-        )
-
-    candidates: list[Path] = [_CATALOG_YAML, *_share_models_yaml_candidates()]
-
-    for path in candidates:
-        if path.is_file():
-            return path.resolve()
-
-    raise FileNotFoundError(
-        "models.yaml not found. Expected one of:\n  "
-        + "\n  ".join(str(p) for p in candidates)
-    )
-
-
-MODELS_YAML = _resolve_models_yaml()
 
 
 def package_root() -> Path:
-    """Directory for resolving relative ``bundle.path`` (repo root when developing)."""
+    """Directory for resolving relative paths (repo root when developing)."""
     repo = _PKG_DIR.parent.parent
     if (repo / "bundles").is_dir() or (repo / "src").is_dir():
         return repo.resolve()

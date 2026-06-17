@@ -37,7 +37,7 @@ VLLM_USE_V1="${VLLM_USE_V1:-0}"
 VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-}"
 VLLM_GPU_MEMORY_UTILIZATION="${VLLM_GPU_MEMORY_UTILIZATION:-0.88}"
 VLLM_TORCH_COMPILE_LEVEL="${VLLM_TORCH_COMPILE_LEVEL:-0}"
-MODEL_NAME="${MODEL_NAME:-qwen3.6-27b-nvfp4}"
+MODEL_NAME="${MODEL_NAME:-qwen36}"
 SHORT_PROMPT="${SHORT_PROMPT:-Explain quantum entanglement in one short paragraph.}"
 SHORT_MAX_TOKENS="${SHORT_MAX_TOKENS:-64}"
 LONG_MAX_TOKENS="${LONG_MAX_TOKENS:-64}"
@@ -56,10 +56,10 @@ HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-1800}"
 GPU_SETTLE_SEC="${GPU_SETTLE_SEC:-8}"
 
 BUNDLE="${BUNDLE:-${FLASHCLI_ROOT}/bundles/qwen_nvfp4}"
-CHECKPOINT="${CHECKPOINT:-${CKPT_QWEN36:-${HOME}/.flashcli/models/qwen36-27b-nvfp4/checkpoint}}"
+CHECKPOINT="${CHECKPOINT:-${CKPT_QWEN36:-${HOME}/.flashcli/models/qwen_nvfp4/1.0.1@qwen36/checkpoint}}"
 VLLM_CHECKPOINT="${VLLM_CHECKPOINT:-${CHECKPOINT}}"
 VLLM_MODEL_NAME="${VLLM_MODEL_NAME:-${MODEL_NAME}}"
-MTP_CKPT="${MTP_CKPT:-${HOME}/.flashcli/models/qwen36-27b-nvfp4/mtp_fp8}"
+MTP_CKPT="${MTP_CKPT:-${HOME}/.flashcli/models/qwen_nvfp4/1.0.1@qwen36/mtp_fp8}"
 OUT_DIR="${OUT_DIR:-}"
 PAYLOAD_DIR=""
 SERVE_PID_FILE=""
@@ -84,14 +84,14 @@ Context cases (pick one scope; default without --short-only/--long-only = both):
   --long-only           Only long-context bench (qwen36_long)
   --long-tokens N       Long prompt user tokens (default: ${LONG_TOKENS})
   --max-seq N           Payload fit + vLLM max-model-len (default: ${MAX_SEQ})
-  --flashrt-serve-max-seq N  FlashRT serve --max-seq (default: catalog 262208; omit for manual-equivalent startup)
+  --flashrt-serve-max-seq N  FlashRT serve --max-seq (default: manifest 262208; omit for manual-equivalent startup)
 
 Presets:
   --comparable          short+long; ${ROUNDS} rounds skip ${SKIP_FIRST}; warmup auto; max_seq ${MAX_SEQ}
   --stress              long prompt repeat-fill (MTP stress; not doc-comparable decode)
   --no-isolate-rounds   Keep hot session across rounds (comparable long default)
   --isolate-rounds      Per-round cache_salt (no cross-round decode warmup)
-  --ctx-16k             short+long at 16K payload (max_seq=16384; FlashRT serve=catalog 262208)
+  --ctx-16k             short+long at 16K payload (max_seq=16384; FlashRT serve=manifest 262208)
   --quick               short only; 3 rounds skip 1; warmup none; max_seq ${QUICK_MAX_SEQ}
 
 Arms:
@@ -154,13 +154,16 @@ resolve_default_bundle() {
   py_root="$(
     python3 - <<'PY' 2>/dev/null || true
 try:
-    from flashcli.models.registry import get_preset
-    from flashcli.bundle.zip import resolve_cached_zip_bundle_root
+    from flashcli.bundle.marker import list_cached_presets
 
-    p = get_preset("qwen36-27b-nvfp4")
-    r = resolve_cached_zip_bundle_root(p)
-    if r is not None:
-        print(r)
+    for entry in list_cached_presets():
+        ref = str(entry.get("ref", "")).lower()
+        if "qwen_nvfp4" not in ref and "qwen36" not in ref:
+            continue
+        root = str(entry.get("bundle_root", "")).strip()
+        if root:
+            print(root)
+            break
 except Exception:
     pass
 PY
@@ -171,7 +174,7 @@ PY
     [[ -n "${found}" ]] && candidates+=("$(dirname "${found}")")
   done < <(
     find "${HOME}/.flashcli/bundles" -name flashcli-bundle.json 2>/dev/null \
-      | grep -E 'qwen_nvfp4|qwen36-27b-nvfp4' | sort -r
+      | grep -E 'qwen_nvfp4' | sort -r
   )
 
   for c in "${candidates[@]}"; do
@@ -199,8 +202,8 @@ ensure_flashrt_bundle() {
   fi
   die "FlashRT bundle not ready: ${BUNDLE}
   Build: bash bundles/qwen_nvfp4/build.sh --repo-root \$FLASHRT_REPO
-  Or:   flashcli bundle sync qwen36-27b-nvfp4
-  Or:   export BUNDLE=/root/.flashcli/bundles/qwen36-27b-nvfp4/zip/.../extracted/flashcli-bundle-qwen_nvfp4-.../"
+  Or:   flashcli bundle sync flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
+  Or:   export BUNDLE=~/.flashcli/runtimes/<runtime_id>/"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -283,7 +286,7 @@ done
 [[ "${RUN_FLASHCLI}" -eq 1 || "${RUN_VLLM}" -eq 1 ]] || die "Nothing to run"
 [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 1 ]] && die "Use only one of --short-only or --long-only"
 
-# Short-only: same as manual `flashcli serve qwen36-27b-nvfp4 --port 8000 --warmup-preset auto`.
+# Short-only: same as manual `flashcli serve flashcli-bundle/qwen_nvfp4:1.0.1@qwen36 --port 8000 --warmup-preset auto`.
 if [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ]]; then
   [[ "${WARMUP_EXPLICIT}" -eq 0 ]] && WARMUP_PRESET=auto
   [[ "${K_EXPLICIT}" -eq 0 ]] && K=""
@@ -600,7 +603,7 @@ wait_health() {
         elif grep -q 'qwen36 agent warmup:' "${serve_log}" 2>/dev/null; then
           log "  tip: warmup finished, waiting for uvicorn — tail -f ${serve_log}"
         else
-          log "  tip: load/warmup in progress (serve.log quiet until done; catalog max_seq ~2–8 min, small --max-seq much slower)"
+          log "  tip: load/warmup in progress (serve.log quiet until done; manifest max_seq ~2–8 min, small --max-seq much slower)"
         fi
       fi
       tail -n 3 "${serve_log}" 2>/dev/null | sed 's/^/    /' >&2 || true
@@ -873,7 +876,7 @@ run_flashcli_backend() {
 
   [[ -f "${MTP_CKPT}/mtp.safetensors" ]] || die "MTP missing: ${MTP_CKPT}/mtp.safetensors"
 
-  # Payload --max-seq caps HTTP prompt+output; FlashRT serve stays on catalog
+  # Payload --max-seq caps HTTP prompt+output; FlashRT serve stays on manifest
   # default (262208) like manual `flashcli serve`. Do NOT pass small --max-seq
   # to FlashRT for 16K benches: max_seq<=32768 → graph_cache_max=1024 (vs 128
   # at 262208), load+warmup can stall 10×+ with almost no serve.log output
@@ -884,11 +887,11 @@ run_flashcli_backend() {
     serve_max_seq="${MAX_SEQ}"
   fi
 
-  # Same as manual `flashcli serve qwen36-27b-nvfp4 …` — preset resolves bundle/checkpoint/MTP.
+  # Same as manual `flashcli serve flashcli-bundle/qwen_nvfp4:1.0.1@qwen36 …`.
   if command -v flashcli >/dev/null 2>&1; then
-    cmd=(flashcli serve qwen36-27b-nvfp4)
+    cmd=(flashcli serve "${FLASHCLI_REF:-flashcli-bundle/qwen_nvfp4:1.0.1@qwen36}")
   else
-    cmd=(python3 -m flashcli.cli serve qwen36-27b-nvfp4)
+    cmd=(python3 -m flashcli.cli serve "${FLASHCLI_REF:-flashcli-bundle/qwen_nvfp4:1.0.1@qwen36}")
     env_args+=(PYTHONPATH="${FLASHCLI_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}")
   fi
   cmd+=(--host "${HOST}" --port "${PORT}" --warmup-preset "${WARMUP_PRESET}")
@@ -910,7 +913,7 @@ run_flashcli_backend() {
   if [[ -n "${serve_max_seq}" ]]; then
     log "  serve max-seq=${serve_max_seq} (payload/vLLM max_seq=${MAX_SEQ})"
   else
-    log "  serve max-seq=catalog 262208 (payload/vLLM max_seq=${MAX_SEQ}; matches manual flashcli serve)"
+    log "  serve max-seq=manifest 262208 (payload/vLLM max_seq=${MAX_SEQ}; matches manual flashcli serve)"
   fi
   export SERVE_LOG_BACKEND=flashrt
   health_s=0
@@ -1125,7 +1128,7 @@ write_report() {
 }
 
 if [[ "${SHORT_ONLY}" -eq 1 && "${LONG_ONLY}" -eq 0 ]]; then
-  log "out=${OUT_DIR} cases=$(bench_cases_label) flashcli_serve='flashcli serve qwen36-27b-nvfp4 --port ${PORT} --warmup-preset auto' flashcli=${RUN_FLASHCLI} vllm=${RUN_VLLM}"
+  log "out=${OUT_DIR} cases=$(bench_cases_label) flashcli_serve='flashcli serve flashcli-bundle/qwen_nvfp4:1.0.1@qwen36 --port ${PORT} --warmup-preset auto' flashcli=${RUN_FLASHCLI} vllm=${RUN_VLLM}"
 else
   log "out=${OUT_DIR} cases=$(bench_cases_label) max_seq=${MAX_SEQ} flashcli=${RUN_FLASHCLI} vllm=${RUN_VLLM}"
 fi
@@ -1150,7 +1153,7 @@ if [[ "${REPORT_ONLY}" -eq 1 ]]; then
 fi
 
 compute_vllm_plan
-[[ "${RUN_FLASHCLI}" -eq 1 ]] && log "  FlashRT serve=preset qwen36-27b-nvfp4 (manual-equivalent, no --bundle zip)"
+[[ "${RUN_FLASHCLI}" -eq 1 ]] && log "  FlashRT serve=flashcli-bundle/qwen_nvfp4:1.0.1@qwen36 (manual-equivalent)"
 [[ "${RUN_VLLM}" -eq 1 ]] && log "  vLLM checkpoint=${VLLM_CHECKPOINT} model=${VLLM_MODEL_NAME} max_model_len=${VLLM_MAX_LEN}"
 [[ "${RUN_FLASHCLI}" -eq 1 || "${RUN_VLLM}" -eq 1 ]] || die "No backend to run after vLLM context plan"
 

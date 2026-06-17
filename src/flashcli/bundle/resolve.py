@@ -1,24 +1,16 @@
-"""Resolve model bundle path from preset catalog and CLI overrides."""
+"""Resolve model bundle path from preset ref and CLI overrides."""
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-from flashcli import config
 from flashcli.bundle.activate import activate_bundle
-from flashcli.bundle.catalog import BundleCatalogError, raw_bundle_cfg, repo_url_for_preset
+from flashcli.bundle.catalog import BundleCatalogError, repo_url_for_preset
 from flashcli.bundle.layout import is_bundle_root
 from flashcli.bundle.manifest import BundleManifest, load_bundle_manifest, validate_bundle_layout
 from flashcli.bundle.marker import read_preset_marker
 from flashcli.models.registry import Preset
-
-
-def _resolve_catalog_bundle_path(path_str: str) -> Path:
-    raw = Path(path_str).expanduser()
-    if raw.is_absolute():
-        return raw.resolve()
-    return (config.package_root() / raw).resolve()
 
 
 def resolve_bundle_root(
@@ -39,7 +31,7 @@ def resolve_bundle_root(
             raise FileNotFoundError(f"Bundle directory not found: {root}")
         return root
 
-    marker = read_preset_marker(preset.name)
+    marker = read_preset_marker(preset)
     if marker:
         marker_root = str(marker.get("bundle_root", "")).strip()
         if marker_root:
@@ -47,14 +39,7 @@ def resolve_bundle_root(
             if is_bundle_root(root):
                 return root
 
-    cfg = raw_bundle_cfg(preset)
-    if cfg.get("path"):
-        root = _resolve_catalog_bundle_path(str(cfg["path"]))
-        if not is_bundle_root(root):
-            raise FileNotFoundError(f"Bundle path not ready: {root}")
-        return root
-
-    repo_url_for_preset(preset)  # validate catalog
+    repo_url_for_preset(preset)  # validate ref
     if not env_root:
         raise FileNotFoundError(
             f"No bundle runtime for preset {preset.name!r}. "

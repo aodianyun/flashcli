@@ -2,26 +2,25 @@
 
 <p align="right"><strong>English</strong> · <a href="environment.zh-CN.md">简体中文</a></p>
 
-flashcli uses environment variables for cache locations, the preset catalog, download behavior, and Hugging Face / preset-specific integration. Variables not listed here have **no effect** on flashcli.
+flashcli uses environment variables for cache locations, preset refs, download behavior, and Hugging Face / preset-specific integration. Variables not listed here have **no effect** on flashcli.
 
 Boolean flags: `1`, `true`, or `yes` (case-insensitive) enable the switch.
 
-## Paths and catalog
+## Paths and FlashHub
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FLASHCLI_HOME` | `~/.flashcli` | Cache root. Default subdirs: `runtimes/`, `models/`, `cache/`. Legacy: `bundles/` (pre-v3 zip cache). |
-| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | Legacy bundle cache override. New syncs use `FLASHCLI_RUNTIMES_DIR` / `runtimes/`. |
-| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | Override Hugging Face weights cache root (per preset usually `<dir>/<preset>/checkpoint/`). |
-| `FLASHCLI_MODELS_YAML` | (bundled) | **Override path to the preset catalog file.** Default: `flashcli/catalog/models.yaml` inside the installed package (same for pip wheel and editable installs). File must exist. |
-
-Normally edit [`src/flashcli/catalog/models.yaml`](../src/flashcli/catalog/models.yaml) in the repo; set `FLASHCLI_MODELS_YAML` only for multiple catalogs, CI, or mounted configs in containers.
+| `FLASHCLI_HOME` | `~/.flashcli` | Cache root. Default subdirs: `runtimes/`, `models/`, `bundles/`, `cache/`. |
+| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | Preset marker cache (`<bundle>/<version>@<variant>/.flashcli_bundle.json`). |
+| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | Hugging Face weights (`<dir>/<bundle>/<version>@<variant>/checkpoint/`). |
+| `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | Base URL for short refs `namespace/bundle:version[@variant]`. |
 
 Example:
 
 ```bash
 export FLASHCLI_HOME=/data/flashcli
-export FLASHCLI_MODELS_YAML=/etc/flashcli/models.yaml
+export FLASHCLI_FLASHHUB_API=https://flashhub-api.aodianyun.com/api/v1/repos
+flashcli run flashcli-bundle/pi05_libero:1.0.3
 flashcli models list
 ```
 
@@ -94,9 +93,9 @@ See [architecture.md](architecture.md#host-cli-vs-bundle-infer-important). Do **
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `FLASH_RT_PALIGEMMA_TOKENIZER` | (auto-download) | Path to the PaliGemma tokenizer **file** for Pi0.5 `post_pull`. Default cache: `~/.cache/flash_rt/`. |
-| `FLASHRT_QWEN36_MTP_CKPT_DIR` | (preset/bundle) | Qwen3.6 MTP weights directory. Set via `--mtp-checkpoint` or `env` in catalog / `flashcli-bundle.json`. |
+| `FLASHRT_QWEN36_MTP_CKPT_DIR` | (preset/bundle) | Qwen3.6 MTP weights directory. Set via `--mtp-checkpoint` or `env` in `flashcli-bundle.json`. |
 
-`env` blocks in `flashcli-bundle.json` or the catalog can set process env at activation (`{models_dir}`, `{bundle_root}` placeholders).
+`env` blocks in `flashcli-bundle.json` can set process env at activation (`{models_dir}`, `{bundle_root}` placeholders).
 
 ## Development
 
@@ -116,5 +115,5 @@ See [architecture.md](architecture.md#host-cli-vs-bundle-infer-important). Do **
 ## Related docs
 
 - [README.md](../README.md) — quick start and cache layout
-- [model_bundle_standard.md](model_bundle_standard.md) — catalog + runtime flow
-- [src/flashcli/catalog/models.yaml](../src/flashcli/catalog/models.yaml) — single catalog source file
+- [model_bundle_standard.md](model_bundle_standard.md) — preset ref + runtime flow
+- [model_bundle_standard.md](model_bundle_standard.md) — preset ref and runtime flow

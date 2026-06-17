@@ -8,7 +8,7 @@ One install, one preset name — flashcli resolves the right native runtime for 
 
 ```bash
 curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
-flashcli run pi05_libero
+flashcli run flashcli-bundle/pi05_libero:1.0.3
 ```
 
 ---
@@ -17,7 +17,7 @@ flashcli run pi05_libero
 
 | Layer | Role |
 |-------|------|
-| **flashcli** | Distribution CLI — catalog, bundle fetch, env detection, deps, cache, HTTP gateway |
+| **flashcli** | Distribution CLI — preset refs, bundle fetch, env detection, deps, cache, HTTP gateway |
 | **Model Bundle** | Versioned artifact (`flashcli-bundle.json` + Python entry + per-env `runtime/` on FlashHub) |
 | **FlashRT** | Kernels and model frontends compiled into the bundle; not a pip dependency of flashcli |
 
@@ -27,9 +27,9 @@ flashcli is intentionally thin: **inference code lives in the bundle**. The CLI 
 
 ## Why flashcli
 
-- **One command to first token** — `flashcli run <preset>` chains dependency install, FlashHub bundle sync, weight pull, and inference.
+- **One command to first token** — `flashcli run <ref>` chains dependency install, FlashHub bundle sync, weight pull, and inference.
 - **Split download by environment** — only this host’s `runtime/<env-key>/` is fetched; use `flashcli models envs` to see the env key.
-- **Reproducible releases** — maintainers upload `dist/` to FlashHub; users pin `bundle.repo` URLs in [`models.yaml`](src/flashcli/catalog/models.yaml).
+- **Reproducible releases** — maintainers upload `dist/` to FlashHub; users pin refs such as `flashcli-bundle/pi05_libero:1.0.3`.
 - **OpenAI-compatible serving** — Qwen NVFP4 presets expose `/v1/chat/completions`, streaming, tools, and session reuse via FlashRT `qwen36_agent`.
 - **Operator-friendly** — structured serve logs, `/health` with `inference_busy`, GPU batch-1 gate (503 when busy), `doctor` for preflight checks.
 - **Mirror-friendly** — Gitee install script, pip/HF mirror env vars; works in restricted networks with documented fallbacks.
@@ -38,11 +38,11 @@ flashcli is intentionally thin: **inference code lives in the bundle**. The CLI 
 
 ## Supported models & hardware
 
-| Preset | Task | GPU | CUDA line | Python | Capabilities |
-|--------|------|-----|-----------|--------|--------------|
-| [`pi05_libero`](bundles/pi05_libero/QUICKSTART.md) | Pi0.5 LIBERO VLA | **SM89**, **SM120** | cu124 (SM89) · cu130 | **3.12** (bundle venv) | `run` |
-| [`qwen3-8b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3-8B NVFP4 chat | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
-| [`qwen36-27b-nvfp4`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
+| Ref | Task | GPU | CUDA line | Python | Capabilities |
+|-----|------|-----|-----------|--------|--------------|
+| [`flashcli-bundle/pi05_libero:1.0.3`](bundles/pi05_libero/QUICKSTART.md) | Pi0.5 LIBERO VLA | **SM89**, **SM120** | cu124 (SM89) · cu130 | **3.12** (bundle venv) | `run` |
+| [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen3`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3-8B NVFP4 chat | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
+| [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen36`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
 
 **Platform requirements**
 
@@ -50,7 +50,7 @@ flashcli is intentionally thin: **inference code lives in the bundle**. The CLI 
 - **Containers**: NVIDIA CUDA runtime images (e.g. `nvcr.io/nvidia/pytorch:25.10-py3` for Qwen SM120), not plain `python:3.x`
 - **Network**: FlashHub bundle sync + Hugging Face weights on first run (Pi0.5 also needs Google Storage for PaliGemma tokenizer)
 
-Qwen3 and Qwen3.6 share **one** FlashHub repo; catalog `bundle_variant` selects weights. Weights are **never** inside the bundle — cached under `~/.flashcli/models/<preset>/`.
+Qwen3 and Qwen3.6 share **one** FlashHub repo; `@qwen3` / `@qwen36` in the ref selects weights. Weights are **never** inside the bundle — cached under `~/.flashcli/models/<bundle>/<version>@<variant>/`.
 
 ---
 
@@ -94,13 +94,13 @@ pip install -e .
 ```bash
 flashcli doctor
 flashcli models list
-flashcli models envs pi05_libero    # or qwen3-8b-nvfp4 / qwen36-27b-nvfp4
+flashcli models envs flashcli-bundle/pi05_libero:1.0.3
 ```
 
 ### 3. First inference — robotics (Pi0.5)
 
 ```bash
-flashcli run pi05_libero \
+flashcli run flashcli-bundle/pi05_libero:1.0.3 \
   --prompt "pick up the red block and place it in the tray" \
   --image /path/to/base.jpg
 ```
@@ -112,35 +112,34 @@ First run syncs the FlashHub runtime, creates the bundle venv, installs the torc
 **Engine (no HTTP)**
 
 ```bash
-flashcli run qwen3-8b-nvfp4 --prompt "Hello" --max-tokens 128
-flashcli run qwen36-27b-nvfp4 --prompt "Hello" --max-tokens 128 --K 6
+flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen3 --prompt "Hello" --max-tokens 128
+flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36 --prompt "Hello" --max-tokens 128 --K 6
 ```
 
 **OpenAI-compatible server**
 
 ```bash
-# qwen3-8b — short context
-flashcli serve qwen3-8b-nvfp4 --host 0.0.0.0 --port 8000 \
+# qwen3 — short context
+flashcli serve flashcli-bundle/qwen_nvfp4:1.0.1@qwen3 --host 0.0.0.0 --port 8000 \
   --max-seq 2048 --max-q-seq 1024 --warmup-preset auto
 
-# qwen3.6-27b — long context + MTP (defaults: FP8-KV, route_min_seq=0)
-flashcli serve qwen36-27b-nvfp4 --host 0.0.0.0 --port 8000 \
+# qwen36 — long context + MTP (defaults: FP8-KV, route_min_seq=0)
+flashcli serve flashcli-bundle/qwen_nvfp4:1.0.1@qwen36 --host 0.0.0.0 --port 8000 \
   --K 6 --max-seq 262208 --warmup-preset auto
 ```
 
 ```bash
 curl -N http://127.0.0.1:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model":"qwen3.6-27b-nvfp4","messages":[{"role":"user","content":"Hello"}],
+  -d '{"model":"qwen36","messages":[{"role":"user","content":"Hello"}],
        "max_tokens":512,"stream":true,"temperature":0}'
 ```
 
 **Local dev bundle** (rebuilt from FlashRT, not FlashHub):
 
 ```bash
-export BUNDLE="$(pwd)/bundles/qwen_nvfp4"
 bash bundles/qwen_nvfp4/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
-flashcli serve qwen36-27b-nvfp4 --bundle "$BUNDLE" --port 8000 --K 6 --max-seq 262208
+flashcli serve bundles/qwen_nvfp4@qwen36 --port 8000 --K 6 --max-seq 262208
 ```
 
 Step-by-step per bundle: **[qwen_nvfp4 QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md)** · **[pi05_libero QUICKSTART](bundles/pi05_libero/QUICKSTART.md)**
@@ -149,13 +148,13 @@ Step-by-step per bundle: **[qwen_nvfp4 QUICKSTART](bundles/qwen_nvfp4/QUICKSTART
 
 ## Model catalog
 
-| Preset | Weights (Hugging Face) | Bundle quickstart |
-|--------|------------------------|-------------------|
-| `pi05_libero` | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) | [QUICKSTART](bundles/pi05_libero/QUICKSTART.md) |
-| `qwen3-8b-nvfp4` | [kaitchup/Qwen3-8B-NVFP4](https://huggingface.co/kaitchup/Qwen3-8B-NVFP4) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md) |
-| `qwen36-27b-nvfp4` | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4) + [MTP](https://huggingface.co/Qwen/Qwen3.6-27B-FP8) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md) |
+| Ref | Weights (Hugging Face) | Bundle QUICKSTART |
+|-----|------------------------|-------------------|
+| `flashcli-bundle/pi05_libero:1.0.3` | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) | [QUICKSTART](bundles/pi05_libero/QUICKSTART.md) |
+| `flashcli-bundle/qwen_nvfp4:1.0.1@qwen3` | [kaitchup/Qwen3-8B-NVFP4](https://huggingface.co/kaitchup/Qwen3-8B-NVFP4) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md) |
+| `flashcli-bundle/qwen_nvfp4:1.0.1@qwen36` | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4) + [MTP](https://huggingface.co/Qwen/Qwen3.6-27B-FP8) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md) |
 
-Catalog source: [`src/flashcli/catalog/models.yaml`](src/flashcli/catalog/models.yaml).
+Preset ref syntax: [model_bundle_standard.md](docs/model_bundle_standard.md).
 
 ---
 
@@ -163,16 +162,17 @@ Catalog source: [`src/flashcli/catalog/models.yaml`](src/flashcli/catalog/models
 
 | Command | Purpose |
 |---------|---------|
-| `flashcli run <preset>` | Sync inference (VLA, chat, …) |
-| `flashcli serve <preset>` | OpenAI HTTP API (Qwen) |
-| `flashcli pull <preset>` | Pre-fetch weights only |
-| `flashcli models list` | Catalog + local cache status |
-| `flashcli models envs [preset]` | Native matrix cells vs this GPU |
+| `flashcli run <ref>` | Sync inference (VLA, chat, …) |
+| `flashcli serve <ref>` | OpenAI HTTP API (Qwen) |
+| `flashcli pull <ref>` | Pre-fetch weights only |
+| `flashcli models list` | Preset refs + local cache status |
+| `flashcli models envs [ref]` | Native matrix cells vs this GPU |
 | `flashcli doctor [--install]` | Environment / GPU preflight |
-| `flashcli bundle sync <preset>` | Pre-fetch bundle runtime from FlashHub |
+| `flashcli bundle sync <ref>` | Pre-fetch bundle runtime from FlashHub |
 | `flashcli bundle validate PATH` | Layout + native matrix check |
 
-**Common flags**: `--bundle PATH` (local bundle root), `--no-auto-install`, `--checkpoint`, `--quiet`
+**Common flags**: `--no-auto-install`, `--checkpoint`, `--quiet`  
+**Ref syntax**: FlashHub `flashcli-bundle/name:version[@variant]` or local `bundles/name[@variant]` (directory must contain `flashcli-bundle.json`). Multi-variant bundles require `@variant`.
 
 `flash` and `flashcli` are equivalent entry points.
 
@@ -187,7 +187,7 @@ Host: install.sh → ~/.flashcli/venv (flashcli once)
   pull/sync/weights → host Python
 
 run/serve:
-  models.yaml → FlashHub → manifest + preflight → runtime/<env-key>/
+  ref → FlashHub → manifest + preflight → runtime/<env-key>/
   → bundle venv (python_abi, torch, …)
   → re-exec: bundle python -m flashcli.runtime.infer  (PYTHONPATH = host flashcli)
   → activate bundle → HF weights → RunEngine / ServeEngine
@@ -201,7 +201,7 @@ run/serve:
 |------|----------|
 | `~/.flashcli/venv/` | Host CLI (single flashcli install) |
 | `~/.flashcli/runtimes/<id>/` | Synced bundle root (`runtime/<env-key>/`, entry tree), bundle venv |
-| `~/.flashcli/models/<preset>/checkpoint/` | Model weights |
+| `~/.flashcli/models/<bundle>/<version>@<variant>/checkpoint/` | Model weights |
 | `~/.cache/flash_rt/` | Pi0.5 PaliGemma tokenizer (post-pull) |
 
 Environment variables: [docs/environment.md](docs/environment.md) (`FLASHCLI_HOME`, `HF_ENDPOINT`, `FLASHRT_QWEN36_*`, …).
@@ -213,7 +213,7 @@ Environment variables: [docs/environment.md](docs/environment.md) (`FLASHCLI_HOM
 | Role | Read in order |
 |------|----------------|
 | **End user** | This README → [pi05_libero QUICKSTART](bundles/pi05_libero/QUICKSTART.md) or [qwen_nvfp4 QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md) → [environment.md](docs/environment.md) |
-| **Catalog integrator** | [`models.yaml`](src/flashcli/catalog/models.yaml) → [model_bundle_standard.md](docs/model_bundle_standard.md) |
+| **Integrator** | [model_bundle_standard.md](docs/model_bundle_standard.md) — preset ref syntax |
 | **Bundle author** | [bundle_publish_standard.md](docs/bundle_publish_standard.md) → [flashcli-bundle/README.md](flashcli-bundle/README.md) |
 
 How host CLI, bundle venv, and FlashHub sync work: [architecture.md](docs/architecture.md). Full index: [docs/README.md](docs/README.md).

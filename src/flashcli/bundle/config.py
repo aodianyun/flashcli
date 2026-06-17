@@ -1,4 +1,4 @@
-"""Read model settings from ``flashcli-bundle.json`` only (not models.yaml)."""
+"""Read model settings from ``flashcli-bundle.json``."""
 
 from __future__ import annotations
 

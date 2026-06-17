@@ -41,7 +41,7 @@ __all__ = [
     "parse_run_argv",
     "parse_serve_argv",
     "resolve_manifest_for_preset",
-    "resolve_preset_from_command_argv",
+    "resolve_run_from_argv",
     "resolve_options_variant",
     "run_option_defaults",
     "serve_option_defaults",
@@ -71,11 +71,11 @@ def resolve_manifest_for_preset(
     *,
     bundle_path: Path | None = None,
 ) -> BundleManifest:
-    from flashcli import config
     from flashcli.bundle.catalog import raw_bundle_cfg, repo_url_for_preset
     from flashcli.bundle.flashhub import download_manifest_from_repo
     from flashcli.bundle.layout import is_bundle_root
     from flashcli.bundle.marker import read_preset_marker
+    from flashcli.models.preset_ref import preset_cache_key
 
     if bundle_path is not None:
         root = bundle_path.expanduser().resolve()
@@ -83,15 +83,7 @@ def resolve_manifest_for_preset(
             return load_bundle_manifest(root)
 
     cfg = raw_bundle_cfg(preset)
-    path_str = str(cfg.get("path", "")).strip()
-    if path_str:
-        root = Path(path_str).expanduser()
-        if not root.is_absolute():
-            root = (config.package_root() / root).resolve()
-        if is_bundle_root(root):
-            return load_bundle_manifest(root)
-
-    marker = read_preset_marker(preset.name) or {}
+    marker = read_preset_marker(preset) or {}
     catalog_repo = _catalog_repo_url(cfg)
     marker_repo = str(marker.get("repo", "")).strip()
     cached_root = str(marker.get("bundle_root", "")).strip()
@@ -107,26 +99,28 @@ def resolve_manifest_for_preset(
         if bundle_path is not None:
             raise FileNotFoundError(f"Bundle root not found: {bundle_path}")
         raise FileNotFoundError(
-            f"Preset {preset.name!r} has no bundle.repo/path and no cached bundle"
+            f"Preset {preset.name!r} has no bundle.repo and no cached bundle"
         )
 
     import tempfile
 
-    tmp = Path(tempfile.gettempdir()) / f"flashcli-manifest-{preset.name}.json"
+    key = preset_cache_key(preset)
+    tmp = Path(tempfile.gettempdir()) / f"flashcli-manifest-{key}.json"
     data = download_manifest_from_repo(repo_url_for_preset(preset), tmp, quiet=True)
     root = Path(cached_root) if cached_root else tmp.parent
     return load_bundle_manifest_data(data, bundle_root=root)
 
 
 COMMON_RUN_OPTIONS_HELP: list[tuple[str, str]] = [
-    ("PRESET", "Model preset name (from catalog)."),
-    ("--bundle PATH", "Override bundle root (local dev tree)."),
+    (
+        "REF",
+        "FlashHub ref namespace/bundle:version[@variant], or local path PATH[@variant].",
+    ),
     ("--checkpoint PATH", "Override checkpoint directory (skip cache/download)."),
     (
         "--mtp-checkpoint PATH",
         "Override MTP weights dir (sets FLASHRT_QWEN36_MTP_CKPT_DIR).",
     ),
-    ("--model NAME", "Override catalog bundle_variant (e.g. qwen3, qwen36)."),
     ("--benchmark N", "Timed predict iterations after the first run."),
     (
         "--warmup N",
@@ -137,11 +131,12 @@ COMMON_RUN_OPTIONS_HELP: list[tuple[str, str]] = [
 ]
 
 COMMON_SERVE_OPTIONS_HELP: list[tuple[str, str]] = [
-    ("PRESET", "Model preset name (from catalog)."),
-    ("--bundle PATH", "Override bundle root (local dev tree)."),
+    (
+        "REF",
+        "FlashHub ref namespace/bundle:version[@variant], or local path PATH[@variant].",
+    ),
     ("--checkpoint PATH", "Override checkpoint directory."),
     ("--mtp-checkpoint PATH", "Override MTP weights dir."),
-    ("--model NAME", "Override catalog bundle_variant."),
     ("--port PORT", "HTTP listen port (default: 8000)."),
     ("--host HOST", "HTTP listen address (default: 0.0.0.0)."),
     ("--no-auto-install", "Do not auto-install bundle Python deps."),
@@ -218,7 +213,6 @@ class RunInvocation:
     bundle: Path | None = None
     checkpoint: Path | None = None
     mtp_checkpoint: Path | None = None
-    model: str | None = None
     benchmark: int = 0
     warmup: int = 0
     no_auto_install: bool = False
@@ -234,7 +228,6 @@ class ServeInvocation:
     bundle: Path | None = None
     checkpoint: Path | None = None
     mtp_checkpoint: Path | None = None
-    model: str | None = None
     port: int = 8000
     host: str = "0.0.0.0"
     no_auto_install: bool = False
@@ -243,32 +236,38 @@ class ServeInvocation:
     option_specs: list[OptionSpec] | None = None
 
 
-def resolve_preset_from_command_argv(
+def resolve_run_from_argv(
     argv: list[str],
     *,
     command: str,
-) -> str:
-    """Return preset name from ``flashcli run|serve`` argv (after the subcommand)."""
+) -> tuple[Preset, Path | None]:
+    """Parse ``run|serve`` argv into (preset, optional local bundle root)."""
+    from flashcli.models.preset_ref import resolve_run_target
+
     rest = list(argv)
     if rest and rest[0] == command:
         rest = rest[1:]
     if not rest:
         raise BundleOptionsError(
-            f"Usage: flashcli {command} PRESET [OPTIONS]\n"
-            f"Try 'flashcli {command} PRESET --help' for bundle-specific options."
+            f"Usage: flashcli {command} REF[@variant] [OPTIONS]\n"
+            f"Try 'flashcli {command} --help' for bundle-specific options."
         )
-    preset_name = rest[0]
-    if preset_name in ("-h", "--help"):
+    if rest[0] in ("-h", "--help"):
         raise BundleOptionsError(
-            f"Usage: flashcli {command} PRESET [OPTIONS]\n"
-            f"Try 'flashcli {command} PRESET --help' for bundle-specific options."
+            f"Usage: flashcli {command} REF[@variant] [OPTIONS]\n"
+            f"Try 'flashcli {command} --help' for bundle-specific options."
         )
-    if preset_name.startswith("-"):
-        raise BundleOptionsError(
-            f"Expected preset name, got {preset_name!r}. "
-            f"Usage: flashcli {command} PRESET [OPTIONS]"
-        )
-    return preset_name
+
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("ref", nargs="?")
+    ns, _ = pre.parse_known_args(rest)
+    positional = ns.ref
+    if positional is None and rest and not rest[0].startswith("-"):
+        positional = rest[0]
+    try:
+        return resolve_run_target(positional)
+    except ValueError as exc:
+        raise BundleOptionsError(str(exc)) from exc
 
 
 def _peek_command_argv(
@@ -278,14 +277,12 @@ def _peek_command_argv(
     bundle_path: Path | None,
 ) -> tuple[str, Path | None, str | None]:
     pre = argparse.ArgumentParser(add_help=False)
-    pre.add_argument("preset", nargs="?")
-    pre.add_argument("--bundle", type=Path, dest="bundle")
-    pre.add_argument("--model")
+    pre.add_argument("ref", nargs="?")
     ns, _ = pre.parse_known_args(argv)
-    preset_name = ns.preset or default_preset
-    if ns.preset is None and argv and not argv[0].startswith("-"):
+    preset_name = ns.ref or default_preset
+    if ns.ref is None and argv and not argv[0].startswith("-"):
         preset_name = argv[0]
-    return preset_name, ns.bundle or bundle_path, ns.model
+    return preset_name, bundle_path, None
 
 
 def _add_spec_to_parser(parser: argparse.ArgumentParser, spec: OptionSpec) -> None:
@@ -312,11 +309,9 @@ def _add_spec_to_parser(parser: argparse.ArgumentParser, spec: OptionSpec) -> No
 
 def _build_run_parser(preset_name: str, specs: list[OptionSpec]) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("preset", nargs="?", default=preset_name)
-    parser.add_argument("--bundle", type=Path)
+    parser.add_argument("ref", nargs="?", default=preset_name)
     parser.add_argument("--checkpoint", type=Path)
     parser.add_argument("--mtp-checkpoint", dest="mtp_checkpoint", type=Path)
-    parser.add_argument("--model")
     parser.add_argument("--benchmark", type=int, default=0)
     parser.add_argument("--warmup", type=int, default=0)
     parser.add_argument("--no-auto-install", action="store_true")
@@ -329,11 +324,9 @@ def _build_run_parser(preset_name: str, specs: list[OptionSpec]) -> argparse.Arg
 
 def _build_serve_parser(preset_name: str, specs: list[OptionSpec]) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("preset", nargs="?", default=preset_name)
-    parser.add_argument("--bundle", type=Path)
+    parser.add_argument("ref", nargs="?", default=preset_name)
     parser.add_argument("--checkpoint", type=Path)
     parser.add_argument("--mtp-checkpoint", dest="mtp_checkpoint", type=Path)
-    parser.add_argument("--model")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--no-auto-install", action="store_true")
@@ -369,12 +362,12 @@ def parse_run_argv(
         return RunInvocation(preset=preset.name, help=True)
 
     wants_help = "--help" in argv or "-h" in argv
-    preset_name, peek_bundle, peek_model = _peek_command_argv(
+    preset_name, peek_bundle, _ = _peek_command_argv(
         argv, default_preset=preset.name, bundle_path=bundle_path
     )
 
     manifest = resolve_manifest_for_preset(preset, bundle_path=peek_bundle)
-    variant_key = resolve_options_variant(manifest, preset, cli_model=peek_model)
+    variant_key = resolve_options_variant(manifest, preset)
     specs = (
         bundle_run_options_for_help(manifest, variant=variant_key)
         if wants_help
@@ -392,10 +385,9 @@ def parse_run_argv(
     ns = _build_run_parser(preset_name, specs).parse_args(argv)
     return RunInvocation(
         preset=preset_name,
-        bundle=ns.bundle or bundle_path,
+        bundle=bundle_path,
         checkpoint=ns.checkpoint,
         mtp_checkpoint=getattr(ns, "mtp_checkpoint", None),
-        model=ns.model,
         benchmark=int(ns.benchmark),
         warmup=int(ns.warmup),
         no_auto_install=bool(ns.no_auto_install),
@@ -419,12 +411,12 @@ def parse_serve_argv(
         return ServeInvocation(preset=preset.name, help=True)
 
     wants_help = "--help" in argv or "-h" in argv
-    preset_name, peek_bundle, peek_model = _peek_command_argv(
+    preset_name, peek_bundle, _ = _peek_command_argv(
         argv, default_preset=preset.name, bundle_path=bundle_path
     )
 
     manifest = resolve_manifest_for_preset(preset, bundle_path=peek_bundle)
-    variant_key = resolve_options_variant(manifest, preset, cli_model=peek_model)
+    variant_key = resolve_options_variant(manifest, preset)
     specs = (
         bundle_serve_options_for_help(manifest, variant=variant_key)
         if wants_help
@@ -442,10 +434,9 @@ def parse_serve_argv(
     ns = _build_serve_parser(preset_name, specs).parse_args(argv)
     return ServeInvocation(
         preset=preset_name,
-        bundle=ns.bundle or bundle_path,
+        bundle=bundle_path,
         checkpoint=ns.checkpoint,
         mtp_checkpoint=getattr(ns, "mtp_checkpoint", None),
-        model=ns.model,
         port=int(ns.port),
         host=str(ns.host),
         no_auto_install=bool(ns.no_auto_install),

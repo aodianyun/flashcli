@@ -10,7 +10,7 @@
 
 ### Catalog 集成方
 
-固定 preset 与 FlashHub URL — [`models.yaml`](../src/flashcli/catalog/models.yaml) + [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
+固定 preset 与 FlashHub URL — 使用 inline ref 字符串；见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
 
 ### 对外 Bundle 作者
 
@@ -25,10 +25,10 @@
 | 文档 | 用途 |
 |------|------|
 | [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) | manifest、entry、`.so`、FlashHub（权威规范） |
-| [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | catalog 字段 + 运行时流程 |
+| [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | preset ref 语法 + 运行时流程 |
 | [architecture.zh-CN.md](architecture.zh-CN.md) | 主机 CLI、bundle venv、re-exec |
 | [environment.zh-CN.md](environment.zh-CN.md) | 环境变量 |
 
-各 preset 命令：[bundles/](../bundles/) · catalog 源：[`models.yaml`](../src/flashcli/catalog/models.yaml)
+各 preset 命令：[bundles/](../bundles/)
 
-**常用命令**：`flashcli models envs [preset]` · `flashcli run PRESET --help`
+**常用命令**：`flashcli models envs [ref]` · `flashcli run <ref> --help`

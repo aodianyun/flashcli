@@ -4,7 +4,7 @@
 
 Pi0.5 LIBERO VLA; weights [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044).
 
-**Public preset**: `pi05_libero` ([`src/flashcli/catalog/models.yaml`](../../src/flashcli/catalog/models.yaml)). End users sync runtime from FlashHub via `bundle.repo`; flashcli matches manifest `runtime` env keys and loads `.so` from `runtime/<env-key>/`. Run `flashcli models envs pi05_libero` to check a match on this host.
+**Ref**: `flashcli-bundle/pi05_libero:1.0.3`. End users sync runtime from FlashHub; flashcli matches manifest `runtime` env keys and loads `.so` from `runtime/<env-key>/`. Run `flashcli models envs flashcli-bundle/pi05_libero:1.0.3` to check a match on this host.
 
 ## Files required to run inference (after sync)
 
@@ -16,7 +16,7 @@ flash_rt/
 runtime/<env-key>/         # *.so for this host
 ```
 
-Weights are downloaded by flashcli to `~/.flashcli/models/pi05_libero/checkpoint/`, not shipped in the bundle.
+Weights are downloaded by flashcli to `~/.flashcli/models/pi05_libero/1.0.3/checkpoint/`, not shipped in the bundle.
 
 ## End users
 
@@ -24,7 +24,7 @@ See **[QUICKSTART.md](QUICKSTART.md)** for copy-paste commands.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
-flashcli run pi05_libero --prompt "..." --image /path/to/base.jpg
+flashcli run flashcli-bundle/pi05_libero:1.0.3 --prompt "..." --image /path/to/base.jpg
 ```
 
 ## Troubleshooting
@@ -34,18 +34,18 @@ flashcli run pi05_libero --prompt "..." --image /path/to/base.jpg
 The bundle is runtime-only; ~7.5GB weights are fetched from the Hub. In K8s or restricted networks, both `huggingface.co` and `hf-mirror.com` may fail with this error (usually DNS/firewall/proxy, not a missing repo).
 
 ```bash
-rm -rf ~/.flashcli/models/pi05_libero/checkpoint
+rm -rf ~/.flashcli/models/*/checkpoint   # or remove the ref's cache dir from flashcli models show
 export HF_ENDPOINT=https://hf-mirror.com   # pin mirror only; default is official Hub then mirror fallback
-flashcli pull pi05_libero
+flashcli pull flashcli-bundle/pi05_libero:1.0.3
 ```
 
-Pre-download on a reachable host, then `flashcli run pi05_libero --bundle bundles/pi05_libero --checkpoint ./checkpoint --image ...`.
+Pre-download on a reachable host, then `flashcli run bundles/pi05_libero --checkpoint ./checkpoint --image ...`.
 
-`--bundle` must be a directory containing `flashcli-bundle.json` (e.g. `bundles/pi05_libero` or `bundles/pi05_libero/dist/`), not a `.zip` archive.
+Local dev: positional ref must be a directory containing `flashcli-bundle.json` (e.g. `bundles/pi05_libero` or `bundles/pi05_libero/dist/`), not a `.zip` archive.
 
 ### `no kernel image is available for execution on the device`
 
-Usually **wrong GPU/CUDA cell** or a **stale FlashHub runtime**. Run `flashcli models envs pi05_libero` — expect `sm89-cu124-*`, `sm89-cu130-*`, or `sm120-cu130-*`.
+Usually **wrong GPU/CUDA cell** or a **stale FlashHub runtime**. Run `flashcli models envs flashcli-bundle/pi05_libero:1.0.3` — expect `sm89-cu124-*`, `sm89-cu130-*`, or `sm120-cu130-*`.
 
 ### `'GemmRunner' object has no attribute 'fp8_nt_dev'`
 

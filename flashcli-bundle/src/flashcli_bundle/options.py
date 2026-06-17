@@ -139,24 +139,18 @@ def _reject_top_level_options_with_variants(bundle: BundleManifest, key: OPTIONS
 def resolve_options_variant(
     bundle: BundleManifest,
     preset: Preset,
-    *,
-    cli_model: str | None = None,
 ) -> str | None:
     if not has_bundle_variants(bundle):
         return None
 
-    override = (cli_model or preset_bundle_variant(preset) or "").strip()
+    override = (preset_bundle_variant(preset) or "").strip()
     if override:
         return resolve_bundle_variant(bundle, override)
 
-    default = str(bundle.raw.get("default_variant", "")).strip()
-    if default:
-        return resolve_bundle_variant(bundle, default)
-
     keys = ", ".join(sorted(bundle_variants(bundle)))
     raise BundleOptionsError(
-        f"Bundle {bundle.name!r} has variants ({keys}); set catalog bundle_variant, "
-        f"pass --model, or define default_variant."
+        f"Bundle {bundle.name!r} has variants ({keys}); add @variant to the preset ref "
+        f"(e.g. flashcli-bundle/{bundle.name}:VERSION@{next(iter(sorted(bundle_variants(bundle))), 'VARIANT')})."
     )
 
 

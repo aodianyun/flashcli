@@ -25,9 +25,9 @@ from flashcli.runtime.bundle_venv import ensure_bundle_venv, in_bundle_venv, ven
 from flashcli.runtime.flashcli_shared import flashcli_pythonpath, prepend_pythonpath
 
 
-def _resolve_catalog_path(preset: Preset) -> Path | None:
+def _resolve_local_root(preset: Preset) -> Path | None:
     raw = raw_bundle_cfg(preset)
-    path_str = str(raw.get("path", "")).strip()
+    path_str = str(raw.get("local_root", "")).strip()
     if not path_str:
         return None
     from flashcli import config
@@ -51,7 +51,7 @@ def prepare_bundle_runtime(
             preset, bundle_path, quiet=quiet
         )
     else:
-        local = _resolve_catalog_path(preset)
+        local = _resolve_local_root(preset)
         if local is not None and local.is_dir():
             runtime_id, bundle_root, manifest, _preflight = ensure_runtime_from_path(
                 preset, local, quiet=quiet

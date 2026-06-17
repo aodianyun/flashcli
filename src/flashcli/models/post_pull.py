@@ -101,7 +101,7 @@ def run_post_pull_steps(
     *,
     quiet: bool = False,
 ) -> None:
-    """Execute merged ``post_pull`` steps from bundle / models.yaml."""
+    """Execute merged ``post_pull`` steps from bundle manifest."""
     for step in steps:
         if not isinstance(step, dict):
             continue

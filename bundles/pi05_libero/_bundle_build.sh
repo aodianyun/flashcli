@@ -597,4 +597,4 @@ maybe_write_tarball
 
 log "Bundle ready: ${BUNDLE_DIR}"
 log "  flashcli bundle validate ${BUNDLE_DIR}"
-log "  flashcli run pi05_libero --bundle ${BUNDLE_DIR}"
+log "  flashcli run ${BUNDLE_DIR}"

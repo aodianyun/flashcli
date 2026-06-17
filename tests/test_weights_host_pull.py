@@ -47,7 +47,7 @@ def test_ensure_checkpoint_resolve_only_raises_without_cache(tmp_path: Path) -> 
     )
     preset = Preset(
         name="test_preset",
-        raw={"engine": "model_bundle", "bundle": {"path": str(bundle_root)}},
+        raw={"engine": "model_bundle", "bundle": {"local_root": str(bundle_root)}},
     )
 
     with pytest.raises(FileNotFoundError, match="flashcli pull test_preset"):
@@ -59,4 +59,4 @@ def test_ensure_model_cached_rejects_download_in_bundle_venv(
 ) -> None:
     monkeypatch.setenv("FLASHCLI_IN_BUNDLE_VENV", "1")
     with pytest.raises(RuntimeError, match="host flashcli CLI"):
-        ensure_model_cached("any_preset", download=True)
+        ensure_model_cached("flashcli-bundle/test:1.0.0", download=True)

@@ -23,8 +23,9 @@ __all__ = [
     "bundle_variants",
     "has_bundle_variants",
     "preset_bundle_variant",
-    "resolve_bundle_variant",
     "resolve_effective_model_variant",
+    "resolve_bundle_variant",
+    "validate_required_variant",
     "variant_env",
     "variant_extra_weights",
     "variant_merged_load_options",
@@ -57,23 +58,31 @@ def variant_env(bundle: BundleManifest, variant: str) -> dict[str, str]:
     return {}
 
 
+def validate_required_variant(preset: Preset, bundle: BundleManifest) -> None:
+    """Require ``@variant`` in preset ref when the bundle defines ``variants``."""
+    if not has_bundle_variants(bundle):
+        return
+    variant = preset_bundle_variant(preset)
+    if variant:
+        resolve_bundle_variant(bundle, variant)
+        return
+    keys = ", ".join(sorted(bundle_variants(bundle)))
+    raise BundleVariantError(
+        f"Bundle {bundle.name!r} has multiple variants; add @variant to the preset ref "
+        f"(choose from: {keys}). "
+        f"Example: flashcli-bundle/{bundle.name}:VERSION@qwen36"
+    )
+
+
 def resolve_effective_model_variant(
     preset: Preset,
     bundle: BundleManifest | None = None,
-    *,
-    cli_override: str | None = None,
 ) -> str | None:
-    if cli_override and str(cli_override).strip():
-        key = str(cli_override).strip()
-        if bundle is not None and has_bundle_variants(bundle):
-            resolve_bundle_variant(bundle, key)
-        return key
     catalog = preset_bundle_variant(preset)
     if catalog:
         if bundle is not None and has_bundle_variants(bundle):
             resolve_bundle_variant(bundle, catalog)
         return catalog
     if bundle is not None and has_bundle_variants(bundle):
-        default = str(bundle.raw.get("default_variant", "")).strip()
-        return default or None
+        validate_required_variant(preset, bundle)
     return None

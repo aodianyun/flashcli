@@ -15,7 +15,7 @@ Thank you for contributing. This project is intended for open source on GitHub. 
 ```text
 flashcli/
 ├── flashcli-bundle/        # Bundle protocol package (flashcli_bundle)
-├── src/flashcli/           # CLI, catalog, bundle loader (no model forward passes)
+├── src/flashcli/           # CLI, preset ref, bundle loader (no model forward passes)
 ├── bundles/                  # Model bundle sources + release-matrix.env
 ├── scripts/                  # Shared release pipeline
 └── docs/                     # User-facing documentation (maintainer docs: see CONTRIBUTING)
@@ -48,12 +48,12 @@ pytest tests/
 1. **Scope** — Keep changes in `flashcli/`. Do not commit FlashRT source changes inside flashcli PRs.
 2. **No inference in CLI** — Do not add model-specific forward logic under `src/flashcli/`. Use bundle `entry` modules.
 3. **Host CLI vs bundle venv** — Do not `pip install flashcli` into bundle venvs. Bundle venvs install **`flashcli-bundle`** from git only (see `deps.flashcli_bundle_pip_spec`); infer re-exec uses host flashcli for `runtime.infer`. **`huggingface_hub` is host-only** (weight pull); bundle `python_dependencies` are independent. See [docs/architecture.md](docs/architecture.md#host-cli-vs-bundle-infer-important).
-4. **Catalog** — Edit `src/flashcli/catalog/models.yaml` only after a bundle is built and validated on real hardware.
+4. **Preset refs** — Document new FlashHub refs in README / bundle QUICKSTART after upload; no bundled catalog file.
 5. **Docs** — Update English docs when behavior or release workflow changes. Mirror important changes in `*.zh-CN.md` when applicable.
 6. **Comments** — New code comments and script headers in English.
 7. **Commits** — Clear, imperative subject lines; one logical change per commit when possible.
 
-## Adding a new catalog preset / bundle
+## Adding a new bundle / preset ref
 
 1. Copy structure from `bundles/pi05_libero/` or `bundles/qwen_nvfp4/`.
 2. Add `flashcli-bundle.json` (format_version 3, **protocol_version 1**), `entry` modules, `release-matrix.env`, `_bundle_build.sh`.
@@ -61,19 +61,19 @@ pytest tests/
 4. Follow [docs/bundle_publish_standard.md](docs/bundle_publish_standard.md) (manifest / entry spec).
 5. Build on **Linux + NVIDIA GPU** (see release checklist below).
 6. `flashcli bundle validate bundles/<name>`
-7. Smoke-test `flashcli run PRESET --help`, `flashcli run` / `flashcli serve` as applicable.
-8. Add preset to `models.yaml` with `bundle.repo` (FlashHub URL) or local `path`.
+7. Smoke-test `flashcli run <ref> --help`, `flashcli run` / `flashcli serve` as applicable.
+8. Upload to FlashHub; document ref (e.g. `flashcli-bundle/my_model:1.0.0` or `@variant` for multi-model repos).
 9. Update [README.md](README.md) and bundle README.
 
 ## Release bundle checklist (maintainers)
 
 **Full steps:** [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md) (English summary) · [docs/bundle_builder_guide.zh-CN.md](docs/bundle_builder_guide.zh-CN.md) (complete, 中文) · matrix reference [docs/runtime-matrix.md](docs/runtime-matrix.md).
 
-Before updating [`models.yaml`](src/flashcli/catalog/models.yaml) `bundle.repo`:
+After uploading `dist/` to FlashHub:
 
 - [ ] `bash scripts/release_bundle.sh --bundle <name> --clean` → upload `dist/` to FlashHub
 - [ ] `flashcli bundle validate bundles/<name>` and smoke `run` / `serve` on target GPU
-- [ ] Qwen: both presets share the same `bundle.repo`; differ by `bundle_variant` only
+- [ ] Document ref strings in README / QUICKSTART (Qwen: same repo, different `@variant`)
 
 Matrix constraints: pi05 **SM89 + SM120** (cu124 on SM89; cu130 on both); qwen **cu130 / SM120 only** — see runtime-matrix doc.
 

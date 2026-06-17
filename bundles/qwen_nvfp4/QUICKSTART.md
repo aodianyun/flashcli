@@ -3,7 +3,7 @@
 <p align="right"><a href="QUICKSTART.zh-CN.md">简体中文</a></p>
 
 **Requires**: Linux · NVIDIA **SM120** · CUDA **13.x** · Python **3.12** (bundle venv; host CLI 3.10+)  
-**Presets**: `qwen3-8b-nvfp4` / `qwen36-27b-nvfp4` (one FlashHub repo; `bundle_variant` picks weights)
+**Refs**: `flashcli-bundle/qwen_nvfp4:1.0.1@qwen3` / `@qwen36` (one FlashHub repo; `@variant` picks weights)
 
 ```bash
 cd /path/to/flashcli
@@ -33,10 +33,10 @@ Missing `runtime/<env-key>/flash_rt_kernels*.so` → `ImportError: flash_rt_kern
 ## 2. Pull weights
 
 ```bash
-flashcli pull qwen3-8b-nvfp4  --bundle "$BUNDLE"
-flashcli pull qwen36-27b-nvfp4 --bundle "$BUNDLE"
-# ~/.flashcli/models/{preset}/checkpoint/
-# qwen36 MTP: ~/.flashcli/models/qwen36-27b-nvfp4/mtp_fp8/
+flashcli pull "$BUNDLE@qwen3"
+flashcli pull "$BUNDLE@qwen36"
+# ~/.flashcli/models/qwen_nvfp4/1.0.1@qwen3/checkpoint/
+# qwen36 MTP: ~/.flashcli/models/qwen_nvfp4/1.0.1@qwen36/mtp_fp8/
 ```
 
 Restricted network: `export HF_ENDPOINT=https://hf-mirror.com`
@@ -46,12 +46,12 @@ Restricted network: `export HF_ENDPOINT=https://hf-mirror.com`
 ## 3. Engine (`run`, no HTTP)
 
 ```bash
-flashcli run qwen3-8b-nvfp4 --help
-flashcli run qwen36-27b-nvfp4 --help
+flashcli run "$BUNDLE@qwen3" --help
+flashcli run "$BUNDLE@qwen36" --help
 
-flashcli run qwen3-8b-nvfp4 --bundle "$BUNDLE" --prompt "Hello" --max-tokens 64
+flashcli run "$BUNDLE@qwen3" --prompt "Hello" --max-tokens 64
 
-flashcli run qwen36-27b-nvfp4 --bundle "$BUNDLE" --prompt "Hello" --max-tokens 64 --K 6
+flashcli run "$BUNDLE@qwen36" --prompt "Hello" --max-tokens 64 --K 6
 ```
 
 ---
@@ -61,12 +61,12 @@ flashcli run qwen36-27b-nvfp4 --bundle "$BUNDLE" --prompt "Hello" --max-tokens 6
 **One GPU → one `flashcli serve` at a time.** Stop qwen3 before starting qwen36.
 
 ```bash
-flashcli serve qwen3-8b-nvfp4 --help
-flashcli serve qwen36-27b-nvfp4 --help
+flashcli serve "$BUNDLE@qwen3" --help
+flashcli serve "$BUNDLE@qwen36" --help
 
-flashcli serve qwen3-8b-nvfp4 --bundle "$BUNDLE" --host 0.0.0.0 --port 8000
+flashcli serve "$BUNDLE@qwen3" --host 0.0.0.0 --port 8000
 
-flashcli serve qwen36-27b-nvfp4 --bundle "$BUNDLE" --host 0.0.0.0 --port 8000 --K 6
+flashcli serve "$BUNDLE@qwen36" --host 0.0.0.0 --port 8000 --K 6
 ```
 
 | Flag | qwen3 default | qwen36 default | Meaning |
@@ -89,7 +89,7 @@ flashcli serve qwen36-27b-nvfp4 --bundle "$BUNDLE" --host 0.0.0.0 --port 8000 --
 curl -N http://127.0.0.1:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "qwen3.6-27b-nvfp4",
+    "model": "qwen36",
     "messages": [{"role": "user", "content": "Hello"}],
     "max_tokens": 128,
     "temperature": 0,
@@ -106,8 +106,9 @@ Request `max_tokens` above `--max-output-tokens` → HTTP 400.
 ## 6. HTTP benchmark
 
 ```bash
-export CKPT_QWEN3=~/.flashcli/models/qwen3-8b-nvfp4/checkpoint
-export CKPT_QWEN36=~/.flashcli/models/qwen36-27b-nvfp4/checkpoint
+# Weights under ~/.flashcli/models/qwen_nvfp4/1.0.1@<variant>/; run: flashcli models show "$BUNDLE@qwen3"
+export CKPT_QWEN3=~/.flashcli/models/qwen_nvfp4/1.0.1@qwen3/checkpoint
+export CKPT_QWEN36=~/.flashcli/models/qwen_nvfp4/1.0.1@qwen36/checkpoint
 
 bash scripts/bench_qwen_curl.sh --qwen3-only --rounds 5
 
@@ -126,4 +127,4 @@ QWEN36_MAX_SEQ=262208 QWEN36_PORT=8000 \
 | `ImportError: flash_rt_kernels` | build bundle; ensure `runtime/<env-key>/` has `.so` for this SM/CUDA/Python |
 | `max_tokens must be <= N` | raise `--max-output-tokens` or lower request `max_tokens` |
 | slow first request | new graph bucket; retry is usually faster |
-| stale FlashHub runtime | `--bundle bundles/qwen_nvfp4` after local rebuild |
+| stale FlashHub runtime | use local path `bundles/qwen_nvfp4@qwen36` after local rebuild |

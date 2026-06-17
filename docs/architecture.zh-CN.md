@@ -9,7 +9,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 ## 核心原则
 
 1. **推理在 bundle 内** — `flashcli-bundle.json` 的 `entry` 指向模块；flashcli 只做 `importlib` 加载。
-2. **catalog 极简** — `models.yaml` 仅含 preset 名与 `bundle.repo`（或本地 `path`）。
+2. **Preset ref** — 用户使用 `namespace/bundle:version[@variant]`；`FLASHCLI_FLASHHUB_API` 配置 API 基址。
 3. **manifest-first + 分包下载** — 先拉 manifest → preflight 匹配 `runtime` env key → 只下载本 env 的 `runtime/<env-key>/`。
 4. **固定 Python ABI** — 每个 bundle 一个 venv（`python_abi`）；CLI 准备完成后 **re-exec** 进 bundle venv。
 5. **主机只装一份 flashcli** — **绝不**向 bundle venv pip 安装 flashcli CLI；bundle venv 只装 **`flashcli-bundle`**（协议层）。`runtime.infer` 仍通过主机 `PYTHONPATH` 加载（见下节）。
@@ -49,9 +49,9 @@ bundle_venv/bin/python /path/to/host/flashcli/runtime/infer_launch.py run|serve 
 
 | 职责 | flashcli | Model Bundle |
 |------|----------|----------------|
-| `models.yaml` | ✓ | |
+| Preset ref / FlashHub | ✓ | |
 | `flashcli-bundle.json` | | ✓ |
-| FlashHub 拉取 / 本地 `path` | ✓ | |
+| FlashHub 拉取 / 本地 `local_root` | ✓ | |
 | bundle venv、PYTHONPATH、pip | ✓ | `python_dependencies` |
 | OpenAI HTTP（`serve`） | ✓ | |
 | `RunEngine` / `ServeEngine` | | ✓ |
@@ -59,7 +59,7 @@ bundle_venv/bin/python /path/to/host/flashcli/runtime/infer_launch.py run|serve 
 
 flashcli **不** pip 依赖 `flash-rt`。`import flash_rt` 仅在 `activate_bundle()` 之后可用。
 
-## 数据流（`flashcli run pi05_libero`）
+## 数据流（`flashcli run flashcli-bundle/pi05_libero:1.0.3`）
 
 ```mermaid
 sequenceDiagram
@@ -73,7 +73,7 @@ sequenceDiagram
   participant Cache as models.cache
   participant Ldr as engines.loader
 
-  U->>CLI: flashcli run pi05_libero
+  U->>CLI: flashcli run flashcli-bundle/pi05_libero:1.0.3
   CLI->>Art: ensure_runtime（若无缓存）
   Art->>FH: fetch_repo_index(repo URL)
   FH-->>Art: files[] + download_url
@@ -87,7 +87,7 @@ sequenceDiagram
   Ldr->>U: actions
 ```
 
-**Bundle 解析顺序**：`--bundle` > catalog `path` > 已 sync 的 runtime 缓存（`FLASHCLI_BUNDLE_ROOT`）；catalog `repo` 由 `bundle sync` 填充缓存。
+**Bundle 解析顺序**：本地 positional path（含 `flashcli-bundle.json` 的目录）> 已 sync 的 runtime 缓存（`FLASHCLI_BUNDLE_ROOT` / preset marker）；FlashHub ref 的 `repo` 由 `bundle sync` 填充缓存。
 
 ## 本机目录
 
@@ -96,8 +96,9 @@ sequenceDiagram
 ├── venv/                    # 主机 CLI（flashcli 只装此处）
 ├── python/                  # 可选：standalone Python，供 bundle venv 使用
 ├── runtimes/<id>/           # sync 后的 bundle 根 + bundle venv
+├── bundles/<bundle>/<version>@<variant>/.flashcli_bundle.json
 ├── cache/repo-index/        # FlashHub listing 缓存
-└── models/<preset>/checkpoint/
+└── models/<bundle>/<version>@<variant>/checkpoint/
 ```
 
 ## Bundle 布局（sync 后）
@@ -116,11 +117,12 @@ sequenceDiagram
 
 | 包 | 职责 |
 |----|------|
-| `bundle/catalog.py` | 读 `models.yaml`；解析 `bundle.repo` |
+| `models/preset_ref.py` | 解析 ref → repo URL + variant + cache key |
+| `bundle/catalog.py` | 从 preset ref 解析 `bundle.repo` |
 | `bundle/flashhub.py` | FlashHub API  listing / 文件下载 |
 | `bundle/artifacts.py` | manifest-first 组装 runtime |
 | `bundle/preflight.py` | env key 与 `runtime` 匹配 |
-| `bundle/resolve.py` | `--bundle` / `path` / 已 sync 缓存 |
+| `bundle/resolve.py` | 本地 path / 已 sync 缓存 |
 | `bundle/activate.py` | PYTHONPATH、依赖、预加载 `.so` |
 | `runtime/bundle_venv.py` | 按 `python_abi` 创建 venv |
 | `runtime/reexec.py` | 主机准备 → re-exec 进 bundle venv |
@@ -131,17 +133,17 @@ sequenceDiagram
 | `models/cache.py` | 主机拉权重 + 缓存；bundle infer 仅解析路径 |
 | `engines/loader.py` | 加载 `entry` |
 
-## 当前 catalog
+## 示例 ref
 
-| Preset | 能力 | bundle 源 |
-|--------|------|-----------|
-| `pi05_libero` | `run` | FlashHub `…/pi05_libero:1.0.3` |
-| `qwen3-8b-nvfp4` | `run`, `serve` | 共享 repo `…/qwen_nvfp4:1.0.1`，`bundle_variant: qwen3` |
-| `qwen36-27b-nvfp4` | `run`, `serve` | 共享 repo `…/qwen_nvfp4:1.0.1`，`bundle_variant: qwen36` |
+| Ref | 能力 | 说明 |
+|-----|------|------|
+| `flashcli-bundle/pi05_libero:1.0.3` | `run` | Pi0.5 LIBERO |
+| `flashcli-bundle/qwen_nvfp4:1.0.1@qwen3` | `run`, `serve` | Qwen3-8B |
+| `flashcli-bundle/qwen_nvfp4:1.0.1@qwen36` | `run`, `serve` | Qwen3.6-27B + MTP |
 
-固定 URL 见 [`models.yaml`](../src/flashcli/catalog/models.yaml)。
+见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
 
 ## 相关文档
 
-- [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) — catalog + 运行时流程
+- [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) — preset ref + 运行时流程
 - [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) — manifest 与 entry 规范

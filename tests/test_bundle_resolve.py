@@ -27,8 +27,9 @@ def test_resolve_bundle_root_from_preset_marker(monkeypatch, tmp_path: Path) -> 
     assert is_bundle_root(bundle_root)
 
     monkeypatch.setattr("flashcli.config.BUNDLES_DIR", tmp_path / "bundles")
+    preset = _fake_preset()
     write_preset_marker(
-        "pi05_libero",
+        preset,
         {
             "source": "repo",
             "repo": "https://example.test/bundle/1.0.0",
@@ -38,5 +39,5 @@ def test_resolve_bundle_root_from_preset_marker(monkeypatch, tmp_path: Path) -> 
         },
     )
 
-    root = resolve_bundle_root(_fake_preset())
+    root = resolve_bundle_root(preset)
     assert root == bundle_root.resolve()

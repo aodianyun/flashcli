@@ -4,11 +4,11 @@
 
 > **Internal maintainer doc** — not listed in public README / `docs/README.md`. Entry point: [CONTRIBUTING.md](../CONTRIBUTING.md).
 
-For **Model Bundle maintainers (internal)**: environment setup, local dev, matrix builds, validation, FlashHub upload, and catalog updates.
+For **Model Bundle maintainers (internal)**: environment setup, local dev, matrix builds, validation, FlashHub upload, and ref documentation updates.
 
 **External bundle publish standard** (manifest / entry / `.so` / FlashHub layout; no scripts) → **[bundle_publish_standard.md](bundle_publish_standard.md)**
 
-Format summary: [model_bundle_standard.md](model_bundle_standard.md) (catalog + runtime flow). End-user commands: each bundle’s `QUICKSTART.md`.
+Format summary: [model_bundle_standard.md](model_bundle_standard.md) (preset ref + runtime flow). End-user commands: each bundle’s `QUICKSTART.md`.
 
 > **Full step-by-step guide:** [bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md) (中文). This page is an English summary.
 
@@ -19,7 +19,7 @@ Format summary: [model_bundle_standard.md](model_bundle_standard.md) (catalog + 
 | Role | Goal | Install |
 |------|------|---------|
 | **Bundle builder** | Edit `run.py` / manifest, compile FlashRT, publish | `pip install -e ./flashcli-bundle -e .` + FlashRT + Docker/GPU |
-| **End user** | `flashcli run <preset>` | `install.sh` / `auto_install.sh` (git: flashcli-bundle + flashcli) |
+| **End user** | `flashcli run <ref>` | `install.sh` / `auto_install.sh` (git: flashcli-bundle + flashcli) |
 
 Entry modules import **`flashcli_bundle` only** — not the full `flashcli` CLI package.
 
@@ -66,9 +66,9 @@ export HF_ENDPOINT=https://hf-mirror.com
 
 bash bundles/pi05_libero/build.sh --repo-root "$FLASHRT_REPO" -j "$(nproc)"
 flashcli bundle validate "$BUNDLE"
-flashcli pull pi05_libero --bundle "$BUNDLE"
-flashcli run pi05_libero --bundle "$BUNDLE" --image /path/to.jpg
-flashcli run pi05_libero --help
+flashcli pull "$BUNDLE"
+flashcli run "$BUNDLE" --image /path/to.jpg
+flashcli run "$BUNDLE" --help
 ```
 
 ---
@@ -87,7 +87,7 @@ bash scripts/release_bundle.sh --bundle pi05_libero --clean
 | `pack_bundle.sh` | Bundle source tree + refreshed manifest |
 | Validate | layout, options, `protocol_version` |
 
-Output: `bundles/<name>/dist/` → upload tree to FlashHub → set `models.yaml` → `bundle.repo`.
+Output: `bundles/<name>/dist/` → upload tree to FlashHub → users pin `flashcli-bundle/<name>:<version>[@variant]`.
 
 Background run:
 
@@ -113,7 +113,7 @@ Field reference: [bundle_publish_standard.md](bundle_publish_standard.md). Step-
 - [ ] `dist/runtime/` contains all env keys in manifest
 - [ ] `protocol_version` matches installed `flashcli-bundle`
 - [ ] Smoke `flashcli run` / `serve` on target GPU
-- [ ] Upload `dist/` to FlashHub; update `bundle.repo` in `models.yaml`
+- [ ] Upload `dist/` to FlashHub; document the pinned ref for users
 
 Example repo URL:
 

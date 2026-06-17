@@ -37,10 +37,13 @@ def resolve_bundle_variant(
             return str(name).strip()
         return ""
 
-    default = str(bundle.raw.get("default_variant", "")).strip()
-    key = (name or default or next(iter(sorted(variants)))).strip()
+    key = (name or "").strip()
     if not key:
-        raise BundleVariantError(f"Bundle {bundle.name!r} has variants but no key resolved")
+        keys = ", ".join(sorted(variants))
+        raise BundleVariantError(
+            f"Bundle {bundle.name!r} has variants; add @variant to the ref "
+            f"(choose from: {keys})"
+        )
     if key not in variants:
         raise BundleVariantError(
             f"Unknown model variant {key!r} for bundle {bundle.name!r}; "
@@ -92,8 +95,7 @@ def variant_merged_load_options(
 
 
 def preset_bundle_variant(preset: Preset) -> str | None:
-    for key in ("bundle_variant", "variant", "model_variant", "model"):
-        value = preset.raw.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
+    value = preset.raw.get("bundle_variant")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
     return None

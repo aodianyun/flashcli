@@ -6,7 +6,7 @@
 # Usage:
 #   export BENCH_ARM=flashrt
 #   bash scripts/bench_qwen36_ctx_http.sh --ctx 512 --rounds 12 --skip 2 \
-#     --checkpoint "$CKPT" --model qwen3.6-27b-nvfp4 --port 8000 \
+#     --checkpoint "$CKPT" --model qwen36 --port 8000 \
 #     --serve-log /path/to/flashrt-agent-serve.log \
 #     --out results/flashrt-512.jsonl
 # Short ctx (32/512): omit --max-seq (script auto-selects). Long ctx: auto max-seq per tier.

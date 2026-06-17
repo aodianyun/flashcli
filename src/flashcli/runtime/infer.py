@@ -10,7 +10,7 @@ from typing import Any, Optional
 import typer
 
 from flashcli.models import cache as model_cache
-from flashcli.models.registry import PresetRegistry
+from flashcli.models.registry import Preset
 from flashcli.runtime.infer_helpers import (
     auto_install_flag,
     ensure_flashcli_serve_imports,
@@ -25,12 +25,11 @@ app = typer.Typer(
 
 
 def execute_run(
-    preset: str,
+    preset: Preset,
     *,
     bundle: Path | None = None,
     checkpoint: Path | None = None,
     mtp_checkpoint: Path | None = None,
-    model: str | None = None,
     benchmark: int = 0,
     warmup: int = 0,
     no_auto_install: bool = False,
@@ -46,7 +45,7 @@ def execute_run(
     from flashcli.bundle.variants import resolve_effective_model_variant
     from flashcli.engines.factory import BundleNotReadyError, activate_for_preset, create_run_engine
 
-    p = PresetRegistry().get(preset)
+    p = preset
 
     try:
         activate_for_preset(
@@ -62,13 +61,11 @@ def execute_run(
     from flashcli.bundle.activate import active_bundle
 
     active = active_bundle()
-    effective_variant = resolve_effective_model_variant(
-        p, active, cli_override=model
-    )
+    effective_variant = resolve_effective_model_variant(p, active)
 
     try:
         ckpt = model_cache.ensure_model_cached(
-            preset,
+            p,
             bundle_path=bundle,
             checkpoint_override=checkpoint,
             mtp_checkpoint_override=mtp_checkpoint,
@@ -141,14 +138,13 @@ def execute_run(
 
 
 def execute_serve(
-    preset: str,
+    preset: Preset,
     *,
     bundle: Path | None = None,
     port: int = 8000,
     host: str = "0.0.0.0",
     checkpoint: Path | None = None,
     mtp_checkpoint: Path | None = None,
-    model: str | None = None,
     no_auto_install: bool = False,
     quiet: bool = False,
     bundle_options: dict[str, Any] | None = None,
@@ -163,7 +159,7 @@ def execute_serve(
     from flashcli.bundle.variants import resolve_effective_model_variant
     from flashcli.engines.factory import BundleNotReadyError, activate_for_preset, create_serve_engine
 
-    p = PresetRegistry().get(preset)
+    p = preset
     auto_install = auto_install_flag(no_auto_install)
 
     try:
@@ -192,13 +188,11 @@ def execute_serve(
         )
         raise typer.Exit(1) from exc
 
-    effective_variant = resolve_effective_model_variant(
-        p, active, cli_override=model
-    )
+    effective_variant = resolve_effective_model_variant(p, active)
 
     try:
         ckpt = model_cache.ensure_model_cached(
-            preset,
+            p,
             bundle_path=bundle,
             checkpoint_override=checkpoint,
             mtp_checkpoint_override=mtp_checkpoint,
@@ -313,17 +307,16 @@ def infer_run() -> None:
         format_run_help,
         parse_run_argv,
         resolve_manifest_for_preset,
-        resolve_preset_from_command_argv,
+        resolve_run_from_argv,
     )
 
     try:
-        preset_name = resolve_preset_from_command_argv(sys.argv[1:], command="run")
-        p = PresetRegistry().get(preset_name)
-        inv = parse_run_argv(sys.argv[1:], preset=p)
+        p, default_bundle = resolve_run_from_argv(sys.argv[1:], command="run")
+        inv = parse_run_argv(sys.argv[1:], preset=p, bundle_path=default_bundle)
     except BundleOptionsError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
-    except KeyError as exc:
+    except ValueError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
     if inv.help:
@@ -337,11 +330,10 @@ def infer_run() -> None:
         raise typer.Exit()
 
     execute_run(
-        preset_name,
+        p,
         bundle=inv.bundle,
         checkpoint=inv.checkpoint,
         mtp_checkpoint=inv.mtp_checkpoint,
-        model=inv.model,
         benchmark=inv.benchmark,
         warmup=inv.warmup,
         no_auto_install=inv.no_auto_install,
@@ -364,17 +356,16 @@ def infer_serve() -> None:
         format_serve_help,
         parse_serve_argv,
         resolve_manifest_for_preset,
-        resolve_preset_from_command_argv,
+        resolve_run_from_argv,
     )
 
     try:
-        preset_name = resolve_preset_from_command_argv(sys.argv[1:], command="serve")
-        p = PresetRegistry().get(preset_name)
-        inv = parse_serve_argv(sys.argv[1:], preset=p)
+        p, default_bundle = resolve_run_from_argv(sys.argv[1:], command="serve")
+        inv = parse_serve_argv(sys.argv[1:], preset=p, bundle_path=default_bundle)
     except BundleOptionsError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
-    except KeyError as exc:
+    except ValueError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
     if inv.help:
@@ -388,13 +379,12 @@ def infer_serve() -> None:
         raise typer.Exit()
 
     execute_serve(
-        preset_name,
+        p,
         bundle=inv.bundle,
         port=inv.port,
         host=inv.host,
         checkpoint=inv.checkpoint,
         mtp_checkpoint=inv.mtp_checkpoint,
-        model=inv.model,
         no_auto_install=inv.no_auto_install,
         quiet=inv.quiet,
         bundle_options=inv.bundle_options,

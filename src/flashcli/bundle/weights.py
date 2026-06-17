@@ -21,6 +21,7 @@ from flashcli.bundle.variants import (
     variant_weights_dir,
     variant_weights_spec,
 )
+from flashcli.models.preset_ref import preset_cache_key
 from flashcli.models.registry import Preset
 
 _SKIP_WEIGHT_NAMES = frozenset({".flashcli_model.json", ".gitkeep"})
@@ -227,7 +228,7 @@ def resolve_checkpoint(
         local = bundle_weights_dir(bundle, variant=variant)
         if has_local_weights(local, weights_spec=spec):
             return local
-    cache = config.MODELS_DIR / preset.name
+    cache = config.MODELS_DIR / preset_cache_key(preset)
     marker = cache / ".flashcli_model.json"
     if marker.is_file():
         try:
@@ -287,7 +288,7 @@ def ensure_checkpoint(
     if not download:
         raise _weights_missing_error(preset)
 
-    cache_dir = config.MODELS_DIR / preset.name
+    cache_dir = config.MODELS_DIR / preset_cache_key(preset)
     checkpoint_dir = cache_dir / "checkpoint"
     cache_dir.mkdir(parents=True, exist_ok=True)
     download_merged_weights(spec, checkpoint_dir, quiet=quiet)

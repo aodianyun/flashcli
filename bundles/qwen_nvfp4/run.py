@@ -1,4 +1,4 @@
-"""Unified Qwen NVFP4 RunEngine — catalog ``bundle_variant`` selects backend."""
+"""Unified Qwen NVFP4 RunEngine — ``bundle_variant`` selects backend."""
 
 from __future__ import annotations
 

@@ -15,11 +15,16 @@ from flashcli.bundle.weights import (
     post_pull_steps,
 )
 from flashcli.models.post_pull import run_post_pull_steps
-from flashcli.models.registry import Preset, PresetRegistry
+from flashcli.models.preset_ref import preset_cache_key, resolve_preset
+from flashcli.models.registry import Preset
 
 
-def preset_cache_dir(preset: str) -> Path:
-    return config.MODELS_DIR / preset
+def preset_cache_dir(preset: Preset | str) -> Path:
+    if isinstance(preset, Preset):
+        key = preset_cache_key(preset)
+    else:
+        key = resolve_preset(preset).cache_key
+    return config.MODELS_DIR / key
 
 
 def _read_marker(cache: Path) -> dict | None:
@@ -49,7 +54,7 @@ def _checkpoint_from_cache(cache: Path) -> Path | None:
     return None
 
 
-def is_cached(preset: str) -> bool:
+def is_cached(preset: Preset | str) -> bool:
     return _checkpoint_from_cache(preset_cache_dir(preset)) is not None
 
 
@@ -84,7 +89,7 @@ def _load_bundle_for_preset(
 
 
 def ensure_model_cached(
-    preset: str,
+    preset: Preset | str,
     *,
     bundle_path: Path | None = None,
     checkpoint_override: Path | None = None,
@@ -98,13 +103,17 @@ def ensure_model_cached(
     When *download* is True (host CLI), fetch from Hugging Face if missing.
     When False (bundle infer), only resolve bundle-local paths and cache hits.
     """
+    if isinstance(preset, str):
+        ref = preset
+        p = resolve_preset(preset)
+    else:
+        p = preset
+        ref = p.name
     if download and os.environ.get("FLASHCLI_IN_BUNDLE_VENV") == "1":
         raise RuntimeError(
             "Weight download is only supported on the host flashcli CLI. "
-            f"Run: flashcli pull {preset}"
+            f"Run: flashcli pull {ref}"
         )
-    reg = PresetRegistry()
-    p = reg.get(preset)
     bundle = _load_bundle_for_preset(
         p,
         bundle_path=bundle_path,

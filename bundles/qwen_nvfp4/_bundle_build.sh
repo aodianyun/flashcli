@@ -609,6 +609,6 @@ maybe_write_tarball
 
 log "Bundle ready: ${BUNDLE_DIR}"
 log "  flashcli bundle validate ${BUNDLE_DIR}"
-log "  flashcli run qwen3-8b-nvfp4 --bundle ${BUNDLE_DIR} --prompt 'Hello'"
-log "  flashcli serve qwen3-8b-nvfp4 --bundle ${BUNDLE_DIR}"
+log "  flashcli run ${BUNDLE_DIR}@qwen3 --prompt 'Hello'"
+log "  flashcli serve ${BUNDLE_DIR}@qwen3"
 log "  Release: cd bundles/qwen_nvfp4 && bash release.sh"

@@ -2,26 +2,25 @@
 
 <p align="right"><a href="environment.md">English</a> · <strong>简体中文</strong></p>
 
-flashcli 通过环境变量配置缓存路径、catalog、下载行为，以及与 Hugging Face / 特定 preset 的集成。未列出的变量对 flashcli **无效果**。
+flashcli 通过环境变量配置缓存路径、preset ref、下载行为，以及与 Hugging Face / 特定 preset 的集成。未列出的变量对 flashcli **无效果**。
 
 取值约定：`1` / `true` / `yes`（不区分大小写）视为开启布尔开关。
 
-## 路径与 catalog
+## 路径与 FlashHub
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `FLASHCLI_HOME` | `~/.flashcli` | 缓存根目录。默认子目录：`runtimes/`、`models/`、`cache/`。旧版：`bundles/`（v3 之前的 zip 缓存）。 |
-| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | 旧版 bundle 缓存路径。新 sync 使用 `FLASHCLI_RUNTIMES_DIR` / `runtimes/`。 |
-| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | 覆盖 Hugging Face 权重缓存根目录（各 preset 一般为 `<dir>/<preset>/checkpoint/`）。 |
-| `FLASHCLI_MODELS_YAML` | （内置） | **覆盖 preset catalog 文件路径**。默认使用安装包内 `flashcli/catalog/models.yaml`（pip wheel 与 editable 相同）。指向的文件必须存在。 |
-
-维护 catalog 时通常**直接改**仓库内 [`src/flashcli/catalog/models.yaml`](../src/flashcli/catalog/models.yaml)；仅在多版本并存、CI 或容器内挂载自定义 catalog 时设置 `FLASHCLI_MODELS_YAML`。
+| `FLASHCLI_HOME` | `~/.flashcli` | 缓存根目录。默认子目录：`runtimes/`、`models/`、`cache/`。 |
+| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | preset marker（`<bundle>/<version>@<variant>/.flashcli_bundle.json`）。 |
+| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | Hugging Face 权重（`<dir>/<bundle>/<version>@<variant>/checkpoint/`）。 |
+| `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | 短 ref `namespace/bundle:version[@variant]` 的 API 基址。 |
 
 示例：
 
 ```bash
 export FLASHCLI_HOME=/data/flashcli
-export FLASHCLI_MODELS_YAML=/etc/flashcli/models.yaml
+export FLASHCLI_FLASHHUB_API=https://flashhub-api.aodianyun.com/api/v1/repos
+flashcli run flashcli-bundle/pi05_libero:1.0.3
 flashcli models list
 ```
 
@@ -95,9 +94,9 @@ Bundle 的 Python 依赖（torch 等）由 `activate_bundle` 按 `flashcli-bundl
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `FLASH_RT_PALIGEMMA_TOKENIZER` | （自动下载） | Pi0.5 `post_pull` 使用的 PaliGemma tokenizer **文件**路径。未设置时下载到 `~/.cache/flash_rt/`。可提前指定以避免重复下载或离线使用。 |
-| `FLASHRT_QWEN36_MTP_CKPT_DIR` | （preset/bundle） | Qwen3.6 MTP 权重目录。可由 `flashcli run` / `serve` 的 `--mtp-checkpoint` 设置，或写在 catalog / `flashcli-bundle.json` 的 `env` 段。 |
+| `FLASHRT_QWEN36_MTP_CKPT_DIR` | （preset/bundle） | Qwen3.6 MTP 权重目录。可由 `flashcli run` / `serve` 的 `--mtp-checkpoint` 设置，或写在 `flashcli-bundle.json` 的 `env` 段。 |
 
-`flashcli-bundle.json` 与 catalog 中的 `env:` 块可在激活 bundle 时写入进程环境（支持 `{models_dir}`、`{bundle_root}` 占位符）。
+`flashcli-bundle.json` 中的 `env:` 块可在激活 bundle 时写入进程环境（支持 `{models_dir}`、`{bundle_root}` 占位符）。
 
 ## 开发与维护
 
@@ -118,5 +117,4 @@ Bundle 的 Python 依赖（torch 等）由 `activate_bundle` 按 `flashcli-bundl
 ## 相关文档
 
 - [README.zh-CN.md](../README.zh-CN.md) — 快速开始与本机缓存路径
-- [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) — catalog + 运行时流程
-- [src/flashcli/catalog/models.yaml](../src/flashcli/catalog/models.yaml) — preset catalog 唯一源文件
+- [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) — preset ref 与运行时流程

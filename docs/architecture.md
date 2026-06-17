@@ -9,11 +9,11 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 ## Core principles
 
 1. **Inference lives in the bundle** — `entry` in `flashcli-bundle.json`; flashcli only `importlib`-loads it.
-2. **Minimal catalog** — `models.yaml` has preset names and `bundle.repo` (or local `path`).
+2. **Preset ref** — users pass `namespace/bundle:version[@variant]`; `FLASHCLI_FLASHHUB_API` sets the API base.
 3. **Manifest-first + split download** — fetch manifest → preflight against `runtime` keys → download only this host’s `runtime/<env-key>/`.
 4. **Fixed Python ABI** — one venv per bundle (`python_abi`); CLI **re-execs** into that venv after prepare.
 5. **Single host flashcli install** — the CLI package is **never** pip-installed into bundle venvs; bundle venvs install **`flashcli-bundle`** only (protocol + manifest). Host flashcli loads via `PYTHONPATH` for `runtime.infer` (see below).
-6. **One command** — `flashcli run <preset>` chains sync → deps → weights → `post_pull` → inference.
+6. **One command** — `flashcli run <ref>` chains sync → deps → weights → `post_pull` → inference.
 
 ## Host CLI vs bundle infer (important)
 
@@ -49,7 +49,7 @@ During `activate_bundle()`, `PYTHONPATH` also prepends the **bundle root** so `e
 
 | Responsibility | flashcli | Model Bundle |
 |----------------|----------|----------------|
-| `models.yaml` | ✓ | |
+| Preset ref / FlashHub | ✓ | |
 | `flashcli-bundle.json` | | ✓ |
 | FlashHub fetch / local `path` | ✓ | |
 | bundle venv, PYTHONPATH, pip | ✓ | `python_dependencies` |
@@ -59,7 +59,7 @@ During `activate_bundle()`, `PYTHONPATH` also prepends the **bundle root** so `e
 
 flashcli does **not** pip-depend on `flash-rt`. `import flash_rt` is only valid after `activate_bundle()`.
 
-## Data flow (`flashcli run pi05_libero`)
+## Data flow (`flashcli run flashcli-bundle/pi05_libero:1.0.3`)
 
 ```mermaid
 sequenceDiagram
@@ -73,7 +73,7 @@ sequenceDiagram
   participant Cache as models.cache
   participant Ldr as engines.loader
 
-  U->>CLI: flashcli run pi05_libero
+  U->>CLI: flashcli run flashcli-bundle/pi05_libero:1.0.3
   CLI->>Art: ensure_runtime (if not cached)
   Art->>FH: fetch_repo_index(repo URL)
   FH-->>Art: files[] + download_url
@@ -87,7 +87,7 @@ sequenceDiagram
   Ldr->>U: actions
 ```
 
-**Resolution order**: `--bundle` > catalog `path` > synced runtime cache (`FLASHCLI_BUNDLE_ROOT`); catalog `repo` is populated via `bundle sync`.
+**Resolution order**: local positional path (directory with `flashcli-bundle.json`) > synced runtime cache (`FLASHCLI_BUNDLE_ROOT` / preset marker); FlashHub ref `repo` is populated via `bundle sync`.
 
 ## Local directories
 
@@ -96,8 +96,9 @@ sequenceDiagram
 ├── venv/                    # host CLI (flashcli installed once)
 ├── python/                  # optional standalone Pythons for bundle venv base
 ├── runtimes/<id>/           # synced bundle root + bundle venv
+├── bundles/<bundle>/<version>@<variant>/.flashcli_bundle.json
 ├── cache/repo-index/        # FlashHub listing cache
-└── models/<preset>/checkpoint/
+└── models/<bundle>/<version>@<variant>/checkpoint/
 ```
 
 ## Bundle layout (after sync)
@@ -116,11 +117,12 @@ See [model_bundle_standard.md](model_bundle_standard.md).
 
 | Package | Role |
 |---------|------|
-| `bundle/catalog.py` | Read `models.yaml`; resolve `bundle.repo` |
+| `models/preset_ref.py` | Parse ref → repo URL + variant + cache key |
+| `bundle/catalog.py` | Resolve `bundle.repo` from preset ref |
 | `bundle/flashhub.py` | FlashHub API listing and file download |
 | `bundle/artifacts.py` | Manifest-first runtime assembly |
 | `bundle/preflight.py` | Match host env key to `runtime` |
-| `bundle/resolve.py` | `--bundle` / `path` / synced cache |
+| `bundle/resolve.py` | Local path / synced cache |
 | `bundle/activate.py` | PYTHONPATH, deps, preload `.so` |
 | `runtime/bundle_venv.py` | Create venv from `python_abi` |
 | `runtime/reexec.py` | Host prepare → re-exec into bundle venv |
@@ -131,17 +133,17 @@ See [model_bundle_standard.md](model_bundle_standard.md).
 | `models/cache.py` | Host weight pull + cache; bundle infer resolve-only |
 | `engines/loader.py` | Load `entry` |
 
-## Current catalog
+## Example refs
 
-| Preset | capabilities | bundle source |
-|--------|--------------|---------------|
-| `pi05_libero` | `run` | FlashHub `…/pi05_libero:1.0.3` |
-| `qwen3-8b-nvfp4` | `run`, `serve` | shared repo `…/qwen_nvfp4:1.0.1`, `bundle_variant: qwen3` |
-| `qwen36-27b-nvfp4` | `run`, `serve` | shared repo `…/qwen_nvfp4:1.0.1`, `bundle_variant: qwen36` |
+| Ref | capabilities |
+|-----|--------------|
+| `flashcli-bundle/pi05_libero:1.0.3` | `run` |
+| `flashcli-bundle/qwen_nvfp4:1.0.1@qwen3` | `run`, `serve` |
+| `flashcli-bundle/qwen_nvfp4:1.0.1@qwen36` | `run`, `serve` |
 
-Pinned URLs: [`models.yaml`](../src/flashcli/catalog/models.yaml).
+See [model_bundle_standard.md](model_bundle_standard.md).
 
 ## Related docs
 
-- [model_bundle_standard.md](model_bundle_standard.md) — catalog + runtime flow
+- [model_bundle_standard.md](model_bundle_standard.md) — preset ref + runtime flow
 - [bundle_publish_standard.md](bundle_publish_standard.md) — manifest and entry spec

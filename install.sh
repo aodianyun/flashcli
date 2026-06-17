@@ -2385,13 +2385,13 @@ print_success() {
   printf '%s\n' "  (source: ${REPO} @ ${REF})"
   printf '%s\n' '' 'Next steps:'
   printf '%s\n' '  flashcli doctor'
-  printf '%s\n' '  flashcli models envs pi05_libero'
+  printf '%s\n' '  flashcli models envs flashcli-bundle/pi05_libero:1.0.3'
   if ! mirror_mode_enabled; then
     printf '%s\n' '  # slow network: ./install.sh --mirror'
     printf '%s\n' '  # alternate git:  ./install.sh --repo https://gitee.com/org/flashcli.git'
   fi
-  printf '%s\n' '  flashcli pull pi05_libero'
-  printf '%s\n' '  flashcli run pi05_libero --image /path/to.jpg --prompt "pick up the block"'
+  printf '%s\n' '  flashcli pull flashcli-bundle/pi05_libero:1.0.3'
+  printf '%s\n' '  flashcli run flashcli-bundle/pi05_libero:1.0.3 --image /path/to.jpg --prompt "pick up the block"'
   _fc="$(command -v flashcli 2>/dev/null || true)"
   if [ -z "$_fc" ]; then
     if [ -x /usr/bin/flashcli ]; then

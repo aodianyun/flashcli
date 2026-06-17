@@ -4,7 +4,7 @@
 
 Pi0.5 LIBERO VLA，权重 [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044)。
 
-**对外 preset**：`pi05_libero`（[`src/flashcli/catalog/models.yaml`](../../src/flashcli/catalog/models.yaml)）。用户通过 FlashHub `bundle.repo` sync runtime；flashcli 按本机 GPU + CUDA 匹配 manifest 中的 `runtime` env key，并从 `runtime/<env-key>/` 加载 `.so`。可用 `flashcli models envs pi05_libero` 查看本机环境键是否匹配。
+**Ref**：`flashcli-bundle/pi05_libero:1.0.3`。用户通过 FlashHub sync runtime；flashcli 按本机 GPU + CUDA 匹配 manifest 中的 `runtime` env key，并从 `runtime/<env-key>/` 加载 `.so`。可用 `flashcli models envs flashcli-bundle/pi05_libero:1.0.3` 查看本机环境键是否匹配。
 
 ## 运行所需文件（sync 后 bundle 根）
 
@@ -16,7 +16,7 @@ flash_rt/
 runtime/<env-key>/         # 本机 env 的 *.so
 ```
 
-权重由 flashcli 下载到 `~/.flashcli/models/pi05_libero/checkpoint/`，**不**打进 bundle。
+权重由 flashcli 下载到 `~/.flashcli/models/pi05_libero/1.0.3/checkpoint/`，**不**打进 bundle。
 
 ## 用户
 
@@ -24,7 +24,7 @@ runtime/<env-key>/         # 本机 env 的 *.so
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
-flashcli run pi05_libero --prompt "..." --image /path/to/base.jpg
+flashcli run flashcli-bundle/pi05_libero:1.0.3 --prompt "..." --image /path/to/base.jpg
 ```
 
 ## 排错
@@ -40,15 +40,15 @@ flashcli 下载权重与官方 CLI 相同：设置 `HF_ENDPOINT` 后调用 `hf d
 curl -fsSL 'https://hf-mirror.com/api/models/lerobot/pi05_libero_finetuned_v044/revision/main' | head -c 80
 
 # 1) 清理不完整缓存后重试
-rm -rf ~/.flashcli/models/pi05_libero/checkpoint
+rm -rf ~/.flashcli/models/*/checkpoint
 
 # 2) 与 hf download 相同：在启动 flashcli 之前 export
 export HF_ENDPOINT=https://hf-mirror.com
 # 未设置 HF_ENDPOINT 时默认先试官方 Hub，失败再试镜像；仅镜像优先：export FLASHCLI_PREFER_HF_MIRROR=1
 
-flashcli pull pi05_libero
+flashcli pull flashcli-bundle/pi05_libero:1.0.3
 # 或带本地 bundle：
-flashcli run pi05_libero --bundle "$(pwd)/bundles/pi05_libero" --image /path/to.jpg
+flashcli run bundles/pi05_libero --image /path/to.jpg
 ```
 
 有代理时设置 `HTTPS_PROXY` / `HTTP_PROXY`。也可在能联网的机器预下载后拷贝：
@@ -57,15 +57,15 @@ flashcli run pi05_libero --bundle "$(pwd)/bundles/pi05_libero" --image /path/to.
 huggingface-cli download lerobot/pi05_libero_finetuned_v044 \
   --local-dir ./checkpoint
 
-flashcli run pi05_libero --bundle bundles/pi05_libero \
+flashcli run bundles/pi05_libero \
   --checkpoint ./checkpoint --image /path/to.jpg
 ```
 
-`--bundle` 应指向含 `flashcli-bundle.json` 的目录（如 `bundles/pi05_libero` 或 `bundles/pi05_libero/dist/`）。
+本地 dev：positional ref 须为含 `flashcli-bundle.json` 的目录（如 `bundles/pi05_libero` 或 `bundles/pi05_libero/dist/`）。
 
 ### `no kernel image is available for execution on the device`
 
-多为 **GPU/CUDA 格不匹配** 或 **FlashHub runtime 过旧**。执行 `flashcli models envs pi05_libero`，应匹配 `sm89-cu124-*`、`sm89-cu130-*` 或 `sm120-cu130-*`。
+多为 **GPU/CUDA 格不匹配** 或 **FlashHub runtime 过旧**。执行 `flashcli models envs flashcli-bundle/pi05_libero:1.0.3`，应匹配 `sm89-cu124-*`、`sm89-cu130-*` 或 `sm120-cu130-*`。
 
 ### `'GemmRunner' object has no attribute 'fp8_nt_dev'`
 

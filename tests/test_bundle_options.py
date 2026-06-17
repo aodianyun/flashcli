@@ -70,7 +70,7 @@ def test_parse_run_argv_bundle_flags(tmp_path: Path, monkeypatch) -> None:
     manifest = _pi05_manifest(tmp_path)
     preset = Preset(
         name="pi05_libero",
-        raw={"description": "test", "bundle": {"path": str(tmp_path)}},
+        raw={"description": "test", "bundle": {"local_root": str(tmp_path)}},
     )
     monkeypatch.setattr(
         "flashcli.bundle.bundle_options.resolve_manifest_for_preset",
@@ -247,7 +247,10 @@ def test_format_serve_help(tmp_path: Path) -> None:
         "runtime": {"sm120-cu130-linux-x86_64-py312": "runtime/x"},
     }
     manifest = load_bundle_manifest_data(data, bundle_root=tmp_path)
-    preset = Preset(name="qwen3-8b-nvfp4", raw={"description": "t", "bundle_variant": "qwen3"})
+    preset = Preset(
+        name="flashcli-bundle/qwen_nvfp4:1.0.1@qwen3",
+        raw={"description": "t", "bundle_variant": "qwen3"},
+    )
     text = format_serve_help(
         preset,
         manifest,
@@ -285,14 +288,20 @@ def test_parse_serve_argv_help(tmp_path: Path, monkeypatch) -> None:
         bundle_root=tmp_path,
     )
     preset = Preset(
-        name="qwen3-8b-nvfp4",
-        raw={"description": "t", "bundle_variant": "qwen3", "bundle": {"path": str(tmp_path)}},
+        name="flashcli-bundle/qwen_nvfp4:1.0.1@qwen3",
+        raw={
+            "description": "t",
+            "bundle_variant": "qwen3",
+            "bundle": {"local_root": str(tmp_path)},
+        },
     )
     monkeypatch.setattr(
         "flashcli.bundle.bundle_options.resolve_manifest_for_preset",
         lambda _p, bundle_path=None: manifest,
     )
-    inv = parse_serve_argv(["qwen3-8b-nvfp4", "--help"], preset=preset)
+    inv = parse_serve_argv(
+        ["flashcli-bundle/qwen_nvfp4:1.0.1@qwen3", "--help"], preset=preset
+    )
     assert inv.help is True
     assert inv.option_specs is not None
 
@@ -301,7 +310,7 @@ def test_parse_run_argv_help(tmp_path: Path, monkeypatch) -> None:
     manifest = _pi05_manifest(tmp_path)
     preset = Preset(
         name="pi05_libero",
-        raw={"description": "test", "bundle": {"path": str(tmp_path)}},
+        raw={"description": "test", "bundle": {"local_root": str(tmp_path)}},
     )
     monkeypatch.setattr(
         "flashcli.bundle.bundle_options.resolve_manifest_for_preset",
@@ -343,28 +352,31 @@ def test_validate_bundle_options_rejects_top_level_with_variants(tmp_path: Path)
         "runtime": {"sm120-cu130-linux-x86_64-py312": "runtime/x"},
     }
     manifest = load_bundle_manifest_data(data, bundle_root=tmp_path)
-    errs = validate_bundle_options(manifest)
-    assert any("top-level run_options" in e for e in errs)
+    with pytest.raises(BundleOptionsError, match="must be declared under each variant"):
+        validate_bundle_options(manifest)
 
 
-def test_resolve_preset_from_command_argv() -> None:
-    from flashcli.bundle.bundle_options import (
-        BundleOptionsError,
-        resolve_preset_from_command_argv,
-    )
+def test_resolve_run_from_argv_local_bundle() -> None:
+    from flashcli.bundle.bundle_options import resolve_run_from_argv
 
-    assert (
-        resolve_preset_from_command_argv(["run", "pi05_libero", "--help"], command="run")
-        == "pi05_libero"
+    preset, bundle_path = resolve_run_from_argv(
+        ["run", "bundles/qwen_nvfp4@qwen36"],
+        command="run",
     )
-    assert (
-        resolve_preset_from_command_argv(["pi05_libero", "--prompt", "x"], command="run")
-        == "pi05_libero"
+    assert preset.bundle_variant == "qwen36"
+    assert bundle_path is not None
+    assert bundle_path.name == "qwen_nvfp4"
+
+
+def test_resolve_run_from_argv_flashhub_ref() -> None:
+    from flashcli.bundle.bundle_options import resolve_run_from_argv
+
+    preset, bundle_path = resolve_run_from_argv(
+        ["run", "flashcli-bundle/qwen_nvfp4:1.0.1@qwen36"],
+        command="run",
     )
-    with pytest.raises(BundleOptionsError, match="PRESET --help"):
-        resolve_preset_from_command_argv(["run", "--help"], command="run")
-    with pytest.raises(BundleOptionsError, match="Expected preset name"):
-        resolve_preset_from_command_argv(["run", "--bundle", "/tmp"], command="run")
+    assert preset.bundle_variant == "qwen36"
+    assert bundle_path is None
 
 
 def test_validate_repo_bundles() -> None:
@@ -375,7 +387,7 @@ def test_validate_repo_bundles() -> None:
 
     root = Path(__file__).resolve().parents[1] / "bundles"
     for name in ("pi05_libero", "qwen_nvfp4"):
-        manifest = load_bundle_manifest(root / name / "flashcli-bundle.json")
+        manifest = load_bundle_manifest(root / name)
         assert validate_bundle_options(manifest) == [], name
 
 
@@ -401,8 +413,16 @@ def test_resolve_manifest_skips_stale_cached_repo(
     (bundle_root / "flashcli-bundle.json").write_text(
         json.dumps(old_manifest), encoding="utf-8"
     )
+    preset = Preset(
+        name="pi05_libero",
+        raw={
+            "description": "test",
+            "bundle": {"repo": "https://flashhub.example/pi05/1.0.3"},
+        },
+        cache_key="pi05_libero/1.0.3",
+    )
     write_preset_marker(
-        "pi05_libero",
+        preset,
         {
             "repo": "https://flashhub.example/pi05/1.0.2",
             "bundle_root": str(bundle_root),
@@ -419,10 +439,11 @@ def test_resolve_manifest_skips_stale_cached_repo(
             "description": "test",
             "bundle": {"repo": "https://flashhub.example/pi05/1.0.3"},
         },
+        cache_key="pi05_libero/1.0.3",
     )
 
     monkeypatch.setattr(
-        "flashcli.bundle.bundle_options.download_manifest_from_repo",
+        "flashcli.bundle.flashhub.download_manifest_from_repo",
         lambda _repo, _dest, **kw: fresh,
     )
 
@@ -453,8 +474,13 @@ def test_resolve_manifest_skips_cache_missing_protocol_version(
     (bundle_root / "flashcli-bundle.json").write_text(
         json.dumps(old_manifest), encoding="utf-8"
     )
+    preset = Preset(
+        name="pi05_libero",
+        raw={"description": "test", "bundle": {"repo": repo}},
+        cache_key="pi05_libero/1.0.4",
+    )
     write_preset_marker(
-        "pi05_libero",
+        preset,
         {"repo": repo, "bundle_root": str(bundle_root), "runtime_id": "pi05_libero-x"},
     )
 
@@ -463,9 +489,10 @@ def test_resolve_manifest_skips_cache_missing_protocol_version(
     preset = Preset(
         name="pi05_libero",
         raw={"description": "test", "bundle": {"repo": repo}},
+        cache_key="pi05_libero/1.0.4",
     )
     monkeypatch.setattr(
-        "flashcli.bundle.bundle_options.download_manifest_from_repo",
+        "flashcli.bundle.flashhub.download_manifest_from_repo",
         lambda _repo, _dest, **kw: fresh,
     )
 

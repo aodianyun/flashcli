@@ -106,7 +106,7 @@ def _runtime_is_ready(
     artifact_rel: str,
     force: bool,
 ) -> bool:
-    """True when cached bundle tree matches catalog repo + remote manifest + native artifacts."""
+    """True when cached bundle tree matches preset repo + remote manifest + native artifacts."""
     if force:
         return False
     if marker.get("env_key") != env_key:
@@ -267,7 +267,7 @@ def ensure_runtime_from_repo(
         },
     )
     write_preset_marker(
-        preset.name,
+        preset,
         {
             "source": "repo",
             "repo": repo_url,
@@ -292,7 +292,7 @@ def ensure_runtime_from_path(
     *,
     quiet: bool = False,
 ) -> tuple[str, Path, BundleManifest, PreflightResult]:
-    """Local dev bundle.path — preflight only, no FlashHub download."""
+    """Local dev bundle root — preflight only, no FlashHub download."""
     bundle_path = bundle_path.expanduser().resolve()
     if not is_bundle_root(bundle_path):
         raise FileNotFoundError(f"Not a bundle root: {bundle_path}")
@@ -313,8 +313,8 @@ def ensure_runtime_from_path(
         runtime_id,
         {
             "runtime_id": runtime_id,
-            "source": "path",
-            "path": str(bundle_path),
+            "source": "local",
+            "local_root": str(bundle_path),
             "env_key": preflight.env_key,
             "host_env_key": preflight.host_env_key,
             "python_abi": preflight.python_abi,
@@ -323,10 +323,10 @@ def ensure_runtime_from_path(
         },
     )
     write_preset_marker(
-        preset.name,
+        preset,
         {
-            "source": "path",
-            "path": str(bundle_path),
+            "source": "local",
+            "local_root": str(bundle_path),
             "runtime_id": runtime_id,
             "bundle_root": str(bundle_path),
             "env_key": preflight.env_key,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from flashcli import config
+from flashcli import __version__, config
 from flashcli.deps import (
     bundle_python_stack_satisfied,
     flashcli_core_stack_satisfied,
@@ -89,45 +89,40 @@ def run_check(*, quiet: bool = False) -> int:
     if not quiet and config.FLASHCLI_HOME.is_dir():
         print(f"     Home: {config.FLASHCLI_HOME}")
     print(f"[ok] flashcli {__version__} ({__import__('sys').executable})")
-    print(f"[ok] Catalog: {config.MODELS_YAML}")
+    print(f"[ok] FlashHub API base: {config.FLASHHUB_API_BASE}")
     try:
-        from flashcli.bundle.catalog import raw_bundle_cfg
-        from flashcli.bundle.marker import read_preset_marker
-        from flashcli.models.registry import PresetRegistry
+        from flashcli.bundle.marker import list_cached_presets
+        from flashcli.models import cache as model_cache
+        from flashcli.models.preset_ref import resolve_preset
 
-        for name in PresetRegistry().list_names():
-            preset = PresetRegistry().get(name)
-            cfg = raw_bundle_cfg(preset)
-            repo = str(cfg.get("repo", "")).strip()
-            if not repo:
-                continue
-            marker = read_preset_marker(name) or {}
-            cached_repo = str(marker.get("repo", "")).strip()
-            rid = str(marker.get("runtime_id", "")).strip()
-            line = f"     {name}: {repo}"
-            if rid:
-                line += f" (cached id {rid})"
-            print(line)
-            if cached_repo and cached_repo != repo:
-                print(
-                    f"[!] {name}: cached bundle repo differs from catalog — "
-                    f"run: flashcli bundle sync {name} --force"
-                )
-                issues += 1
+        cached = list_cached_presets()
+        if cached:
+            print(f"[ok] Cached presets ({len(cached)}):")
+            for entry in cached:
+                ref = str(entry.get("ref", "")).strip()
+                repo = str(entry.get("repo", "")).strip()
+                rid = str(entry.get("runtime_id", "")).strip()
+                line = f"     {ref or entry.get('cache_key', '?')}"
+                if rid:
+                    line += f" (runtime {rid})"
+                print(line)
+                if ref:
+                    try:
+                        preset = resolve_preset(ref)
+                        expected = preset.raw.get("bundle", {}).get("repo", "")
+                        if repo and expected and repo != expected:
+                            print(
+                                f"[!] {ref}: cached repo differs from ref — "
+                                f"run: flashcli bundle sync {ref} --force"
+                            )
+                            issues += 1
+                        if not model_cache.is_cached(preset):
+                            print(f"[i] {ref}: weights not cached — run: flashcli pull {ref}")
+                    except ValueError:
+                        pass
+        elif not quiet:
+            print("[i] No cached presets — run flashcli run <ref> or flashcli bundle sync <ref>")
     except Exception as exc:
         if not quiet:
-            print(f"[i] Could not read catalog repos: {exc}")
+            print(f"[i] Could not list cached presets: {exc}")
     return issues
-
-
-def run_install(
-    *,
-    quiet: bool = False,
-    force: bool = False,
-) -> None:
-    ensure_environment(
-        install_flashcli=True,
-        quiet=quiet,
-        force=force,
-    )
-    print("flashcli environment install complete.")

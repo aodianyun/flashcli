@@ -15,7 +15,7 @@
 | **protocol_version** | `flashcli-bundle` 协议 API 版本，当前为 **1** |
 | **权重** | **不** 打进 bundle；在 manifest 中声明 Hugging Face 等来源，由终端用户首次运行时拉取 |
 
-终端用户通过 catalog 中的 `bundle.repo` URL 获取 bundle；flashcli 先下载 `flashcli-bundle.json`，再按本机 GPU/CUDA/Python 匹配 `runtime` 中的 env key，仅下载对应 `runtime/<env-key>/` 下的文件。
+终端用户通过 inline ref（`flashcli-bundle/<name>:<version>[@variant]`）获取 bundle；flashcli 先下载 `flashcli-bundle.json`，再按本机 GPU/CUDA/Python 匹配 `runtime` 中的 env key，仅下载对应 `runtime/<env-key>/` 下的文件。
 
 ---
 
@@ -45,7 +45,7 @@ my_bundle/                              ← 上传根（版本目录内容）
 
 ### 2.2 多 preset 共用 repo（示例：qwen_nvfp4）
 
-同一 repo 内 **`entry` 相同**，通过 catalog 的 `bundle_variant` 选择 variant 块中的权重与 options：
+同一 repo 内 **`entry` 相同**，ref 中的 `@variant` 选择 variant 块中的权重与 options：
 
 ```text
 qwen_nvfp4/
@@ -73,21 +73,27 @@ qwen_nvfp4/
 | `build.sh`、`.build-matrix/`、`dist/` 打包脚本产物以外的开发垃圾 | 非 runtime 必需 |
 | 模型权重 checkpoint | 由 manifest `weights` / variant `weights` 声明外部拉取 |
 
-### 2.4 catalog 对接（供集成方参考）
+### 2.4 Preset ref（供集成方参考）
 
-```yaml
-models:
-  my-preset:
-    bundle:
-      repo: https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/my_model:1.0.0
-  qwen3-8b-nvfp4:
-    bundle_variant: qwen3          # 对应 manifest variants.qwen3
-    bundle:
-      repo: https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/qwen_nvfp4:1.0.1
+用户使用 inline ref 字符串 — 无 bundled catalog 文件：
+
+```text
+flashcli-bundle/<name>:<version>[@variant]
 ```
 
-- **`bundle.repo`**：FlashHub 仓库地址 URL。
-- **`bundle_variant`**：仅当 manifest 含 `variants` 时使用；多个 preset 可共用同一 `repo`。
+示例：
+
+```bash
+flashcli run flashcli-bundle/pi05_libero:1.0.3
+flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen3
+flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
+```
+
+- **单 variant bundle** — ref 仅为 `namespace/bundle:version`。
+- **多 variant bundle** — ref **必须**带 `@variant`。
+- **本地 dev** — `flashcli run bundles/qwen_nvfp4@qwen36`（目录须含 `flashcli-bundle.json`）。
+
+完整语法：[model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
 
 ---
 
@@ -110,7 +116,6 @@ models:
 | `serve_options` | 条件 | 无 `variants` 且支持 `serve` 时必填 |
 | `weights` | 条件 | 单 preset bundle 的权重来源 |
 | `variants` | 条件 | 多 preset 共用 repo 时必填（见 §3.3） |
-| `default_variant` | 推荐 | 存在 `variants` 时的默认 variant 名 |
 | `post_pull` | 否 | 权重拉取后的钩子（如 tokenizer 准备） |
 
 ### 3.2 `entry`
@@ -197,7 +202,7 @@ Bundle 自定义 CLI 参数的 **唯一** 默认值来源；终端 `--help` 由 
 | `phase` | 否 | **run**：`load`（传给 `load()`）或 `predict`（传给 `predict()`）；**serve**：`load` 或 `warmup` |
 | `flag` | 否 | CLI 长选项名（不含 `--`）；默认 `name` 的 `_` 转为 `-` |
 
-**不在 manifest 中声明的参数**（由 flashcli 提供）：如 `--bundle`、`--checkpoint`、`--host`、`--port` 等。
+**不在 manifest 中声明的参数**（由 flashcli 提供）：如 `--checkpoint`、`--host`、`--port` 等。
 
 ### 3.7 `runtime`
 
@@ -400,5 +405,5 @@ flash_rt_fp4-v1.2.0-sm120-cu130-linux-x86_64-py312.so
 | 文档 | 内容 |
 |------|------|
 | [bundle_publish_standard.md](bundle_publish_standard.md) | 英文版 |
-| [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | catalog 字段 + 终端用户运行时流程 |
+| [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | preset ref 与终端用户运行时流程 |
 | [flashcli-bundle/README.md](../flashcli-bundle/README.md) | `flashcli_bundle` Python API |

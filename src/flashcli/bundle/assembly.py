@@ -1,4 +1,4 @@
-"""Detect whether a local bundle.path tree is built and ready to run."""
+"""Detect whether a local bundle tree is built and ready to run."""
 
 from __future__ import annotations
 

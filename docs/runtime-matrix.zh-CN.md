@@ -33,7 +33,7 @@ dist/
 
 运行时 flashcli 直接从缓存 bundle 根下的 `runtime/<env-key>/` 加载匹配 env 的 `.so`（不会拷贝到 `lib/`）。
 
-每个 preset 在 `models.yaml` 中一个 **`bundle.repo`**（`schema_version: 7`），指向 FlashHub 语义化 URL。
+每个已发布 bundle 由 **FlashHub ref**（`flashcli-bundle/<name>:<version>[@variant]`）固定 — 见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
 
 ### Native `.so` 命名（构建阶段）
 
@@ -47,9 +47,9 @@ dist/
 
 1. `bash scripts/release_bundle.sh --bundle <name> --clean`
 2. 上传 `dist/` 整棵树到 FlashHub
-3. 更新 [`models.yaml`](../src/flashcli/catalog/models.yaml) 中 `bundle.repo` 版本 URL
+3. 告知用户固定新 ref（如在文档中更新 `flashcli-bundle/pi05_libero:1.0.4`）
 
-示例（与 [`models.yaml`](../src/flashcli/catalog/models.yaml) 一致）：
+示例 repo URL：
 
 ```text
 https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3
@@ -95,15 +95,14 @@ bash build.sh --repo-root "$FLASHRT_REPO"
 | `flashcli run` | bundle venv 装 torch → 从 `runtime/<env-key>/` 加载 `.so` → 权重 → `entry` |
 
 本机环境键示例：`sm89-cu124-linux-x86_64-py312`、`sm120-cu130-linux-x86_64-py312`  
-查看匹配：`flashcli models envs pi05_libero`
+查看匹配：`flashcli models envs flashcli-bundle/pi05_libero:1.0.3`
 
 **不要**用与 manifest `python_abi` 不一致的系统 Python 跑 bundle（会在 venv / preflight 阶段失败）。
 
 ## 本地调试（不经过 FlashHub）
 
 ```bash
-flashcli run pi05_libero \
-  --bundle "$(pwd)/bundles/pi05_libero" \
+flashcli run bundles/pi05_libero \
   --image /path/to.jpg
 ```
 
@@ -113,13 +112,13 @@ flashcli run pi05_libero \
 
 ## qwen_nvfp4（SM120 × cu130）
 
-一个 FlashHub repo 服务两个 catalog preset（`qwen3-8b-nvfp4`、`qwen36-27b-nvfp4`），通过 `bundle_variant` 区分权重。
+一个 FlashHub repo（`flashcli-bundle/qwen_nvfp4:1.0.1`）；ref 中 `@qwen3` / `@qwen36` 区分权重。
 
 ```bash
 bash scripts/release_bundle.sh --bundle qwen_nvfp4 --clean
 ```
 
-更新 **两个** preset 的 `bundle.repo`（同一 repo URL，不同 `bundle_variant`）。
+更新 **两个** variant ref（同一 repo URL，不同 `@variant`）。
 
 环境键示例：`sm120-cu130-linux-x86_64-py312`
 

@@ -32,7 +32,7 @@ dist/
 
 At runtime, flashcli loads matching `.so` files directly from `runtime/<env-key>/` in the cached bundle root (no copy to `lib/`).
 
-Each catalog preset has one **`bundle.repo`** in [`models.yaml`](../src/flashcli/catalog/models.yaml) (`schema_version: 7`) — a semantic FlashHub URL.
+Each published bundle is pinned by a **FlashHub ref** (`flashcli-bundle/<name>:<version>[@variant]`) — see [model_bundle_standard.md](model_bundle_standard.md).
 
 ### Native `.so` naming (build time)
 
@@ -44,9 +44,9 @@ Each catalog preset has one **`bundle.repo`** in [`models.yaml`](../src/flashcli
 
 1. `bash scripts/release_bundle.sh --bundle <name> --clean`
 2. Upload the full `dist/` tree to FlashHub
-3. Update `bundle.repo` version URL in `models.yaml`
+3. Tell users to pin the new ref (e.g. bump version in `flashcli-bundle/pi05_libero:1.0.4`)
 
-Example (see [`models.yaml`](../src/flashcli/catalog/models.yaml)):
+Example repo URL:
 
 ```text
 https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3
@@ -80,17 +80,17 @@ bash build.sh --repo-root /path/to/FlashRT
 
 **GPU**: SM89 (Ada) and SM120 (Blackwell). **CUDA**: cu124 (SM89 only); cu130 (SM89 + SM120 — cu130 matrix pass also cross-builds `sm120-cu130`).
 
-Host keys: `sm89-cu124-linux-x86_64-py312`, `sm89-cu130-linux-x86_64-py312`, `sm120-cu130-linux-x86_64-py312`. Check: `flashcli models envs pi05_libero`.
+Host keys: `sm89-cu124-linux-x86_64-py312`, `sm89-cu130-linux-x86_64-py312`, `sm120-cu130-linux-x86_64-py312`. Check: `flashcli models envs flashcli-bundle/pi05_libero:1.0.3`.
 
-Upload `dist/` to FlashHub; update `pi05_libero.bundle.repo`.
+Upload `dist/` to FlashHub; users pin `flashcli-bundle/pi05_libero:<version>`.
 
 ---
 
 ## qwen_nvfp4 (SM120 × cu130)
 
-One FlashHub repo for two presets (`qwen3-8b-nvfp4`, `qwen36-27b-nvfp4`); weights differ via `bundle_variant`.
+One FlashHub repo (`flashcli-bundle/qwen_nvfp4:1.0.1`); weights differ via `@qwen3` / `@qwen36` in the ref.
 
-Update **both** presets’ `bundle.repo` (same repo URL).
+Document both variant refs (`@qwen3`, `@qwen36`) for the same repo URL.
 
 Host key example: `sm120-cu130-linux-x86_64-py312`.
 
@@ -108,11 +108,10 @@ Do not use a system Python that mismatches manifest `python_abi`.
 ## Local debug (no FlashHub)
 
 ```bash
-flashcli run pi05_libero \
-  --bundle "$(pwd)/bundles/pi05_libero" \
+flashcli run bundles/pi05_libero \
   --image /path/to.jpg
 ```
 
-Catalog and bundle format: [model_bundle_standard.md](model_bundle_standard.md).
+Preset ref and bundle format: [model_bundle_standard.md](model_bundle_standard.md).
 
 Local dev trees need `.so` under the manifest’s `runtime/<env-key>/` (`build.sh` → `lib/`, then stage to `runtime/`; see bundle QUICKSTART).

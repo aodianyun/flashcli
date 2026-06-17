@@ -15,13 +15,13 @@ Examples:
 
   # Short prompt smoke (~19 rendered tokens; do not pass huge --max-seq for fit)
   python3 scripts/bench_qwen36_ttft_local.py \\
-    --checkpoint ~/.flashcli/models/qwen36-27b-nvfp4/checkpoint \\
+    --checkpoint ~/.flashcli/models/qwen_nvfp4/1.0.1@qwen36/checkpoint \\
     --bundle-dir /path/to/qwen_nvfp4-runtime-bundle \\
     --K 6 --target-prompt-tokens 64 --long-prompt-style flashrt
 
   # 256K comparable (prefill only)
   python3 scripts/bench_qwen36_ttft_local.py \\
-    --checkpoint ~/.flashcli/models/qwen36-27b-nvfp4/checkpoint \\
+    --checkpoint ~/.flashcli/models/qwen_nvfp4/1.0.1@qwen36/checkpoint \\
     --bundle-dir /path/to/qwen_nvfp4-runtime-bundle \\
     --max-seq 262208 --K 6 --target-prompt-tokens 262144 \\
     --long-prompt-style flashrt --skip-full-generate
@@ -60,9 +60,13 @@ def _default_bundle_dirs() -> list[Path]:
     home = Path(os.environ.get("HOME", ""))
     if home:
         for p in (
-            home / ".flashcli" / "bundles" / "qwen36-27b-nvfp4",
             home / ".flashcli" / "bundles" / "qwen_nvfp4",
+            home / ".flashcli" / "runtimes",
         ):
+            if p.name == "runtimes" and p.is_dir():
+                for marker in sorted(p.glob("*/flashcli-bundle.json")):
+                    out.append(marker.parent)
+                continue
             if (p / "flashcli-bundle.json").is_file():
                 out.append(p)
     return out
@@ -86,7 +90,7 @@ def _resolve_bundle_dir(explicit: Path | None) -> Path:
     raise SystemExit(
         "Cannot find qwen_nvfp4 bundle (need lib/flash_rt_kernels*.so). "
         "Set --bundle-dir or FLASHCLI_BUNDLE to the same runtime used by "
-        "'flashcli serve qwen36-27b-nvfp4'."
+        "'flashcli serve flashcli-bundle/qwen_nvfp4:1.0.1@qwen36'."
     )
 
 
@@ -111,7 +115,7 @@ def _load_engine(ckpt: Path, *, max_seq: int, K: int, device: str):
         checkpoint=str(ckpt),
         device=device,
         max_seq=max_seq,
-        model_name="qwen36-27b-nvfp4",
+        model_name="qwen36",
         K=K,
     )
 

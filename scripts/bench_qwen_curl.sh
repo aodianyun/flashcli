@@ -2,16 +2,16 @@
 # HTTP benchmark for Qwen3 / Qwen36 via OpenAI-compatible /v1/chat/completions.
 #
 # Prerequisites: one or two HTTP servers (single-GPU: run one model at a time).
-#   flashcli serve qwen3-8b-nvfp4 --host 0.0.0.0 --port 8000
-#   flashcli serve qwen36-27b-nvfp4 --host 0.0.0.0 --port 8001 --K 6
+#   flashcli serve flashcli-bundle/qwen_nvfp4:1.0.1@qwen3 --host 0.0.0.0 --port 8000
+#   flashcli serve flashcli-bundle/qwen_nvfp4:1.0.1@qwen36 --host 0.0.0.0 --port 8001 --K 6
 #
 # Single GPU (only one serve process):
 #   bash scripts/bench_qwen_curl.sh --qwen3-only
 #   bash scripts/bench_qwen_curl.sh --qwen36-only --qwen36-long-tokens 32768
 #
 # Usage:
-#   export CKPT_QWEN3=~/.flashcli/models/qwen3-8b-nvfp4/checkpoint
-#   export CKPT_QWEN36=~/.flashcli/models/qwen36-27b-nvfp4/checkpoint
+#   export CKPT_QWEN3=~/.flashcli/models/qwen_nvfp4/1.0.1@qwen3/checkpoint
+#   export CKPT_QWEN36=~/.flashcli/models/qwen_nvfp4/1.0.1@qwen36/checkpoint
 #   bash scripts/bench_qwen_curl.sh
 #   bash scripts/bench_qwen_curl.sh --qwen3-only --rounds 5   # 5 runs, drop 1st, mean last 4
 #   bash scripts/bench_qwen_curl.sh --qwen36-long-tokens 131072 --qwen36-only
@@ -28,11 +28,11 @@ SERVE_METRICS_PY="${SCRIPT_DIR}/bench_qwen36_serve_metrics.py"
 HOST="${HOST:-127.0.0.1}"
 QWEN3_PORT="${QWEN3_PORT:-8000}"
 QWEN36_PORT="${QWEN36_PORT:-8001}"
-QWEN3_MODEL="${QWEN3_MODEL:-qwen3-8b-nvfp4}"
-QWEN36_MODEL="${QWEN36_MODEL:-qwen3.6-27b-nvfp4}"
+QWEN3_MODEL="${QWEN3_MODEL:-qwen3}"
+QWEN36_MODEL="${QWEN36_MODEL:-qwen36}"
 
-CKPT_QWEN3="${CKPT_QWEN3:-${HOME}/.flashcli/models/qwen3-8b-nvfp4/checkpoint}"
-CKPT_QWEN36="${CKPT_QWEN36:-${HOME}/.flashcli/models/qwen36-27b-nvfp4/checkpoint}"
+CKPT_QWEN3="${CKPT_QWEN3:-${HOME}/.flashcli/models/qwen_nvfp4/1.0.1@qwen3/checkpoint}"
+CKPT_QWEN36="${CKPT_QWEN36:-${HOME}/.flashcli/models/qwen_nvfp4/1.0.1@qwen36/checkpoint}"
 
 SHORT_PROMPT="${SHORT_PROMPT:-Explain quantum entanglement in one short paragraph.}"
 SHORT_MAX_TOKENS="${SHORT_MAX_TOKENS:-64}"
