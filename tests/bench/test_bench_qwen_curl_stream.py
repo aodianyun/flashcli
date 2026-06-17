@@ -5,8 +5,9 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-STREAM_PY = ROOT / "scripts" / "bench_qwen_curl_stream.py"
+SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
+
+STREAM_PY = SCRIPTS_DIR / "bench_qwen_curl_stream.py"
 
 
 def _load_stream_mod():

@@ -7,11 +7,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-REPORT_PY = ROOT / "scripts" / "bench_qwen36_report.py"
+SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
+
+REPORT_PY = SCRIPTS_DIR / "bench_qwen36_report.py"
 
 
-def test_report_vllm_http_stream_decode(tmp_path: Path) -> None:
+def test_report_vllm_http_stream_decode(tmp_path) -> None:
     workdir = tmp_path / "vllm"
     workdir.mkdir()
     (workdir / "manifest.json").write_text(

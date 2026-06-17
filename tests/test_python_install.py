@@ -64,7 +64,7 @@ def test_ensure_python_skips_install_when_disabled(
     monkeypatch.setenv("FLASHCLI_AUTO_INSTALL_BUNDLE_PYTHON", "0")
     monkeypatch.setenv("FLASHCLI_HOME", str(tmp_path))
     monkeypatch.setattr(
-        "flashcli.bundle.native_validate.resolve_python_for_minor",
+        "flashcli.bundle.python_resolve.resolve_python_for_minor",
         lambda _abi: None,
     )
     assert ensure_python_for_minor("312", auto_install=False) is None
@@ -75,7 +75,7 @@ def test_ensure_python_uses_existing(monkeypatch, tmp_path: Path) -> None:
     py.write_text("#!/bin/sh\n", encoding="utf-8")
     py.chmod(0o755)
     monkeypatch.setattr(
-        "flashcli.bundle.native_validate.resolve_python_for_minor",
+        "flashcli.bundle.python_resolve.resolve_python_for_minor",
         lambda _abi: py,
     )
     with patch("flashcli.bundle.python_install.install_standalone_python") as install_mock:
@@ -103,7 +103,7 @@ def test_ensure_python_triggers_install(monkeypatch, tmp_path: Path) -> None:
     py.write_text("#!/bin/sh\n", encoding="utf-8")
     py.chmod(0o755)
     monkeypatch.setattr(
-        "flashcli.bundle.native_validate.resolve_python_for_minor",
+        "flashcli.bundle.python_resolve.resolve_python_for_minor",
         lambda _abi: None,
     )
     with patch(

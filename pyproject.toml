@@ -31,3 +31,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 flashcli = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--ignore=tests/bench"]

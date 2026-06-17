@@ -171,3 +171,178 @@ def test_openai_compat_has_no_http_stack_imports() -> None:
 def test_removed_host_infer_shims_absent(rel: str) -> None:
     path = ROOT / rel
     assert not path.exists(), f"Obsolete host shim still present: {rel}"
+
+
+# --- Phase A: re-export contract + module ownership ---
+
+HOST_REEXPORT_FILES: dict[str, str] = {
+    "models/preset_ref.py": "flashcli_bundle.preset_ref",
+    "bundle/marker.py": "flashcli_bundle.marker",
+    "util/download_progress.py": "flashcli_bundle.util.download_progress",
+    "runtime/mirror.py": "flashcli_bundle.runtime.mirror",
+    "runtime/detect.py": "flashcli_bundle.runtime.detect",
+    "runtime/requirements_spec.py": "flashcli_bundle.runtime.requirements_spec",
+    "models/post_pull.py": "flashcli_bundle.post_pull",
+    "bundle/resolve.py": "flashcli_bundle.resolve",
+}
+
+INFER_REEXPORT_FILES: dict[str, str] = {
+    "infer/runtime/detect.py": "flashcli_bundle.runtime.detect",
+    "infer/runtime/requirements_spec.py": "flashcli_bundle.runtime.requirements_spec",
+    "infer/runtime/mirror.py": "flashcli_bundle.runtime.mirror",
+    "infer/post_pull.py": "flashcli_bundle.post_pull",
+    "infer/cache.py": "flashcli_bundle.cache",
+    "infer/bundle/weights.py": "flashcli_bundle.weights",
+}
+
+
+def _is_reexport_module(text: str, protocol_prefix: str) -> bool:
+    """True when file only re-exports from protocol (no standalone business defs)."""
+    import_patterns = (
+        protocol_prefix,
+        protocol_prefix.replace(".", " import "),
+        f"from flashcli_bundle import {protocol_prefix.rsplit('.', 1)[-1]}",
+    )
+    if not any(p in text for p in import_patterns):
+        return False
+    if "from flashcli_bundle" not in text:
+        return False
+    tree = ast.parse(text)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            return False
+    return True
+
+
+@pytest.mark.parametrize("rel,prefix", HOST_REEXPORT_FILES.items())
+def test_host_modules_are_protocol_reexports(rel: str, prefix: str) -> None:
+    path = HOST_SRC / rel
+    assert path.is_file(), f"missing host module {rel}"
+    text = path.read_text(encoding="utf-8")
+    import_patterns = (
+        prefix,
+        f"from flashcli_bundle import {prefix.rsplit('.', 1)[-1]}",
+    )
+    assert any(p in text for p in import_patterns), f"{rel} must re-export from {prefix}"
+    assert _is_reexport_module(text, prefix) or rel == "models/cache.py", (
+        f"{rel} must be a thin re-export (or host wrapper for cache)"
+    )
+
+
+@pytest.mark.parametrize("rel,prefix", INFER_REEXPORT_FILES.items())
+def test_infer_modules_are_protocol_reexports(rel: str, prefix: str) -> None:
+    path = FLASHCLI_BUNDLE / "src" / "flashcli_bundle" / rel
+    assert path.is_file(), f"missing infer module {rel}"
+    text = path.read_text(encoding="utf-8")
+    assert prefix in text, f"{rel} must re-export from {prefix}"
+    assert _is_reexport_module(text, prefix), f"{rel} must be a thin re-export"
+
+
+def test_infer_runtime_mirror_matches_protocol_logic() -> None:
+    """Infer mirror must not retain stale USE_MIRROR-before-NO_MIRROR ordering."""
+    proto = (
+        FLASHCLI_BUNDLE / "src" / "flashcli_bundle" / "runtime" / "mirror.py"
+    ).read_text(encoding="utf-8")
+    assert 'os.environ.get("FLASHCLI_NO_MIRROR")' in proto
+    assert proto.index("FLASHCLI_NO_MIRROR") < proto.index("FLASHCLI_USE_MIRROR")
+
+
+def test_preset_has_engine_and_description() -> None:
+    from flashcli_bundle.preset import Preset
+
+    p = Preset(name="test", raw={"engine": "model_bundle", "description": "demo"})
+    assert p.engine == "model_bundle"
+    assert p.description == "demo"
+
+
+def test_protocol_modules_import_without_serve_or_hf() -> None:
+    import flashcli_bundle.cache
+    import flashcli_bundle.post_pull
+    import flashcli_bundle.resolve
+    import flashcli_bundle.weights
+    import flashcli_bundle.activate_core
+    import flashcli_bundle.runtime.mirror
+
+    assert flashcli_bundle.cache.ensure_model_cached is not None
+    assert flashcli_bundle.resolve.load_preset_bundle is not None
+    assert not hasattr(flashcli_bundle.runtime.mirror, "download_github_release_asset")
+
+
+def test_host_cache_is_thin_wrapper() -> None:
+    text = (HOST_SRC / "models" / "cache.py").read_text(encoding="utf-8")
+    assert "flashcli_bundle.cache" in text or "flashcli_bundle import cache" in text
+    assert "def preset_cache_dir" not in text
+    assert "def _read_marker" not in text
+
+
+# --- Module placement: host/infer-only logic must not grow in protocol ---
+
+# Host-only modules still under flashcli_bundle/ (migration backlog — do not add).
+HOST_ONLY_PROTOCOL_MODULES = frozenset()
+
+HOST_ONLY_MIRROR_SYMBOLS = frozenset({
+    "download_github_release_asset",
+    "github_release_download_urls",
+    "proxied_github_url",
+    "DEFAULT_GIT_PROXY_PREFIX",
+})
+
+_PLACEMENT_MARKERS = (
+    "Host-only",
+    "Infer-only",
+    "host only",
+    "infer only",
+    "HOST_ONLY_PROTOCOL",
+)
+
+
+def test_module_layers_documents_single_layer_placement_rule() -> None:
+    en = (ROOT / "docs" / "module_layers.md").read_text(encoding="utf-8")
+    zh = (ROOT / "docs" / "module_layers.zh-CN.md").read_text(encoding="utf-8")
+    assert "Host-only" in en or "host only" in en.lower()
+    assert "Infer-only" in en or "infer only" in en.lower()
+    assert any(m in zh for m in _PLACEMENT_MARKERS)
+
+
+def test_host_only_protocol_allowlist_documented_in_module_layers() -> None:
+    if not HOST_ONLY_PROTOCOL_MODULES:
+        return
+    doc = (ROOT / "docs" / "module_layers.md").read_text(encoding="utf-8")
+    for mod in HOST_ONLY_PROTOCOL_MODULES:
+        stem = mod.rsplit(".", 1)[-1]
+        assert stem in doc, f"document migration backlog for {mod} in module_layers.md"
+
+
+def test_host_only_protocol_allowlist_must_not_grow() -> None:
+    """New host-only modules must not appear under flashcli_bundle/ without review."""
+    proto_root = FLASHCLI_BUNDLE / "src" / "flashcli_bundle"
+    allow_stems = {m.rsplit(".", 1)[-1] for m in HOST_ONLY_PROTOCOL_MODULES}
+    for path in proto_root.rglob("*.py"):
+        if "infer" in path.parts:
+            continue
+        stem = path.stem
+        if stem == "__init__":
+            continue
+        if stem in allow_stems:
+            continue
+        if stem.endswith("_host_only"):
+            raise AssertionError(
+                f"unexpected host-only marker file {path.relative_to(ROOT)}; "
+                "implement under src/flashcli/ instead"
+            )
+
+
+def test_host_mirror_has_github_release_helpers() -> None:
+    from flashcli.runtime import mirror as host_mirror
+
+    assert hasattr(host_mirror, "download_github_release_asset")
+    assert hasattr(host_mirror, "github_release_download_urls")
+
+
+def test_infer_mirror_does_not_reexport_host_github_helpers() -> None:
+    text = (
+        FLASHCLI_BUNDLE / "src" / "flashcli_bundle" / "infer" / "runtime" / "mirror.py"
+    ).read_text(encoding="utf-8")
+    for sym in HOST_ONLY_MIRROR_SYMBOLS:
+        assert sym not in text, f"infer/runtime/mirror must not re-export host-only {sym}"
+

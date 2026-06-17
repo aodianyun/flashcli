@@ -28,7 +28,7 @@ def test_download_url_to_path_writes_file(tmp_path: Path) -> None:
         def __exit__(self, *args):
             return False
 
-    with patch("flashcli.util.download_progress.urlopen", lambda *_a, **_k: Resp()):
+    with patch("flashcli_bundle.util.download_progress.urlopen", lambda *_a, **_k: Resp()):
         nbytes = download_url_to_path("https://example/file", dest, quiet=True)
 
     assert dest.read_bytes() == data

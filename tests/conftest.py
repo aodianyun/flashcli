@@ -17,9 +17,14 @@ _MIRROR_ENV_KEYS = (
 )
 
 
-def _reset_mirror_state() -> None:
-    import flashcli.runtime.mirror as mirror_mod
+def _mirror_module():
+    import flashcli_bundle.runtime.mirror as mirror_mod
 
+    return mirror_mod
+
+
+def _reset_mirror_state() -> None:
+    mirror_mod = _mirror_module()
     mirror_mod._APPLIED = False
 
 
@@ -34,7 +39,7 @@ def pytest_configure(config: pytest.Config) -> None:
 @pytest.fixture(autouse=True)
 def _neutral_mirror_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Unit tests assume default (non-mirror) behavior unless they set env explicitly."""
-    import flashcli.runtime.mirror as mirror_mod
+    mirror_mod = _mirror_module()
 
     for key in _MIRROR_ENV_KEYS:
         monkeypatch.delenv(key, raising=False)

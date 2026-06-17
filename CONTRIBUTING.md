@@ -42,7 +42,9 @@ flashcli models list
 Run tests:
 
 ```bash
-pytest tests/
+pytest tests/              # unit/integration (default; excludes tests/bench)
+pytest tests/bench/        # bench script helpers (scripts/bench_*.py)
+pytest tests/ tests/bench/ # full suite including bench
 ```
 
 ## Pull request guidelines

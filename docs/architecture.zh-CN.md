@@ -15,6 +15,10 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 5. **主机只装一份 flashcli** — 主机 venv 仅 pip **`flashcli-bundle`**（协议）；bundle venv pip **`flashcli-bundle[infer]`**。主机代码**禁止** `import flashcli_bundle.infer`。
 6. **一条命令** — `flashcli run <preset>` 串联：sync → 依赖 → 权重 → `post_pull` → 推理。
 
+### 模块放哪（必读）
+
+**只有 host 用到 → `src/flashcli/`；只有 infer 用到 → `flashcli_bundle/infer/`；两层都用 → `flashcli_bundle/` protocol。** Re-export 不能作为把 host/infer 专有逻辑塞进 protocol 的理由。详见 [module_layers.zh-CN.md](module_layers.zh-CN.md)。
+
 ## 主机 CLI 与 bundle infer（必读）
 
 `flashcli pull` / `bundle sync` / 权重下载在**主机 CLI venv**（如 `install.sh` 的 Python 3.10）中执行。  
@@ -154,5 +158,6 @@ sequenceDiagram
 
 ## 相关文档
 
+- [module_layers.md](module_layers.md) — 三层模块归属与 import 规则
 - [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) — preset ref + 运行时流程
 - [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) — manifest 与 entry 规范

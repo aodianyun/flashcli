@@ -28,7 +28,7 @@ def test_proxied_github_url() -> None:
 def test_github_urls_mirror_first(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("FLASHCLI_USE_MIRROR", "1")
     monkeypatch.delenv("FLASHCLI_NO_MIRROR", raising=False)
-    import flashcli.runtime.mirror as mirror_mod
+    import flashcli_bundle.runtime.mirror as mirror_mod
 
     mirror_mod._APPLIED = False
 
@@ -42,7 +42,7 @@ def test_github_urls_mirror_first(monkeypatch, tmp_path: Path) -> None:
 def test_github_urls_direct_first_without_mirror(monkeypatch) -> None:
     monkeypatch.delenv("FLASHCLI_USE_MIRROR", raising=False)
     monkeypatch.setenv("FLASHCLI_NO_MIRROR", "1")
-    import flashcli.runtime.mirror as mirror_mod
+    import flashcli_bundle.runtime.mirror as mirror_mod
 
     mirror_mod._APPLIED = False
 
@@ -54,7 +54,7 @@ def test_github_urls_direct_first_without_mirror(monkeypatch) -> None:
 
 def test_github_urls_respect_disable_proxy(monkeypatch) -> None:
     monkeypatch.setenv("FLASHCLI_GIT_PROXY", "0")
-    import flashcli.runtime.mirror as mirror_mod
+    import flashcli_bundle.runtime.mirror as mirror_mod
 
     mirror_mod._APPLIED = False
 
@@ -63,7 +63,7 @@ def test_github_urls_respect_disable_proxy(monkeypatch) -> None:
 
 
 def test_download_github_release_asset_fallback(monkeypatch, tmp_path: Path) -> None:
-    import flashcli.runtime.mirror as mirror_mod
+    import flashcli_bundle.runtime.mirror as mirror_mod
 
     mirror_mod._APPLIED = False
     monkeypatch.delenv("FLASHCLI_USE_MIRROR", raising=False)
@@ -91,7 +91,7 @@ def test_download_github_release_asset_fallback(monkeypatch, tmp_path: Path) -> 
 
 
 def test_download_github_release_asset_custom_proxy(monkeypatch, tmp_path: Path) -> None:
-    import flashcli.runtime.mirror as mirror_mod
+    import flashcli_bundle.runtime.mirror as mirror_mod
 
     mirror_mod._APPLIED = False
     monkeypatch.setenv("FLASHCLI_USE_MIRROR", "1")

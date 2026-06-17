@@ -69,7 +69,7 @@ def format_run_help(
     lines = [
         f"Usage: flashcli run {preset.name} [COMMON OPTIONS] [BUNDLE OPTIONS]",
         "",
-        manifest.description or getattr(preset, "description", "") or "",
+        manifest.description or preset.description or "",
         "",
         "Common options (flashcli):",
     ]
@@ -90,7 +90,7 @@ def format_serve_help(
     lines = [
         f"Usage: flashcli serve {preset.name} [COMMON OPTIONS] [BUNDLE OPTIONS]",
         "",
-        manifest.description or getattr(preset, "description", "") or "",
+        manifest.description or preset.description or "",
         "",
         "Common options (flashcli):",
     ]

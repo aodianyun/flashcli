@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from flashcli import config
 from flashcli.models.preset_ref import cache_key, parse_preset_ref, resolve_preset
 
 
@@ -41,8 +40,10 @@ def test_parse_full_url_with_variant() -> None:
 
 
 def test_custom_flashhub_api_base(monkeypatch: pytest.MonkeyPatch) -> None:
+    import flashcli_bundle.paths as paths
+
     monkeypatch.setattr(
-        config,
+        paths,
         "FLASHHUB_API_BASE",
         "https://staging.example/api/v1/repos",
     )

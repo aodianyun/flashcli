@@ -1,11 +1,11 @@
-"""Standalone Python install paths (shared by host sync and native ABI probe)."""
+"""Standalone Python install paths (host sync / python_install only)."""
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-from flashcli_bundle import paths
+from flashcli import config
 
 _ENV_LOADED = False
 
@@ -14,14 +14,14 @@ def bundle_python_root() -> Path:
     override = os.environ.get("FLASHCLI_PYTHON_ROOT", "").strip()
     if override:
         return Path(override).expanduser()
-    return paths.FLASHCLI_HOME / "python"
+    return config.FLASHCLI_HOME / "python"
 
 
 def bundle_python_env_file() -> Path:
     override = os.environ.get("FLASHCLI_PYTHON_ENV", "").strip()
     if override:
         return Path(override).expanduser()
-    return paths.FLASHCLI_HOME / "python-runtime.env"
+    return config.FLASHCLI_HOME / "python-runtime.env"
 
 
 def load_python_env_file() -> None:

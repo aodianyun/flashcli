@@ -5,8 +5,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
-sys.path.insert(0, str(_SCRIPTS))
+SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
+
+sys.path.insert(0, str(SCRIPTS_DIR))
 
 import bench_qwen_make_payload as bmp  # noqa: E402
 

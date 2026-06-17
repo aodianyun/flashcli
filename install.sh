@@ -2443,7 +2443,7 @@ run_post_install_tests() {
         FLASHCLI_PREFER_GITHUB_MIRROR FLASHCLI_GIT_PROXY PIP_INDEX_URL PIP_TRUSTED_HOST \
         2>/dev/null || true
       export FLASHCLI_NO_MIRROR=1
-      run_py -m pytest tests -q --tb=line
+      run_py -m pytest tests -q --tb=line --ignore=tests/bench
     ); then
       die "post-install pytest failed (full suite). Re-run: cd ${_src} && pytest tests/"
     fi

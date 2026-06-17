@@ -7,17 +7,18 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-REPORT_PY = ROOT / "scripts" / "bench_qwen36_report.py"
+SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
+
+REPORT_PY = SCRIPTS_DIR / "bench_qwen36_report.py"
 
 
-def _write_jsonl(path: Path, rows: list[dict]) -> None:
+def _write_jsonl(path, rows: list[dict]) -> None:
     with path.open("w", encoding="utf-8") as f:
         for row in rows:
             f.write(json.dumps(row) + "\n")
 
 
-def test_report_summarize_and_compare(tmp_path: Path) -> None:
+def test_report_summarize_and_compare(tmp_path) -> None:
     flashcli_dir = tmp_path / "flashcli"
     flashrt_dir = tmp_path / "flashrt"
     flashcli_dir.mkdir()
@@ -104,7 +105,7 @@ def test_report_summarize_and_compare(tmp_path: Path) -> None:
     assert "Comparison" in proc.stdout
 
 
-def test_report_omits_decode_without_engine_metrics(tmp_path: Path) -> None:
+def test_report_omits_decode_without_engine_metrics(tmp_path) -> None:
     workdir = tmp_path / "flashcli"
     workdir.mkdir()
     (workdir / "manifest.json").write_text(

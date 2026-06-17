@@ -15,6 +15,10 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 5. **Single host flashcli install** — host venv installs **`flashcli-bundle`** (protocol only); bundle venvs install **`flashcli-bundle[infer]`**. Host code **must not** `import flashcli_bundle.infer`.
 6. **One command** — `flashcli run <ref>` chains sync → deps → weights → `post_pull` → inference.
 
+### Where modules live (required reading)
+
+**Host-only → `src/flashcli/`. Infer-only → `flashcli_bundle/infer/`. Both → `flashcli_bundle/` protocol.** Re-export is not an excuse to put single-layer logic in protocol. See [module_layers.md](module_layers.md).
+
 ## Host CLI vs bundle infer (important)
 
 `flashcli pull` / `bundle sync` / weight download run in the **host CLI venv** (e.g. Python 3.10 from `install.sh`).  
@@ -155,5 +159,6 @@ See [model_bundle_standard.md](model_bundle_standard.md).
 
 ## Related docs
 
+- [module_layers.md](module_layers.md) — three-layer module ownership and import rules
 - [model_bundle_standard.md](model_bundle_standard.md) — preset ref + runtime flow
 - [bundle_publish_standard.md](bundle_publish_standard.md) — manifest and entry spec

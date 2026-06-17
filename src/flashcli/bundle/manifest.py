@@ -20,8 +20,10 @@ from flashcli_bundle.manifest_ext import (
     bundle_torch_index,
     check_bundle_python_abi,
     resolve_bundle_env_key,
-    validate_bundle_layout,
+    validate_bundle_layout as _validate_bundle_layout,
 )
+
+from flashcli.bundle.python_resolve import resolve_python_for_minor
 
 __all__ = [
     "BUNDLE_FORMAT",
@@ -43,3 +45,17 @@ __all__ = [
     "resolve_bundle_env_key",
     "validate_bundle_layout",
 ]
+
+
+def validate_bundle_layout(
+    bundle: BundleManifest,
+    *,
+    probe_abi: bool = False,
+    env_key: str | None = None,
+) -> list[str]:
+    return _validate_bundle_layout(
+        bundle,
+        probe_abi=probe_abi,
+        env_key=env_key,
+        python_for_minor=resolve_python_for_minor if probe_abi else None,
+    )

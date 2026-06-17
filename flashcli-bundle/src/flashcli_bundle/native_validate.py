@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import os
-import re
-import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from flashcli_bundle.manifest_ext import BundleManifest, bundle_runtime_map
-from flashcli_bundle.python_paths import bundle_python_root, load_python_env_file
 from flashcli_bundle.native_naming import (
     NATIVE_MODULE_BASES,
     ParsedNativeTag,
@@ -20,6 +18,8 @@ from flashcli_bundle.native_naming import (
     parse_native_tag_from_filename,
 )
 from flashcli_bundle.runtime_env import host_python_minor
+
+PythonForMinorFn = Callable[[str], Path | None]
 
 _ABI_MISMATCH_MARKERS = (
     "Python version mismatch",
@@ -66,99 +66,27 @@ def _find_artifact(
     return None
 
 
-def _python_roots() -> list[str]:
-    roots: list[str] = []
-    override = os.environ.get("FLASHCLI_PYTHON_ROOT", "").strip()
-    if override:
-        roots.append(override)
-    roots.append(str(bundle_python_root()))
-    roots.append("/opt/flashcli-python")
-    seen: set[str] = set()
-    out: list[str] = []
-    for root in roots:
-        if root and root not in seen:
-            seen.add(root)
-            out.append(root)
-    return out
-
-
-def _python_candidates(py_minor: str) -> list[str]:
-    if not py_minor.isdigit() or len(py_minor) != 3:
-        return []
-    major, minor = py_minor[0], py_minor[1:]
-    ver = f"python{major}.{minor}"
-    override = os.environ.get(f"FLASHCLI_PY{py_minor}_BIN", "").strip()
-    out: list[str] = []
-    if override:
-        out.append(override)
-    out.extend(
-        [
-            ver,
-            f"/usr/local/bin/{ver}",
-            f"/usr/bin/{ver}",
-        ]
-    )
-    for root in _python_roots():
-        mm = f"{major}.{minor}"
-        out.extend(
-            [
-                f"{root}/{mm}/bin/{ver}",
-                f"{root}/{mm}/bin/python3",
-            ]
-        )
-    out.append(f"/opt/python/{ver}/bin/{ver}")
-    return out
-
-
-def resolve_python_for_minor(py_minor: str) -> Path | None:
-    load_python_env_file()
+def _default_python_for_minor(py_minor: str) -> Path | None:
+    """Infer-safe resolver: current interpreter or ``FLASHCLI_PY{minor}_BIN``."""
     if host_python_minor() == py_minor:
         return Path(sys.executable)
-    for cand in _python_candidates(py_minor):
-        if "/" in cand:
-            p = Path(cand)
-            if not (p.is_file() and os.access(p, os.X_OK)):
-                continue
-        else:
-            found = shutil.which(cand)
-            if not found:
-                continue
-            p = Path(found)
-        try:
-            out = subprocess.run(
-                [str(p), "-c", "import sys; print(sys.version_info[:2])"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                check=False,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            continue
-        if out.returncode != 0:
-            continue
-        m = re.match(r"\((\d+), (\d+)\)", out.stdout.strip())
-        if not m:
-            continue
-        if int(m.group(1)) == int(py_minor[0]) and int(m.group(2)) == int(py_minor[1:]):
+    override = os.environ.get(f"FLASHCLI_PY{py_minor}_BIN", "").strip()
+    if override:
+        p = Path(override).expanduser()
+        if p.is_file() and os.access(p, os.X_OK):
             return p.resolve()
     return None
 
 
-def _classify_probe_failure(stderr: str, stdout: str) -> str:
-    combined = f"{stderr}\n{stdout}"
-    lower = combined.lower()
-    if any(m in combined for m in _ABI_MISMATCH_MARKERS):
-        return "abi_mismatch"
-    if any(m.lower() in lower for m in _CUDA_LOAD_MARKERS):
-        return "cuda_runtime"
-    if any(m in combined for m in _ELF_BAD_MARKERS):
-        return "invalid_elf"
-    return "load_failed"
-
-
-def probe_native_so_abi(path: Path, *, python_minor: str) -> str | None:
+def probe_native_so_abi(
+    path: Path,
+    *,
+    python_minor: str,
+    python_for_minor: PythonForMinorFn | None = None,
+) -> str | None:
     """Return an error string if the .so cannot load under the tagged Python ABI."""
-    py = resolve_python_for_minor(python_minor)
+    resolve = python_for_minor or _default_python_for_minor
+    py = resolve(python_minor)
     if py is None:
         return (
             f"no Python {python_minor[0]}.{python_minor[1:]} interpreter found to verify "
@@ -193,6 +121,18 @@ def probe_native_so_abi(path: Path, *, python_minor: str) -> str | None:
         return None
     detail = (proc.stderr or proc.stdout).strip().replace("\n", " ")[:240]
     return f"{path.name}: failed to load with {py} ({kind}): {detail}"
+
+
+def _classify_probe_failure(stderr: str, stdout: str) -> str:
+    combined = f"{stderr}\n{stdout}"
+    lower = combined.lower()
+    if any(m in combined for m in _ABI_MISMATCH_MARKERS):
+        return "abi_mismatch"
+    if any(m.lower() in lower for m in _CUDA_LOAD_MARKERS):
+        return "cuda_runtime"
+    if any(m in combined for m in _ELF_BAD_MARKERS):
+        return "invalid_elf"
+    return "load_failed"
 
 
 def _validate_runtime_cell(
@@ -277,7 +217,11 @@ def validate_native_runtime_matrix(bundle: BundleManifest) -> list[str]:
     return errors
 
 
-def validate_native_runtime_abi(bundle: BundleManifest) -> list[str]:
+def validate_native_runtime_abi(
+    bundle: BundleManifest,
+    *,
+    python_for_minor: PythonForMinorFn | None = None,
+) -> list[str]:
     """Probe-load each tagged ``runtime/<env-key>/*.so`` with its filename Python ABI."""
     errors: list[str] = []
     try:
@@ -293,7 +237,11 @@ def validate_native_runtime_abi(bundle: BundleManifest) -> list[str]:
         arts = list_native_artifacts(native_dir)
         for mod in required:
             for parsed, path in arts.get(mod, []):
-                err = probe_native_so_abi(path, python_minor=parsed.python_minor)
+                err = probe_native_so_abi(
+                    path,
+                    python_minor=parsed.python_minor,
+                    python_for_minor=python_for_minor,
+                )
                 if err:
                     errors.append(err)
     return errors
@@ -304,6 +252,7 @@ def validate_native_runtime(
     *,
     probe_abi: bool = True,
     env_key: str | None = None,
+    python_for_minor: PythonForMinorFn | None = None,
 ) -> list[str]:
     if env_key is None:
         errors = validate_native_runtime_matrix(bundle)
@@ -332,7 +281,11 @@ def validate_native_runtime(
             arts = list_native_artifacts(native_dir)
             for mod in required:
                 for parsed, path in arts.get(mod, []):
-                    err = probe_native_so_abi(path, python_minor=parsed.python_minor)
+                    err = probe_native_so_abi(
+                    path,
+                    python_minor=parsed.python_minor,
+                    python_for_minor=python_for_minor,
+                )
                     if err:
                         errors.append(err)
     return errors

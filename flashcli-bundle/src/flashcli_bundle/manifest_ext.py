@@ -23,6 +23,7 @@ from flashcli_bundle.manifest import (
 )
 
 if TYPE_CHECKING:
+    from flashcli_bundle.native_validate import PythonForMinorFn
     from flashcli_bundle.runtime.detect import GpuInfo
 
 __all__ = [
@@ -122,6 +123,7 @@ def validate_bundle_layout(
     *,
     probe_abi: bool = False,
     env_key: str | None = None,
+    python_for_minor: PythonForMinorFn | None = None,
 ) -> list[str]:
     errors: list[str] = []
     py_root = bundle_python_root(bundle)
@@ -169,7 +171,14 @@ def validate_bundle_layout(
     from flashcli_bundle.manifest import validate_bundle_protocol_version
     from flashcli_bundle.options import validate_bundle_options
 
-    errors.extend(validate_native_runtime(bundle, probe_abi=probe_abi, env_key=env_key))
+    errors.extend(
+        validate_native_runtime(
+            bundle,
+            probe_abi=probe_abi,
+            env_key=env_key,
+            python_for_minor=python_for_minor,
+        )
+    )
     errors.extend(validate_weights_spec(bundle))
     errors.extend(validate_bundle_options(bundle))
     errors.extend(validate_bundle_protocol_version(bundle))
