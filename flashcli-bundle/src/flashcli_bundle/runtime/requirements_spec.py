@@ -18,6 +18,7 @@ _IMPORT_NAMES: dict[str, str] = {
     "pillow": "PIL",
     "pyyaml": "yaml",
     "opencv-python": "cv2",
+    "melband-roformer-infer": "mel_band_roformer",
 }
 
 
@@ -312,39 +313,6 @@ def import_name_for_requirement(spec: str) -> str:
     return _IMPORT_NAMES.get(name, re.sub(r"[-.]", "_", name))
 
 
-def top_level_import_name(spec: str) -> str:
-    return import_name_for_requirement(spec).split(".", 1)[0]
-
-
-def _module_name_candidates(spec: str) -> list[str]:
-    """Import name and normalized PyPI name variants for filesystem lookup."""
-    top = top_level_import_name(spec)
-    req = _req_name(spec)
-    out: list[str] = []
-    for candidate in (top, req, req.replace("-", "_"), req.replace("_", "-")):
-        if candidate and candidate not in out:
-            out.append(candidate)
-    return out
-
-
-def bundle_provides_module(bundle_root: Path, spec: str) -> bool:
-    """True when *bundle_root* ships this module (directory or .py on PYTHONPATH)."""
-    root = bundle_root.expanduser().resolve()
-    if not root.is_dir():
-        return False
-    prefixes = ("", "src", "lib", "vendor", "packages")
-    for top in _module_name_candidates(spec):
-        for prefix in prefixes:
-            base = root / prefix if prefix else root
-            if not base.is_dir():
-                continue
-            if (base / top).is_dir():
-                return True
-            if (base / f"{top}.py").is_file():
-                return True
-    return False
-
-
 def pythonpath_env(bundle_root: Path | None) -> dict[str, str]:
     import os
 
@@ -363,15 +331,8 @@ def requirement_import_satisfied(
     python: Path | str,
     bundle_root: Path | None = None,
 ) -> bool:
-    """True when *spec* is available for the bundle venv.
-
-    Bundle-shipped modules are detected on disk only — do not import them here,
-    because their ``__init__.py`` may require pip deps not installed yet.
-    """
+    """True when a pip spec is installed in *python* (metadata first, then import)."""
     import subprocess
-
-    if bundle_root is not None and bundle_provides_module(bundle_root, spec):
-        return True
 
     mod = import_name_for_requirement(spec)
     py = str(python)
@@ -384,17 +345,23 @@ from packaging.requirements import Requirement
 spec = {spec!r}
 mod = {mod!r}
 req = Requirement(spec)
+
+def distribution_ok() -> bool:
+    try:
+        ver = md.version(req.name)
+    except md.PackageNotFoundError:
+        return False
+    return not req.specifier or ver in req.specifier
+
+# Pip packages may use a different import root than normalized PyPI name
+# (e.g. melband-roformer-infer installs import mel_band_roformer).
+if distribution_ok():
+    raise SystemExit(0)
+
 try:
     __import__(mod)
 except ImportError:
     raise SystemExit(1)
-if req.specifier:
-    try:
-        ver = md.version(req.name)
-    except md.PackageNotFoundError:
-        raise SystemExit(1)
-    if ver not in req.specifier:
-        raise SystemExit(1)
 raise SystemExit(0)
 """
     proc = subprocess.run(
@@ -413,11 +380,8 @@ def requirement_needs_pip_install(
     bundle_root: Path | None = None,
     force: bool = False,
 ) -> bool:
-    """False for bundle-local modules (PYTHONPATH at runtime, not PyPI)."""
     if force:
         return True
-    if bundle_root is not None and bundle_provides_module(bundle_root, spec):
-        return False
     return not requirement_import_satisfied(
         spec, python=python, bundle_root=bundle_root
     )

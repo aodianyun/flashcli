@@ -297,9 +297,11 @@ def ensure_runtime_python_stack(
             spec, python=python, bundle_root=bundle_root
         )
     if missing:
-        names = ", ".join(import_name_for_requirement(p) for p in missing)
+        details = ", ".join(
+            f"{p} (import {import_name_for_requirement(p)})" for p in missing
+        )
         raise RuntimeError(
-            f"Bundle Python dependencies still missing after pip install: {names}\n"
+            f"Bundle Python dependencies still missing after pip install: {details}\n"
             f"Spec source: {spec.source}\n"
             "Try: flashcli bundle install <path>"
         )
