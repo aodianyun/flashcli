@@ -489,6 +489,23 @@ def pull(
     )
 
 
+def _emit_bundle_help_and_exit(
+    preset: Preset,
+    bundle_path: Path | None,
+    *,
+    command: str,
+) -> None:
+    """Print bundle-specific help from manifest only (host; no infer re-exec)."""
+    from flashcli.bundle.run_help import format_command_help
+
+    try:
+        typer.echo(format_command_help(preset, bundle_path, command=command))
+    except FileNotFoundError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+    raise typer.Exit(0)
+
+
 @app.command(
     add_help_option=False,
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
@@ -507,14 +524,16 @@ def run() -> None:
     if _auto_install_flag(flags.no_auto_install):
         ensure_environment(install_flashcli=True, quiet=flags.quiet)
 
-    if not flags.wants_help:
-        _ensure_host_weights_before_reexec(
-            p,
-            bundle=default_bundle,
-            checkpoint=flags.checkpoint,
-            mtp_checkpoint=flags.mtp_checkpoint,
-            quiet=flags.quiet,
-        )
+    if flags.wants_help:
+        _emit_bundle_help_and_exit(p, default_bundle, command="run")
+
+    _ensure_host_weights_before_reexec(
+        p,
+        bundle=default_bundle,
+        checkpoint=flags.checkpoint,
+        mtp_checkpoint=flags.mtp_checkpoint,
+        quiet=flags.quiet,
+    )
     ensure_bundle_runtime_and_reexec(
         p, bundle_path=default_bundle, quiet=flags.quiet
     )
@@ -538,14 +557,16 @@ def serve() -> None:
     if _auto_install_flag(flags.no_auto_install):
         ensure_environment(install_flashcli=True, quiet=flags.quiet)
 
-    if not flags.wants_help:
-        _ensure_host_weights_before_reexec(
-            p,
-            bundle=default_bundle,
-            checkpoint=flags.checkpoint,
-            mtp_checkpoint=flags.mtp_checkpoint,
-            quiet=flags.quiet,
-        )
+    if flags.wants_help:
+        _emit_bundle_help_and_exit(p, default_bundle, command="serve")
+
+    _ensure_host_weights_before_reexec(
+        p,
+        bundle=default_bundle,
+        checkpoint=flags.checkpoint,
+        mtp_checkpoint=flags.mtp_checkpoint,
+        quiet=flags.quiet,
+    )
     ensure_bundle_runtime_and_reexec(
         p, bundle_path=default_bundle, quiet=flags.quiet
     )

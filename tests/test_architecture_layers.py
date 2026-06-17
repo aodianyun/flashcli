@@ -144,6 +144,13 @@ def test_host_config_defines_paths_once() -> None:
     assert "from flashcli_bundle.paths import" in text
 
 
+def test_run_help_module_uses_protocol_only() -> None:
+    text = (HOST_SRC / "bundle" / "run_help.py").read_text(encoding="utf-8")
+    assert "flashcli_bundle.infer" not in text
+    assert "flashcli_bundle.manifest_resolve" in text
+    assert "flashcli_bundle.help_text" in text
+
+
 @pytest.mark.parametrize(
     "rel",
     [

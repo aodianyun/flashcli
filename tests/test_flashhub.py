@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from flashcli.bundle.flashhub import (
+from flashcli_bundle.flashhub import (
     RepoIndex,
     _parse_index_payload,
     _path_from_download_url,
 )
+from flashcli.bundle.flashhub import download_manifest_from_repo
 
 
 def test_path_from_download_url() -> None:
@@ -76,7 +77,7 @@ def test_parse_flashhub_api_error() -> None:
 
 
 def test_download_manifest_mock(tmp_path: Path, monkeypatch) -> None:
-    from flashcli.bundle import flashhub
+    from flashcli_bundle import flashhub
 
     manifest = {"format": "flashcli-model-bundle", "format_version": 3, "protocol_version": 1, "name": "t"}
 

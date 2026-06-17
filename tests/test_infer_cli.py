@@ -444,7 +444,7 @@ def test_resolve_manifest_skips_stale_cached_repo(
     )
 
     monkeypatch.setattr(
-        "flashcli_bundle.infer.bundle.flashhub.download_manifest_from_repo",
+        "flashcli_bundle.manifest_resolve.download_manifest_from_repo",
         lambda _repo, _dest, **kw: fresh,
     )
 
@@ -494,7 +494,7 @@ def test_resolve_manifest_skips_cache_missing_protocol_version(
         cache_key="pi05_libero/1.0.4",
     )
     monkeypatch.setattr(
-        "flashcli_bundle.infer.bundle.flashhub.download_manifest_from_repo",
+        "flashcli_bundle.manifest_resolve.download_manifest_from_repo",
         lambda _repo, _dest, **kw: fresh,
     )
 
