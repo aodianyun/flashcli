@@ -33,6 +33,30 @@ def ms_endpoint_from_spec(spec: Mapping[str, Any]) -> tuple[str, bool]:
     return "", False
 
 
+def modelscope_revision_attempts(revision: str | None) -> list[str | None]:
+    """Revision candidates for ModelScope (HF ``main`` → ``master``)."""
+    if revision is None:
+        return [None]
+    rev = str(revision).strip()
+    if not rev:
+        return [None]
+    if rev.lower() == "main":
+        return ["master", None]
+    out: list[str | None] = [rev]
+    if rev.lower() == "master":
+        out.append(None)
+    elif rev not in ("master",):
+        out.append(None)
+    return out
+
+
+def is_ms_revision_not_found(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return "no revision" in msg or (
+        type(exc).__name__ == "NotExistError" and "revision" in msg
+    )
+
+
 @contextlib.contextmanager
 def _ms_download_env(endpoint: str) -> Iterator[None]:
     prev_endpoint = os.environ.get("MODELSCOPE_ENDPOINT")

@@ -17,7 +17,12 @@ from flashcli.models.hf_hub import (
     filter_download_endpoints,
     run_hf_cli_download,
 )
-from flashcli.models.ms_hub import ms_endpoint_from_spec, run_ms_snapshot_download
+from flashcli.models.ms_hub import (
+    is_ms_revision_not_found,
+    modelscope_revision_attempts,
+    ms_endpoint_from_spec,
+    run_ms_snapshot_download,
+)
 from flashcli.models.preset_ref import preset_cache_key
 from flashcli.models.registry import Preset
 from flashcli.util.hub_quiet import hf_download_verbose, suppress_hub_side_logs
@@ -54,8 +59,9 @@ def _prepare_download_dest(
     quiet: bool,
     allow_patterns: list[str] | None = None,
     require_norm_stats: bool = False,
+    source: str = "huggingface",
 ) -> None:
-    """Ensure dest exists; keep partial Hub downloads so ``hf download`` can resume."""
+    """Ensure dest exists; keep partial downloads so the hub client can resume."""
     from flashcli.bundle.checkpoint import has_cached_weight_files
 
     if not dest.exists():
@@ -71,8 +77,9 @@ def _prepare_download_dest(
         entry_count = 0
     if entry_count:
         if not quiet:
+            hub = "ModelScope" if source == "modelscope" else "HuggingFace"
             print(
-                f"Resuming incomplete HuggingFace download "
+                f"Resuming incomplete {hub} download "
                 f"({entry_count} cached entries): {dest}",
                 file=sys.stderr,
             )
@@ -275,47 +282,62 @@ def _download_modelscope(
         quiet=quiet,
         allow_patterns=patterns,
         require_norm_stats=require_ns,
+        source="modelscope",
     )
     revision = spec.get("revision")
-    rev = str(revision) if revision else None
+    rev = str(revision).strip() if revision else None
     endpoint, _explicit = ms_endpoint_from_spec(spec)
 
     errors: list[tuple[str, Exception]] = []
     max_retries = _ms_download_retries()
+    label = endpoint or "modelscope.cn"
+    rev_attempts = modelscope_revision_attempts(rev)
     with suppress_hub_side_logs():
-        last_exc: Exception | None = None
-        label = endpoint or "modelscope.cn"
-        for attempt in range(max_retries):
-            try:
-                run_ms_snapshot_download(
-                    model_id,
-                    dest,
-                    revision=rev,
-                    allow_patterns=patterns,
-                    endpoint=endpoint,
-                    quiet=quiet,
-                )
-                if has_cached_weight_files(
-                    dest, patterns, require_norm_stats=require_ns
-                ):
-                    return
-                last_exc = RuntimeError(
-                    "ModelScope download finished but checkpoint files are missing"
-                )
-            except Exception as exc:
-                last_exc = exc
-            if attempt + 1 >= max_retries:
+        for rev_idx, rev_try in enumerate(rev_attempts):
+            rev_label = rev_try or "(default)"
+            last_exc: Exception | None = None
+            for attempt in range(max_retries):
+                try:
+                    run_ms_snapshot_download(
+                        model_id,
+                        dest,
+                        revision=rev_try,
+                        allow_patterns=patterns,
+                        endpoint=endpoint,
+                        quiet=quiet,
+                    )
+                    if has_cached_weight_files(
+                        dest, patterns, require_norm_stats=require_ns
+                    ):
+                        return
+                    last_exc = RuntimeError(
+                        "ModelScope download finished but checkpoint files are missing"
+                    )
+                except Exception as exc:
+                    last_exc = exc
+                if last_exc is not None and is_ms_revision_not_found(last_exc):
+                    if not quiet and rev_idx + 1 < len(rev_attempts):
+                        print(
+                            f"ModelScope revision {rev_label!r} not found for "
+                            f"{model_id!r}; trying next revision ...",
+                            file=sys.stderr,
+                        )
+                    break
+                if attempt + 1 >= max_retries:
+                    break
+                if not quiet:
+                    print(
+                        f"ModelScope download failed ({label}), "
+                        f"retry {attempt + 2}/{max_retries} in "
+                        f"{_hf_retry_sleep(attempt):.0f}s ...",
+                        file=sys.stderr,
+                    )
+                time.sleep(_hf_retry_sleep(attempt))
+            if last_exc is not None:
+                errors.append((f"{label} revision={rev_label}", last_exc))
+                if is_ms_revision_not_found(last_exc):
+                    continue
                 break
-            if not quiet:
-                print(
-                    f"ModelScope download failed ({label}), "
-                    f"retry {attempt + 2}/{max_retries} in "
-                    f"{_hf_retry_sleep(attempt):.0f}s ...",
-                    file=sys.stderr,
-                )
-            time.sleep(_hf_retry_sleep(attempt))
-        if last_exc is not None:
-            errors.append((label, last_exc))
 
     rev_note = f" revision={revision!r}" if revision else ""
     attempts = "\n".join(
@@ -328,6 +350,7 @@ def _download_modelscope(
         "  Checks:\n"
         "  - pip install 'modelscope>=1.11'\n"
         "  - Gated model: set MODELSCOPE_API_TOKEN\n"
+        "  - ModelScope uses branch master (not HF main); revision main is auto-mapped\n"
         "  - Custom endpoint: export MODELSCOPE_ENDPOINT=https://www.modelscope.cn\n"
         "  - Partial download: re-run `flashcli pull` to resume (cache is kept)\n"
         "  - Local weights: flashcli run <preset> --checkpoint /path/to/ckpt"
