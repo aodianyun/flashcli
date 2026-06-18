@@ -18,6 +18,16 @@ def test_mtp_safetensors_only_is_usable(tmp_path: Path) -> None:
     assert has_cached_weight_files(dest, ["mtp.safetensors"])
 
 
+def test_pytorch_ckpt_is_usable(tmp_path: Path) -> None:
+    dest = tmp_path / "melband"
+    dest.mkdir()
+    (dest / "MelBandRoformer.ckpt").write_bytes(b"fake")
+    (dest / "config_vocals_mel_band_roformer.yaml").write_text("x: 1\n")
+
+    assert has_usable_checkpoint(dest)
+    assert has_cached_weight_files(dest, None)
+
+
 def test_mtp_download_skipped_when_cached(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("HF_ENDPOINT", "https://hf-mirror.com")
     dest = tmp_path / "mtp_fp8"

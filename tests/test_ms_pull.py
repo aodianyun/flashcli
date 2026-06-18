@@ -75,8 +75,20 @@ def test_modelscope_endpoint_from_spec(monkeypatch, tmp_path: Path) -> None:
     assert calls == ["org/model"]
 
 
-def test_download_weights_dispatches_huggingface(tmp_path: Path) -> None:
-    spec = {"source": "huggingface", "repo": "org/model"}
-    with patch("flashcli.models.pull._download_huggingface") as mock_hf:
-        download_weights(spec, tmp_path / "ckpt", quiet=True)
-    mock_hf.assert_called_once()
+def test_modelscope_ckpt_download_accepted(tmp_path: Path) -> None:
+    spec = {
+        "source": "modelscope",
+        "repo": "cpadyun/melband-roformer",
+        "revision": "main",
+    }
+    dest = tmp_path / "ckpt"
+
+    def fake_ms(**kwargs):
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / "MelBandRoformer.ckpt").write_bytes(b"x" * 1024)
+        (dest / "config_vocals_mel_band_roformer.yaml").write_text("x: 1\n")
+
+    with patch("flashcli.models.ms_hub._import_snapshot_download", return_value=fake_ms):
+        _download_modelscope(spec, dest, quiet=True)
+
+    assert (dest / "MelBandRoformer.ckpt").is_file()

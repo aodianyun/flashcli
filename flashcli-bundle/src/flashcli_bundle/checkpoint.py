@@ -58,6 +58,8 @@ def has_checkpoint_weight_files(path: Path) -> bool:
         return True
     if (path / "mtp.safetensors").is_file():
         return True
+    if any(path.glob("*.ckpt")):
+        return True
     return False
 
 
