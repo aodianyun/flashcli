@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from flashcli.models.preset_ref import cache_key, parse_preset_ref, resolve_preset
@@ -85,3 +87,24 @@ def test_parse_bundle_path_arg() -> None:
         "qwen36",
     )
     assert parse_bundle_path_arg("bundles/qwen_nvfp4") == ("bundles/qwen_nvfp4", None)
+
+
+def test_resolve_bundle_root_dotdot_relative(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from flashcli.models.preset_ref import resolve_bundle_root, resolve_run_target
+
+    bundle_root = tmp_path / "runtimes" / "pi05_libero-abc" / "root"
+    bundle_root.mkdir(parents=True)
+    (bundle_root / "flashcli-bundle.json").write_text("{}", encoding="utf-8")
+
+    work = tmp_path / "app"
+    work.mkdir()
+    monkeypatch.chdir(work)
+
+    rel = "../runtimes/pi05_libero-abc/root"
+    assert resolve_bundle_root(Path(rel)) == bundle_root.resolve()
+
+    preset, path = resolve_run_target(f"{rel}/")
+    assert path == bundle_root.resolve()
+    assert preset.raw["bundle"]["local_root"] == str(bundle_root.resolve())

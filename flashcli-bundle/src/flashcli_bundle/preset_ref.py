@@ -110,10 +110,27 @@ def is_flashhub_ref(raw: str) -> bool:
 
 
 def resolve_bundle_root(path: Path) -> Path:
+    """Resolve a local bundle directory path.
+
+    Relative paths are tried against the current working directory first (so
+    ``../.flashcli/runtimes/...`` works), then against :func:`package_root`
+    for dev shorthands like ``bundles/qwen_nvfp4``.
+    """
     raw = path.expanduser()
     if raw.is_absolute():
         return raw.resolve()
-    return (config.package_root() / raw).resolve()
+
+    from flashcli_bundle.layout import is_bundle_root
+
+    cwd_candidate = raw.resolve()
+    if is_bundle_root(cwd_candidate):
+        return cwd_candidate
+
+    package_candidate = (config.package_root() / raw).resolve()
+    if is_bundle_root(package_candidate):
+        return package_candidate
+
+    return cwd_candidate
 
 
 def _is_bundle_root(path: Path) -> bool:
