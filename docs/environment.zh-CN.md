@@ -56,6 +56,18 @@ flashcli models list
 
 权重下载与 `hf download` 相同；失败时请先用相同 `HF_ENDPOINT` 手动试一次 CLI。
 
+## ModelScope（魔搭）
+
+manifest 中 `weights.source` / `extra_weights.source` 设为 `"modelscope"` 时，由主机 CLI 调用 ModelScope SDK 拉取（`repo` 为魔搭 model id，如 `Qwen/Qwen2-7B`）。
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `MODELSCOPE_ENDPOINT` | （官方） | 自定义魔搭 API 端点；manifest 里 `weights.endpoint` 优先级更高。 |
+| `MODELSCOPE_API_TOKEN` | （无） | 魔搭访问令牌（gated 模型）。 |
+| `FLASHCLI_MS_DOWNLOAD_RETRIES` | `3` | ModelScope 下载重试次数。 |
+
+`install.sh` 会安装 `modelscope>=1.11`（与 `huggingface_hub` 同为 host 权重依赖）。
+
 `install.sh` / `auto_install.sh` 从 git 安装 `flashcli-bundle`，再装 `flashcli`（`--no-deps`）与运行时依赖（含 `huggingface_hub>=0.26`，提供 `hf` / `huggingface-cli`）。
 
 ## 行为开关

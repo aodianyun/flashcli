@@ -185,7 +185,7 @@ bundle venv 的 Python 版本由 `python_abi` 决定，与主机 CLI Python 版�
 
 | 字段 | 说明 |
 |------|------|
-| `source` | 当前支持 `"huggingface"` |
+| `source` | 当前支持 `"huggingface"`、`"modelscope"` |
 | `repo` / `revision` | Hugging Face 模型 id 与分支/提交 |
 | `require_norm_stats` | 可选；VLA 等需 norm stats 时为 `true` |
 

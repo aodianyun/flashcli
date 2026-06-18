@@ -86,7 +86,9 @@ def validate_weights_spec(bundle: BundleManifest) -> list[str]:
                 )
                 continue
             source = str(spec.get("source", "huggingface")).lower()
-            if source == "huggingface" and not str(spec.get("repo", "")).strip():
+            if source in ("huggingface", "modelscope") and not str(
+                spec.get("repo", "")
+            ).strip():
                 errors.append(f"variants.{name}.weights.repo is required")
         return errors
 
@@ -104,9 +106,9 @@ def validate_weights_spec(bundle: BundleManifest) -> list[str]:
         return errors
 
     source = str(weights.get("source", "huggingface")).lower()
-    if source == "huggingface":
+    if source in ("huggingface", "modelscope"):
         if not str(weights.get("repo", "")).strip():
-            errors.append("weights.repo is required when source is huggingface")
+            errors.append(f"weights.repo is required when source is {source}")
     elif source == "url":
         if not str(weights.get("url", "")).strip():
             errors.append("weights.url is required when source is url")

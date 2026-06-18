@@ -1787,6 +1787,7 @@ install_flashcli_runtime_deps() {
     'pyyaml>=6.0' \
     'packaging>=23.0' \
     'huggingface_hub>=0.26' \
+    'modelscope>=1.11' \
     'tqdm>=4.66'
   if [ -n "${FLASHCLI_PIP_USER_FLAG:-}" ]; then
     set -- "$@" --user

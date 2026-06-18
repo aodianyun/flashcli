@@ -1,11 +1,11 @@
-"""Resolve and download model weights (host: HuggingFace download)."""
+"""Resolve and download model weights (host: HuggingFace / ModelScope download)."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
-from flashcli.models.pull import _allow_patterns, _download_huggingface, _write_marker
+from flashcli.models.pull import _allow_patterns, _write_marker, download_weights
 from flashcli_bundle import weights as _w
 from flashcli_bundle.checkpoint import has_cached_weight_files, weights_require_norm_stats
 from flashcli_bundle.manifest import BundleManifest
@@ -49,14 +49,11 @@ def download_extra_weights(
 
             dest = config.MODELS_DIR / cache_name
         dest.mkdir(parents=True, exist_ok=True)
-        source = str(spec.get("source", "huggingface")).lower()
-        if source != "huggingface":
-            raise NotImplementedError(f"Unsupported extra weights source: {source!r}")
         patterns = _allow_patterns(spec)
         require_ns = weights_require_norm_stats(spec)
         if has_cached_weight_files(dest, patterns, require_norm_stats=require_ns):
             continue
-        _download_huggingface(spec, dest, quiet=quiet)
+        download_weights(spec, dest, quiet=quiet)
 
 
 def download_merged_weights(
@@ -69,19 +66,8 @@ def download_merged_weights(
         raise ValueError(
             "No weights download spec (set weights in flashcli-bundle.json)"
         )
-    source = str(spec.get("source", "huggingface")).lower()
     dest.mkdir(parents=True, exist_ok=True)
-    if source == "huggingface":
-        _download_huggingface(spec, dest, quiet=quiet)
-        return
-    if source == "url":
-        url = str(spec.get("url", "")).strip()
-        if not url:
-            raise ValueError("weights.url required when source is 'url'")
-        raise NotImplementedError(
-            "weights.source=url is reserved; use huggingface repo for now"
-        )
-    raise NotImplementedError(f"Unsupported weights source: {source!r}")
+    download_weights(spec, dest, quiet=quiet)
 
 
 def ensure_checkpoint(

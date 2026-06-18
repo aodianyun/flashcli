@@ -1,4 +1,4 @@
-"""Download model weights from HuggingFace into the flashcli cache."""
+"""Download model weights from HuggingFace or ModelScope into the flashcli cache."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from flashcli.models.hf_hub import (
     filter_download_endpoints,
     run_hf_cli_download,
 )
+from flashcli.models.ms_hub import ms_endpoint_from_spec, run_ms_snapshot_download
 from flashcli.models.preset_ref import preset_cache_key
 from flashcli.models.registry import Preset
 from flashcli.util.hub_quiet import hf_download_verbose, suppress_hub_side_logs
@@ -101,6 +102,34 @@ def _allow_patterns(spec: dict[str, Any]) -> list[str] | None:
     if isinstance(patterns, list) and patterns:
         return [str(p) for p in patterns]
     return None
+
+
+def _weights_source(spec: dict[str, Any]) -> str:
+    return str(spec.get("source", "huggingface")).lower()
+
+
+def download_weights(
+    spec: dict[str, Any],
+    dest: Path,
+    *,
+    quiet: bool,
+) -> None:
+    """Download weights per manifest ``weights`` / ``extra_weights`` spec."""
+    source = _weights_source(spec)
+    if source == "huggingface":
+        _download_huggingface(spec, dest, quiet=quiet)
+        return
+    if source == "modelscope":
+        _download_modelscope(spec, dest, quiet=quiet)
+        return
+    if source == "url":
+        url = str(spec.get("url", "")).strip()
+        if not url:
+            raise ValueError("weights.url required when source is 'url'")
+        raise NotImplementedError(
+            "weights.source=url is reserved; use huggingface or modelscope repo"
+        )
+    raise NotImplementedError(f"Unsupported weights source: {source!r}")
 
 
 def _download_huggingface(
@@ -211,6 +240,100 @@ def _download_huggingface(
     )
 
 
+def _ms_download_retries() -> int:
+    raw = os.environ.get("FLASHCLI_MS_DOWNLOAD_RETRIES", "3").strip()
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 3
+
+
+def _download_modelscope(
+    spec: dict[str, Any],
+    dest: Path,
+    *,
+    quiet: bool,
+) -> None:
+    model_id = str(spec.get("repo", "")).strip()
+    if not model_id:
+        raise ValueError("ModelScope weights spec requires non-empty 'repo'")
+
+    from flashcli.bundle.checkpoint import (
+        has_cached_weight_files,
+        weights_require_norm_stats,
+    )
+
+    patterns = _allow_patterns(spec)
+    require_ns = weights_require_norm_stats(spec)
+    if has_cached_weight_files(dest, patterns, require_norm_stats=require_ns):
+        if not quiet:
+            print(f"Weights already cached: {dest}", file=sys.stderr)
+        return
+
+    _prepare_download_dest(
+        dest,
+        quiet=quiet,
+        allow_patterns=patterns,
+        require_norm_stats=require_ns,
+    )
+    revision = spec.get("revision")
+    rev = str(revision) if revision else None
+    endpoint, _explicit = ms_endpoint_from_spec(spec)
+
+    errors: list[tuple[str, Exception]] = []
+    max_retries = _ms_download_retries()
+    with suppress_hub_side_logs():
+        last_exc: Exception | None = None
+        label = endpoint or "modelscope.cn"
+        for attempt in range(max_retries):
+            try:
+                run_ms_snapshot_download(
+                    model_id,
+                    dest,
+                    revision=rev,
+                    allow_patterns=patterns,
+                    endpoint=endpoint,
+                    quiet=quiet,
+                )
+                if has_cached_weight_files(
+                    dest, patterns, require_norm_stats=require_ns
+                ):
+                    return
+                last_exc = RuntimeError(
+                    "ModelScope download finished but checkpoint files are missing"
+                )
+            except Exception as exc:
+                last_exc = exc
+            if attempt + 1 >= max_retries:
+                break
+            if not quiet:
+                print(
+                    f"ModelScope download failed ({label}), "
+                    f"retry {attempt + 2}/{max_retries} in "
+                    f"{_hf_retry_sleep(attempt):.0f}s ...",
+                    file=sys.stderr,
+                )
+            time.sleep(_hf_retry_sleep(attempt))
+        if last_exc is not None:
+            errors.append((label, last_exc))
+
+    rev_note = f" revision={revision!r}" if revision else ""
+    attempts = "\n".join(
+        f"  - {ep}: {type(err).__name__}: {err}" for ep, err in errors
+    )
+    raise RuntimeError(
+        f"Failed to download ModelScope model {model_id!r}{rev_note} -> {dest}\n"
+        "  Attempts:\n"
+        f"{attempts}\n"
+        "  Checks:\n"
+        "  - pip install 'modelscope>=1.11'\n"
+        "  - Gated model: set MODELSCOPE_API_TOKEN\n"
+        "  - Custom endpoint: export MODELSCOPE_ENDPOINT=https://www.modelscope.cn\n"
+        "  - Partial download: re-run `flashcli pull` to resume (cache is kept)\n"
+        "  - Local weights: flashcli run <preset> --checkpoint /path/to/ckpt"
+    )
+
+
 def _run_post_pull(preset: Preset, checkpoint_dir: Path, *, quiet: bool) -> None:
     from flashcli.models.post_pull import run_post_pull_steps
 
@@ -238,11 +361,7 @@ def download_preset(preset: Preset, *, quiet: bool = False) -> Path:
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     weights = preset.raw.get("weights") or {}
-    source = str(weights.get("source", "huggingface")).lower()
-    if source != "huggingface":
-        raise NotImplementedError(f"Unsupported weights source: {source!r}")
-
-    _download_huggingface(weights, checkpoint_dir, quiet=quiet)
+    download_weights(weights, checkpoint_dir, quiet=quiet)
 
     extra_pull = preset.raw.get("extra_pull") or {}
     if isinstance(extra_pull, dict):
@@ -256,7 +375,7 @@ def download_preset(preset: Preset, *, quiet: bool = False) -> Path:
                 continue
             cache_name = str(spec.get("cache_name", _key))
             extra_dir = config.MODELS_DIR / cache_name
-            _download_huggingface(spec, extra_dir, quiet=quiet)
+            download_weights(spec, extra_dir, quiet=quiet)
 
     _write_marker(cache_dir, preset.name, checkpoint_dir)
     _run_post_pull(preset, checkpoint_dir, quiet=quiet)

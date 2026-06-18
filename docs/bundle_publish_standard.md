@@ -185,7 +185,7 @@ The bundle venv Python version is fixed by `python_abi`, independent of the host
 
 | Field | Description |
 |-------|-------------|
-| `source` | Currently `"huggingface"` |
+| `source` | Supported: `"huggingface"`, `"modelscope"` |
 | `repo` / `revision` | Hugging Face model id and branch/commit |
 | `require_norm_stats` | Optional; set `true` for VLA policies that need norm stats |
 

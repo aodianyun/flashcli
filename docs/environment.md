@@ -55,6 +55,18 @@ flashcli models list
 
 Weight download behavior matches `hf download`; on failures, test the same `HF_ENDPOINT` manually with Hub CLI.
 
+## ModelScope
+
+When `weights.source` / `extra_weights.source` is `"modelscope"`, the host CLI pulls via the ModelScope SDK (`repo` is the ModelScope model id).
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MODELSCOPE_ENDPOINT` | (official) | Custom ModelScope API endpoint; manifest `weights.endpoint` overrides. |
+| `MODELSCOPE_API_TOKEN` | (none) | ModelScope token for gated models. |
+| `FLASHCLI_MS_DOWNLOAD_RETRIES` | `3` | ModelScope download retries. |
+
+`install.sh` installs `modelscope>=1.11` alongside `huggingface_hub` for host weight pulls.
+
 `install.sh` / `auto_install.sh` install `flashcli-bundle` from git, then `flashcli` (`--no-deps`) and runtime deps including `huggingface_hub>=0.26` (`hf` / `huggingface-cli`). Post-install verification also checks Hub CLI availability; if scripts dir is not on `PATH`, flashcli falls back to `python -m huggingface_hub.cli.hf`.
 
 ## Behavior switches
