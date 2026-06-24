@@ -53,9 +53,9 @@ def has_local_weights(
             continue
         if entry.name == ".cache":
             continue
-        if entry.is_file():
-            return True
-        if entry.is_dir() and has_usable_checkpoint(entry):
+        if entry.is_dir() and has_usable_checkpoint(
+            entry, require_norm_stats=require_ns
+        ):
             return True
     return False
 

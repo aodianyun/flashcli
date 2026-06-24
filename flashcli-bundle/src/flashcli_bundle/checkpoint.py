@@ -50,11 +50,27 @@ def _matches_allow_pattern(path: Path, pattern: str) -> bool:
     return (path / pattern).is_file()
 
 
+def _is_sidecar_safetensors(name: str) -> bool:
+    """True for pi05/lerobot processor sidecars, not main model weights."""
+    lower = name.lower()
+    return any(
+        token in lower
+        for token in ("normalizer", "unnormalizer", "processor", "preprocessor", "postprocessor")
+    )
+
+
+def _has_main_safetensors(path: Path) -> bool:
+    return any(
+        entry.is_file() and not _is_sidecar_safetensors(entry.name)
+        for entry in path.glob("*.safetensors")
+    )
+
+
 def has_checkpoint_weight_files(path: Path) -> bool:
     for name in _CHECKPOINT_WEIGHT_FILES:
         if (path / name).is_file():
             return True
-    if (path / "config.json").is_file() and any(path.glob("*.safetensors")):
+    if (path / "config.json").is_file() and _has_main_safetensors(path):
         return True
     if (path / "mtp.safetensors").is_file():
         return True

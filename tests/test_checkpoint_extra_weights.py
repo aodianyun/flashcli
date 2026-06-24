@@ -44,6 +44,33 @@ def test_mtp_download_skipped_when_cached(monkeypatch, tmp_path: Path) -> None:
     mock_dl.assert_not_called()
 
 
+def test_pi05_incomplete_sidecars_resume_download(monkeypatch, tmp_path: Path) -> None:
+    """Incomplete pi05 cache must not skip ``hf download``."""
+    monkeypatch.setenv("HF_ENDPOINT", "https://hf-mirror.com")
+    dest = tmp_path / "checkpoint"
+    dest.mkdir()
+    (dest / "config.json").write_text("{}", encoding="utf-8")
+    (dest / "policy_preprocessor_step_2_normalizer_processor.safetensors").write_bytes(
+        b"x"
+    )
+    (dest / "policy_postprocessor_step_0_unnormalizer_processor.safetensors").write_bytes(
+        b"x"
+    )
+    spec = {
+        "repo": "lerobot/pi05_libero_finetuned_v044",
+        "require_norm_stats": True,
+    }
+
+    with patch("flashcli.models.pull.run_hf_cli_download") as mock_dl:
+        def _write_weights(*_args, **_kwargs) -> None:
+            (dest / "model.safetensors").write_bytes(b"x")
+
+        mock_dl.side_effect = _write_weights
+        _download_huggingface(spec, dest, quiet=True)
+
+    mock_dl.assert_called_once()
+
+
 def test_mtp_incomplete_cache_is_resumed_before_download(
     monkeypatch, tmp_path: Path
 ) -> None:
