@@ -159,6 +159,13 @@ def validate_bundle_layout(
     ):
         if spec is None:
             continue
+        entry_raw = (bundle.raw.get("entry") or {}).get(cap)
+        if isinstance(entry_raw, dict):
+            raw_mode = str(entry_raw.get("mode", "engine")).strip().lower() or "engine"
+            if raw_mode not in ("engine", "script"):
+                errors.append(
+                    f"entry.{cap}.mode must be 'engine' or 'script', got {raw_mode!r}"
+                )
         mod_path = _entry_module_path(bundle, spec)
         if mod_path is None or not mod_path.is_file():
             errors.append(

@@ -21,6 +21,12 @@ class HostRunFlags:
     wants_help: bool = False
 
 
+@dataclass
+class ScriptHostFlags:
+    checkpoint: Path | None = None
+    wants_help: bool = False
+
+
 def resolve_run_from_argv(
     argv: list[str],
     *,
@@ -76,6 +82,19 @@ def peel_host_run_flags(argv: list[str], *, command: str) -> HostRunFlags:
         mtp_checkpoint=ns.mtp_checkpoint,
         wants_help=ns.help,
     )
+
+
+def peel_script_host_flags(argv: list[str], *, command: str) -> ScriptHostFlags:
+    """Extract script-mode host flags (checkpoint + help only) before re-exec."""
+    rest = list(argv)
+    if rest and rest[0] == command:
+        rest = rest[1:]
+    wants_help = "--help" in rest or "-h" in rest
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("ref", nargs="?")
+    parser.add_argument("--checkpoint", type=Path)
+    ns, _ = parser.parse_known_args(rest)
+    return ScriptHostFlags(checkpoint=ns.checkpoint, wants_help=wants_help)
 
 
 def generic_run_usage(command: str) -> str:

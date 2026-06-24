@@ -99,9 +99,11 @@ sequenceDiagram
   Note over Infer: bundle venv: flashcli-bundle[infer] only
   Infer->>Act: activate_bundle
   Infer->>Cache: ensure_model_cached + post_pull
-  Infer->>Ldr: entry.run.RunEngine
+  Infer->>Ldr: entry.run (engine: RunEngine; script: main(argv))
   Ldr->>U: actions
 ```
+
+**Entry modes**: `engine` (default) loads `RunEngine`/`ServeEngine` and parses manifest CLI options; `script` passes argv through to the bundle entry script; the host only uses `--checkpoint` for weight pull.
 
 **Resolution order**: local positional path (directory with `flashcli-bundle.json`) > synced runtime cache (`FLASHCLI_BUNDLE_ROOT` / preset marker); FlashHub ref `repo` is populated via `bundle sync`.
 

@@ -127,12 +127,26 @@ flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
 }
 ```
 
+可选 **`mode`**：`"engine"`（默认）或 `"script"`。engine 模式走 `RunEngine`/`ServeEngine` 协议与 flashcli 内置 HTTP 栈；script 模式将 `run|serve` 的 argv（去掉 REF 后）原样传给 `attr` 指向的可调用对象（通常为 `main`），`run_options`/`serve_options` 仅用于 `flashcli run|serve <ref> --help` 文档。
+
+script 示例：
+
+```json
+"entry": {
+  "run":  { "module": "run",  "attr": "main", "mode": "script" },
+  "serve": { "module": "serve", "attr": "main", "mode": "script" }
+}
+```
+
 | 子字段 | 说明 |
 |--------|------|
 | `module` | 相对 bundle 根的 Python 模块名（不含 `.py`），如 `"run"` → `run.py` |
-| `attr` | 模块内暴露的类名，须实现对应协议（见 §4） |
+| `attr` | engine 模式：类名（`RunEngine`/`ServeEngine`）；script 模式：可调用入口（如 `main`） |
+| `mode` | 可选，`engine`（默认）或 `script` |
 
 能力由 `entry` 推断：有 `run` 即支持 `flashcli run`；有 `serve` 即支持 `flashcli serve`。
+
+entry 执行前由 flashcli 注入、供 bundle 代码读取的环境变量见 **§4.4**（engine 与 script 不同）。
 
 ### 3.3 `variants`（多 preset 共用同一 repo）
 
@@ -149,7 +163,7 @@ variant 块常用字段：
 | `weights_dir` | 权重在本地 cache 下的子目录名（相对 preset） |
 | `weights` | `{ "source": "huggingface", "repo": "…", "revision": "…" }` |
 | `extra_weights` | 附加权重（如 Qwen MTP），结构同 weights，可加 `cache_name`、`allow_patterns` |
-| `env` | 激活 bundle 时写入进程环境，支持 `{models_dir}`、`{bundle_root}` 占位符 |
+| `env` | **Engine 模式**：entry 执行前写入进程环境，支持 `{models_dir}`、`{bundle_root}`（见 §4.4.2）。Script 模式不应用 manifest `env`（见 §4.4.1）。 |
 | `run_options` / `serve_options` | 该 variant 专属 CLI 参数（结构见 §3.5） |
 
 ### 3.4 `python_dependencies`
@@ -271,10 +285,29 @@ variants 完整示例见仓库 `bundles/qwen_nvfp4/flashcli-bundle.json`。
 ### 4.1 模块位置与 import
 
 - `entry.*.module` 对应 bundle 根下的 `{module}.py`（或包目录）。
-- bundle 根在运行时加入 `PYTHONPATH`；entry 及同目录 helper 可直接 `import`。
+- bundle 根在运行时加入 `sys.path`；entry 及同目录 helper 可直接 `import`。
 - entry **只能** 依赖 **`flashcli_bundle`** 协议包（manifest、options、protocol 类型），**不得** `import flashcli` CLI 包。
 
-推荐 import：
+#### 4.1.1 Native `.so` 加载（engine / script 相同）
+
+无论 `entry.*.mode` 为 **engine** 还是 **script**，flashcli 在调用 `RunEngine` / `ServeEngine` 或 script `main(argv)` **之前** 都会执行 **activate**：
+
+1. 按本机 GPU / CUDA / `python_abi` 从 manifest `runtime` 选择匹配的 `runtime/<env-key>/`（见 §5）。
+2. 将该目录下的 `.so` 注册为 Python 扩展模块（导入名如 `flash_rt_kernels`、`flash_rt_fa2`，**不含**文件名中的 env 后缀；见 §5.3）。
+3. 将 bundle 根目录加入 `sys.path`，以便 `import flash_rt` 及同目录 helper。
+
+因此 **script 模式不需要** 也 **不应** 通过环境变量或手动 `dlopen` 加载 `.so`。entry 内与 engine 一样直接 import 即可，例如：
+
+```python
+import flash_rt
+from flash_rt import flash_rt_kernels
+```
+
+`.so` 的发布布局、命名与 env key 规则见 **§5**；与 `§4.4` 中的权重环境变量无关。
+
+本地若直接 `python run.py`（不经过 `flashcli run`），不会自动完成上述 activate；请用 `flashcli run <ref> …` 验证，或仅在开发时自行模拟路径与 native 注册。
+
+推荐 import（engine 协议类型；script 仅需其中与业务相关的部分）：
 
 ```python
 from flashcli_bundle.context import active_bundle
@@ -306,12 +339,99 @@ from flashcli_bundle.preset import Preset
 | `chat(request: ChatRequest) -> ChatResult` | 非流式 |
 | `chat_stream(request) -> Iterator[ChatChunk]` | 流式 |
 
-### 4.4 文件对应关系
+### 4.4 Entry 环境变量（engine / script）
+
+flashcli 在 **权重已校验**、即将调用 entry（`RunEngine` / `ServeEngine` 或 script `main`）之前，向当前进程写入环境变量。第三方 entry **只应依赖本节列出的名称**；其余 `FLASHCLI_*`（如 `FLASHCLI_RUNTIME_ID`、`FLASHCLI_IN_BUNDLE_VENV`）为内部实现，**不保证稳定**。
+
+两种 `entry.*.mode` 注入的变量 **不同**：script 使用平台统一的 `FLASHCLI_*` 绝对路径；engine 使用 manifest 自声明的 `env` 与少量约定名。
+
+#### 4.4.1 Script 模式（`mode: "script"`）
+
+entry 签名为 `def main(argv: list[str] | None = None) -> int | None`（或等价 callable）。用户 CLI 参数在 `argv` 中由 bundle 自行解析；权重路径通过环境变量提供。
+
+| 变量 | 必有 | 说明 |
+|------|------|------|
+| `FLASHCLI_CHECKPOINT` | 是 | 当前 preset 的 **主权重** 目录（绝对路径，已通过 cache 校验）。 |
+| `FLASHCLI_BUNDLE_ROOT` | 是 | 当前 bundle 根目录（绝对路径）。 |
+| `FLASHCLI_PRESET` | 是 | 当前 preset ref，与 CLI positional ref 一致（如 `flashcli-bundle/qwen_nvfp4:1.0.1@qwen3`）。 |
+| `FLASHCLI_VARIANT` | 否 | ref 含 `@variant` 时写入 variant 名；单 variant bundle 通常 **不** 设置。 |
+| `FLASHCLI_EXTRA_WEIGHT_<KEY>` | 否 | 每个 manifest `extra_weights` 条目一条；`<KEY>` 为 manifest 键的大写形式（非字母数字 → `_`）。值为该扩展权重的 **绝对路径**（已校验）。 |
+
+`extra_weights` 键到环境变量名示例：
+
+| manifest `extra_weights` 键 | 环境变量 |
+|-----------------------------|----------|
+| `vocoder` | `FLASHCLI_EXTRA_WEIGHT_VOCODER` |
+| `mtp_fp8` | `FLASHCLI_EXTRA_WEIGHT_MTP_FP8` |
+
+Script 模式 **不会** 应用 manifest 顶层 / variant 的 `env` 块，也 **不会** 注入 `{models_dir}` 占位符展开后的全局 cache 布局。entry 只读上表变量即可。
+
+Native 扩展（`.so`）的加载与 engine 相同，见 **§4.1.1**；script 下同样 `import flash_rt` / `from flash_rt import flash_rt_*`，无需为 `.so` 单独配置环境变量。
+
+示例 `run.py`：
+
+```python
+import os
+from pathlib import Path
+
+def main(argv: list[str] | None = None) -> int:
+    ckpt = Path(os.environ["FLASHCLI_CHECKPOINT"])
+    bundle_root = Path(os.environ["FLASHCLI_BUNDLE_ROOT"])
+    mtp = os.environ.get("FLASHCLI_EXTRA_WEIGHT_MTP_FP8")  # 若 manifest 声明了 extra_weights.mtp_fp8
+    ...
+    return 0
+```
+
+#### 4.4.2 Engine 模式（默认，省略 `mode` 或 `"engine"`）
+
+主权重 **不** 写入 `FLASHCLI_CHECKPOINT`，而是由 flashcli 调用 `RunEngine.load(checkpoint, preset, **options)` / `ServeEngine.load(...)` 时以 **参数** 传入。扩展路径与模型相关资源通过下列方式进入进程：
+
+| 来源 | 说明 | 示例变量名 |
+|------|------|------------|
+| manifest **`env`** / variant **`env`** | entry 执行前写入；值可含 `{bundle_root}`、`{models_dir}` 占位符（由 flashcli 展开为绝对路径）。**键名由 bundle 作者定义。** | `FLASHRT_QWEN36_MTP_CKPT_DIR`、`MY_AUX_DIR` |
+| **`post_pull`** | 权重拉取后按 manifest 步骤准备附属文件并写入 env。 | `FLASH_RT_PALIGEMMA_TOKENIZER`（Pi0.5 PaliGemma tokenizer 文件路径） |
+| CLI **`--mtp-checkpoint`** | 仅 engine 模式由 flashcli 解析；覆盖 manifest `env` 中的 MTP 路径。 | `FLASHRT_QWEN36_MTP_CKPT_DIR` |
+
+manifest `env` 示例（Qwen variant，节选）：
+
+```json
+"env": {
+  "FLASHRT_QWEN36_MTP_CKPT_DIR": "{models_dir}/qwen_nvfp4/1.0.1@qwen36/mtp_fp8"
+}
+```
+
+`{models_dir}` 展开为 flashcli 模型缓存根（默认 `~/.flashcli/models`）；`{bundle_root}` 展开为 bundle 根目录。Engine entry 在 `load()` 内通过 `os.environ` 读取作者在 manifest 中声明的键名。
+
+#### 4.4.3 模式对比
+
+| 项目 | Script | Engine |
+|------|--------|--------|
+| 主权重 | `FLASHCLI_CHECKPOINT` | `load(checkpoint, …)` 参数 |
+| 扩展权重 | `FLASHCLI_EXTRA_WEIGHT_<KEY>` | manifest `env` 或自定义键 |
+| manifest `env` | **不应用** | **应用** |
+| `post_pull` 写入的 env | 若 manifest 含 `post_pull` 仍会执行（准备磁盘文件）；script entry 一般 **不依赖** 其 env，优先用上表 `FLASHCLI_*` | 可读，如 `FLASH_RT_PALIGEMMA_TOKENIZER` |
+| `run_options` / `serve_options` | 仅 `--help` 文档；参数在 `argv` 中 | 由 flashcli 解析并传入 engine |
+| `--checkpoint` | 留在 `argv`；同时用于 flashcli 校验并写入 `FLASHCLI_CHECKPOINT` | flashcli 解析；传入 `load()`，不写 `FLASHCLI_CHECKPOINT` |
+| `--mtp-checkpoint` | **不** 由 flashcli 解析（原样在 `argv`）；扩展权重用 `FLASHCLI_EXTRA_WEIGHT_*` | 写入 `FLASHRT_QWEN36_MTP_CKPT_DIR` |
+
+#### 4.4.4 请勿在 entry 中依赖
+
+| 变量 | 原因 |
+|------|------|
+| `FLASHCLI_RUNTIME_ID` | re-exec 内部 runtime 矩阵键 |
+| `FLASHCLI_IN_BUNDLE_VENV` | 标识 infer 子进程，非业务配置 |
+| `FLASHCLI_HOME` / `FLASHCLI_MODELS_DIR` 等 | 主机路径配置；script 应用已解析的 `FLASHCLI_CHECKPOINT` 等，勿自行拼 cache 路径 |
+| 其他 bundle 的 cache 路径 | 不会注入；仅当前 preset 的权重 |
+
+运维向完整列表见 [environment.zh-CN.md](environment.zh-CN.md#bundle-entry-环境变量engine--script)。
+
+### 4.5 文件对应关系
 
 | manifest | 发布包内文件 |
 |----------|----------------|
 | `"entry": { "run": { "module": "run", … } }` | 根目录 `run.py`，内含 `RunEngine` 类 |
 | `"entry": { "serve": { "module": "serve", … } }` | 根目录 `serve.py`，内含 `ServeEngine` 类 |
+| `"entry": { "run": { "module": "run", "attr": "main", "mode": "script" } }` | 根目录 `run.py`，内含 `main(argv)` |
 | 两者兼有 | `run.py` 与 `serve.py` **均** 必须存在 |
 
 ---

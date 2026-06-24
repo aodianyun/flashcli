@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 from flashcli_bundle.manifest import BundleManifest
 
 _ACTIVE_BUNDLE: BundleManifest | None = None
@@ -14,11 +12,6 @@ def active_bundle() -> BundleManifest | None:
 
 
 def set_active_bundle(bundle: BundleManifest | None) -> None:
-    """Register the bundle currently on ``PYTHONPATH`` (host calls during activate)."""
+    """Register the bundle currently on ``sys.path`` (in-memory only)."""
     global _ACTIVE_BUNDLE
     _ACTIVE_BUNDLE = bundle
-    if bundle is None:
-        os.environ.pop("FLASHCLI_ACTIVE_BUNDLE", None)
-        return
-    root = str(bundle.bundle_root.resolve())
-    os.environ["FLASHCLI_ACTIVE_BUNDLE"] = root

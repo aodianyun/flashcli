@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from flashcli_bundle.help_text import format_run_help, format_serve_help
+from flashcli_bundle.manifest import EntryMode, entry_mode_for_capability
 from flashcli_bundle.manifest_resolve import resolve_manifest_for_preset
 from flashcli_bundle.options import (
     BundleOptionsError,
@@ -65,6 +66,8 @@ class RunInvocation:
     quiet: bool = False
     bundle_options: dict[str, Any] | None = None
     option_specs: list[OptionSpec] | None = None
+    entry_mode: EntryMode = "engine"
+    bundle_argv: list[str] | None = None
 
 
 @dataclass
@@ -80,6 +83,8 @@ class ServeInvocation:
     quiet: bool = False
     bundle_options: dict[str, Any] | None = None
     option_specs: list[OptionSpec] | None = None
+    entry_mode: EntryMode = "engine"
+    bundle_argv: list[str] | None = None
 
 
 def resolve_run_from_argv(
@@ -194,6 +199,27 @@ def _collect_bundle_options(ns: argparse.Namespace, specs: list[OptionSpec]) -> 
     return bundle_options
 
 
+def _bundle_argv_after_ref(argv: list[str]) -> list[str]:
+    rest = list(argv)
+    if rest and not rest[0].startswith("-"):
+        return rest[1:]
+    return rest
+
+
+def _peek_checkpoint_from_argv(argv: list[str]) -> Path | None:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--checkpoint", type=Path)
+    ns, _ = parser.parse_known_args(argv)
+    return ns.checkpoint
+
+
+def _peek_mtp_checkpoint_from_argv(argv: list[str]) -> Path | None:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--mtp-checkpoint", dest="mtp_checkpoint", type=Path)
+    ns, _ = parser.parse_known_args(argv)
+    return ns.mtp_checkpoint
+
+
 def parse_run_argv(
     argv: list[str] | None = None,
     *,
@@ -213,10 +239,11 @@ def parse_run_argv(
     )
 
     manifest = resolve_manifest_for_preset(preset, bundle_path=peek_bundle)
+    em = entry_mode_for_capability(manifest, "run")
     variant_key = resolve_options_variant(manifest, preset)
     specs = (
         bundle_run_options_for_help(manifest, variant=variant_key)
-        if wants_help
+        if wants_help or em == "script"
         else bundle_run_options(manifest, variant=variant_key)
     )
 
@@ -225,6 +252,19 @@ def parse_run_argv(
             preset=preset_name,
             help=True,
             bundle=peek_bundle,
+            option_specs=specs,
+            entry_mode=em,
+        )
+
+    if em == "script":
+        bundle_argv = _bundle_argv_after_ref(argv)
+        return RunInvocation(
+            preset=preset_name,
+            bundle=bundle_path,
+            entry_mode="script",
+            bundle_argv=bundle_argv,
+            checkpoint=_peek_checkpoint_from_argv(bundle_argv),
+            mtp_checkpoint=_peek_mtp_checkpoint_from_argv(bundle_argv),
             option_specs=specs,
         )
 
@@ -262,10 +302,11 @@ def parse_serve_argv(
     )
 
     manifest = resolve_manifest_for_preset(preset, bundle_path=peek_bundle)
+    em = entry_mode_for_capability(manifest, "serve")
     variant_key = resolve_options_variant(manifest, preset)
     specs = (
         bundle_serve_options_for_help(manifest, variant=variant_key)
-        if wants_help
+        if wants_help or em == "script"
         else bundle_serve_options(manifest, variant=variant_key)
     )
 
@@ -274,6 +315,19 @@ def parse_serve_argv(
             preset=preset_name,
             help=True,
             bundle=peek_bundle,
+            option_specs=specs,
+            entry_mode=em,
+        )
+
+    if em == "script":
+        bundle_argv = _bundle_argv_after_ref(argv)
+        return ServeInvocation(
+            preset=preset_name,
+            bundle=bundle_path,
+            entry_mode="script",
+            bundle_argv=bundle_argv,
+            checkpoint=_peek_checkpoint_from_argv(bundle_argv),
+            mtp_checkpoint=_peek_mtp_checkpoint_from_argv(bundle_argv),
             option_specs=specs,
         )
 

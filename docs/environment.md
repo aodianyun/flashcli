@@ -117,10 +117,45 @@ See [architecture.md](architecture.md#host-cli-vs-bundle-infer-important). Do **
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FLASH_RT_PALIGEMMA_TOKENIZER` | (auto-download) | Path to the PaliGemma tokenizer **file** for Pi0.5 `post_pull`. Default cache: `~/.cache/flash_rt/`. |
-| `FLASHRT_QWEN36_MTP_CKPT_DIR` | (preset/bundle) | Qwen3.6 MTP weights directory. Set via `--mtp-checkpoint` or `env` in `flashcli-bundle.json`. |
+| `FLASH_RT_PALIGEMMA_TOKENIZER` | (auto-download) | **Engine mode:** PaliGemma tokenizer file path from Pi0.5 `post_pull`. |
+| `FLASHRT_QWEN36_MTP_CKPT_DIR` | (manifest / CLI) | **Engine mode:** Qwen3.6 MTP weights; from manifest `env` or `--mtp-checkpoint`. |
 
-`env` blocks in `flashcli-bundle.json` can set process env at activation (`{models_dir}`, `{bundle_root}` placeholders).
+Top-level / variant **`env:`** in `flashcli-bundle.json` is applied only for **engine mode** entries (see **Bundle entry environment variables** below). Script mode uses platform `FLASHCLI_*` variables with resolved absolute paths instead.
+
+## Bundle entry environment variables (engine / script)
+
+Injected in the **bundle venv infer process** before `RunEngine` / `ServeEngine` or script `main(argv)`. Third-party entries should rely only on names listed here; other `FLASHCLI_*` values (e.g. `FLASHCLI_RUNTIME_ID`) are internal and **not a stable API**.
+
+### Script mode (`entry.*.mode: "script"`)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `FLASHCLI_CHECKPOINT` | yes | **Main weights** directory (absolute path, validated). |
+| `FLASHCLI_BUNDLE_ROOT` | yes | Bundle root (absolute path). |
+| `FLASHCLI_PRESET` | yes | Preset ref string (same as CLI positional ref). |
+| `FLASHCLI_VARIANT` | no | Set when ref includes `@variant`. |
+| `FLASHCLI_EXTRA_WEIGHT_<KEY>` | no | One per manifest `extra_weights` key; `<KEY>` is uppercased manifest key (non-alphanumeric → `_`). Example: `mtp_fp8` → `FLASHCLI_EXTRA_WEIGHT_MTP_FP8`. |
+
+Script entries should **not** depend on `{models_dir}` placeholders or global cache layout.
+
+### Engine mode (default)
+
+| Source | Description |
+|--------|-------------|
+| manifest **`env`** / variant **`env`** | Applied before entry runs; `{bundle_root}`, `{models_dir}` placeholders. |
+| **`post_pull`** | e.g. `FLASH_RT_PALIGEMMA_TOKENIZER`. |
+| **`--mtp-checkpoint`** | Overrides `FLASHRT_QWEN36_MTP_CKPT_DIR` (engine host/infer only). |
+
+Engine mode does **not** set `FLASHCLI_CHECKPOINT` (weights passed to `RunEngine.load(...)`).
+
+### Internal (do not use in entry code)
+
+| Variable | Description |
+|----------|-------------|
+| `FLASHCLI_RUNTIME_ID` | Runtime matrix key at re-exec. |
+| `FLASHCLI_IN_BUNDLE_VENV` | `1` in infer subprocess. |
+| `FLASHCLI_BUNDLE_ROOT` (at re-exec) | Internal manifest resolve; script entry injection sets the documented value. |
+| `VIRTUAL_ENV` | Bundle venv (Python standard). |
 
 ## Infer / serve (bundle venv)
 
@@ -141,13 +176,13 @@ See [architecture.md](architecture.md#host-cli-vs-bundle-infer-important). Do **
 | `GITHUB_TOKEN` / `GH_TOKEN` | (none) | Optional token for GitHub API when fetching python-build-standalone releases. |
 | `FLASHRT_REPO_ROOT` | (auto-detect) | FlashRT source repo root. Fallback when resolving `python_dependencies` from FlashRT `pyproject.toml` (`runtime/requirements_spec.py`). Useful in a FlashRT + flashcli monorepo. |
 
-## Set by flashcli at runtime (informational)
+## Set by flashcli at runtime (internal)
+
+Not part of the bundle entry stable API (see **Bundle entry environment variables** above):
 
 | Variable | Description |
 |----------|-------------|
-| `FLASHCLI_ACTIVE_BUNDLE` | Absolute path of the active bundle root. |
-| `FLASHCLI_BUNDLE_ROOT` | Active bundle root (set during re-exec). |
-| `PYTHONPATH` | **Activate:** bundle root prepended for `entry` / `flash_rt`. **Re-exec:** host `flashcli` is not on `PYTHONPATH`. |
+| `PYTHONPATH` | **Activate:** bundle root on `sys.path` for `entry` / `flash_rt`. **Re-exec:** host `PYTHONPATH` cleared. |
 
 ## Related docs
 

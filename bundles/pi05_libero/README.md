@@ -10,13 +10,24 @@ Pi0.5 LIBERO VLA; weights [lerobot/pi05_libero_finetuned_v044](https://huggingfa
 
 ```text
 flashcli-bundle.json
-run.py
+run.py                    # script entry (main)
+run_engine.py             # engine entry (RunEngine); see flashcli-bundle.engine.json
+_pi05_infer.py
 _pi05_compat.py
 flash_rt/
 runtime/<env-key>/         # *.so for this host
 ```
 
 Weights are downloaded by flashcli to `~/.flashcli/models/pi05_libero/1.0.3/checkpoint/`, not shipped in the bundle.
+
+## Entry modes
+
+| File | Role |
+|------|------|
+| `flashcli-bundle.json` | **Default script**: `run.main(argv)`; does **not** `import flashcli_bundle` |
+| `flashcli-bundle.engine.json` | **Engine example**: `run_engine.RunEngine`; `cp flashcli-bundle.engine.json flashcli-bundle.json` to try engine locally |
+
+`run.py` (script) and `run_engine.py` (engine) share `_pi05_infer.py`; script reads paths from `FLASHCLI_CHECKPOINT` and related env vars only.
 
 ## End users
 

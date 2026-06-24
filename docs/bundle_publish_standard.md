@@ -127,12 +127,26 @@ Full syntax: [model_bundle_standard.md](model_bundle_standard.md).
 }
 ```
 
+Optional **`mode`**: `"engine"` (default) or `"script"`. Engine mode uses `RunEngine`/`ServeEngine` and the built-in HTTP stack; script mode passes argv (after REF) through to the entry callable (usually `main`). `run_options`/`serve_options` are documentation-only in script mode (`--help`).
+
+Script example:
+
+```json
+"entry": {
+  "run":  { "module": "run",  "attr": "main", "mode": "script" },
+  "serve": { "module": "serve", "attr": "main", "mode": "script" }
+}
+```
+
 | Subfield | Description |
 |----------|-------------|
 | `module` | Python module name relative to bundle root (no `.py`), e.g. `"run"` → `run.py` |
-| `attr` | Class name in that module; must implement the matching protocol (see §4) |
+| `attr` | Engine mode: class name (`RunEngine`/`ServeEngine`); script mode: callable entry (e.g. `main`) |
+| `mode` | Optional: `engine` (default) or `script` |
 
 Capabilities are inferred from `entry`: `run` enables `flashcli run`; `serve` enables `flashcli serve`.
+
+Environment variables injected before entry runs are documented in **§4.4** (engine vs script differ).
 
 ### 3.3 `variants` (multiple presets, one repo)
 
@@ -149,7 +163,7 @@ Common variant fields:
 | `weights_dir` | Subdirectory name under the preset cache for weights |
 | `weights` | `{ "source": "huggingface", "repo": "…", "revision": "…" }` |
 | `extra_weights` | Additional weights (e.g. Qwen MTP); same shape as `weights`; may add `cache_name`, `allow_patterns` |
-| `env` | Process env vars set at bundle activation; supports `{models_dir}`, `{bundle_root}` placeholders |
+| `env` | **Engine mode:** process env before entry runs; `{models_dir}`, `{bundle_root}` (see §4.4.2). Script mode does not apply manifest `env` (see §4.4.1). |
 | `run_options` / `serve_options` | Variant-specific CLI options (see §3.6) |
 
 ### 3.4 `python_dependencies`
@@ -271,10 +285,29 @@ Full `variants` example: `bundles/qwen_nvfp4/flashcli-bundle.json` in the repo.
 ### 4.1 Module location and imports
 
 - `entry.*.module` maps to `{module}.py` (or a package directory) under the bundle root.
-- The bundle root is on `PYTHONPATH` at runtime; entry and co-located helpers may import each other directly.
+- The bundle root is added to `sys.path` at runtime; entry and co-located helpers may import each other directly.
 - Entry code may depend on **`flashcli_bundle`** only (manifest, options, protocol types). **Do not** `import flashcli` (the CLI package).
 
-Recommended imports:
+#### 4.1.1 Native `.so` loading (same for engine and script)
+
+Regardless of `entry.*.mode` (**engine** or **script**), flashcli runs **activate** before invoking `RunEngine` / `ServeEngine` or script `main(argv)`:
+
+1. Select the matching `runtime/<env-key>/` from manifest `runtime` using host GPU / CUDA / `python_abi` (see §5).
+2. Register `.so` files in that directory as Python extension modules (import names such as `flash_rt_kernels`, `flash_rt_fa2` — **without** the env suffix in filenames; see §5.3).
+3. Add the bundle root to `sys.path` so `import flash_rt` and local helpers work.
+
+**Script mode does not** and **should not** load `.so` via environment variables or manual `dlopen`. Import as in engine mode, e.g.:
+
+```python
+import flash_rt
+from flash_rt import flash_rt_kernels
+```
+
+Publish layout and naming are in **§5**; this is unrelated to weight env vars in §4.4.
+
+Running `python run.py` directly (without `flashcli run`) does **not** perform activate; use `flashcli run <ref> …` for validation, or simulate paths/native registration only for local dev.
+
+Recommended imports (engine protocol types; script entry uses only what it needs):
 
 ```python
 from flashcli_bundle.context import active_bundle
@@ -306,12 +339,99 @@ Class name matches `entry.serve.attr` (typically `ServeEngine`). Must implement:
 | `chat(request: ChatRequest) -> ChatResult` | Non-streaming |
 | `chat_stream(request) -> Iterator[ChatChunk]` | Streaming |
 
-### 4.4 File mapping
+### 4.4 Entry environment variables (engine / script)
+
+flashcli writes environment variables to the current process **after weights are validated** and **immediately before** invoking the entry (`RunEngine` / `ServeEngine` or script `main`). Third-party entry code should **only** rely on names listed in this section; other `FLASHCLI_*` values (e.g. `FLASHCLI_RUNTIME_ID`, `FLASHCLI_IN_BUNDLE_VENV`) are internal and **not a stable API**.
+
+`entry.*.mode` determines which variables are set: script mode uses platform `FLASHCLI_*` absolute paths; engine mode uses manifest-declared `env` and a few conventional names.
+
+#### 4.4.1 Script mode (`mode: "script"`)
+
+Entry signature: `def main(argv: list[str] | None = None) -> int | None` (or equivalent). User CLI flags live in `argv` and are parsed by the bundle; weight paths are provided via environment variables.
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `FLASHCLI_CHECKPOINT` | yes | **Main weights** directory (absolute path, cache-validated). |
+| `FLASHCLI_BUNDLE_ROOT` | yes | Bundle root (absolute path). |
+| `FLASHCLI_PRESET` | yes | Preset ref string (same as CLI positional ref). |
+| `FLASHCLI_VARIANT` | no | Set when ref includes `@variant`; usually unset for single-variant bundles. |
+| `FLASHCLI_EXTRA_WEIGHT_<KEY>` | no | One per manifest `extra_weights` entry; `<KEY>` is the uppercased manifest key (non-alphanumeric → `_`). Value is the **absolute path** (validated). |
+
+`extra_weights` key → env name examples:
+
+| manifest `extra_weights` key | Environment variable |
+|--------------------------------|----------------------|
+| `vocoder` | `FLASHCLI_EXTRA_WEIGHT_VOCODER` |
+| `mtp_fp8` | `FLASHCLI_EXTRA_WEIGHT_MTP_FP8` |
+
+Script mode does **not** apply top-level or variant `env` blocks and does **not** expose the global `{models_dir}` cache layout. Read only the variables above.
+
+Native extensions (`.so`) load the same way as in engine mode; see **§4.1.1**. In script mode, use `import flash_rt` / `from flash_rt import flash_rt_*` — no separate env vars for `.so`.
+
+Example `run.py`:
+
+```python
+import os
+from pathlib import Path
+
+def main(argv: list[str] | None = None) -> int:
+    ckpt = Path(os.environ["FLASHCLI_CHECKPOINT"])
+    bundle_root = Path(os.environ["FLASHCLI_BUNDLE_ROOT"])
+    mtp = os.environ.get("FLASHCLI_EXTRA_WEIGHT_MTP_FP8")  # if manifest has extra_weights.mtp_fp8
+    ...
+    return 0
+```
+
+#### 4.4.2 Engine mode (default, omit `mode` or `"engine"`)
+
+Main weights are **not** written to `FLASHCLI_CHECKPOINT`; flashcli passes them as the `checkpoint` argument to `RunEngine.load(...)` / `ServeEngine.load(...)`. Additional paths and assets enter the process via:
+
+| Source | Description | Example names |
+|--------|-------------|---------------|
+| manifest **`env`** / variant **`env`** | Applied before entry runs; values may use `{bundle_root}`, `{models_dir}` placeholders (expanded to absolute paths). **Keys are author-defined.** | `FLASHRT_QWEN36_MTP_CKPT_DIR`, `MY_AUX_DIR` |
+| **`post_pull`** | Runs after weight fetch; prepares ancillary files and may set env. | `FLASH_RT_PALIGEMMA_TOKENIZER` (Pi0.5 PaliGemma tokenizer file) |
+| CLI **`--mtp-checkpoint`** | Parsed by flashcli in engine mode only; overrides manifest MTP env. | `FLASHRT_QWEN36_MTP_CKPT_DIR` |
+
+manifest `env` example (Qwen variant, excerpt):
+
+```json
+"env": {
+  "FLASHRT_QWEN36_MTP_CKPT_DIR": "{models_dir}/qwen_nvfp4/1.0.1@qwen36/mtp_fp8"
+}
+```
+
+`{models_dir}` expands to the flashcli models cache root (default `~/.flashcli/models`); `{bundle_root}` to the bundle root. Engine entry code reads author-declared keys via `os.environ` inside `load()` or helpers.
+
+#### 4.4.3 Mode comparison
+
+| Topic | Script | Engine |
+|-------|--------|--------|
+| Main weights | `FLASHCLI_CHECKPOINT` | `load(checkpoint, …)` argument |
+| Extra weights | `FLASHCLI_EXTRA_WEIGHT_<KEY>` | manifest `env` or custom keys |
+| manifest `env` | **not applied** | **applied** |
+| `post_pull` env | `post_pull` may still run to prepare files on disk; script entry should prefer `FLASHCLI_*` above | e.g. `FLASH_RT_PALIGEMMA_TOKENIZER` |
+| `run_options` / `serve_options` | `--help` documentation only; flags in `argv` | parsed by flashcli and passed to engine |
+| `--checkpoint` | stays in `argv`; also used for validation → `FLASHCLI_CHECKPOINT` | parsed by flashcli → `load()`, no `FLASHCLI_CHECKPOINT` |
+| `--mtp-checkpoint` | **not** parsed by flashcli (passed in `argv`); use `FLASHCLI_EXTRA_WEIGHT_*` | sets `FLASHRT_QWEN36_MTP_CKPT_DIR` |
+
+#### 4.4.4 Do not rely on in entry code
+
+| Variable | Reason |
+|----------|--------|
+| `FLASHCLI_RUNTIME_ID` | internal runtime matrix key at re-exec |
+| `FLASHCLI_IN_BUNDLE_VENV` | marks infer subprocess, not business config |
+| `FLASHCLI_HOME` / `FLASHCLI_MODELS_DIR` etc. | host path config; script mode should use resolved `FLASHCLI_CHECKPOINT` etc., not assemble cache paths |
+| other bundles' cache paths | never injected; only current preset weights |
+
+Full ops reference: [environment.md](environment.md#bundle-entry-environment-variables-engine--script).
+
+### 4.5 File mapping
 
 | Manifest | File in publish package |
 |----------|-------------------------|
 | `"entry": { "run": { "module": "run", … } }` | `run.py` with class `RunEngine` |
 | `"entry": { "serve": { "module": "serve", … } }` | `serve.py` with class `ServeEngine` |
+| `"entry": { "run": { "module": "run", "attr": "main", "mode": "script" } }` | `run.py` with `main(argv)` |
 | Both | **Both** `run.py` and `serve.py` are required |
 
 ---

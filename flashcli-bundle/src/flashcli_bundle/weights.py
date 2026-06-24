@@ -103,6 +103,7 @@ def apply_bundle_env(
     *,
     variant: str | None = None,
 ) -> None:
+    """Write manifest ``env`` into the process (engine entry only; see ``entry_env``)."""
     import os
 
     if has_bundle_variants(bundle):
@@ -146,6 +147,15 @@ def _extra_dest(
             return (bundle.bundle_root / rel).resolve()
     cache_name = str(spec.get("cache_name", key))
     return config.MODELS_DIR / cache_name
+
+
+def extra_weight_dir(
+    bundle: BundleManifest,
+    key: str,
+    spec: dict[str, Any],
+) -> Path:
+    """Resolved on-disk directory for one ``extra_weights`` entry."""
+    return _extra_dest(bundle, key, spec)
 
 
 def require_extra_weights_cached(
@@ -222,8 +232,6 @@ def ensure_checkpoint(
         path = checkpoint_override.expanduser().resolve()
         if not path.exists():
             raise FileNotFoundError(f"Checkpoint not found: {path}")
-        if bundle is not None:
-            apply_bundle_env(bundle, variant=variant)
         return path
 
     if bundle is None:
@@ -237,7 +245,6 @@ def ensure_checkpoint(
     if has_local_weights(local, weights_spec=spec):
         if not quiet:
             print(f"Using bundle-local weights: {local}")
-        apply_bundle_env(bundle, variant=variant)
         require_extra_weights_cached(bundle, variant=variant)
         return local
 
@@ -245,7 +252,6 @@ def ensure_checkpoint(
     if existing is not None:
         if not quiet:
             print(f"Using cached weights: {existing}")
-        apply_bundle_env(bundle, variant=variant)
         require_extra_weights_cached(bundle, variant=variant)
         return existing
 

@@ -14,7 +14,6 @@ from flashcli_bundle.preset import Preset
 from flashcli_bundle.preset_ref import preset_cache_key, resolve_preset
 from flashcli_bundle.resolve import load_preset_bundle
 from flashcli_bundle.weights import (
-    apply_bundle_env,
     ensure_checkpoint,
     post_pull_steps,
 )
@@ -59,22 +58,6 @@ def _checkpoint_from_cache(cache: Path) -> Path | None:
 
 def is_cached(preset: Preset | str) -> bool:
     return _checkpoint_from_cache(preset_cache_dir(preset)) is not None
-
-
-def _apply_mtp_env(
-    bundle: BundleManifest | None,
-    *,
-    mtp_checkpoint_override: Path | None,
-    model_variant: str | None = None,
-) -> None:
-    if mtp_checkpoint_override is not None:
-        path = mtp_checkpoint_override.expanduser().resolve()
-        if not path.exists():
-            raise FileNotFoundError(f"MTP checkpoint not found: {path}")
-        os.environ["FLASHRT_QWEN36_MTP_CKPT_DIR"] = str(path)
-        return
-    if bundle is not None:
-        apply_bundle_env(bundle, variant=model_variant)
 
 
 def _load_bundle_for_preset(
@@ -125,13 +108,6 @@ def ensure_model_cached(
         if not path.exists():
             raise FileNotFoundError(f"Checkpoint not found: {path}")
         if bundle is not None:
-            apply_bundle_env(bundle)
-        _apply_mtp_env(
-            bundle,
-            mtp_checkpoint_override=mtp_checkpoint_override,
-            model_variant=model_variant,
-        )
-        if bundle is not None:
             post = post_pull_steps(bundle)
             if post:
                 run_post_pull_steps(post, quiet=quiet)
@@ -145,11 +121,6 @@ def ensure_model_cached(
         variant=model_variant,
         quiet=quiet,
         download=download,
-    )
-    _apply_mtp_env(
-        bundle,
-        mtp_checkpoint_override=mtp_checkpoint_override,
-        model_variant=model_variant,
     )
     if bundle is not None:
         post = post_pull_steps(bundle)

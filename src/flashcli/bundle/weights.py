@@ -110,7 +110,6 @@ def ensure_checkpoint(
     if has_local_weights(local, weights_spec=spec):
         if not quiet:
             print(f"Using bundle-local weights: {local}")
-        apply_bundle_env(bundle, variant=variant)
         download_extra_weights(bundle, variant=variant, quiet=quiet, download=True)
         return local
 
@@ -118,7 +117,6 @@ def ensure_checkpoint(
     if existing is not None:
         if not quiet:
             print(f"Using cached weights: {existing}")
-        apply_bundle_env(bundle, variant=variant)
         download_extra_weights(bundle, variant=variant, quiet=quiet, download=True)
         return existing
 
@@ -131,7 +129,6 @@ def ensure_checkpoint(
     download_merged_weights(spec, checkpoint_dir, quiet=quiet)
     download_extra_weights(bundle, variant=variant, quiet=quiet, download=True)
     _write_marker(cache_dir, preset.name, checkpoint_dir)
-    apply_bundle_env(bundle, variant=variant)
     return checkpoint_dir
 
 

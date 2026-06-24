@@ -10,13 +10,24 @@ Pi0.5 LIBERO VLA，权重 [lerobot/pi05_libero_finetuned_v044](https://huggingfa
 
 ```text
 flashcli-bundle.json
-run.py
+run.py                    # script entry (main)
+run_engine.py             # engine entry (RunEngine); see flashcli-bundle.engine.json
+_pi05_infer.py
 _pi05_compat.py
 flash_rt/
 runtime/<env-key>/         # 本机 env 的 *.so
 ```
 
 权重由 flashcli 下载到 `~/.flashcli/models/pi05_libero/1.0.3/checkpoint/`，**不**打进 bundle。
+
+## Entry 模式
+
+| 文件 | 说明 |
+|------|------|
+| `flashcli-bundle.json` | **默认 script**：`run.main(argv)`，**不** `import flashcli_bundle` |
+| `flashcli-bundle.engine.json` | **engine 示例**：`run_engine.RunEngine`；本地试 engine 时可 `cp flashcli-bundle.engine.json flashcli-bundle.json` |
+
+`run.py`（script）与 `run_engine.py`（engine）共用 `_pi05_infer.py`；script 仅从 `FLASHCLI_CHECKPOINT` 等环境变量读路径。
 
 ## 用户
 

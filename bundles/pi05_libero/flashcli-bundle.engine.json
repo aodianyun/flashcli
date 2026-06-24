@@ -3,12 +3,11 @@
   "format_version": 3,
   "protocol_version": 1,
   "name": "pi05_libero",
-  "description": "Pi0.5 LIBERO VLA — HuggingFace lerobot/pi05_libero_finetuned_v044 (script: run.py; engine: flashcli-bundle.engine.json + run_engine.py)",
+  "description": "Pi0.5 LIBERO VLA — engine entry (run_engine.RunEngine); copy to flashcli-bundle.json to use engine mode",
   "entry": {
     "run": {
-      "module": "run",
-      "attr": "main",
-      "mode": "script"
+      "module": "run_engine",
+      "attr": "RunEngine"
     }
   },
   "python_abi": "312",

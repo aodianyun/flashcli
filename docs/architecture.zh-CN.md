@@ -98,9 +98,11 @@ sequenceDiagram
   Note over Infer: bundle venv: flashcli-bundle[infer] only
   Infer->>Act: activate_bundle
   Infer->>Cache: ensure_model_cached + post_pull
-  Infer->>Ldr: entry.run.RunEngine
+  Infer->>Ldr: entry.run (engine: RunEngine; script: main(argv))
   Ldr->>U: actions
 ```
+
+**Entry modes**: `engine`（默认）加载 `RunEngine`/`ServeEngine` 并解析 manifest CLI 选项；`script` 将 argv 透传给 bundle 入口脚本，主机侧仅根据 `--checkpoint` 决定权重拉取。
 
 **Bundle 解析顺序**：本地 positional path（含 `flashcli-bundle.json` 的目录）> 已 sync 的 runtime 缓存（`FLASHCLI_BUNDLE_ROOT` / preset marker）；FlashHub ref 的 `repo` 由 `bundle sync` 填充缓存。
 

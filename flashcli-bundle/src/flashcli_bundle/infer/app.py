@@ -10,6 +10,7 @@ from typing import Any, Optional
 import typer
 
 from flashcli_bundle.infer import cache as model_cache
+from flashcli_bundle.manifest import EntryMode
 from flashcli_bundle.preset import Preset
 from flashcli_bundle.infer.helpers import (
     auto_install_flag,
@@ -36,6 +37,8 @@ def execute_run(
     quiet: bool = False,
     bundle_options: dict[str, Any] | None = None,
     option_specs: list[Any] | None = None,
+    entry_mode: EntryMode = "engine",
+    bundle_argv: list[str] | None = None,
 ) -> None:
     from flashcli_bundle.infer.cli import (
         OptionSpec,
@@ -77,6 +80,36 @@ def execute_run(
     except (NotImplementedError, FileNotFoundError, ValueError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
+
+    if ckpt is not None:
+        if active is not None:
+            from flashcli_bundle.entry_env import inject_entry_env
+
+            inject_entry_env(
+                mode=entry_mode,
+                preset=p,
+                bundle=active,
+                checkpoint=Path(ckpt),
+                variant=effective_variant,
+                mtp_checkpoint=mtp_checkpoint,
+            )
+
+    if entry_mode == "script":
+        from flashcli_bundle.infer.engines.entry_invoke import (
+            invoke_script_main,
+            load_entry_callable,
+        )
+
+        if active is None or active.entry_run is None:
+            typer.echo("Bundle has no entry.run", err=True)
+            raise typer.Exit(1)
+        try:
+            fn = load_entry_callable(active.entry_run, kind="run")
+            rc = invoke_script_main(fn, list(bundle_argv or []))
+        except (ImportError, AttributeError, TypeError) as exc:
+            typer.echo(f"Cannot load run entry: {exc}", err=True)
+            raise typer.Exit(1) from exc
+        raise typer.Exit(rc)
 
     specs: list[OptionSpec] = list(option_specs or [])
     if not specs and active is not None:
@@ -150,6 +183,8 @@ def execute_serve(
     quiet: bool = False,
     bundle_options: dict[str, Any] | None = None,
     option_specs: list[Any] | None = None,
+    entry_mode: EntryMode = "engine",
+    bundle_argv: list[str] | None = None,
 ) -> None:
     from flashcli_bundle.infer.cli import (
         OptionSpec,
@@ -178,18 +213,6 @@ def execute_serve(
     from flashcli_bundle.infer.bundle.activate import active_bundle
 
     active = active_bundle()
-
-    try:
-        ensure_flashcli_serve_imports(auto_install=auto_install, quiet=quiet)
-        from flashcli_bundle.infer.serve.app import build_app
-    except ImportError as exc:
-        typer.echo(
-            f"Cannot load flashcli HTTP serve stack: {exc} "
-            "(reinstall with install.sh or: pip install -e './flashcli-bundle[infer]')",
-            err=True,
-        )
-        raise typer.Exit(1) from exc
-
     effective_variant = resolve_effective_model_variant(p, active)
 
     try:
@@ -204,6 +227,47 @@ def execute_serve(
         )
     except (NotImplementedError, FileNotFoundError, ValueError) as exc:
         typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+
+    if ckpt is not None:
+        if active is not None:
+            from flashcli_bundle.entry_env import inject_entry_env
+
+            inject_entry_env(
+                mode=entry_mode,
+                preset=p,
+                bundle=active,
+                checkpoint=Path(ckpt),
+                variant=effective_variant,
+                mtp_checkpoint=mtp_checkpoint,
+            )
+
+    if entry_mode == "script":
+        from flashcli_bundle.infer.engines.entry_invoke import (
+            invoke_script_main,
+            load_entry_callable,
+        )
+
+        if active is None or active.entry_serve is None:
+            typer.echo("Bundle has no entry.serve", err=True)
+            raise typer.Exit(1)
+        try:
+            fn = load_entry_callable(active.entry_serve, kind="serve")
+            rc = invoke_script_main(fn, list(bundle_argv or []))
+        except (ImportError, AttributeError, TypeError) as exc:
+            typer.echo(f"Cannot load serve entry: {exc}", err=True)
+            raise typer.Exit(1) from exc
+        raise typer.Exit(rc)
+
+    try:
+        ensure_flashcli_serve_imports(auto_install=auto_install, quiet=quiet)
+        from flashcli_bundle.infer.serve.app import build_app
+    except ImportError as exc:
+        typer.echo(
+            f"Cannot load flashcli HTTP serve stack: {exc} "
+            "(reinstall with install.sh or: pip install -e './flashcli-bundle[infer]')",
+            err=True,
+        )
         raise typer.Exit(1) from exc
 
     specs: list[OptionSpec] = list(option_specs or [])
@@ -325,7 +389,7 @@ def infer_run() -> None:
         try:
             manifest = resolve_manifest_for_preset(p, bundle_path=inv.bundle)
             specs = inv.option_specs or []
-            typer.echo(format_run_help(p, manifest, specs))
+            typer.echo(format_run_help(p, manifest, specs, entry_mode=inv.entry_mode))
         except FileNotFoundError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(1) from exc
@@ -342,6 +406,8 @@ def infer_run() -> None:
         quiet=inv.quiet,
         bundle_options=inv.bundle_options,
         option_specs=inv.option_specs,
+        entry_mode=inv.entry_mode,
+        bundle_argv=inv.bundle_argv,
     )
 
 
@@ -374,7 +440,7 @@ def infer_serve() -> None:
         try:
             manifest = resolve_manifest_for_preset(p, bundle_path=inv.bundle)
             specs = inv.option_specs or []
-            typer.echo(format_serve_help(p, manifest, specs))
+            typer.echo(format_serve_help(p, manifest, specs, entry_mode=inv.entry_mode))
         except FileNotFoundError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(1) from exc
@@ -391,6 +457,8 @@ def infer_serve() -> None:
         quiet=inv.quiet,
         bundle_options=inv.bundle_options,
         option_specs=inv.option_specs,
+        entry_mode=inv.entry_mode,
+        bundle_argv=inv.bundle_argv,
     )
 
 

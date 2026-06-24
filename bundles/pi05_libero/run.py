@@ -1,101 +1,126 @@
-"""Pi0.5 VLA RunEngine — thin wrapper over bundle ``flash_rt.load_model``."""
+"""Pi0.5 LIBERO script entry — ``main(argv)``; standalone (no flashcli_bundle import)."""
 
 from __future__ import annotations
 
+import argparse
+import os
+import sys
 from pathlib import Path
-from typing import Any
 
-import numpy as np
+from _pi05_infer import load_pi05_model, run_pi05_predict
 
-from flashcli_bundle.context import active_bundle
-from flashcli_bundle.options import option_value, run_option_defaults
-from flashcli_bundle.preset import Preset
-
-import _pi05_compat
+_DEFAULT_PROMPT = "pick up the red block and place it in the tray"
 
 
-def load_images_from_paths(
-    paths: list[Path],
-    *,
-    num_views: int,
-    size: tuple[int, int] = (224, 224),
-) -> list[np.ndarray]:
-    from PIL import Image
-
-    if not paths:
-        raise ValueError("No image paths provided")
-    loaded: list[np.ndarray] = []
-    for path in paths:
-        path = path.expanduser().resolve()
-        if not path.is_file():
-            raise FileNotFoundError(f"Image not found: {path}")
-        img = Image.open(path).convert("RGB")
-        if size:
-            img = img.resize(size)
-        loaded.append(np.asarray(img, dtype=np.uint8))
-    if len(loaded) == 1 and num_views > 1:
-        loaded = loaded * num_views
-    elif len(loaded) < num_views:
-        raise ValueError(
-            f"Need {num_views} image(s), got {len(paths)} path(s): "
-            + ", ".join(str(p) for p in paths)
-        )
-    return loaded[:num_views]
+def _parse_bool_arg(value: str) -> bool:
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
-def placeholder_images(num_views: int) -> list[np.ndarray]:
-    img = np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8)
-    return [img] * max(1, num_views)
+def _image_paths_from_arg(raw: str | None) -> list[Path] | None:
+    if not raw or not str(raw).strip():
+        return None
+    return [Path(part.strip()) for part in str(raw).split(",") if part.strip()]
 
 
-class RunEngine:
-    def __init__(self) -> None:
-        self._model: Any = None
-        self._defaults: dict[str, Any] = {}
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Pi0.5 LIBERO inference (script entry)")
+    parser.add_argument(
+        "--prompt",
+        default=_DEFAULT_PROMPT,
+        help="Natural-language task instruction.",
+    )
+    parser.add_argument(
+        "--image",
+        default=None,
+        help="Comma-separated RGB image paths (one per camera view).",
+    )
+    parser.add_argument(
+        "--num-views",
+        type=int,
+        default=2,
+        help="Number of camera views (LIBERO uses 2).",
+    )
+    parser.add_argument(
+        "--hardware",
+        default="auto",
+        help="FlashRT backend: auto, rtx_sm89, rtx_sm120, thor.",
+    )
+    parser.add_argument(
+        "--autotune",
+        type=int,
+        default=3,
+        help="CUDA graph autotune trials (0 disables).",
+    )
+    parser.add_argument(
+        "--use-fp8",
+        type=_parse_bool_arg,
+        nargs="?",
+        const=True,
+        default=True,
+        help="Load policy weights in FP8 when supported.",
+    )
+    parser.add_argument(
+        "--config",
+        default="pi05",
+        help="FlashRT model config name.",
+    )
+    parser.add_argument(
+        "--framework",
+        default="torch",
+        help="FlashRT framework backend.",
+    )
+    parser.add_argument(
+        "--benchmark",
+        type=int,
+        default=0,
+        help="Timed predict iterations after warmup (0 disables).",
+    )
+    parser.add_argument(
+        "--warmup",
+        type=int,
+        default=0,
+        help="Extra predict iterations before --benchmark.",
+    )
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Less output (suppress benchmark summary).",
+    )
+    return parser
 
-    def _opt(self, overrides: dict[str, Any], name: str) -> Any:
-        return option_value(name, overrides, self._defaults)
 
-    def load(self, checkpoint: Path, preset: Preset, **options: Any) -> None:
-        del preset
-        bundle = active_bundle()
-        if bundle is None:
-            raise RuntimeError(
-                "No active bundle; activate bundle runtime before RunEngine.load()"
-            )
-        self._defaults = run_option_defaults(bundle)
+def main(argv: list[str] | None = None) -> int:
+    argv = list(argv if argv is not None else sys.argv[1:])
 
-        _pi05_compat.prepare_flash_rt_kernels(quiet=True)
+    ckpt_raw = os.environ.get("FLASHCLI_CHECKPOINT", "").strip()
+    if not ckpt_raw:
+        print("FLASHCLI_CHECKPOINT is not set (run via flashcli run)", file=sys.stderr)
+        return 1
+    checkpoint = Path(ckpt_raw)
 
-        import flash_rt
+    args = _build_parser().parse_args(argv)
+    model = load_pi05_model(
+        checkpoint,
+        num_views=args.num_views,
+        autotune=args.autotune,
+        config=args.config,
+        hardware=args.hardware,
+        use_fp8=bool(args.use_fp8),
+        framework=args.framework,
+    )
+    actions = run_pi05_predict(
+        model,
+        prompt=args.prompt,
+        num_views=args.num_views,
+        image_paths=_image_paths_from_arg(args.image),
+        warmup=args.warmup,
+        benchmark=args.benchmark,
+        quiet=args.quiet,
+    )
+    print(f"actions: shape={getattr(actions, 'shape', type(actions).__name__)}")
+    return 0
 
-        self._model = flash_rt.load_model(
-            checkpoint=str(checkpoint.expanduser().resolve()),
-            framework=str(
-                options.get("framework") or bundle.raw.get("framework", "torch")
-            ),
-            num_views=int(self._opt(options, "num_views")),
-            autotune=int(self._opt(options, "autotune")),
-            config=str(self._opt(options, "config")),
-            hardware=str(self._opt(options, "hardware")),
-            use_fp8=bool(self._opt(options, "use_fp8")),
-        )
 
-    def predict(
-        self,
-        *,
-        prompt: str = "",
-        images: list[Any] | None = None,
-        image_paths: list[Path] | None = None,
-        **kwargs: Any,
-    ) -> np.ndarray:
-        if self._model is None:
-            raise RuntimeError("RunEngine.load() not called")
-        merged = {"prompt": prompt, **kwargs}
-        num_views = int(self._opt(merged, "num_views"))
-        prompt_text = str(self._opt(merged, "prompt") or "")
-        if image_paths:
-            images = load_images_from_paths(image_paths, num_views=num_views)
-        if not images:
-            images = placeholder_images(num_views)
-        return self._model.predict(images=images, prompt=prompt_text)
+if __name__ == "__main__":
+    raise SystemExit(main())

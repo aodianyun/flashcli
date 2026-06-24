@@ -5,16 +5,20 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 BUNDLE_FORMAT = "flashcli-model-bundle"
 BUNDLE_FORMAT_VERSION = 3
+
+EntryMode = Literal["engine", "script"]
+_VALID_ENTRY_MODES = frozenset({"engine", "script"})
 
 
 @dataclass(frozen=True)
 class EntrySpec:
     module: str
     attr: str
+    mode: EntryMode = "engine"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> EntrySpec | None:
@@ -24,7 +28,19 @@ class EntrySpec:
         attr = str(data.get("attr", "")).strip()
         if not mod or not attr:
             return None
-        return cls(module=mod, attr=attr)
+        raw_mode = str(data.get("mode", "engine")).strip().lower() or "engine"
+        mode: EntryMode = "engine"
+        if raw_mode in _VALID_ENTRY_MODES:
+            mode = raw_mode  # type: ignore[assignment]
+        return cls(module=mod, attr=attr, mode=mode)
+
+
+def entry_mode_for_capability(bundle: BundleManifest, capability: str) -> EntryMode:
+    if capability == "run":
+        return bundle.entry_run.mode if bundle.entry_run else "engine"
+    if capability == "serve":
+        return bundle.entry_serve.mode if bundle.entry_serve else "engine"
+    return "engine"
 
 
 @dataclass

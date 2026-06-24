@@ -118,10 +118,45 @@ Bundle 的 Python 依赖（torch 等）由 `activate_bundle` 按 `flashcli-bundl
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `FLASH_RT_PALIGEMMA_TOKENIZER` | （自动下载） | Pi0.5 `post_pull` 使用的 PaliGemma tokenizer **文件**路径。未设置时下载到 `~/.cache/flash_rt/`。可提前指定以避免重复下载或离线使用。 |
-| `FLASHRT_QWEN36_MTP_CKPT_DIR` | （preset/bundle） | Qwen3.6 MTP 权重目录。可由 `flashcli run` / `serve` 的 `--mtp-checkpoint` 设置，或写在 `flashcli-bundle.json` 的 `env` 段。 |
+| `FLASH_RT_PALIGEMMA_TOKENIZER` | （自动下载） | **Engine 模式**：Pi0.5 `post_pull` 写入的 PaliGemma tokenizer 文件路径。 |
+| `FLASHRT_QWEN36_MTP_CKPT_DIR` | （manifest / CLI） | **Engine 模式**：Qwen3.6 MTP 权重目录；manifest `env` 或 `--mtp-checkpoint` 注入。 |
 
-`flashcli-bundle.json` 中的 `env:` 块可在激活 bundle 时写入进程环境（支持 `{models_dir}`、`{bundle_root}` 占位符）。
+`flashcli-bundle.json` 中的顶层 / variant **`env:`** 块仅在 **engine 模式** entry 执行前写入（见下方「Bundle entry 环境变量」）。Script 模式不使用 manifest `env` 注入权重路径，改由平台变量 `FLASHCLI_*` 提供已解析的绝对路径。
+
+## Bundle entry 环境变量（engine / script）
+
+以下变量在 **bundle venv infer 进程**内、调用 `RunEngine` / `ServeEngine` 或 script `main(argv)` **之前**由 flashcli 注入。第三方 entry 只应依赖本表列出的名称；其余 `FLASHCLI_*`（如 `FLASHCLI_RUNTIME_ID`）为内部实现，**不保证稳定**。
+
+### Script 模式（`entry.*.mode: "script"`）
+
+| 变量 | 必有 | 说明 |
+|------|------|------|
+| `FLASHCLI_CHECKPOINT` | 是 | 当前 preset 的**主权重**目录（绝对路径，已通过 cache 校验）。 |
+| `FLASHCLI_BUNDLE_ROOT` | 是 | 当前 bundle 根目录（绝对路径）。 |
+| `FLASHCLI_PRESET` | 是 | 当前 preset ref 字符串（与 CLI  positional ref 一致）。 |
+| `FLASHCLI_VARIANT` | 否 | 若 ref 含 `@variant` 则写入；否则不设置。 |
+| `FLASHCLI_EXTRA_WEIGHT_<KEY>` | 否 | 每个 manifest `extra_weights` 条目一条；`<KEY>` 为大写 manifest 键（非字母数字转为 `_`）。值为该扩展权重的**绝对路径**（已校验存在）。例：`extra_weights.mtp_fp8` → `FLASHCLI_EXTRA_WEIGHT_MTP_FP8`。 |
+
+Script entry **不应**依赖 `{models_dir}` 占位符或全局 cache 布局；只读上表变量即可。
+
+### Engine 模式（默认）
+
+| 来源 | 说明 |
+|------|------|
+| manifest **`env`** / variant **`env`** | 在 entry 执行前写入；支持 `{bundle_root}`、`{models_dir}` 占位符。由 bundle 作者命名（如 Qwen 的 `FLASHRT_QWEN36_MTP_CKPT_DIR`）。 |
+| **`post_pull`** | 按 manifest 步骤写入（如 `FLASH_RT_PALIGEMMA_TOKENIZER`）。 |
+| **`--mtp-checkpoint`** | 覆盖并写入 `FLASHRT_QWEN36_MTP_CKPT_DIR`（仅 engine 主机/infer 解析该 flag）。 |
+
+Engine 模式**不**设置 `FLASHCLI_CHECKPOINT`（权重通过 `RunEngine.load(path, …)` 传入）。
+
+### 内部变量（entry 请勿依赖）
+
+| 变量 | 说明 |
+|------|------|
+| `FLASHCLI_RUNTIME_ID` | re-exec 时当前 runtime 矩阵键。 |
+| `FLASHCLI_IN_BUNDLE_VENV` | `1` 表示 infer 子进程。 |
+| `FLASHCLI_BUNDLE_ROOT`（re-exec 时） | flashcli 内部解析 manifest 用；script 模式由 entry 注入覆盖为同一语义的路径。 |
+| `VIRTUAL_ENV` | bundle venv 路径（Python 标准）。 |
 
 ## Infer / serve（bundle venv）
 
@@ -142,15 +177,13 @@ Bundle 的 Python 依赖（torch 等）由 `activate_bundle` 按 `flashcli-bundl
 | `GITHUB_TOKEN` / `GH_TOKEN` | （无） | 拉取 python-build-standalone release 时可选 GitHub API token。 |
 | `FLASHRT_REPO_ROOT` | （自动探测） | FlashRT 源码仓库根目录。在无法从 bundle 的 `flashcli-bundle.json` 解析 `python_dependencies` 时，用于回退读取 FlashRT 的 `pyproject.toml`（见 `runtime/requirements_spec.py`）。本地 FlashRT + flashcli monorepo 时偶尔需要。 |
 
-## 运行时由 flashcli 设置（只读 / 调试）
+## 运行时由 flashcli 设置（内部 / 调试）
 
-以下变量由 flashcli 在 `activate_bundle` 或推理流程中**写入**当前进程，一般无需用户设置；bundle 内 `entry` 模块可读取：
+以下变量由 flashcli 在 re-exec 或 activate 流程中写入，**不属于 bundle entry 稳定 API**（见上一节「Bundle entry 环境变量」）：
 
 | 变量 | 说明 |
 |------|------|
-| `FLASHCLI_ACTIVE_BUNDLE` | 当前激活的 bundle 根目录绝对路径。 |
-| `FLASHCLI_BUNDLE_ROOT` | 当前 bundle 根目录（re-exec 时设置）。 |
-| `PYTHONPATH` | **Activate：** prepend bundle 根目录以便 `import entry` / `flash_rt`。**Re-exec：** 不加载主机 `flashcli`。 |
+| `PYTHONPATH` | **Activate：** 通过 `sys.path` prepend bundle 根目录以便 `import entry` / `flash_rt`。**Re-exec：** 清除 host `PYTHONPATH`。 |
 
 ## 相关文档
 

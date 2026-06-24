@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from flashcli_bundle.help_text import format_run_help, format_serve_help
+from flashcli_bundle.manifest import entry_mode_for_capability
 from flashcli_bundle.manifest_resolve import resolve_manifest_for_preset
 from flashcli_bundle.options import (
     bundle_run_options_for_help,
@@ -23,10 +24,11 @@ def format_command_help(
     """Build run/serve help from manifest only (no full bundle sync)."""
     manifest = resolve_manifest_for_preset(preset, bundle_path=bundle_path)
     variant_key = resolve_options_variant(manifest, preset)
+    em = entry_mode_for_capability(manifest, command)
     if command == "run":
         specs = bundle_run_options_for_help(manifest, variant=variant_key)
-        return format_run_help(preset, manifest, specs)
+        return format_run_help(preset, manifest, specs, entry_mode=em)
     if command == "serve":
         specs = bundle_serve_options_for_help(manifest, variant=variant_key)
-        return format_serve_help(preset, manifest, specs)
+        return format_serve_help(preset, manifest, specs, entry_mode=em)
     raise ValueError(f"unknown command: {command!r}")
