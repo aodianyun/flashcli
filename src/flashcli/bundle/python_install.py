@@ -247,7 +247,7 @@ def ensure_python_for_minor(
     from flashcli.bundle.python_resolve import resolve_python_for_minor
 
     load_python_env_file()
-    found = resolve_python_for_minor(py_minor)
+    found = resolve_python_for_minor(py_minor, require_venv=True)
     if found is not None:
         return found
 

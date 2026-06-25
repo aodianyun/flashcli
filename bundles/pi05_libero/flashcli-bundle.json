@@ -78,7 +78,7 @@
     }
   ],
   "weights": {
-    "source": "huggingface",
+    "source": "modelscope",
     "repo": "lerobot/pi05_libero_finetuned_v044",
     "revision": "main",
     "require_norm_stats": true

@@ -93,9 +93,19 @@ def ensure_bundle_venv(
 
     if not quiet:
         print(
-            f"Creating bundle venv (Python 3.{python_abi[1:]}) at {venv} ..."
+            f"Creating bundle venv (Python 3.{python_abi[1:]}) at {venv} "
+            f"(base: {base_python}) ..."
         )
-    _create_venv(base_python, venv)
+    try:
+        _create_venv(base_python, venv)
+    except subprocess.CalledProcessError as exc:
+        raise BundleEnvironmentError(
+            f"Failed to create bundle venv at {venv} using {base_python}.\n"
+            "  On Debian/Ubuntu without python3-venv: flashcli will auto-install "
+            "standalone Python when FLASHCLI_AUTO_INSTALL_BUNDLE_PYTHON=1 (default).\n"
+            "  Or: apt install python3.12-venv\n"
+            "  Or: set FLASHCLI_PY312_BIN=/path/to/python-with-venv"
+        ) from exc
     py = venv_python(runtime_id)
 
     ensure_runtime_python_stack(

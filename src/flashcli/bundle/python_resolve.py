@@ -38,54 +38,93 @@ def _python_candidates(py_minor: str) -> list[str]:
     out: list[str] = []
     if override:
         out.append(override)
-    out.extend(
-        [
-            ver,
-            f"/usr/local/bin/{ver}",
-            f"/usr/bin/{ver}",
-        ]
-    )
+    mm = f"{major}.{minor}"
     for root in _python_roots():
-        mm = f"{major}.{minor}"
         out.extend(
             [
                 f"{root}/{mm}/bin/{ver}",
                 f"{root}/{mm}/bin/python3",
             ]
         )
-    out.append(f"/opt/python/{ver}/bin/{ver}")
+    out.extend(
+        [
+            f"/opt/python/{ver}/bin/{ver}",
+            f"/usr/local/bin/{ver}",
+            f"/usr/bin/{ver}",
+            ver,
+        ]
+    )
+    if host_python_minor() == py_minor:
+        out.append(sys.executable)
     return out
 
 
-def resolve_python_for_minor(py_minor: str) -> Path | None:
+def python_can_create_venv(py_bin: Path) -> bool:
+    """True when *py_bin* can run ``python -m venv`` (Debian may split ensurepip)."""
+    try:
+        proc = subprocess.run(
+            [str(py_bin), "-c", "import ensurepip, venv"],
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+        return proc.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def _python_reports_minor(py_bin: Path, py_minor: str) -> bool:
+    try:
+        out = subprocess.run(
+            [str(py_bin), "-c", "import sys; print(sys.version_info[:2])"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if out.returncode != 0:
+        return False
+    m = re.match(r"\((\d+), (\d+)\)", out.stdout.strip())
+    if not m:
+        return False
+    return int(m.group(1)) == int(py_minor[0]) and int(m.group(2)) == int(py_minor[1:])
+
+
+def _resolve_candidate_path(cand: str) -> Path | None:
+    if "/" in cand or cand.startswith("."):
+        p = Path(cand)
+        if p.is_file() and os.access(p, os.X_OK):
+            return p
+        return None
+    found = shutil.which(cand)
+    if not found:
+        return None
+    p = Path(found)
+    if p.is_file() and os.access(p, os.X_OK):
+        return p
+    return None
+
+
+def resolve_python_for_minor(
+    py_minor: str,
+    *,
+    require_venv: bool = False,
+) -> Path | None:
     load_python_env_file()
-    if host_python_minor() == py_minor:
-        return Path(sys.executable)
+    seen: set[str] = set()
     for cand in _python_candidates(py_minor):
-        if "/" in cand:
-            p = Path(cand)
-            if not (p.is_file() and os.access(p, os.X_OK)):
-                continue
-        else:
-            found = shutil.which(cand)
-            if not found:
-                continue
-            p = Path(found)
-        try:
-            out = subprocess.run(
-                [str(p), "-c", "import sys; print(sys.version_info[:2])"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                check=False,
-            )
-        except (OSError, subprocess.TimeoutExpired):
+        p = _resolve_candidate_path(cand)
+        if p is None:
             continue
-        if out.returncode != 0:
+        key = str(p.resolve())
+        if key in seen:
             continue
-        m = re.match(r"\((\d+), (\d+)\)", out.stdout.strip())
-        if not m:
+        seen.add(key)
+        if not _python_reports_minor(p, py_minor):
             continue
-        if int(m.group(1)) == int(py_minor[0]) and int(m.group(2)) == int(py_minor[1:]):
-            return p.resolve()
+        if require_venv and not python_can_create_venv(p):
+            continue
+        return p.resolve()
     return None

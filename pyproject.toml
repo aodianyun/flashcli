@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flashcli"
-version = "0.3.1.2026.6.17"
+version = "0.3.2.2026.6.25"
 description = "FlashRT distribution CLI — model bundles, sync, and bundle runtime host."
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -25,7 +25,6 @@ dev = ["flash-rt[torch,server]"]
 
 [project.scripts]
 flashcli = "flashcli.cli:app"
-flash = "flashcli.cli:app"
 
 [tool.setuptools.packages.find]
 where = ["src"]
