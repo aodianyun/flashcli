@@ -166,8 +166,6 @@ Preset 语法见 [model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-
 **常用参数**：`--no-auto-install`、`--checkpoint`、`--quiet`  
 **Ref 语法**：FlashHub `flashcli-bundle/name:version[@variant]` 或本地 `bundles/name[@variant]`（目录须含 `flashcli-bundle.json`）。多 variant bundle 必须带 `@variant`。
 
-`flash` 与 `flashcli` 等价。
-
 Qwen `serve` 要点：`--max-seq`、`--max-q-seq`（qwen3）、`--K`、`--max-output-tokens`（默认 16384）、`--warmup-preset`、`--default-max-tokens`。
 
 ---

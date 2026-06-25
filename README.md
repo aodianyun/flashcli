@@ -174,8 +174,6 @@ Preset ref syntax: [model_bundle_standard.md](docs/model_bundle_standard.md).
 **Common flags**: `--no-auto-install`, `--checkpoint`, `--quiet`  
 **Ref syntax**: FlashHub `flashcli-bundle/name:version[@variant]` or local `bundles/name[@variant]` (directory must contain `flashcli-bundle.json`). Multi-variant bundles require `@variant`.
 
-`flash` and `flashcli` are equivalent entry points.
-
 Qwen `serve` highlights: `--max-seq`, `--max-q-seq` (qwen3), `--K`, `--max-output-tokens` (default 16384), `--warmup-preset`, `--default-max-tokens`.
 
 ---

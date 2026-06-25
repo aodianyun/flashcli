@@ -2060,9 +2060,9 @@ def collect_errors() -> list[str]:
     found = {
         ep.name
         for ep in entry_points(group="console_scripts")
-        if ep.name in ("flashcli", "flash") and ep.value in (expected, alt_expected)
+        if ep.name == "flashcli" and ep.value in (expected, alt_expected)
     }
-    missing = {"flashcli", "flash"} - found
+    missing = {"flashcli"} - found
     if missing:
         err(f"[project.scripts] missing: {', '.join(sorted(missing))}")
 
@@ -2228,7 +2228,7 @@ write_module_cli_wrapper() {
 install_cli_wrappers_in_dir() {
   _dir="$1"
   write_module_cli_wrapper "${_dir}/flashcli" "$PYTHON" "flashcli.cli" || return 1
-  write_module_cli_wrapper "${_dir}/flash" "$PYTHON" "flashcli.cli" || return 1
+  rm -f "${_dir}/flash" 2>/dev/null || true
   if run_py -c "import huggingface_hub" 2>/dev/null; then
     write_module_cli_wrapper "${_dir}/hf" "$PYTHON" "huggingface_hub.cli.hf" || true
     rm -f "${_dir}/huggingface-cli" 2>/dev/null || true
