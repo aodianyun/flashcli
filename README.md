@@ -43,6 +43,7 @@ flashcli is intentionally thin: **inference code lives in the bundle**. The CLI 
 | [`flashcli-bundle/pi05_libero:1.0.3`](bundles/pi05_libero/QUICKSTART.md) | Pi0.5 LIBERO VLA | **SM89**, **SM120** | cu124 (SM89) · cu130 | **3.12** (bundle venv) | `run` |
 | [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen3`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3-8B NVFP4 chat | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
 | [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen36`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
+| [`flashcli-bundle/qwen3_vl_nvfp4:1.0.0`](bundles/qwen3_vl_nvfp4/QUICKSTART.md) | Qwen3-VL-8B NVFP4 image+text | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
 
 **Platform requirements**
 
@@ -114,6 +115,8 @@ First run syncs the FlashHub runtime, creates the bundle venv, installs the torc
 ```bash
 flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen3 --prompt "Hello" --max-tokens 128
 flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36 --prompt "Hello" --max-tokens 128 --K 6
+flashcli run flashcli-bundle/qwen3_vl_nvfp4:1.0.0 \
+  --image /path/to/scene.jpg --prompt "Describe this image." --max-tokens 128
 ```
 
 **OpenAI-compatible server**
@@ -126,6 +129,10 @@ flashcli serve flashcli-bundle/qwen_nvfp4:1.0.1@qwen3 --host 0.0.0.0 --port 8000
 # qwen36 — long context + MTP (defaults: FP8-KV, route_min_seq=0)
 flashcli serve flashcli-bundle/qwen_nvfp4:1.0.1@qwen36 --host 0.0.0.0 --port 8000 \
   --K 6 --max-seq 262208 --warmup-preset auto
+
+# qwen3-vl — multimodal (image + text)
+flashcli serve flashcli-bundle/qwen3_vl_nvfp4:1.0.0 --host 0.0.0.0 --port 8000 \
+  --max-pixels 500000 --warmup-preset short
 ```
 
 ```bash
@@ -142,7 +149,7 @@ bash bundles/qwen_nvfp4/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
 flashcli serve bundles/qwen_nvfp4@qwen36 --port 8000 --K 6 --max-seq 262208
 ```
 
-Step-by-step per bundle: **[qwen_nvfp4 QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md)** · **[pi05_libero QUICKSTART](bundles/pi05_libero/QUICKSTART.md)**
+Step-by-step per bundle: **[qwen_nvfp4 QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md)** · **[qwen3_vl_nvfp4 QUICKSTART](bundles/qwen3_vl_nvfp4/QUICKSTART.md)** · **[pi05_libero QUICKSTART](bundles/pi05_libero/QUICKSTART.md)**
 
 ---
 
@@ -153,6 +160,7 @@ Step-by-step per bundle: **[qwen_nvfp4 QUICKSTART](bundles/qwen_nvfp4/QUICKSTART
 | `flashcli-bundle/pi05_libero:1.0.3` | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) | [QUICKSTART](bundles/pi05_libero/QUICKSTART.md) |
 | `flashcli-bundle/qwen_nvfp4:1.0.1@qwen3` | [kaitchup/Qwen3-8B-NVFP4](https://huggingface.co/kaitchup/Qwen3-8B-NVFP4) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md) |
 | `flashcli-bundle/qwen_nvfp4:1.0.1@qwen36` | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4) + [MTP](https://huggingface.co/Qwen/Qwen3.6-27B-FP8) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md) |
+| `flashcli-bundle/qwen3_vl_nvfp4:1.0.0` | FlashRT NVFP4 from [Qwen/Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) (quantize before publish) | [QUICKSTART](bundles/qwen3_vl_nvfp4/QUICKSTART.md) |
 
 Preset ref syntax: [model_bundle_standard.md](docs/model_bundle_standard.md).
 

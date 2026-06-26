@@ -10,5 +10,6 @@ FlashHub 上的参考 bundle 源码。终端用户固定 ref（如 `flashcli-bun
 |------|-----|------------|
 | [`pi05_libero/`](pi05_libero/) | `flashcli-bundle/pi05_libero:1.0.3` | **SM89** · cu124/cu130 · **SM120** · cu130 |
 | [`qwen_nvfp4/`](qwen_nvfp4/) | `flashcli-bundle/qwen_nvfp4:1.0.1@qwen3`、`@qwen36` | **SM120** · 仅 cu130 |
+| [`qwen3_vl_nvfp4/`](qwen3_vl_nvfp4/) | `flashcli-bundle/qwen3_vl_nvfp4:1.0.0` | **SM120** · 仅 cu130 |
 
 Bundle 格式：[bundle_publish_standard.zh-CN.md](../docs/bundle_publish_standard.zh-CN.md) · ref 语法：[model_bundle_standard.zh-CN.md](../docs/model_bundle_standard.zh-CN.md)

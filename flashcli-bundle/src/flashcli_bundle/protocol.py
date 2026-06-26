@@ -12,7 +12,7 @@ from flashcli_bundle.preset import Preset
 @dataclass
 class ChatMessage:
     role: str
-    content: str | None = None
+    content: str | list | None = None
     tool_calls: list[dict[str, Any]] | None = None
 
 

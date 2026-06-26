@@ -1,0 +1,132 @@
+{
+  "format": "flashcli-model-bundle",
+  "format_version": 3,
+  "protocol_version": 1,
+  "name": "qwen3_vl_nvfp4",
+  "description": "Qwen3-VL-8B NVFP4 multimodal (SM120) — image+text run/serve with streaming and tools",
+  "python_abi": "312",
+  "python_dependencies": {
+    "torch": { "package": "torch", "index": "auto" },
+    "pip": [
+      "numpy",
+      "pyyaml",
+      "safetensors",
+      "sentencepiece",
+      "ml_dtypes",
+      "transformers<4.56",
+      "pillow"
+    ]
+  },
+  "runtime": {
+    "sm120-cu130-linux-x86_64-py312": "runtime/sm120-cu130-linux-x86_64-py312"
+  },
+  "entry": {
+    "run": { "module": "run", "attr": "RunEngine" },
+    "serve": { "module": "serve", "attr": "ServeEngine" }
+  },
+  "weights": {
+    "source": "huggingface",
+    "repo": "Qwen/Qwen3-VL-8B-Instruct",
+    "revision": "main"
+  },
+  "run_options": [
+    {
+      "name": "prompt",
+      "type": "string",
+      "default": "Describe this image in one sentence.",
+      "help": "User text paired with the image.",
+      "phase": "predict"
+    },
+    {
+      "name": "image",
+      "type": "string",
+      "help": "Path to an RGB image file.",
+      "phase": "predict"
+    },
+    {
+      "name": "max_tokens",
+      "type": "integer",
+      "default": 256,
+      "help": "Maximum new tokens to generate.",
+      "phase": "predict"
+    },
+    {
+      "name": "max_pixels",
+      "type": "integer",
+      "default": 500000,
+      "help": "Cap image resolution (pixels) for TTFT and VRAM.",
+      "phase": "load"
+    },
+    {
+      "name": "temperature",
+      "type": "float",
+      "default": 0.0,
+      "help": "Sampling temperature (0 = greedy).",
+      "phase": "predict"
+    },
+    {
+      "name": "top_p",
+      "type": "float",
+      "default": 1.0,
+      "help": "Nucleus sampling top-p.",
+      "phase": "predict"
+    },
+    {
+      "name": "top_k",
+      "type": "integer",
+      "default": 0,
+      "help": "Top-k sampling (0 disables).",
+      "phase": "predict"
+    },
+    {
+      "name": "seed",
+      "type": "integer",
+      "help": "Random seed (optional).",
+      "phase": "predict"
+    }
+  ],
+  "serve_options": [
+    {
+      "name": "device",
+      "type": "string",
+      "default": "cuda:0",
+      "help": "Torch device for inference.",
+      "phase": "load"
+    },
+    {
+      "name": "max_seq",
+      "type": "integer",
+      "default": 4096,
+      "help": "KV / context length budget.",
+      "phase": "load"
+    },
+    {
+      "name": "max_pixels",
+      "type": "integer",
+      "default": 500000,
+      "help": "Cap image resolution (pixels) for TTFT and VRAM.",
+      "phase": "load"
+    },
+    {
+      "name": "model_name",
+      "type": "string",
+      "default": "qwen3-vl",
+      "help": "OpenAI API model id exposed by serve.",
+      "phase": "load"
+    },
+    {
+      "name": "warmup_preset",
+      "type": "string",
+      "default": "none",
+      "help": "Warmup preset: none|short (decode graph capture with dummy image).",
+      "phase": "warmup"
+    },
+    {
+      "name": "warmup",
+      "type": "string",
+      "default": "",
+      "help": "Decode warmup: max_new_tokens integer.",
+      "phase": "warmup"
+    }
+  ]
+}

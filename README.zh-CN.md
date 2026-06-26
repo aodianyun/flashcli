@@ -43,6 +43,7 @@ flashcli 刻意保持轻薄：**推理代码在 bundle 内**。CLI 从 FlashHub 
 | [`flashcli-bundle/pi05_libero:1.0.3`](bundles/pi05_libero/QUICKSTART.zh-CN.md) | Pi0.5 LIBERO VLA | **SM89**、**SM120** | cu124（SM89）· cu130 | **3.12**（bundle venv） | `run` |
 | [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen3`](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) | Qwen3-8B NVFP4 对话 | **SM120** | **仅 cu130** | **3.12** | `run`, `serve` |
 | [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen36`](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **仅 cu130** | **3.12** | `run`, `serve` |
+| [`flashcli-bundle/qwen3_vl_nvfp4:1.0.0`](bundles/qwen3_vl_nvfp4/QUICKSTART.zh-CN.md) | Qwen3-VL-8B NVFP4 图文 | **SM120** | **仅 cu130** | **3.12** | `run`, `serve` |
 
 **平台要求**
 
@@ -108,6 +109,8 @@ flashcli run flashcli-bundle/pi05_libero:1.0.3 \
 ```bash
 flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen3 --prompt "你好" --max-tokens 128
 flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36 --prompt "你好" --max-tokens 128 --K 6
+flashcli run flashcli-bundle/qwen3_vl_nvfp4:1.0.0 \
+  --image /path/to/scene.jpg --prompt "描述这张图" --max-tokens 128
 ```
 
 **OpenAI 兼容服务**
@@ -118,6 +121,10 @@ flashcli serve flashcli-bundle/qwen_nvfp4:1.0.1@qwen3 --host 0.0.0.0 --port 8000
 
 flashcli serve flashcli-bundle/qwen_nvfp4:1.0.1@qwen36 --host 0.0.0.0 --port 8000 \
   --K 6 --max-seq 262208 --warmup-preset auto
+
+# qwen3-vl — 多模态（图 + 文）
+flashcli serve flashcli-bundle/qwen3_vl_nvfp4:1.0.0 --host 0.0.0.0 --port 8000 \
+  --max-pixels 500000 --warmup-preset short
 ```
 
 ```bash
@@ -134,7 +141,7 @@ bash bundles/qwen_nvfp4/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
 flashcli serve bundles/qwen_nvfp4@qwen36 --port 8000 --K 6 --max-seq 262208
 ```
 
-分 bundle 详细步骤：**[qwen_nvfp4 快速上手](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md)** · **[pi05_libero 快速上手](bundles/pi05_libero/QUICKSTART.zh-CN.md)**
+分 bundle 详细步骤：**[qwen_nvfp4 快速上手](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md)** · **[qwen3_vl_nvfp4 快速上手](bundles/qwen3_vl_nvfp4/QUICKSTART.zh-CN.md)** · **[pi05_libero 快速上手](bundles/pi05_libero/QUICKSTART.zh-CN.md)**
 
 ---
 
@@ -145,6 +152,7 @@ flashcli serve bundles/qwen_nvfp4@qwen36 --port 8000 --K 6 --max-seq 262208
 | `flashcli-bundle/pi05_libero:1.0.3` | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) | [QUICKSTART](bundles/pi05_libero/QUICKSTART.zh-CN.md) |
 | `flashcli-bundle/qwen_nvfp4:1.0.1@qwen3` | [kaitchup/Qwen3-8B-NVFP4](https://huggingface.co/kaitchup/Qwen3-8B-NVFP4) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) |
 | `flashcli-bundle/qwen_nvfp4:1.0.1@qwen36` | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4) + [MTP](https://huggingface.co/Qwen/Qwen3.6-27B-FP8) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) |
+| `flashcli-bundle/qwen3_vl_nvfp4:1.0.0` | 由 [Qwen/Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) 量化后的 FlashRT NVFP4（发布前 quantize） | [QUICKSTART](bundles/qwen3_vl_nvfp4/QUICKSTART.zh-CN.md) |
 
 Preset 语法见 [model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md)。
 

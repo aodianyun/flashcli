@@ -1,0 +1,119 @@
+"""Qwen3-VL frontend subclass — tools= support without modifying FlashRT."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from flash_rt.frontends.torch.qwen3_vl_rtx import Qwen3VlTorchFrontendRtx
+
+
+class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
+    """Adds optional ``tools`` to ``apply_chat_template`` for function calling."""
+
+    def set_prompt(self, messages: list, *, tools: list[dict[str, Any]] | None = None) -> None:
+        import torch
+
+        from flash_rt.frontends.torch import _qwen3_vl_geometry as geo
+
+        template_kw: dict[str, Any] = {
+            "add_generation_prompt": True,
+            "tokenize": True,
+            "return_dict": True,
+            "return_tensors": "pt",
+        }
+        if tools is not None:
+            template_kw["tools"] = tools
+        inputs = self.processor.apply_chat_template(messages, **template_kw)
+        inputs = inputs.to(self.device)
+        input_ids = inputs["input_ids"][0]
+        s_len = int(input_ids.shape[0])
+        if s_len > self.max_seq:
+            raise ValueError(f"prompt length {s_len} exceeds max_seq {self.max_seq}")
+
+        merge = self._merge
+        image_grid = inputs.get("image_grid_thw")
+        video_grid = inputs.get("video_grid_thw")
+        pix_img = inputs.get("pixel_values")
+        pix_vid = inputs.get("pixel_values_videos")
+        if pix_img is not None:
+            pix_img = pix_img.to(torch.bfloat16)
+        if pix_vid is not None:
+            pix_vid = pix_vid.to(torch.bfloat16)
+
+        segs = geo.vision_segments(
+            input_ids.cpu(),
+            image_grid,
+            video_grid,
+            image_token_id=self._image_token_id,
+            video_token_id=self._video_token_id,
+            spatial_merge_size=merge,
+        )
+        seg_pix: list = []
+        seg_grids: list = []
+        spans: list[tuple[int, int]] = []
+        seg_patches: list[int] = []
+        off_img = off_vid = 0
+        for sg in segs:
+            npp = sg["patches"]
+            if sg["kind"] == "image":
+                seg_pix.append(pix_img[off_img : off_img + npp])
+                off_img += npp
+            else:
+                seg_pix.append(pix_vid[off_vid : off_vid + npp])
+                off_vid += npp
+            seg_grids.append(sg["grid"])
+            spans.append(sg["span"])
+            seg_patches.append(npp)
+
+        seg_grid = torch.tensor(seg_grids, dtype=torch.long)
+        pixel_values = torch.cat(seg_pix, dim=0).contiguous()
+
+        pos_ids = geo.mrope_position_ids(
+            input_ids.cpu(),
+            image_grid.cpu() if image_grid is not None else None,
+            video_grid.cpu() if video_grid is not None else None,
+            image_token_id=self._image_token_id,
+            video_token_id=self._video_token_id,
+            vision_start_token_id=self._vision_start_token_id,
+            spatial_merge_size=merge,
+        )
+        mcos, msin = geo.mrope_cos_sin(
+            pos_ids,
+            head_dim=self._head_dim,
+            rope_theta=self._rope_theta,
+            mrope_section=self._mrope_section,
+            device=self.device,
+        )
+        vcos, vsin = geo.vision_rope_cos_sin(
+            seg_grid,
+            head_dim=self._vis_head_dim,
+            spatial_merge_size=merge,
+            device=self.device,
+        )
+        pos_embeds = geo.vision_pos_embeds(
+            seg_grid,
+            self.vision.pos_embed,
+            num_grid_per_side=self._num_grid_per_side,
+            spatial_merge_size=merge,
+            device=self.device,
+        )
+
+        self._prompt = {
+            "input_ids": input_ids,
+            "pixel_values": pixel_values,
+            "spans": spans,
+            "seg_patches": seg_patches,
+            "img_start": spans[0][0],
+            "img_end": spans[0][1],
+            "mcos": mcos,
+            "msin": msin,
+            "vcos": vcos,
+            "vsin": vsin,
+            "pos_embeds": pos_embeds,
+            "S": s_len,
+            "mrope_max": int(pos_ids.max()),
+        }
+        if len(spans) == 1:
+            self._prompt["pg_key"] = self._stage_prefill_inputs(
+                seg_patches[0], s_len, spans[0]
+            )

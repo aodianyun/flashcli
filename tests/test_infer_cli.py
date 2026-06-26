@@ -386,7 +386,7 @@ def test_validate_repo_bundles() -> None:
     from flashcli.bundle.manifest import load_bundle_manifest
 
     root = Path(__file__).resolve().parents[1] / "bundles"
-    for name in ("pi05_libero", "qwen_nvfp4"):
+    for name in ("pi05_libero", "qwen_nvfp4", "qwen3_vl_nvfp4"):
         manifest = load_bundle_manifest(root / name)
         assert validate_bundle_options(manifest) == [], name
 

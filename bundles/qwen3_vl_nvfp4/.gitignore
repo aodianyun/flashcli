@@ -1,0 +1,9 @@
+# Assembled by build.sh (Linux + NVIDIA SM120 GPU)
+/flash_rt/
+/lib/
+/runtime/
+/dist/
+/flash_rt_*.so
+/libfmha_fp16_strided.so
+/checkpoint/*
+!/checkpoint/.gitkeep
