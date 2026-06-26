@@ -14,6 +14,10 @@ verify_native_lib_python_abi() {
   local strict_missing="${7:-1}"
   local native_lib="${bundle_dir}/lib"
   local py cuda py_mod pattern so rc err py_bin probe_env
+  local -a py_mods=(flash_rt_kernels flash_rt_fa2)
+  if [[ -n "${RELEASE_NATIVE_MODULES:-}" ]]; then
+    read -r -a py_mods <<< "${RELEASE_NATIVE_MODULES}"
+  fi
 
   [[ -d "${native_lib}" ]] || {
     die "Missing ${native_lib}"
@@ -43,7 +47,7 @@ verify_native_lib_python_abi() {
       continue
     fi
     for cuda in ${cuda_tags}; do
-      for py_mod in flash_rt_kernels flash_rt_fa2; do
+      for py_mod in "${py_mods[@]}"; do
         pattern="${native_lib}/${py_mod}*-sm${sm}-cu${cuda}-${os_name}-${arch}-py${py}.so"
         shopt -s nullglob
         local -a matches=( ${pattern} )

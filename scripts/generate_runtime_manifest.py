@@ -138,20 +138,21 @@ def main() -> int:
 
     torch_spec, pip_packages = extract_runtime_packages(repo_root)
 
-    _src = Path(__file__).resolve().parents[1] / "src"
-    if str(_src) not in sys.path:
-        sys.path.insert(0, str(_src))
+    _scripts_lib = Path(__file__).resolve().parent / "lib"
+    if str(_scripts_lib) not in sys.path:
+        sys.path.insert(0, str(_scripts_lib))
+    from flashcli_bundle_path import ensure_flashcli_bundle_on_path
+
+    ensure_flashcli_bundle_on_path(Path(__file__).resolve().parents[1])
 
     py_minor = str(args.python_minor).strip()
     if not py_minor.isdigit() or len(py_minor) != 3:
         raise SystemExit(f"--python-minor must be 310/311/312, got {py_minor!r}")
-    major = int(py_minor[0])
-    minor = int(py_minor[1:])
 
     runtime_artifacts: dict[str, str] = {}
 
     if args.matrix_manifest:
-        from flashcli.bundle.native_naming import parse_native_tag_from_filename
+        from flashcli_bundle.native_naming import parse_native_tag_from_filename
 
         for so in sorted(lib_dir.glob("*.so")):
             parsed = parse_native_tag_from_filename(so.name)

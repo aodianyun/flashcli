@@ -29,6 +29,7 @@ load_release_matrix_config() {
   FINALIZE_EXTRA="${RELEASE_FINALIZE_EXTRA:-${CELL_EXTRA}}"
   PACK_FILES="${RELEASE_PACK_FILES:-}"
   SM120_CUDA_TAGS="${RELEASE_MATRIX_SM120_CUDA_TAGS:-}"
+  NATIVE_MODULES="${RELEASE_NATIVE_MODULES:-flash_rt_kernels flash_rt_fa2}"
 
   local missing=()
   [[ -n "${RELEASE_BUNDLE_NAME}" ]] || missing+=("RELEASE_BUNDLE_NAME")

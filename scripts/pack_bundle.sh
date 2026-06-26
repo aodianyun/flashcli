@@ -100,9 +100,10 @@ load_release_matrix_config "${BUNDLE_DIR}" || die "Invalid release-matrix.env"
 resolve_repo_root
 
 PYTHON_ABI="${RELEASE_PYTHON_ABI:-312}"
-PY_MINORS="${RELEASE_MATRIX_PY_MINORS:-${PYTHON_ABI}}"
-PACK_FILES="${RELEASE_PACK_FILES:-}"
-[[ -n "${PACK_FILES}" ]] || die "RELEASE_PACK_FILES not set in release-matrix.env"
+  PY_MINORS="${RELEASE_MATRIX_PY_MINORS:-${PYTHON_ABI}}"
+  PACK_FILES="${RELEASE_PACK_FILES:-}"
+  NATIVE_MODULES="${RELEASE_NATIVE_MODULES:-flash_rt_kernels flash_rt_fa2}"
+  [[ -n "${PACK_FILES}" ]] || die "RELEASE_PACK_FILES not set in release-matrix.env"
 
 native_lib="${BUNDLE_DIR}/lib"
 [[ -d "${native_lib}" ]] || die "Missing lib/ (run release_bundle.sh first)"
@@ -136,23 +137,11 @@ for entry in ${PACK_FILES}; do
 done
 log "Copied bundle tree to ${OUTPUT_DIR}"
 
-# Native cells: group .so by env key suffix *-pyNNN
-declare -A CELLS=()
+# Native cells: group lib/*.so into runtime/<env-key>/ via Python (see below).
 shopt -s nullglob
-for so in "${native_lib}"/*.so; do
-  base="$(basename "${so}")"
-  if [[ "${base}" =~ -py[0-9]{3}\.so$ ]]; then
-    cell="${base#flash_rt_kernels-}"
-    cell="${cell#flash_rt_fa2-}"
-    cell="${cell#flash_rt_fp4-}"
-    cell="${cell%.so}"
-    # cell is {abi}-sm..-pyNNN — extract catalog key via python helper
-    :
-  fi
-done
 shopt -u nullglob
 
-python3 - "${BUNDLE_DIR}" "${OUTPUT_DIR}" "${PYTHON_ABI}" "${FLASHCLI_ROOT}/src" <<'PY'
+python3 - "${BUNDLE_DIR}" "${OUTPUT_DIR}" "${PYTHON_ABI}" "${FLASHCLI_ROOT}" <<'PY'
 import json
 import shutil
 import sys
@@ -161,8 +150,13 @@ from pathlib import Path
 bundle_dir = Path(sys.argv[1])
 out_dir = Path(sys.argv[2])
 py_abi = sys.argv[3]
-sys.path.insert(0, sys.argv[4])
-from flashcli.bundle.native_naming import parse_native_tag_from_filename
+flashcli_root = Path(sys.argv[4])
+scripts_lib = flashcli_root / "scripts" / "lib"
+sys.path.insert(0, str(scripts_lib))
+from flashcli_bundle_path import ensure_flashcli_bundle_on_path
+
+ensure_flashcli_bundle_on_path(flashcli_root)
+from flashcli_bundle.native_naming import parse_native_tag_from_filename
 
 lib = bundle_dir / "lib"
 manifest_path = bundle_dir / "flashcli-bundle.json"
