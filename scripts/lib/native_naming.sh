@@ -70,7 +70,8 @@ clean_flashrt_shared_native_outputs() {
   rm -f \
     "${repo_root}/flash_rt/flash_rt_kernels"*.so \
     "${repo_root}/flash_rt/flash_rt_fa2"*.so \
-    "${repo_root}/flash_rt/flash_rt_fp4"*.so
+    "${repo_root}/flash_rt/flash_rt_fp4"*.so \
+    "${repo_root}/flash_rt/flash_rt_qwen3_vl_kernels"*.so
 }
 
 snapshot_flashrt_native_to_build_dir() {
@@ -83,7 +84,8 @@ snapshot_flashrt_native_to_build_dir() {
   for f in \
     "${repo_root}/flash_rt/flash_rt_kernels"*.so \
     "${repo_root}/flash_rt/flash_rt_fa2"*.so \
-    "${repo_root}/flash_rt/flash_rt_fp4"*.so; do
+    "${repo_root}/flash_rt/flash_rt_fp4"*.so \
+    "${repo_root}/flash_rt/flash_rt_qwen3_vl_kernels"*.so; do
     [[ -f "${f}" ]] || continue
     cp -f "${f}" "${out}/"
   done

@@ -18,6 +18,7 @@ from flashcli_bundle.runtime.detect import GpuInfo
 # Longest first for prefix matching in logical_native_module_name.
 NATIVE_MODULE_BASES: tuple[str, ...] = (
     "libfmha_fp16_strided",
+    "flash_rt_qwen3_vl_kernels",
     "flash_rt_kernels",
     "flash_rt_fa2",
     "flash_rt_fp4",

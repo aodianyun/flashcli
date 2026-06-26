@@ -121,6 +121,11 @@ def main() -> int:
         help="Scan lib/ and emit runtime/ directory map",
     )
     parser.add_argument(
+        "--native-artifact-tag",
+        default="",
+        help="Tag suffix for this build cell (informational; lib/ scan drives runtime map)",
+    )
+    parser.add_argument(
         "--base-artifact",
         default="base.tar.gz",
         help="Relative path for base artifact in FlashHub repo",
@@ -200,6 +205,8 @@ def main() -> int:
             "fmha": args.has_fmha == "1",
         },
     }
+    if args.native_artifact_tag:
+        bundle["build"]["native_artifact_tag"] = args.native_artifact_tag
 
     bundle_path.write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(bundle, indent=2), file=sys.stderr)

@@ -30,3 +30,5 @@ def test_logical_module_name():
     name = "flash_rt_kernels-dev-sm89-cu124-linux-x86_64-py312.so"
     assert logical_native_module_name(name) == "flash_rt_kernels"
     assert logical_native_module_name("flash_rt_fa2.so") == "flash_rt_fa2"
+    vlk = "flash_rt_qwen3_vl_kernels-dev-sm120-cu130-linux-x86_64-py312.so"
+    assert logical_native_module_name(vlk) == "flash_rt_qwen3_vl_kernels"
