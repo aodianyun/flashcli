@@ -358,6 +358,15 @@ def distribution_ok() -> bool:
 if distribution_ok():
     raise SystemExit(0)
 
+# Installed but version does not satisfy the specifier → needs pip upgrade.
+if req.specifier:
+    try:
+        md.version(req.name)
+    except md.PackageNotFoundError:
+        pass
+    else:
+        raise SystemExit(1)
+
 try:
     __import__(mod)
 except ImportError:

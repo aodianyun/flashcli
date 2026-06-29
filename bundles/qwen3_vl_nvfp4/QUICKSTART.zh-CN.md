@@ -150,5 +150,6 @@ curl -s http://127.0.0.1:8000/health | jq
 | `w16a16_gemm_sm120_bf16` missing | 需 `-DFLASHRT_ENABLE_QWEN35MOE=ON` 重编 native（`build.sh` 已开启）；只 pack 不够 |
 | 16GB OOM | 降低 `--max-pixels`、`--max-seq` |
 | 图文报 `image_processor` / processor 错误 | 确认 bundle runtime 里 `transformers>=4.57.0`（Qwen3-VL 需要 `Qwen3VLProcessor`）；旧版 `<4.56` 即使有 `preprocessor_config.json` 也只会加载 tokenizer |
+| `transformers 4.55.x does not include Qwen3VLProcessor` | `flashcli bundle install bundles/qwen3_vl_nvfp4/dist/ --force` 或 venv 内 `pip install "transformers>=4.57.0"` |
 | BF16 权重加载失败 | 需 `prepare_qwen3_vl_weights.sh` 量化后的 NVFP4 目录 |
 | 首次请求慢 | `--warmup-preset short` 或 `--warmup 32` |

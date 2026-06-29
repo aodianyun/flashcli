@@ -22,3 +22,11 @@ def test_requirement_satisfied_by_distribution_metadata(tmp_path: Path) -> None:
     py = venv / "bin" / "python"
     subprocess.run([str(py), "-m", "pip", "install", "-q", "packaging>=23.0"], check=True)
     assert requirement_import_satisfied("packaging>=23.0", python=py)
+
+
+def test_requirement_unsatisfied_when_version_below_specifier(tmp_path: Path) -> None:
+    venv = tmp_path / "venv"
+    subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
+    py = venv / "bin" / "python"
+    subprocess.run([str(py), "-m", "pip", "install", "-q", "packaging==23.2"], check=True)
+    assert not requirement_import_satisfied("packaging>=24.0", python=py)
