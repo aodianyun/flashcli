@@ -29,6 +29,20 @@ def test_manifest_validate_options() -> None:
     assert validate_bundle_options(manifest) == []
 
 
+def test_resolve_processor_tokenizer() -> None:
+    from _qwen3_vl_util_messages import resolve_processor_tokenizer
+
+    class Proc:
+        tokenizer = object()
+
+    class Tok:
+        pass
+
+    assert resolve_processor_tokenizer(Proc()) is Proc.tokenizer
+    tok = Tok()
+    assert resolve_processor_tokenizer(tok) is tok
+
+
 def test_openai_messages_to_frontend_text() -> None:
     from _qwen3_vl_util_messages import openai_messages_to_frontend
 

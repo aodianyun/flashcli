@@ -11,6 +11,39 @@ from typing import Any
 from flashcli_bundle.protocol import ChatMessage, ChatRequest
 
 
+def resolve_processor_tokenizer(processor: Any) -> Any:
+    """Return the HF tokenizer from a Processor or pass through a bare tokenizer."""
+    tok = getattr(processor, "tokenizer", None)
+    return processor if tok is None else tok
+
+
+def load_qwen3_vl_processor(checkpoint_path: str) -> Any:
+    """Load Qwen3-VL processor; recover from AutoProcessor returning a bare tokenizer."""
+    import os
+
+    from transformers import AutoProcessor
+
+    obj = AutoProcessor.from_pretrained(checkpoint_path, trust_remote_code=True)
+    if hasattr(obj, "tokenizer"):
+        return obj
+
+    preproc_cfg = os.path.join(checkpoint_path, "preprocessor_config.json")
+    if os.path.isfile(preproc_cfg):
+        import importlib
+
+        mod = importlib.import_module("transformers")
+        for class_name in ("Qwen3VLProcessor", "Qwen2VLProcessor"):
+            cls = getattr(mod, class_name, None)
+            if cls is None:
+                continue
+            try:
+                return cls.from_pretrained(checkpoint_path, trust_remote_code=True)
+            except Exception:
+                continue
+
+    return obj
+
+
 def _load_image(url_or_path: str):
     from PIL import Image
 

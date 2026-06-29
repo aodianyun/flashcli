@@ -13,6 +13,8 @@ from flash_rt.frontends.torch.qwen3_vl_rtx import (
     _require_qwen3_vl_kernels,
 )
 
+from _qwen3_vl_util_messages import load_qwen3_vl_processor, resolve_processor_tokenizer
+
 
 class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
     """Adds optional ``tools`` and a separate ``max_q_seq`` prefill budget.
@@ -32,8 +34,6 @@ class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
         max_q_seq: int = 1024,
         max_pixels: int | None = None,
     ) -> None:
-        from transformers import AutoProcessor
-
         max_seq = int(max_seq)
         max_q_seq = int(max_q_seq)
         if max_q_seq > max_seq:
@@ -73,7 +73,7 @@ class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
             max_q_seq=max_q_seq,
         )
         self.vision = Qwen3VlVisionRtx(checkpoint_path, device=device)
-        self.processor = AutoProcessor.from_pretrained(checkpoint_path)
+        self.processor = load_qwen3_vl_processor(checkpoint_path)
         self.max_pixels = max_pixels
         if max_pixels is not None:
             for proc in (
@@ -96,6 +96,10 @@ class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
             self.max_seq, hidden, dtype=_torch.bfloat16, device=device
         )
         self._pg_logits = _torch.empty(1, vocab, dtype=_torch.bfloat16, device=device)
+
+    @property
+    def tokenizer(self) -> Any:
+        return resolve_processor_tokenizer(self.processor)
 
     def set_prompt(self, messages: list, *, tools: list[dict[str, Any]] | None = None) -> None:
         import torch

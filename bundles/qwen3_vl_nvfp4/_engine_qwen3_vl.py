@@ -57,7 +57,7 @@ class Qwen3VlEngine:
 
     @property
     def tokenizer(self) -> Any:
-        return self.fe.processor.tokenizer
+        return self.fe.tokenizer
 
     def warmup(self, max_new_tokens: int = 32) -> None:
         """Capture decode CUDA graphs using a tiny in-memory image."""
