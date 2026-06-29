@@ -138,11 +138,10 @@ def configure_vl_max_pixels(processor: Any, max_pixels: int | None) -> None:
 
 
 def vl_processor_call_kwargs(max_pixels: int | None) -> dict[str, Any]:
-    """Keyword args for ``Qwen3VLProcessor.__call__`` / ``apply_chat_template`` (4.57+)."""
+    """Keyword args for ``Qwen3VLProcessor.__call__`` (transformers 4.57+)."""
     if max_pixels is None:
         return {}
-    cap = int(max_pixels)
-    return {"max_pixels": cap, "images_kwargs": {"max_pixels": cap}}
+    return {"max_pixels": int(max_pixels)}
 
 
 def _try_load_vl_processor(path_or_repo: str) -> Any | None:
