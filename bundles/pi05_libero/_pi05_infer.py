@@ -13,7 +13,7 @@ import _pi05_compat
 
 
 def load_images_from_paths(
-    paths: list[Path],
+    paths: list[Path | str],
     *,
     num_views: int,
     size: tuple[int, int] = (224, 224),
@@ -23,8 +23,8 @@ def load_images_from_paths(
     if not paths:
         raise ValueError("No image paths provided")
     loaded: list[np.ndarray] = []
-    for path in paths:
-        path = path.expanduser().resolve()
+    for raw in paths:
+        path = Path(raw).expanduser().resolve()
         if not path.is_file():
             raise FileNotFoundError(f"Image not found: {path}")
         img = Image.open(path).convert("RGB")

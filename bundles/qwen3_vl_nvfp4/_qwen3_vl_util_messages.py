@@ -7,6 +7,7 @@ import io
 import urllib.request
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from flashcli_bundle.protocol import ChatMessage, ChatRequest
 
@@ -260,12 +261,29 @@ def _load_image(url_or_path: str):
     return Image.open(io.BytesIO(raw)).convert("RGB")
 
 
+def _normalize_image_spec(text: str) -> str:
+    """Repair specs corrupted by ``Path("https://…")`` (collapses ``//``)."""
+    stripped = text.strip()
+    if stripped.startswith("https:/") and not stripped.startswith("https://"):
+        return "https://" + stripped[len("https:/") :].lstrip("/")
+    if stripped.startswith("http:/") and not stripped.startswith("http://"):
+        return "http://" + stripped[len("http:/") :].lstrip("/")
+    return stripped
+
+
+def _is_remote_image_spec(text: str) -> bool:
+    if text.startswith("data:"):
+        return True
+    scheme = urlparse(text).scheme.lower()
+    return scheme in ("http", "https")
+
+
 def resolve_image_input(spec: str):
     """Load an RGB PIL image from a local path, HTTP(S) URL, or data URL."""
-    text = spec.strip()
+    text = _normalize_image_spec(spec)
     if not text:
         raise ValueError("image spec is empty")
-    if text.startswith("data:") or text.startswith(("http://", "https://")):
+    if _is_remote_image_spec(text):
         return _load_image(text)
     path = Path(text).expanduser().resolve()
     if not path.is_file():

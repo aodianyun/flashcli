@@ -134,6 +134,16 @@ def test_run_messages_from_prompt_image_data_url() -> None:
     assert msgs[0]["content"][0]["image"].size == (12, 12)
 
 
+def test_normalize_image_spec_recovers_path_corruption() -> None:
+    from _qwen3_vl_util_messages import _is_remote_image_spec, _normalize_image_spec
+
+    corrupted = str(Path("https://example.com/a.png"))
+    assert corrupted == "https:/example.com/a.png"
+    fixed = _normalize_image_spec(corrupted)
+    assert fixed == "https://example.com/a.png"
+    assert _is_remote_image_spec(fixed)
+
+
 def test_run_messages_text_only() -> None:
     from _qwen3_vl_util import build_run_request
 

@@ -47,7 +47,7 @@ class RunEngine:
         *,
         prompt: str = "",
         images: list[Any] | None = None,
-        image_paths: list[Path] | None = None,
+        image_paths: list[str | Path] | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         if self._engine is None:

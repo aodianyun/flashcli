@@ -117,10 +117,11 @@ def execute_run(
     load_kw, predict_kw = split_run_options(bundle_options or {}, specs)
 
     image = predict_kw.pop("image", None)
-    image_paths: list[Path] | None = None
+    image_paths: list[str] | None = None
     if image:
+        # Keep raw strings — Path("https://...") collapses "//" and breaks URLs.
         image_paths = [
-            Path(part.strip()) for part in str(image).split(",") if part.strip()
+            part.strip() for part in str(image).split(",") if part.strip()
         ]
 
     auto_install = auto_install_flag(no_auto_install)
