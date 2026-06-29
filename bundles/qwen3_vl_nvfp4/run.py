@@ -12,7 +12,7 @@ from flashcli_bundle.options import option_value, run_option_defaults
 from flashcli_bundle.preset import Preset
 
 from _engine_qwen3_vl import Qwen3VlEngine
-from _qwen3_vl_util import build_run_request, parse_warmup_spec, run_async
+from _qwen3_vl_util import build_run_request, run_async
 
 
 class RunEngine:
@@ -31,21 +31,15 @@ class RunEngine:
         for key, default in self._run_defaults.items():
             merged.setdefault(key, default)
 
-        max_pixels = merged.get("max_pixels")
+        max_pixels = option_value("max_pixels", merged, self._run_defaults)
         self._engine = Qwen3VlEngine(
             checkpoint=str(checkpoint.expanduser().resolve()),
-            device=str(merged.get("device", "cuda:0")),
+            device=str(option_value("device", merged, self._run_defaults) or "cuda:0"),
             model_name="qwen3-vl",
-            max_seq=int(merged.get("max_seq", 2048)),
-            max_q_seq=int(merged.get("max_q_seq", 1024)),
+            max_seq=int(option_value("max_seq", merged, self._run_defaults) or 2048),
+            max_q_seq=int(option_value("max_q_seq", merged, self._run_defaults) or 1024),
             max_pixels=int(max_pixels) if max_pixels is not None else None,
         )
-
-        warm = merged.get("warmup")
-        if warm:
-            n = parse_warmup_spec(str(warm))
-            if n > 0:
-                self._engine.warmup(n)
 
     def predict(
         self,
@@ -66,7 +60,6 @@ class RunEngine:
 
         d = self._run_defaults
         messages, gen_kw = build_run_request([], defaults=d, merged=merged)
-        max_tokens = gen_kw.pop("max_tokens")
         benchmark = int(kwargs.get("benchmark", 0))
         warmup_iters = int(kwargs.get("warmup_iters", 0))
         echo = bool(kwargs.get("echo", True))
@@ -79,7 +72,6 @@ class RunEngine:
             async for ev in self._engine.stream_generate(
                 messages,
                 tools=None,
-                max_tokens=max_tokens,
                 stop=None,
                 **gen_kw,
             ):

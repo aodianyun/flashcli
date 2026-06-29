@@ -70,21 +70,27 @@ def build_run_request(
     merged: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     del req_messages
-    prompt = str(option_value("prompt", merged, defaults) or "")
-    image = option_value("image", merged, defaults)
+    d = {
+        "max_tokens": 256,
+        "temperature": 0.0,
+        "top_p": 1.0,
+        "top_k": 0,
+        **defaults,
+    }
+    prompt = str(option_value("prompt", merged, d) or "")
+    image = option_value("image", merged, d)
     messages = run_messages_from_prompt(
         prompt,
         image_path=str(image) if image else None,
     )
+    seed = option_value("seed", merged, d)
     gen_kw = {
-        "max_tokens": int(option_value("max_tokens", merged, defaults)),
-        "temperature": float(option_value("temperature", merged, defaults)),
-        "top_p": float(option_value("top_p", merged, defaults)),
-        "top_k": int(option_value("top_k", merged, defaults)),
+        "max_tokens": int(option_value("max_tokens", merged, d)),
+        "temperature": float(option_value("temperature", merged, d)),
+        "top_p": float(option_value("top_p", merged, d)),
+        "top_k": int(option_value("top_k", merged, d)),
+        "seed": int(seed) if seed is not None else None,
     }
-    seed = option_value("seed", merged, defaults)
-    if seed is not None:
-        gen_kw["seed"] = int(seed)
     return messages, gen_kw
 
 

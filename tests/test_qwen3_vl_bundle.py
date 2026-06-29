@@ -99,11 +99,49 @@ def test_run_messages_text_only() -> None:
     )
     assert messages == [{"role": "user", "content": "你好"}]
     assert gen_kw["max_tokens"] == 32
+    assert gen_kw["seed"] is None
+
+
+def test_build_run_request_gen_kw_matches_stream_generate() -> None:
+    import inspect
+
+    pytest.importorskip("flash_rt")
+    from _engine_qwen3_vl import Qwen3VlEngine
+    from _qwen3_vl_util import build_run_request
+
+    _, gen_kw = build_run_request([], defaults={}, merged={"prompt": "hi"})
+    params = inspect.signature(Qwen3VlEngine.stream_generate).parameters
+    for key in gen_kw:
+        assert key in params, key
+
+
+def test_run_messages_image_path_resolves(tmp_path: Path, monkeypatch) -> None:
+    from _qwen3_vl_util_messages import run_messages_from_prompt_image
+
+    img_path = tmp_path / "scene.png"
+    Image.new("RGB", (4, 4)).save(img_path)
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    monkeypatch.chdir(sub)
+    msgs = run_messages_from_prompt_image("look", "../scene.png")
+    assert msgs[0]["content"][0]["type"] == "image"
+
+
+def test_stream_generate_accepts_optional_seed() -> None:
+    import inspect
+
+    pytest.importorskip("flash_rt")
+    from _engine_qwen3_vl import Qwen3VlEngine
+
+    sig = inspect.signature(Qwen3VlEngine.stream_generate)
+    assert sig.parameters["seed"].default is None
+    assert sig.parameters["stop"].default is None
 
 
 def test_run_engine_predict_accepts_image_paths(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    pytest.importorskip("flash_rt")
     import run as run_mod
 
     img_path = tmp_path / "test.png"
@@ -117,6 +155,7 @@ def test_run_engine_predict_accepts_image_paths(
             "temperature": 0.0,
             "top_p": 1.0,
             "top_k": 0,
+            "seed": None,
         }
 
     class FakeEngine:

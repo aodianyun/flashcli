@@ -93,8 +93,8 @@ class Qwen3VlEngine:
         temperature: float,
         top_p: float,
         top_k: int,
-        seed: int | None,
-        stop: list[str] | None,
+        seed: int | None = None,
+        stop: list[str] | None = None,
     ) -> AsyncIterator[tuple[Any, ...]]:
         """Yield ``('content', str)``, ``('tool_calls', list)``, ``('finish', reason, usage)``."""
         import torch
@@ -118,9 +118,12 @@ class Qwen3VlEngine:
 
             t0 = time.perf_counter()
             fe.set_prompt(messages, tools=tools)
-            prompt_len = int(fe._prompt["S"])
+            prompt_state = fe._prompt
+            if prompt_state is None:
+                raise RuntimeError("set_prompt did not build prompt state")
+            prompt_len = int(prompt_state["S"])
             base_slot = prompt_len
-            base_rope = int(fe._prompt["mrope_max"]) + 1
+            base_rope = int(prompt_state["mrope_max"]) + 1
 
             logits = self._prefill_logits()
             prefill_s = time.perf_counter() - t0

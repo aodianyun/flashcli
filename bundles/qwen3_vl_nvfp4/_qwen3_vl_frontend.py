@@ -233,6 +233,7 @@ class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
             llm.reset_state()
             ids = self._prompt["input_ids"].view(1, -1)
             return llm.prefill_with_graph(ids)
+        self.llm.reset_state()
         return super().prefill_graph()
 
     def warmup_decode_graphs(self, n_tokens: int) -> None:

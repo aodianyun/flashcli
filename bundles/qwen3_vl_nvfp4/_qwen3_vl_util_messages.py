@@ -26,7 +26,7 @@ def _load_image(url_or_path: str):
 
 
 def run_messages_from_prompt_image(prompt: str, image_path: str) -> list[dict[str, Any]]:
-    path = Path(image_path).expanduser()
+    path = Path(image_path).expanduser().resolve()
     if not path.is_file():
         raise FileNotFoundError(f"image not found: {path}")
     from PIL import Image
