@@ -148,5 +148,6 @@ curl -s http://127.0.0.1:8000/health | jq
 | `ImportError: flash_rt_kernels` | build bundle; copy `lib/*.so` into `runtime/<env-key>/` |
 | `flash_rt_qwen3_vl_kernels is not built` | rebuild with `-DFLASHRT_BUILD_QWEN3_VL=ON` (build.sh does this) |
 | OOM on 16 GB | lower `--max-pixels` and `--max-seq` |
+| multimodal `image_processor` / processor errors | bundle runtime needs `transformers>=4.57.0` (`Qwen3VLProcessor`); older `<4.56` loads tokenizer-only even when `preprocessor_config.json` exists |
 | BF16 checkpoint load errors | quantize with `prepare_qwen3_vl_weights.sh`; runtime needs NVFP4 layout |
 | slow first request | warmup: `--warmup-preset short` or `--warmup 32` |

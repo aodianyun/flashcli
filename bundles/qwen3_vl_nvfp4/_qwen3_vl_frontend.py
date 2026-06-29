@@ -18,6 +18,7 @@ from _qwen3_vl_util_messages import (
     extract_images_from_messages,
     has_image_processor,
     load_qwen3_vl_processor,
+    qwen3_vl_transformers_version_error,
     resolve_processor_tokenizer,
 )
 
@@ -161,13 +162,15 @@ class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
                 fallback_repos=self._processor_fallback_repos,
             )
         if not has_image_processor(self.processor):
+            ver_err = qwen3_vl_transformers_version_error()
+            if ver_err is not None:
+                raise RuntimeError(ver_err)
             raise RuntimeError(
                 "Multimodal inference requires a Qwen3-VL processor with "
-                "image_processor. The NVFP4 checkpoint is missing "
-                "preprocessor_config.json and fallback repos are unavailable: "
-                f"{list(self._processor_fallback_repos)!r}. Set QWEN3_VL_PROCESSOR_REPO, "
-                "ensure Hugging Face access (HF_ENDPOINT for mirrors), or re-quantize "
-                "with prepare_qwen3_vl_weights.sh so sidecars are copied."
+                "image_processor. Checkpoint has preprocessor sidecars but "
+                f"processor load failed (fallback repos: {list(self._processor_fallback_repos)!r}). "
+                "Ensure transformers>=4.57.0 in the bundle runtime, install torchvision, "
+                "or set QWEN3_VL_PROCESSOR_REPO / HF_ENDPOINT for processor download."
             )
 
         text = self.processor.apply_chat_template(

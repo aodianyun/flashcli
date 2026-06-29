@@ -16,7 +16,7 @@
       "safetensors",
       "sentencepiece",
       "ml_dtypes",
-      "transformers<4.56",
+      "transformers>=4.57.0",
       "pillow",
       "torchvision"
     ]

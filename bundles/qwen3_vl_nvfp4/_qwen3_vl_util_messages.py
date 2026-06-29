@@ -21,6 +21,45 @@ DEFAULT_VL_PROCESSOR_REPOS: tuple[str, ...] = (
     "Qwen/Qwen3-VL-8B-Instruct",
 )
 
+_MIN_TRANSFORMERS_VERSION = (4, 57, 0)
+
+
+def _parse_version(version: str) -> tuple[int, ...]:
+    parts: list[int] = []
+    for piece in version.split(".")[:3]:
+        num = piece.split("+", 1)[0].split("-", 1)[0]
+        for prefix in ("a", "b", "rc"):
+            if prefix in num:
+                num = num.split(prefix, 1)[0]
+        parts.append(int(num or "0"))
+    while len(parts) < 3:
+        parts.append(0)
+    return tuple(parts)
+
+
+def qwen3_vl_transformers_version_error() -> str | None:
+    """Return an actionable error when ``transformers`` is too old for Qwen3-VL."""
+    import importlib
+
+    mod = importlib.import_module("transformers")
+    current = _parse_version(str(getattr(mod, "__version__", "0.0.0")))
+    if current >= _MIN_TRANSFORMERS_VERSION:
+        return None
+    if getattr(mod, "Qwen3VLProcessor", None) is None:
+        return (
+            f"transformers {mod.__version__} does not include Qwen3VLProcessor; "
+            f"upgrade to >=4.57.0 (bundle manifest pins transformers>=4.57.0). "
+            "With an older runtime, AutoProcessor loads a bare tokenizer even when "
+            "preprocessor_config.json exists."
+        )
+    return None
+
+
+def require_qwen3_vl_transformers() -> None:
+    err = qwen3_vl_transformers_version_error()
+    if err is not None:
+        raise RuntimeError(err)
+
 _VL_PROCESSOR_PATTERNS: tuple[str, ...] = (
     "preprocessor_config.json",
     "video_preprocessor_config.json",
@@ -129,6 +168,8 @@ def load_qwen3_vl_processor(
     from transformers import AutoProcessor
 
     log = logging.getLogger(__name__)
+
+    require_qwen3_vl_transformers()
 
     if not fallback_repos:
         fallback_repos = DEFAULT_VL_PROCESSOR_REPOS

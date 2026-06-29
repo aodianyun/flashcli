@@ -204,6 +204,21 @@ def test_run_engine_predict_accepts_image_paths(
     assert captured.get("image") == str(img_path)
 
 
+def test_qwen3_vl_transformers_version_error_old_transformers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from _qwen3_vl_util_messages import qwen3_vl_transformers_version_error
+
+    class FakeTransformers:
+        __version__ = "4.55.0"
+        Qwen3VLProcessor = None
+
+    monkeypatch.setitem(sys.modules, "transformers", FakeTransformers())
+    err = qwen3_vl_transformers_version_error()
+    assert err is not None
+    assert "4.57.0" in err
+
+
 def test_vl_processor_fallback_repos_reads_manifest() -> None:
     from flashcli.bundle.manifest import load_bundle_manifest
     from _qwen3_vl_util import vl_processor_fallback_repos
