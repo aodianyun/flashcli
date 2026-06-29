@@ -14,7 +14,9 @@ from flash_rt.frontends.torch.qwen3_vl_rtx import (
 )
 
 from _qwen3_vl_util_messages import (
+    DEFAULT_VL_PROCESSOR_REPOS,
     extract_images_from_messages,
+    has_image_processor,
     load_qwen3_vl_processor,
     resolve_processor_tokenizer,
 )
@@ -37,6 +39,7 @@ class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
         max_seq: int = 2048,
         max_q_seq: int = 1024,
         max_pixels: int | None = None,
+        processor_fallback_repos: tuple[str, ...] | None = None,
     ) -> None:
         max_seq = int(max_seq)
         max_q_seq = int(max_q_seq)
@@ -49,6 +52,11 @@ class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
         self.device = device
         self.max_seq = max_seq
         self.max_q_seq = max_q_seq
+        self._processor_fallback_repos = (
+            processor_fallback_repos
+            if processor_fallback_repos is not None
+            else DEFAULT_VL_PROCESSOR_REPOS
+        )
 
         _require_qwen3_vl_kernels()
 
@@ -77,7 +85,10 @@ class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
             max_q_seq=max_q_seq,
         )
         self.vision = Qwen3VlVisionRtx(checkpoint_path, device=device)
-        self.processor = load_qwen3_vl_processor(checkpoint_path)
+        self.processor = load_qwen3_vl_processor(
+            checkpoint_path,
+            fallback_repos=self._processor_fallback_repos,
+        )
         self.max_pixels = max_pixels
         if max_pixels is not None:
             for proc in (
@@ -144,11 +155,19 @@ class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
             raise RuntimeError(
                 "Prompt contains vision tokens but no images were found in messages."
             )
-        if not hasattr(self.processor, "image_processor"):
+        if not has_image_processor(self.processor):
+            self.processor = load_qwen3_vl_processor(
+                self.checkpoint_path,
+                fallback_repos=self._processor_fallback_repos,
+            )
+        if not has_image_processor(self.processor):
             raise RuntimeError(
-                "Multimodal inference requires a full Qwen3-VL processor with "
-                "image_processor. Ensure the checkpoint includes "
-                "preprocessor_config.json (run prepare_qwen3_vl_weights.sh)."
+                "Multimodal inference requires a Qwen3-VL processor with "
+                "image_processor. The NVFP4 checkpoint is missing "
+                "preprocessor_config.json and fallback repos are unavailable: "
+                f"{list(self._processor_fallback_repos)!r}. Set QWEN3_VL_PROCESSOR_REPO, "
+                "ensure Hugging Face access (HF_ENDPOINT for mirrors), or re-quantize "
+                "with prepare_qwen3_vl_weights.sh so sidecars are copied."
             )
 
         text = self.processor.apply_chat_template(

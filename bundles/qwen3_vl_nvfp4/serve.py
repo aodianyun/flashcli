@@ -11,7 +11,7 @@ from flashcli_bundle.preset import Preset
 from flashcli_bundle.protocol import ChatChunk, ChatRequest, ChatResult
 
 from _backend_qwen3_vl import Qwen3VlBackend
-from _qwen3_vl_util import merge_load_options, resolve_warmup_tokens, run_async
+from _qwen3_vl_util import merge_load_options, resolve_warmup_tokens, run_async, vl_processor_fallback_repos
 from _serve_backend import ServeChatBackend
 
 
@@ -43,6 +43,7 @@ class ServeEngine:
             max_seq=int(opts["max_seq"]),
             max_q_seq=int(opts.get("max_q_seq", 1024)),
             max_pixels=int(opts["max_pixels"]) if opts.get("max_pixels") is not None else None,
+            processor_fallback_repos=vl_processor_fallback_repos(bundle),
         )
 
     def resolve_warmup(

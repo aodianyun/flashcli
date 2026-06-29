@@ -37,7 +37,8 @@
   "weights": {
     "source": "modelscope",
     "repo": "cpadyun/Qwen3-VL-8B-FlashRT-NVFP4",
-    "revision": "main"
+    "revision": "main",
+    "processor_repo": "Qwen/Qwen3-VL-8B-Instruct"
   },
   "run_options": [
     {

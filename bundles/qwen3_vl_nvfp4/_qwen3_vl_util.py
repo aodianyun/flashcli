@@ -11,10 +11,35 @@ from flashcli_bundle.options import option_value, run_option_defaults, serve_opt
 from flashcli_bundle.protocol import ChatMessage, ChatRequest
 
 from _qwen3_vl_util_messages import (
+    DEFAULT_VL_PROCESSOR_REPOS,
     messages_from_request,
     openai_messages_to_frontend,
     run_messages_from_prompt,
 )
+
+
+def vl_processor_fallback_repos(bundle: BundleManifest | None = None) -> tuple[str, ...]:
+    """Repos to load VL processor sidecars when the NVFP4 checkpoint omits them."""
+    import os
+
+    repos: list[str] = []
+    env_repo = os.environ.get("QWEN3_VL_PROCESSOR_REPO")
+    if env_repo:
+        repos.append(env_repo.strip())
+    if bundle is not None:
+        weights = bundle.raw.get("weights")
+        if isinstance(weights, dict):
+            proc_repo = weights.get("processor_repo")
+            if proc_repo:
+                repos.append(str(proc_repo))
+    repos.extend(DEFAULT_VL_PROCESSOR_REPOS)
+    seen: set[str] = set()
+    out: list[str] = []
+    for repo in repos:
+        if repo and repo not in seen:
+            seen.add(repo)
+            out.append(repo)
+    return tuple(out)
 
 
 def merge_load_options(bundle: BundleManifest, **options: Any) -> dict[str, Any]:

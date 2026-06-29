@@ -26,6 +26,7 @@ class Qwen3VlBackend:
         max_seq: int,
         max_q_seq: int,
         max_pixels: int | None,
+        processor_fallback_repos: tuple[str, ...] | None = None,
     ) -> Qwen3VlBackend:
         engine = Qwen3VlEngine(
             checkpoint=checkpoint,
@@ -34,6 +35,7 @@ class Qwen3VlBackend:
             max_seq=int(max_seq),
             max_q_seq=int(max_q_seq),
             max_pixels=int(max_pixels) if max_pixels is not None else None,
+            processor_fallback_repos=processor_fallback_repos,
         )
         return cls(engine)
 

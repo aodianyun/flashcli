@@ -12,7 +12,7 @@ from flashcli_bundle.options import option_value, run_option_defaults
 from flashcli_bundle.preset import Preset
 
 from _engine_qwen3_vl import Qwen3VlEngine
-from _qwen3_vl_util import build_run_request, run_async
+from _qwen3_vl_util import build_run_request, run_async, vl_processor_fallback_repos
 
 
 class RunEngine:
@@ -39,6 +39,7 @@ class RunEngine:
             max_seq=int(option_value("max_seq", merged, self._run_defaults) or 2048),
             max_q_seq=int(option_value("max_q_seq", merged, self._run_defaults) or 1024),
             max_pixels=int(max_pixels) if max_pixels is not None else None,
+            processor_fallback_repos=vl_processor_fallback_repos(bundle),
         )
 
     def predict(

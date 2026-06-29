@@ -17,35 +17,161 @@ def resolve_processor_tokenizer(processor: Any) -> Any:
     return processor if tok is None else tok
 
 
-def load_qwen3_vl_processor(checkpoint_path: str) -> Any:
-    """Load Qwen3-VL processor; recover from AutoProcessor returning a bare tokenizer."""
+DEFAULT_VL_PROCESSOR_REPOS: tuple[str, ...] = (
+    "Qwen/Qwen3-VL-8B-Instruct",
+)
+
+_VL_PROCESSOR_PATTERNS: tuple[str, ...] = (
+    "preprocessor_config.json",
+    "video_preprocessor_config.json",
+    "tokenizer_config.json",
+    "tokenizer.json",
+    "vocab.json",
+    "merges.txt",
+    "chat_template.json",
+    "special_tokens_map.json",
+    "processor_config.json",
+)
+
+
+def _processor_cache_dir(repo: str) -> str:
+    import os
+    from pathlib import Path
+
+    safe = repo.replace("/", "--")
+    root = os.environ.get("FLASHCLI_PROCESSOR_CACHE")
+    if root:
+        return str(Path(root).expanduser() / safe)
+    return str(Path.home() / ".flashcli" / "processor_cache" / safe)
+
+
+def _cache_vl_processor_sidecars(repo: str) -> str | None:
+    """Download processor JSON sidecars once; reuse from local cache."""
+    import logging
+    import os
+
+    log = logging.getLogger(__name__)
+    cache_dir = _processor_cache_dir(repo)
+    preproc = os.path.join(cache_dir, "preprocessor_config.json")
+    if os.path.isfile(preproc):
+        return cache_dir
+
+    try:
+        from huggingface_hub import snapshot_download
+
+        snapshot_download(
+            repo_id=repo,
+            local_dir=cache_dir,
+            allow_patterns=list(_VL_PROCESSOR_PATTERNS),
+        )
+    except Exception as exc:
+        log.warning("failed to cache VL processor sidecars from %s: %s", repo, exc)
+        return None
+
+    return cache_dir if os.path.isfile(preproc) else None
+
+
+def has_image_processor(processor: Any) -> bool:
+    return getattr(processor, "image_processor", None) is not None
+
+
+def _try_load_vl_processor(path_or_repo: str) -> Any | None:
+    import importlib
+    import logging
+
+    from transformers import AutoProcessor
+
+    log = logging.getLogger(__name__)
+    last_err: Exception | None = None
+
+    try:
+        obj = AutoProcessor.from_pretrained(path_or_repo, trust_remote_code=True)
+        if has_image_processor(obj):
+            return obj
+    except Exception as exc:
+        last_err = exc
+
+    mod = importlib.import_module("transformers")
+    for class_name in (
+        "Qwen3VLProcessor",
+        "Qwen2_5_VLProcessor",
+        "Qwen2VLProcessor",
+    ):
+        cls = getattr(mod, class_name, None)
+        if cls is None:
+            continue
+        try:
+            obj = cls.from_pretrained(path_or_repo, trust_remote_code=True)
+            if has_image_processor(obj):
+                return obj
+        except Exception as exc:
+            last_err = exc
+            continue
+    if last_err is not None:
+        log.debug("VL processor load failed for %s: %s", path_or_repo, last_err)
+    return None
+
+
+def load_qwen3_vl_processor(
+    checkpoint_path: str,
+    *,
+    fallback_repos: tuple[str, ...] = DEFAULT_VL_PROCESSOR_REPOS,
+) -> Any:
+    """Load a Qwen3-VL processor with ``image_processor``.
+
+    NVFP4 checkpoints copied to ModelScope often omit ``preprocessor_config.json``
+    and ``AutoProcessor`` then returns a bare tokenizer. Fall back to the
+    official instruct repo for processor sidecars while keeping local weights.
+    """
+    import logging
     import os
 
     from transformers import AutoProcessor
 
-    obj = AutoProcessor.from_pretrained(checkpoint_path, trust_remote_code=True)
-    if hasattr(obj, "tokenizer") and hasattr(obj, "image_processor"):
-        return obj
+    log = logging.getLogger(__name__)
+
+    if not fallback_repos:
+        fallback_repos = DEFAULT_VL_PROCESSOR_REPOS
+
+    proc = _try_load_vl_processor(checkpoint_path)
+    if proc is not None:
+        return proc
 
     preproc_cfg = os.path.join(checkpoint_path, "preprocessor_config.json")
-    if os.path.isfile(preproc_cfg):
-        import importlib
+    if not os.path.isfile(preproc_cfg):
+        log.warning(
+            "checkpoint %s missing preprocessor_config.json; "
+            "trying official VL processor repos: %s",
+            checkpoint_path,
+            ", ".join(fallback_repos),
+        )
 
-        mod = importlib.import_module("transformers")
-        for class_name in ("Qwen3VLProcessor", "Qwen2VLProcessor"):
-            cls = getattr(mod, class_name, None)
-            if cls is None:
-                continue
-            try:
-                proc = cls.from_pretrained(checkpoint_path, trust_remote_code=True)
-                if hasattr(proc, "image_processor"):
-                    return proc
-            except Exception:
-                continue
-
-    if hasattr(obj, "tokenizer"):
+    obj = AutoProcessor.from_pretrained(checkpoint_path, trust_remote_code=True)
+    if has_image_processor(obj):
         return obj
 
+    for repo in fallback_repos:
+        proc = _try_load_vl_processor(repo)
+        if proc is not None:
+            log.info("using VL processor from %s (weights stay at %s)", repo, checkpoint_path)
+            return proc
+        cached = _cache_vl_processor_sidecars(repo)
+        if cached is not None:
+            proc = _try_load_vl_processor(cached)
+            if proc is not None:
+                log.info(
+                    "using cached VL processor sidecars from %s (weights stay at %s)",
+                    repo,
+                    checkpoint_path,
+                )
+                return proc
+
+    log.warning(
+        "checkpoint %s has no image_processor; text-only run works but "
+        "multimodal needs preprocessor sidecars or HF access to %s",
+        checkpoint_path,
+        ", ".join(fallback_repos),
+    )
     return obj
 
 

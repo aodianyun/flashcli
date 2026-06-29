@@ -40,6 +40,7 @@ class Qwen3VlEngine:
         max_seq: int,
         max_q_seq: int,
         max_pixels: int | None,
+        processor_fallback_repos: tuple[str, ...] | None = None,
     ) -> None:
         log.info("loading Qwen3-VL NVFP4 ckpt from %s ...", checkpoint)
         t0 = time.perf_counter()
@@ -49,6 +50,7 @@ class Qwen3VlEngine:
             max_seq=int(max_seq),
             max_q_seq=int(max_q_seq),
             max_pixels=max_pixels,
+            processor_fallback_repos=processor_fallback_repos,
         )
         log.info("loaded in %.1f s", time.perf_counter() - t0)
         self.model_name = model_name

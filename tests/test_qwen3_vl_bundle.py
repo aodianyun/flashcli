@@ -204,6 +204,16 @@ def test_run_engine_predict_accepts_image_paths(
     assert captured.get("image") == str(img_path)
 
 
+def test_vl_processor_fallback_repos_reads_manifest() -> None:
+    from flashcli.bundle.manifest import load_bundle_manifest
+    from _qwen3_vl_util import vl_processor_fallback_repos
+
+    manifest = load_bundle_manifest(BUNDLE_ROOT)
+    repos = vl_processor_fallback_repos(manifest)
+    assert "Qwen/Qwen3-VL-8B-Instruct" in repos
+    assert repos[0] == "Qwen/Qwen3-VL-8B-Instruct"
+
+
 def test_bundle_modules_import() -> None:
     from _qwen3_vl_stream_parser import StreamParser, sample_token
 
