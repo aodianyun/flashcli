@@ -120,6 +120,20 @@ def test_run_messages_from_prompt_image(tmp_path: Path) -> None:
     assert len(msgs[0]["content"]) == 2
 
 
+def test_run_messages_from_prompt_image_data_url() -> None:
+    from _qwen3_vl_util_messages import run_messages_from_prompt_image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (12, 12), color=(0, 255, 0)).save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    msgs = run_messages_from_prompt_image(
+        "color?",
+        f"data:image/png;base64,{b64}",
+    )
+    assert msgs[0]["content"][0]["type"] == "image"
+    assert msgs[0]["content"][0]["image"].size == (12, 12)
+
+
 def test_run_messages_text_only() -> None:
     from _qwen3_vl_util import build_run_request
 

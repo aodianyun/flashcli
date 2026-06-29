@@ -51,7 +51,7 @@
     {
       "name": "image",
       "type": "string",
-      "help": "Optional path to an RGB image file.",
+      "help": "Optional image: local path, http(s) URL, or data:image/...;base64,... (same as serve image_url).",
       "phase": "predict"
     },
     {

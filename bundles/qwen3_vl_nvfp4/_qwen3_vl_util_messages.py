@@ -260,6 +260,19 @@ def _load_image(url_or_path: str):
     return Image.open(io.BytesIO(raw)).convert("RGB")
 
 
+def resolve_image_input(spec: str):
+    """Load an RGB PIL image from a local path, HTTP(S) URL, or data URL."""
+    text = spec.strip()
+    if not text:
+        raise ValueError("image spec is empty")
+    if text.startswith("data:") or text.startswith(("http://", "https://")):
+        return _load_image(text)
+    path = Path(text).expanduser().resolve()
+    if not path.is_file():
+        raise FileNotFoundError(f"image not found: {path}")
+    return _load_image(str(path))
+
+
 def extract_images_from_messages(messages: list[dict[str, Any]]) -> list[Any]:
     images: list[Any] = []
     for msg in messages:
@@ -275,12 +288,7 @@ def extract_images_from_messages(messages: list[dict[str, Any]]) -> list[Any]:
 
 
 def run_messages_from_prompt_image(prompt: str, image_path: str) -> list[dict[str, Any]]:
-    path = Path(image_path).expanduser().resolve()
-    if not path.is_file():
-        raise FileNotFoundError(f"image not found: {path}")
-    from PIL import Image
-
-    image = Image.open(path).convert("RGB")
+    image = resolve_image_input(image_path)
     return [
         {
             "role": "user",
