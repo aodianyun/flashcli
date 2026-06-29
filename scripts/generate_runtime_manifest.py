@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Merge runtime fields into flashcli-bundle.json (format_version 3, split artifacts)."""
+"""Write build-time manifest overlay (read-only author ``flashcli-bundle.json``).
+
+See docs/bundle_manifest_policy.md — publishers maintain ``flashcli-bundle.json``;
+this script only writes ``--output-json`` (typically ``.build/manifest-overlay.json``).
+"""
 
 from __future__ import annotations
 
@@ -130,13 +134,28 @@ def main() -> int:
         default="base.tar.gz",
         help="Relative path for base artifact in FlashHub repo",
     )
+    parser.add_argument(
+        "--output-json",
+        type=Path,
+        required=True,
+        help="Write generated overlay here (.build/manifest-overlay.json); never overwrite --bundle-json",
+    )
+    parser.add_argument(
+        "--full-manifest",
+        action="store_true",
+        help="Write merged full manifest to --output-json (dist/ only; not bundle source)",
+    )
+    parser.add_argument(
+        "--sync-python-dependencies",
+        action="store_true",
+        help="Deprecated: overwrite python_dependencies from FlashRT runtime-inference.txt",
+    )
     args = parser.parse_args()
 
     lib_dir = args.lib_dir.resolve()
     bundle_path = args.bundle_json.resolve()
     repo_root = args.repo_root.resolve()
-
-    torch_spec, pip_packages = extract_runtime_packages(repo_root)
+    output_path = args.output_json.resolve()
 
     _scripts_lib = Path(__file__).resolve().parent / "lib"
     if str(_scripts_lib) not in sys.path:
@@ -165,6 +184,13 @@ def main() -> int:
                 runtime_artifacts[cell] = f"runtime/{cell}"
 
     bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    author_deps = bundle.get("python_dependencies")
+    if args.sync_python_dependencies:
+        torch_spec, pip_packages = extract_runtime_packages(repo_root)
+        author_deps = {
+            "torch": {"package": torch_spec, "index": args.torch_index},
+            "pip": pip_packages,
+        }
     bundle["format"] = "flashcli-model-bundle"
     bundle["format_version"] = 3
     bundle.pop("runtime_dir", None)
@@ -181,10 +207,8 @@ def main() -> int:
     bundle.pop("python", None)
 
     bundle["python_abi"] = py_minor
-    bundle["python_dependencies"] = {
-        "torch": {"package": torch_spec, "index": args.torch_index},
-        "pip": pip_packages,
-    }
+    if author_deps is not None:
+        bundle["python_dependencies"] = author_deps
     if runtime_artifacts:
         bundle["runtime"] = runtime_artifacts
     bundle["build"] = {
@@ -209,8 +233,20 @@ def main() -> int:
     if args.native_artifact_tag:
         bundle["build"]["native_artifact_tag"] = args.native_artifact_tag
 
-    bundle_path.write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps(bundle, indent=2), file=sys.stderr)
+    if args.full_manifest:
+        payload = bundle
+    else:
+        payload = {
+            "format_version": 3,
+            "python_abi": py_minor,
+            "build": bundle["build"],
+        }
+        if runtime_artifacts:
+            payload["runtime"] = runtime_artifacts
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(payload, indent=2), file=sys.stderr)
     return 0
 
 

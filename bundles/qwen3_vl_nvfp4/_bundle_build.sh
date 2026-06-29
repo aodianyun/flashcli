@@ -14,6 +14,8 @@ FLASHCLI_SCRIPTS="${FLASHCLI_ROOT}/scripts"
 source "${FLASHCLI_SCRIPTS}/lib/native_naming.sh"
 # shellcheck source=../../scripts/lib/probe_native_abi.sh
 source "${FLASHCLI_SCRIPTS}/lib/probe_native_abi.sh"
+# shellcheck source=../../scripts/lib/manifest_overlay.sh
+source "${FLASHCLI_SCRIPTS}/lib/manifest_overlay.sh"
 GEN_MANIFEST="${FLASHCLI_SCRIPTS}/generate_runtime_manifest.py"
 BUNDLED_REQUIREMENTS="${FLASHCLI_SCRIPTS}/requirements/runtime-inference.txt"
 
@@ -51,7 +53,7 @@ Usage:
 Options:
   --repo-root DIR         FlashRT source (default: auto-detect)
   --output-dir DIR        Also write tarball here (optional)
-  --git-ref REF           Record in flashcli-bundle.json git_ref (default: main)
+  --git-ref REF           Record git_ref in manifest overlay (default: main)
   --runtime-version VER   manifest runtime_version (default: 1.0.0)
   --gpu-arch ARCH         CMake -DGPU_ARCH= (default: auto SM)
   --build-dir DIR         CMake build dir (default: <repo>/build)
@@ -63,7 +65,7 @@ Options:
   --sm SM                 SM label (default: auto from GPU; release matrix uses 120)
   --cuda-tag TAG          CUDA tag 124 / 130 (default: from nvcc)
   --merge-native          Stage .so into lib/ without replacing other matrix cells
-  --skip-manifest         Skip flashcli-bundle.json update (matrix intermediate cell)
+  --skip-manifest         Skip .build/manifest-overlay.json (matrix intermediate cell)
   --finalize-matrix-manifest  After full matrix, scan lib/ and write multi-env manifest
   -h, --help
 
@@ -109,6 +111,13 @@ resolve_repo_root() {
 
 ensure_runtime_requirements_file() {
   local dest="${REPO_ROOT}/requirements/runtime-inference.txt"
+  local bundle_req="${BUNDLE_DIR}/requirements-runtime.txt"
+  if [[ -f "${bundle_req}" ]]; then
+    mkdir -p "${REPO_ROOT}/requirements"
+    cp -f "${bundle_req}" "${dest}"
+    log "Using bundle runtime requirements: ${bundle_req}"
+    return 0
+  fi
   if [[ -f "${dest}" ]]; then
     return 0
   fi
@@ -278,33 +287,51 @@ PY
   log "Staged minimal flash_rt/ for qwen3_vl_nvfp4 ($(find "${dst}" -type f | wc -l) files)"
 }
 
+write_manifest_overlay() {
+  local lib_dir="$1"
+  local native_tag="$2"
+  local has_fa2_flag="$3"
+  local nvfp4_flag="$4"
+  local py_bin="${PYTHON_BIN:-python3}"
+  local build_id="${BUILD_ID:-$(date -u +%Y%m%d)-sm${SM}}"
+  local torch_idx
+  torch_idx="$(recommended_torch_index)"
+  local min_drv="${MIN_DRIVER:-$(default_min_driver)}"
+  local flashrt_tag="${FLASHRT_TAG:-dev}"
+  local git_commit
+  git_commit="$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)"
+
+  run_manifest_overlay "${BUNDLE_DIR}" "${lib_dir}" "${GEN_MANIFEST}" "${REPO_ROOT}" "${py_bin}" \
+    --matrix-manifest \
+    --runtime-version "${RUNTIME_VERSION}" \
+    --flashrt-tag "${flashrt_tag}" \
+    --git-commit "${git_commit}" \
+    --build-id "${build_id}" \
+    --git-ref "${GIT_REF}" \
+    --sm "${SM}" \
+    --os-name "${OS_NAME}" \
+    --cpuarch "${CPU_ARCH}" \
+    --gpu-arch "${GPU_ARCH}" \
+    --cuda-tag "${CUDA_TAG}" \
+    --toolkit "$(cuda_toolkit_version)" \
+    --torch-index "${torch_idx}" \
+    --min-driver "${min_drv}" \
+    --has-fa2 "${has_fa2_flag}" \
+    --has-fp4 "${nvfp4_flag}" \
+    --has-fmha "0" \
+    --python-minor "${PYTHON_MINOR}" \
+    --native-artifact-tag "${native_tag}"
+}
+
 finalize_matrix_manifest() {
   local native_lib="${BUNDLE_DIR}/lib"
   [[ -d "${native_lib}" ]] || die "Missing ${native_lib} for --finalize-matrix-manifest"
-  local py_bin="${PYTHON_BIN:-python3}"
-  log "Finalizing multi-env manifest from ${native_lib}"
-  "${py_bin}" "${GEN_MANIFEST}" \
-    --repo-root "${REPO_ROOT}" \
-    --bundle-json "${BUNDLE_DIR}/flashcli-bundle.json" \
-    --lib-dir "${native_lib}" \
-    --matrix-manifest \
-    --runtime-version "${RUNTIME_VERSION}" \
-    --flashrt-tag "${FLASHRT_TAG:-dev}" \
-    --git-commit "$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)" \
-    --build-id "${BUILD_ID:-matrix}" \
-    --git-ref "${GIT_REF}" \
-    --sm "${SM:-120}" \
-    --os-name "${OS_NAME:-linux}" \
-    --cpuarch "${CPU_ARCH:-x86_64}" \
-    --gpu-arch "${GPU_ARCH:-120}" \
-    --cuda-tag "${CUDA_TAG:-130}" \
-    --toolkit "13.0" \
-    --torch-index "cu128" \
-    --min-driver "550.54.14" \
-    --has-fa2 "1" \
-    --has-fp4 "1" \
-    --has-fmha "0" \
-    --python-minor "310" >/dev/null
+  SM="${SM:-120}"
+  OS_NAME="${OS_NAME:-linux}"
+  CPU_ARCH="${CPU_ARCH:-x86_64}"
+  CUDA_TAG="${CUDA_TAG:-130}"
+  PYTHON_MINOR="${PYTHON_MINOR:-310}"
+  write_manifest_overlay "${native_lib}" "matrix-finalize" 1 1
 }
 
 stage_bundle_runtime() {
@@ -414,36 +441,13 @@ stage_bundle_runtime() {
   min_drv="${MIN_DRIVER:-$(default_min_driver)}"
 
   if [[ "${SKIP_MANIFEST}" -eq 1 ]]; then
-    log "Skipping manifest update (--skip-manifest)"
+    log "Skipping manifest overlay (--skip-manifest)"
     mkdir -p "${cache_dir}"
     cp -f "${lib_dir}/${kernels_name}" "${lib_dir}/${fa2_name}" "${lib_dir}/${vlk_name}" "${cache_dir}/"
     return 0
   fi
 
-  log "Updating flashcli-bundle.json (v2, lib/) python_abi=${PYTHON_MINOR}"
-  "${py_bin}" "${GEN_MANIFEST}" \
-    --repo-root "${REPO_ROOT}" \
-    --bundle-json "${BUNDLE_DIR}/flashcli-bundle.json" \
-    --lib-dir "${lib_dir}" \
-    --matrix-manifest \
-    --runtime-version "${RUNTIME_VERSION}" \
-    --flashrt-tag "${flashrt_tag}" \
-    --git-commit "${git_commit}" \
-    --build-id "${build_id}" \
-    --git-ref "${GIT_REF}" \
-    --sm "${SM}" \
-    --os-name "${OS_NAME}" \
-    --cpuarch "${CPU_ARCH}" \
-    --gpu-arch "${GPU_ARCH}" \
-    --cuda-tag "${CUDA_TAG}" \
-    --toolkit "$(cuda_toolkit_version)" \
-    --torch-index "${torch_idx}" \
-    --min-driver "${min_drv}" \
-    --has-fa2 "${has_fa2}" \
-    --has-fp4 "${nvfp4_feature}" \
-    --has-fmha "0" \
-    --python-minor "${PYTHON_MINOR}" \
-    --native-artifact-tag "${native_tag}" >/dev/null
+  write_manifest_overlay "${lib_dir}" "${native_tag}" "${has_fa2}" "${nvfp4_feature}"
 
   mkdir -p "${cache_dir}"
   cp -f "${lib_dir}/${kernels_name}" "${lib_dir}/${fa2_name}" "${lib_dir}/${vlk_name}" "${cache_dir}/"
@@ -508,7 +512,7 @@ if [[ "${FINALIZE_MATRIX_MANIFEST}" -eq 1 ]]; then
   detect_platform
   SM="${SM:-120}"
   finalize_matrix_manifest
-  log "Matrix manifest ready: ${BUNDLE_DIR}/flashcli-bundle.json"
+  log "Matrix overlay ready: ${MANIFEST_OVERLAY}"
   exit 0
 fi
 

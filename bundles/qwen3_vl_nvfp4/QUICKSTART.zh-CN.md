@@ -26,6 +26,8 @@ flashcli bundle validate "$BUNDLE"
 
 缺少 `flash_rt_qwen3_vl_kernels*.so` 时视觉路径会在加载阶段失败。
 
+**Manifest 约定**：`flashcli-bundle.json` 由维护者手写（含 `python_dependencies`、`weights` 等）。`build.sh` 只写 `.build/manifest-overlay.json`（runtime/build 元数据）；`pack.sh` 合并 overlay + `lib/*.so` 后**仅**生成 `dist/flashcli-bundle.json`，不改源码目录里的 manifest。
+
 ---
 
 ## 2. 权重

@@ -3,6 +3,7 @@
 /lib/
 /runtime/
 /dist/
+/.build/
 /flash_rt_*.so
 /libfmha_fp16_strided.so
 /checkpoint/*

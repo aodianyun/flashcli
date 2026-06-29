@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -294,7 +295,11 @@ def write_runtime_requirements_artifacts(
     *,
     merge_into_manifest: dict | None = None,
 ) -> None:
-    """Write requirements-runtime.txt and optional manifest fields."""
+    """Write requirements-runtime.txt (author reference only).
+
+    ``merge_into_manifest`` is deprecated: ``flashcli-bundle.json`` is publisher-owned;
+    build must not overwrite ``python_dependencies``. See docs/bundle_manifest_policy.md.
+    """
     stage_dir = stage_dir.resolve()
     lines = spec.pip_packages_for_bundle()
     (stage_dir / "requirements-runtime.txt").write_text(
@@ -302,6 +307,12 @@ def write_runtime_requirements_artifacts(
         encoding="utf-8",
     )
     if merge_into_manifest is not None:
+        warnings.warn(
+            "merge_into_manifest is deprecated; maintain python_dependencies in "
+            "flashcli-bundle.json instead (see docs/bundle_manifest_policy.md)",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         merge_into_manifest["python_dependencies"] = {
             "torch": spec.torch_package,
             "pip": spec.pip_packages,

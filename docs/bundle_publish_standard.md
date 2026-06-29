@@ -99,6 +99,10 @@ Full syntax: [model_bundle_standard.md](model_bundle_standard.md).
 
 ## 3. `flashcli-bundle.json` reference
 
+### 3.0 Author manifest (do not auto-modify)
+
+**`flashcli-bundle.json` in the bundle source tree is authoritative and complete.** Publishers maintain all product fields (`python_dependencies`, `weights`, `run_options`, …) by hand in git. Build and pack scripts **must not** overwrite this file; they only write `.build/manifest-overlay.json` (build metadata) and merge into **`dist/flashcli-bundle.json`** at pack time. See [bundle_manifest_policy.md](bundle_manifest_policy.md).
+
 ### 3.1 Top-level required and recommended fields
 
 | Field | Required | Description |

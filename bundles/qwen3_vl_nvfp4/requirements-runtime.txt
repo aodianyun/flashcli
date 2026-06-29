@@ -1,0 +1,10 @@
+# Author reference for flashcli-bundle.json python_dependencies.pip (not auto-synced on build).
+# Qwen3-VL requires transformers>=4.57.0 for Qwen3VLProcessor.
+numpy
+pyyaml
+safetensors
+sentencepiece
+ml_dtypes
+transformers>=4.57.0
+pillow
+torchvision

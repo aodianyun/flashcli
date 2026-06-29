@@ -159,8 +159,14 @@ ensure_flashcli_bundle_on_path(flashcli_root)
 from flashcli_bundle.native_naming import parse_native_tag_from_filename
 
 lib = bundle_dir / "lib"
-manifest_path = bundle_dir / "flashcli-bundle.json"
-manifest = json.loads(manifest_path.read_text())
+source_manifest_path = bundle_dir / "flashcli-bundle.json"
+overlay_path = bundle_dir / ".build" / "manifest-overlay.json"
+manifest = json.loads(source_manifest_path.read_text())
+if overlay_path.is_file():
+    overlay = json.loads(overlay_path.read_text())
+    for key in ("format_version", "python_abi", "runtime", "build"):
+        if key in overlay:
+            manifest[key] = overlay[key]
 cells: dict[str, list[Path]] = {}
 for so in sorted(lib.glob("*.so")):
     parsed = parse_native_tag_from_filename(so.name)
@@ -183,9 +189,8 @@ for key, paths in sorted(cells.items()):
 manifest["format_version"] = 3
 manifest["python_abi"] = py_abi
 manifest["runtime"] = runtime_map
-manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
-shutil.copy2(manifest_path, out_dir / "flashcli-bundle.json")
-print(f"[pack] Updated {manifest_path} and copied to {out_dir / 'flashcli-bundle.json'}", file=sys.stderr)
+(out_dir / "flashcli-bundle.json").write_text(json.dumps(manifest, indent=2) + "\n")
+print(f"[pack] Wrote {out_dir / 'flashcli-bundle.json'} (source manifest unchanged)", file=sys.stderr)
 PY
 
 log "FlashHub upload dir: ${OUTPUT_DIR}"

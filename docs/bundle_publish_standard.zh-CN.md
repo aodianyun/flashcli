@@ -99,6 +99,10 @@ flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
 
 ## 3. `flashcli-bundle.json` 配置详解
 
+### 3.0 作者 manifest（禁止 build 覆盖）
+
+源码目录中的 **`flashcli-bundle.json` 为权威、完整，由发布者维护**。所有产品字段（`python_dependencies`、`weights`、`run_options` 等）须在 git 中手写维护；build/pack **不得**覆盖该文件，仅可写 `.build/manifest-overlay.json`（构建元数据），并在 pack 时合并为 **`dist/flashcli-bundle.json`**。详见 [bundle_manifest_policy.md](bundle_manifest_policy.md)。
+
 ### 3.1 顶层必填与推荐字段
 
 | 字段 | 必填 | 说明 |

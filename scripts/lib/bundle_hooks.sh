@@ -31,19 +31,21 @@
 # MUST:
 #   - Add/update only this cell's tagged .so under lib/
 #   - Leave other lib/*.so cells untouched (--merge-native semantics)
-#   - NOT modify flashcli-bundle.json (manifest is finalize only)
+#   - NOT modify flashcli-bundle.json (author manifest; write overlay only on finalize)
 #   - NOT write dist/ or delete lib/ siblings
 #
 # finalize contract
 # -----------------
 # Called with: --repo-root DIR --sm SM --cuda-tag TAG --git-ref REF
-# MUST: scan lib/*.so and update flashcli-bundle.json (native_layout=matrix)
+# MUST: scan lib/*.so and write .build/manifest-overlay.json (not flashcli-bundle.json)
 # MUST NOT: run cmake or remove lib/ artifacts
 #
 # pack contract (scripts/pack_bundle.sh)
 # --------------------------------------
 # Called with: --bundle-dir DIR --repo-root DIR
 # MUST: verify matrix + ABI, write dist/<zip> from RELEASE_PACK_FILES only
+# MUST NOT: modify bundles/<name>/flashcli-bundle.json (author manifest); merge
+#           overlay + runtime map into dist/flashcli-bundle.json only
 # Zip name: {ZIP_PREFIX}-{flashrt_abi}-sm{SM}-multi-{os}-{arch}-{YYYYMMDD-HHMMSS}
 
 bundle_hook_runner() {

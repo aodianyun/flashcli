@@ -5,6 +5,7 @@
 /libfmha_fp16_strided.so
 /requirements-runtime.txt
 /dist/
+/.build/
 # Embedded weights (optional --embed-checkpoint)
 /checkpoint/*
 !/checkpoint/.gitkeep

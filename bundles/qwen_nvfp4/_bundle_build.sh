@@ -14,6 +14,8 @@ FLASHCLI_SCRIPTS="${FLASHCLI_ROOT}/scripts"
 source "${FLASHCLI_SCRIPTS}/lib/native_naming.sh"
 # shellcheck source=../../scripts/lib/probe_native_abi.sh
 source "${FLASHCLI_SCRIPTS}/lib/probe_native_abi.sh"
+# shellcheck source=../../scripts/lib/manifest_overlay.sh
+source "${FLASHCLI_SCRIPTS}/lib/manifest_overlay.sh"
 GEN_MANIFEST="${FLASHCLI_SCRIPTS}/generate_runtime_manifest.py"
 BUNDLED_REQUIREMENTS="${FLASHCLI_SCRIPTS}/requirements/runtime-inference.txt"
 
@@ -68,7 +70,7 @@ Options:
   --sm SM                 SM label (default: auto from GPU; release matrix uses 120)
   --cuda-tag TAG          CUDA tag 124 / 130 (default: from nvcc)
   --merge-native          Stage .so into lib/ without replacing other matrix cells
-  --skip-manifest         Skip flashcli-bundle.json update (matrix intermediate cell)
+  --skip-manifest         Skip .build/manifest-overlay.json (matrix intermediate cell)
   --finalize-matrix-manifest  After full matrix, scan lib/ and write multi-env manifest
   -h, --help
 
@@ -328,11 +330,8 @@ finalize_matrix_manifest() {
   local native_lib="${BUNDLE_DIR}/lib"
   [[ -d "${native_lib}" ]] || die "Missing ${native_lib} for --finalize-matrix-manifest"
   local py_bin="${PYTHON_BIN:-python3}"
-  log "Finalizing multi-env manifest from ${native_lib}"
-  "${py_bin}" "${GEN_MANIFEST}" \
-    --repo-root "${REPO_ROOT}" \
-    --bundle-json "${BUNDLE_DIR}/flashcli-bundle.json" \
-    --lib-dir "${native_lib}" \
+  log "Finalizing multi-env manifest overlay from ${native_lib}"
+  run_manifest_overlay "${BUNDLE_DIR}" "${native_lib}" "${GEN_MANIFEST}" "${REPO_ROOT}" "${py_bin}" \
     --matrix-manifest \
     --runtime-version "${RUNTIME_VERSION}" \
     --flashrt-tag "${FLASHRT_TAG:-dev}" \
@@ -471,18 +470,14 @@ stage_bundle_runtime() {
   min_drv="${MIN_DRIVER:-$(default_min_driver)}"
 
   if [[ "${SKIP_MANIFEST}" -eq 1 ]]; then
-    log "Skipping manifest update (--skip-manifest)"
+    log "Skipping manifest overlay (--skip-manifest)"
     mkdir -p "${cache_dir}"
     cp -f "${lib_dir}/${kernels_name}" "${lib_dir}/${fa2_name}" "${cache_dir}/"
     [[ "${has_fp4}" -eq 1 ]] && cp -f "${lib_dir}/${fp4_name}" "${cache_dir}/"
     return 0
   fi
 
-  log "Updating flashcli-bundle.json (v2, lib/) python_abi=${PYTHON_MINOR}"
-  "${py_bin}" "${GEN_MANIFEST}" \
-    --repo-root "${REPO_ROOT}" \
-    --bundle-json "${BUNDLE_DIR}/flashcli-bundle.json" \
-    --lib-dir "${lib_dir}" \
+  run_manifest_overlay "${BUNDLE_DIR}" "${lib_dir}" "${GEN_MANIFEST}" "${REPO_ROOT}" "${py_bin}" \
     --matrix-manifest \
     --runtime-version "${RUNTIME_VERSION}" \
     --flashrt-tag "${flashrt_tag}" \
