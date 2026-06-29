@@ -132,6 +132,21 @@ class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
         if pix_vid is not None:
             pix_vid = pix_vid.to(torch.bfloat16)
 
+        if pix_img is None and pix_vid is None:
+            ids_list = input_ids.tolist()
+            if (
+                self._image_token_id not in ids_list
+                and self._video_token_id not in ids_list
+            ):
+                self._prompt = {
+                    "text_only": True,
+                    "input_ids": input_ids,
+                    "S": s_len,
+                    "mrope_max": s_len - 1,
+                    "pg_key": None,
+                }
+                return
+
         segs = geo.vision_segments(
             input_ids.cpu(),
             image_grid,
@@ -209,3 +224,31 @@ class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
             self._prompt["pg_key"] = self._stage_prefill_inputs(
                 seg_patches[0], s_len, spans[0]
             )
+
+    def prefill_graph(self):
+        if self._prompt is None:
+            raise RuntimeError("call set_prompt() before prefill_graph()")
+        if self._prompt.get("text_only"):
+            llm = self.llm
+            llm.reset_state()
+            ids = self._prompt["input_ids"].view(1, -1)
+            return llm.prefill_with_graph(ids)
+        return super().prefill_graph()
+
+    def warmup_decode_graphs(self, n_tokens: int) -> None:
+        if self._prompt is None:
+            raise RuntimeError("call set_prompt() before warmup")
+        if self._prompt.get("text_only"):
+            start = int(self._prompt["S"])
+            for i in range(n_tokens):
+                self.llm._ensure_decode_graph(start + i)
+            return
+        super().warmup_decode_graphs(n_tokens)
+
+    def _decode_step_graph(self, token: int, cache_pos: int, rope_pos: int):
+        if self._prompt and self._prompt.get("text_only"):
+            llm = self.llm
+            llm._static_token_id.fill_(int(token))
+            llm._ensure_decode_graph(cache_pos).replay()
+            return llm._logits_buf[:1]
+        return super()._decode_step_graph(token, cache_pos, rope_pos)

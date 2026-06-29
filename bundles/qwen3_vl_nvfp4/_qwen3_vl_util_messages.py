@@ -43,6 +43,16 @@ def run_messages_from_prompt_image(prompt: str, image_path: str) -> list[dict[st
     ]
 
 
+def run_messages_from_prompt(
+    prompt: str,
+    *,
+    image_path: str | None = None,
+) -> list[dict[str, Any]]:
+    if image_path:
+        return run_messages_from_prompt_image(prompt, image_path)
+    return [{"role": "user", "content": prompt or ""}]
+
+
 def messages_from_request(req: ChatRequest) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for m in req.messages:

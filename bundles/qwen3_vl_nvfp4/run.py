@@ -52,13 +52,16 @@ class RunEngine:
         *,
         prompt: str = "",
         images: list[Any] | None = None,
+        image_paths: list[Path] | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         if self._engine is None:
             raise RuntimeError("RunEngine.load() not called")
 
         merged = {"prompt": prompt, **kwargs}
-        if images:
+        if image_paths:
+            merged["image"] = str(image_paths[0])
+        elif images:
             merged["image"] = images[0] if isinstance(images[0], str) else str(images[0])
 
         d = self._run_defaults

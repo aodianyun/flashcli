@@ -42,14 +42,14 @@
     {
       "name": "prompt",
       "type": "string",
-      "default": "Describe this image in one sentence.",
-      "help": "User text paired with the image.",
+      "default": "Hello!",
+      "help": "User message; add --image for vision.",
       "phase": "predict"
     },
     {
       "name": "image",
       "type": "string",
-      "help": "Path to an RGB image file.",
+      "help": "Optional path to an RGB image file.",
       "phase": "predict"
     },
     {

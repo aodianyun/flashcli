@@ -13,7 +13,7 @@ from flashcli_bundle.protocol import ChatMessage, ChatRequest
 from _qwen3_vl_util_messages import (
     messages_from_request,
     openai_messages_to_frontend,
-    run_messages_from_prompt_image,
+    run_messages_from_prompt,
 )
 
 
@@ -72,9 +72,10 @@ def build_run_request(
     del req_messages
     prompt = str(option_value("prompt", merged, defaults) or "")
     image = option_value("image", merged, defaults)
-    if not image:
-        raise ValueError("--image is required for Qwen3-VL run")
-    messages = run_messages_from_prompt_image(prompt, str(image))
+    messages = run_messages_from_prompt(
+        prompt,
+        image_path=str(image) if image else None,
+    )
     gen_kw = {
         "max_tokens": int(option_value("max_tokens", merged, defaults)),
         "temperature": float(option_value("temperature", merged, defaults)),

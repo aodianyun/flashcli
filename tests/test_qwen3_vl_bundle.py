@@ -89,11 +89,49 @@ def test_run_messages_from_prompt_image(tmp_path: Path) -> None:
     assert len(msgs[0]["content"]) == 2
 
 
-def test_run_messages_missing_image() -> None:
+def test_run_messages_text_only() -> None:
     from _qwen3_vl_util import build_run_request
 
-    with pytest.raises(ValueError, match="--image is required"):
-        build_run_request([], defaults={}, merged={"prompt": "hi"})
+    messages, gen_kw = build_run_request(
+        [],
+        defaults={"max_tokens": 32, "temperature": 0.0, "top_p": 1.0, "top_k": 0},
+        merged={"prompt": "你好"},
+    )
+    assert messages == [{"role": "user", "content": "你好"}]
+    assert gen_kw["max_tokens"] == 32
+
+
+def test_run_engine_predict_accepts_image_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import run as run_mod
+
+    img_path = tmp_path / "test.png"
+    Image.new("RGB", (8, 8)).save(img_path)
+    captured: dict[str, object] = {}
+
+    def fake_build(_msgs, *, defaults, merged):
+        captured.update(merged)
+        return [], {
+            "max_tokens": 1,
+            "temperature": 0.0,
+            "top_p": 1.0,
+            "top_k": 0,
+        }
+
+    class FakeEngine:
+        async def stream_generate(self, *_a, **_k):
+            if False:
+                yield ("finish", "stop", {})
+
+    monkeypatch.setattr(run_mod, "build_run_request", fake_build)
+    monkeypatch.setattr(run_mod, "run_async", lambda _coro: {"text": ""})
+
+    engine = run_mod.RunEngine()
+    engine._engine = FakeEngine()
+    engine._run_defaults = {}
+    engine.predict(prompt="describe", image_paths=[img_path], echo=False)
+    assert captured.get("image") == str(img_path)
 
 
 def test_bundle_modules_import() -> None:
