@@ -60,6 +60,27 @@
       "phase": "predict"
     },
     {
+      "name": "device",
+      "type": "string",
+      "default": "cuda:0",
+      "help": "Torch device for inference.",
+      "phase": "load"
+    },
+    {
+      "name": "max_seq",
+      "type": "integer",
+      "default": 2048,
+      "help": "KV / context length budget.",
+      "phase": "load"
+    },
+    {
+      "name": "max_q_seq",
+      "type": "integer",
+      "default": 1024,
+      "help": "Max prefill length (text + vision tokens); sizes LLM scratch buffers.",
+      "phase": "load"
+    },
+    {
       "name": "max_pixels",
       "type": "integer",
       "default": 500000,
@@ -105,8 +126,15 @@
     {
       "name": "max_seq",
       "type": "integer",
-      "default": 4096,
+      "default": 2048,
       "help": "KV / context length budget.",
+      "phase": "load"
+    },
+    {
+      "name": "max_q_seq",
+      "type": "integer",
+      "default": 1024,
+      "help": "Max prefill length (text + vision tokens); sizes LLM scratch buffers.",
       "phase": "load"
     },
     {

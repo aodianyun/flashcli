@@ -2,13 +2,100 @@
 
 from __future__ import annotations
 
+import json
+import os
 from typing import Any
 
-from flash_rt.frontends.torch.qwen3_vl_rtx import Qwen3VlTorchFrontendRtx
+from flash_rt.frontends.torch._qwen3_vl_vision_rtx import Qwen3VlVisionRtx
+from flash_rt.frontends.torch.qwen3_rtx import Qwen3TorchFrontendRtx
+from flash_rt.frontends.torch.qwen3_vl_rtx import (
+    Qwen3VlTorchFrontendRtx,
+    _require_qwen3_vl_kernels,
+)
 
 
 class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
-    """Adds optional ``tools`` to ``apply_chat_template`` for function calling."""
+    """Adds optional ``tools`` and a separate ``max_q_seq`` prefill budget.
+
+    FlashRT's ``Qwen3VlTorchFrontendRtx`` passes ``max_q_seq=max_seq``, which
+    sizes prefill scratch (including ``_logits_buf``) for the full KV budget.
+    On 16GB GPUs that OOMs at the default ``max_seq=4096``. This subclass
+    keeps ``max_seq`` for KV only and uses a smaller ``max_q_seq`` for prefill.
+    """
+
+    def __init__(
+        self,
+        checkpoint_path: str,
+        *,
+        device: str = "cuda:0",
+        max_seq: int = 2048,
+        max_q_seq: int = 1024,
+        max_pixels: int | None = None,
+    ) -> None:
+        from transformers import AutoProcessor
+
+        max_seq = int(max_seq)
+        max_q_seq = int(max_q_seq)
+        if max_q_seq > max_seq:
+            raise ValueError(
+                f"max_q_seq ({max_q_seq}) cannot exceed max_seq ({max_seq})"
+            )
+
+        self.checkpoint_path = str(checkpoint_path)
+        self.device = device
+        self.max_seq = max_seq
+        self.max_q_seq = max_q_seq
+
+        _require_qwen3_vl_kernels()
+
+        cfg = json.load(open(os.path.join(checkpoint_path, "config.json")))
+        self._image_token_id = int(cfg["image_token_id"])
+        self._video_token_id = int(cfg["video_token_id"])
+        self._vision_start_token_id = int(cfg["vision_start_token_id"])
+        vc = cfg["vision_config"]
+        self._merge = int(vc["spatial_merge_size"])
+        self._vis_head_dim = vc["hidden_size"] // vc["num_heads"]
+        self._num_grid_per_side = int(vc["num_position_embeddings"] ** 0.5)
+        self._deepstack_layers = len(vc["deepstack_visual_indexes"])
+        self._rope_theta = float(cfg["rope_theta"])
+        self._head_dim = int(cfg["head_dim"])
+        self._mrope_section = tuple(cfg["rope_scaling"]["mrope_section"])
+        eos = cfg.get("eos_token_id")
+        if eos is None:
+            self._eos_token_ids: set[int] = set()
+        else:
+            self._eos_token_ids = set(eos if isinstance(eos, list) else [eos])
+
+        self.llm = Qwen3TorchFrontendRtx(
+            checkpoint_path,
+            device=device,
+            max_seq=max_seq,
+            max_q_seq=max_q_seq,
+        )
+        self.vision = Qwen3VlVisionRtx(checkpoint_path, device=device)
+        self.processor = AutoProcessor.from_pretrained(checkpoint_path)
+        self.max_pixels = max_pixels
+        if max_pixels is not None:
+            for proc in (
+                getattr(self.processor, "image_processor", None),
+                getattr(self.processor, "video_processor", None),
+            ):
+                size = getattr(proc, "size", None)
+                if isinstance(size, dict) and "longest_edge" in size:
+                    size["longest_edge"] = int(max_pixels)
+
+        self._prompt: dict[str, Any] | None = None
+        self._decode_graphs: dict[int, Any] = {}
+        self._prefill_graphs: dict = {}
+        self._pg_buffers: dict = {}
+        import torch as _torch
+
+        hidden = self.llm._cfg["hidden_size"]
+        vocab = self.llm._cfg["vocab_size"]
+        self._pg_last_hidden = _torch.empty(
+            self.max_seq, hidden, dtype=_torch.bfloat16, device=device
+        )
+        self._pg_logits = _torch.empty(1, vocab, dtype=_torch.bfloat16, device=device)
 
     def set_prompt(self, messages: list, *, tools: list[dict[str, Any]] | None = None) -> None:
         import torch
@@ -29,6 +116,11 @@ class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
         s_len = int(input_ids.shape[0])
         if s_len > self.max_seq:
             raise ValueError(f"prompt length {s_len} exceeds max_seq {self.max_seq}")
+        if s_len > self.max_q_seq:
+            raise ValueError(
+                f"prompt length {s_len} exceeds max_q_seq {self.max_q_seq} "
+                f"(prefill scratch); increase --max-q-seq or reduce --max-pixels"
+            )
 
         merge = self._merge
         image_grid = inputs.get("image_grid_thw")

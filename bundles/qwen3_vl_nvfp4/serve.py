@@ -41,6 +41,7 @@ class ServeEngine:
             device=str(opts["device"]),
             model_name=self._model_id,
             max_seq=int(opts["max_seq"]),
+            max_q_seq=int(opts["max_q_seq"]),
             max_pixels=int(opts["max_pixels"]) if opts.get("max_pixels") is not None else None,
         )
 

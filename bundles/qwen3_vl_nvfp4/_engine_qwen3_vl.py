@@ -38,6 +38,7 @@ class Qwen3VlEngine:
         device: str,
         model_name: str,
         max_seq: int,
+        max_q_seq: int,
         max_pixels: int | None,
     ) -> None:
         log.info("loading Qwen3-VL NVFP4 ckpt from %s ...", checkpoint)
@@ -46,6 +47,7 @@ class Qwen3VlEngine:
             checkpoint,
             device=device,
             max_seq=int(max_seq),
+            max_q_seq=int(max_q_seq),
             max_pixels=max_pixels,
         )
         log.info("loaded in %.1f s", time.perf_counter() - t0)

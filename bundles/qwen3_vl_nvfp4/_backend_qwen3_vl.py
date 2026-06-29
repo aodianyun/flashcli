@@ -24,6 +24,7 @@ class Qwen3VlBackend:
         device: str,
         model_name: str,
         max_seq: int,
+        max_q_seq: int,
         max_pixels: int | None,
     ) -> Qwen3VlBackend:
         engine = Qwen3VlEngine(
@@ -31,6 +32,7 @@ class Qwen3VlBackend:
             device=device,
             model_name=model_name,
             max_seq=int(max_seq),
+            max_q_seq=int(max_q_seq),
             max_pixels=int(max_pixels) if max_pixels is not None else None,
         )
         return cls(engine)

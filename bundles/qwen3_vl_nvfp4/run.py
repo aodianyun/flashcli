@@ -36,7 +36,8 @@ class RunEngine:
             checkpoint=str(checkpoint.expanduser().resolve()),
             device=str(merged.get("device", "cuda:0")),
             model_name="qwen3-vl",
-            max_seq=int(merged.get("max_seq", 4096)),
+            max_seq=int(merged.get("max_seq", 2048)),
+            max_q_seq=int(merged.get("max_q_seq", 1024)),
             max_pixels=int(max_pixels) if max_pixels is not None else None,
         )
 
