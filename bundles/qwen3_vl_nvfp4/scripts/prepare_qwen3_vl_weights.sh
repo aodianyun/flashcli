@@ -33,9 +33,33 @@ Options:
   --flashrt-repo DIR      FlashRT source (default: auto-detect or \$FLASHRT_REPO)
   --hf-repo REPO          Hugging Face source repo (default: ${SRC_REPO})
   --hf-revision REF       HF revision (default: main)
-  --skip-download         Require --src-dir; do not call huggingface-cli
+  --skip-download         Require --src-dir; do not download from Hugging Face
   -h, --help
 EOF
+}
+
+resolve_hf_download_cmd() {
+  if command -v hf >/dev/null 2>&1; then
+    HF_DOWNLOAD=(hf download)
+    return 0
+  fi
+  if command -v huggingface-cli >/dev/null 2>&1; then
+    HF_DOWNLOAD=(huggingface-cli download)
+    return 0
+  fi
+  if python3 -c "import huggingface_hub" >/dev/null 2>&1; then
+    HF_DOWNLOAD=(python3 -m huggingface_hub.cli.hf download)
+    return 0
+  fi
+  die "No Hugging Face CLI (install: pip install 'huggingface_hub>=0.26' — use hf download)"
+}
+
+download_hf_repo() {
+  local repo="$1" revision="$2" dest="$3"
+  resolve_hf_download_cmd
+  log "Downloading ${repo} (revision=${revision}) -> ${dest}"
+  log "CLI: ${HF_DOWNLOAD[*]} ${repo} --revision ${revision} --local-dir ${dest}"
+  "${HF_DOWNLOAD[@]}" "${repo}" --revision "${revision}" --local-dir "${dest}"
 }
 
 resolve_flashrt_repo() {
@@ -78,10 +102,8 @@ if [[ -n "${SRC_DIR}" ]]; then
 elif [[ "${SKIP_DOWNLOAD}" -eq 1 ]]; then
   die "--skip-download requires --src-dir"
 else
-  command -v huggingface-cli >/dev/null 2>&1 || die "huggingface-cli not found"
   SRC_DIR="$(mktemp -d "${TMPDIR:-/tmp}/qwen3-vl-src.XXXXXX")"
-  log "Downloading ${SRC_REPO} (revision=${HF_REVISION}) -> ${SRC_DIR}"
-  huggingface-cli download "${SRC_REPO}" --revision "${HF_REVISION}" --local-dir "${SRC_DIR}"
+  download_hf_repo "${SRC_REPO}" "${HF_REVISION}" "${SRC_DIR}"
 fi
 
 [[ -d "${SRC_DIR}" ]] || die "Source checkpoint not found: ${SRC_DIR}"

@@ -6,7 +6,10 @@
   "description": "Qwen3-VL-8B NVFP4 multimodal (SM120) — image+text run/serve with streaming and tools",
   "python_abi": "312",
   "python_dependencies": {
-    "torch": { "package": "torch", "index": "auto" },
+    "torch": {
+      "package": "torch",
+      "index": "auto"
+    },
     "pip": [
       "numpy",
       "pyyaml",
@@ -21,12 +24,18 @@
     "sm120-cu130-linux-x86_64-py312": "runtime/sm120-cu130-linux-x86_64-py312"
   },
   "entry": {
-    "run": { "module": "run", "attr": "RunEngine" },
-    "serve": { "module": "serve", "attr": "ServeEngine" }
+    "run": {
+      "module": "run",
+      "attr": "RunEngine"
+    },
+    "serve": {
+      "module": "serve",
+      "attr": "ServeEngine"
+    }
   },
   "weights": {
-    "source": "huggingface",
-    "repo": "Qwen/Qwen3-VL-8B-Instruct",
+    "source": "modelscope",
+    "repo": "cpadyun/Qwen3-VL-8B-FlashRT-NVFP4",
     "revision": "main"
   },
   "run_options": [

@@ -74,29 +74,6 @@ EOF
 log() { printf '[qwen3-vl-bundle] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
 
-sync_tree() {
-  local src="$1" dst="$2"
-  shift 2
-  local excludes=("$@")
-  mkdir -p "${dst}"
-  if command -v rsync >/dev/null 2>&1; then
-    local -a args=(-a)
-    local pat
-    for pat in "${excludes[@]}"; do
-      args+=(--exclude="${pat}")
-    done
-    rsync "${args[@]}" "${src}/" "${dst}/"
-    return 0
-  fi
-  log "rsync not found; using tar for ${src} -> ${dst}"
-  local -a tar_args=(-C "${src}")
-  local pat
-  for pat in "${excludes[@]}"; do
-    tar_args+=(--exclude="${pat}")
-  done
-  tar "${tar_args[@]}" -cf - . | tar -C "${dst}" -xf -
-}
-
 copy_dir() {
   local src="$1" dst="$2"
   mkdir -p "${dst}"
@@ -255,30 +232,49 @@ ensure_bundle_entry_modules() {
   die "Missing run.py+serve.py under ${BUNDLE_DIR}"
 }
 
-stage_flash_rt_python() {
-  local py_dir="$1"
-  local flash_rt_src="${REPO_ROOT}/flash_rt"
-  local -a excludes=(
-    '*.so'
-    'frontends/jax'
-    'datasets'
-    'refs'
-    'executors/jax'
-    'models/groot'
-    'models/groot_n17'
-    'models/pi0'
-    'models/pi0fast'
-    'models/motus'
-    'models/qwen36'
-    'hardware/thor'
-    'frontends/torch/groot_thor.py'
-    'frontends/torch/groot_rtx.py'
-    'frontends/torch/pi05_thor.py'
-    'frontends/torch/pi05_thor_fp4.py'
-    'frontends/torch/motus'
-    'frontends/torch/qwen36_rtx.py'
-  )
-  sync_tree "${flash_rt_src}" "${py_dir}" "${excludes[@]}"
+# Minimal flash_rt tree for qwen3_vl_nvfp4 (matches end-user zip contents).
+stage_qwen3_vl_flash_rt_minimal() {
+  local dst="$1"
+  local src="${REPO_ROOT}/flash_rt"
+  rm -rf "${dst}"
+  mkdir -p "${dst}"
+
+  _cp_file() {
+    local rel="$1"
+    mkdir -p "${dst}/$(dirname "${rel}")"
+    cp -a "${src}/${rel}" "${dst}/${rel}"
+  }
+
+  for rel in __init__.py api.py models/__init__.py; do
+    _cp_file "${rel}"
+  done
+
+  for rel in \
+    frontends/__init__.py \
+    frontends/torch/__init__.py \
+    frontends/torch/qwen3_vl_rtx.py \
+    frontends/torch/qwen3_rtx.py \
+    frontends/torch/_qwen3_vl_vision_rtx.py \
+    frontends/torch/_qwen3_vl_geometry.py \
+    frontends/torch/_qwen3_rtx_nvfp4_weights.py; do
+    _cp_file "${rel}"
+  done
+
+  _cp_file hardware/__init__.py
+
+  mkdir -p "${dst}/hardware/rtx"
+  cp -a "${src}/hardware/rtx/attn_backend_qwen3.py" "${dst}/hardware/rtx/attn_backend_qwen3.py"
+  cat > "${dst}/hardware/rtx/__init__.py" <<'PY'
+"""RTX attention backends (qwen3_vl_nvfp4 bundle subset)."""
+from .attn_backend_qwen3 import RtxFlashAttnBackendQwen3, make_qwen3_8b_attention_spec
+
+__all__ = [
+    "RtxFlashAttnBackendQwen3",
+    "make_qwen3_8b_attention_spec",
+]
+PY
+
+  log "Staged minimal flash_rt/ for qwen3_vl_nvfp4 ($(find "${dst}" -type f | wc -l) files)"
 }
 
 finalize_matrix_manifest() {
@@ -408,7 +404,7 @@ stage_bundle_runtime() {
 
   ensure_bundle_entry_modules
   if [[ "${skip_py_stage}" -eq 0 ]]; then
-    stage_flash_rt_python "${py_dir}"
+    stage_qwen3_vl_flash_rt_minimal "${py_dir}"
     find "${py_dir}" -name '*.so' -type f -delete 2>/dev/null || true
   fi
 
