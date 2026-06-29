@@ -205,12 +205,13 @@ run_cmake_build() {
     -DGPU_ARCH="${GPU_ARCH}"
     -DPython3_EXECUTABLE="${py_bin}"
     -DFLASHRT_BUILD_QWEN3_VL=ON
+    -DFLASHRT_ENABLE_QWEN35MOE=ON
   )
   if [[ "${FA2_NATIVE_ONLY}" -eq 1 ]]; then
     cmake_args+=(-DFA2_ARCH_NATIVE_ONLY=ON)
   fi
   clean_flashrt_shared_native_outputs "${REPO_ROOT}"
-  log "CMake configure GPU_ARCH=${GPU_ARCH} FLASHRT_BUILD_QWEN3_VL=ON Python3_EXECUTABLE=${py_bin} ($("${py_bin}" --version 2>&1 | head -1))"
+  log "CMake configure GPU_ARCH=${GPU_ARCH} FLASHRT_BUILD_QWEN3_VL=ON FLASHRT_ENABLE_QWEN35MOE=ON Python3_EXECUTABLE=${py_bin} ($("${py_bin}" --version 2>&1 | head -1))"
   cmake "${cmake_args[@]}"
   cmake --build "${BUILD_DIR}" -j"${JOBS}" --target \
     flash_rt_kernels flash_rt_fa2 flash_rt_qwen3_vl_kernels

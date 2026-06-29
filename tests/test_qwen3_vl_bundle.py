@@ -204,6 +204,25 @@ def test_run_engine_predict_accepts_image_paths(
     assert captured.get("image") == str(img_path)
 
 
+def test_require_flash_rt_kernels_for_vl_sm120_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("flash_rt")
+    import torch
+    import flash_rt
+    from _qwen3_vl_frontend import _require_flash_rt_kernels_for_vl
+
+    class FakeKernels:
+        pass
+
+    monkeypatch.setattr(flash_rt, "flash_rt_kernels", FakeKernels())
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda _dev: (12, 0))
+
+    with pytest.raises(RuntimeError, match="w16a16_gemm_sm120_bf16"):
+        _require_flash_rt_kernels_for_vl("cuda:0")
+
+
 def test_vl_processor_call_kwargs_includes_max_pixels() -> None:
     from _qwen3_vl_util_messages import vl_processor_call_kwargs
 

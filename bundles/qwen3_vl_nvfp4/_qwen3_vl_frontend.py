@@ -25,6 +25,27 @@ from _qwen3_vl_util_messages import (
 )
 
 
+def _require_flash_rt_kernels_for_vl(device: str = "cuda:0") -> None:
+    """SM120 ViT bf16 linears need ``w16a16_gemm_sm120_bf16`` in flash_rt_kernels."""
+    import torch
+    from flash_rt import flash_rt_kernels as fvk
+
+    dev = torch.device(device)
+    if dev.type != "cuda" or not torch.cuda.is_available():
+        return
+    major, minor = torch.cuda.get_device_capability(dev)
+    if major * 10 + minor < 120:
+        return
+    if hasattr(fvk, "w16a16_gemm_sm120_bf16"):
+        return
+    raise RuntimeError(
+        "flash_rt_kernels is missing w16a16_gemm_sm120_bf16 (Qwen3-VL vision on "
+        "SM120). Rebuild native libs with FlashRT "
+        "-DFLASHRT_ENABLE_QWEN35MOE=ON — run "
+        "bundles/qwen3_vl_nvfp4/build.sh, then pack again."
+    )
+
+
 class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
     """Adds optional ``tools`` and a separate ``max_q_seq`` prefill budget.
 
@@ -62,6 +83,7 @@ class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
         )
 
         _require_qwen3_vl_kernels()
+        _require_flash_rt_kernels_for_vl(device)
 
         cfg = json.load(open(os.path.join(checkpoint_path, "config.json")))
         self._image_token_id = int(cfg["image_token_id"])
