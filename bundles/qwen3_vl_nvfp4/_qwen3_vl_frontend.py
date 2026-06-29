@@ -15,11 +15,13 @@ from flash_rt.frontends.torch.qwen3_vl_rtx import (
 
 from _qwen3_vl_util_messages import (
     DEFAULT_VL_PROCESSOR_REPOS,
+    configure_vl_max_pixels,
     extract_images_from_messages,
     has_image_processor,
     load_qwen3_vl_processor,
     qwen3_vl_transformers_version_error,
     resolve_processor_tokenizer,
+    vl_processor_call_kwargs,
 )
 
 
@@ -91,14 +93,7 @@ class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
             fallback_repos=self._processor_fallback_repos,
         )
         self.max_pixels = max_pixels
-        if max_pixels is not None:
-            for proc in (
-                getattr(self.processor, "image_processor", None),
-                getattr(self.processor, "video_processor", None),
-            ):
-                size = getattr(proc, "size", None)
-                if isinstance(size, dict) and "longest_edge" in size:
-                    size["longest_edge"] = int(max_pixels)
+        configure_vl_max_pixels(self.processor, max_pixels)
 
         self._prompt: dict[str, Any] | None = None
         self._decode_graphs: dict[int, Any] = {}
@@ -123,74 +118,60 @@ class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
         *,
         tools: list[dict[str, Any]] | None = None,
     ) -> Any:
-        """Match FlashRT: pass device= so vision tensors are materialized on GPU."""
-        template_kw: dict[str, Any] = {
+        """Build multimodal inputs; pass max_pixels so vision tokens stay within budget."""
+        configure_vl_max_pixels(self.processor, self.max_pixels)
+        pixel_kw = vl_processor_call_kwargs(self.max_pixels)
+
+        images = extract_images_from_messages(messages)
+        if images:
+            if not has_image_processor(self.processor):
+                self.processor = load_qwen3_vl_processor(
+                    self.checkpoint_path,
+                    fallback_repos=self._processor_fallback_repos,
+                )
+                configure_vl_max_pixels(self.processor, self.max_pixels)
+            if not has_image_processor(self.processor):
+                ver_err = qwen3_vl_transformers_version_error()
+                if ver_err is not None:
+                    raise RuntimeError(ver_err)
+                raise RuntimeError(
+                    "Multimodal inference requires a Qwen3-VL processor with "
+                    "image_processor. Checkpoint has preprocessor sidecars but "
+                    f"processor load failed (fallback repos: {list(self._processor_fallback_repos)!r}). "
+                    "Ensure transformers>=4.57.0 in the bundle runtime, install torchvision, "
+                    "or set QWEN3_VL_PROCESSOR_REPO / HF_ENDPOINT for processor download."
+                )
+
+            template_kw: dict[str, Any] = {
+                "add_generation_prompt": True,
+                "tokenize": False,
+            }
+            if tools is not None:
+                template_kw["tools"] = tools
+            text = self.processor.apply_chat_template(messages, **template_kw)
+            inputs = self.processor(
+                images=images,
+                text=text,
+                return_tensors="pt",
+                padding=True,
+                **pixel_kw,
+            ).to(self.device)
+            if inputs.get("pixel_values") is None or inputs.get("image_grid_thw") is None:
+                raise RuntimeError(
+                    "Failed to build vision tensors (pixel_values / image_grid_thw). "
+                    "Try: pip install torchvision"
+                )
+            return inputs
+
+        template_kw = {
             "add_generation_prompt": True,
             "tokenize": True,
             "return_dict": True,
             "return_tensors": "pt",
-            "device": self.device,
         }
         if tools is not None:
             template_kw["tools"] = tools
-
-        inputs = self.processor.apply_chat_template(messages, **template_kw).to(
-            self.device
-        )
-        input_ids = inputs["input_ids"][0]
-        ids_list = input_ids.tolist()
-        wants_vision = (
-            self._image_token_id in ids_list or self._video_token_id in ids_list
-        )
-        if not wants_vision:
-            return inputs
-
-        if (
-            inputs.get("pixel_values") is not None
-            and inputs.get("image_grid_thw") is not None
-        ):
-            return inputs
-
-        images = extract_images_from_messages(messages)
-        if not images:
-            raise RuntimeError(
-                "Prompt contains vision tokens but no images were found in messages."
-            )
-        if not has_image_processor(self.processor):
-            self.processor = load_qwen3_vl_processor(
-                self.checkpoint_path,
-                fallback_repos=self._processor_fallback_repos,
-            )
-        if not has_image_processor(self.processor):
-            ver_err = qwen3_vl_transformers_version_error()
-            if ver_err is not None:
-                raise RuntimeError(ver_err)
-            raise RuntimeError(
-                "Multimodal inference requires a Qwen3-VL processor with "
-                "image_processor. Checkpoint has preprocessor sidecars but "
-                f"processor load failed (fallback repos: {list(self._processor_fallback_repos)!r}). "
-                "Ensure transformers>=4.57.0 in the bundle runtime, install torchvision, "
-                "or set QWEN3_VL_PROCESSOR_REPO / HF_ENDPOINT for processor download."
-            )
-
-        text = self.processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=False,
-            tools=tools,
-        )
-        inputs = self.processor(
-            text=text,
-            images=images,
-            return_tensors="pt",
-            padding=True,
-        ).to(self.device)
-        if inputs.get("pixel_values") is None or inputs.get("image_grid_thw") is None:
-            raise RuntimeError(
-                "Failed to build vision tensors (pixel_values / image_grid_thw). "
-                "Try: pip install torchvision"
-            )
-        return inputs
+        return self.processor.apply_chat_template(messages, **template_kw).to(self.device)
 
     def set_prompt(self, messages: list, *, tools: list[dict[str, Any]] | None = None) -> None:
         import torch
@@ -201,7 +182,15 @@ class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
         input_ids = inputs["input_ids"][0]
         s_len = int(input_ids.shape[0])
         if s_len > self.max_seq:
-            raise ValueError(f"prompt length {s_len} exceeds max_seq {self.max_seq}")
+            hint = ""
+            if inputs.get("pixel_values") is not None or inputs.get("pixel_values_videos") is not None:
+                hint = (
+                    f" Lower --max-pixels (now {self.max_pixels}) or raise "
+                    f"--max-seq / --max-q-seq."
+                )
+            raise ValueError(
+                f"prompt length {s_len} exceeds max_seq {self.max_seq}.{hint}"
+            )
         if s_len > self.max_q_seq:
             raise ValueError(
                 f"prompt length {s_len} exceeds max_q_seq {self.max_q_seq} "

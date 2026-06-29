@@ -204,6 +204,15 @@ def test_run_engine_predict_accepts_image_paths(
     assert captured.get("image") == str(img_path)
 
 
+def test_vl_processor_call_kwargs_includes_max_pixels() -> None:
+    from _qwen3_vl_util_messages import vl_processor_call_kwargs
+
+    kw = vl_processor_call_kwargs(500_000)
+    assert kw["max_pixels"] == 500_000
+    assert kw["images_kwargs"]["max_pixels"] == 500_000
+    assert vl_processor_call_kwargs(None) == {}
+
+
 def test_qwen3_vl_transformers_version_error_old_transformers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

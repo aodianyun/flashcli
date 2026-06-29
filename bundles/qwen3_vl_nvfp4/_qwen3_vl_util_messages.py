@@ -114,6 +114,37 @@ def has_image_processor(processor: Any) -> bool:
     return getattr(processor, "image_processor", None) is not None
 
 
+def configure_vl_max_pixels(processor: Any, max_pixels: int | None) -> None:
+    """Cap vision token count via the processor's smart_resize budget (total pixels)."""
+    if max_pixels is None:
+        return
+    cap = int(max_pixels)
+    for proc in (
+        getattr(processor, "image_processor", None),
+        getattr(processor, "video_processor", None),
+    ):
+        if proc is None:
+            continue
+        if hasattr(proc, "max_pixels"):
+            proc.max_pixels = cap
+        size = getattr(proc, "size", None)
+        if isinstance(size, dict):
+            size["longest_edge"] = cap
+        elif size is not None:
+            try:
+                size["longest_edge"] = cap
+            except Exception:
+                pass
+
+
+def vl_processor_call_kwargs(max_pixels: int | None) -> dict[str, Any]:
+    """Keyword args for ``Qwen3VLProcessor.__call__`` / ``apply_chat_template`` (4.57+)."""
+    if max_pixels is None:
+        return {}
+    cap = int(max_pixels)
+    return {"max_pixels": cap, "images_kwargs": {"max_pixels": cap}}
+
+
 def _try_load_vl_processor(path_or_repo: str) -> Any | None:
     import importlib
     import logging
