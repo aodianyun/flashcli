@@ -13,7 +13,11 @@ from flash_rt.frontends.torch.qwen3_vl_rtx import (
     _require_qwen3_vl_kernels,
 )
 
-from _qwen3_vl_util_messages import load_qwen3_vl_processor, resolve_processor_tokenizer
+from _qwen3_vl_util_messages import (
+    extract_images_from_messages,
+    load_qwen3_vl_processor,
+    resolve_processor_tokenizer,
+)
 
 
 class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
@@ -101,21 +105,77 @@ class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
     def tokenizer(self) -> Any:
         return resolve_processor_tokenizer(self.processor)
 
-    def set_prompt(self, messages: list, *, tools: list[dict[str, Any]] | None = None) -> None:
-        import torch
-
-        from flash_rt.frontends.torch import _qwen3_vl_geometry as geo
-
+    def _apply_vl_chat_template(
+        self,
+        messages: list,
+        *,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> Any:
+        """Match FlashRT: pass device= so vision tensors are materialized on GPU."""
         template_kw: dict[str, Any] = {
             "add_generation_prompt": True,
             "tokenize": True,
             "return_dict": True,
             "return_tensors": "pt",
+            "device": self.device,
         }
         if tools is not None:
             template_kw["tools"] = tools
-        inputs = self.processor.apply_chat_template(messages, **template_kw)
-        inputs = inputs.to(self.device)
+
+        inputs = self.processor.apply_chat_template(messages, **template_kw).to(
+            self.device
+        )
+        input_ids = inputs["input_ids"][0]
+        ids_list = input_ids.tolist()
+        wants_vision = (
+            self._image_token_id in ids_list or self._video_token_id in ids_list
+        )
+        if not wants_vision:
+            return inputs
+
+        if (
+            inputs.get("pixel_values") is not None
+            and inputs.get("image_grid_thw") is not None
+        ):
+            return inputs
+
+        images = extract_images_from_messages(messages)
+        if not images:
+            raise RuntimeError(
+                "Prompt contains vision tokens but no images were found in messages."
+            )
+        if not hasattr(self.processor, "image_processor"):
+            raise RuntimeError(
+                "Multimodal inference requires a full Qwen3-VL processor with "
+                "image_processor. Ensure the checkpoint includes "
+                "preprocessor_config.json (run prepare_qwen3_vl_weights.sh)."
+            )
+
+        text = self.processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=False,
+            tools=tools,
+        )
+        inputs = self.processor(
+            text=text,
+            images=images,
+            return_tensors="pt",
+            padding=True,
+        ).to(self.device)
+        if inputs.get("pixel_values") is None or inputs.get("image_grid_thw") is None:
+            raise RuntimeError(
+                "Failed to build vision tensors (pixel_values / image_grid_thw). "
+                "Try: pip install torchvision"
+            )
+        return inputs
+
+    def set_prompt(self, messages: list, *, tools: list[dict[str, Any]] | None = None) -> None:
+        import torch
+
+        from flash_rt.frontends.torch import _qwen3_vl_geometry as geo
+
+        inputs = self._apply_vl_chat_template(messages, tools=tools)
         input_ids = inputs["input_ids"][0]
         s_len = int(input_ids.shape[0])
         if s_len > self.max_seq:
@@ -167,6 +227,10 @@ class Qwen3VlFrontend(Qwen3VlTorchFrontendRtx):
         for sg in segs:
             npp = sg["patches"]
             if sg["kind"] == "image":
+                if pix_img is None:
+                    raise RuntimeError(
+                        "Vision segment requires pixel_values but none were produced."
+                    )
                 seg_pix.append(pix_img[off_img : off_img + npp])
                 off_img += npp
             else:

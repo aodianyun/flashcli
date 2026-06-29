@@ -17,7 +17,8 @@
       "sentencepiece",
       "ml_dtypes",
       "transformers<4.56",
-      "pillow"
+      "pillow",
+      "torchvision"
     ]
   },
   "runtime": {

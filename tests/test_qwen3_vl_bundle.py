@@ -93,6 +93,23 @@ def test_openai_messages_to_frontend_data_url() -> None:
     assert out[0]["content"][0]["type"] == "image"
 
 
+def test_extract_images_from_messages() -> None:
+    from _qwen3_vl_util_messages import extract_images_from_messages
+
+    img = object()
+    msgs = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "image": img},
+                {"type": "text", "text": "hi"},
+            ],
+        }
+    ]
+    assert extract_images_from_messages(msgs) == [img]
+    assert extract_images_from_messages([{"role": "user", "content": "hi"}]) == []
+
+
 def test_run_messages_from_prompt_image(tmp_path: Path) -> None:
     from _qwen3_vl_util_messages import run_messages_from_prompt_image
 

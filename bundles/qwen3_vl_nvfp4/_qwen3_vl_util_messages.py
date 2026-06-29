@@ -24,7 +24,7 @@ def load_qwen3_vl_processor(checkpoint_path: str) -> Any:
     from transformers import AutoProcessor
 
     obj = AutoProcessor.from_pretrained(checkpoint_path, trust_remote_code=True)
-    if hasattr(obj, "tokenizer"):
+    if hasattr(obj, "tokenizer") and hasattr(obj, "image_processor"):
         return obj
 
     preproc_cfg = os.path.join(checkpoint_path, "preprocessor_config.json")
@@ -37,9 +37,14 @@ def load_qwen3_vl_processor(checkpoint_path: str) -> Any:
             if cls is None:
                 continue
             try:
-                return cls.from_pretrained(checkpoint_path, trust_remote_code=True)
+                proc = cls.from_pretrained(checkpoint_path, trust_remote_code=True)
+                if hasattr(proc, "image_processor"):
+                    return proc
             except Exception:
                 continue
+
+    if hasattr(obj, "tokenizer"):
+        return obj
 
     return obj
 
@@ -56,6 +61,20 @@ def _load_image(url_or_path: str):
         with open(url_or_path, "rb") as fh:
             raw = fh.read()
     return Image.open(io.BytesIO(raw)).convert("RGB")
+
+
+def extract_images_from_messages(messages: list[dict[str, Any]]) -> list[Any]:
+    images: list[Any] = []
+    for msg in messages:
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") == "image" and part.get("image") is not None:
+                images.append(part["image"])
+    return images
 
 
 def run_messages_from_prompt_image(prompt: str, image_path: str) -> list[dict[str, Any]]:
