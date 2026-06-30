@@ -2,9 +2,9 @@
 
 <p align="right"><a href="README.md">English</a> · <strong>简体中文</strong></p>
 
-FlashHub 上的参考 bundle 源码。终端用户固定 ref（如 `flashcli-bundle/pi05_libero:1.0.3`）— 各 bundle 见 [QUICKSTART](pi05_libero/QUICKSTART.zh-CN.md)。
+本仓库内的参考 bundle **源码**。已发布制品与完整列表见 **[FlashHub](https://flashhub.top)**。终端用户固定 ref（如 `flashcli-bundle/pi05_libero:1.0.3`）— 各 bundle 见 [QUICKSTART](pi05_libero/QUICKSTART.zh-CN.md)。
 
-## 已发布 bundle
+## 源码 bundle（示例）
 
 | 目录 | Ref | GPU / CUDA |
 |------|-----|------------|

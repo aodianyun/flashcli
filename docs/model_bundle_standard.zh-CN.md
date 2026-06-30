@@ -4,9 +4,13 @@
 
 面向 **集成方** 对接 preset 与 FlashHub。manifest、entry、`.so` 完整规范 → **[bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)**。
 
-## Preset ref（FlashHub）
+## 从 FlashHub 发现 bundle
 
-用户使用 **ref 字符串**，不再依赖内置 catalog 文件：
+已发布的 Model Bundle 在 **[FlashHub](https://flashhub.top)**。在站点选择 repo/版本后，将 ref 传给 flashcli。flashcli 仓库内**无 bundled catalog 文件**。
+
+`flashcli models list` 仅显示**本机已缓存**的 ref（在 `run`、`serve`、`pull` 或 `bundle sync` 之后）。
+
+## Preset ref（FlashHub）
 
 ```text
 namespace/bundle:version[@variant]
@@ -24,9 +28,10 @@ flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
 |------|------|
 | `namespace/bundle:version` | FlashHub repo 名 + 固定版本 |
 | `@variant` | 可选；选择 manifest `variants.*`（如 Qwen3 / Qwen3.6） |
-| 完整 URL | `https://flashhub-api…/flashcli-bundle/pi05_libero:1.0.3` 也可 |
+| 完整 URL | `https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3` 也可 |
 
 **API 基址**（环境变量）：`FLASHCLI_FLASHHUB_API`（默认 `https://flashhub-api.aodianyun.com/api/v1/repos`）。  
+在 **[flashhub.top](https://flashhub.top)** 浏览已发布 bundle（对外站点）；API 尚未迁移至该域名。  
 拼出 repo URL：`{FLASHCLI_FLASHHUB_API}/{namespace}/{bundle}:{version}`。
 
 **本地开发**（positional，路径下须有 `flashcli-bundle.json`）：

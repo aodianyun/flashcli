@@ -60,7 +60,7 @@ pytest tests/ tests/bench/ # full suite including bench
 
    Bundle re-exec runs ``python -m flashcli_bundle.infer`` inside the bundle venv. Tests: ``test_reexec_argv.py``, ``test_flashcli_bundle_infer.py``. **Do not** prepend host ``site-packages`` or pip-install ``flashcli`` into bundle venvs.
 
-4. **Preset refs** — Document new FlashHub refs in README / bundle QUICKSTART after upload; no bundled catalog file.
+4. **Preset refs** — Upload to [FlashHub](https://flashhub.top); document the ref in the bundle QUICKSTART (and README examples if needed). No bundled catalog file.
 5. **Docs** — Update English docs when behavior or release workflow changes. Mirror important changes in `*.zh-CN.md` when applicable.
 6. **Comments** — New code comments and script headers in English.
 7. **Commits** — Clear, imperative subject lines; one logical change per commit when possible.
@@ -74,8 +74,8 @@ pytest tests/ tests/bench/ # full suite including bench
 5. Build on **Linux + NVIDIA GPU** (see release checklist below).
 6. `flashcli bundle validate bundles/<name>`
 7. Smoke-test `flashcli run <ref> --help`, `flashcli run` / `flashcli serve` as applicable.
-8. Upload to FlashHub; document ref (e.g. `flashcli-bundle/my_model:1.0.0` or `@variant` for multi-model repos).
-9. Update [README.md](README.md) and bundle README.
+8. Upload to [FlashHub](https://flashhub.top); document ref (e.g. `flashcli-bundle/my_model:1.0.0` or `@variant` for multi-model repos).
+9. Update bundle README / QUICKSTART (and README supported-examples table if applicable).
 
 ## Release bundle checklist (maintainers)
 

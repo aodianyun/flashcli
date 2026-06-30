@@ -75,7 +75,7 @@ qwen_nvfp4/
 
 ### 2.4 Preset refs (for integrators)
 
-Users pass an inline ref string — no bundled catalog file:
+Users pass an inline ref string — discover bundles on [FlashHub](https://flashhub.top); no bundled catalog file in flashcli:
 
 ```text
 flashcli-bundle/<name>:<version>[@variant]

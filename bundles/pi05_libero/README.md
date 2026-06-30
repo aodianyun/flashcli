@@ -34,7 +34,7 @@ Weights are downloaded by flashcli to `~/.flashcli/models/pi05_libero/1.0.3/chec
 See **[QUICKSTART.md](QUICKSTART.md)** for copy-paste commands.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
+curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
 flashcli run flashcli-bundle/pi05_libero:1.0.3 --prompt "..." --image /path/to/base.jpg
 ```
 

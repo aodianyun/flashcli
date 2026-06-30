@@ -8,9 +8,9 @@
 
 安装并运行 preset — [../README.zh-CN.md](../README.zh-CN.md)，再读各模型的 [QUICKSTART](../bundles/pi05_libero/QUICKSTART.zh-CN.md)。镜像与缓存：[environment.zh-CN.md](environment.zh-CN.md)。
 
-### Catalog 集成方
+### 集成方
 
-固定 preset 与 FlashHub URL — 使用 inline ref 字符串；见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
+从 [FlashHub](https://flashhub.top) 固定 preset ref。语法见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
 
 ### 对外 Bundle 作者
 

@@ -2,9 +2,9 @@
 
 <p align="right"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
 
-Reference bundle sources shipped via FlashHub. End users pin refs such as `flashcli-bundle/pi05_libero:1.0.3` — see [QUICKSTART](pi05_libero/QUICKSTART.md) per bundle.
+Reference bundle **sources** in this repo. Published artifacts and the full bundle list live on **[FlashHub](https://flashhub.top)**. End users pin refs such as `flashcli-bundle/pi05_libero:1.0.3` — see [QUICKSTART](pi05_libero/QUICKSTART.md) per bundle.
 
-## Published bundles
+## Source bundles (examples)
 
 | Directory | Ref(s) | GPU / CUDA |
 |-----------|--------|------------|

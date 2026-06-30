@@ -9,7 +9,7 @@ Minimal Python package for **Model Bundle** authors and runtime entry modules (`
 **End users** — `install.sh` installs `flashcli-bundle` on the host and `flashcli-bundle[infer]` in bundle venvs:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
+curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
 # mirror: ... | sh -s -- --mirror
 ```
 

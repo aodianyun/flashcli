@@ -4,9 +4,13 @@
 
 For **integrators** wiring presets to FlashHub. Full manifest / entry / `.so` spec → **[bundle_publish_standard.md](bundle_publish_standard.md)**.
 
-## Preset ref (FlashHub)
+## Discovering bundles (FlashHub)
 
-Users pass a **ref string** instead of a bundled catalog file:
+Published Model Bundles live on **[FlashHub](https://flashhub.top)**. Pick a repo/version there, then pass its ref to flashcli. There is **no bundled catalog file** in the flashcli repo.
+
+`flashcli models list` shows **locally cached** refs only (after `run`, `serve`, `pull`, or `bundle sync`).
+
+## Preset ref (FlashHub)
 
 ```text
 namespace/bundle:version[@variant]
@@ -24,9 +28,10 @@ flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
 |------|---------|
 | `namespace/bundle:version` | FlashHub repo slug + pinned version |
 | `@variant` | Optional; selects `variants.*` in manifest (e.g. Qwen3 vs Qwen3.6) |
-| Full URL | `https://flashhub-api…/flashcli-bundle/pi05_libero:1.0.3` also accepted |
+| Full URL | `https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3` also accepted |
 
 **API base** (env): `FLASHCLI_FLASHHUB_API` (default `https://flashhub-api.aodianyun.com/api/v1/repos`).  
+Browse published bundles on **[flashhub.top](https://flashhub.top)** — the public site; the API is not yet served on that domain.  
 Resolved repo URL: `{FLASHCLI_FLASHHUB_API}/{namespace}/{bundle}:{version}`.
 
 **Local dev** (positional; directory must contain `flashcli-bundle.json`):

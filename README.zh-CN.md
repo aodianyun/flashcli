@@ -38,9 +38,11 @@ flashcli 刻意保持轻薄：**推理代码在 bundle 内**。CLI 从 FlashHub 
 
 ## 支持范围
 
+在 **[FlashHub](https://flashhub.top)** 浏览已发布的 bundle。下表为常用 preset（硬件矩阵）；分 bundle 步骤见各 QUICKSTART。
+
 | Ref | 任务 | GPU | CUDA 线 | Python | 能力 |
 |-----|------|-----|---------|--------|------|
-| [`flashcli-bundle/pi05_libero:1.0.3`](bundles/pi05_libero/QUICKSTART.zh-CN.md) | Pi0.5 LIBERO VLA | **SM89**、**SM120** | cu124（SM89）· cu130 | **3.12**（bundle venv） | `run` |
+| [`flashcli-bundle/pi05_libero:1.0.4`](bundles/pi05_libero/QUICKSTART.zh-CN.md) | Pi0.5 LIBERO VLA | **SM89**、**SM120** | cu124（SM89）· cu130 | **3.12**（bundle venv） | `run` |
 | [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen3`](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) | Qwen3-8B NVFP4 对话 | **SM120** | **仅 cu130** | **3.12** | `run`, `serve` |
 | [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen36`](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **仅 cu130** | **3.12** | `run`, `serve` |
 | [`flashcli-bundle/qwen3_vl_nvfp4:1.0.0`](bundles/qwen3_vl_nvfp4/QUICKSTART.zh-CN.md) | Qwen3-VL-8B NVFP4 图文 | **SM120** | **仅 cu130** | **3.12** | `run`, `serve` |
@@ -60,7 +62,7 @@ Qwen3 与 Qwen3.6 **共用** 同一 FlashHub repo；ref 中 `@qwen3` / `@qwen36`
 | 月份 | 亮点 |
 |------|------|
 | **2026-06** | **Qwen3.6 对话服务**达到生产可用 — 回复更快（遇结束符即停）、真流式输出、更长单次生成，HTTP 与推理安装更省心 |
-| **2026-05** | **Blackwell（SM120）Qwen NVFP4** 入库 — 一条命令 `run` / OpenAI 兼容 `serve`；可复现的多环境发布包 |
+| **2026-05** | **Blackwell（SM120）Qwen NVFP4** 上架 FlashHub — 一条命令 `run` / OpenAI 兼容 `serve`；可复现的多环境发布包 |
 
 完整历史见 `git log`。
 
@@ -145,19 +147,6 @@ flashcli serve bundles/qwen_nvfp4@qwen36 --port 8000 --K 6 --max-seq 262208
 
 ---
 
-## 模型目录
-
-| Ref | 权重（Hugging Face） | Bundle 快速上手 |
-|-----|----------------------|-----------------|
-| `flashcli-bundle/pi05_libero:1.0.3` | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) | [QUICKSTART](bundles/pi05_libero/QUICKSTART.zh-CN.md) |
-| `flashcli-bundle/qwen_nvfp4:1.0.1@qwen3` | [kaitchup/Qwen3-8B-NVFP4](https://huggingface.co/kaitchup/Qwen3-8B-NVFP4) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) |
-| `flashcli-bundle/qwen_nvfp4:1.0.1@qwen36` | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4) + [MTP](https://huggingface.co/Qwen/Qwen3.6-27B-FP8) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) |
-| `flashcli-bundle/qwen3_vl_nvfp4:1.0.0` | 由 [Qwen/Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) 量化后的 FlashRT NVFP4（发布前 quantize） | [QUICKSTART](bundles/qwen3_vl_nvfp4/QUICKSTART.zh-CN.md) |
-
-Preset 语法见 [model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md)。
-
----
-
 ## CLI 速查
 
 | 命令 | 用途 |
@@ -165,14 +154,14 @@ Preset 语法见 [model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-
 | `flashcli run <ref>` | 同步推理（VLA、对话等） |
 | `flashcli serve <ref>` | OpenAI HTTP（Qwen） |
 | `flashcli pull <ref>` | 仅预拉权重 |
-| `flashcli models list` | 本地已缓存 ref 与权重状态 |
+| `flashcli models list` | 本地已缓存 ref 与权重状态（在 [FlashHub](https://flashhub.top) 发现 bundle） |
 | `flashcli models envs [ref]` | 矩阵档位 vs 本机 GPU |
 | `flashcli doctor [--install]` | 环境 / GPU 预检 |
 | `flashcli bundle sync <ref>` | 从 FlashHub 预拉 bundle runtime |
 | `flashcli bundle validate PATH` | 布局与 native 矩阵校验 |
 
 **常用参数**：`--no-auto-install`、`--checkpoint`、`--quiet`  
-**Ref 语法**：FlashHub `flashcli-bundle/name:version[@variant]` 或本地 `bundles/name[@variant]`（目录须含 `flashcli-bundle.json`）。多 variant bundle 必须带 `@variant`。
+**Ref 语法**：FlashHub `flashcli-bundle/name:version[@variant]` 或本地 `bundles/name[@variant]`（目录须含 `flashcli-bundle.json`）。多 variant bundle 必须带 `@variant`。详见 [model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md)。
 
 Qwen `serve` 要点：`--max-seq`、`--max-q-seq`（qwen3）、`--K`、`--max-output-tokens`（默认 16384）、`--warmup-preset`、`--default-max-tokens`。
 
@@ -211,7 +200,7 @@ run/serve：
 | 角色 | 阅读顺序 |
 |------|----------|
 | **终端用户** | 本 README → [pi05_libero 快速上手](bundles/pi05_libero/QUICKSTART.zh-CN.md) 或 [qwen_nvfp4 快速上手](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) → [environment.zh-CN.md](docs/environment.zh-CN.md) |
-| **集成方** | [model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md) — preset ref 语法 |
+| **集成方** | [FlashHub](https://flashhub.top) → [model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md) — preset ref 语法 |
 | **Bundle 作者** | [bundle_publish_standard.zh-CN.md](docs/bundle_publish_standard.zh-CN.md) → [flashcli-bundle/README.md](flashcli-bundle/README.md) |
 
 主机 CLI、bundle venv、FlashHub sync 原理：[architecture.zh-CN.md](docs/architecture.zh-CN.md)。完整索引：[docs/README.zh-CN.md](docs/README.zh-CN.md)。

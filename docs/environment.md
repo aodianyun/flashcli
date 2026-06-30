@@ -13,7 +13,7 @@ Boolean flags: `1`, `true`, or `yes` (case-insensitive) enable the switch.
 | `FLASHCLI_HOME` | `~/.flashcli` | Cache root. Default subdirs: `runtimes/`, `models/`, `bundles/`, `cache/`. |
 | `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | Preset marker cache (`<bundle>/<version>@<variant>/.flashcli_bundle.json`). |
 | `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | Hugging Face weights (`<dir>/<bundle>/<version>@<variant>/checkpoint/`). |
-| `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | Base URL for short refs `namespace/bundle:version[@variant]`. |
+| `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | Base URL for short refs `namespace/bundle:version[@variant]`. Browse bundles at [flashhub.top](https://flashhub.top) (API host is not yet on that domain). |
 
 Example:
 

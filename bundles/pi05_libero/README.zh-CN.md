@@ -34,7 +34,7 @@ runtime/<env-key>/         # 本机 env 的 *.so
 命令速查见 **[QUICKSTART.zh-CN.md](QUICKSTART.zh-CN.md)**。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
+curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
 flashcli run flashcli-bundle/pi05_libero:1.0.3 --prompt "..." --image /path/to/base.jpg
 ```
 

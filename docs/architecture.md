@@ -136,7 +136,7 @@ See [model_bundle_standard.md](model_bundle_standard.md).
 | Package | Role |
 |---------|------|
 | `models/preset_ref.py` | Parse ref → repo URL + variant + cache key |
-| `bundle/catalog.py` | Resolve `bundle.repo` from preset ref |
+| `bundle/catalog.py` | Resolve `bundle.repo` from preset ref (no bundled catalog file) |
 | `bundle/flashhub.py` | FlashHub API listing and file download |
 | `bundle/artifacts.py` | Manifest-first runtime assembly |
 | `bundle/preflight.py` | Match host env key to `runtime` |

@@ -135,7 +135,7 @@ sequenceDiagram
 | 包 | 职责 |
 |----|------|
 | `models/preset_ref.py` | 解析 ref → repo URL + variant + cache key |
-| `bundle/catalog.py` | 从 preset ref 解析 `bundle.repo` |
+| `bundle/catalog.py` | 从 preset ref 解析 `bundle.repo`（无 bundled catalog 文件） |
 | `bundle/flashhub.py` | FlashHub API  listing / 文件下载 |
 | `bundle/artifacts.py` | manifest-first 组装 runtime |
 | `bundle/preflight.py` | env key 与 `runtime` 匹配 |

@@ -8,9 +8,9 @@
 
 Install and run presets — [../README.md](../README.md), then [QUICKSTART](../bundles/pi05_libero/QUICKSTART.md) per model. Mirrors and cache paths: [environment.md](environment.md).
 
-### Catalog integrators
+### Integrators
 
-Pin presets and FlashHub URLs — inline ref strings; see [model_bundle_standard.md](model_bundle_standard.md).
+Pin preset refs from [FlashHub](https://flashhub.top). Ref syntax: [model_bundle_standard.md](model_bundle_standard.md).
 
 ### External bundle authors
 

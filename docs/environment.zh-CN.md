@@ -13,7 +13,7 @@ flashcli 通过环境变量配置缓存路径、preset ref、下载行为，以�
 | `FLASHCLI_HOME` | `~/.flashcli` | 缓存根目录。默认子目录：`runtimes/`、`models/`、`cache/`。 |
 | `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | preset marker（`<bundle>/<version>@<variant>/.flashcli_bundle.json`）。 |
 | `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | Hugging Face 权重（`<dir>/<bundle>/<version>@<variant>/checkpoint/`）。 |
-| `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | 短 ref `namespace/bundle:version[@variant]` 的 API 基址。 |
+| `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | 短 ref `namespace/bundle:version[@variant]` 的 API 基址。在 [flashhub.top](https://flashhub.top) 浏览 bundle（API 尚未迁移至该域名）。 |
 
 示例：
 

@@ -75,7 +75,7 @@ qwen_nvfp4/
 
 ### 2.4 Preset ref（供集成方参考）
 
-用户使用 inline ref 字符串 — 无 bundled catalog 文件：
+用户使用 inline ref 字符串 — 在 [FlashHub](https://flashhub.top) 发现 bundle；flashcli 仓库内无 bundled catalog 文件：
 
 ```text
 flashcli-bundle/<name>:<version>[@variant]

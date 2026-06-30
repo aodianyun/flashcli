@@ -38,6 +38,8 @@ flashcli is intentionally thin: **inference code lives in the bundle**. The CLI 
 
 ## Supported models & hardware
 
+Browse published bundles on **[FlashHub](https://flashhub.top)**. The table below lists common presets (hardware matrix); per-bundle steps are in each bundle’s QUICKSTART.
+
 | Ref | Task | GPU | CUDA line | Python | Capabilities |
 |-----|------|-----|-----------|--------|--------------|
 | [`flashcli-bundle/pi05_libero:1.0.3`](bundles/pi05_libero/QUICKSTART.md) | Pi0.5 LIBERO VLA | **SM89**, **SM120** | cu124 (SM89) · cu130 | **3.12** (bundle venv) | `run` |
@@ -60,7 +62,7 @@ Qwen3 and Qwen3.6 share **one** FlashHub repo; `@qwen3` / `@qwen36` in the ref s
 | Month | What's new |
 |-------|------------|
 | **2026-06** | Production-grade **Qwen3.6 chat serving** — faster real-world replies (early stop on end-of-text), true streaming, longer outputs, and a lighter install path for HTTP + inference |
-| **2026-05** | **Qwen NVFP4 on Blackwell (SM120)** joins the catalog with one-command `run` and OpenAI-compatible `serve`; reproducible multi-GPU release bundles |
+| **2026-05** | **Qwen NVFP4 on Blackwell (SM120)** on FlashHub — one-command `run` and OpenAI-compatible `serve`; reproducible multi-env release bundles |
 
 Full history: `git log`.
 
@@ -153,19 +155,6 @@ Step-by-step per bundle: **[qwen_nvfp4 QUICKSTART](bundles/qwen_nvfp4/QUICKSTART
 
 ---
 
-## Model catalog
-
-| Ref | Weights (Hugging Face) | Bundle QUICKSTART |
-|-----|------------------------|-------------------|
-| `flashcli-bundle/pi05_libero:1.0.3` | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) | [QUICKSTART](bundles/pi05_libero/QUICKSTART.md) |
-| `flashcli-bundle/qwen_nvfp4:1.0.1@qwen3` | [kaitchup/Qwen3-8B-NVFP4](https://huggingface.co/kaitchup/Qwen3-8B-NVFP4) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md) |
-| `flashcli-bundle/qwen_nvfp4:1.0.1@qwen36` | [prithivMLmods/Qwen3.6-27B-NVFP4](https://huggingface.co/prithivMLmods/Qwen3.6-27B-NVFP4) + [MTP](https://huggingface.co/Qwen/Qwen3.6-27B-FP8) | [QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md) |
-| `flashcli-bundle/qwen3_vl_nvfp4:1.0.0` | FlashRT NVFP4 from [Qwen/Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) (quantize before publish) | [QUICKSTART](bundles/qwen3_vl_nvfp4/QUICKSTART.md) |
-
-Preset ref syntax: [model_bundle_standard.md](docs/model_bundle_standard.md).
-
----
-
 ## CLI reference
 
 | Command | Purpose |
@@ -173,14 +162,14 @@ Preset ref syntax: [model_bundle_standard.md](docs/model_bundle_standard.md).
 | `flashcli run <ref>` | Sync inference (VLA, chat, …) |
 | `flashcli serve <ref>` | OpenAI HTTP API (Qwen) |
 | `flashcli pull <ref>` | Pre-fetch weights only |
-| `flashcli models list` | Preset refs + local cache status |
+| `flashcli models list` | Locally cached refs + weight status (discover bundles on [FlashHub](https://flashhub.top)) |
 | `flashcli models envs [ref]` | Native matrix cells vs this GPU |
 | `flashcli doctor [--install]` | Environment / GPU preflight |
 | `flashcli bundle sync <ref>` | Pre-fetch bundle runtime from FlashHub |
 | `flashcli bundle validate PATH` | Layout + native matrix check |
 
 **Common flags**: `--no-auto-install`, `--checkpoint`, `--quiet`  
-**Ref syntax**: FlashHub `flashcli-bundle/name:version[@variant]` or local `bundles/name[@variant]` (directory must contain `flashcli-bundle.json`). Multi-variant bundles require `@variant`.
+**Ref syntax**: FlashHub `flashcli-bundle/name:version[@variant]` or local `bundles/name[@variant]` (directory must contain `flashcli-bundle.json`). Multi-variant bundles require `@variant`. Details: [model_bundle_standard.md](docs/model_bundle_standard.md).
 
 Qwen `serve` highlights: `--max-seq`, `--max-q-seq` (qwen3), `--K`, `--max-output-tokens` (default 16384), `--warmup-preset`, `--default-max-tokens`.
 
@@ -219,7 +208,7 @@ Environment variables: [docs/environment.md](docs/environment.md) (`FLASHCLI_HOM
 | Role | Read in order |
 |------|----------------|
 | **End user** | This README → [pi05_libero QUICKSTART](bundles/pi05_libero/QUICKSTART.md) or [qwen_nvfp4 QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md) → [environment.md](docs/environment.md) |
-| **Integrator** | [model_bundle_standard.md](docs/model_bundle_standard.md) — preset ref syntax |
+| **Integrator** | [FlashHub](https://flashhub.top) → [model_bundle_standard.md](docs/model_bundle_standard.md) — preset ref syntax |
 | **Bundle author** | [bundle_publish_standard.md](docs/bundle_publish_standard.md) → [flashcli-bundle/README.md](flashcli-bundle/README.md) |
 
 How host CLI, bundle venv, and FlashHub sync work: [architecture.md](docs/architecture.md). Full index: [docs/README.md](docs/README.md).
