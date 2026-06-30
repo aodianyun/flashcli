@@ -89,7 +89,7 @@ def _select_loadable_module(
     last_exc: BaseException | None = None
     for candidate in ranked:
         try:
-            _probe_so_file(candidate)
+            _probe_so_file(candidate, env_key=env_key)
             return candidate
         except (ImportError, RuntimeError) as exc:
             last_exc = exc

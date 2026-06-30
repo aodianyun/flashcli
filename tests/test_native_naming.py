@@ -71,6 +71,23 @@ def test_parse_native_artifact_legacy_env_key_only():
     assert parsed.catalog_key() == env_key
 
 
+def test_parse_native_artifact_git_short_abi():
+    env_key = "sm120-cu130-linux-x86_64-py312"
+    parsed = parse_native_artifact(
+        f"flash_rt_fa2-5b51bb8-{env_key}.so",
+        env_key=env_key,
+    )
+    assert parsed is not None
+    assert parsed.module_base == "flash_rt_fa2"
+    assert parsed.flashrt_abi == "5b51bb8"
+
+
+def test_logical_module_name_git_short_abi():
+    env_key = "sm120-cu130-linux-x86_64-py312"
+    name = f"flash_rt_qwen3_vl_kernels-5b51bb8-{env_key}.so"
+    assert logical_native_module_name(name, env_key=env_key) == "flash_rt_qwen3_vl_kernels"
+
+
 def test_discover_legacy_pi05_native_modules(tmp_path):
     from pathlib import Path
 

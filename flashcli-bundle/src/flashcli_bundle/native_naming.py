@@ -125,7 +125,7 @@ def native_so_filename(module_base: str, tag: str) -> str:
 _KNOWN_OS = frozenset({"linux", "darwin", "win32", "windows"})
 _KNOWN_ARCH = frozenset({"x86_64", "aarch64", "arm64"})
 _FLASHRT_ABI_RE = re.compile(
-    r"^(?:dev|v?\d+\.\d+(?:\.\d+)?(?:[a-zA-Z0-9._+-]*)?|[a-f0-9]{8,})$",
+    r"^(?:dev|v?\d+\.\d+(?:\.\d+)?(?:[a-zA-Z0-9._+-]*)?|[a-f0-9]{7,})$",
     re.IGNORECASE,
 )
 
@@ -145,8 +145,6 @@ def _split_module_base_and_abi(module_and_abi: str) -> tuple[str, str] | None:
         return None
     if _looks_like_flashrt_abi(flashrt_abi):
         return module_base, flashrt_abi
-    if module_and_abi.startswith("flash_rt_"):
-        return module_and_abi, "dev"
     return None
 
 

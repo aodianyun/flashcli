@@ -58,6 +58,15 @@ def _host_managed_pip_package(spec: str) -> bool:
     return requirement_package_name(spec) in _HOST_MANAGED_PIP_NAMES
 
 
+def _venv_site_packages(python: Path) -> Path | None:
+    root = _venv_root_from_python(python.resolve())
+    lib = root / "lib"
+    if not lib.is_dir():
+        return None
+    matches = sorted(lib.glob("python*/site-packages"))
+    return matches[0] if matches else None
+
+
 def _pip_show_version(*, python: Path, name: str) -> str | None:
     proc = subprocess.run(
         [str(python), "-m", "pip", "show", name],
@@ -67,11 +76,23 @@ def _pip_show_version(*, python: Path, name: str) -> str | None:
     )
     if proc.returncode != 0:
         return None
+    version: str | None = None
+    location: Path | None = None
     for line in proc.stdout.splitlines():
         if line.startswith("Version:"):
-            version = line.partition(":")[2].strip()
-            return version or None
-    return None
+            version = line.partition(":")[2].strip() or None
+        elif line.startswith("Location:"):
+            location = Path(line.partition(":")[2].strip())
+    if not version:
+        return None
+    site = _venv_site_packages(python)
+    if site is None or location is None:
+        return version
+    try:
+        location.resolve().relative_to(site.resolve())
+    except ValueError:
+        return None
+    return version
 
 
 def _query_installed_torch_ecosystem_versions(*, python: Path) -> dict[str, str]:
