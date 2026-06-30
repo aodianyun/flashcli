@@ -13,6 +13,7 @@ from typing import Any
 from packaging.requirements import Requirement
 
 _TORCH_NAMES = frozenset({"torch", "pytorch"})
+_TORCH_CUDA_WHEEL_NAMES = frozenset({"torchaudio", "torchvision", "torchtext"})
 
 # PyPI name -> importlib module name (when they differ).
 _IMPORT_NAMES: dict[str, str] = {
@@ -58,6 +59,11 @@ def _load_toml(path: Path) -> dict:
 
 def _req_name(spec: str) -> str:
     return Requirement(spec).name.lower()
+
+
+def uses_torch_cuda_wheel_index(spec: str) -> bool:
+    """True for packages that must install from the PyTorch CUDA wheel index."""
+    return _req_name(spec) in _TORCH_CUDA_WHEEL_NAMES
 
 
 def _dedupe_strings(items: list[str]) -> list[str]:

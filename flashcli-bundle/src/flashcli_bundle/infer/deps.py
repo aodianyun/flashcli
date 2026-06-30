@@ -22,6 +22,7 @@ from flashcli_bundle.runtime.requirements_spec import (
     requirement_import_satisfied,
     requirement_needs_pip_install,
     resolve_runtime_requirements,
+    uses_torch_cuda_wheel_index,
 )
 
 _INFER_EXTRA = "infer"
@@ -58,11 +59,21 @@ def _missing_runtime_imports(
     python: Path | None = None,
     bundle_root: Path | None = None,
 ) -> list[str]:
-    return [
+    missing = [
         p
         for p in spec.all_packages()
         if not _imports_ok(p, python=python, bundle_root=bundle_root)
     ]
+    for pkg in spec.pip_packages:
+        if not uses_torch_cuda_wheel_index(pkg):
+            continue
+        if pkg in missing:
+            continue
+        if _imports_ok(pkg, python=python, bundle_root=bundle_root) and not _torch_cuda_wheel_stack_ok(
+            python=python
+        ):
+            missing.append(pkg)
+    return missing
 
 
 def bundle_python_stack_satisfied(
@@ -89,6 +100,84 @@ def _run_pip(
     if quiet:
         cmd.append("-q")
     subprocess.run(cmd, check=True)
+
+
+def _torch_index_pip_args(
+    packages: list[str],
+    torch_index: str,
+) -> list[str]:
+    index_url = resolve_torch_index_url(torch_index)
+    args = list(packages) + ["--index-url", index_url]
+    pypi = pip_index_url()
+    if pypi:
+        args.extend(["--extra-index-url", pypi])
+        host = pip_trusted_host()
+        if host:
+            args.extend(["--trusted-host", host])
+    return args
+
+
+def _pip_install_torch_index_packages(
+    packages: list[str],
+    *,
+    torch_index: str,
+    python: Path | None = None,
+    quiet: bool,
+) -> None:
+    if not packages:
+        return
+    if not quiet:
+        index_url = resolve_torch_index_url(torch_index)
+        print(
+            f"Installing PyTorch CUDA wheels from {index_url}: "
+            f"{', '.join(packages)}"
+        )
+    _run_pip(
+        _torch_index_pip_args(packages, torch_index),
+        quiet=quiet,
+        use_pypi_mirror=False,
+        python=python,
+    )
+
+
+_TORCH_CUDA_STACK_PROBE = """
+import torch
+try:
+    import torchaudio
+except RuntimeError as exc:
+    msg = str(exc)
+    if "different CUDA versions" in msg or "compiled with different CUDA versions" in msg:
+        raise SystemExit(1) from exc
+    raise
+raise SystemExit(0)
+"""
+
+
+def _torch_cuda_wheel_stack_ok(*, python: Path | None = None) -> bool:
+    """True when torchaudio (if importable) matches torch's CUDA userland."""
+    py = _pip_python(python)
+    proc = subprocess.run(
+        [py, "-c", _TORCH_CUDA_STACK_PROBE],
+        capture_output=True,
+        check=False,
+    )
+    return proc.returncode == 0
+
+
+def _needs_torch_cuda_wheel_reinstall(
+    spec: str,
+    *,
+    python: Path | None = None,
+    bundle_root: Path | None = None,
+    force: bool = False,
+) -> bool:
+    if not uses_torch_cuda_wheel_index(spec):
+        return False
+    if force:
+        return True
+    if not _imports_ok(spec, python=python, bundle_root=bundle_root):
+        return True
+    return not _torch_cuda_wheel_stack_ok(python=python)
 
 
 def _load_persisted_install_env() -> None:
@@ -251,29 +340,46 @@ def ensure_runtime_python_stack(
         ):
             if not quiet:
                 print(f"Installing {spec.torch_package} from {index_url} ...")
-            torch_args = [spec.torch_package, "--index-url", index_url]
-            pypi = pip_index_url()
-            if pypi:
-                torch_args.extend(["--extra-index-url", pypi])
-                host = pip_trusted_host()
-                if host:
-                    torch_args.extend(["--trusted-host", host])
-            _run_pip(torch_args, quiet=quiet, use_pypi_mirror=False, python=python)
+            _run_pip(
+                _torch_index_pip_args([spec.torch_package], torch_index),
+                quiet=quiet,
+                use_pypi_mirror=False,
+                python=python,
+            )
 
-    to_install = [
+    pending = [
         p
         for p in spec.pip_packages
-        if requirement_needs_pip_install(
+        if _needs_torch_cuda_wheel_reinstall(
             p,
-            python=_pip_python(python),
+            python=python,
             bundle_root=bundle_root,
             force=force,
         )
+        or (
+            not uses_torch_cuda_wheel_index(p)
+            and requirement_needs_pip_install(
+                p,
+                python=_pip_python(python),
+                bundle_root=bundle_root,
+                force=force,
+            )
+        )
     ]
-    if to_install:
+    torch_wheel_pkgs = [p for p in pending if uses_torch_cuda_wheel_index(p)]
+    pypi_pkgs = [p for p in pending if not uses_torch_cuda_wheel_index(p)]
+
+    if torch_wheel_pkgs:
+        _pip_install_torch_index_packages(
+            torch_wheel_pkgs,
+            torch_index=torch_index,
+            python=python,
+            quiet=quiet,
+        )
+    if pypi_pkgs:
         if not quiet:
-            print(f"Installing bundle runtime dependencies: {', '.join(to_install)}")
-        _run_pip(to_install, quiet=quiet, python=python)
+            print(f"Installing bundle runtime dependencies: {', '.join(pypi_pkgs)}")
+        _run_pip(pypi_pkgs, quiet=quiet, python=python)
 
     missing = _missing_runtime_imports(
         spec, python=python, bundle_root=bundle_root
@@ -282,17 +388,36 @@ def ensure_runtime_python_stack(
         pip_retry = [
             p
             for p in missing
-            if requirement_needs_pip_install(
+            if _needs_torch_cuda_wheel_reinstall(
                 p,
-                python=_pip_python(python),
+                python=python,
                 bundle_root=bundle_root,
                 force=True,
+            )
+            or (
+                not uses_torch_cuda_wheel_index(p)
+                and requirement_needs_pip_install(
+                    p,
+                    python=_pip_python(python),
+                    bundle_root=bundle_root,
+                    force=True,
+                )
             )
         ]
         if pip_retry:
             if not quiet:
                 print(f"Retrying missing bundle imports: {', '.join(pip_retry)}")
-            _run_pip(pip_retry, quiet=quiet, python=python)
+            retry_torch = [p for p in pip_retry if uses_torch_cuda_wheel_index(p)]
+            retry_pypi = [p for p in pip_retry if not uses_torch_cuda_wheel_index(p)]
+            if retry_torch:
+                _pip_install_torch_index_packages(
+                    retry_torch,
+                    torch_index=torch_index,
+                    python=python,
+                    quiet=quiet,
+                )
+            if retry_pypi:
+                _run_pip(retry_pypi, quiet=quiet, python=python)
         missing = _missing_runtime_imports(
             spec, python=python, bundle_root=bundle_root
         )
