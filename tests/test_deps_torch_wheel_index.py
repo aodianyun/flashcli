@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 from flashcli_bundle.infer.deps import (
     pypi_prereqs_for_isolated_install,
     resolve_torch_index_specs,
@@ -73,6 +75,30 @@ def test_pypi_prereqs_for_isolated_install_skips_torch_and_eval_extras() -> None
     assert "numpy" in prereqs
     assert not any("torch" in p for p in prereqs)
     assert not any("jiwer" in p for p in prereqs)
+
+
+def test_query_installed_torch_ecosystem_versions_uses_pip_show(tmp_path) -> None:
+    import subprocess
+
+    from flashcli_bundle.infer.deps import _query_installed_torch_ecosystem_versions
+
+    venv = tmp_path / "venv"
+    subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
+    py = venv / "bin" / "python"
+    subprocess.run(
+        [str(py), "-m", "pip", "install", "-q", "pip"],
+        check=True,
+    )
+    versions = _query_installed_torch_ecosystem_versions(python=py)
+    assert versions == {}
+
+    subprocess.run(
+        [str(py), "-m", "pip", "install", "-q", "numpy"],
+        check=True,
+    )
+    versions = _query_installed_torch_ecosystem_versions(python=py)
+    assert "numpy" not in versions
+    assert "torch" not in versions
 
 
 def test_format_torch_ecosystem_constraint_lines_pins_local_versions() -> None:

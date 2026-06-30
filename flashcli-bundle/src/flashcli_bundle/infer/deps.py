@@ -51,33 +51,38 @@ def format_torch_ecosystem_constraint_lines(installed_versions: dict[str, str]) 
     return [f"{name}=={version}" for name, version in sorted(installed_versions.items())]
 
 
-def _query_installed_torch_ecosystem_versions(*, python: Path) -> dict[str, str]:
-    names = sorted(torch_ecosystem_package_names())
-    script = f"""
-import importlib.metadata as md
-names = {names!r}
-for name in names:
-    try:
-        print(name + "==" + md.version(name))
-    except md.PackageNotFoundError:
-        pass
-"""
+_HOST_MANAGED_PIP_NAMES = frozenset({"flashcli-bundle"})
+
+
+def _host_managed_pip_package(spec: str) -> bool:
+    return requirement_package_name(spec) in _HOST_MANAGED_PIP_NAMES
+
+
+def _pip_show_version(*, python: Path, name: str) -> str | None:
     proc = subprocess.run(
-        [str(python), "-c", script],
+        [str(python), "-m", "pip", "show", name],
         capture_output=True,
         text=True,
         check=False,
     )
     if proc.returncode != 0:
-        return {}
-    out: dict[str, str] = {}
+        return None
     for line in proc.stdout.splitlines():
-        if "==" not in line:
+        if line.startswith("Version:"):
+            version = line.partition(":")[2].strip()
+            return version or None
+    return None
+
+
+def _query_installed_torch_ecosystem_versions(*, python: Path) -> dict[str, str]:
+    """Versions pip actually installed in the bundle venv (not importlib metadata)."""
+    py = python.resolve()
+    out: dict[str, str] = {}
+    for name in sorted(torch_ecosystem_package_names()):
+        if name == "pytorch" and "torch" in out:
             continue
-        name, _, version = line.partition("==")
-        name = name.strip().lower()
-        version = version.strip()
-        if name and version:
+        version = _pip_show_version(python=py, name=name)
+        if version:
             out[name] = version
     return out
 
@@ -352,6 +357,8 @@ def _pip_wheel_requires_cache(
     for pkg in pip_packages:
         if uses_torch_cuda_wheel_index(pkg):
             continue
+        if _host_managed_pip_package(pkg):
+            continue
         try:
             cache[pkg] = _wheel_requires_dist(pkg, python=python, quiet=quiet)
         except subprocess.CalledProcessError:
@@ -428,7 +435,6 @@ def _install_isolated_packages(
     quiet: bool,
     bundle_root: Path | None,
     force: bool,
-    constraints: Path | None = None,
 ) -> None:
     for package_spec in packages:
         prereqs = pypi_prereqs_for_isolated_install(
@@ -454,7 +460,6 @@ def _install_isolated_packages(
                 needed_prereqs,
                 quiet=quiet,
                 python=python,
-                constraints=constraints,
             )
         if not requirement_needs_pip_install(
             package_spec,
@@ -472,7 +477,6 @@ def _install_isolated_packages(
             quiet=quiet,
             python=python,
             no_deps=True,
-            constraints=constraints,
         )
 
 
@@ -519,6 +523,8 @@ def _collect_install_batches(
     isolated_pkgs: list[str] = []
     for pkg in spec.pip_packages:
         if uses_torch_cuda_wheel_index(pkg):
+            continue
+        if _host_managed_pip_package(pkg):
             continue
         if not requirement_needs_pip_install(
             pkg,
@@ -576,7 +582,6 @@ def _install_runtime_batches(
             quiet=quiet,
             bundle_root=bundle_root,
             force=force,
-            constraints=constraints,
         )
 
 
