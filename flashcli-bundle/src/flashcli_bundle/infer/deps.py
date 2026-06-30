@@ -21,7 +21,6 @@ from flashcli_bundle.infer.runtime.mirror import (
 )
 from flashcli_bundle.runtime.requirements_spec import (
     RuntimeRequirementsSpec,
-    declared_package_names,
     import_name_for_requirement,
     requirement_import_satisfied,
     requirement_needs_pip_install,
@@ -214,35 +213,109 @@ def _wheel_requires_dist(
 
 def torch_ecosystem_nodeps_needed(
     wheel_requires: list[str],
-    declared: frozenset[str],
+    covered_ecosystem: frozenset[str],
 ) -> bool:
-    """True when wheel torch-ecosystem requires are already declared in the manifest."""
+    """True when wheel torch-ecosystem requires are covered by the torch-index batch."""
     ecosystem = torch_ecosystem_package_names()
     torch_requires = [
         req for req in wheel_requires if requirement_package_name(req) in ecosystem
     ]
     if not torch_requires:
         return False
-    return all(requirement_package_name(req) in declared for req in torch_requires)
+    return all(
+        requirement_package_name(req) in covered_ecosystem for req in torch_requires
+    )
+
+
+def resolve_torch_index_specs(
+    spec: RuntimeRequirementsSpec,
+    wheel_requires_by_package: dict[str, list[str]],
+) -> tuple[list[str], frozenset[str]]:
+    """Manifest torch stack plus torch-ecosystem wheels inferred from PyPI package metadata."""
+    ecosystem = torch_ecosystem_package_names()
+    ordered: list[str] = []
+    seen: set[str] = set()
+
+    def add(spec_str: str) -> None:
+        name = requirement_package_name(spec_str)
+        if name in seen:
+            return
+        seen.add(name)
+        ordered.append(spec_str)
+
+    if spec.torch_package.strip():
+        add(spec.torch_package)
+
+    for pkg in spec.pip_packages:
+        if uses_torch_cuda_wheel_index(pkg):
+            add(pkg)
+
+    for requires in wheel_requires_by_package.values():
+        for req in requires:
+            if requirement_package_name(req) in ecosystem:
+                add(requirement_package_name(req))
+
+    covered = frozenset(
+        requirement_package_name(item)
+        for item in ordered
+        if requirement_package_name(item) in ecosystem
+    )
+    return ordered, covered
+
+
+def _pip_wheel_requires_cache(
+    pip_packages: list[str],
+    *,
+    python: Path | None,
+    quiet: bool,
+) -> dict[str, list[str]]:
+    cache: dict[str, list[str]] = {}
+    for pkg in pip_packages:
+        if uses_torch_cuda_wheel_index(pkg):
+            continue
+        try:
+            cache[pkg] = _wheel_requires_dist(pkg, python=python, quiet=quiet)
+        except subprocess.CalledProcessError:
+            cache[pkg] = []
+    return cache
+
+
+def _needs_torch_index_install(
+    spec_str: str,
+    *,
+    python: Path | None,
+    bundle_root: Path | None,
+    force: bool,
+) -> bool:
+    name = requirement_package_name(spec_str)
+    if name in {"torch", "pytorch"}:
+        return requirement_needs_pip_install(
+            spec_str,
+            python=_pip_python(python),
+            bundle_root=bundle_root,
+            force=force,
+        )
+    if uses_torch_cuda_wheel_index(spec_str):
+        return _needs_torch_cuda_wheel_reinstall(
+            spec_str,
+            python=python,
+            bundle_root=bundle_root,
+            force=force,
+        ) or requirement_needs_pip_install(
+            spec_str,
+            python=_pip_python(python),
+            bundle_root=bundle_root,
+            force=force,
+        )
+    return False
 
 
 def _should_install_without_deps(
-    package_spec: str,
-    spec: RuntimeRequirementsSpec,
-    *,
-    python: Path | None = None,
-    quiet: bool,
+    wheel_requires: list[str],
+    covered_ecosystem: frozenset[str],
 ) -> bool:
-    """Skip transitive install when manifest already owns the torch stack for this wheel."""
-    try:
-        wheel_requires = _wheel_requires_dist(
-            package_spec, python=python, quiet=quiet
-        )
-    except subprocess.CalledProcessError:
-        return False
-    return torch_ecosystem_nodeps_needed(
-        wheel_requires, declared_package_names(spec)
-    )
+    """Skip transitive install when the torch-index batch already covers this wheel."""
+    return torch_ecosystem_nodeps_needed(wheel_requires, covered_ecosystem)
 
 
 def _install_isolated_packages(
@@ -263,7 +336,7 @@ def _install_isolated_packages(
             continue
         if not quiet:
             print(
-                f"Installing {package_spec} (--no-deps; torch stack from manifest)"
+                f"Installing {package_spec} (--no-deps; torch stack already installed)"
             )
         _run_pip([package_spec], quiet=quiet, python=python, no_deps=True)
 
@@ -292,34 +365,25 @@ def _collect_install_batches(
     force: bool,
     quiet: bool,
 ) -> tuple[list[str], list[str], list[str]]:
-    torch_index_pkgs: list[str] = []
+    wheel_cache = _pip_wheel_requires_cache(
+        spec.pip_packages, python=python, quiet=quiet
+    )
+    torch_specs, covered_ecosystem = resolve_torch_index_specs(spec, wheel_cache)
+    torch_index_pkgs = [
+        pkg
+        for pkg in torch_specs
+        if _needs_torch_index_install(
+            pkg,
+            python=python,
+            bundle_root=bundle_root,
+            force=force,
+        )
+    ]
+
     pypi_pkgs: list[str] = []
     isolated_pkgs: list[str] = []
-
-    if spec.torch_package.strip() and requirement_needs_pip_install(
-        spec.torch_package,
-        python=_pip_python(python),
-        bundle_root=bundle_root,
-        force=force,
-    ):
-        torch_index_pkgs.append(spec.torch_package)
-
     for pkg in spec.pip_packages:
-        if uses_torch_cuda_wheel_index(pkg) and (
-            _needs_torch_cuda_wheel_reinstall(
-                pkg,
-                python=python,
-                bundle_root=bundle_root,
-                force=force,
-            )
-            or requirement_needs_pip_install(
-                pkg,
-                python=_pip_python(python),
-                bundle_root=bundle_root,
-                force=force,
-            )
-        ):
-            torch_index_pkgs.append(pkg)
+        if uses_torch_cuda_wheel_index(pkg):
             continue
         if not requirement_needs_pip_install(
             pkg,
@@ -328,9 +392,8 @@ def _collect_install_batches(
             force=force,
         ):
             continue
-        if _should_install_without_deps(
-            pkg, spec, python=python, quiet=quiet
-        ):
+        wheel_requires = wheel_cache.get(pkg, [])
+        if _should_install_without_deps(wheel_requires, covered_ecosystem):
             isolated_pkgs.append(pkg)
         else:
             pypi_pkgs.append(pkg)

@@ -187,8 +187,8 @@ Common variant fields:
 | Key | Description |
 |-----|-------------|
 | `torch` | PyTorch wheel; `"index": "auto"` lets flashcli pick cu124/cu128 index from host CUDA (**recommended**) |
-| `pip` | Additional pip packages (strings with optional version constraints); **only listed packages are installed** — flashcli does not auto-complete |
-| `torchaudio` / `torchvision` | When required at runtime, **must be listed in `pip`**; flashcli installs them from the same CUDA wheel index as `torch`. If a PyPI wheel (e.g. `omnivoice`) declares torch-ecosystem deps already present in the manifest, flashcli installs the torch stack first, then that package with `--no-deps` so PyPI cannot overwrite CUDA builds |
+| `pip` | Additional pip packages (strings with optional version constraints) |
+| `torchaudio` / `torchvision` | May be listed explicitly in `pip`; if omitted but another `pip` wheel declares them, flashcli **infers and installs them with `torch`** from the CUDA index, then installs that PyPI package with `--no-deps` |
 
 The bundle venv Python version is fixed by `python_abi`, independent of the host CLI Python.
 

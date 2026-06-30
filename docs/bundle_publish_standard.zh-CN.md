@@ -187,8 +187,8 @@ variant 块常用字段：
 | 键 | 说明 |
 |----|------|
 | `torch` | PyTorch wheel；`index: "auto"` 表示由 flashcli 按本机 CUDA 线选择 cu124/cu128 索引（**推荐**） |
-| `pip` | 其余 pip 包列表（字符串，可带版本约束）；**仅安装此处列出的包**，flashcli 不会自动补全 |
-| `torchaudio` / `torchvision` | 若运行时需要，**必须在 `pip` 中显式列出**；flashcli 会从与 `torch` 相同的 CUDA wheel 索引安装。若某 PyPI 包（如 `omnivoice`）的 wheel 声明依赖 `torchaudio` 且 manifest 已列出，flashcli 会先装 `torchaudio` 再以 `--no-deps` 装该包，避免 PyPI 覆盖 CUDA 版本 |
+| `pip` | 其余 pip 包列表（字符串，可带版本约束）；**仅安装此处列出的 PyPI 包** |
+| `torchaudio` / `torchvision` | 可在 `pip` 中显式列出；若未列出但某个 `pip` 包的 wheel 声明依赖它们，flashcli 会在安装 `torch` 时**一并从 CUDA 索引推断安装**。之后该 PyPI 包会以 `--no-deps` 安装，避免 PyPI 覆盖 CUDA 版本 |
 
 bundle venv 的 Python 版本由 `python_abi` 决定，与主机 CLI Python 版本无关。
 
