@@ -31,6 +31,82 @@ from flashcli_bundle.runtime.requirements_spec import (
 )
 
 _INFER_EXTRA = "infer"
+_TORCH_CONSTRAINTS_BASENAME = "torch-ecosystem.constraints.txt"
+
+
+def _venv_root_from_python(python: Path) -> Path:
+    parent = python.resolve().parent
+    if parent.name in ("bin", "Scripts"):
+        return parent.parent
+    return parent
+
+
+def torch_ecosystem_constraints_path(python: Path) -> Path:
+    """Path to pip constraints pinning installed torch-ecosystem wheels in a bundle venv."""
+    return _venv_root_from_python(python) / _TORCH_CONSTRAINTS_BASENAME
+
+
+def format_torch_ecosystem_constraint_lines(installed_versions: dict[str, str]) -> list[str]:
+    """Build ``pip --constraint`` lines (exact versions including ``+cu128`` locals)."""
+    return [f"{name}=={version}" for name, version in sorted(installed_versions.items())]
+
+
+def _query_installed_torch_ecosystem_versions(*, python: Path) -> dict[str, str]:
+    names = sorted(torch_ecosystem_package_names())
+    script = f"""
+import importlib.metadata as md
+names = {names!r}
+for name in names:
+    try:
+        print(name + "==" + md.version(name))
+    except md.PackageNotFoundError:
+        pass
+"""
+    proc = subprocess.run(
+        [str(python), "-c", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return {}
+    out: dict[str, str] = {}
+    for line in proc.stdout.splitlines():
+        if "==" not in line:
+            continue
+        name, _, version = line.partition("==")
+        name = name.strip().lower()
+        version = version.strip()
+        if name and version:
+            out[name] = version
+    return out
+
+
+def _refresh_torch_ecosystem_constraints(
+    *,
+    python: Path | None,
+    quiet: bool,
+) -> Path | None:
+    """Pin installed torch/torchaudio/... so later PyPI installs cannot replace CUDA builds."""
+    if python is None:
+        return None
+    py = python.resolve()
+    installed = _query_installed_torch_ecosystem_versions(python=py)
+    if not installed:
+        return None
+    path = torch_ecosystem_constraints_path(py)
+    lines = format_torch_ecosystem_constraint_lines(installed)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    if not quiet:
+        print(f"Pinned torch stack in {path.name}: {', '.join(lines)}")
+    return path
+
+
+def _constraints_for_pypi_install(*, python: Path | None) -> Path | None:
+    if python is None:
+        return None
+    path = torch_ecosystem_constraints_path(python.resolve())
+    return path if path.is_file() else None
 
 
 def _pip_python(python: Path | None) -> str:
@@ -123,10 +199,13 @@ def _run_pip(
     quiet: bool,
     use_pypi_mirror: bool = True,
     no_deps: bool = False,
+    constraints: Path | None = None,
 ) -> None:
     cmd = [_pip_python(python), "-m", "pip", "install"]
     if no_deps:
         cmd.append("--no-deps")
+    if constraints is not None and constraints.is_file():
+        cmd.extend(["--constraint", str(constraints)])
     if use_pypi_mirror:
         cmd.extend(pip_install_extra_args())
     cmd.extend(args)
@@ -349,6 +428,7 @@ def _install_isolated_packages(
     quiet: bool,
     bundle_root: Path | None,
     force: bool,
+    constraints: Path | None = None,
 ) -> None:
     for package_spec in packages:
         prereqs = pypi_prereqs_for_isolated_install(
@@ -370,7 +450,12 @@ def _install_isolated_packages(
                     f"Installing prerequisites for {package_spec}: "
                     f"{', '.join(needed_prereqs)}"
                 )
-            _run_pip(needed_prereqs, quiet=quiet, python=python)
+            _run_pip(
+                needed_prereqs,
+                quiet=quiet,
+                python=python,
+                constraints=constraints,
+            )
         if not requirement_needs_pip_install(
             package_spec,
             python=_pip_python(python),
@@ -382,7 +467,13 @@ def _install_isolated_packages(
             print(
                 f"Installing {package_spec} (--no-deps; torch stack already installed)"
             )
-        _run_pip([package_spec], quiet=quiet, python=python, no_deps=True)
+        _run_pip(
+            [package_spec],
+            quiet=quiet,
+            python=python,
+            no_deps=True,
+            constraints=constraints,
+        )
 
 
 def _needs_torch_cuda_wheel_reinstall(
@@ -458,6 +549,7 @@ def _install_runtime_batches(
     force: bool,
     force_torch_reinstall: bool = False,
 ) -> None:
+    constraints: Path | None = None
     if torch_index_pkgs:
         _pip_install_torch_index_packages(
             torch_index_pkgs,
@@ -466,10 +558,16 @@ def _install_runtime_batches(
             quiet=quiet,
             force_reinstall=force_torch_reinstall,
         )
+        if python is not None:
+            constraints = _refresh_torch_ecosystem_constraints(
+                python=python, quiet=quiet
+            )
+    if constraints is None and python is not None:
+        constraints = _constraints_for_pypi_install(python=python)
     if pypi_pkgs:
         if not quiet:
             print(f"Installing bundle runtime dependencies: {', '.join(pypi_pkgs)}")
-        _run_pip(pypi_pkgs, quiet=quiet, python=python)
+        _run_pip(pypi_pkgs, quiet=quiet, python=python, constraints=constraints)
     if isolated_pkgs:
         _install_isolated_packages(
             isolated_pkgs,
@@ -478,6 +576,7 @@ def _install_runtime_batches(
             quiet=quiet,
             bundle_root=bundle_root,
             force=force,
+            constraints=constraints,
         )
 
 

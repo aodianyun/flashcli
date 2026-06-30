@@ -141,23 +141,60 @@ def _resolve_host_native_paths(
     return paths
 
 
+def _attach_native_module(name: str, mod: Any) -> None:
+    sys.modules[name] = mod
+    flash_rt_pkg = sys.modules.get("flash_rt")
+    if flash_rt_pkg is not None:
+        setattr(flash_rt_pkg, name, mod)
+    sys.modules[f"flash_rt.{name}"] = mod
+
+
+def _refresh_flash_rt_kernel_bindings() -> None:
+    """Re-bind kernel modules cached at import time in bundle ``flash_rt.api``."""
+    fvk = sys.modules.get("flash_rt_kernels")
+    fvo = sys.modules.get("flash_rt_omnivoice")
+    if fvk is None and fvo is None:
+        return
+
+    for mod_name in ("flash_rt.api", "flash_rt.models.omnivoice.pipeline_rtx"):
+        mod = sys.modules.get(mod_name)
+        if mod is None:
+            continue
+        if fvk is not None and getattr(mod, "_fvk", None) is None:
+            mod._fvk = fvk
+        if fvo is not None and getattr(mod, "_fvo", None) is None:
+            mod._fvo = fvo
+        if hasattr(mod, "_has_cfg_kernel"):
+            resolved_fvo = getattr(mod, "_fvo", None)
+            mod._has_cfg_kernel = resolved_fvo is not None and hasattr(
+                resolved_fvo, "omnivoice_cfg_logsoftmax_bf16"
+            )
+
+
 def _register_from_paths(paths: dict[str, Path]) -> list[str]:
     import importlib
 
-    try:
-        importlib.import_module("flash_rt")
-    except ImportError:
-        pass
-
+    # Load pybind extensions before ``import flash_rt``. Bundle ``flash_rt/__init__.py``
+    # often imports ``flash_rt.api``, which caches kernel handles at module import time.
     loaded: list[str] = []
+    modules: dict[str, Any] = {}
     for name, path in paths.items():
         mod = _load_extension_from_path(path, name)
-        sys.modules[name] = mod
+        modules[name] = mod
         loaded.append(name)
-        flash_rt_pkg = sys.modules.get("flash_rt")
-        if flash_rt_pkg is not None:
-            setattr(flash_rt_pkg, name, mod)
-            sys.modules[f"flash_rt.{name}"] = mod
+
+    for name, mod in modules.items():
+        _attach_native_module(name, mod)
+
+    if "flash_rt" not in sys.modules:
+        try:
+            importlib.import_module("flash_rt")
+        except ImportError:
+            pass
+        for name, mod in modules.items():
+            _attach_native_module(name, mod)
+
+    _refresh_flash_rt_kernel_bindings()
     return loaded
 
 

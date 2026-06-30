@@ -73,3 +73,18 @@ def test_pypi_prereqs_for_isolated_install_skips_torch_and_eval_extras() -> None
     assert "numpy" in prereqs
     assert not any("torch" in p for p in prereqs)
     assert not any("jiwer" in p for p in prereqs)
+
+
+def test_format_torch_ecosystem_constraint_lines_pins_local_versions() -> None:
+    from flashcli_bundle.infer.deps import format_torch_ecosystem_constraint_lines
+
+    lines = format_torch_ecosystem_constraint_lines(
+        {
+            "torchaudio": "2.6.0+cu128",
+            "torch": "2.6.0+cu128",
+        }
+    )
+    assert lines == [
+        "torch==2.6.0+cu128",
+        "torchaudio==2.6.0+cu128",
+    ]
