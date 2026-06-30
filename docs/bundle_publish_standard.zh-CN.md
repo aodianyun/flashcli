@@ -178,18 +178,17 @@ variant 块常用字段：
   "pip": [
     "numpy",
     "safetensors",
-    "transformers<4.56"
-  ],
-  "pip_nodeps": ["omnivoice"]
+    "transformers<4.56",
+    "torchaudio"
+  ]
 }
 ```
 
 | 键 | 说明 |
 |----|------|
 | `torch` | PyTorch wheel；`index: "auto"` 表示由 flashcli 按本机 CUDA 线选择 cu124/cu128 索引（**推荐**） |
-| `pip` | 其余 pip 包列表（字符串，可带版本约束） |
-| `pip_nodeps` | 可选；以 `pip install --no-deps` 安装的包名（避免从 PyPI 拉取与 torch 索引冲突的 `torchaudio` 等传递依赖）。未声明时 `omnivoice` 仍默认走 `--no-deps` |
-| `torchaudio` / `torchvision` | 若 bundle 运行时需要，建议在 `pip` 中**显式列出**；flashcli 会从与 `torch` 相同的 CUDA wheel 索引安装 |
+| `pip` | 其余 pip 包列表（字符串，可带版本约束）；**仅安装此处列出的包**，flashcli 不会自动补全 |
+| `torchaudio` / `torchvision` | 若运行时需要，**必须在 `pip` 中显式列出**；flashcli 会从与 `torch` 相同的 CUDA wheel 索引安装。若某 PyPI 包（如 `omnivoice`）的 wheel 声明依赖 `torchaudio` 且 manifest 已列出，flashcli 会先装 `torchaudio` 再以 `--no-deps` 装该包，避免 PyPI 覆盖 CUDA 版本 |
 
 bundle venv 的 Python 版本由 `python_abi` 决定，与主机 CLI Python 版本无关。
 

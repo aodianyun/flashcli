@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from flashcli_bundle.infer.deps import torch_ecosystem_nodeps_needed
 from flashcli_bundle.runtime.mirror import resolve_torch_index_url
 from flashcli_bundle.runtime.requirements_spec import (
-    RuntimeRequirementsSpec,
-    pip_nodeps_names,
+    declared_package_names,
     uses_torch_cuda_wheel_index,
+)
+from flashcli_bundle.runtime.requirements_spec import (
+    RuntimeRequirementsSpec,
 )
 
 
@@ -18,32 +21,20 @@ def test_uses_torch_cuda_wheel_index() -> None:
     assert not uses_torch_cuda_wheel_index("omnivoice")
 
 
-def test_pip_nodeps_names_defaults_omnivoice() -> None:
-    spec = RuntimeRequirementsSpec(pip_packages=["numpy", "omnivoice"])
-    assert "omnivoice" in pip_nodeps_names(spec)
-    assert "numpy" not in pip_nodeps_names(spec)
-
-
-def test_pip_nodeps_names_from_manifest() -> None:
+def test_torch_ecosystem_nodeps_needed_when_manifest_covers_wheel() -> None:
     spec = RuntimeRequirementsSpec(
-        pip_packages=["foo", "bar"],
-        pip_nodeps=["SomePkg>=1.0", "bar"],
+        torch_package="torch",
+        pip_packages=["torchaudio", "omnivoice"],
     )
-    names = pip_nodeps_names(spec)
-    assert "omnivoice" in names
-    assert "somepkg" in names
-    assert "bar" in names
-    assert "foo" not in names
+    declared = declared_package_names(spec)
+    assert torch_ecosystem_nodeps_needed(["torchaudio>=2.0"], declared)
+    assert not torch_ecosystem_nodeps_needed(["numpy>=1.0"], declared)
+    assert not torch_ecosystem_nodeps_needed(
+        ["torchaudio>=2.0"],
+        frozenset({"torch"}),
+    )
 
 
 def test_resolve_torch_index_url_cu128() -> None:
     url = resolve_torch_index_url("cu128")
     assert "cu128" in url
-
-
-def test_torch_cuda_stack_probe_missing_torchaudio_is_not_ok() -> None:
-    from flashcli_bundle.infer.deps import _TORCH_CUDA_STACK_PROBE
-
-    assert "ImportError" in _TORCH_CUDA_STACK_PROBE
-    assert "SystemExit(1)" in _TORCH_CUDA_STACK_PROBE
-    assert "SystemExit(0)" not in _TORCH_CUDA_STACK_PROBE.split("except ImportError:")[1].split("except RuntimeError")[0]

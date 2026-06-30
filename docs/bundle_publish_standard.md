@@ -178,18 +178,17 @@ Common variant fields:
   "pip": [
     "numpy",
     "safetensors",
-    "transformers<4.56"
-  ],
-  "pip_nodeps": ["omnivoice"]
+    "transformers<4.56",
+    "torchaudio"
+  ]
 }
 ```
 
 | Key | Description |
 |-----|-------------|
 | `torch` | PyTorch wheel; `"index": "auto"` lets flashcli pick cu124/cu128 index from host CUDA (**recommended**) |
-| `pip` | Additional pip packages (strings with optional version constraints) |
-| `pip_nodeps` | Optional; package names installed with `pip install --no-deps` so PyPI does not pull transitive `torchaudio` wheels that conflict with the torch CUDA index. `omnivoice` defaults to `--no-deps` even when omitted |
-| `torchaudio` / `torchvision` | When required at runtime, **list explicitly** in `pip`; flashcli installs them from the same CUDA wheel index as `torch` |
+| `pip` | Additional pip packages (strings with optional version constraints); **only listed packages are installed** — flashcli does not auto-complete |
+| `torchaudio` / `torchvision` | When required at runtime, **must be listed in `pip`**; flashcli installs them from the same CUDA wheel index as `torch`. If a PyPI wheel (e.g. `omnivoice`) declares torch-ecosystem deps already present in the manifest, flashcli installs the torch stack first, then that package with `--no-deps` so PyPI cannot overwrite CUDA builds |
 
 The bundle venv Python version is fixed by `python_abi`, independent of the host CLI Python.
 
