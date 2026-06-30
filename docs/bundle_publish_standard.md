@@ -179,7 +179,8 @@ Common variant fields:
     "numpy",
     "safetensors",
     "transformers<4.56"
-  ]
+  ],
+  "pip_nodeps": ["omnivoice"]
 }
 ```
 
@@ -187,6 +188,8 @@ Common variant fields:
 |-----|-------------|
 | `torch` | PyTorch wheel; `"index": "auto"` lets flashcli pick cu124/cu128 index from host CUDA (**recommended**) |
 | `pip` | Additional pip packages (strings with optional version constraints) |
+| `pip_nodeps` | Optional; package names installed with `pip install --no-deps` so PyPI does not pull transitive `torchaudio` wheels that conflict with the torch CUDA index. `omnivoice` defaults to `--no-deps` even when omitted |
+| `torchaudio` / `torchvision` | When required at runtime, **list explicitly** in `pip`; flashcli installs them from the same CUDA wheel index as `torch` |
 
 The bundle venv Python version is fixed by `python_abi`, independent of the host CLI Python.
 

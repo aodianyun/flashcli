@@ -14,6 +14,7 @@ from packaging.requirements import Requirement
 
 _TORCH_NAMES = frozenset({"torch", "pytorch"})
 _TORCH_CUDA_WHEEL_NAMES = frozenset({"torchaudio", "torchvision", "torchtext"})
+_DEFAULT_PIP_NODEPS = frozenset({"omnivoice"})
 
 # PyPI name -> importlib module name (when they differ).
 _IMPORT_NAMES: dict[str, str] = {
@@ -29,6 +30,7 @@ class RuntimeRequirementsSpec:
     """Pip requirements for an installed runtime package."""
 
     pip_packages: list[str] = field(default_factory=list)
+    pip_nodeps: list[str] = field(default_factory=list)
     torch_package: str = "torch"
     torch_index: str = ""
     optional_groups: dict[str, list[str]] = field(default_factory=dict)
@@ -59,6 +61,19 @@ def _load_toml(path: Path) -> dict:
 
 def _req_name(spec: str) -> str:
     return Requirement(spec).name.lower()
+
+
+def requirement_package_name(spec: str) -> str:
+    """Normalized PyPI distribution name for a pip requirement string."""
+    return _req_name(spec)
+
+
+def pip_nodeps_names(spec: RuntimeRequirementsSpec) -> frozenset[str]:
+    """Package names installed with ``pip install --no-deps`` (plus built-in defaults)."""
+    names = set(_DEFAULT_PIP_NODEPS)
+    for item in spec.pip_nodeps:
+        names.add(_req_name(item))
+    return frozenset(names)
 
 
 def uses_torch_cuda_wheel_index(spec: str) -> bool:
@@ -165,6 +180,7 @@ def _spec_from_python_dependencies(
     pip_from_txt: list[str] | None = None,
 ) -> RuntimeRequirementsSpec | None:
     pip = list(py.get("pip", []))
+    pip_nodeps = list(py.get("pip_nodeps", []))
     if pip_from_txt:
         pip.extend(pip_from_txt)
     pip = _dedupe_strings(pip)
@@ -177,6 +193,7 @@ def _spec_from_python_dependencies(
     if pip or torch_spec:
         return RuntimeRequirementsSpec(
             pip_packages=pip,
+            pip_nodeps=pip_nodeps,
             torch_package=torch_spec,
             torch_index=torch_index,
             optional_groups=groups,
