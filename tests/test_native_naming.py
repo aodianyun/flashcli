@@ -57,3 +57,28 @@ def test_parse_native_artifact_generic_platform_tail():
     assert parsed.sm is None
     assert parsed.cuda_tag is None
     assert parsed.catalog_key() == env_key
+
+
+def test_parse_native_artifact_legacy_env_key_only():
+    env_key = "sm120-cu130-linux-x86_64-py312"
+    parsed = parse_native_artifact(
+        f"flash_rt_kernels-{env_key}.so",
+        env_key=env_key,
+    )
+    assert parsed is not None
+    assert parsed.module_base == "flash_rt_kernels"
+    assert parsed.flashrt_abi == "dev"
+    assert parsed.catalog_key() == env_key
+
+
+def test_discover_legacy_pi05_native_modules(tmp_path):
+    from pathlib import Path
+
+    from flashcli.bundle.native_naming import discover_native_module_bases
+
+    env_key = "sm120-cu130-linux-x86_64-py312"
+    native = tmp_path / "runtime" / env_key
+    native.mkdir(parents=True)
+    (native / f"flash_rt_kernels-{env_key}.so").write_bytes(b"\x00")
+    (native / f"flash_rt_fa2-{env_key}.so").write_bytes(b"\x00")
+    assert discover_native_module_bases(native) == ("flash_rt_fa2", "flash_rt_kernels")

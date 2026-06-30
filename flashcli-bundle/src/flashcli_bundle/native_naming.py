@@ -124,6 +124,30 @@ def native_so_filename(module_base: str, tag: str) -> str:
 
 _KNOWN_OS = frozenset({"linux", "darwin", "win32", "windows"})
 _KNOWN_ARCH = frozenset({"x86_64", "aarch64", "arm64"})
+_FLASHRT_ABI_RE = re.compile(
+    r"^(?:dev|v?\d+\.\d+(?:\.\d+)?(?:[a-zA-Z0-9._+-]*)?|[a-f0-9]{8,})$",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_flashrt_abi(segment: str) -> bool:
+    return bool(_FLASHRT_ABI_RE.match(segment.strip()))
+
+
+def _split_module_base_and_abi(module_and_abi: str) -> tuple[str, str] | None:
+    """Split ``{module_base}-{flashrt_abi}`` or legacy ``{module_base}`` only."""
+    if not module_and_abi.startswith("flash_rt"):
+        return None
+    if "-" not in module_and_abi:
+        return module_and_abi, "dev"
+    module_base, _, flashrt_abi = module_and_abi.rpartition("-")
+    if not module_base or not flashrt_abi:
+        return None
+    if _looks_like_flashrt_abi(flashrt_abi):
+        return module_base, flashrt_abi
+    if module_and_abi.startswith("flash_rt_"):
+        return module_and_abi, "dev"
+    return None
 
 
 def infer_env_key_from_native_stem(stem: str) -> str | None:
@@ -171,7 +195,7 @@ def parse_native_artifact(
     *,
     env_key: str,
 ) -> ParsedNativeTag | None:
-    """Parse ``{module_base}-{flashrt_abi}-{env_key}.so``."""
+    """Parse ``{module_base}-{flashrt_abi}-{env_key}.so`` or legacy ``{module_base}-{env_key}.so``."""
     stem = Path(filename).name
     if stem.endswith(".so"):
         stem = stem[: -len(".so")]
@@ -179,11 +203,12 @@ def parse_native_artifact(
     if not stem.endswith(suffix):
         return None
     module_and_abi = stem[: -len(suffix)]
-    if not module_and_abi or "-" not in module_and_abi:
+    if not module_and_abi:
         return None
-    module_base, _, flashrt_abi = module_and_abi.rpartition("-")
-    if not module_base or not flashrt_abi:
+    split = _split_module_base_and_abi(module_and_abi)
+    if split is None:
         return None
+    module_base, flashrt_abi = split
     try:
         return ParsedNativeTag.from_parts(
             module_base=module_base,
