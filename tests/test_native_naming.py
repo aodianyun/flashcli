@@ -4,6 +4,7 @@ from flashcli.bundle.native_naming import (
     logical_native_module_name,
     native_artifact_tag,
     native_so_filename,
+    parse_native_artifact,
     parse_native_tag_suffix,
     sanitize_flashrt_abi,
 )
@@ -32,3 +33,27 @@ def test_logical_module_name():
     assert logical_native_module_name("flash_rt_fa2.so") == "flash_rt_fa2"
     vlk = "flash_rt_qwen3_vl_kernels-dev-sm120-cu130-linux-x86_64-py312.so"
     assert logical_native_module_name(vlk) == "flash_rt_qwen3_vl_kernels"
+
+
+def test_parse_native_artifact_env_key_anchored():
+    env_key = "sm120-cu130-linux-x86_64-py312"
+    parsed = parse_native_artifact(
+        f"flash_rt_omnivoice-1.0.0-{env_key}.so",
+        env_key=env_key,
+    )
+    assert parsed is not None
+    assert parsed.module_base == "flash_rt_omnivoice"
+    assert parsed.flashrt_abi == "1.0.0"
+    assert parsed.catalog_key() == env_key
+
+
+def test_parse_native_artifact_generic_platform_tail():
+    env_key = "gfx942-rocm611-linux-x86_64-py312"
+    parsed = parse_native_artifact(
+        f"flash_rt_kernels-dev-{env_key}.so",
+        env_key=env_key,
+    )
+    assert parsed is not None
+    assert parsed.sm is None
+    assert parsed.cuda_tag is None
+    assert parsed.catalog_key() == env_key

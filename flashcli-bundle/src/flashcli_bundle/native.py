@@ -12,7 +12,7 @@ from flashcli_bundle.manifest import (
     bundle_python_abi,
     bundle_python_root,
 )
-from flashcli_bundle.manifest_ext import bundle_active_native_dir
+from flashcli_bundle.manifest_ext import bundle_active_native_dir, resolve_bundle_env_key
 from flashcli_bundle.native_naming import (
     NativeEnvironmentNotSupportedError,
     discover_native_module_bases,
@@ -22,8 +22,8 @@ from flashcli_bundle.native_naming import (
 from flashcli_bundle.runtime.detect import GpuInfo, detect_gpu_or_raise
 
 
-def _so_basename_to_module_name(filename: str) -> str:
-    return logical_native_module_name(filename)
+def _so_basename_to_module_name(filename: str, *, env_key: str | None = None) -> str:
+    return logical_native_module_name(filename, env_key=env_key)
 
 
 def _load_extension_from_path(path: Path, module_name: str) -> Any:
@@ -74,9 +74,15 @@ def _select_loadable_module(
     gpu: GpuInfo,
     *,
     python_minor: str,
+    env_key: str,
 ) -> Path | None:
     ranked = select_native_module_ranked(
-        native_dir, module_base, gpu, allowed_sm=None, python_minor=python_minor
+        native_dir,
+        module_base,
+        gpu,
+        allowed_sm=None,
+        python_minor=python_minor,
+        env_key=env_key,
     )
     if not ranked:
         return None
@@ -99,12 +105,13 @@ def _resolve_host_native_paths(
     gpu: GpuInfo,
 ) -> dict[str, Path]:
     """Pick native modules for this host from ``runtime/<env-key>/``."""
-    native_dir = bundle_active_native_dir(bundle, gpu=gpu)
-    present = discover_native_module_bases(native_dir)
+    env_key = resolve_bundle_env_key(bundle, gpu=gpu)
+    native_dir = bundle_active_native_dir(bundle, gpu=gpu, env_key=env_key)
+    present = discover_native_module_bases(native_dir, env_key=env_key)
     if not native_dir.is_dir() or not present:
         raise NativeEnvironmentNotSupportedError(
-            module_base="flash_rt_kernels",
-            wanted="",
+            module_base="native",
+            wanted=env_key,
             lib_dir=native_dir,
             available=[],
             gpu=gpu,
@@ -114,7 +121,11 @@ def _resolve_host_native_paths(
     paths: dict[str, Path] = {}
     for module_base in present:
         selected = _select_loadable_module(
-            native_dir, module_base, gpu, python_minor=python_minor
+            native_dir,
+            module_base,
+            gpu,
+            python_minor=python_minor,
+            env_key=env_key,
         )
         if selected is not None:
             paths[module_base] = selected
@@ -122,7 +133,7 @@ def _resolve_host_native_paths(
     if not paths:
         raise NativeEnvironmentNotSupportedError(
             module_base=present[0],
-            wanted=f"*py{python_minor}",
+            wanted=env_key,
             lib_dir=native_dir,
             available=[],
             gpu=gpu,
@@ -164,8 +175,8 @@ def verify_native_modules(bundle: BundleManifest, *, gpu: GpuInfo | None = None)
     _resolve_host_native_paths(bundle, gpu)
 
 
-def _probe_so_file(path: Path) -> None:
-    name = _so_basename_to_module_name(path.name)
+def _probe_so_file(path: Path, *, env_key: str | None = None) -> None:
+    name = _so_basename_to_module_name(path.name, env_key=env_key)
     _load_extension_from_path(path, name)
     for key in (name, f"flash_rt.{name}"):
         sys.modules.pop(key, None)
@@ -173,9 +184,10 @@ def _probe_so_file(path: Path) -> None:
 
 def probe_native_python_abi(bundle: BundleManifest, *, gpu: GpuInfo | None = None) -> None:
     gpu = gpu or detect_gpu_or_raise()
+    env_key = resolve_bundle_env_key(bundle, gpu=gpu)
     paths = _resolve_host_native_paths(bundle, gpu)
     for path in paths.values():
-        _probe_so_file(path)
+        _probe_so_file(path, env_key=env_key)
         return
 
 

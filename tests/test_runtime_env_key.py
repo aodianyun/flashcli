@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from flashcli.bundle.runtime_env import resolve_runtime_env_key
+from flashcli.bundle.runtime_env import parse_variant_key, resolve_runtime_env_key
+
+
+def test_parse_generic_platform_tail() -> None:
+    key = parse_variant_key("gfx942-rocm611-linux-x86_64-py312")
+    assert key.platform_tail == "gfx942-rocm611"
+    assert key.sm is None
+    assert key.cuda_tag is None
+    assert key.catalog_name() == "gfx942-rocm611-linux-x86_64-py312"
 
 
 def test_resolve_runtime_exact() -> None:

@@ -4,6 +4,40 @@
 #
 #   verify_native_matrix_lib "${BUNDLE_DIR}/lib" 120 130 linux x86_64 "310 311 312" \
 #     flash_rt_kernels flash_rt_fa2
+#
+# When no module names are passed, each cell must contain at least one
+# *-sm{SM}-cu{CUDA}-{os}-{arch}-py{PY}.so artifact.
+
+verify_native_matrix_cell_any() {
+  local lib_dir="$1" sm="$2" cuda_tag="$3" os_name="$4" arch="$5" py_minors_csv="$6"
+  local -a py_minors=()
+  local py pattern
+  local -a matches=()
+
+  [[ -d "${lib_dir}" ]] || {
+    printf '[matrix-verify] ERROR: missing lib dir: %s\n' "${lib_dir}" >&2
+    return 1
+  }
+
+  # shellcheck disable=SC2206
+  py_minors=(${py_minors_csv})
+
+  for py in "${py_minors[@]}"; do
+    pattern="*-sm${sm}-cu${cuda_tag}-${os_name}-${arch}-py${py}.so"
+    shopt -s nullglob
+    matches=( "${lib_dir}"/${pattern} )
+    shopt -u nullglob
+    if [[ ${#matches[@]} -lt 1 ]]; then
+      printf '[matrix-verify] ERROR: missing cell artifact (expected %s)\n' "${pattern}" >&2
+      return 1
+    fi
+  done
+
+  printf '[matrix-verify] OK sm%s-cu%s-%s-%s × py%s (any module)\n' \
+    "${sm}" "${cuda_tag}" "${os_name}" "${arch}" \
+    "$(IFS=/; echo "${py_minors[*]}")" >&2
+  return 0
+}
 
 verify_native_matrix_lib() {
   local lib_dir="$1" sm="$2" cuda_tag="$3" os_name="$4" arch="$5" py_minors_csv="$6"
@@ -51,8 +85,13 @@ verify_native_matrix_multi() {
   local -a modules=("$@")
   local cuda
   for cuda in ${cuda_tags_csv}; do
-    verify_native_matrix_lib "${lib_dir}" "${sm}" "${cuda}" "${os_name}" "${arch}" \
-      "${py_minors_csv}" "${modules[@]}" || return 1
+    if [[ ${#modules[@]} -eq 0 ]]; then
+      verify_native_matrix_cell_any "${lib_dir}" "${sm}" "${cuda}" "${os_name}" "${arch}" \
+        "${py_minors_csv}" || return 1
+    else
+      verify_native_matrix_lib "${lib_dir}" "${sm}" "${cuda}" "${os_name}" "${arch}" \
+        "${py_minors_csv}" "${modules[@]}" || return 1
+    fi
   done
   printf '[matrix-verify] OK full matrix sm%s × (%s) × py%s\n' \
     "${sm}" "$(echo "${cuda_tags_csv}" | tr ' ' /)" \

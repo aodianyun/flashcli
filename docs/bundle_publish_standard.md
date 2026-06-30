@@ -447,18 +447,19 @@ Full ops reference: [environment.md](environment.md#bundle-entry-environment-var
 Format:
 
 ```text
-sm{SM}-cu{CUDA}-{os}-{arch}-py{PY}
+{platform_tail}-{os}-{arch}-py{PY}
 ```
 
 | Segment | Meaning | Example |
 |---------|---------|---------|
-| `SM` | NVIDIA compute capability × 10, no decimal | `89` → SM8.9; `120` → SM12.0 |
-| `CUDA` | CUDA **user-space** version shorthand | `124` → 12.4; `130` → 13.0 |
+| `platform_tail` | Opaque platform/runtime id (parsed only for matching) | `sm120-cu130` (NVIDIA); `gfx942-rocm611` (AMD ROCm) |
 | `os` | Operating system | currently `linux` |
 | `arch` | CPU architecture | currently `x86_64` |
 | `PY` | Python ABI; must match `python_abi` | `312` → 3.12 |
 
-Examples: `sm89-cu124-linux-x86_64-py312`, `sm120-cu130-linux-x86_64-py312`.
+NVIDIA bundles still use `sm{SM}-cu{CUDA}` as `platform_tail` (e.g. `sm89-cu124-linux-x86_64-py312`, `sm120-cu130-linux-x86_64-py312`). Non-NVIDIA examples: `gfx942-rocm611-linux-x86_64-py312`.
+
+Host detection still generates NVIDIA-style keys today; override with `FLASHCLI_RUNTIME_ENV_KEY` when debugging a manifest cell that has no auto-detect yet.
 
 ### 5.2 Directory rules
 
@@ -473,31 +474,29 @@ Examples: `sm89-cu124-linux-x86_64-py312`, `sm120-cu130-linux-x86_64-py312`.
 Each `.so` file:
 
 ```text
+{module_base}-{flashrt_abi}-{env_key}.so
+```
+
+where `{env_key}` is the directory name (see §5.1). NVIDIA example:
+
+```text
 {module_base}-{flashrt_abi}-sm{SM}-cu{CUDA}-{os}-{arch}-py{PY}.so
 ```
 
 | Part | Description |
 |------|-------------|
-| `module_base` | Logical module name (table below) |
-| `flashrt_abi` | FlashRT build id (release tag or git commit prefix; `[a-zA-Z0-9._-]` only) |
-| env suffix | Must match the directory env key (`sm`, `cu`, `os`, `arch`, `py`) |
+| `module_base` | Logical pybind import name (any valid identifier segment, e.g. `flash_rt_kernels`, `flash_rt_omnivoice`) |
+| `flashrt_abi` | FlashRT build id (release tag or git commit prefix; `[a-zA-Z0-9._-]` only, single segment) |
+| `env_key` | Must match the parent `runtime/<env-key>/` directory |
 
-Supported `module_base` values (longest prefix match first):
-
-| module_base | Required |
-|-------------|----------|
-| `flash_rt_kernels` | as present in directory |
-| `flash_rt_fa2` | as present (FlashRT attention) |
-| `flash_rt_fp4` | as needed (NVFP4 / FP4 paths) |
-| `libfmha_fp16_strided` | as needed (extra FMHA in some bundles) |
-
-Each `runtime/<env-key>/` directory must contain **at least one** recognizable tagged `.so`. Which modules are required is determined by **files in that directory** (no duplicate manifest field needed).
+Every tagged `{module_base}-{flashrt_abi}-{env_key}.so` in a cell directory is discovered and loaded at runtime (no manifest whitelist). If multiple ABI builds exist for the same `module_base`, the host picks one deterministically (prefer a single artifact per module when publishing).
 
 Examples:
 
 ```text
 flash_rt_kernels-v1.2.0-sm89-cu124-linux-x86_64-py312.so
 flash_rt_fa2-v1.2.0-sm89-cu124-linux-x86_64-py312.so
+flash_rt_omnivoice-1.0.0-sm120-cu130-linux-x86_64-py312.so
 flash_rt_fp4-v1.2.0-sm120-cu130-linux-x86_64-py312.so
 ```
 

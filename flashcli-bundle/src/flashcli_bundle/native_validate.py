@@ -10,11 +10,9 @@ from pathlib import Path
 
 from flashcli_bundle.manifest_ext import BundleManifest, bundle_runtime_map
 from flashcli_bundle.native_naming import (
-    NATIVE_MODULE_BASES,
     ParsedNativeTag,
     discover_native_module_bases,
     list_native_artifacts,
-    logical_native_module_name,
     parse_native_tag_from_filename,
 )
 from flashcli_bundle.runtime_env import host_python_minor
@@ -50,9 +48,14 @@ except ImportError as exc:
 """
 
 
-def _required_module_bases(_bundle: BundleManifest, native_dir: Path) -> tuple[str, ...]:
+def _required_module_bases(
+    _bundle: BundleManifest,
+    native_dir: Path,
+    *,
+    env_key: str,
+) -> tuple[str, ...]:
     """Modules declared by ``*.so`` files under ``runtime/<env-key>/``."""
-    return discover_native_module_bases(native_dir)
+    return discover_native_module_bases(native_dir, env_key=env_key)
 
 
 def _find_artifact(
@@ -145,28 +148,40 @@ def _validate_runtime_cell(
     if not native_dir.is_dir():
         return [f"missing {rel}/ for runtime {env_key!r}"]
 
-    arts = list_native_artifacts(native_dir)
-    required = _required_module_bases(bundle, native_dir)
-    if not required:
-        errors.append(
-            f"{rel}/ has no recognized native .so artifacts "
-            f"(expected tagged files such as flash_rt_kernels-*-{env_key}.so)"
-        )
-        return errors
+    arts = list_native_artifacts(native_dir, env_key=env_key)
+    matched_modules: set[str] = set()
 
     for path in sorted(native_dir.glob("*.so")):
-        parsed = parse_native_tag_from_filename(path.name)
+        parsed = parse_native_tag_from_filename(path.name, env_key=env_key)
         if parsed is None:
-            base = logical_native_module_name(path.name)
-            if base not in NATIVE_MODULE_BASES and not path.name.startswith("libfmha"):
-                errors.append(f"{rel}/{path.name}: unrecognized native artifact filename")
+            inferred = parse_native_tag_from_filename(path.name)
+            if inferred is not None and inferred.catalog_key() != env_key:
+                errors.append(
+                    f"{rel}/{path.name}: filename tag {inferred.catalog_key()!r} "
+                    f"does not match runtime cell {env_key!r}"
+                )
+            else:
+                errors.append(
+                    f"{rel}/{path.name}: unrecognized native artifact filename "
+                    f"(expected *-*-{env_key}.so)"
+                )
             continue
         if parsed.catalog_key() != env_key:
             errors.append(
                 f"{rel}/{path.name}: filename tag {parsed.catalog_key()!r} "
                 f"does not match runtime cell {env_key!r}"
             )
+            continue
+        matched_modules.add(parsed.module_base)
 
+    if not matched_modules:
+        errors.append(
+            f"{rel}/ has no recognized native .so artifacts "
+            f"(expected tagged files such as *-*-{env_key}.so)"
+        )
+        return errors
+
+    required = tuple(sorted(matched_modules))
     refs: list[tuple[str, ParsedNativeTag]] = []
     for mod in required:
         found = _find_artifact(arts, mod, env_key)
@@ -184,15 +199,10 @@ def _validate_runtime_cell(
                     f"{env_key}: inconsistent python_abi — {refs[0][0]} -py{ref.python_minor} "
                     f"vs {mod} -py{tag.python_minor}"
                 )
-            if (
-                tag.sm,
-                tag.cuda_tag,
-                tag.os_name,
-                tag.arch,
-            ) != (ref.sm, ref.cuda_tag, ref.os_name, ref.arch):
+            if tag.env_key != ref.env_key:
                 errors.append(
-                    f"{env_key}: inconsistent platform tags between {refs[0][0]} and {mod} "
-                    f"(sm/cu/os/arch must match)"
+                    f"{env_key}: inconsistent env key between {refs[0][0]} and {mod} "
+                    f"({ref.env_key!r} vs {tag.env_key!r})"
                 )
             if tag.flashrt_abi != ref.flashrt_abi:
                 errors.append(
@@ -229,12 +239,12 @@ def validate_native_runtime_abi(
     except ValueError:
         return errors
 
-    for _env_key, rel_path in runtime_map.items():
+    for env_key, rel_path in runtime_map.items():
         native_dir = (bundle.bundle_root / rel_path.strip().lstrip("/")).resolve()
         if not native_dir.is_dir():
             continue
-        required = _required_module_bases(bundle, native_dir)
-        arts = list_native_artifacts(native_dir)
+        required = _required_module_bases(bundle, native_dir, env_key=env_key)
+        arts = list_native_artifacts(native_dir, env_key=env_key)
         for mod in required:
             for parsed, path in arts.get(mod, []):
                 err = probe_native_so_abi(
@@ -274,18 +284,18 @@ def validate_native_runtime(
         cells = [(env_key, native_dir)]
 
     if probe_abi:
-        for _key, native_dir in cells:
+        for key, native_dir in cells:
             if not native_dir.is_dir():
                 continue
-            required = _required_module_bases(bundle, native_dir)
-            arts = list_native_artifacts(native_dir)
+            required = _required_module_bases(bundle, native_dir, env_key=key)
+            arts = list_native_artifacts(native_dir, env_key=key)
             for mod in required:
                 for parsed, path in arts.get(mod, []):
                     err = probe_native_so_abi(
-                    path,
-                    python_minor=parsed.python_minor,
-                    python_for_minor=python_for_minor,
-                )
+                        path,
+                        python_minor=parsed.python_minor,
+                        python_for_minor=python_for_minor,
+                    )
                     if err:
                         errors.append(err)
     return errors

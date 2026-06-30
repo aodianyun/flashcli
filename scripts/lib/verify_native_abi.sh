@@ -14,7 +14,7 @@ verify_native_lib_python_abi() {
   local strict_missing="${7:-1}"
   local native_lib="${bundle_dir}/lib"
   local py cuda py_mod pattern so rc err py_bin probe_env
-  local -a py_mods=(flash_rt_kernels flash_rt_fa2)
+  local -a py_mods=()
   if [[ -n "${RELEASE_NATIVE_MODULES:-}" ]]; then
     read -r -a py_mods <<< "${RELEASE_NATIVE_MODULES}"
   fi
@@ -47,13 +47,20 @@ verify_native_lib_python_abi() {
       continue
     fi
     for cuda in ${cuda_tags}; do
-      for py_mod in "${py_mods[@]}"; do
-        pattern="${native_lib}/${py_mod}*-sm${sm}-cu${cuda}-${os_name}-${arch}-py${py}.so"
-        shopt -s nullglob
-        local -a matches=( ${pattern} )
-        shopt -u nullglob
-        [[ ${#matches[@]} -ge 1 ]] || continue
-        so="${matches[0]}"
+      shopt -s nullglob
+      if [[ ${#py_mods[@]} -eq 0 ]]; then
+        local -a matches=( "${native_lib}"/*-sm${sm}-cu${cuda}-${os_name}-${arch}-py${py}.so )
+      else
+        local -a matches=()
+        for py_mod in "${py_mods[@]}"; do
+          pattern="${native_lib}/${py_mod}*-sm${sm}-cu${cuda}-${os_name}-${arch}-py${py}.so"
+          local -a mod_matches=( ${pattern} )
+          matches+=( "${mod_matches[@]}" )
+        done
+      fi
+      shopt -u nullglob
+      for so in "${matches[@]}"; do
+        [[ -f "${so}" ]] || continue
         rc=0
         err=""
         if [[ ${#probe_env[@]} -gt 0 ]]; then

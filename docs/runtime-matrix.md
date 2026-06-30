@@ -92,7 +92,7 @@ One FlashHub repo (`flashcli-bundle/qwen_nvfp4:1.0.1`); weights differ via `@qwe
 
 Document both variant refs (`@qwen3`, `@qwen36`) for the same repo URL.
 
-Host key example: `sm120-cu130-linux-x86_64-py312`.
+Host key example: `sm120-cu130-linux-x86_64-py312` (NVIDIA). Env keys use a fixed tail `-{os}-{arch}-py{PY}` with an opaque `platform_tail` prefix; non-NVIDIA cells (e.g. `gfx942-rocm611-linux-x86_64-py312`) are matched from manifest `runtime` the same way. Host auto-detection still emits NVIDIA-style keys; set `FLASHCLI_RUNTIME_ENV_KEY` to force a manifest cell when testing new platforms.
 
 ---
 

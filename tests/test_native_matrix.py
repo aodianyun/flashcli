@@ -83,12 +83,16 @@ def test_select_from_runtime(tmp_path: Path):
 
 
 def test_select_missing_fails(tmp_path: Path):
-    native = _runtime_dir(tmp_path, "sm89-cu130-linux-x86_64-py310")
+    lib = tmp_path / "lib"
+    lib.mkdir()
     tag = "dev-sm89-cu130-linux-x86_64-py310"
-    (native / native_so_filename("flash_rt_kernels", tag)).write_bytes(b"\x00")
+    (lib / native_so_filename("flash_rt_kernels", tag)).write_bytes(b"\x00")
     with pytest.raises(NativeEnvironmentNotSupportedError):
         resolve_native_modules_for_host(
-            tmp_path, _gpu(cuda="124"), native_dir_rel="runtime/sm89-cu130-linux-x86_64-py310"
+            tmp_path,
+            _gpu(cuda="124"),
+            native_lib_rel="lib",
+            python_minor="310",
         )
 
 
@@ -156,5 +160,23 @@ def test_sm120_uses_sm89_artifact(tmp_path: Path):
     (native / native_so_filename("flash_rt_kernels", tag)).write_bytes(b"\x00")
     (native / native_so_filename("flash_rt_fa2", tag)).write_bytes(b"\x00")
     host = host_runtime_env_key(_gpu(sm="120", cuda="128"), python_minor="312")
-    artifact = ParsedNativeTag("dev", "89", "124", "linux", "x86_64", "312")
+    artifact = ParsedNativeTag.from_parts(
+        module_base="flash_rt_kernels",
+        flashrt_abi="dev",
+        env_key=CELL312,
+    )
     assert score_native_tag(artifact, host, allowed_sm=["89", "120"]) > 0
+
+
+def test_load_omnivoice_from_runtime_cell(tmp_path: Path) -> None:
+    cell = CELL312
+    native = _runtime_dir(tmp_path, cell)
+    tag = f"1.0.0-{cell}"
+    (native / native_so_filename("flash_rt_omnivoice", tag)).write_bytes(b"\x00")
+    resolved = resolve_native_modules_for_host(
+        tmp_path,
+        _gpu(),
+        native_dir_rel=RUNTIME312,
+        python_minor="312",
+    )
+    assert set(resolved) == {"flash_rt_omnivoice"}

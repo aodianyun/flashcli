@@ -4,7 +4,7 @@
 pack_verify_lib_matrix_and_abi() {
   local bundle_dir="$1" sm="$2" cuda_tags="$3" os_name="$4" arch="$5" py_minors="$6"
   local native_lib="${bundle_dir}/lib"
-  local -a modules=(flash_rt_kernels flash_rt_fa2)
+  local -a modules=()
   if [[ -n "${RELEASE_NATIVE_MODULES:-}" ]]; then
     read -r -a modules <<< "${RELEASE_NATIVE_MODULES}"
   fi
@@ -20,9 +20,15 @@ pack_verify_lib_matrix_and_abi() {
   if [[ -n "${RELEASE_MATRIX_SM120_CUDA_TAGS:-${SM120_CUDA_TAGS:-}}" ]]; then
     local sm120_cuda="${RELEASE_MATRIX_SM120_CUDA_TAGS:-${SM120_CUDA_TAGS}}"
     for cuda in ${sm120_cuda}; do
-      verify_native_matrix_lib "${native_lib}" "120" "${cuda}" "${os_name}" "${arch}" \
-        "${py_minors}" "${modules[@]}" \
-        || die "lib/ missing sm120-cu${cuda} cells (Blackwell)"
+      if [[ ${#modules[@]} -eq 0 ]]; then
+        verify_native_matrix_cell_any "${native_lib}" "120" "${cuda}" "${os_name}" "${arch}" \
+          "${py_minors}" \
+          || die "lib/ missing sm120-cu${cuda} cells (Blackwell)"
+      else
+        verify_native_matrix_lib "${native_lib}" "120" "${cuda}" "${os_name}" "${arch}" \
+          "${py_minors}" "${modules[@]}" \
+          || die "lib/ missing sm120-cu${cuda} cells (Blackwell)"
+      fi
     done
   fi
 

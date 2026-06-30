@@ -11,38 +11,48 @@ from flashcli_bundle.runtime_env import (
     cuda_runtime_family,
     host_python_minor,
     parse_variant_key,
+    score_env_key_match,
     variant_dir_name,
 )
 from flashcli_bundle.runtime.detect import GpuInfo
 
-# Longest first for prefix matching in logical_native_module_name.
-NATIVE_MODULE_BASES: tuple[str, ...] = (
-    "libfmha_fp16_strided",
-    "flash_rt_qwen3_vl_kernels",
-    "flash_rt_kernels",
-    "flash_rt_fa2",
-    "flash_rt_fp4",
-)
-
 DEFAULT_NATIVE_LIB = "lib"  # build-time staging only; runtime loads runtime/<env-key>/
 
 _ABI_SANITIZE = re.compile(r"[^a-zA-Z0-9._-]+")
-_PY_TAIL_RE = re.compile(r"-py(3\d{2})$")
 
 
 @dataclass(frozen=True)
 class ParsedNativeTag:
+    module_base: str
     flashrt_abi: str
-    sm: str
-    cuda_tag: str
-    os_name: str
-    arch: str
-    python_minor: str
+    env_key: str
+    sm: str | None = None
+    cuda_tag: str | None = None
+    os_name: str = ""
+    arch: str = ""
+    python_minor: str = ""
 
     def catalog_key(self) -> str:
-        return (
-            f"sm{self.sm}-cu{self.cuda_tag}-{self.os_name}-"
-            f"{self.arch}-py{self.python_minor}"
+        return self.env_key
+
+    @classmethod
+    def from_parts(
+        cls,
+        *,
+        module_base: str,
+        flashrt_abi: str,
+        env_key: str,
+    ) -> ParsedNativeTag:
+        env = parse_variant_key(env_key)
+        return cls(
+            module_base=module_base,
+            flashrt_abi=flashrt_abi,
+            env_key=env_key,
+            sm=env.sm,
+            cuda_tag=env.cuda_tag,
+            os_name=env.os_name,
+            arch=env.arch,
+            python_minor=env.python_minor or "",
         )
 
 
@@ -91,92 +101,160 @@ def native_artifact_tag(
     arch: str,
     python_minor: str,
 ) -> str:
-    """Tag suffix: ``{abi}-sm{SM}-cu{CUDA}-{os}-{arch}-py{PY}``."""
+    """Tag suffix: ``{abi}-{env_key}`` (NVIDIA ``sm``/``cu`` platform tail)."""
     sm = str(sm).strip().lstrip("sSmM")
     cuda_tag = str(cuda_tag).strip().lstrip("cCuU")
     py = str(python_minor).strip().lstrip("pPyY")
     if py.isdigit() and len(py) == 1:
         py = f"3{py}0"
-    return f"{flashrt_abi}-sm{sm}-cu{cuda_tag}-{os_name}-{arch}-py{py}"
+    env_key = RuntimeEnvKey(
+        platform_tail=f"sm{sm}-cu{cuda_tag}",
+        os_name=os_name,
+        arch=arch,
+        python_minor=py,
+        sm=sm,
+        cuda_tag=cuda_tag,
+    ).catalog_name()
+    return f"{flashrt_abi}-{env_key}"
 
 
 def native_so_filename(module_base: str, tag: str) -> str:
     return f"{module_base}-{tag}.so"
 
 
-def logical_native_module_name(filename: str) -> str:
-    """Import name for pybind (``flash_rt_kernels``, not the full tagged stem)."""
+_KNOWN_OS = frozenset({"linux", "darwin", "win32", "windows"})
+_KNOWN_ARCH = frozenset({"x86_64", "aarch64", "arm64"})
+
+
+def infer_env_key_from_native_stem(stem: str) -> str | None:
+    """Extract env key suffix from ``{module}-{abi}-{env_key}`` or ``{abi}-{env_key}``."""
+    parts = [p for p in stem.split("-") if p]
+    if len(parts) < 4:
+        return None
+    starts = (2, 1) if len(parts) >= 7 else (1, 2)
+    for start in starts:
+        if len(parts) <= start:
+            continue
+        candidate = "-".join(parts[start:])
+        try:
+            env = parse_variant_key(candidate)
+        except ValueError:
+            continue
+        if env.os_name in _KNOWN_OS and env.arch in _KNOWN_ARCH:
+            return candidate
+    for i in range(len(parts) - 3, 0, -1):
+        candidate = "-".join(parts[i:])
+        try:
+            env = parse_variant_key(candidate)
+        except ValueError:
+            continue
+        if env.os_name in _KNOWN_OS and env.arch in _KNOWN_ARCH:
+            return candidate
+    return None
+
+
+def resolve_env_key_for_native_dir(native_dir: Path, env_key: str | None = None) -> str | None:
+    if env_key:
+        return env_key
+    name = native_dir.name.strip()
+    if not name or name in ("lib", "runtime", ".", ".."):
+        return None
+    try:
+        parse_variant_key(name)
+    except ValueError:
+        return None
+    return name
+
+
+def parse_native_artifact(
+    filename: str,
+    *,
+    env_key: str,
+) -> ParsedNativeTag | None:
+    """Parse ``{module_base}-{flashrt_abi}-{env_key}.so``."""
     stem = Path(filename).name
     if stem.endswith(".so"):
         stem = stem[: -len(".so")]
-    for base in NATIVE_MODULE_BASES:
-        if stem == base or stem.startswith(f"{base}-"):
-            return base
+    suffix = f"-{env_key}"
+    if not stem.endswith(suffix):
+        return None
+    module_and_abi = stem[: -len(suffix)]
+    if not module_and_abi or "-" not in module_and_abi:
+        return None
+    module_base, _, flashrt_abi = module_and_abi.rpartition("-")
+    if not module_base or not flashrt_abi:
+        return None
+    try:
+        return ParsedNativeTag.from_parts(
+            module_base=module_base,
+            flashrt_abi=flashrt_abi,
+            env_key=env_key,
+        )
+    except ValueError:
+        return None
+
+
+def logical_native_module_name(filename: str, *, env_key: str | None = None) -> str:
+    """Import name for pybind (``flash_rt_kernels``, not the full tagged stem)."""
+    key = env_key or infer_env_key_from_native_stem(
+        Path(filename).name[: -len(".so")] if filename.endswith(".so") else filename
+    )
+    if key:
+        parsed = parse_native_artifact(filename, env_key=key)
+        if parsed is not None:
+            return parsed.module_base
+    stem = Path(filename).name
+    if stem.endswith(".so"):
+        stem = stem[: -len(".so")]
     return stem
 
 
 def parse_native_tag_suffix(tag_suffix: str) -> ParsedNativeTag | None:
-    """Parse ``{abi}-sm{SM}-cu{CUDA}-{os}-{arch}-py{PY}`` (abi may contain dashes)."""
-    suffix = tag_suffix.strip()
-    m = _PY_TAIL_RE.search(suffix)
-    if not m:
+    """Parse legacy ``{abi}-{env_key}`` tag suffix (build scripts)."""
+    env_key = infer_env_key_from_native_stem(tag_suffix.strip())
+    if env_key is None:
         return None
-    python_minor = m.group(1)
-    rest = suffix[: m.start()]
-    parts = [p for p in rest.split("-") if p]
-    if len(parts) < 4:
-        return None
-
-    arch = parts[-1]
-    os_name = parts[-2]
-    sm: str | None = None
-    cuda: str | None = None
-    abi_parts: list[str] = []
-    for part in parts[:-2]:
-        if part.startswith("sm") and len(part) > 2 and sm is None:
-            sm = part[2:]
-        elif part.startswith("cu") and len(part) > 2 and cuda is None:
-            cuda = part[2:]
-        else:
-            abi_parts.append(part)
-    if not sm or not cuda:
-        return None
-    flashrt_abi = "-".join(abi_parts) if abi_parts else "dev"
-    return ParsedNativeTag(
-        flashrt_abi=flashrt_abi,
-        sm=sm,
-        cuda_tag=cuda,
-        os_name=os_name,
-        arch=arch,
-        python_minor=python_minor,
+    abi = tag_suffix[: -(len(env_key) + 1)].strip("-")
+    if not abi:
+        abi = "dev"
+    return ParsedNativeTag.from_parts(
+        module_base="",
+        flashrt_abi=abi,
+        env_key=env_key,
     )
 
 
-def parse_native_tag_from_filename(filename: str) -> ParsedNativeTag | None:
+def parse_native_tag_from_filename(
+    filename: str,
+    *,
+    env_key: str | None = None,
+) -> ParsedNativeTag | None:
     stem = Path(filename).name
     if stem.endswith(".so"):
         stem = stem[: -len(".so")]
-    for base in NATIVE_MODULE_BASES:
-        prefix = f"{base}-"
-        if stem.startswith(prefix):
-            return parse_native_tag_suffix(stem[len(prefix) :])
-    return None
+    key = env_key or infer_env_key_from_native_stem(stem)
+    if key is None:
+        return None
+    return parse_native_artifact(f"{stem}.so", env_key=key)
 
 
-def discover_native_module_bases(native_dir: Path) -> tuple[str, ...]:
-    """Return ``module_base`` names present in ``runtime/<env-key>/`` from ``*.so`` files."""
+def discover_native_module_bases(
+    native_dir: Path,
+    env_key: str | None = None,
+) -> tuple[str, ...]:
+    """Return ``module_base`` names from all tagged ``*.so`` in the cell directory."""
     if not native_dir.is_dir():
         return ()
+    key = resolve_env_key_for_native_dir(native_dir, env_key)
     seen: set[str] = set()
     for path in sorted(native_dir.glob("*.so")):
-        base = logical_native_module_name(path.name)
-        if base in NATIVE_MODULE_BASES or base.startswith("libfmha"):
-            seen.add(base)
-    ordered = [b for b in NATIVE_MODULE_BASES if b in seen]
-    for base in sorted(seen):
-        if base not in ordered:
-            ordered.append(base)
-    return tuple(ordered)
+        if key:
+            parsed = parse_native_artifact(path.name, env_key=key)
+        else:
+            parsed = parse_native_tag_from_filename(path.name)
+        if parsed is not None and parsed.module_base:
+            seen.add(parsed.module_base)
+    return tuple(sorted(seen))
 
 
 def bundle_native_lib_dir(bundle_root: Path, rel: str | None = None) -> Path:
@@ -188,18 +266,23 @@ def bundle_uses_runtime_matrix(raw: dict) -> bool:
     return isinstance(raw.get("runtime"), dict) and bool(raw["runtime"])
 
 
-def native_dir_has_tagged_native_artifacts(native_dir: Path) -> bool:
-    """True when a native dir holds ``*-sm…-pyNNN.so`` files."""
+def native_dir_has_tagged_native_artifacts(
+    native_dir: Path,
+    env_key: str | None = None,
+) -> bool:
+    """True when a native dir holds ``*-{env_key}.so`` or inferrable env tags."""
     if not native_dir.is_dir():
         return False
+    key = resolve_env_key_for_native_dir(native_dir, env_key)
     for path in native_dir.glob("*.so"):
+        if key and parse_native_artifact(path.name, env_key=key):
+            return True
         if parse_native_tag_from_filename(path.name) is not None:
             return True
     return False
 
 
 def lib_dir_has_tagged_native_artifacts(lib_dir: Path) -> bool:
-    """Alias for :func:`native_dir_has_tagged_native_artifacts`."""
     return native_dir_has_tagged_native_artifacts(lib_dir)
 
 
@@ -208,8 +291,10 @@ def host_runtime_env_key(gpu: GpuInfo, *, python_minor: str | None = None) -> Ru
 
 
 def _sm_artifact_compatible(
-    host_sm: str, artifact_sm: str, allowed_sm: list[str] | None
+    host_sm: str | None, artifact_sm: str | None, allowed_sm: list[str] | None
 ) -> bool:
+    if not host_sm or not artifact_sm:
+        return True
     if artifact_sm == host_sm:
         return True
     if allowed_sm:
@@ -224,37 +309,57 @@ def score_native_tag(
     *,
     allowed_sm: list[str] | None = None,
 ) -> int:
-    if artifact.python_minor != host.python_minor:
+    if artifact.env_key == host.catalog_name():
+        return 100
+    if artifact.python_minor and artifact.python_minor != host.python_minor:
+        return 0
+    if artifact.os_name and (
+        artifact.os_name != host.os_name or artifact.arch != host.arch
+    ):
+        return 0
+    if (
+        artifact.cuda_tag
+        and host.cuda_tag
+        and artifact.cuda_tag != host.cuda_tag
+        and cuda_runtime_family(artifact.cuda_tag)
+        != cuda_runtime_family(host.cuda_tag)
+    ):
         return 0
     if not _sm_artifact_compatible(host.sm, artifact.sm, allowed_sm):
         return 0
-    if artifact.os_name != host.os_name or artifact.arch != host.arch:
+    try:
+        artifact_env = parse_variant_key(artifact.env_key)
+    except ValueError:
         return 0
-
-    score = 20  # exact python
-    if artifact.sm == host.sm:
-        score += 10
-    else:
-        score += 6  # cross-sm within published runtime map
-    if artifact.cuda_tag == host.cuda_tag:
-        score += 5
-    elif cuda_runtime_family(artifact.cuda_tag) == cuda_runtime_family(host.cuda_tag):
-        score += 3
-    return score
+    return score_env_key_match(artifact_env, host)
 
 
-def list_native_artifacts(lib_dir: Path) -> dict[str, list[tuple[ParsedNativeTag, Path]]]:
+def list_native_artifacts(
+    lib_dir: Path,
+    env_key: str | None = None,
+) -> dict[str, list[tuple[ParsedNativeTag, Path]]]:
     """Map module_base -> [(parsed tag, path), ...]."""
-    out: dict[str, list[tuple[ParsedNativeTag, Path]]] = {b: [] for b in NATIVE_MODULE_BASES}
+    out: dict[str, list[tuple[ParsedNativeTag, Path]]] = {}
     if not lib_dir.is_dir():
         return out
+    key = resolve_env_key_for_native_dir(lib_dir, env_key)
     for path in sorted(lib_dir.glob("*.so")):
-        parsed = parse_native_tag_from_filename(path.name)
-        if parsed is None:
+        if key:
+            parsed = parse_native_artifact(path.name, env_key=key)
+        else:
+            parsed = parse_native_tag_from_filename(path.name)
+        if parsed is None or not parsed.module_base:
             continue
-        base = logical_native_module_name(path.name)
-        out.setdefault(base, []).append((parsed, path))
+        out.setdefault(parsed.module_base, []).append((parsed, path))
     return out
+
+
+def _pick_best_artifact(
+    items: list[tuple[ParsedNativeTag, Path]],
+) -> Path:
+    """Choose one artifact when multiple ABI builds share a module_base."""
+    ranked = sorted(items, key=lambda item: (item[0].flashrt_abi, item[1].name))
+    return ranked[0][1]
 
 
 def select_native_module_for_host(
@@ -264,7 +369,21 @@ def select_native_module_for_host(
     *,
     allowed_sm: list[str] | None = None,
     python_minor: str | None = None,
+    env_key: str | None = None,
 ) -> Path:
+    key = resolve_env_key_for_native_dir(lib_dir, env_key)
+    if key:
+        arts = list_native_artifacts(lib_dir, env_key=key).get(module_base, [])
+        if arts:
+            return _pick_best_artifact(arts)
+        raise NativeEnvironmentNotSupportedError(
+            module_base=module_base,
+            wanted=key,
+            lib_dir=lib_dir,
+            available=list(list_native_artifacts(lib_dir, env_key=key)),
+            gpu=gpu,
+        )
+
     host = host_runtime_env_key(gpu, python_minor=python_minor or host_python_minor())
     wanted = host.catalog_name()
     ranked: list[tuple[int, str, Path]] = []
@@ -276,9 +395,9 @@ def select_native_module_for_host(
         avail_keys: list[str] = []
         for _base, items in list_native_artifacts(lib_dir).items():
             for parsed, _path in items:
-                key = parsed.catalog_key()
-                if key not in avail_keys:
-                    avail_keys.append(key)
+                key_name = parsed.catalog_key()
+                if key_name not in avail_keys:
+                    avail_keys.append(key_name)
         raise NativeEnvironmentNotSupportedError(
             module_base=module_base,
             wanted=wanted,
@@ -297,8 +416,16 @@ def select_native_module_ranked(
     *,
     allowed_sm: list[str] | None = None,
     python_minor: str | None = None,
+    env_key: str | None = None,
 ) -> list[Path]:
     """All matching ``.so`` paths for this host, best-first."""
+    key = resolve_env_key_for_native_dir(lib_dir, env_key)
+    if key:
+        arts = list_native_artifacts(lib_dir, env_key=key).get(module_base, [])
+        if not arts:
+            return []
+        return [_pick_best_artifact(arts)]
+
     host = host_runtime_env_key(gpu, python_minor=python_minor or host_python_minor())
     ranked: list[tuple[int, str, Path]] = []
     for parsed, path in list_native_artifacts(lib_dir).get(module_base, []):
@@ -322,19 +449,24 @@ def resolve_native_modules_for_host(
     """Pick one ``.so`` per module present in the runtime cell (or *required_modules*)."""
     rel = native_dir_rel if native_dir_rel is not None else native_lib_rel
     native_dir = bundle_native_lib_dir(bundle_root, rel)
+    env_key = resolve_env_key_for_native_dir(native_dir)
     if not native_dir.is_dir():
         raise NativeEnvironmentNotSupportedError(
-            module_base="flash_rt_kernels",
+            module_base="native",
             wanted=host_runtime_env_key(gpu).catalog_name(),
             lib_dir=native_dir,
             available=[],
             gpu=gpu,
         )
-    modules = required_modules if required_modules is not None else discover_native_module_bases(native_dir)
+    modules = (
+        required_modules
+        if required_modules is not None
+        else discover_native_module_bases(native_dir, env_key=env_key)
+    )
     if not modules:
         raise NativeEnvironmentNotSupportedError(
-            module_base="flash_rt_kernels",
-            wanted=host_runtime_env_key(gpu).catalog_name(),
+            module_base="native",
+            wanted=env_key or host_runtime_env_key(gpu).catalog_name(),
             lib_dir=native_dir,
             available=[],
             gpu=gpu,
@@ -347,6 +479,7 @@ def resolve_native_modules_for_host(
             gpu,
             allowed_sm=allowed_sm,
             python_minor=python_minor,
+            env_key=env_key,
         )
     return resolved
 

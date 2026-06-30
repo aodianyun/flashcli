@@ -447,18 +447,19 @@ manifest `env` 示例（Qwen variant，节选）：
 格式：
 
 ```text
-sm{SM}-cu{CUDA}-{os}-{arch}-py{PY}
+{platform_tail}-{os}-{arch}-py{PY}
 ```
 
 | 段 | 含义 | 示例 |
 |----|------|------|
-| `SM` | NVIDIA compute capability × 10，无小数点 | `89` → SM8.9；`120` → SM12.0 |
-| `CUDA` | CUDA **用户态**版本缩写 | `124` → 12.4；`130` → 13.0 |
+| `platform_tail` | 不透明平台/运行时标识（仅用于匹配） | `sm120-cu130`（NVIDIA）；`gfx942-rocm611`（AMD ROCm） |
 | `os` | 操作系统 | 当前为 `linux` |
 | `arch` | CPU 架构 | 当前为 `x86_64` |
 | `PY` | Python ABI，与 `python_abi` 一致 | `312` → 3.12 |
 
-示例：`sm89-cu124-linux-x86_64-py312`、`sm120-cu130-linux-x86_64-py312`。
+NVIDIA bundle 仍使用 `sm{SM}-cu{CUDA}` 作为 `platform_tail`（如 `sm89-cu124-linux-x86_64-py312`）。非 NVIDIA 示例：`gfx942-rocm611-linux-x86_64-py312`。
+
+当前 host 检测仍生成 NVIDIA 风格 key；调试尚无 auto-detect 的 manifest cell 时可设 `FLASHCLI_RUNTIME_ENV_KEY` 强制选中。
 
 ### 5.2 目录放置原则
 
@@ -473,31 +474,29 @@ sm{SM}-cu{CUDA}-{os}-{arch}-py{PY}
 单个 `.so` 文件名：
 
 ```text
+{module_base}-{flashrt_abi}-{env_key}.so
+```
+
+其中 `{env_key}` 即目录名（见 §5.1）。NVIDIA 示例：
+
+```text
 {module_base}-{flashrt_abi}-sm{SM}-cu{CUDA}-{os}-{arch}-py{PY}.so
 ```
 
 | 部分 | 说明 |
 |------|------|
-| `module_base` | 逻辑模块名，见下表 |
-| `flashrt_abi` | FlashRT 构建标识（release tag 或 git commit 前缀，仅 `[a-zA-Z0-9._-]`） |
-| 后缀 env 段 | 必须与所在目录 env key 的 `sm/cu/os/arch/py` 一致 |
+| `module_base` | pybind 逻辑导入名（任意合法段，如 `flash_rt_kernels`、`flash_rt_omnivoice`） |
+| `flashrt_abi` | FlashRT 构建标识（release tag 或 git commit 前缀，单段 `[a-zA-Z0-9._-]`） |
+| `env_key` | 必须与所在 `runtime/<env-key>/` 目录名一致 |
 
-支持的 `module_base`（按前缀匹配，长名优先）：
-
-| module_base | 必要性 |
-|-------------|--------|
-| `flash_rt_kernels` | 按需（目录内有则校验/加载） |
-| `flash_rt_fa2` | 按需（FlashRT attention） |
-| `flash_rt_fp4` | 按需（NVFP4 等 FP4 路径） |
-| `libfmha_fp16_strided` | 按需（部分 bundle 额外 FMHA） |
-
-每个 `runtime/<env-key>/` 目录 **至少含一个** 可识别的 tagged `.so`；具体需要哪些模块由 **该目录内的文件列表** 决定（不必在 manifest 重复声明）。
+cell 目录内所有符合 `{module_base}-{flashrt_abi}-{env_key}.so` 的文件均会被 discover 并加载（无 manifest 白名单）。同一 `module_base` 若有多条 ABI 构建，host 会 deterministic 选一条（发布侧建议每 module 仅一条）。
 
 示例：
 
 ```text
 flash_rt_kernels-v1.2.0-sm89-cu124-linux-x86_64-py312.so
 flash_rt_fa2-v1.2.0-sm89-cu124-linux-x86_64-py312.so
+flash_rt_omnivoice-1.0.0-sm120-cu130-linux-x86_64-py312.so
 flash_rt_fp4-v1.2.0-sm120-cu130-linux-x86_64-py312.so
 ```
 

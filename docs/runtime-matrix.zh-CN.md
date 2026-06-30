@@ -94,7 +94,7 @@ bash build.sh --repo-root "$FLASHRT_REPO"
 | `flashcli bundle sync` | FlashHub API → manifest → preflight → 下载源码树 + 本 env `runtime/` |
 | `flashcli run` | bundle venv 装 torch → 从 `runtime/<env-key>/` 加载 `.so` → 权重 → `entry` |
 
-本机环境键示例：`sm89-cu124-linux-x86_64-py312`、`sm120-cu130-linux-x86_64-py312`  
+本机环境键示例：`sm89-cu124-linux-x86_64-py312`、`sm120-cu130-linux-x86_64-py312`（NVIDIA）。env key 固定尾部为 `-{os}-{arch}-py{PY}`，前缀 `platform_tail` 可为 opaque（如 `gfx942-rocm611-linux-x86_64-py312`）。host 自动检测仍生成 NVIDIA 风格 key；调试新平台可设 `FLASHCLI_RUNTIME_ENV_KEY` 强制选中 manifest cell。  
 查看匹配：`flashcli models envs flashcli-bundle/pi05_libero:1.0.3`
 
 **不要**用与 manifest `python_abi` 不一致的系统 Python 跑 bundle（会在 venv / preflight 阶段失败）。

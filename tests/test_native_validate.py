@@ -132,6 +132,29 @@ def test_kernels_only_runtime_cell_passes(tmp_path: Path) -> None:
     assert not errs
 
 
+def test_unknown_module_base_passes_when_tagged(tmp_path: Path) -> None:
+    root = tmp_path / "b"
+    cell = "sm120-cu130-linux-x86_64-py312"
+    bundle = _write_bundle(root, native_cells=[cell])
+    native = root / "runtime" / cell
+    native.mkdir(parents=True)
+    (native / native_so_filename("flash_rt_omnivoice", f"1.0.0-{cell}")).write_bytes(b"\x7fELF")
+    errs = validate_native_runtime_matrix(bundle)
+    assert not errs
+
+
+def test_env_key_suffix_mismatch_fails(tmp_path: Path) -> None:
+    root = tmp_path / "b"
+    cell = "sm120-cu130-linux-x86_64-py312"
+    bundle = _write_bundle(root, native_cells=[cell])
+    native = root / "runtime" / cell
+    native.mkdir(parents=True)
+    wrong = "sm89-cu124-linux-x86_64-py312"
+    (native / native_so_filename("flash_rt_kernels", f"dev-{wrong}")).write_bytes(b"\x7fELF")
+    errs = validate_native_runtime_matrix(bundle)
+    assert any("does not match runtime cell" in e for e in errs)
+
+
 def test_empty_runtime_cell_fails(tmp_path: Path) -> None:
     root = tmp_path / "b"
     cell = "sm120-cu130-linux-x86_64-py312"
