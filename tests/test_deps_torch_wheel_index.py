@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from flashcli_bundle.infer.deps import (
+    pypi_prereqs_for_isolated_install,
     resolve_torch_index_specs,
     torch_ecosystem_nodeps_needed,
 )
@@ -57,3 +58,18 @@ def test_resolve_torch_index_specs_keeps_manifest_pins() -> None:
 def test_resolve_torch_index_url_cu128() -> None:
     url = resolve_torch_index_url("cu128")
     assert "cu128" in url
+
+
+def test_pypi_prereqs_for_isolated_install_skips_torch_and_eval_extras() -> None:
+    requires = [
+        "torch>=2.4",
+        "torchaudio>=2.4",
+        "transformers>=5.3.0",
+        "numpy",
+        "jiwer==3.1.0; extra == 'eval'",
+    ]
+    prereqs = pypi_prereqs_for_isolated_install(requires)
+    assert "transformers>=5.3.0" in prereqs
+    assert "numpy" in prereqs
+    assert not any("torch" in p for p in prereqs)
+    assert not any("jiwer" in p for p in prereqs)

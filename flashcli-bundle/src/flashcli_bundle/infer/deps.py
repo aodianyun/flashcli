@@ -318,15 +318,59 @@ def _should_install_without_deps(
     return torch_ecosystem_nodeps_needed(wheel_requires, covered_ecosystem)
 
 
+def pypi_prereqs_for_isolated_install(wheel_requires: list[str]) -> list[str]:
+    """Direct PyPI prerequisites for a ``--no-deps`` install (torch stack excluded)."""
+    from packaging.markers import default_environment
+    from packaging.requirements import Requirement
+
+    env = default_environment()
+    ecosystem = torch_ecosystem_package_names()
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in wheel_requires:
+        req = Requirement(raw)
+        if req.marker is not None and not req.marker.evaluate(env):
+            continue
+        name = req.name.lower()
+        if name in ecosystem:
+            continue
+        if name in seen:
+            continue
+        seen.add(name)
+        out.append(str(req))
+    return out
+
+
 def _install_isolated_packages(
     packages: list[str],
     *,
+    wheel_cache: dict[str, list[str]],
     python: Path | None = None,
     quiet: bool,
     bundle_root: Path | None,
     force: bool,
 ) -> None:
     for package_spec in packages:
+        prereqs = pypi_prereqs_for_isolated_install(
+            wheel_cache.get(package_spec, [])
+        )
+        needed_prereqs = [
+            req
+            for req in prereqs
+            if requirement_needs_pip_install(
+                req,
+                python=_pip_python(python),
+                bundle_root=bundle_root,
+                force=force,
+            )
+        ]
+        if needed_prereqs:
+            if not quiet:
+                print(
+                    f"Installing prerequisites for {package_spec}: "
+                    f"{', '.join(needed_prereqs)}"
+                )
+            _run_pip(needed_prereqs, quiet=quiet, python=python)
         if not requirement_needs_pip_install(
             package_spec,
             python=_pip_python(python),
@@ -364,7 +408,7 @@ def _collect_install_batches(
     bundle_root: Path | None,
     force: bool,
     quiet: bool,
-) -> tuple[list[str], list[str], list[str]]:
+) -> tuple[list[str], list[str], list[str], dict[str, list[str]]]:
     wheel_cache = _pip_wheel_requires_cache(
         spec.pip_packages, python=python, quiet=quiet
     )
@@ -398,7 +442,7 @@ def _collect_install_batches(
         else:
             pypi_pkgs.append(pkg)
 
-    return torch_index_pkgs, pypi_pkgs, isolated_pkgs
+    return torch_index_pkgs, pypi_pkgs, isolated_pkgs, wheel_cache
 
 
 def _install_runtime_batches(
@@ -406,6 +450,7 @@ def _install_runtime_batches(
     torch_index_pkgs: list[str],
     pypi_pkgs: list[str],
     isolated_pkgs: list[str],
+    wheel_cache: dict[str, list[str]],
     torch_index: str,
     python: Path | None,
     quiet: bool,
@@ -428,6 +473,7 @@ def _install_runtime_batches(
     if isolated_pkgs:
         _install_isolated_packages(
             isolated_pkgs,
+            wheel_cache=wheel_cache,
             python=python,
             quiet=quiet,
             bundle_root=bundle_root,
@@ -585,7 +631,7 @@ def ensure_runtime_python_stack(
     if not quiet:
         print(f"Installing bundle Python dependencies from: {spec.source}")
 
-    torch_index_pkgs, pypi_pkgs, isolated_pkgs = _collect_install_batches(
+    torch_index_pkgs, pypi_pkgs, isolated_pkgs, wheel_cache = _collect_install_batches(
         spec,
         python=python,
         bundle_root=bundle_root,
@@ -596,6 +642,7 @@ def ensure_runtime_python_stack(
         torch_index_pkgs=torch_index_pkgs,
         pypi_pkgs=pypi_pkgs,
         isolated_pkgs=isolated_pkgs,
+        wheel_cache=wheel_cache,
         torch_index=torch_index,
         python=python,
         quiet=quiet,
@@ -609,7 +656,7 @@ def ensure_runtime_python_stack(
     if missing:
         if not quiet:
             print(f"Retrying missing bundle imports: {', '.join(missing)}")
-        retry_torch, retry_pypi, retry_isolated = _collect_install_batches(
+        retry_torch, retry_pypi, retry_isolated, retry_cache = _collect_install_batches(
             spec,
             python=python,
             bundle_root=bundle_root,
@@ -620,6 +667,7 @@ def ensure_runtime_python_stack(
             torch_index_pkgs=retry_torch,
             pypi_pkgs=retry_pypi,
             isolated_pkgs=retry_isolated,
+            wheel_cache=retry_cache,
             torch_index=torch_index,
             python=python,
             quiet=quiet,
