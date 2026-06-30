@@ -39,3 +39,11 @@ def test_pip_nodeps_names_from_manifest() -> None:
 def test_resolve_torch_index_url_cu128() -> None:
     url = resolve_torch_index_url("cu128")
     assert "cu128" in url
+
+
+def test_torch_cuda_stack_probe_missing_torchaudio_is_not_ok() -> None:
+    from flashcli_bundle.infer.deps import _TORCH_CUDA_STACK_PROBE
+
+    assert "ImportError" in _TORCH_CUDA_STACK_PROBE
+    assert "SystemExit(1)" in _TORCH_CUDA_STACK_PROBE
+    assert "SystemExit(0)" not in _TORCH_CUDA_STACK_PROBE.split("except ImportError:")[1].split("except RuntimeError")[0]

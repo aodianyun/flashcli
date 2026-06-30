@@ -278,7 +278,7 @@ import torch
 try:
     import torchaudio
 except ImportError:
-    raise SystemExit(0)
+    raise SystemExit(1)
 except RuntimeError as exc:
     msg = str(exc)
     if "different CUDA versions" in msg or "compiled with different CUDA versions" in msg:
@@ -289,7 +289,7 @@ raise SystemExit(0)
 
 
 def _torch_cuda_wheel_stack_ok(*, python: Path | None = None) -> bool:
-    """True when torchaudio (if importable) matches torch's CUDA userland."""
+    """True when torchaudio is installed and matches torch's CUDA userland."""
     py = _pip_python(python)
     proc = subprocess.run(
         [py, "-c", _TORCH_CUDA_STACK_PROBE],
