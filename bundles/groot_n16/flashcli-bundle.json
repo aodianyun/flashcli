@@ -103,6 +103,17 @@
     "repo": "nvidia/GR00T-N1.6-3B",
     "revision": "main"
   },
+  "extra_weights": {
+    "qwen3_tokenizer": {
+      "source": "huggingface",
+      "repo": "Qwen/Qwen3-1.7B",
+      "allow_patterns": [
+        "tokenizer.json",
+        "tokenizer_config.json"
+      ],
+      "checkpoint_subdir": "tokenizer"
+    }
+  },
   "runtime": {
     "sm120-cu130-linux-x86_64-py312": "runtime/sm120-cu130-linux-x86_64-py312"
   }

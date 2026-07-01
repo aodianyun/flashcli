@@ -24,12 +24,15 @@ def download_extra_weights(
     bundle: BundleManifest | None,
     *,
     variant: str | None = None,
+    checkpoint_dir: Path | None = None,
     quiet: bool = False,
     download: bool = True,
 ) -> None:
     if bundle is None or not download:
         if bundle is not None:
-            _w.require_extra_weights_cached(bundle, variant=variant)
+            _w.require_extra_weights_cached(
+                bundle, variant=variant, checkpoint_dir=checkpoint_dir
+            )
         return
     extra = extra_weights_spec(bundle, variant=variant)
     for key, spec in extra.items():
@@ -40,14 +43,9 @@ def download_extra_weights(
             if not quiet:
                 print(f"  extra_weights {key!r}: repo not set, skipping")
             continue
-        rel = str(spec.get("relative_dir", "")).strip()
-        if rel:
-            dest = (bundle.bundle_root / rel).resolve()
-        else:
-            cache_name = str(spec.get("cache_name", key))
-            from flashcli_bundle import paths as config
-
-            dest = config.MODELS_DIR / cache_name
+        dest = _w.extra_weight_dest(
+            bundle, key, spec, checkpoint_dir=checkpoint_dir
+        )
         dest.mkdir(parents=True, exist_ok=True)
         patterns = _allow_patterns(spec)
         require_ns = weights_require_norm_stats(spec)
@@ -110,14 +108,26 @@ def ensure_checkpoint(
     if has_local_weights(local, weights_spec=spec):
         if not quiet:
             print(f"Using bundle-local weights: {local}")
-        download_extra_weights(bundle, variant=variant, quiet=quiet, download=True)
+        download_extra_weights(
+            bundle,
+            variant=variant,
+            checkpoint_dir=local,
+            quiet=quiet,
+            download=True,
+        )
         return local
 
     existing = resolve_checkpoint(preset, bundle=bundle, variant=variant)
     if existing is not None:
         if not quiet:
             print(f"Using cached weights: {existing}")
-        download_extra_weights(bundle, variant=variant, quiet=quiet, download=True)
+        download_extra_weights(
+            bundle,
+            variant=variant,
+            checkpoint_dir=existing,
+            quiet=quiet,
+            download=True,
+        )
         return existing
 
     from flashcli_bundle import paths as config
@@ -127,7 +137,13 @@ def ensure_checkpoint(
     checkpoint_dir = cache_dir / "checkpoint"
     cache_dir.mkdir(parents=True, exist_ok=True)
     download_merged_weights(spec, checkpoint_dir, quiet=quiet)
-    download_extra_weights(bundle, variant=variant, quiet=quiet, download=True)
+    download_extra_weights(
+        bundle,
+        variant=variant,
+        checkpoint_dir=checkpoint_dir,
+        quiet=quiet,
+        download=True,
+    )
     _write_marker(cache_dir, preset.name, checkpoint_dir)
     return checkpoint_dir
 

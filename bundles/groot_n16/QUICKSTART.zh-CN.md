@@ -60,10 +60,19 @@ flashcli bundle validate bundles/groot_n16/dist
 
 ## 4. 拉权重并运行
 
+`flashcli pull` 会一并完成：
+
+- GR00T 权重（`nvidia/GR00T-N1.6-3B`）
+- **Qwen3 tokenizer**（`extra_weights` → `{checkpoint}/tokenizer/`，供 GROOT 编码 prompt）
+- bundle runtime 与 Python 依赖（除非 `--no-auto-install`）
+
 ```bash
 export HF_ENDPOINT=https://hf-mirror.com   # 国内可选
 
 flashcli pull bundles/groot_n16/dist
+
+# 确认 tokenizer 已就位（路径以 models show 为准）
+ls "$(flashcli models show bundles/groot_n16/dist 2>/dev/null | sed -n 's/.*checkpoint: //p')/tokenizer/"
 
 flashcli run bundles/groot_n16/dist \
   --prompt "pick up the cup on the table" \
@@ -95,6 +104,6 @@ flashcli run bundles/groot_n16/dist \
 | 现象 | 处理 |
 |------|------|
 | `GemmRunner missing fp8_nt_dev` | `_groot_compat.py` 自动 shim；仍失败则重编 FlashRT `.so` |
-| tokenizer 加载失败 | 确保 checkpoint 含 `tokenizer/`，或预下载 `Qwen/Qwen3-1.7B` |
+| tokenizer 加载失败 | 先执行 `flashcli pull`（会自动下载到 `checkpoint/tokenizer/`）；或检查 HF 网络 / `HF_ENDPOINT` |
 | 输出像噪声 | 检查 `embodiment_tag` 是否为已训练 tag |
 | `num_views` 不匹配 | `gr1` 用 1；`robocasa`/`behavior_r1_pro` 用 3 |

@@ -136,11 +136,22 @@ def _extra_weights_missing_error(key: str, dest: Path) -> FileNotFoundError:
     )
 
 
-def _extra_dest(
+def extra_weight_dest(
     bundle: BundleManifest | None,
     key: str,
     spec: dict[str, Any],
+    *,
+    checkpoint_dir: Path | None = None,
 ) -> Path:
+    """Resolved on-disk directory for one ``extra_weights`` entry."""
+    sub = str(spec.get("checkpoint_subdir", "")).strip().strip("/")
+    if sub:
+        if checkpoint_dir is None:
+            raise ValueError(
+                f"extra_weights.{key!r} uses checkpoint_subdir but checkpoint_dir "
+                "is unknown"
+            )
+        return checkpoint_dir.expanduser().resolve() / sub
     if bundle is not None:
         rel = str(spec.get("relative_dir", "")).strip()
         if rel:
@@ -153,15 +164,18 @@ def extra_weight_dir(
     bundle: BundleManifest,
     key: str,
     spec: dict[str, Any],
+    *,
+    checkpoint_dir: Path | None = None,
 ) -> Path:
     """Resolved on-disk directory for one ``extra_weights`` entry."""
-    return _extra_dest(bundle, key, spec)
+    return extra_weight_dest(bundle, key, spec, checkpoint_dir=checkpoint_dir)
 
 
 def require_extra_weights_cached(
     bundle: BundleManifest | None,
     *,
     variant: str | None = None,
+    checkpoint_dir: Path | None = None,
 ) -> None:
     """Raise if manifest extra_weights are not present (no download)."""
     if bundle is None:
@@ -173,7 +187,7 @@ def require_extra_weights_cached(
         repo = str(spec.get("repo", "")).strip()
         if not repo:
             continue
-        dest = _extra_dest(bundle, key, spec)
+        dest = extra_weight_dest(bundle, key, spec, checkpoint_dir=checkpoint_dir)
         patterns = spec.get("allow_patterns")
         if isinstance(patterns, list):
             patterns = [str(p) for p in patterns]
@@ -245,14 +259,18 @@ def ensure_checkpoint(
     if has_local_weights(local, weights_spec=spec):
         if not quiet:
             print(f"Using bundle-local weights: {local}")
-        require_extra_weights_cached(bundle, variant=variant)
+        require_extra_weights_cached(
+            bundle, variant=variant, checkpoint_dir=local
+        )
         return local
 
     existing = resolve_checkpoint(preset, bundle=bundle, variant=variant)
     if existing is not None:
         if not quiet:
             print(f"Using cached weights: {existing}")
-        require_extra_weights_cached(bundle, variant=variant)
+        require_extra_weights_cached(
+            bundle, variant=variant, checkpoint_dir=existing
+        )
         return existing
 
     if not download:

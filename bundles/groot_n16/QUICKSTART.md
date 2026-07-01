@@ -58,10 +58,19 @@ flashcli bundle validate bundles/groot_n16/dist
 
 ## 4. Pull weights / run
 
+`flashcli pull` downloads:
+
+- GR00T weights (`nvidia/GR00T-N1.6-3B`)
+- **Qwen3 tokenizer** (`extra_weights` → `{checkpoint}/tokenizer/` for GROOT prompt encoding)
+- bundle runtime and Python deps (unless `--no-auto-install`)
+
 ```bash
 export HF_ENDPOINT=https://hf-mirror.com   # optional mirror
 
 flashcli pull bundles/groot_n16/dist
+
+# Optional: confirm tokenizer is present (path from models show)
+ls "$(flashcli models show bundles/groot_n16/dist 2>/dev/null | sed -n 's/.*checkpoint: //p')/tokenizer/"
 
 flashcli run bundles/groot_n16/dist \
   --prompt "pick up the cup on the table" \

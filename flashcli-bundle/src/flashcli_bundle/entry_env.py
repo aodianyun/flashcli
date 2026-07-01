@@ -66,7 +66,7 @@ def inject_script_entry_env(
             continue
         if not str(spec.get("repo", "")).strip():
             continue
-        dest = extra_weight_dir(bundle, key, spec)
+        dest = extra_weight_dir(bundle, key, spec, checkpoint_dir=checkpoint)
         os.environ[extra_weight_env_name(key)] = str(dest.resolve())
 
 

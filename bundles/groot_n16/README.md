@@ -36,5 +36,5 @@ See **[QUICKSTART.md](QUICKSTART.md)** for build, pack, and run commands.
 | HuggingFace download fails | Set `HF_ENDPOINT=https://hf-mirror.com` or pre-download and `--checkpoint` |
 | Output looks like noise | Use a trained `embodiment_tag` (`gr1`, `robocasa_panda_omron`, `behavior_r1_pro`) |
 | `num_views` mismatch | `gr1` → 1 view; `robocasa_panda_omron` / `behavior_r1_pro` → 3 views |
-| Tokenizer load fails | Ensure checkpoint includes `tokenizer/`, or pre-download `Qwen/Qwen3-1.7B` tokenizer |
+| Tokenizer load fails | Run `flashcli pull` first (downloads to `checkpoint/tokenizer/`); check HF network / `HF_ENDPOINT` |
 | `'GemmRunner'... fp8_nt_dev` | Rebuild FlashRT, or `_groot_compat.py` shims older `.so` builds |
