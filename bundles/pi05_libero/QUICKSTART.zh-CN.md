@@ -3,18 +3,18 @@
 <p align="right"><a href="QUICKSTART.md">English</a></p>
 
 **环境**：Linux · NVIDIA **SM89**（Ada）或 **SM120**（Blackwell）· CUDA **12.4+**（SM89）或 **13.x**（SM120）· Python **3.12**（bundle venv；主机 CLI 3.10+）  
-**Ref**：`flashcli-bundle/pi05_libero:1.0.3` · 权重 [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044)（~7.5GB，不进 zip）
+**Ref**：`flashcli-bundle/pi05_libero:1.0.4` · 权重 [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044)（~7.5GB，不进 zip）
 
 ```bash
 cd /path/to/flashcli
-pip install -e .
+pip install -e ./flashcli-bundle -e .
 export BUNDLE="$(pwd)/bundles/pi05_libero"   # 本地 dev；省略则走 FlashHub sync
 ```
 
 检查本机匹配哪档 runtime：
 
 ```bash
-flashcli models envs flashcli-bundle/pi05_libero:1.0.3
+flashcli models envs flashcli-bundle/pi05_libero:1.0.4
 # 期望 sm89-cu124-*、sm89-cu130-* 或 sm120-cu130-*（与本机 GPU + CUDA 用户态一致）
 ```
 
@@ -57,7 +57,7 @@ flashcli run "$BUNDLE" \
   --image /path/to/base.jpg
 ```
 
-权重缓存：`~/.flashcli/models/pi05_libero/1.0.3/checkpoint/`（`flashcli models show "$BUNDLE"` 查看）
+权重缓存：`~/.flashcli/models/pi05_libero/1.0.4/checkpoint/`（`flashcli models show "$BUNDLE"` 查看）
 
 指定已有 checkpoint：
 
@@ -85,7 +85,7 @@ flashcli run "$BUNDLE" \
 | 现象 | 处理 |
 |------|------|
 | `LocalEntryNotFoundError` | 网络/DNS；设 `HF_ENDPOINT`，或预下载后 `--checkpoint` |
-| `NativeEnvironmentNotSupportedError` | GPU/CUDA 格不在 manifest；执行 `flashcli models envs flashcli-bundle/pi05_libero:1.0.3` 并 sync 新版 bundle |
-| `no kernel image...` | GPU/CUDA 格不匹配；在本机执行 `flashcli models envs flashcli-bundle/pi05_libero:1.0.3` |
+| `NativeEnvironmentNotSupportedError` | GPU/CUDA 格不在 manifest；执行 `flashcli models envs flashcli-bundle/pi05_libero:1.0.4` 并 sync 新版 bundle |
+| `no kernel image...` | GPU/CUDA 格不匹配；在本机执行 `flashcli models envs flashcli-bundle/pi05_libero:1.0.4` |
 | `'GemmRunner'... fp8_nt_dev` | 更新 FlashRT 并重编，或 bundle 内 `_pi05_compat.py` shim |
 | `FvkContext is already registered` | 升级 flashcli |

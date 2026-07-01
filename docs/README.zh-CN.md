@@ -18,7 +18,11 @@
 
 ### 架构说明（可选）
 
-主机 CLI、bundle venv、sync 流程 — [architecture.zh-CN.md](architecture.zh-CN.md)。
+主机 CLI、bundle venv、sync 流程 — [architecture.zh-CN.md](architecture.zh-CN.md)。维护者模块分层：[module_layers.zh-CN.md](module_layers.zh-CN.md)。
+
+### 维护者（内部）
+
+构建、打包、发布 bundle — [bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md) · runtime 矩阵 [runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md)（仅从 [CONTRIBUTING.md](../CONTRIBUTING.md) 索引）。
 
 ## 文档索引
 
@@ -28,6 +32,7 @@
 | [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | preset ref 语法 + 运行时流程 |
 | [architecture.zh-CN.md](architecture.zh-CN.md) | 主机 CLI、bundle venv、re-exec |
 | [environment.zh-CN.md](environment.zh-CN.md) | 环境变量 |
+| [module_layers.zh-CN.md](module_layers.zh-CN.md) | 主机 CLI 与 `flashcli_bundle` 包边界 |
 
 各 preset 命令：[bundles/](../bundles/)
 

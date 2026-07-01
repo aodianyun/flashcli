@@ -11,7 +11,9 @@ How maintainers build **multi CUDA / SM native artifacts** and publish via **Fla
 | Bundle | SM | CUDA lines | Python ABI | Native modules |
 |--------|-----|------------|------------|----------------|
 | `pi05_libero` | **89**, **120** | cu124 (SM89), cu130 | **3.12** (`python_abi: 312`) | `flash_rt_kernels`, `flash_rt_fa2` |
-| `qwen_nvfp4` | **120** | **cu130 only** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2` |
+| `qwen_nvfp4` | **120** | **cu130 only** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2`, `flash_rt_fp4` |
+| `qwen3_vl_nvfp4` | **120** | **cu130 only** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2`, `flash_rt_fp4`, `flash_rt_qwen3_vl_kernels` |
+| `groot_n16` | **120** | **cu130 only** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2` *(local dev; not on FlashHub yet)* |
 
 OS / arch: **linux-x86_64**. Config: `bundles/<name>/release-matrix.env`.
 
@@ -49,7 +51,7 @@ Each published bundle is pinned by a **FlashHub ref** (`flashcli-bundle/<name>:<
 Example repo URL:
 
 ```text
-https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3
+https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.4
 ```
 
 ## Shared release pipeline
@@ -80,7 +82,7 @@ bash build.sh --repo-root /path/to/FlashRT
 
 **GPU**: SM89 (Ada) and SM120 (Blackwell). **CUDA**: cu124 (SM89 only); cu130 (SM89 + SM120 — cu130 matrix pass also cross-builds `sm120-cu130`).
 
-Host keys: `sm89-cu124-linux-x86_64-py312`, `sm89-cu130-linux-x86_64-py312`, `sm120-cu130-linux-x86_64-py312`. Check: `flashcli models envs flashcli-bundle/pi05_libero:1.0.3`.
+Host keys: `sm89-cu124-linux-x86_64-py312`, `sm89-cu130-linux-x86_64-py312`, `sm120-cu130-linux-x86_64-py312`. Check: `flashcli models envs flashcli-bundle/pi05_libero:1.0.4`.
 
 Upload `dist/` to FlashHub; users pin `flashcli-bundle/pi05_libero:<version>`.
 

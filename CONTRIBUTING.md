@@ -67,7 +67,7 @@ pytest tests/ tests/bench/ # full suite including bench
 
 ## Adding a new bundle / preset ref
 
-1. Copy structure from `bundles/pi05_libero/` or `bundles/qwen_nvfp4/`.
+1. Copy structure from `bundles/pi05_libero/`, `bundles/qwen_nvfp4/`, or `bundles/groot_n16/` (local dev example for script entry + `extra_weights`).
 2. Add `flashcli-bundle.json` (format_version 3, **protocol_version 1**), `entry` modules, `release-matrix.env`, `_bundle_build.sh`.
 3. Declare bundle CLI flags in manifest **`run_options`** / **`serve_options`**. Entry modules import protocol/helpers from **`flashcli_bundle`** (installed via git `flashcli-bundle` subdirectory or `pip install -e ./flashcli-bundle`), not from the full `flashcli` CLI package.
 4. Follow [docs/bundle_publish_standard.md](docs/bundle_publish_standard.md) (manifest / entry spec).
@@ -87,7 +87,7 @@ After uploading `dist/` to FlashHub:
 - [ ] `flashcli bundle validate bundles/<name>` and smoke `run` / `serve` on target GPU
 - [ ] Document ref strings in README / QUICKSTART (Qwen: same repo, different `@variant`)
 
-Matrix constraints: pi05 **SM89 + SM120** (cu124 on SM89; cu130 on both); qwen **cu130 / SM120 only** — see runtime-matrix doc.
+Matrix constraints: pi05 **SM89 + SM120** (cu124 on SM89; cu130 on both); qwen / qwen3_vl / groot_n16 **cu130 / SM120 only** — see runtime-matrix doc.
 
 ## Reporting issues
 

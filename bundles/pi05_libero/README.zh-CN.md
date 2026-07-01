@@ -4,7 +4,7 @@
 
 Pi0.5 LIBERO VLA，权重 [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044)。
 
-**Ref**：`flashcli-bundle/pi05_libero:1.0.3`。用户通过 FlashHub sync runtime；flashcli 按本机 GPU + CUDA 匹配 manifest 中的 `runtime` env key，并从 `runtime/<env-key>/` 加载 `.so`。可用 `flashcli models envs flashcli-bundle/pi05_libero:1.0.3` 查看本机环境键是否匹配。
+**Ref**：`flashcli-bundle/pi05_libero:1.0.4`。用户通过 FlashHub sync runtime；flashcli 按本机 GPU + CUDA 匹配 manifest 中的 `runtime` env key，并从 `runtime/<env-key>/` 加载 `.so`。可用 `flashcli models envs flashcli-bundle/pi05_libero:1.0.4` 查看本机环境键是否匹配。
 
 ## 运行所需文件（sync 后 bundle 根）
 
@@ -18,7 +18,7 @@ flash_rt/
 runtime/<env-key>/         # 本机 env 的 *.so
 ```
 
-权重由 flashcli 下载到 `~/.flashcli/models/pi05_libero/1.0.3/checkpoint/`，**不**打进 bundle。
+权重由 flashcli 下载到 `~/.flashcli/models/pi05_libero/1.0.4/checkpoint/`，**不**打进 bundle。
 
 ## Entry 模式
 
@@ -35,7 +35,7 @@ runtime/<env-key>/         # 本机 env 的 *.so
 
 ```bash
 curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
-flashcli run flashcli-bundle/pi05_libero:1.0.3 --prompt "..." --image /path/to/base.jpg
+flashcli run flashcli-bundle/pi05_libero:1.0.4 --prompt "..." --image /path/to/base.jpg
 ```
 
 ## 排错
@@ -57,7 +57,7 @@ rm -rf ~/.flashcli/models/*/checkpoint
 export HF_ENDPOINT=https://hf-mirror.com
 # 未设置 HF_ENDPOINT 时默认先试官方 Hub，失败再试镜像；仅镜像优先：export FLASHCLI_PREFER_HF_MIRROR=1
 
-flashcli pull flashcli-bundle/pi05_libero:1.0.3
+flashcli pull flashcli-bundle/pi05_libero:1.0.4
 # 或带本地 bundle：
 flashcli run bundles/pi05_libero --image /path/to.jpg
 ```
@@ -76,7 +76,7 @@ flashcli run bundles/pi05_libero \
 
 ### `no kernel image is available for execution on the device`
 
-多为 **GPU/CUDA 格不匹配** 或 **FlashHub runtime 过旧**。执行 `flashcli models envs flashcli-bundle/pi05_libero:1.0.3`，应匹配 `sm89-cu124-*`、`sm89-cu130-*` 或 `sm120-cu130-*`。
+多为 **GPU/CUDA 格不匹配** 或 **FlashHub runtime 过旧**。执行 `flashcli models envs flashcli-bundle/pi05_libero:1.0.4`，应匹配 `sm89-cu124-*`、`sm89-cu130-*` 或 `sm120-cu130-*`。
 
 ### `'GemmRunner' object has no attribute 'fp8_nt_dev'`
 

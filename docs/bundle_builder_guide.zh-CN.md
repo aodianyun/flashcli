@@ -86,8 +86,7 @@ git clone https://gitee.com/aodiansoft/flashcli.git   # 或 GitHub
 cd flashcli
 
 # 开发安装（构建者必做）
-pip install -e ./flashcli-bundle
-pip install -e .
+pip install -e ./flashcli-bundle -e .
 
 flashcli doctor
 flashcli models list
@@ -258,11 +257,11 @@ bundles/pi05_libero/dist/
 2. 获得语义化 URL，例如：
 
    ```text
-   https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3
+   https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.4
    ```
 
 3. 在 README / QUICKSTART 中更新固定 ref：
-   - 单 variant：`flashcli-bundle/pi05_libero:1.0.3`
+   - 单 variant：`flashcli-bundle/pi05_libero:1.0.4`
    - 多 variant：`flashcli-bundle/qwen_nvfp4:1.0.1@qwen3`、`@qwen36`（**必须**带 `@variant`）
 
 4. 用户侧：安装/升级 flashcli 后，执行 `flashcli run <ref>` 或 `flashcli bundle sync <ref>` 从新版本 sync。
@@ -304,7 +303,7 @@ bundles/pi05_libero/dist/
 | bundle venv 缺 `flashcli_bundle` | 删 `~/.flashcli/runtimes/<id>/` 重跑；或 `flashcli run` 触发 venv 重建 |
 | `pip install flashcli` 缺 flashcli-bundle / typer 等 | **勿**裸 `pip install flashcli`（PyPI 无 flashcli-bundle）。用 `install.sh`，或手动：`pip install 'flashcli-bundle[infer] @ git+…#subdirectory=flashcli-bundle'` 再 `pip install --no-deps 'flashcli @ git+…'` |
 | HF 权重失败 | `export HF_ENDPOINT=https://hf-mirror.com` 后 `flashcli pull` |
-| pi05 `NativeEnvironmentNotSupportedError` | 确认 manifest 含本机 env key（含 `sm120-cu130`）；`flashcli bundle sync flashcli-bundle/pi05_libero:1.0.3 --force` |
+| pi05 `NativeEnvironmentNotSupportedError` | 确认 manifest 含本机 env key（含 `sm120-cu130`）；`flashcli bundle sync flashcli-bundle/pi05_libero:1.0.4 --force` |
 | qwen 在 cu124 上编译失败 | qwen **仅 cu130**；用 25.10-py3 容器 |
 
 ---

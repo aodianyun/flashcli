@@ -48,8 +48,7 @@ export PIP_TRUSTED_HOST=mirrors.aliyun.com
 ```bash
 git clone https://github.com/aodianyun/flashcli.git
 cd flashcli
-pip install -e ./flashcli-bundle
-pip install -e .
+pip install -e ./flashcli-bundle -e .
 flashcli doctor
 ```
 
@@ -118,7 +117,7 @@ Field reference: [bundle_publish_standard.md](bundle_publish_standard.md). Step-
 Example repo URL:
 
 ```text
-https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3
+https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.4
 ```
 
 ---

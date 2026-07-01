@@ -8,7 +8,7 @@ One install, one preset name — flashcli resolves the right native runtime for 
 
 ```bash
 curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
-flashcli run flashcli-bundle/pi05_libero:1.0.3
+flashcli run flashcli-bundle/pi05_libero:1.0.4
 ```
 
 ---
@@ -29,7 +29,7 @@ flashcli is intentionally thin: **inference code lives in the bundle**. The CLI 
 
 - **One command to first token** — `flashcli run <ref>` chains dependency install, FlashHub bundle sync, weight pull, and inference.
 - **Split download by environment** — only this host’s `runtime/<env-key>/` is fetched; use `flashcli models envs` to see the env key.
-- **Reproducible releases** — maintainers upload `dist/` to FlashHub; users pin refs such as `flashcli-bundle/pi05_libero:1.0.3`.
+- **Reproducible releases** — maintainers upload `dist/` to FlashHub; users pin refs such as `flashcli-bundle/pi05_libero:1.0.4`.
 - **OpenAI-compatible serving** — Qwen NVFP4 presets expose `/v1/chat/completions`, streaming, tools, and session reuse via FlashRT `qwen36_agent`.
 - **Operator-friendly** — structured serve logs, `/health` with `inference_busy`, GPU batch-1 gate (503 when busy), `doctor` for preflight checks.
 - **Mirror-friendly** — Gitee install script, pip/HF mirror env vars; works in restricted networks with documented fallbacks.
@@ -42,10 +42,13 @@ Browse published bundles on **[FlashHub](https://flashhub.top)**. The table belo
 
 | Ref | Task | GPU | CUDA line | Python | Capabilities |
 |-----|------|-----|-----------|--------|--------------|
-| [`flashcli-bundle/pi05_libero:1.0.3`](bundles/pi05_libero/QUICKSTART.md) | Pi0.5 LIBERO VLA | **SM89**, **SM120** | cu124 (SM89) · cu130 | **3.12** (bundle venv) | `run` |
+| [`flashcli-bundle/pi05_libero:1.0.4`](bundles/pi05_libero/QUICKSTART.md) | Pi0.5 LIBERO VLA | **SM89**, **SM120** | cu124 (SM89) · cu130 | **3.12** (bundle venv) | `run` |
 | [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen3`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3-8B NVFP4 chat | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
 | [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen36`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
 | [`flashcli-bundle/qwen3_vl_nvfp4:1.0.0`](bundles/qwen3_vl_nvfp4/QUICKSTART.md) | Qwen3-VL-8B NVFP4 image+text | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
+| [`bundles/groot_n16`](bundles/groot_n16/QUICKSTART.md) *(local dev)* | GROOT N1.6 VLA | **SM120** | **cu130 only** | **3.12** | `run` |
+
+Full repo index: [bundles/README.md](bundles/README.md). Published refs: [FlashHub](https://flashhub.top).
 
 **Platform requirements**
 
@@ -88,8 +91,7 @@ curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh 
 
 ```bash
 git clone https://github.com/aodianyun/flashcli.git && cd flashcli
-pip install -e ./flashcli-bundle
-pip install -e .
+pip install -e ./flashcli-bundle -e .
 ```
 
 ### 2. Preflight
@@ -97,13 +99,13 @@ pip install -e .
 ```bash
 flashcli doctor
 flashcli models list
-flashcli models envs flashcli-bundle/pi05_libero:1.0.3
+flashcli models envs flashcli-bundle/pi05_libero:1.0.4
 ```
 
 ### 3. First inference — robotics (Pi0.5)
 
 ```bash
-flashcli run flashcli-bundle/pi05_libero:1.0.3 \
+flashcli run flashcli-bundle/pi05_libero:1.0.4 \
   --prompt "pick up the red block and place it in the tray" \
   --image /path/to/base.jpg
 ```
@@ -151,7 +153,7 @@ bash bundles/qwen_nvfp4/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
 flashcli serve bundles/qwen_nvfp4@qwen36 --port 8000 --K 6 --max-seq 262208
 ```
 
-Step-by-step per bundle: **[qwen_nvfp4 QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md)** · **[qwen3_vl_nvfp4 QUICKSTART](bundles/qwen3_vl_nvfp4/QUICKSTART.md)** · **[pi05_libero QUICKSTART](bundles/pi05_libero/QUICKSTART.md)**
+Step-by-step per bundle: **[qwen_nvfp4 QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md)** · **[qwen3_vl_nvfp4 QUICKSTART](bundles/qwen3_vl_nvfp4/QUICKSTART.md)** · **[pi05_libero QUICKSTART](bundles/pi05_libero/QUICKSTART.md)** · **[groot_n16 QUICKSTART](bundles/groot_n16/QUICKSTART.md)** *(local dev)*
 
 ---
 
@@ -161,7 +163,7 @@ Step-by-step per bundle: **[qwen_nvfp4 QUICKSTART](bundles/qwen_nvfp4/QUICKSTART
 |---------|---------|
 | `flashcli run <ref>` | Sync inference (VLA, chat, …) |
 | `flashcli serve <ref>` | OpenAI HTTP API (Qwen) |
-| `flashcli pull <ref>` | Pre-fetch weights only |
+| `flashcli pull <ref>` | Pre-fetch runtime + weights (same download path as first `run`) |
 | `flashcli models list` | Locally cached refs + weight status (discover bundles on [FlashHub](https://flashhub.top)) |
 | `flashcli models envs [ref]` | Native matrix cells vs this GPU |
 | `flashcli doctor [--install]` | Environment / GPU preflight |
@@ -179,13 +181,14 @@ Qwen `serve` highlights: `--max-seq`, `--max-q-seq` (qwen3), `--K`, `--max-outpu
 
 ```text
 Host: install.sh → ~/.flashcli/venv (flashcli once)
-  pull/sync/weights → host Python
+  pull / run preflight → host Python (sync, weights, extra_weights, post_pull)
 
 run/serve:
   ref → FlashHub → manifest + preflight → runtime/<env-key>/
+  → ensure weights on host (download if missing; same as pull)
   → bundle venv (python_abi, torch, …)
-  → re-exec: bundle python -m flashcli_bundle.infer
-  → activate bundle → HF weights → RunEngine / ServeEngine
+  → re-exec: bundle python -m flashcli_bundle.infer  (HF hub offline)
+  → activate bundle → local checkpoint → RunEngine / ServeEngine / script main
 ```
 
 **Do not** pip-install flashcli into bundle venvs. Details: [docs/architecture.md](docs/architecture.md#host-cli-vs-bundle-infer-important).

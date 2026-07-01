@@ -8,7 +8,7 @@
 
 ```bash
 curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
-flashcli run flashcli-bundle/pi05_libero:1.0.3
+flashcli run flashcli-bundle/pi05_libero:1.0.4
 ```
 
 ---
@@ -29,7 +29,7 @@ flashcli 刻意保持轻薄：**推理代码在 bundle 内**。CLI 从 FlashHub 
 
 - **一条命令到首 token** — `flashcli run <ref>` 串联依赖安装、FlashHub bundle sync、权重拉取与推理。
 - **按环境分包下载** — 只拉本机 GPU/CUDA/Python 对应的 `runtime/<env-key>/`；`flashcli models envs` 查看本机 env key。
-- **可复现发布** — 维护者构建 `dist/` 上传 FlashHub；用户使用固定 ref（如 `flashcli-bundle/pi05_libero:1.0.3`）。
+- **可复现发布** — 维护者构建 `dist/` 上传 FlashHub；用户使用固定 ref（如 `flashcli-bundle/pi05_libero:1.0.4`）。
 - **OpenAI 兼容服务** — Qwen NVFP4 提供 `/v1/chat/completions`、流式、tools、会话复用（FlashRT `qwen36_agent`）。
 - **运维友好** — serve 结构化日志、`/health` 含 `inference_busy`、GPU batch=1 忙时 503、`doctor` 预检。
 - **镜像网络友好** — Gitee 安装脚本、pip/HF 镜像环境变量；受限网络有文档化 fallback。
@@ -46,6 +46,9 @@ flashcli 刻意保持轻薄：**推理代码在 bundle 内**。CLI 从 FlashHub 
 | [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen3`](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) | Qwen3-8B NVFP4 对话 | **SM120** | **仅 cu130** | **3.12** | `run`, `serve` |
 | [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen36`](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **仅 cu130** | **3.12** | `run`, `serve` |
 | [`flashcli-bundle/qwen3_vl_nvfp4:1.0.0`](bundles/qwen3_vl_nvfp4/QUICKSTART.zh-CN.md) | Qwen3-VL-8B NVFP4 图文 | **SM120** | **仅 cu130** | **3.12** | `run`, `serve` |
+| [`bundles/groot_n16`](bundles/groot_n16/QUICKSTART.zh-CN.md) *（本地 dev）* | GROOT N1.6 VLA | **SM120** | **仅 cu130** | **3.12** | `run` |
+
+完整索引：[bundles/README.zh-CN.md](bundles/README.zh-CN.md)。已发布 ref：[FlashHub](https://flashhub.top)。
 
 **平台要求**
 
@@ -78,12 +81,17 @@ Qwen3 与 Qwen3.6 **共用** 同一 FlashHub repo；ref 中 `@qwen3` / `@qwen36`
 curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
 ```
 
+**Github**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
+```
+
 **源码（开发者）**
 
 ```bash
 git clone https://github.com/aodianyun/flashcli.git && cd flashcli
-pip install -e ./flashcli-bundle
-pip install -e .
+pip install -e ./flashcli-bundle -e .
 ```
 
 ### 2. 预检
@@ -91,13 +99,13 @@ pip install -e .
 ```bash
 flashcli doctor
 flashcli models list
-flashcli models envs flashcli-bundle/pi05_libero:1.0.3
+flashcli models envs flashcli-bundle/pi05_libero:1.0.4
 ```
 
 ### 3. 首次推理 — 机器人（Pi0.5）
 
 ```bash
-flashcli run flashcli-bundle/pi05_libero:1.0.3 \
+flashcli run flashcli-bundle/pi05_libero:1.0.4 \
   --prompt "pick up the red block and place it in the tray" \
   --image /path/to/base.jpg
 ```
@@ -143,7 +151,7 @@ bash bundles/qwen_nvfp4/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
 flashcli serve bundles/qwen_nvfp4@qwen36 --port 8000 --K 6 --max-seq 262208
 ```
 
-分 bundle 详细步骤：**[qwen_nvfp4 快速上手](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md)** · **[qwen3_vl_nvfp4 快速上手](bundles/qwen3_vl_nvfp4/QUICKSTART.zh-CN.md)** · **[pi05_libero 快速上手](bundles/pi05_libero/QUICKSTART.zh-CN.md)**
+分 bundle 步骤：**[qwen_nvfp4 快速上手](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md)** · **[qwen3_vl_nvfp4 快速上手](bundles/qwen3_vl_nvfp4/QUICKSTART.zh-CN.md)** · **[pi05_libero 快速上手](bundles/pi05_libero/QUICKSTART.zh-CN.md)** · **[groot_n16 快速上手](bundles/groot_n16/QUICKSTART.zh-CN.md)** *（本地 dev）*
 
 ---
 
@@ -153,7 +161,7 @@ flashcli serve bundles/qwen_nvfp4@qwen36 --port 8000 --K 6 --max-seq 262208
 |------|------|
 | `flashcli run <ref>` | 同步推理（VLA、对话等） |
 | `flashcli serve <ref>` | OpenAI HTTP（Qwen） |
-| `flashcli pull <ref>` | 仅预拉权重 |
+| `flashcli pull <ref>` | 预拉 runtime + 权重（与首次 `run` 相同的下载路径） |
 | `flashcli models list` | 本地已缓存 ref 与权重状态（在 [FlashHub](https://flashhub.top) 发现 bundle） |
 | `flashcli models envs [ref]` | 矩阵档位 vs 本机 GPU |
 | `flashcli doctor [--install]` | 环境 / GPU 预检 |
@@ -171,13 +179,14 @@ Qwen `serve` 要点：`--max-seq`、`--max-q-seq`（qwen3）、`--K`、`--max-ou
 
 ```text
 主机：install.sh → ~/.flashcli/venv（flashcli 只装一次）
-  pull/sync/权重 → 主机 Python
+  pull / run 预检 → 主机 Python（sync、权重、extra_weights、post_pull）
 
 run/serve：
   ref → FlashHub → manifest + preflight → runtime/<env-key>/
+  → 主机 ensure 权重（缺失则下载，与 pull 相同）
   → bundle venv（python_abi、torch…）
-  → re-exec：bundle python -m flashcli_bundle.infer
-  → activate bundle → HF 权重 → RunEngine / ServeEngine
+  → re-exec：bundle python -m flashcli_bundle.infer（HF hub 离线）
+  → activate bundle → 本地 checkpoint → RunEngine / ServeEngine / script main
 ```
 
 **不要**在 bundle venv 里 pip 安装 flashcli。详见 [docs/architecture.zh-CN.md](docs/architecture.zh-CN.md#主机-cli-与-bundle-infer必读)。

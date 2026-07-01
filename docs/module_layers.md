@@ -29,7 +29,7 @@ both       → flashcli_bundle/ (protocol, dependencies = [])
 
 **Shared orchestration allowed in protocol** (host/infer inject deps via callbacks):
 
-- `activate_core.py`, `cache.py`, `post_pull.py`, resolve paths in `weights.py` / `resolve.py`
+- `activate_core.py`, `cache.py`, `post_pull.py`, resolve paths in `weights.py` / `resolve.py` — HF download and per-file `extra_weights` fetch stay in host (`models/pull.py`)
 
 **Host-only modules** (examples, not exhaustive): `python_paths.py`, `python_resolve.py`, `runtime/mirror_github.py`, `bundle/weights.py` (HF download), `models/hf_hub.py`, `models/pull.py`, `bundle/artifacts.py`, `runtime/reexec.py`.
 

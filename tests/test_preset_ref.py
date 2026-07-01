@@ -10,11 +10,11 @@ from flashcli.models.preset_ref import cache_key, parse_preset_ref, resolve_pres
 
 
 def test_parse_short_ref() -> None:
-    parsed = parse_preset_ref("flashcli-bundle/pi05_libero:1.0.3")
-    assert parsed.ref == "flashcli-bundle/pi05_libero:1.0.3"
+    parsed = parse_preset_ref("flashcli-bundle/pi05_libero:1.0.4")
+    assert parsed.ref == "flashcli-bundle/pi05_libero:1.0.4"
     assert parsed.variant is None
-    assert parsed.repo_url.endswith("/flashcli-bundle/pi05_libero:1.0.3")
-    assert parsed.cache_key == "pi05_libero/1.0.3"
+    assert parsed.repo_url.endswith("/flashcli-bundle/pi05_libero:1.0.4")
+    assert parsed.cache_key == "pi05_libero/1.0.4"
 
 
 def test_parse_ref_with_variant() -> None:
@@ -26,7 +26,7 @@ def test_parse_ref_with_variant() -> None:
 
 
 def test_parse_full_url_ref() -> None:
-    url = "https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3"
+    url = "https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.4"
     parsed = parse_preset_ref(url)
     assert parsed.repo_url == url
     assert parsed.ref == url
@@ -49,9 +49,9 @@ def test_custom_flashhub_api_base(monkeypatch: pytest.MonkeyPatch) -> None:
         "FLASHHUB_API_BASE",
         "https://staging.example/api/v1/repos",
     )
-    parsed = parse_preset_ref("flashcli-bundle/pi05_libero:1.0.3")
+    parsed = parse_preset_ref("flashcli-bundle/pi05_libero:1.0.4")
     assert parsed.repo_url == (
-        "https://staging.example/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3"
+        "https://staging.example/api/v1/repos/flashcli-bundle/pi05_libero:1.0.4"
     )
 
 

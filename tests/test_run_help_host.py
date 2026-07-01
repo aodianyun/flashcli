@@ -34,7 +34,7 @@ def test_format_command_help_from_local_manifest(tmp_path: Path) -> None:
     preset = Preset(
         name="pi05_libero",
         raw={"description": "test", "bundle": {"local_root": str(bundle_root)}},
-        cache_key="pi05_libero/1.0.3",
+        cache_key="pi05_libero/1.0.4",
     )
     text = format_command_help(preset, bundle_root, command="run")
     assert "Bundle run options:" in text
@@ -48,7 +48,7 @@ def test_run_help_skips_reexec(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(
         "sys.argv",
-        ["flashcli", "run", "flashcli-bundle/pi05_libero:1.0.3", "--help"],
+        ["flashcli", "run", "flashcli-bundle/pi05_libero:1.0.4", "--help"],
     )
     monkeypatch.setattr(
         "flashcli.runtime.reexec.ensure_bundle_runtime_and_reexec",
@@ -70,7 +70,7 @@ def test_run_help_skips_reexec(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["run", "flashcli-bundle/pi05_libero:1.0.3", "--help"],
+        ["run", "flashcli-bundle/pi05_libero:1.0.4", "--help"],
         catch_exceptions=False,
     )
     assert result.exit_code == 0

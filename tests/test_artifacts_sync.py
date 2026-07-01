@@ -21,7 +21,7 @@ def _write_bundle_root(root: Path, *, manifest: dict) -> None:
 
 
 def test_runtime_not_ready_when_manifest_differs(tmp_path: Path) -> None:
-    repo = "https://flashhub.example/pi05/1.0.3"
+    repo = "https://flashhub.example/pi05/1.0.4"
     manifest_v2 = {
         "format": "flashcli-model-bundle",
         "format_version": 3,
@@ -55,7 +55,7 @@ def test_runtime_not_ready_when_manifest_differs(tmp_path: Path) -> None:
 
 
 def test_runtime_ready_when_manifest_matches(tmp_path: Path) -> None:
-    repo = "https://flashhub.example/pi05/1.0.3"
+    repo = "https://flashhub.example/pi05/1.0.4"
     manifest = {
         "format": "flashcli-model-bundle",
         "format_version": 3,
@@ -108,7 +108,7 @@ def test_runtime_not_ready_when_repo_url_changes(tmp_path: Path) -> None:
         bundle_root=bundle_root,
         manifest_cache=staging,
         marker=marker,
-        repo_url="https://flashhub.example/pi05/1.0.3",
+        repo_url="https://flashhub.example/pi05/1.0.4",
         env_key="sm89-cu130-linux-x86_64-py312",
         artifact_rel="runtime/sm89-cu130-linux-x86_64-py312",
         force=False,

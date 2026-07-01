@@ -19,7 +19,7 @@ namespace/bundle:version[@variant]
 示例：
 
 ```bash
-flashcli run flashcli-bundle/pi05_libero:1.0.3
+flashcli run flashcli-bundle/pi05_libero:1.0.4
 flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen3
 flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
 ```
@@ -28,7 +28,7 @@ flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
 |------|------|
 | `namespace/bundle:version` | FlashHub repo 名 + 固定版本 |
 | `@variant` | 可选；选择 manifest `variants.*`（如 Qwen3 / Qwen3.6） |
-| 完整 URL | `https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3` 也可 |
+| 完整 URL | `https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.4` 也可 |
 
 **API 基址**（环境变量）：`FLASHCLI_FLASHHUB_API`（默认 `https://flashhub-api.aodianyun.com/api/v1/repos`）。  
 在 **[flashhub.top](https://flashhub.top)** 浏览已发布 bundle（对外站点）；API 尚未迁移至该域名。  
@@ -60,11 +60,14 @@ flashcli pull bundles/qwen_nvfp4@qwen36
 1. 解析 REF → 若为本地目录则用 `local_root`；否则 `bundle.repo`（或已 sync 的 marker）
 2. FlashHub manifest → 本机 **preflight** env key
 3. 下载 entry + 匹配的 `runtime/<env-key>/`
-4. 创建 bundle venv
+4. 创建 bundle venv（`python_abi`、manifest 中的 torch）
 5. 在 bundle venv 内 **re-exec** infer — [architecture.zh-CN.md](architecture.zh-CN.md)
-6. activate → HF 权重 → `entry`
+6. **主机**（re-exec 前）：若 cache 不完整则下载 `weights` + `extra_weights` + 执行 `post_pull` — 与 `flashcli pull` 同一代码路径
+7. **bundle venv**：仅解析本地 checkpoint（`HF_HUB_OFFLINE=1`）；运行 `entry`
 
-`flashcli bundle sync <ref>` 可预拉；首次 `run` / `serve` 会自动 sync。
+`flashcli pull <ref>` 执行步骤 1–6，不进入推理。首次 `flashcli run` / `serve` 在 cache 为空时也会自动执行 1–6。
+
+`flashcli bundle sync <ref>` 仅预拉 FlashHub 目录树（不含权重）。
 
 **环境键**（`flashcli models envs <ref>`）：`sm{SM}-cu{CUDA}-linux-x86_64-py{PY}`。
 

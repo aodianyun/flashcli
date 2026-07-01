@@ -28,7 +28,7 @@
 **允许在 protocol 的「共享编排」**（host/infer 各注入依赖，不 duplicate）：
 
 - `activate_core.py` — pip/venv 通过回调注入
-- `cache.py` / `weights.py` — resolve 共享；HF **下载实现**应在 host
+- `cache.py` / `weights.py` — resolve 共享；HF **下载实现**与 `extra_weights` 按文件拉取在 host（`models/pull.py`）
 - `post_pull.py` — run/pull 后 host 与 infer 都可能触发
 
 **Re-export 不是放 protocol 的理由：** host/infer 的薄 re-export 仅为稳定 import 路径；若逻辑只在一层使用，应直接放在该层。

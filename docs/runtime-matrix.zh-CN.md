@@ -11,7 +11,9 @@
 | Bundle | SM | CUDA 线 | Python ABI | Native 模块 |
 |--------|-----|---------|------------|-------------|
 | `pi05_libero` | **89**、**120** | cu124（SM89）、cu130 | **3.12**（`python_abi: 312`） | `flash_rt_kernels`, `flash_rt_fa2` |
-| `qwen_nvfp4` | **120** | **仅 cu130** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2` |
+| `qwen_nvfp4` | **120** | **仅 cu130** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2`, `flash_rt_fp4` |
+| `qwen3_vl_nvfp4` | **120** | **仅 cu130** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2`, `flash_rt_fp4`, `flash_rt_qwen3_vl_kernels` |
+| `groot_n16` | **120** | **仅 cu130** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2` *（本地 dev；尚未上 FlashHub）* |
 
 OS / arch：**linux-x86_64**。配置见 `bundles/<name>/release-matrix.env`。
 
@@ -52,7 +54,7 @@ dist/
 示例 repo URL：
 
 ```text
-https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3
+https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.4
 ```
 
 ### FA2（pi05_libero）
@@ -95,7 +97,7 @@ bash build.sh --repo-root "$FLASHRT_REPO"
 | `flashcli run` | bundle venv 装 torch → 从 `runtime/<env-key>/` 加载 `.so` → 权重 → `entry` |
 
 本机环境键示例：`sm89-cu124-linux-x86_64-py312`、`sm120-cu130-linux-x86_64-py312`（NVIDIA）。env key 固定尾部为 `-{os}-{arch}-py{PY}`，前缀 `platform_tail` 可为 opaque（如 `gfx942-rocm611-linux-x86_64-py312`）。host 自动检测仍生成 NVIDIA 风格 key；调试新平台可设 `FLASHCLI_RUNTIME_ENV_KEY` 强制选中 manifest cell。  
-查看匹配：`flashcli models envs flashcli-bundle/pi05_libero:1.0.3`
+查看匹配：`flashcli models envs flashcli-bundle/pi05_libero:1.0.4`
 
 **不要**用与 manifest `python_abi` 不一致的系统 Python 跑 bundle（会在 venv / preflight 阶段失败）。
 

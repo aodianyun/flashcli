@@ -20,7 +20,7 @@ Example:
 ```bash
 export FLASHCLI_HOME=/data/flashcli
 export FLASHCLI_FLASHHUB_API=https://flashhub-api.aodianyun.com/api/v1/repos
-flashcli run flashcli-bundle/pi05_libero:1.0.3
+flashcli run flashcli-bundle/pi05_libero:1.0.4
 flashcli models list
 ```
 
@@ -161,6 +161,9 @@ Engine mode does **not** set `FLASHCLI_CHECKPOINT` (weights passed to `RunEngine
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `HF_HUB_OFFLINE` | `1` (set by flashcli) | Blocks Hugging Face Hub network access during bundle inference. Weights and `extra_weights` must be prepared by `flashcli pull` or host preflight in `run`/`serve`. |
+| `TRANSFORMERS_OFFLINE` | `1` (set by flashcli) | Same for `transformers` / `AutoTokenizer` — fails fast if local tokenizer files are incomplete. |
+| `HF_DATASETS_OFFLINE` | `1` (set by flashcli) | Blocks datasets hub access in the infer subprocess. |
 | `FLASHCLI_SERVE_LOG_LEVEL` | `INFO` | Application log level for `flashcli serve`. |
 | `FLASHCLI_UVICORN_LOG_LEVEL` | `info` | Uvicorn access/error log level. |
 | `FLASHCLI_SERVE_BUSY_TIMEOUT_SEC` | `0` | Max seconds to wait when the engine is busy (`0` = no limit). |

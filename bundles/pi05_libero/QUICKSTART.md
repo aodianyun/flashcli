@@ -3,18 +3,18 @@
 <p align="right"><a href="QUICKSTART.zh-CN.md">简体中文</a></p>
 
 **Requires**: Linux · NVIDIA **SM89** (Ada) or **SM120** (Blackwell) · CUDA **12.4+** (SM89) or **13.x** (SM120) · Python **3.12** (bundle venv; host CLI 3.10+)  
-**Ref**: `flashcli-bundle/pi05_libero:1.0.3` · weights [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) (~7.5GB, not in zip)
+**Ref**: `flashcli-bundle/pi05_libero:1.0.4` · weights [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) (~7.5GB, not in zip)
 
 ```bash
 cd /path/to/flashcli
-pip install -e .
+pip install -e ./flashcli-bundle -e .
 export BUNDLE="$(pwd)/bundles/pi05_libero"   # local dev; omit for FlashHub sync
 ```
 
 Check runtime cell for this host:
 
 ```bash
-flashcli models envs flashcli-bundle/pi05_libero:1.0.3
+flashcli models envs flashcli-bundle/pi05_libero:1.0.4
 # expect sm89-cu124-*, sm89-cu130-*, or sm120-cu130-* matching your GPU + CUDA userland
 ```
 
@@ -56,7 +56,7 @@ flashcli run "$BUNDLE" \
   --image /path/to/base.jpg
 ```
 
-Weights cache: `~/.flashcli/models/pi05_libero/1.0.3/checkpoint/` (see `flashcli models show "$BUNDLE"`)
+Weights cache: `~/.flashcli/models/pi05_libero/1.0.4/checkpoint/` (see `flashcli models show "$BUNDLE"`)
 
 Use a local checkpoint:
 
@@ -84,7 +84,7 @@ flashcli run "$BUNDLE" \
 | Symptom | Fix |
 |---------|-----|
 | `LocalEntryNotFoundError` | network/DNS; set `HF_ENDPOINT` or `--checkpoint` |
-| `NativeEnvironmentNotSupportedError` | GPU/CUDA cell not in manifest; run `flashcli models envs flashcli-bundle/pi05_libero:1.0.3` and sync a current bundle |
-| `no kernel image...` | wrong GPU or CUDA cell; run `flashcli models envs flashcli-bundle/pi05_libero:1.0.3` on this host |
+| `NativeEnvironmentNotSupportedError` | GPU/CUDA cell not in manifest; run `flashcli models envs flashcli-bundle/pi05_libero:1.0.4` and sync a current bundle |
+| `no kernel image...` | wrong GPU or CUDA cell; run `flashcli models envs flashcli-bundle/pi05_libero:1.0.4` on this host |
 | `'GemmRunner'... fp8_nt_dev` | rebuild FlashRT or use `_pi05_compat.py` |
 | `FvkContext is already registered` | upgrade flashcli |

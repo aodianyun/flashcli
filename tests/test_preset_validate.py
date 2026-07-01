@@ -79,11 +79,11 @@ def test_fetch_manifest_downloads_when_no_cache(
         "entry": {"run": {"module": "run", "attr": "RunEngine"}},
         "runtime": {"sm89-cu124-linux-x86_64-py312": "runtime/x"},
     }
-    repo = "https://flashhub.example/pi05/1.0.3"
+    repo = "https://flashhub.example/pi05/1.0.4"
     preset = Preset(
-        name="flashcli-bundle/pi05_libero:1.0.3",
+        name="flashcli-bundle/pi05_libero:1.0.4",
         raw={"bundle": {"repo": repo}},
-        cache_key="pi05_libero/1.0.3",
+        cache_key="pi05_libero/1.0.4",
     )
     monkeypatch.setattr(
         "flashcli.bundle.preset_validate.read_preset_marker",

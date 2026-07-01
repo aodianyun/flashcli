@@ -13,7 +13,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 3. **manifest-first + 分包下载** — 先拉 manifest → preflight 匹配 `runtime` env key → 只下载本 env 的 `runtime/<env-key>/`。
 4. **固定 Python ABI** — 每个 bundle 一个 venv（`python_abi`）；CLI 准备完成后 **re-exec** 进 bundle venv。
 5. **主机只装一份 flashcli** — 主机 venv 仅 pip **`flashcli-bundle`**（协议）；bundle venv pip **`flashcli-bundle[infer]`**。主机代码**禁止** `import flashcli_bundle.infer`。
-6. **一条命令** — `flashcli run <preset>` 串联：sync → 依赖 → 权重 → `post_pull` → 推理。
+6. **一条命令** — `flashcli run <preset>` 串联：sync → 依赖 → 权重（主机缺失则下载）→ `post_pull` → bundle venv 内离线推理。
 
 ### 模块放哪（必读）
 
@@ -74,7 +74,7 @@ bundle venv **不** prepend 主机 `PYTHONPATH`，**不** import 主机 `flashcl
 
 flashcli **不** pip 依赖 `flash-rt`。`import flash_rt` 仅在 `activate_bundle()` 之后可用。
 
-## 数据流（`flashcli run flashcli-bundle/pi05_libero:1.0.3`）
+## 数据流（`flashcli run flashcli-bundle/pi05_libero:1.0.4`）
 
 ```mermaid
 sequenceDiagram
@@ -88,7 +88,7 @@ sequenceDiagram
   participant Cache as models.cache
   participant Ldr as engines.loader
 
-  U->>CLI: flashcli run flashcli-bundle/pi05_libero:1.0.3
+  U->>CLI: flashcli run flashcli-bundle/pi05_libero:1.0.4
   CLI->>Art: ensure_runtime（若无缓存）
   Art->>FH: fetch_repo_index(repo URL)
   FH-->>Art: files[] + download_url
@@ -145,16 +145,18 @@ sequenceDiagram
 | `runtime/reexec.py` | 主机准备 → re-exec：`python -m flashcli_bundle.infer` |
 | `flashcli_bundle.infer` | 在 bundle venv 内执行 `run` / `serve`（`flashcli-bundle[infer]`） |
 | `deps.py` | 主机 pip + `flashcli-bundle`；bundle venv 经 `ensure_flashcli_bundle_in_venv(..., extras=("infer",))` |
-| `models/cache.py` | 主机拉权重 + 缓存；bundle infer 仅解析路径 |
+| `models/cache.py` | 主机拉权重 + 缓存；bundle infer 仅解析（`download=False`） |
 | `engines/loader.py` | 加载 `entry` |
 
 ## 示例 ref
 
 | Ref | 能力 | 说明 |
 |-----|------|------|
-| `flashcli-bundle/pi05_libero:1.0.3` | `run` | Pi0.5 LIBERO |
+| `flashcli-bundle/pi05_libero:1.0.4` | `run` | Pi0.5 LIBERO |
 | `flashcli-bundle/qwen_nvfp4:1.0.1@qwen3` | `run`, `serve` | Qwen3-8B |
 | `flashcli-bundle/qwen_nvfp4:1.0.1@qwen36` | `run`, `serve` | Qwen3.6-27B + MTP |
+| `flashcli-bundle/qwen3_vl_nvfp4:1.0.0` | `run`, `serve` | Qwen3-VL-8B |
+| `bundles/groot_n16` *（本地 dev）* | `run` | GROOT N1.6 |
 
 见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
 

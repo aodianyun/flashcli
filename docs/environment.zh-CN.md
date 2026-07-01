@@ -20,7 +20,7 @@ flashcli 通过环境变量配置缓存路径、preset ref、下载行为，以�
 ```bash
 export FLASHCLI_HOME=/data/flashcli
 export FLASHCLI_FLASHHUB_API=https://flashhub-api.aodianyun.com/api/v1/repos
-flashcli run flashcli-bundle/pi05_libero:1.0.3
+flashcli run flashcli-bundle/pi05_libero:1.0.4
 flashcli models list
 ```
 
@@ -162,6 +162,9 @@ Engine 模式**不**设置 `FLASHCLI_CHECKPOINT`（权重通过 `RunEngine.load(
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
+| `HF_HUB_OFFLINE` | `1`（flashcli 设置） | bundle 推理阶段禁止访问 Hugging Face Hub。权重与 `extra_weights` 须由 `flashcli pull` 或 `run`/`serve` 主机预检准备好。 |
+| `TRANSFORMERS_OFFLINE` | `1`（flashcli 设置） | 同上，作用于 `transformers` / `AutoTokenizer` — 本地 tokenizer 不完整时快速失败。 |
+| `HF_DATASETS_OFFLINE` | `1`（flashcli 设置） | infer 子进程禁止访问 datasets hub。 |
 | `FLASHCLI_SERVE_LOG_LEVEL` | `INFO` | `flashcli serve` 应用日志级别。 |
 | `FLASHCLI_UVICORN_LOG_LEVEL` | `info` | Uvicorn 访问/错误日志级别。 |
 | `FLASHCLI_SERVE_BUSY_TIMEOUT_SEC` | `0` | 引擎忙碌时最长等待秒数（`0` = 不限制）。 |

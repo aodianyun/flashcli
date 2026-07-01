@@ -123,7 +123,7 @@ def hints_for(exc: BaseException) -> list[str]:
 
     if isinstance(exc, ValueError) and "Invalid preset ref" in msg:
         hints.append(
-            "Examples: flashcli-bundle/pi05_libero:1.0.3, "
+            "Examples: flashcli-bundle/pi05_libero:1.0.4, "
             "flashcli-bundle/qwen_nvfp4:1.0.1@qwen36, bundles/qwen_nvfp4@qwen3"
         )
         return hints

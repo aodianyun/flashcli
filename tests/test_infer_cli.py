@@ -418,9 +418,9 @@ def test_resolve_manifest_skips_stale_cached_repo(
         name="pi05_libero",
         raw={
             "description": "test",
-            "bundle": {"repo": "https://flashhub.example/pi05/1.0.3"},
+            "bundle": {"repo": "https://flashhub.example/pi05/1.0.4"},
         },
-        cache_key="pi05_libero/1.0.3",
+        cache_key="pi05_libero/1.0.4",
     )
     write_preset_marker(
         preset,
@@ -438,9 +438,9 @@ def test_resolve_manifest_skips_stale_cached_repo(
         name="pi05_libero",
         raw={
             "description": "test",
-            "bundle": {"repo": "https://flashhub.example/pi05/1.0.3"},
+            "bundle": {"repo": "https://flashhub.example/pi05/1.0.4"},
         },
-        cache_key="pi05_libero/1.0.3",
+        cache_key="pi05_libero/1.0.4",
     )
 
     monkeypatch.setattr(
@@ -462,7 +462,7 @@ def test_resolve_manifest_skips_cache_missing_protocol_version(
 
     monkeypatch.setattr("flashcli.config.BUNDLES_DIR", tmp_path / "bundles")
     monkeypatch.setattr("flashcli_bundle.paths.BUNDLES_DIR", tmp_path / "bundles")
-    repo = "https://flashhub.example/pi05/1.0.3"
+    repo = "https://flashhub.example/pi05/1.0.4"
     bundle_root = tmp_path / "cached"
     bundle_root.mkdir()
     old_manifest = {

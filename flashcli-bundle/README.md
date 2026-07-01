@@ -24,9 +24,11 @@ pip install --no-deps "flashcli @ git+https://github.com/aodianyun/flashcli.git@
 **Bundle authors / monorepo dev:**
 
 ```bash
-# same git repo as flashcli
+# host CLI + protocol (build, validate, pull, run from repo)
+pip install -e "./flashcli-bundle"
+pip install -e ".[dev]"
+# optional: infer subprocess tests
 pip install -e "./flashcli-bundle[infer]"
-pip install -e .
 ```
 
 **From git (protocol + infer runtime):**

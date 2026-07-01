@@ -13,7 +13,7 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 3. **Manifest-first + split download** — fetch manifest → preflight against `runtime` keys → download only this host’s `runtime/<env-key>/`.
 4. **Fixed Python ABI** — one venv per bundle (`python_abi`); CLI **re-execs** into that venv after prepare.
 5. **Single host flashcli install** — host venv installs **`flashcli-bundle`** (protocol only); bundle venvs install **`flashcli-bundle[infer]`**. Host code **must not** `import flashcli_bundle.infer`.
-6. **One command** — `flashcli run <ref>` chains sync → deps → weights → `post_pull` → inference.
+6. **One command** — `flashcli run <ref>` chains sync → deps → weights (host download if missing) → `post_pull` → offline inference in bundle venv.
 
 ### Where modules live (required reading)
 
@@ -75,7 +75,7 @@ During `activate_bundle()`, `PYTHONPATH` prepends the **bundle root** so `entry`
 
 flashcli does **not** pip-depend on `flash-rt`. `import flash_rt` is only valid after `activate_bundle()`.
 
-## Data flow (`flashcli run flashcli-bundle/pi05_libero:1.0.3`)
+## Data flow (`flashcli run flashcli-bundle/pi05_libero:1.0.4`)
 
 ```mermaid
 sequenceDiagram
@@ -89,7 +89,7 @@ sequenceDiagram
   participant Cache as models.cache
   participant Ldr as engines.loader
 
-  U->>CLI: flashcli run flashcli-bundle/pi05_libero:1.0.3
+  U->>CLI: flashcli run flashcli-bundle/pi05_libero:1.0.4
   CLI->>Art: ensure_runtime (if not cached)
   Art->>FH: fetch_repo_index(repo URL)
   FH-->>Art: files[] + download_url
@@ -146,16 +146,18 @@ See [model_bundle_standard.md](model_bundle_standard.md).
 | `runtime/reexec.py` | Host prepare → `execve` `python -m flashcli_bundle.infer` |
 | `flashcli_bundle.infer` | `run` / `serve` inside bundle venv |
 | `deps.py` | Host pip + `flashcli-bundle`; bundle venv gets `[infer]` via `ensure_flashcli_bundle_in_venv` |
-| `models/cache.py` | Host weight pull + cache; bundle infer resolve-only |
+| `models/cache.py` | Host weight pull + cache; bundle infer resolve-only (`download=False`) |
 | `engines/loader.py` | Load `entry` |
 
 ## Example refs
 
 | Ref | capabilities |
 |-----|--------------|
-| `flashcli-bundle/pi05_libero:1.0.3` | `run` |
+| `flashcli-bundle/pi05_libero:1.0.4` | `run` |
 | `flashcli-bundle/qwen_nvfp4:1.0.1@qwen3` | `run`, `serve` |
 | `flashcli-bundle/qwen_nvfp4:1.0.1@qwen36` | `run`, `serve` |
+| `flashcli-bundle/qwen3_vl_nvfp4:1.0.0` | `run`, `serve` |
+| `bundles/groot_n16` *(local dev)* | `run` |
 
 See [model_bundle_standard.md](model_bundle_standard.md).
 

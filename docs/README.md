@@ -18,7 +18,11 @@ Publish a bundle to FlashHub — [bundle_publish_standard.md](bundle_publish_sta
 
 ### Architecture (optional)
 
-Host CLI vs bundle venv, sync flow, module map — [architecture.md](architecture.md).
+Host CLI vs bundle venv, sync flow, module map — [architecture.md](architecture.md). Maintainer-oriented layer split: [module_layers.md](module_layers.md).
+
+### Maintainers (internal)
+
+Build, pack, and publish bundles — [bundle_builder_guide.md](bundle_builder_guide.md) · runtime matrix [runtime-matrix.md](runtime-matrix.md) (indexed from [CONTRIBUTING.md](../CONTRIBUTING.md) only).
 
 ## Doc index
 
@@ -28,5 +32,6 @@ Host CLI vs bundle venv, sync flow, module map — [architecture.md](architectur
 | [model_bundle_standard.md](model_bundle_standard.md) | Preset ref syntax + end-user runtime flow |
 | [architecture.md](architecture.md) | Host CLI, bundle venv, re-exec, module map |
 | [environment.md](environment.md) | Environment variables |
+| [module_layers.md](module_layers.md) | Host CLI vs `flashcli_bundle` package boundaries |
 
 Per-preset commands: [bundles/](../bundles/)

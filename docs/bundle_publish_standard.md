@@ -84,7 +84,7 @@ flashcli-bundle/<name>:<version>[@variant]
 Examples:
 
 ```bash
-flashcli run flashcli-bundle/pi05_libero:1.0.3
+flashcli run flashcli-bundle/pi05_libero:1.0.4
 flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen3
 flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
 ```
@@ -120,7 +120,7 @@ Full syntax: [model_bundle_standard.md](model_bundle_standard.md).
 | `serve_options` | conditional | Required when there is no `variants` and `serve` is supported |
 | `weights` | conditional | Weight source for a single-preset bundle |
 | `variants` | conditional | Required when multiple presets share one repo (see §3.3) |
-| `post_pull` | no | Hooks after weight download (e.g. tokenizer setup) |
+| `post_pull` | no | Host-only hooks after weight download (non-Hub assets, e.g. PaliGemma URL). Prefer `extra_weights` for HF/ModelScope repos. |
 
 ### 3.2 `entry`
 
@@ -166,7 +166,7 @@ Common variant fields:
 | `description` | Variant summary |
 | `weights_dir` | Subdirectory name under the preset cache for weights |
 | `weights` | `{ "source": "huggingface", "repo": "…", "revision": "…" }` |
-| `extra_weights` | Additional weights (e.g. Qwen MTP); same shape as `weights`; may add `cache_name`, `allow_patterns` |
+| `extra_weights` | Additional weights (e.g. Qwen MTP, GROOT tokenizer); see §3.5.1 |
 | `env` | **Engine mode:** process env before entry runs; `{models_dir}`, `{bundle_root}` (see §4.4.2). Script mode does not apply manifest `env` (see §4.4.1). |
 | `run_options` / `serve_options` | Variant-specific CLI options (see §3.6) |
 
@@ -208,6 +208,38 @@ The bundle venv Python version is fixed by `python_abi`, independent of the host
 | `source` | Supported: `"huggingface"`, `"modelscope"` |
 | `repo` / `revision` | Hugging Face model id and branch/commit |
 | `require_norm_stats` | Optional; set `true` for VLA policies that need norm stats |
+
+### 3.5.1 `extra_weights` (sidecar assets)
+
+Use for **additional Hugging Face / ModelScope repos** that are not the main `weights` checkpoint — e.g. Qwen3.6 MTP (`cache_name`), or GROOT Qwen3 tokenizer files co-located under the main checkpoint.
+
+```json
+"extra_weights": {
+  "qwen3_tokenizer": {
+    "source": "huggingface",
+    "repo": "Qwen/Qwen3-1.7B",
+    "allow_patterns": [
+      "tokenizer.json",
+      "tokenizer_config.json",
+      "vocab.json",
+      "merges.txt"
+    ],
+    "checkpoint_subdir": "tokenizer"
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `source` / `repo` / `revision` | Same as `weights` |
+| `cache_name` | Optional; install under `~/.flashcli/models/<cache_name>` (default: use manifest key) |
+| `checkpoint_subdir` | Optional; install under `{checkpoint}/<subdir>/` instead of a separate cache dir |
+| `allow_patterns` | Files to fetch (Hub CLI `--include`); list explicit filenames when the Hub returns one file per invocation |
+| `require_any_patterns` | Optional; readiness check uses **any** match (legacy; prefer listing all required files in `allow_patterns`) |
+
+**Host vs infer:** `flashcli pull` and the host preflight inside `flashcli run` / `serve` download `weights` + `extra_weights` + run `post_pull`. The bundle venv sets `HF_HUB_OFFLINE=1` during inference — missing assets must be fixed by re-running `flashcli pull`, not by runtime Hub access.
+
+**Prefer `extra_weights` over `post_pull`** for Hugging Face repos. Reserve `post_pull` for non-Hub assets (e.g. Pi0.5 PaliGemma tokenizer from a fixed URL).
 
 ### 3.6 `run_options` / `serve_options`
 

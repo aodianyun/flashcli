@@ -35,7 +35,7 @@ def repo_url_for_preset(preset: Preset) -> str:
     if not repo:
         raise BundleCatalogError(
             f"Preset {preset.name!r} has no bundle.repo. "
-            "Use a FlashHub ref such as flashcli-bundle/pi05_libero:1.0.3"
+            "Use a FlashHub ref such as flashcli-bundle/pi05_libero:1.0.4"
         )
     return repo
 

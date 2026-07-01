@@ -11,7 +11,7 @@ from flashcli_bundle import paths as config
 from flashcli_bundle.preset import Preset
 
 _REF_EXAMPLES = (
-    "flashcli-bundle/pi05_libero:1.0.3\n"
+    "flashcli-bundle/pi05_libero:1.0.4\n"
     "  flashcli-bundle/qwen_nvfp4:1.0.1@qwen36\n"
     "  bundles/qwen_nvfp4@qwen36  (local dev)"
 )

@@ -19,7 +19,7 @@ namespace/bundle:version[@variant]
 Examples:
 
 ```bash
-flashcli run flashcli-bundle/pi05_libero:1.0.3
+flashcli run flashcli-bundle/pi05_libero:1.0.4
 flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen3
 flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
 ```
@@ -28,7 +28,7 @@ flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
 |------|---------|
 | `namespace/bundle:version` | FlashHub repo slug + pinned version |
 | `@variant` | Optional; selects `variants.*` in manifest (e.g. Qwen3 vs Qwen3.6) |
-| Full URL | `https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.3` also accepted |
+| Full URL | `https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.4` also accepted |
 
 **API base** (env): `FLASHCLI_FLASHHUB_API` (default `https://flashhub-api.aodianyun.com/api/v1/repos`).  
 Browse published bundles on **[flashhub.top](https://flashhub.top)** — the public site; the API is not yet served on that domain.  
@@ -62,9 +62,12 @@ Weights are **not** in the bundle; cached under `~/.flashcli/models/<bundle>/<ve
 3. Download entry tree + **only** matching `runtime/<env-key>/`
 4. Create bundle venv (`python_abi`, manifest torch)
 5. **Re-exec** infer inside bundle venv — [architecture.md](architecture.md)
-6. Activate → HF weights → `entry`
+6. **Host** (before re-exec): download `weights` + `extra_weights` + `post_pull` if cache is incomplete — same code path as `flashcli pull`
+7. **Bundle venv**: resolve local checkpoint only (`HF_HUB_OFFLINE=1`); run `entry`
 
-`flashcli bundle sync <ref>` pre-fetches; first `run` / `serve` syncs automatically.
+`flashcli pull <ref>` runs steps 1–6 without inference. First `flashcli run` / `serve` also runs 1–6 automatically when cache is cold.
+
+`flashcli bundle sync <ref>` pre-fetches the FlashHub tree only (no weights).
 
 **Env key** (`flashcli models envs <ref>`): `sm{SM}-cu{CUDA}-linux-x86_64-py{PY}`.
 

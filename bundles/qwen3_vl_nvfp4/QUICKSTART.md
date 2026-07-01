@@ -7,7 +7,7 @@
 
 ```bash
 cd /path/to/flashcli
-pip install -e ./flashcli-bundle && pip install -e .
+pip install -e ./flashcli-bundle -e .
 export BUNDLE="$(pwd)/bundles/qwen3_vl_nvfp4"   # local dev; omit for FlashHub sync
 ```
 

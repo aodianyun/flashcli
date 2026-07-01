@@ -84,7 +84,7 @@ flashcli-bundle/<name>:<version>[@variant]
 示例：
 
 ```bash
-flashcli run flashcli-bundle/pi05_libero:1.0.3
+flashcli run flashcli-bundle/pi05_libero:1.0.4
 flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen3
 flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
 ```
@@ -120,7 +120,7 @@ flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
 | `serve_options` | 条件 | 无 `variants` 且支持 `serve` 时必填 |
 | `weights` | 条件 | 单 preset bundle 的权重来源 |
 | `variants` | 条件 | 多 preset 共用 repo 时必填（见 §3.3） |
-| `post_pull` | 否 | 权重拉取后的钩子（如 tokenizer 准备） |
+| `post_pull` | 否 | 主机侧权重拉取后钩子（非 Hub 资源，如 PaliGemma URL）。Hugging Face / ModelScope 侧车资源优先用 `extra_weights` |
 
 ### 3.2 `entry`
 
@@ -166,7 +166,7 @@ variant 块常用字段：
 | `description` | variant 说明 |
 | `weights_dir` | 权重在本地 cache 下的子目录名（相对 preset） |
 | `weights` | `{ "source": "huggingface", "repo": "…", "revision": "…" }` |
-| `extra_weights` | 附加权重（如 Qwen MTP），结构同 weights，可加 `cache_name`、`allow_patterns` |
+| `extra_weights` | 附加权重（如 Qwen MTP、GROOT tokenizer）；见 §3.5.1 |
 | `env` | **Engine 模式**：entry 执行前写入进程环境，支持 `{models_dir}`、`{bundle_root}`（见 §4.4.2）。Script 模式不应用 manifest `env`（见 §4.4.1）。 |
 | `run_options` / `serve_options` | 该 variant 专属 CLI 参数（结构见 §3.5） |
 
@@ -208,6 +208,38 @@ bundle venv 的 Python 版本由 `python_abi` 决定，与主机 CLI Python 版�
 | `source` | 当前支持 `"huggingface"`、`"modelscope"` |
 | `repo` / `revision` | Hugging Face 模型 id 与分支/提交 |
 | `require_norm_stats` | 可选；VLA 等需 norm stats 时为 `true` |
+
+### 3.5.1 `extra_weights`（侧车资源）
+
+用于主 `weights` checkpoint **之外**的 Hugging Face / ModelScope 仓库 — 例如 Qwen3.6 MTP（`cache_name`），或 GROOT 的 Qwen3 tokenizer 与主 checkpoint 同目录存放。
+
+```json
+"extra_weights": {
+  "qwen3_tokenizer": {
+    "source": "huggingface",
+    "repo": "Qwen/Qwen3-1.7B",
+    "allow_patterns": [
+      "tokenizer.json",
+      "tokenizer_config.json",
+      "vocab.json",
+      "merges.txt"
+    ],
+    "checkpoint_subdir": "tokenizer"
+  }
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `source` / `repo` / `revision` | 同 `weights` |
+| `cache_name` | 可选；安装到 `~/.flashcli/models/<cache_name>`（默认用 manifest 键名） |
+| `checkpoint_subdir` | 可选；安装到 `{checkpoint}/<subdir>/`，而非独立 cache 目录 |
+| `allow_patterns` | 要拉取的文件（Hub CLI `--include`）；Hub 常一次只返回一个文件时，应列出全部必需文件名 |
+| `require_any_patterns` | 可选；就绪检查为**任一**匹配（遗留；优先在 `allow_patterns` 中列出全部必需文件） |
+
+**主机 vs infer：** `flashcli pull` 与 `flashcli run` / `serve` 的主机预检会下载 `weights` + `extra_weights` 并执行 `post_pull`。bundle venv 推理阶段设置 `HF_HUB_OFFLINE=1` — 缺文件应重新 `flashcli pull`，而非在运行时访问 Hub。
+
+**Hugging Face 仓库优先用 `extra_weights`，少用 `post_pull`。** `post_pull` 保留给非 Hub 资源（如 Pi0.5 从固定 URL 拉 PaliGemma tokenizer）。
 
 ### 3.6 `run_options` / `serve_options`
 
