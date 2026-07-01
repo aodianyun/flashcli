@@ -143,17 +143,52 @@ def _dest_weight_files(dest: Path) -> frozenset[str]:
 
 
 def _run_hub_download_until_ready(
-    download_once: Any,
+    download_patterns: Any,
     *,
     dest: Path,
     spec: dict[str, Any],
     allow_patterns: list[str] | None,
     require_norm_stats: bool,
 ) -> bool:
-    """Call *download_once* repeatedly until cache is ready or no new files appear."""
+    """Download until cache is ready.
+
+    When ``require_any_patterns`` is set, request each ``allow_patterns`` entry
+    separately — the Hub CLI often fetches only one file per invocation.
+    """
+    any_patterns = spec.get("require_any_patterns")
+    if isinstance(any_patterns, list) and any_patterns and allow_patterns:
+        for pattern in allow_patterns:
+            if _weights_cache_ready(
+                dest,
+                spec,
+                allow_patterns=allow_patterns,
+                require_norm_stats=require_norm_stats,
+            ):
+                return True
+            prev_files = _dest_weight_files(dest)
+            for _ in range(_hub_resume_rounds()):
+                download_patterns([pattern])
+                if _weights_cache_ready(
+                    dest,
+                    spec,
+                    allow_patterns=allow_patterns,
+                    require_norm_stats=require_norm_stats,
+                ):
+                    return True
+                current = _dest_weight_files(dest)
+                if current == prev_files:
+                    break
+                prev_files = current
+        return _weights_cache_ready(
+            dest,
+            spec,
+            allow_patterns=allow_patterns,
+            require_norm_stats=require_norm_stats,
+        )
+
     prev_files = _dest_weight_files(dest)
     for _ in range(_hub_resume_rounds()):
-        download_once()
+        download_patterns(allow_patterns)
         if _weights_cache_ready(
             dest,
             spec,
@@ -254,15 +289,20 @@ def _download_huggingface(
             last_exc: Exception | None = None
             for attempt in range(max_retries):
                 try:
-                    ready = _run_hub_download_until_ready(
-                        lambda: run_hf_cli_download(
+                    def _download_with_patterns(
+                        file_patterns: list[str] | None,
+                    ) -> None:
+                        run_hf_cli_download(
                             repo,
                             dest,
                             revision=rev,
                             endpoint=ep,
-                            allow_patterns=patterns,
+                            allow_patterns=file_patterns,
                             quiet=quiet,
-                        ),
+                        )
+
+                    ready = _run_hub_download_until_ready(
+                        _download_with_patterns,
                         dest=dest,
                         spec=spec,
                         allow_patterns=patterns,
@@ -371,15 +411,20 @@ def _download_modelscope(
             last_exc: Exception | None = None
             for attempt in range(max_retries):
                 try:
-                    ready = _run_hub_download_until_ready(
-                        lambda: run_ms_snapshot_download(
+                    def _ms_download_with_patterns(
+                        file_patterns: list[str] | None,
+                    ) -> None:
+                        run_ms_snapshot_download(
                             model_id,
                             dest,
                             revision=rev_try,
-                            allow_patterns=patterns,
+                            allow_patterns=file_patterns,
                             endpoint=endpoint,
                             quiet=quiet,
-                        ),
+                        )
+
+                    ready = _run_hub_download_until_ready(
+                        _ms_download_with_patterns,
                         dest=dest,
                         spec=spec,
                         allow_patterns=patterns,

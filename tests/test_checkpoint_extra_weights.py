@@ -96,9 +96,10 @@ def test_mtp_incomplete_cache_is_resumed_before_download(
     mock_dl.assert_called_once()
 
 
-def test_hf_extra_weights_resumes_until_require_any(tmp_path: Path, monkeypatch) -> None:
-    """Hub may fetch one file per CLI call; flashcli must keep resuming."""
-    monkeypatch.setenv("FLASHCLI_HF_RESUME_ROUNDS", "5")
+def test_hf_extra_weights_downloads_each_pattern_until_require_any(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Hub fetches one file per CLI call; flashcli requests each pattern in order."""
     monkeypatch.setenv("HF_ENDPOINT", "https://hf-mirror.com")
     dest = tmp_path / "tokenizer"
     dest.mkdir()
@@ -113,20 +114,22 @@ def test_hf_extra_weights_resumes_until_require_any(tmp_path: Path, monkeypatch)
         "require_any_patterns": ["tokenizer.json", "tokenizer_config.json"],
         "checkpoint_subdir": "tokenizer",
     }
-    calls = {"n": 0}
+    seen: list[list[str] | None] = []
 
-    def _incremental_download(*_args, **_kwargs) -> None:
-        calls["n"] += 1
-        if calls["n"] == 1:
-            (dest / "merges.txt").write_bytes(b"fake")
-        elif calls["n"] == 2:
+    def _per_pattern_download(
+        *_args,
+        allow_patterns: list[str] | None = None,
+        **_kwargs,
+    ) -> None:
+        seen.append(allow_patterns)
+        if allow_patterns == ["tokenizer.json"]:
             (dest / "tokenizer.json").write_text("{}", encoding="utf-8")
 
     with patch(
         "flashcli.models.pull.run_hf_cli_download",
-        side_effect=_incremental_download,
+        side_effect=_per_pattern_download,
     ):
         _download_huggingface(spec, dest, quiet=True)
 
-    assert calls["n"] == 2
+    assert seen[0] == ["tokenizer.json"]
     assert (dest / "tokenizer.json").is_file()
