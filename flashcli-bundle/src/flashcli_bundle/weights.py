@@ -188,15 +188,10 @@ def require_extra_weights_cached(
         if not repo:
             continue
         dest = extra_weight_dest(bundle, key, spec, checkpoint_dir=checkpoint_dir)
-        patterns = spec.get("allow_patterns")
-        if isinstance(patterns, list):
-            patterns = [str(p) for p in patterns]
-        else:
-            patterns = None
-        from flashcli_bundle.checkpoint import has_cached_weight_files
+        from flashcli_bundle.checkpoint import extra_weights_ready
 
         require_ns = weights_require_norm_stats(spec)
-        if has_cached_weight_files(dest, patterns, require_norm_stats=require_ns):
+        if extra_weights_ready(dest, spec):
             continue
         raise _extra_weights_missing_error(key, dest)
 

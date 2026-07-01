@@ -7,7 +7,7 @@ from typing import Any
 
 from flashcli.models.pull import _allow_patterns, _write_marker, download_weights
 from flashcli_bundle import weights as _w
-from flashcli_bundle.checkpoint import has_cached_weight_files, weights_require_norm_stats
+from flashcli_bundle.checkpoint import extra_weights_ready, weights_require_norm_stats
 from flashcli_bundle.manifest import BundleManifest
 from flashcli_bundle.preset import Preset
 
@@ -47,9 +47,7 @@ def download_extra_weights(
             bundle, key, spec, checkpoint_dir=checkpoint_dir
         )
         dest.mkdir(parents=True, exist_ok=True)
-        patterns = _allow_patterns(spec)
-        require_ns = weights_require_norm_stats(spec)
-        if has_cached_weight_files(dest, patterns, require_norm_stats=require_ns):
+        if extra_weights_ready(dest, spec):
             continue
         download_weights(spec, dest, quiet=quiet)
 

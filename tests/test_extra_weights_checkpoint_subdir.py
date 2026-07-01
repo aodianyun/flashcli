@@ -8,6 +8,7 @@ from unittest.mock import patch
 from flashcli.bundle.weights import download_extra_weights, ensure_checkpoint
 from flashcli_bundle.manifest import load_bundle_manifest
 from flashcli_bundle.preset import Preset
+from flashcli_bundle.checkpoint import extra_weights_ready
 from flashcli_bundle.weights import extra_weight_dest, require_extra_weights_cached
 
 
@@ -19,10 +20,7 @@ def test_groot_manifest_declares_qwen3_extra_weights() -> None:
     assert isinstance(spec, dict)
     assert spec.get("repo") == "Qwen/Qwen3-1.7B"
     assert spec.get("checkpoint_subdir") == "tokenizer"
-    assert "post_pull" not in manifest.raw or not any(
-        isinstance(step, dict) and step.get("tokenizer") == "qwen3"
-        for step in (manifest.raw.get("post_pull") or [])
-    )
+    assert spec.get("require_any_patterns")
 
 
 def test_extra_weight_dest_checkpoint_subdir(tmp_path: Path) -> None:
@@ -34,6 +32,30 @@ def test_extra_weight_dest_checkpoint_subdir(tmp_path: Path) -> None:
     }
     dest = extra_weight_dest(None, "qwen3_tokenizer", spec, checkpoint_dir=checkpoint)
     assert dest == checkpoint / "tokenizer"
+
+
+def test_extra_weights_ready_require_any_one_tokenizer_file(tmp_path: Path) -> None:
+    tok = tmp_path / "tokenizer"
+    tok.mkdir()
+    (tok / "tokenizer.json").write_text("{}", encoding="utf-8")
+    spec = {
+        "repo": "Qwen/Qwen3-1.7B",
+        "allow_patterns": ["tokenizer*", "vocab*", "merges*"],
+        "require_any_patterns": ["tokenizer.json", "tokenizer_config.json"],
+        "checkpoint_subdir": "tokenizer",
+    }
+    assert extra_weights_ready(tok, spec)
+
+
+def test_extra_weights_ready_require_any_incomplete(tmp_path: Path) -> None:
+    tok = tmp_path / "tokenizer"
+    tok.mkdir()
+    (tok / ".cache").mkdir()
+    spec = {
+        "allow_patterns": ["tokenizer*", "vocab*", "merges*"],
+        "require_any_patterns": ["tokenizer.json", "tokenizer_config.json"],
+    }
+    assert not extra_weights_ready(tok, spec)
 
 
 def test_download_extra_weights_checkpoint_subdir(tmp_path: Path) -> None:
@@ -48,7 +70,6 @@ def test_download_extra_weights_checkpoint_subdir(tmp_path: Path) -> None:
         calls.append(dest)
         dest.mkdir(parents=True, exist_ok=True)
         (dest / "tokenizer.json").write_text("{}", encoding="utf-8")
-        (dest / "tokenizer_config.json").write_text("{}", encoding="utf-8")
 
     with patch("flashcli.bundle.weights.download_weights", side_effect=_fake_download):
         download_extra_weights(

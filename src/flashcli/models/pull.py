@@ -53,22 +53,42 @@ def _hf_endpoint_configured(spec: dict[str, Any]) -> tuple[str, bool]:
     return "", False
 
 
+def _weights_cache_ready(
+    dest: Path,
+    spec: dict[str, Any],
+    *,
+    allow_patterns: list[str] | None,
+    require_norm_stats: bool,
+) -> bool:
+    from flashcli.bundle.checkpoint import extra_weights_ready, has_cached_weight_files
+
+    if spec.get("require_any_patterns") or spec.get("checkpoint_subdir"):
+        return extra_weights_ready(dest, spec)
+    return has_cached_weight_files(
+        dest, allow_patterns, require_norm_stats=require_norm_stats
+    )
+
+
 def _prepare_download_dest(
     dest: Path,
     *,
     quiet: bool,
+    spec: dict[str, Any] | None = None,
     allow_patterns: list[str] | None = None,
     require_norm_stats: bool = False,
     source: str = "huggingface",
 ) -> None:
     """Ensure dest exists; keep partial downloads so the hub client can resume."""
-    from flashcli.bundle.checkpoint import has_cached_weight_files
-
+    if spec is None:
+        spec = {}
     if not dest.exists():
         dest.mkdir(parents=True, exist_ok=True)
         return
-    if has_cached_weight_files(
-        dest, allow_patterns, require_norm_stats=require_norm_stats
+    if _weights_cache_ready(
+        dest,
+        spec,
+        allow_patterns=allow_patterns,
+        require_norm_stats=require_norm_stats,
     ):
         return
     try:
@@ -149,14 +169,13 @@ def _download_huggingface(
     if not repo:
         raise ValueError("HuggingFace weights spec requires non-empty 'repo'")
 
-    from flashcli.bundle.checkpoint import (
-        has_cached_weight_files,
-        weights_require_norm_stats,
-    )
+    from flashcli.bundle.checkpoint import weights_require_norm_stats
 
     patterns = _allow_patterns(spec)
     require_ns = weights_require_norm_stats(spec)
-    if has_cached_weight_files(dest, patterns, require_norm_stats=require_ns):
+    if _weights_cache_ready(
+        dest, spec, allow_patterns=patterns, require_norm_stats=require_ns
+    ):
         if not quiet:
             print(f"Weights already cached: {dest}", file=sys.stderr)
         return
@@ -164,6 +183,7 @@ def _download_huggingface(
     _prepare_download_dest(
         dest,
         quiet=quiet,
+        spec=spec,
         allow_patterns=patterns,
         require_norm_stats=require_ns,
     )
@@ -193,8 +213,11 @@ def _download_huggingface(
                         allow_patterns=patterns,
                         quiet=quiet,
                     )
-                    if has_cached_weight_files(
-                        dest, patterns, require_norm_stats=require_ns
+                    if _weights_cache_ready(
+                        dest,
+                        spec,
+                        allow_patterns=patterns,
+                        require_norm_stats=require_ns,
                     ):
                         return
                     last_exc = RuntimeError(
@@ -265,14 +288,13 @@ def _download_modelscope(
     if not model_id:
         raise ValueError("ModelScope weights spec requires non-empty 'repo'")
 
-    from flashcli.bundle.checkpoint import (
-        has_cached_weight_files,
-        weights_require_norm_stats,
-    )
+    from flashcli.bundle.checkpoint import weights_require_norm_stats
 
     patterns = _allow_patterns(spec)
     require_ns = weights_require_norm_stats(spec)
-    if has_cached_weight_files(dest, patterns, require_norm_stats=require_ns):
+    if _weights_cache_ready(
+        dest, spec, allow_patterns=patterns, require_norm_stats=require_ns
+    ):
         if not quiet:
             print(f"Weights already cached: {dest}", file=sys.stderr)
         return
@@ -280,6 +302,7 @@ def _download_modelscope(
     _prepare_download_dest(
         dest,
         quiet=quiet,
+        spec=spec,
         allow_patterns=patterns,
         require_norm_stats=require_ns,
         source="modelscope",
@@ -306,8 +329,11 @@ def _download_modelscope(
                         endpoint=endpoint,
                         quiet=quiet,
                     )
-                    if has_cached_weight_files(
-                        dest, patterns, require_norm_stats=require_ns
+                    if _weights_cache_ready(
+                        dest,
+                        spec,
+                        allow_patterns=patterns,
+                        require_norm_stats=require_ns,
                     ):
                         return
                     last_exc = RuntimeError(

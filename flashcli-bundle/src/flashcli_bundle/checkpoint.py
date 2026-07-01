@@ -90,6 +90,36 @@ def has_usable_checkpoint(path: Path, *, require_norm_stats: bool = False) -> bo
     return True
 
 
+def _patterns_satisfied(path: Path, patterns: list[str], *, mode: str) -> bool:
+    if not patterns:
+        return False
+    if mode == "any":
+        return any(_matches_allow_pattern(path, pat) for pat in patterns)
+    return all(_matches_allow_pattern(path, pat) for pat in patterns)
+
+
+def extra_weights_ready(path: Path, spec: dict[str, Any] | None) -> bool:
+    """True when an ``extra_weights`` destination has the files it needs."""
+    if not path.is_dir():
+        return False
+    if spec is None:
+        return False
+    require_ns = weights_require_norm_stats(spec)
+    if has_usable_checkpoint(path, require_norm_stats=require_ns):
+        return True
+    any_patterns = spec.get("require_any_patterns")
+    if isinstance(any_patterns, list) and any_patterns:
+        return _patterns_satisfied(
+            path, [str(p) for p in any_patterns], mode="any"
+        )
+    allow_patterns = spec.get("allow_patterns")
+    if isinstance(allow_patterns, list) and allow_patterns:
+        return _patterns_satisfied(
+            path, [str(p) for p in allow_patterns], mode="all"
+        )
+    return has_usable_checkpoint(path, require_norm_stats=require_ns)
+
+
 def has_cached_weight_files(
     path: Path,
     allow_patterns: list[str] | None = None,
