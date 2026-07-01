@@ -20,7 +20,34 @@ def test_groot_manifest_declares_qwen3_extra_weights() -> None:
     assert isinstance(spec, dict)
     assert spec.get("repo") == "Qwen/Qwen3-1.7B"
     assert spec.get("checkpoint_subdir") == "tokenizer"
-    assert spec.get("require_any_patterns")
+    assert spec.get("allow_patterns") == [
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "vocab.json",
+        "merges.txt",
+    ]
+    assert "require_any_patterns" not in spec
+
+
+def test_extra_weights_ready_requires_all_tokenizer_files(tmp_path: Path) -> None:
+    tok = tmp_path / "tokenizer"
+    tok.mkdir()
+    (tok / "tokenizer.json").write_text("{}", encoding="utf-8")
+    spec = {
+        "repo": "Qwen/Qwen3-1.7B",
+        "allow_patterns": [
+            "tokenizer.json",
+            "tokenizer_config.json",
+            "vocab.json",
+            "merges.txt",
+        ],
+        "checkpoint_subdir": "tokenizer",
+    }
+    assert not extra_weights_ready(tok, spec)
+    (tok / "tokenizer_config.json").write_text("{}", encoding="utf-8")
+    (tok / "vocab.json").write_text("{}", encoding="utf-8")
+    (tok / "merges.txt").write_bytes(b"x")
+    assert extra_weights_ready(tok, spec)
 
 
 def test_extra_weight_dest_checkpoint_subdir(tmp_path: Path) -> None:
@@ -69,7 +96,13 @@ def test_download_extra_weights_checkpoint_subdir(tmp_path: Path) -> None:
         del spec, quiet
         calls.append(dest)
         dest.mkdir(parents=True, exist_ok=True)
-        (dest / "tokenizer.json").write_text("{}", encoding="utf-8")
+        for name in (
+            "tokenizer.json",
+            "tokenizer_config.json",
+            "vocab.json",
+            "merges.txt",
+        ):
+            (dest / name).write_text("{}", encoding="utf-8")
 
     with patch("flashcli.bundle.weights.download_weights", side_effect=_fake_download):
         download_extra_weights(
@@ -116,8 +149,13 @@ def test_ensure_checkpoint_downloads_extra_into_checkpoint_subdir(
         dest = checkpoint_dir / "tokenizer"
         extra_calls.append(dest)
         dest.mkdir(parents=True, exist_ok=True)
-        (dest / "tokenizer.json").write_text("{}", encoding="utf-8")
-        (dest / "tokenizer_config.json").write_text("{}", encoding="utf-8")
+        for name in (
+            "tokenizer.json",
+            "tokenizer_config.json",
+            "vocab.json",
+            "merges.txt",
+        ):
+            (dest / name).write_text("{}", encoding="utf-8")
 
     with (
         patch("flashcli.bundle.weights.download_merged_weights", side_effect=_fake_main),

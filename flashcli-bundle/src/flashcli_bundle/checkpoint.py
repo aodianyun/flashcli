@@ -98,6 +98,11 @@ def _patterns_satisfied(path: Path, patterns: list[str], *, mode: str) -> bool:
     return all(_matches_allow_pattern(path, pat) for pat in patterns)
 
 
+def pattern_matches_path(path: Path, pattern: str) -> bool:
+    """True when *pattern* already matches a file under *path*."""
+    return _matches_allow_pattern(path, pattern)
+
+
 def extra_weights_ready(path: Path, spec: dict[str, Any] | None) -> bool:
     """True when an ``extra_weights`` destination has the files it needs."""
     if not path.is_dir():

@@ -107,7 +107,7 @@ def ensure_model_cached(
         path = checkpoint_override.expanduser().resolve()
         if not path.exists():
             raise FileNotFoundError(f"Checkpoint not found: {path}")
-        if bundle is not None:
+        if download and bundle is not None:
             post = post_pull_steps(bundle)
             if post:
                 run_post_pull_steps(post, quiet=quiet)
@@ -122,7 +122,7 @@ def ensure_model_cached(
         quiet=quiet,
         download=download,
     )
-    if bundle is not None:
+    if download and bundle is not None:
         post = post_pull_steps(bundle)
         if post:
             run_post_pull_steps(post, quiet=quiet)

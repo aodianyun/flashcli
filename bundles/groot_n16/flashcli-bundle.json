@@ -113,10 +113,6 @@
         "vocab.json",
         "merges.txt"
       ],
-      "require_any_patterns": [
-        "tokenizer.json",
-        "tokenizer_config.json"
-      ],
       "checkpoint_subdir": "tokenizer"
     }
   },

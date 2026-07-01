@@ -89,7 +89,7 @@ def _ensure_host_weights_before_reexec(
     mtp_checkpoint: Path | None,
     quiet: bool,
 ) -> None:
-    """Validate manifest, sync runtime, then pull weights on the host CLI."""
+    """Validate manifest/runtime, then ensure weights (download if missing, same as pull)."""
     from flashcli.bundle.preflight import BundleEnvironmentError
     from flashcli.bundle.preset_validate import validate_preset_before_sync
     from flashcli.bundle.variants import resolve_effective_model_variant

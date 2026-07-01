@@ -93,7 +93,13 @@ def ensure_bundle_runtime_and_reexec(
         python=py, quiet=quiet, force=force, extras=("infer",)
     )
 
+    from flashcli.runtime.mirror import apply_mirror_env
+
+    apply_mirror_env()
     env = os.environ.copy()
+    env["HF_HUB_OFFLINE"] = "1"
+    env["TRANSFORMERS_OFFLINE"] = "1"
+    env["HF_DATASETS_OFFLINE"] = "1"
     env["FLASHCLI_IN_BUNDLE_VENV"] = "1"
     env["FLASHCLI_RUNTIME_ID"] = runtime_id
     env["FLASHCLI_BUNDLE_ROOT"] = str(bundle_root)

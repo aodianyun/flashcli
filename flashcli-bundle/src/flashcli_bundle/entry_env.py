@@ -20,6 +20,9 @@ ENV_EXTRA_WEIGHT_PREFIX = "FLASHCLI_EXTRA_WEIGHT_"
 # --- Documented engine-only names (also set via manifest ``env`` / post_pull) ---
 ENV_MTP_CHECKPOINT = "FLASHRT_QWEN36_MTP_CKPT_DIR"
 ENV_PALIGEMMA_TOKENIZER = "FLASH_RT_PALIGEMMA_TOKENIZER"
+ENV_HF_HUB_OFFLINE = "HF_HUB_OFFLINE"
+ENV_TRANSFORMERS_OFFLINE = "TRANSFORMERS_OFFLINE"
+ENV_HF_DATASETS_OFFLINE = "HF_DATASETS_OFFLINE"
 
 _SCRIPT_ENV_KEYS = frozenset(
     {
@@ -42,6 +45,35 @@ def _clear_script_entry_env(bundle: BundleManifest, *, variant: str | None) -> N
         os.environ.pop(key, None)
     for manifest_key in extra_weights_spec(bundle, variant=variant):
         os.environ.pop(extra_weight_env_name(manifest_key), None)
+
+
+def apply_offline_hub_env() -> None:
+    """Block Hugging Face hub access during bundle inference (pull prepares assets)."""
+    os.environ[ENV_HF_HUB_OFFLINE] = "1"
+    os.environ[ENV_TRANSFORMERS_OFFLINE] = "1"
+    os.environ[ENV_HF_DATASETS_OFFLINE] = "1"
+
+
+def _validate_extra_weights_cached(
+    bundle: BundleManifest,
+    *,
+    checkpoint: Path,
+    variant: str | None,
+) -> None:
+    from flashcli_bundle.checkpoint import extra_weights_ready
+
+    for key, spec in extra_weights_spec(bundle, variant=variant).items():
+        if not isinstance(spec, dict):
+            continue
+        if not str(spec.get("repo", "")).strip():
+            continue
+        dest = extra_weight_dir(bundle, key, spec, checkpoint_dir=checkpoint)
+        if extra_weights_ready(dest, spec):
+            continue
+        raise FileNotFoundError(
+            f"Extra weights {key!r} are not ready at {dest}.\n"
+            "Run on the host CLI: flashcli pull <preset>"
+        )
 
 
 def inject_script_entry_env(
@@ -95,6 +127,10 @@ def inject_entry_env(
     variant: str | None,
     mtp_checkpoint: Path | None = None,
 ) -> None:
+    apply_offline_hub_env()
+    _validate_extra_weights_cached(
+        bundle, checkpoint=checkpoint, variant=variant
+    )
     if mode == "script":
         inject_script_entry_env(
             preset=preset,

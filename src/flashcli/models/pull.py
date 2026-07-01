@@ -142,6 +142,18 @@ def _dest_weight_files(dest: Path) -> frozenset[str]:
     )
 
 
+def _use_per_pattern_hub_download(
+    spec: dict[str, Any],
+    allow_patterns: list[str] | None,
+) -> bool:
+    if not allow_patterns:
+        return False
+    if str(spec.get("checkpoint_subdir", "")).strip():
+        return True
+    any_patterns = spec.get("require_any_patterns")
+    return isinstance(any_patterns, list) and bool(any_patterns)
+
+
 def _run_hub_download_until_ready(
     download_patterns: Any,
     *,
@@ -152,11 +164,11 @@ def _run_hub_download_until_ready(
 ) -> bool:
     """Download until cache is ready.
 
-    When ``require_any_patterns`` is set, request each ``allow_patterns`` entry
+    When per-pattern mode applies, request each ``allow_patterns`` entry
     separately — the Hub CLI often fetches only one file per invocation.
     """
-    any_patterns = spec.get("require_any_patterns")
-    if isinstance(any_patterns, list) and any_patterns and allow_patterns:
+    if _use_per_pattern_hub_download(spec, allow_patterns):
+        assert allow_patterns is not None
         for pattern in allow_patterns:
             if _weights_cache_ready(
                 dest,
@@ -165,6 +177,10 @@ def _run_hub_download_until_ready(
                 require_norm_stats=require_norm_stats,
             ):
                 return True
+            from flashcli.bundle.checkpoint import pattern_matches_path
+
+            if pattern_matches_path(dest, pattern):
+                continue
             prev_files = _dest_weight_files(dest)
             for _ in range(_hub_resume_rounds()):
                 download_patterns([pattern])
@@ -175,6 +191,8 @@ def _run_hub_download_until_ready(
                     require_norm_stats=require_norm_stats,
                 ):
                     return True
+                if pattern_matches_path(dest, pattern):
+                    break
                 current = _dest_weight_files(dest)
                 if current == prev_files:
                     break

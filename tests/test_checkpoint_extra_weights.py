@@ -5,7 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from flashcli.bundle.checkpoint import has_cached_weight_files, has_usable_checkpoint
+from flashcli.bundle.checkpoint import (
+    extra_weights_ready,
+    has_cached_weight_files,
+    has_usable_checkpoint,
+)
 from flashcli.models.pull import _download_huggingface
 
 
@@ -96,10 +100,10 @@ def test_mtp_incomplete_cache_is_resumed_before_download(
     mock_dl.assert_called_once()
 
 
-def test_hf_extra_weights_downloads_each_pattern_until_require_any(
+def test_hf_extra_weights_downloads_each_pattern_until_all_present(
     tmp_path: Path, monkeypatch
 ) -> None:
-    """Hub fetches one file per CLI call; flashcli requests each pattern in order."""
+    """checkpoint_subdir extras download every allow_patterns file in order."""
     monkeypatch.setenv("HF_ENDPOINT", "https://hf-mirror.com")
     dest = tmp_path / "tokenizer"
     dest.mkdir()
@@ -111,7 +115,6 @@ def test_hf_extra_weights_downloads_each_pattern_until_require_any(
             "vocab.json",
             "merges.txt",
         ],
-        "require_any_patterns": ["tokenizer.json", "tokenizer_config.json"],
         "checkpoint_subdir": "tokenizer",
     }
     seen: list[list[str] | None] = []
@@ -122,8 +125,10 @@ def test_hf_extra_weights_downloads_each_pattern_until_require_any(
         **_kwargs,
     ) -> None:
         seen.append(allow_patterns)
-        if allow_patterns == ["tokenizer.json"]:
-            (dest / "tokenizer.json").write_text("{}", encoding="utf-8")
+        if not allow_patterns:
+            return
+        name = allow_patterns[0]
+        (dest / name).write_text("{}", encoding="utf-8")
 
     with patch(
         "flashcli.models.pull.run_hf_cli_download",
@@ -131,5 +136,10 @@ def test_hf_extra_weights_downloads_each_pattern_until_require_any(
     ):
         _download_huggingface(spec, dest, quiet=True)
 
-    assert seen[0] == ["tokenizer.json"]
-    assert (dest / "tokenizer.json").is_file()
+    assert seen == [
+        ["tokenizer.json"],
+        ["tokenizer_config.json"],
+        ["vocab.json"],
+        ["merges.txt"],
+    ]
+    assert extra_weights_ready(dest, spec)
