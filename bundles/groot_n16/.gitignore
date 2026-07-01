@@ -1,0 +1,12 @@
+# Assembled by build.sh (Linux + NVIDIA GPU)
+/flash_rt/
+/flash_rt_*.so
+/flash_rt_fp4.so
+/libfmha_fp16_strided.so
+/lib/
+/requirements-runtime.txt
+/dist/
+/.build/
+# Embedded weights (optional --embed-checkpoint)
+/checkpoint/*
+!/checkpoint/.gitkeep

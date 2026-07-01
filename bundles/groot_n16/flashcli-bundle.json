@@ -1,0 +1,114 @@
+{
+  "format": "flashcli-model-bundle",
+  "format_version": 3,
+  "protocol_version": 1,
+  "name": "groot_n16",
+  "description": "GROOT N1.6 VLA — nvidia/GR00T-N1.6-3B (script: run.py; config=groot, default embodiment gr1)",
+  "entry": {
+    "run": {
+      "module": "run",
+      "attr": "main",
+      "mode": "script"
+    },
+    "serve": {
+      "module": "run",
+      "attr": "main",
+      "mode": "script"
+    }
+  },
+  "python_abi": "312",
+  "python_dependencies": {
+    "torch": {
+      "package": "torch",
+      "index": "auto"
+    },
+    "pip": [
+      "numpy",
+      "pyyaml",
+      "safetensors",
+      "sentencepiece",
+      "ml_dtypes",
+      "transformers<4.56",
+      "pillow"
+    ]
+  },
+  "run_options": [
+    {
+      "name": "prompt",
+      "type": "string",
+      "default": "pick up the cup on the table",
+      "help": "Natural-language task instruction for the robot policy.",
+      "phase": "predict"
+    },
+    {
+      "name": "image",
+      "type": "string",
+      "help": "Comma-separated RGB image paths (one per camera view).",
+      "phase": "predict"
+    },
+    {
+      "name": "num_views",
+      "type": "integer",
+      "default": 1,
+      "help": "Number of camera views (gr1 uses 1; robocasa_panda_omron and behavior_r1_pro use 3).",
+      "phase": "load"
+    },
+    {
+      "name": "embodiment_tag",
+      "type": "string",
+      "default": "gr1",
+      "help": "GROOT embodiment slot. Trained in base checkpoint: gr1, robocasa_panda_omron, behavior_r1_pro.",
+      "phase": "load"
+    },
+    {
+      "name": "action_horizon",
+      "type": "integer",
+      "default": 16,
+      "help": "Number of action steps to generate (default 16 for quick demo; use 50 for full horizon).",
+      "phase": "load"
+    },
+    {
+      "name": "hardware",
+      "type": "string",
+      "default": "auto",
+      "help": "FlashRT backend: auto, rtx_sm89, rtx_sm120, thor.",
+      "phase": "load"
+    },
+    {
+      "name": "autotune",
+      "type": "integer",
+      "default": 3,
+      "help": "CUDA graph autotune trials (0 disables).",
+      "phase": "load"
+    },
+    {
+      "name": "use_fp8",
+      "type": "boolean",
+      "default": true,
+      "help": "Load policy weights in FP8 when supported.",
+      "phase": "load"
+    },
+    {
+      "name": "use_fp16",
+      "type": "boolean",
+      "default": false,
+      "help": "Run full-FP16 baseline (disables FP8).",
+      "phase": "load"
+    },
+    {
+      "name": "config",
+      "type": "string",
+      "default": "groot",
+      "help": "FlashRT model config name.",
+      "phase": "load"
+    }
+  ],
+  "weights": {
+    "source": "huggingface",
+    "repo": "nvidia/GR00T-N1.6-3B",
+    "revision": "main"
+  },
+  "runtime": {
+    "sm120-cu130-linux-x86_64-py312": "runtime/sm120-cu130-linux-x86_64-py312"
+  }
+}
