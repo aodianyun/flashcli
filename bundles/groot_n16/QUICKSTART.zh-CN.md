@@ -16,14 +16,15 @@ export BUNDLE="$(pwd)/bundles/groot_n16/dist"   # pack 后用 dist/
 ## 1. Build（编译 native + 组装 bundle）
 
 ```bash
+bash bundles/groot_n16/build.sh --repo-root /app/FlashRT -j 4
 export FLASHRT_REPO=/path/to/FlashRT
 bash bundles/groot_n16/build.sh --repo-root "$FLASHRT_REPO" -j "$(nproc)"
 ```
 
 产物：
 
-- `bundles/groot_n16/lib/*.so` — `flash_rt_kernels`、`flash_rt_fa2`
-- `bundles/groot_n16/flash_rt/` — GROOT 最小 Python 子树
+- `bundles/groot_n16/runtime/sm120-cu130-linux-x86_64-py312/*.so`
+- `bundles/groot_n16/flash_rt/`
 - `bundles/groot_n16/.build/manifest-overlay.json`
 
 FlashRT 已编译时可跳过 cmake：

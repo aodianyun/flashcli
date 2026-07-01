@@ -308,10 +308,14 @@ PY
 
 finalize_matrix_manifest() {
   local native_lib="${BUNDLE_DIR}/lib"
-  [[ -d "${native_lib}" ]] || die "Missing ${native_lib} for --finalize-matrix-manifest"
+  local scan_dir="${native_lib}"
+  if [[ ! -d "${scan_dir}" ]] || ! compgen -G "${scan_dir}"/*.so >/dev/null; then
+    scan_dir="${BUNDLE_DIR}/runtime"
+    [[ -d "${scan_dir}" ]] || die "Missing lib/ or runtime/ for --finalize-matrix-manifest"
+  fi
   local py_bin="${PYTHON_BIN:-python3}"
-  log "Finalizing multi-env manifest overlay from ${native_lib}"
-  run_manifest_overlay "${BUNDLE_DIR}" "${native_lib}" "${GEN_MANIFEST}" "${REPO_ROOT}" "${py_bin}" \
+  log "Finalizing multi-env manifest overlay from ${scan_dir}"
+  run_manifest_overlay "${BUNDLE_DIR}" "${scan_dir}" "${GEN_MANIFEST}" "${REPO_ROOT}" "${py_bin}" \
     --matrix-manifest \
     --runtime-version "${RUNTIME_VERSION}" \
     --flashrt-tag "${FLASHRT_TAG:-dev}" \
@@ -333,16 +337,33 @@ finalize_matrix_manifest() {
 }
 
 stage_bundle_runtime() {
-  local native_lib="${BUNDLE_DIR}/lib"
-  local lib_dir="${BUNDLE_DIR}"
-  if [[ "${MERGE_NATIVE}" -eq 1 ]]; then
-    lib_dir="${native_lib}"
-    mkdir -p "${native_lib}"
-  fi
   local py_dir="${BUNDLE_DIR}/flash_rt"
   local flash_rt_src="${REPO_ROOT}/flash_rt"
   local build_src="${BUILD_DIR:-${REPO_ROOT}/build}/native-out"
   local skip_py_stage=0
+  local lib_dir env_key runtime_cell
+
+  if [[ "${MERGE_NATIVE}" -eq 1 ]]; then
+    lib_dir="${BUNDLE_DIR}/lib"
+    mkdir -p "${lib_dir}"
+  else
+    local py_bin_probe="${PYTHON_BIN:-python3}"
+    if [[ -z "${PYTHON_MINOR}" ]]; then
+      PYTHON_MINOR="$("${py_bin_probe}" -c 'import sys; print(f"{sys.version_info.major}{sys.version_info.minor:02d}")')"
+    fi
+    env_key="$(runtime_env_key "${SM}" "${CUDA_TAG}" "${OS_NAME}" "${CPU_ARCH}" "${PYTHON_MINOR}")"
+    runtime_cell="${BUNDLE_DIR}/runtime/${env_key}"
+    mkdir -p "${runtime_cell}"
+    lib_dir="${runtime_cell}"
+    log "Staging native .so -> runtime/${env_key}/"
+    shopt -s nullglob
+    for legacy_so in "${BUNDLE_DIR}"/flash_rt_*.so; do
+      [[ -f "${legacy_so}" ]] || continue
+      log "Moving legacy $(basename "${legacy_so}") -> runtime/${env_key}/"
+      mv -f "${legacy_so}" "${runtime_cell}/"
+    done
+    shopt -u nullglob
+  fi
 
   if [[ "${MERGE_NATIVE}" -eq 1 && -d "${py_dir}" && -f "${py_dir}/api.py" ]]; then
     skip_py_stage=1
@@ -350,16 +371,20 @@ stage_bundle_runtime() {
   else
     rm -rf "${py_dir}"
   fi
-  rm -rf "${BUNDLE_DIR}/runtime"
-  if [[ "${MERGE_NATIVE}" -eq 1 ]]; then
-    rm -f "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so
-  else
-    rm -f "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so
+  if [[ "${MERGE_NATIVE}" -eq 0 ]]; then
+    rm -rf "${BUNDLE_DIR}/lib"
   fi
+  rm -f "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so
 
   local py_bin="${PYTHON_BIN:-python3}"
   if [[ -z "${PYTHON_MINOR}" ]]; then
     PYTHON_MINOR="$("${py_bin}" -c 'import sys; print(f"{sys.version_info.major}{sys.version_info.minor:02d}")')"
+  fi
+  if [[ "${MERGE_NATIVE}" -eq 0 && -z "${env_key:-}" ]]; then
+    env_key="$(runtime_env_key "${SM}" "${CUDA_TAG}" "${OS_NAME}" "${CPU_ARCH}" "${PYTHON_MINOR}")"
+    runtime_cell="${BUNDLE_DIR}/runtime/${env_key}"
+    mkdir -p "${runtime_cell}"
+    lib_dir="${runtime_cell}"
   fi
 
   local git_commit flashrt_tag build_id torch_idx min_drv flashrt_abi native_tag
@@ -432,7 +457,12 @@ stage_bundle_runtime() {
     return 0
   fi
 
-  run_manifest_overlay "${BUNDLE_DIR}" "${lib_dir}" "${GEN_MANIFEST}" "${REPO_ROOT}" "${py_bin}" \
+  local overlay_scan_dir="${lib_dir}"
+  if [[ "${MERGE_NATIVE}" -eq 0 ]]; then
+    overlay_scan_dir="${BUNDLE_DIR}/runtime"
+  fi
+  run_manifest_overlay "${BUNDLE_DIR}" "${overlay_scan_dir}" "${GEN_MANIFEST}" "${REPO_ROOT}" "${py_bin}" \
+    --matrix-manifest \
     --runtime-version "${RUNTIME_VERSION}" \
     --flashrt-tag "${flashrt_tag}" \
     --git-commit "${git_commit}" \
@@ -564,5 +594,8 @@ fi
 maybe_write_tarball
 
 log "Bundle ready: ${BUNDLE_DIR}"
+if [[ "${MERGE_NATIVE}" -eq 0 && -n "${env_key:-}" ]]; then
+  log "  runtime/${env_key}/ ($(find "${BUNDLE_DIR}/runtime/${env_key}" -name '*.so' 2>/dev/null | wc -l | tr -d ' ') .so)"
+fi
 log "  bash bundles/groot_n16/pack.sh"
 log "  flashcli bundle validate ${BUNDLE_DIR}/dist"

@@ -12,6 +12,15 @@ sanitize_flashrt_abi() {
   printf '%s\n' "${out}"
 }
 
+runtime_env_key() {
+  local sm="$1" cuda_tag="$2" os_name="$3" arch="$4" py="$5"
+  sm="${sm#sm}" sm="${sm#SM}"
+  cuda_tag="${cuda_tag#cu}" cuda_tag="${cuda_tag#CU}"
+  py="${py#py}" py="${py#PY}"
+  printf 'sm%s-cu%s-%s-%s-py%s\n' \
+    "${sm}" "${cuda_tag}" "${os_name}" "${arch}" "${py}"
+}
+
 native_artifact_tag() {
   local flashrt_abi="$1" sm="$2" cuda_tag="$3" os_name="$4" arch="$5" py="$6"
   sm="${sm#sm}" sm="${sm#SM}"

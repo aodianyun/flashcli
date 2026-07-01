@@ -106,12 +106,31 @@ PYTHON_ABI="${RELEASE_PYTHON_ABI:-312}"
   [[ -n "${PACK_FILES}" ]] || die "RELEASE_PACK_FILES not set in release-matrix.env"
 
 native_lib="${BUNDLE_DIR}/lib"
-[[ -d "${native_lib}" ]] || die "Missing lib/ (run release_bundle.sh first)"
+runtime_root="${BUNDLE_DIR}/runtime"
+PACK_NATIVE_LAYOUT="lib"
+if [[ -d "${runtime_root}" ]]; then
+  shopt -s nullglob
+  for _cell in "${runtime_root}"/*/; do
+    if compgen -G "${_cell}"*.so >/dev/null 2>&1; then
+      PACK_NATIVE_LAYOUT="runtime"
+      break
+    fi
+  done
+  shopt -u nullglob
+fi
+if [[ "${PACK_NATIVE_LAYOUT}" == "lib" ]]; then
+  [[ -d "${native_lib}" ]] || die "Missing runtime/<env-key>/ or lib/ (run build.sh first)"
+fi
 [[ -d "${BUNDLE_DIR}/flash_rt" ]] || die "Missing flash_rt/"
 
 if [[ "${SKIP_MATRIX_VERIFY}" -eq 0 ]]; then
-  pack_verify_lib_matrix_and_abi \
-    "${BUNDLE_DIR}" "${MATRIX_SM}" "${CUDA_TAGS}" "${OS_NAME}" "${ARCH}" "${PY_MINORS}"
+  if [[ "${PACK_NATIVE_LAYOUT}" == "runtime" ]]; then
+    pack_verify_runtime_matrix \
+      "${BUNDLE_DIR}" "${MATRIX_SM}" "${CUDA_TAGS}" "${OS_NAME}" "${ARCH}" "${PY_MINORS}"
+  else
+    pack_verify_lib_matrix_and_abi \
+      "${BUNDLE_DIR}" "${MATRIX_SM}" "${CUDA_TAGS}" "${OS_NAME}" "${ARCH}" "${PY_MINORS}"
+  fi
 fi
 
 if [[ -z "${OUTPUT_DIR}" ]]; then
@@ -135,13 +154,17 @@ for entry in ${PACK_FILES}; do
     cp -a "${local_path}" "${OUTPUT_DIR}/"
   fi
 done
+if [[ "${PACK_NATIVE_LAYOUT}" == "runtime" && ! -d "${OUTPUT_DIR}/runtime" ]]; then
+  mkdir -p "${OUTPUT_DIR}/runtime"
+  cp -a "${runtime_root}/." "${OUTPUT_DIR}/runtime/"
+fi
 log "Copied bundle tree to ${OUTPUT_DIR}"
 
-# Native cells: group lib/*.so into runtime/<env-key>/ via Python (see below).
+# Native cells: lib/*.so → runtime/<env-key>/, or copy pre-staged runtime/<env-key>/.
 shopt -s nullglob
 shopt -u nullglob
 
-python3 - "${BUNDLE_DIR}" "${OUTPUT_DIR}" "${PYTHON_ABI}" "${FLASHCLI_ROOT}" <<'PY'
+python3 - "${BUNDLE_DIR}" "${OUTPUT_DIR}" "${PYTHON_ABI}" "${FLASHCLI_ROOT}" "${PACK_NATIVE_LAYOUT}" <<'PY'
 import json
 import shutil
 import sys
@@ -151,6 +174,7 @@ bundle_dir = Path(sys.argv[1])
 out_dir = Path(sys.argv[2])
 py_abi = sys.argv[3]
 flashcli_root = Path(sys.argv[4])
+pack_layout = sys.argv[5]
 scripts_lib = flashcli_root / "scripts" / "lib"
 sys.path.insert(0, str(scripts_lib))
 from flashcli_bundle_path import ensure_flashcli_bundle_on_path
@@ -158,7 +182,6 @@ from flashcli_bundle_path import ensure_flashcli_bundle_on_path
 ensure_flashcli_bundle_on_path(flashcli_root)
 from flashcli_bundle.native_naming import parse_native_tag_from_filename
 
-lib = bundle_dir / "lib"
 source_manifest_path = bundle_dir / "flashcli-bundle.json"
 overlay_path = bundle_dir / ".build" / "manifest-overlay.json"
 manifest = json.loads(source_manifest_path.read_text())
@@ -167,28 +190,50 @@ if overlay_path.is_file():
     for key in ("format_version", "python_abi", "runtime", "build"):
         if key in overlay:
             manifest[key] = overlay[key]
-cells: dict[str, list[Path]] = {}
-for so in sorted(lib.glob("*.so")):
-    parsed = parse_native_tag_from_filename(so.name)
-    if parsed is None or parsed.python_minor != py_abi:
-        continue
-    key = parsed.catalog_key()
-    cells.setdefault(key, []).append(so)
 
-runtime_map = {}
-for key, paths in sorted(cells.items()):
-    dest = out_dir / "runtime" / key
-    if dest.is_dir():
-        shutil.rmtree(dest)
-    dest.mkdir(parents=True)
-    for p in paths:
-        shutil.copy2(p, dest / p.name)
-    runtime_map[key] = f"runtime/{key}"
-    print(f"[pack] Created {dest} ({len(paths)} .so)", file=sys.stderr)
+runtime_map: dict[str, str] = {}
+
+if pack_layout == "runtime":
+    runtime_root = bundle_dir / "runtime"
+    for cell_dir in sorted(runtime_root.iterdir()):
+        if not cell_dir.is_dir():
+            continue
+        sos = sorted(cell_dir.glob("*.so"))
+        if not sos:
+            continue
+        key = cell_dir.name
+        dest = out_dir / "runtime" / key
+        if dest.is_dir():
+            shutil.rmtree(dest)
+        dest.mkdir(parents=True)
+        for p in sos:
+            shutil.copy2(p, dest / p.name)
+        runtime_map[key] = f"runtime/{key}"
+        print(f"[pack] runtime/{key} ({len(sos)} .so)", file=sys.stderr)
+else:
+    lib = bundle_dir / "lib"
+    cells: dict[str, list[Path]] = {}
+    for so in sorted(lib.glob("*.so")):
+        parsed = parse_native_tag_from_filename(so.name)
+        if parsed is None or parsed.python_minor != py_abi:
+            continue
+        key = parsed.catalog_key()
+        cells.setdefault(key, []).append(so)
+
+    for key, paths in sorted(cells.items()):
+        dest = out_dir / "runtime" / key
+        if dest.is_dir():
+            shutil.rmtree(dest)
+        dest.mkdir(parents=True)
+        for p in paths:
+            shutil.copy2(p, dest / p.name)
+        runtime_map[key] = f"runtime/{key}"
+        print(f"[pack] Created {dest} ({len(paths)} .so)", file=sys.stderr)
 
 manifest["format_version"] = 3
 manifest["python_abi"] = py_abi
-manifest["runtime"] = runtime_map
+if runtime_map:
+    manifest["runtime"] = runtime_map
 (out_dir / "flashcli-bundle.json").write_text(json.dumps(manifest, indent=2) + "\n")
 print(f"[pack] Wrote {out_dir / 'flashcli-bundle.json'} (source manifest unchanged)", file=sys.stderr)
 PY

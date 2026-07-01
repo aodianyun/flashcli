@@ -173,15 +173,26 @@ def main() -> int:
     if args.matrix_manifest:
         from flashcli_bundle.native_naming import parse_native_tag_from_filename
 
-        for so in sorted(lib_dir.glob("*.so")):
-            parsed = parse_native_tag_from_filename(so.name)
-            if parsed is None:
-                continue
-            cell = parsed.catalog_key()
-            if parsed.python_minor != py_minor:
-                continue
-            if cell not in runtime_artifacts:
-                runtime_artifacts[cell] = f"runtime/{cell}"
+        flat_sos = sorted(lib_dir.glob("*.so"))
+        if flat_sos:
+            for so in flat_sos:
+                parsed = parse_native_tag_from_filename(so.name)
+                if parsed is None:
+                    continue
+                cell = parsed.catalog_key()
+                if parsed.python_minor != py_minor:
+                    continue
+                if cell not in runtime_artifacts:
+                    runtime_artifacts[cell] = f"runtime/{cell}"
+        else:
+            for cell_dir in sorted(lib_dir.iterdir()):
+                if not cell_dir.is_dir():
+                    continue
+                cell_sos = sorted(cell_dir.glob("*.so"))
+                if not cell_sos:
+                    continue
+                cell_name = cell_dir.name
+                runtime_artifacts[cell_name] = f"runtime/{cell_name}"
 
     bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
     author_deps = bundle.get("python_dependencies")

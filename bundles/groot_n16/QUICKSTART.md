@@ -22,8 +22,8 @@ bash bundles/groot_n16/build.sh --repo-root "$FLASHRT_REPO" -j "$(nproc)"
 
 Outputs:
 
-- `bundles/groot_n16/lib/*.so` — `flash_rt_kernels`, `flash_rt_fa2`
-- `bundles/groot_n16/flash_rt/` — minimal GROOT Python tree
+- `bundles/groot_n16/runtime/sm120-cu130-linux-x86_64-py312/*.so`
+- `bundles/groot_n16/flash_rt/`
 - `bundles/groot_n16/.build/manifest-overlay.json`
 
 Skip cmake if FlashRT is already built:

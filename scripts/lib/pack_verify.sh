@@ -1,5 +1,40 @@
-# Matrix + ABI verification before packing lib/*.so
+# Matrix + ABI verification before packing lib/*.so or runtime/<env-key>/
 # Requires: log, die, verify_native_matrix_multi, verify_native_lib_python_abi
+
+pack_verify_runtime_matrix() {
+  local bundle_dir="$1" sm="$2" cuda_tags="$3" os_name="$4" arch="$5" py_minors="$6"
+  local -a modules=()
+  if [[ -n "${RELEASE_NATIVE_MODULES:-}" ]]; then
+    read -r -a modules <<< "${RELEASE_NATIVE_MODULES}"
+  fi
+  local runtime_root="${bundle_dir}/runtime"
+  [[ -d "${runtime_root}" ]] || die "Missing ${runtime_root}"
+
+  local cuda py env_key cell_dir mod pattern
+  local -a matches=()
+  for cuda in ${cuda_tags}; do
+    for py in ${py_minors}; do
+      env_key="$(runtime_env_key "${sm}" "${cuda}" "${os_name}" "${arch}" "${py}")"
+      cell_dir="${runtime_root}/${env_key}"
+      [[ -d "${cell_dir}" ]] || die "Missing runtime/${env_key} (run build.sh first)"
+      if [[ ${#modules[@]} -eq 0 ]]; then
+        shopt -s nullglob
+        matches=( "${cell_dir}"/*-sm"${sm}"-cu"${cuda}"-"${os_name}"-"${arch}"-py"${py}".so )
+        shopt -u nullglob
+        [[ ${#matches[@]} -ge 1 ]] || die "runtime/${env_key} has no .so artifacts"
+      else
+        for mod in "${modules[@]}"; do
+          pattern="${cell_dir}/${mod}*-sm${sm}-cu${cuda}-${os_name}-${arch}-py${py}.so"
+          shopt -s nullglob
+          matches=( ${pattern} )
+          shopt -u nullglob
+          [[ ${#matches[@]} -ge 1 ]] || die "Missing runtime/${env_key}/${mod}*.so"
+        done
+      fi
+      log "runtime/${env_key} OK"
+    done
+  done
+}
 
 pack_verify_lib_matrix_and_abi() {
   local bundle_dir="$1" sm="$2" cuda_tags="$3" os_name="$4" arch="$5" py_minors="$6"
