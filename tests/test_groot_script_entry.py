@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flashcli_bundle.infer.cli import parse_run_argv
+from flashcli_bundle.infer.cli import parse_run_argv, validate_bundle_options
 from flashcli_bundle.manifest import load_bundle_manifest
 from flashcli_bundle.options import bundle_run_options
 from flashcli_bundle.preset import Preset
@@ -77,6 +77,11 @@ def test_groot_script_parse_passes_flags(monkeypatch) -> None:
         "--image",
         "/tmp/a.jpg",
     ]
+
+
+def test_groot_validate_bundle_options() -> None:
+    manifest = load_bundle_manifest(GROOT_ROOT)
+    assert validate_bundle_options(manifest) == []
 
 
 def test_groot_runtime_sm120_only() -> None:

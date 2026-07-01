@@ -9,11 +9,6 @@
       "module": "run",
       "attr": "main",
       "mode": "script"
-    },
-    "serve": {
-      "module": "run",
-      "attr": "main",
-      "mode": "script"
     }
   },
   "python_abi": "312",
