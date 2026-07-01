@@ -124,6 +124,55 @@ def _hf_retry_sleep(attempt: int) -> float:
     return min(60.0, base * (attempt + 1))
 
 
+def _hub_resume_rounds() -> int:
+    raw = os.environ.get("FLASHCLI_HF_RESUME_ROUNDS", "12").strip()
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 12
+
+
+def _dest_weight_files(dest: Path) -> frozenset[str]:
+    if not dest.is_dir():
+        return frozenset()
+    return frozenset(
+        entry.name
+        for entry in dest.iterdir()
+        if entry.is_file() and not entry.name.startswith(".")
+    )
+
+
+def _run_hub_download_until_ready(
+    download_once: Any,
+    *,
+    dest: Path,
+    spec: dict[str, Any],
+    allow_patterns: list[str] | None,
+    require_norm_stats: bool,
+) -> bool:
+    """Call *download_once* repeatedly until cache is ready or no new files appear."""
+    prev_files = _dest_weight_files(dest)
+    for _ in range(_hub_resume_rounds()):
+        download_once()
+        if _weights_cache_ready(
+            dest,
+            spec,
+            allow_patterns=allow_patterns,
+            require_norm_stats=require_norm_stats,
+        ):
+            return True
+        current = _dest_weight_files(dest)
+        if current == prev_files:
+            return False
+        prev_files = current
+    return _weights_cache_ready(
+        dest,
+        spec,
+        allow_patterns=allow_patterns,
+        require_norm_stats=require_norm_stats,
+    )
+
+
 def _allow_patterns(spec: dict[str, Any]) -> list[str] | None:
     patterns = spec.get("allow_patterns")
     if isinstance(patterns, list) and patterns:
@@ -205,20 +254,21 @@ def _download_huggingface(
             last_exc: Exception | None = None
             for attempt in range(max_retries):
                 try:
-                    run_hf_cli_download(
-                        repo,
-                        dest,
-                        revision=rev,
-                        endpoint=ep,
-                        allow_patterns=patterns,
-                        quiet=quiet,
-                    )
-                    if _weights_cache_ready(
-                        dest,
-                        spec,
+                    ready = _run_hub_download_until_ready(
+                        lambda: run_hf_cli_download(
+                            repo,
+                            dest,
+                            revision=rev,
+                            endpoint=ep,
+                            allow_patterns=patterns,
+                            quiet=quiet,
+                        ),
+                        dest=dest,
+                        spec=spec,
                         allow_patterns=patterns,
                         require_norm_stats=require_ns,
-                    ):
+                    )
+                    if ready:
                         return
                     last_exc = RuntimeError(
                         "Hub CLI exited successfully but checkpoint files are missing"
@@ -321,20 +371,21 @@ def _download_modelscope(
             last_exc: Exception | None = None
             for attempt in range(max_retries):
                 try:
-                    run_ms_snapshot_download(
-                        model_id,
-                        dest,
-                        revision=rev_try,
-                        allow_patterns=patterns,
-                        endpoint=endpoint,
-                        quiet=quiet,
-                    )
-                    if _weights_cache_ready(
-                        dest,
-                        spec,
+                    ready = _run_hub_download_until_ready(
+                        lambda: run_ms_snapshot_download(
+                            model_id,
+                            dest,
+                            revision=rev_try,
+                            allow_patterns=patterns,
+                            endpoint=endpoint,
+                            quiet=quiet,
+                        ),
+                        dest=dest,
+                        spec=spec,
                         allow_patterns=patterns,
                         require_norm_stats=require_ns,
-                    ):
+                    )
+                    if ready:
                         return
                     last_exc = RuntimeError(
                         "ModelScope download finished but checkpoint files are missing"

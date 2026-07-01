@@ -108,9 +108,10 @@
       "source": "huggingface",
       "repo": "Qwen/Qwen3-1.7B",
       "allow_patterns": [
-        "tokenizer*",
-        "vocab*",
-        "merges*"
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "vocab.json",
+        "merges.txt"
       ],
       "require_any_patterns": [
         "tokenizer.json",

@@ -94,3 +94,39 @@ def test_mtp_incomplete_cache_is_resumed_before_download(
     assert dest.is_dir()
     assert (dest / ".cache").exists()
     mock_dl.assert_called_once()
+
+
+def test_hf_extra_weights_resumes_until_require_any(tmp_path: Path, monkeypatch) -> None:
+    """Hub may fetch one file per CLI call; flashcli must keep resuming."""
+    monkeypatch.setenv("FLASHCLI_HF_RESUME_ROUNDS", "5")
+    monkeypatch.setenv("HF_ENDPOINT", "https://hf-mirror.com")
+    dest = tmp_path / "tokenizer"
+    dest.mkdir()
+    spec = {
+        "repo": "Qwen/Qwen3-1.7B",
+        "allow_patterns": [
+            "tokenizer.json",
+            "tokenizer_config.json",
+            "vocab.json",
+            "merges.txt",
+        ],
+        "require_any_patterns": ["tokenizer.json", "tokenizer_config.json"],
+        "checkpoint_subdir": "tokenizer",
+    }
+    calls = {"n": 0}
+
+    def _incremental_download(*_args, **_kwargs) -> None:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            (dest / "merges.txt").write_bytes(b"fake")
+        elif calls["n"] == 2:
+            (dest / "tokenizer.json").write_text("{}", encoding="utf-8")
+
+    with patch(
+        "flashcli.models.pull.run_hf_cli_download",
+        side_effect=_incremental_download,
+    ):
+        _download_huggingface(spec, dest, quiet=True)
+
+    assert calls["n"] == 2
+    assert (dest / "tokenizer.json").is_file()
