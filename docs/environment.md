@@ -13,7 +13,7 @@ Boolean flags: `1`, `true`, or `yes` (case-insensitive) enable the switch.
 | `FLASHCLI_HOME` | `~/.flashcli` | Cache root. Default subdirs: `runtimes/`, `models/`, `bundles/`, `cache/`. |
 | `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | Preset marker cache (`<bundle>/<version>@<variant>/.flashcli_bundle.json`). |
 | `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | Hugging Face weights (`<dir>/<bundle>/<version>@<variant>/checkpoint/`). |
-| `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | Base URL for short refs `namespace/bundle:version[@variant]`. Browse bundles at [flashhub.top](https://flashhub.top) (API host is not yet on that domain). |
+| `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | **Single** FlashHub API base for bundle short refs, `python-standalone` auto-install, etc. Browse bundles at [flashhub.top](https://flashhub.top) (API host is not yet on that domain). |
 
 Example:
 
@@ -88,7 +88,8 @@ When `weights.source` / `extra_weights.source` is `"modelscope"`, the host CLI p
 | `FLASHCLI_PYTHON_ENV` | `$FLASHCLI_HOME/python-runtime.env` | Env file written with `FLASHCLI_PY312_BIN=…` after auto-install (sourced on next resolve). |
 | `FLASHCLI_PY312_BIN` | (auto) | Override path to Python 3.12 for bundle venv / native ABI probes. Also `FLASHCLI_PY310_BIN`, `FLASHCLI_PY311_BIN`, … |
 | `FLASHCLI_PYTHON_STANDALONE_TAG` | `20260602` | Upstream python-build-standalone release tag (GitHub fallback). |
-| `FLASHCLI_PYTHON_REPO` | [FlashHub 1.0.0](https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/python-standalone/1.0.0) | **Preferred** source for `python-standalone.json` + tarballs; on failure → GitHub → GitHub proxy. Set `0` to skip FlashHub. |
+| `FLASHCLI_PYTHON_REPO` | (derived from `FLASHCLI_FLASHHUB_API`) | Override full standalone-Python repo URL (default `{FLASHCLI_FLASHHUB_API}/flashcli-bundle/python-standalone:1.0.0`). Set `0` to skip FlashHub and use GitHub fallback only. |
+| `FLASHCLI_PYTHON_STANDALONE_VERSION` | `1.0.0` | python-standalone repo version when `FLASHCLI_PYTHON_REPO` is unset. |
 | `FLASHCLI_PYTHON_STANDALONE_MANIFEST` | (none) | Local manifest path (fallback before GitHub when FlashHub fails). |
 | `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | Bundle runtime cache (bundle root, `runtime/`, venv). |
 | `FLASHCLI_IN_BUNDLE_VENV` | (internal) | `1` when the infer subprocess is running inside the bundle venv. |

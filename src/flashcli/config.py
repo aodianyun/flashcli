@@ -17,6 +17,10 @@ from flashcli_bundle.paths import (
     MODELS_DIR,
     RUNTIMES_DIR,
     SKIP_AUTO_INSTALL_ENV,
+    default_python_standalone_repo_url,
+    flashhub_api_base,
+    flashhub_repo_url,
+    python_standalone_repo_url,
     skip_auto_install,
 )
 
@@ -43,6 +47,10 @@ __all__ = [
     "MODELS_DIR",
     "RUNTIMES_DIR",
     "SKIP_AUTO_INSTALL_ENV",
+    "default_python_standalone_repo_url",
+    "flashhub_api_base",
+    "flashhub_repo_url",
     "package_root",
+    "python_standalone_repo_url",
     "skip_auto_install",
 ]

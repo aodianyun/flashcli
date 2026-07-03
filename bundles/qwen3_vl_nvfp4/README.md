@@ -1,45 +1,61 @@
-# qwen3_vl_nvfp4
+# Qwen3-VL NVFP4
 
-<p align="right"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a> · <a href="QUICKSTART.md">Quick start</a></p>
+<p align="right"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
 
-**Qwen3-VL-8B NVFP4** multimodal bundle — image + text `run` and OpenAI-compatible `serve` with true SSE streaming and tool calls.
+**Qwen3-VL-8B** multimodal model in FlashRT NVFP4 layout. Image + text chat via `run` or OpenAI-compatible `serve` with SSE streaming and tool calls.
 
-## Layout
+| | |
+|---|---|
+| **Ref** | `flashcli-bundle/qwen3_vl_nvfp4:1.0.0` |
+| **Weights** | [cpadyun/Qwen3-VL-8B-FlashRT-NVFP4](https://huggingface.co/cpadyun/Qwen3-VL-8B-FlashRT-NVFP4) (FlashRT NVFP4 checkpoint) |
+| **Processor** | [Qwen/Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) |
+| **GPU** | NVIDIA **SM120** · CUDA **13.x** |
+| **Python** | **3.12** (bundle venv) |
+| **Capabilities** | `run`, `serve` |
 
-`format_version: 3` manifest with `runtime: { env_key: path }`. Native `.so` live under `runtime/<env-key>/` on FlashHub and after sync. Requires **SM120 × cu130 × Python 3.12** (bundle venv). Weights are **not** in the bundle — pull FlashRT NVFP4 checkpoint from Hugging Face (see weights note below).
-
-| Component | Notes |
-|-----------|-------|
-| `flash_rt_kernels` | NVFP4 language GEMM (SM120) |
-| `flash_rt_fa2` | FA2 attention |
-| `flash_rt_qwen3_vl_kernels` | Vision tower + multimodal scatter |
-| Bundle engine | `_engine_qwen3_vl.py` (not FlashRT examples) |
-
-## Weights
-
-Runtime expects a **FlashRT NVFP4** checkpoint (not raw BF16 `Qwen/Qwen3-VL-8B-Instruct`). Maintainers: run [`scripts/prepare_qwen3_vl_weights.sh`](scripts/prepare_qwen3_vl_weights.sh), upload to HF, update `flashcli-bundle.json` `weights.repo`. Dev: `--embed-checkpoint` after quantize.
+**Supports:** `image` / `image_url`, streaming SSE, sampling, tools / `tool_calls`  
+**Not supported (v1):** thinking / `reasoning_content`, video
 
 ## Run
 
-See **[QUICKSTART.md](QUICKSTART.md)** for copy-paste commands.
-
 ```bash
 flashcli run flashcli-bundle/qwen3_vl_nvfp4:1.0.0 \
-  --image /path/to/scene.jpg --prompt "Describe this image." --max-tokens 128
-
-flashcli serve flashcli-bundle/qwen3_vl_nvfp4:1.0.0 \
-  --host 0.0.0.0 --port 8000 --max-pixels 500000
+  --image /path/to/scene.jpg \
+  --prompt "Describe this image in one sentence." \
+  --max-tokens 128
 ```
 
-Local bundle (no FlashHub):
+## Serve
 
 ```bash
-flashcli run bundles/qwen3_vl_nvfp4 --image scene.jpg --prompt "Describe this image."
+flashcli serve flashcli-bundle/qwen3_vl_nvfp4:1.0.0 \
+  --host 0.0.0.0 --port 8000 \
+  --max-pixels 500000
 ```
 
-## Limits (v1)
+Full flags: `flashcli run … --help` · `flashcli serve … --help`
 
-- Supports: `image` / `image_url`, streaming SSE, EOS, sampling, tools / `tool_calls`
-- Not supported: thinking / `reasoning_content`, video
+## Parameters
 
-**16 GB VRAM tip:** `--max-pixels 500000`, `--max-seq 2048`.
+### `run`
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--prompt` | `Hello!` | User message |
+| `--image` | — | Image path, URL, or `data:image/...;base64,...` |
+| `--max-tokens` | `256` | Max new tokens |
+| `--max-pixels` | `500000` | Cap image resolution (VRAM / TTFT) |
+| `--max-seq` | `2048` | Context budget |
+| `--max-q-seq` | `1024` | Max prefill (text + vision tokens) |
+| `--temperature` | `0.0` | Sampling temperature |
+| `--top-p` | `1.0` | Nucleus sampling |
+| `--top-k` | `0` | Top-k (`0` = off) |
+
+### `serve`
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--model-name` | `qwen3-vl` | OpenAI `model` id |
+| `--max-seq` | `2048` | Context budget |
+| `--max-pixels` | `500000` | Image resolution cap |
+| `--warmup-preset` | `none` | `short` = decode graph warmup with dummy image |

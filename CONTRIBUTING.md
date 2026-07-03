@@ -60,14 +60,14 @@ pytest tests/ tests/bench/ # full suite including bench
 
    Bundle re-exec runs ``python -m flashcli_bundle.infer`` inside the bundle venv. Tests: ``test_reexec_argv.py``, ``test_flashcli_bundle_infer.py``. **Do not** prepend host ``site-packages`` or pip-install ``flashcli`` into bundle venvs.
 
-4. **Preset refs** — Upload to [FlashHub](https://flashhub.top); document the ref in the bundle QUICKSTART (and README examples if needed). No bundled catalog file.
+4. **Preset refs** — Upload to [FlashHub](https://flashhub.top); document the ref in the bundle README (and BUILD for maintainers). No bundled catalog file.
 5. **Docs** — Update English docs when behavior or release workflow changes. Mirror important changes in `*.zh-CN.md` when applicable.
 6. **Comments** — New code comments and script headers in English.
 7. **Commits** — Clear, imperative subject lines; one logical change per commit when possible.
 
 ## Adding a new bundle / preset ref
 
-1. Copy structure from `bundles/pi05_libero/`, `bundles/qwen_nvfp4/`, or `bundles/groot_n16/` (local dev example for script entry + `extra_weights`).
+1. Copy structure from `bundles/pi05_libero/`, `bundles/qwen_nvfp4/`, `bundles/groot_n16/` (script entry + `extra_weights`), or `bundles/groot_n17/` (script entry, N1.7 `set_prompt` + `infer`, no `extra_weights`).
 2. Add `flashcli-bundle.json` (format_version 3, **protocol_version 1**), `entry` modules, `release-matrix.env`, `_bundle_build.sh`.
 3. Declare bundle CLI flags in manifest **`run_options`** / **`serve_options`**. Entry modules import protocol/helpers from **`flashcli_bundle`** (installed via git `flashcli-bundle` subdirectory or `pip install -e ./flashcli-bundle`), not from the full `flashcli` CLI package.
 4. Follow [docs/bundle_publish_standard.md](docs/bundle_publish_standard.md) (manifest / entry spec).
@@ -75,7 +75,7 @@ pytest tests/ tests/bench/ # full suite including bench
 6. `flashcli bundle validate bundles/<name>`
 7. Smoke-test `flashcli run <ref> --help`, `flashcli run` / `flashcli serve` as applicable.
 8. Upload to [FlashHub](https://flashhub.top); document ref (e.g. `flashcli-bundle/my_model:1.0.0` or `@variant` for multi-model repos).
-9. Update bundle README / QUICKSTART (and README supported-examples table if applicable).
+9. Update bundle README / BUILD (and README supported-examples table if applicable).
 
 ## Release bundle checklist (maintainers)
 
@@ -85,9 +85,9 @@ After uploading `dist/` to FlashHub:
 
 - [ ] `bash scripts/release_bundle.sh --bundle <name> --clean` → upload `dist/` to FlashHub
 - [ ] `flashcli bundle validate bundles/<name>` and smoke `run` / `serve` on target GPU
-- [ ] Document ref strings in README / QUICKSTART (Qwen: same repo, different `@variant`)
+- [ ] Document ref strings in README / BUILD (Qwen: same repo, different `@variant`)
 
-Matrix constraints: pi05 **SM89 + SM120** (cu124 on SM89; cu130 on both); qwen / qwen3_vl / groot_n16 **cu130 / SM120 only** — see runtime-matrix doc.
+Matrix constraints: pi05 **SM89 + SM120** (cu124 on SM89; cu130 on both); qwen / qwen3_vl / groot_n16 **cu130 / SM120 / py312**; **groot_n17** **cu130 / SM120 / py310** (Isaac-GR00T) — see runtime-matrix doc.
 
 ## Reporting issues
 

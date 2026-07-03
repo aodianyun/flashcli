@@ -1,45 +1,61 @@
-# qwen3_vl_nvfp4
+# Qwen3-VL NVFP4
 
-<p align="right"><a href="README.md">English</a> · <strong>简体中文</strong> · <a href="QUICKSTART.zh-CN.md">快速上手</a></p>
+<p align="right"><a href="README.md">English</a> · <strong>简体中文</strong></p>
 
-**Qwen3-VL-8B NVFP4** 多模态 bundle — 图文 `run` 与 OpenAI 兼容 `serve`（真流式 SSE、tool calls）。
+**Qwen3-VL-8B** 多模态模型，FlashRT NVFP4 格式。支持图文 `run` 与 OpenAI 兼容 `serve`（SSE 流式、工具调用）。
 
-## 结构
+| | |
+|---|---|
+| **Ref** | `flashcli-bundle/qwen3_vl_nvfp4:1.0.0` |
+| **权重** | [cpadyun/Qwen3-VL-8B-FlashRT-NVFP4](https://huggingface.co/cpadyun/Qwen3-VL-8B-FlashRT-NVFP4)（FlashRT NVFP4 checkpoint） |
+| **Processor** | [Qwen/Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) |
+| **GPU** | NVIDIA **SM120** · CUDA **13.x** |
+| **Python** | **3.12**（bundle venv） |
+| **能力** | `run`、`serve` |
 
-`format_version: 3` manifest，`runtime: { env_key: path }`。FlashHub sync 后 native `.so` 在 `runtime/<env-key>/`。要求 **SM120 × cu130 × Python 3.12**（bundle venv）。权重不在 bundle 内，需拉取 FlashRT NVFP4 格式 checkpoint。
+**支持：** `image` / `image_url`、SSE 流式、采样、tools / `tool_calls`  
+**不支持（v1）：** thinking / `reasoning_content`、视频
 
-| 组件 | 说明 |
-|------|------|
-| `flash_rt_kernels` | NVFP4 语言 GEMM（SM120） |
-| `flash_rt_fa2` | FA2 attention |
-| `flash_rt_qwen3_vl_kernels` | 视觉塔 + 多模态 scatter |
-| Bundle 引擎 | `_engine_qwen3_vl.py`（非 FlashRT examples） |
-
-## 权重
-
-运行时需要 **FlashRT NVFP4** checkpoint（非 BF16 源权重 `Qwen/Qwen3-VL-8B-Instruct`）。维护者：运行 [`scripts/prepare_qwen3_vl_weights.sh`](scripts/prepare_qwen3_vl_weights.sh)，上传 HF 后更新 `weights.repo`。开发：`quantize` 后 `--embed-checkpoint`。
-
-## 使用
-
-详见 **[QUICKSTART.zh-CN.md](QUICKSTART.zh-CN.md)**。
+## 运行
 
 ```bash
 flashcli run flashcli-bundle/qwen3_vl_nvfp4:1.0.0 \
-  --image /path/to/scene.jpg --prompt "描述这张图" --max-tokens 128
-
-flashcli serve flashcli-bundle/qwen3_vl_nvfp4:1.0.0 \
-  --host 0.0.0.0 --port 8000 --max-pixels 500000
+  --image /path/to/scene.jpg \
+  --prompt "用一句话描述这张图。" \
+  --max-tokens 128
 ```
 
-本地 bundle：
+## 服务
 
 ```bash
-flashcli run bundles/qwen3_vl_nvfp4 --image scene.jpg --prompt "描述这张图"
+flashcli serve flashcli-bundle/qwen3_vl_nvfp4:1.0.0 \
+  --host 0.0.0.0 --port 8000 \
+  --max-pixels 500000
 ```
 
-## 边界（v1）
+完整参数：`flashcli run … --help` · `flashcli serve … --help`
 
-- 支持：图片 / `image_url`、流式 SSE、EOS、采样、tools / `tool_calls`
-- 不支持：thinking / `reasoning_content`、视频
+## 参数
 
-**16GB 显存建议：** `--max-pixels 500000`、`--max-seq 2048`。
+### `run`
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--prompt` | `Hello!` | 用户消息 |
+| `--image` | — | 图片路径、URL 或 base64 data URL |
+| `--max-tokens` | `256` | 最大生成 token |
+| `--max-pixels` | `500000` | 限制图像分辨率（显存 / 首 token 延迟） |
+| `--max-seq` | `2048` | 上下文长度 |
+| `--max-q-seq` | `1024` | 最大 prefill（文本 + 视觉 token） |
+| `--temperature` | `0.0` | 采样温度 |
+| `--top-p` | `1.0` | Nucleus 采样 |
+| `--top-k` | `0` | Top-k（`0` 关闭） |
+
+### `serve`
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--model-name` | `qwen3-vl` | OpenAI `model` 字段 |
+| `--max-seq` | `2048` | 上下文长度 |
+| `--max-pixels` | `500000` | 图像分辨率上限 |
+| `--warmup-preset` | `none` | `short` = 用占位图预热 decode 图 |

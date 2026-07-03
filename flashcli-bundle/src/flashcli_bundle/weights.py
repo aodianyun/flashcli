@@ -9,6 +9,7 @@ from typing import Any
 from flashcli_bundle import paths as config
 from flashcli_bundle.bundle_config import bundle_dict, bundle_list
 from flashcli_bundle.checkpoint import (
+    extra_weights_ready,
     has_checkpoint_weight_files,
     has_usable_checkpoint,
     weights_require_norm_stats,
@@ -55,6 +56,8 @@ def has_local_weights(
     require_ns = weights_require_norm_stats(weights_spec)
     if has_usable_checkpoint(path, require_norm_stats=require_ns):
         return True
+    if weights_spec is not None and extra_weights_ready(path, weights_spec):
+        return True
     if require_ns and has_checkpoint_weight_files(path):
         return False
     for entry in path.iterdir():
@@ -62,9 +65,11 @@ def has_local_weights(
             continue
         if entry.name == ".cache":
             continue
-        if entry.is_dir() and has_usable_checkpoint(
-            entry, require_norm_stats=require_ns
-        ):
+        if not entry.is_dir():
+            continue
+        if has_usable_checkpoint(entry, require_norm_stats=require_ns):
+            return True
+        if weights_spec is not None and extra_weights_ready(entry, weights_spec):
             return True
     return False
 
@@ -184,8 +189,8 @@ def require_extra_weights_cached(
     for key, spec in extra.items():
         if not isinstance(spec, dict):
             continue
-        repo = str(spec.get("repo", "")).strip()
-        if not repo:
+        source = str(spec.get("source", "huggingface")).lower()
+        if source != "bundled" and not str(spec.get("repo", "")).strip():
             continue
         dest = extra_weight_dest(bundle, key, spec, checkpoint_dir=checkpoint_dir)
         from flashcli_bundle.checkpoint import extra_weights_ready

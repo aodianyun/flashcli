@@ -105,9 +105,13 @@ def execute_run(
             raise typer.Exit(1)
         try:
             fn = load_entry_callable(active.entry_run, kind="run")
-            rc = invoke_script_main(fn, list(bundle_argv or []))
         except (ImportError, AttributeError, TypeError) as exc:
             typer.echo(f"Cannot load run entry: {exc}", err=True)
+            raise typer.Exit(1) from exc
+        try:
+            rc = invoke_script_main(fn, list(bundle_argv or []))
+        except ImportError as exc:
+            typer.echo(f"Run entry import failed during inference: {exc}", err=True)
             raise typer.Exit(1) from exc
         raise typer.Exit(rc)
 

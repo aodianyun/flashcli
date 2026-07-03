@@ -20,19 +20,19 @@ from flashcli.standalone_release import (
     load_manifest,
 )
 
-DEFAULT_PYTHON_REPO = (
-    "https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/python-standalone/1.0.0"
+from flashcli_bundle.paths import (
+    default_python_standalone_repo_url,
+    python_standalone_repo_url,
 )
+
+DEFAULT_PYTHON_REPO = default_python_standalone_repo_url()
 
 _MANIFEST_NAME = "python-standalone.json"
 
 
 def python_repo_url() -> str | None:
     """FlashHub repo API URL for python-standalone (``FLASHCLI_PYTHON_REPO``)."""
-    raw = os.environ.get("FLASHCLI_PYTHON_REPO", DEFAULT_PYTHON_REPO).strip()
-    if raw.lower() in ("0", "false", "no", "off"):
-        return None
-    return raw.rstrip("/")
+    return python_standalone_repo_url()
 
 
 def _is_flashhub_url(url: str) -> bool:

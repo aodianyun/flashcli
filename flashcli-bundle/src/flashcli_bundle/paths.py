@@ -22,10 +22,51 @@ RUNTIMES_DIR = Path(
 SKIP_AUTO_INSTALL_ENV = "FLASHCLI_SKIP_AUTO_INSTALL"
 
 _DEFAULT_FLASHHUB_API = "https://flashhub-api.aodianyun.com/api/v1/repos"
+_PYTHON_STANDALONE_NAMESPACE = "flashcli-bundle"
+_PYTHON_STANDALONE_BUNDLE = "python-standalone"
+_DEFAULT_PYTHON_STANDALONE_VERSION = "1.0.0"
 
-FLASHHUB_API_BASE = os.environ.get("FLASHCLI_FLASHHUB_API", _DEFAULT_FLASHHUB_API).strip().rstrip(
-    "/"
-) or _DEFAULT_FLASHHUB_API
+
+def flashhub_api_base() -> str:
+    """Resolved FlashHub API base (``FLASHCLI_FLASHHUB_API``)."""
+    raw = os.environ.get("FLASHCLI_FLASHHUB_API", _DEFAULT_FLASHHUB_API).strip().rstrip("/")
+    return raw or _DEFAULT_FLASHHUB_API
+
+
+# Import-time snapshot for legacy imports; prefer flashhub_api_base() when env may change.
+FLASHHUB_API_BASE = flashhub_api_base()
+
+
+def flashhub_repo_url(namespace: str, bundle: str, version: str) -> str:
+    """Build FlashHub repo API URL: ``{FLASHHUB_API_BASE}/{namespace}/{bundle}:{version}``."""
+    ns = namespace.strip().strip("/")
+    name = bundle.strip().strip("/")
+    ver = version.strip()
+    if not ns or not name or not ver:
+        raise ValueError(
+            f"Invalid FlashHub repo parts: namespace={namespace!r} bundle={bundle!r} version={version!r}"
+        )
+    return f"{flashhub_api_base().rstrip('/')}/{ns}/{name}:{ver}"
+
+
+def default_python_standalone_repo_url() -> str:
+    """Default python-standalone repo under the same FlashHub API base as bundles."""
+    ver = (
+        os.environ.get("FLASHCLI_PYTHON_STANDALONE_VERSION", _DEFAULT_PYTHON_STANDALONE_VERSION)
+        .strip()
+        or _DEFAULT_PYTHON_STANDALONE_VERSION
+    )
+    return flashhub_repo_url(_PYTHON_STANDALONE_NAMESPACE, _PYTHON_STANDALONE_BUNDLE, ver)
+
+
+def python_standalone_repo_url() -> str | None:
+    """FlashHub repo for standalone Python tarballs (``FLASHCLI_PYTHON_REPO``)."""
+    raw = os.environ.get("FLASHCLI_PYTHON_REPO", "").strip()
+    if raw.lower() in ("0", "false", "no", "off"):
+        return None
+    if raw:
+        return raw.rstrip("/")
+    return default_python_standalone_repo_url()
 
 
 def package_root() -> Path:

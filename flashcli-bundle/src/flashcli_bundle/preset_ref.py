@@ -198,7 +198,7 @@ def _repo_url_from_body(body: str) -> str:
             f"Examples:\n  {_REF_EXAMPLES}"
         )
     namespace, bundle, version = match.groups()
-    base = config.FLASHHUB_API_BASE.rstrip("/")
+    base = config.flashhub_api_base().rstrip("/")
     return f"{base}/{namespace}/{bundle}:{version}"
 
 

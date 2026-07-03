@@ -79,7 +79,7 @@ def run_check(*, quiet: bool = False) -> int:
     if not quiet and config.FLASHCLI_HOME.is_dir():
         print(f"     Home: {config.FLASHCLI_HOME}")
     print(f"[ok] flashcli {__version__} ({__import__('sys').executable})")
-    print(f"[ok] FlashHub API base: {config.FLASHHUB_API_BASE}")
+    print(f"[ok] FlashHub API base: {config.flashhub_api_base()}")
     try:
         from flashcli.bundle.marker import list_cached_presets
         from flashcli.models import cache as model_cache

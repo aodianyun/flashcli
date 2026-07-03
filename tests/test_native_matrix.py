@@ -154,6 +154,21 @@ def test_probe_uses_manifest_python_abi(mock_probe, tmp_path: Path) -> None:
     assert mock_probe.call_args[0][0].name.endswith("py312.so")
 
 
+@patch("flashcli_bundle.native_validate.probe_native_so_abi", return_value=None)
+def test_probe_so_file_uses_tagged_python_when_host_minor_differs(
+    mock_probe, tmp_path: Path
+) -> None:
+    from flashcli_bundle.native import _probe_so_file
+    from flashcli_bundle.native_naming import native_so_filename
+
+    cell = "sm120-cu130-linux-x86_64-py310"
+    so = tmp_path / native_so_filename("flash_rt_fa2", f"dev-{cell}")
+    so.write_bytes(b"\x7fELF")
+    _probe_so_file(so, env_key=cell, python_minor="310")
+    mock_probe.assert_called_once()
+    assert mock_probe.call_args.kwargs["python_minor"] == "310"
+
+
 def test_sm120_uses_sm89_artifact(tmp_path: Path):
     native = _runtime_dir(tmp_path, CELL312)
     tag = "dev-sm89-cu124-linux-x86_64-py312"

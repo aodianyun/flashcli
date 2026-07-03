@@ -6,7 +6,7 @@
 
 ### End users
 
-Install and run presets — [../README.md](../README.md), then [QUICKSTART](../bundles/pi05_libero/QUICKSTART.md) per model. Mirrors and cache paths: [environment.md](environment.md).
+Install and run presets — [../README.md](../README.md), then each bundle [README](../bundles/pi05_libero/README.md). Mirrors and cache paths: [environment.md](environment.md).
 
 ### Integrators
 

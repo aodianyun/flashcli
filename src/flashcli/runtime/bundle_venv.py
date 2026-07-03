@@ -52,6 +52,13 @@ def _create_venv(python_bin: Path, dest: Path) -> None:
         [str(python_bin), "-m", "venv", str(dest)],
         check=True,
     )
+    py = dest / "bin" / "python3"
+    if not py.is_file():
+        py = dest / "bin" / "python"
+    subprocess.run(
+        [str(py), "-m", "pip", "install", "-q", "--upgrade", "pip"],
+        check=False,
+    )
 
 
 def ensure_bundle_venv(

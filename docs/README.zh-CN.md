@@ -6,7 +6,7 @@
 
 ### 终端用户
 
-安装并运行 preset — [../README.zh-CN.md](../README.zh-CN.md)，再读各模型的 [QUICKSTART](../bundles/pi05_libero/QUICKSTART.zh-CN.md)。镜像与缓存：[environment.zh-CN.md](environment.zh-CN.md)。
+安装并运行 preset — [../README.zh-CN.md](../README.zh-CN.md)，再读各 bundle [README](../bundles/pi05_libero/README.zh-CN.md)。镜像与缓存：[environment.zh-CN.md](environment.zh-CN.md)。
 
 ### 集成方
 

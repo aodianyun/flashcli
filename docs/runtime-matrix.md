@@ -14,6 +14,7 @@ How maintainers build **multi CUDA / SM native artifacts** and publish via **Fla
 | `qwen_nvfp4` | **120** | **cu130 only** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2`, `flash_rt_fp4` |
 | `qwen3_vl_nvfp4` | **120** | **cu130 only** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2`, `flash_rt_fp4`, `flash_rt_qwen3_vl_kernels` |
 | `groot_n16` | **120** | **cu130 only** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2` *(local dev; not on FlashHub yet)* |
+| `groot_n17` | **120** | **cu130 only** | **3.10** *(Isaac-GR00T)* | `flash_rt_kernels`, `flash_rt_fa2` *(local dev; not on FlashHub yet)* |
 
 OS / arch: **linux-x86_64**. Config: `bundles/<name>/release-matrix.env`.
 
@@ -116,4 +117,4 @@ flashcli run bundles/pi05_libero \
 
 Preset ref and bundle format: [model_bundle_standard.md](model_bundle_standard.md).
 
-Local dev trees need `.so` under the manifest’s `runtime/<env-key>/` (`build.sh` → `lib/`, then stage to `runtime/`; see bundle QUICKSTART).
+Local dev trees need `.so` under the manifest’s `runtime/<env-key>/` (`build.sh` → `lib/`, then stage to `runtime/`; see bundle `BUILD.md`).

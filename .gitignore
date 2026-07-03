@@ -6,6 +6,7 @@ __pycache__/
 .cursor/
 
 .venv
+uv.lock
 .vscode
 .native-cache
 build/

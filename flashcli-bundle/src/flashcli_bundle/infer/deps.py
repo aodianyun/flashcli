@@ -1,10 +1,21 @@
-"""Install bundle inference dependencies into the bundle venv."""
+"""Install bundle inference dependencies into the bundle venv.
+
+Flow (host ``pull`` / ``activate_bundle``):
+  1. ``resolve_runtime_requirements(bundle_root)`` — manifest ``python_dependencies``
+  2. ``ensure_flashcli_bundle_in_venv`` — ``flashcli-bundle[infer]`` only (never host ``flashcli``)
+  3. ``_install_runtime_batches`` — torch CUDA index → pin constraints → PyPI / isolated / VCS
+  4. ``requirement_import_satisfied`` (protocol) — venv metadata + ``find_spec``, ``python -I``
+
+See ``docs/architecture.zh-CN.md`` (bundle venv pip layers) and ``module_layers.zh-CN.md``.
+"""
 
 from __future__ import annotations
 
 import importlib.util
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -14,7 +25,7 @@ from pathlib import Path
 
 from flashcli_bundle import paths as config
 from flashcli_bundle.infer.runtime.mirror import (
-    pip_index_url,
+    default_pip_index_url,
     pip_install_extra_args,
     pip_trusted_host,
     resolve_torch_index_url,
@@ -22,12 +33,14 @@ from flashcli_bundle.infer.runtime.mirror import (
 from flashcli_bundle.runtime.requirements_spec import (
     RuntimeRequirementsSpec,
     import_name_for_requirement,
+    requirement_import_failure_reason,
     requirement_import_satisfied,
     requirement_needs_pip_install,
     requirement_package_name,
     resolve_runtime_requirements,
     torch_ecosystem_package_names,
     uses_torch_cuda_wheel_index,
+    venv_purelib,
 )
 
 _INFER_EXTRA = "infer"
@@ -58,15 +71,6 @@ def _host_managed_pip_package(spec: str) -> bool:
     return requirement_package_name(spec) in _HOST_MANAGED_PIP_NAMES
 
 
-def _venv_site_packages(python: Path) -> Path | None:
-    root = _venv_root_from_python(python.resolve())
-    lib = root / "lib"
-    if not lib.is_dir():
-        return None
-    matches = sorted(lib.glob("python*/site-packages"))
-    return matches[0] if matches else None
-
-
 def _pip_show_version(*, python: Path, name: str) -> str | None:
     proc = subprocess.run(
         [str(python), "-m", "pip", "show", name],
@@ -85,9 +89,9 @@ def _pip_show_version(*, python: Path, name: str) -> str | None:
             location = Path(line.partition(":")[2].strip())
     if not version:
         return None
-    site = _venv_site_packages(python)
+    site = venv_purelib(python)
     if site is None or location is None:
-        return version
+        return None
     try:
         location.resolve().relative_to(site.resolve())
     except ValueError:
@@ -240,18 +244,142 @@ def _run_pip(
     subprocess.run(cmd, check=True)
 
 
+def _is_vcs_pip_spec(spec: str) -> bool:
+    return " @ git+" in spec.lower()
+
+
+def _parse_vcs_pip_spec(spec: str) -> tuple[str, str, str]:
+    """Return ``(distribution_name, repo_url, git_ref)`` from a VCS pip spec."""
+    dist, _, rest = spec.partition(" @ git+")
+    repo_url, _, ref = rest.rpartition("@")
+    if not repo_url or not ref:
+        raise ValueError(f"Invalid VCS pip spec: {spec!r}")
+    return dist.strip(), repo_url.strip(), ref.strip()
+
+
+def _is_isaac_gr00t_vcs_spec(spec: str) -> bool:
+    if not _is_vcs_pip_spec(spec):
+        return False
+    _, repo_url, _ = _parse_vcs_pip_spec(spec)
+    normalized = repo_url.rstrip("/").lower()
+    return normalized.endswith("nvidia/isaac-gr00t.git")
+
+
+def _git_clone_url(repo_url: str) -> str:
+    """Optional GitHub proxy prefix (``FLASHCLI_GIT_PROXY``)."""
+    proxy = (os.environ.get("FLASHCLI_GIT_PROXY") or "").strip().rstrip("/")
+    if not proxy or proxy.lower() in ("0", "false", "no", "off"):
+        return repo_url
+    if repo_url.startswith(proxy + "/"):
+        return repo_url
+    return f"{proxy}/{repo_url}"
+
+
+def _isaac_gr00t_source_dir(git_ref: str) -> Path:
+    safe_ref = re.sub(r"[^A-Za-z0-9._-]+", "_", git_ref)
+    return config.FLASHCLI_HOME / "cache" / "isaac-gr00t-src" / safe_ref
+
+
+def _ensure_isaac_gr00t_source(repo_url: str, git_ref: str, *, quiet: bool) -> Path:
+    """Shallow clone Isaac-GR00T without submodules (inference-only subset)."""
+    local = os.environ.get("FLASHCLI_GR00T_SRC", "").strip()
+    if local:
+        path = Path(local).expanduser().resolve()
+        if not path.is_dir():
+            raise RuntimeError(f"FLASHCLI_GR00T_SRC is not a directory: {path}")
+        if not (path / "gr00t").is_dir():
+            raise RuntimeError(
+                f"FLASHCLI_GR00T_SRC must be an Isaac-GR00T checkout with gr00t/: {path}"
+            )
+        return path
+
+    dest = _isaac_gr00t_source_dir(git_ref)
+    if (dest / "pyproject.toml").is_file() and (dest / "gr00t").is_dir():
+        return dest
+
+    clone_url = _git_clone_url(repo_url)
+    if dest.exists():
+        shutil.rmtree(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if not quiet:
+        print(
+            f"Cloning Isaac-GR00T ref {git_ref} without submodules "
+            f"(cache: {dest}) ..."
+        )
+    subprocess.run(
+        [
+            "git",
+            "clone",
+            "--filter=blob:none",
+            "--no-recurse-submodules",
+            "--depth",
+            "1",
+            clone_url,
+            str(dest),
+        ],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(dest), "fetch", "--depth", "1", "origin", git_ref],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(dest), "checkout", "FETCH_HEAD"],
+        check=True,
+    )
+    return dest
+
+
+def _install_isaac_gr00t_vcs_package(
+    spec: str,
+    *,
+    python: Path | None,
+    quiet: bool,
+    constraints: Path | None,
+    bundle_root: Path | None,
+    force: bool,
+) -> None:
+    if not force and not requirement_needs_pip_install(
+        spec,
+        python=_pip_python(python),
+        bundle_root=bundle_root,
+        force=False,
+    ):
+        return
+    _, repo_url, git_ref = _parse_vcs_pip_spec(spec)
+    src = _ensure_isaac_gr00t_source(repo_url, git_ref, quiet=quiet)
+    if not quiet:
+        print(
+            f"Installing gr00t editable from {src} "
+            f"(inference-only checkout; simulation submodules skipped)"
+        )
+    _run_pip(
+        ["-e", str(src)],
+        quiet=quiet,
+        python=python,
+        constraints=constraints,
+        no_deps=True,
+    )
+
+
 def _torch_index_pip_args(
     packages: list[str],
     torch_index: str,
 ) -> list[str]:
-    index_url = resolve_torch_index_url(torch_index)
-    args = list(packages) + ["--index-url", index_url]
-    pypi = pip_index_url()
-    if pypi:
-        args.extend(["--extra-index-url", pypi])
-        host = pip_trusted_host()
-        if host:
-            args.extend(["--trusted-host", host])
+    """Install torch CUDA wheels: PyPI (or mirror) primary, PyTorch index extra.
+
+    Using the PyTorch index as ``--index-url`` breaks transitive deps (e.g.
+    ``typing-extensions``, ``jinja2``) because those wheels have inconsistent
+    ``Name`` metadata on download.pytorch.org.
+    """
+    torch_url = resolve_torch_index_url(torch_index)
+    pypi = default_pip_index_url()
+    args = list(packages)
+    args.extend(["--index-url", pypi])
+    host = pip_trusted_host()
+    if host:
+        args.extend(["--trusted-host", host])
+    args.extend(["--extra-index-url", torch_url])
     return args
 
 
@@ -379,6 +507,8 @@ def _pip_wheel_requires_cache(
         if uses_torch_cuda_wheel_index(pkg):
             continue
         if _host_managed_pip_package(pkg):
+            continue
+        if _is_isaac_gr00t_vcs_spec(pkg):
             continue
         try:
             cache[pkg] = _wheel_requires_dist(pkg, python=python, quiet=quiet)
@@ -524,7 +654,7 @@ def _collect_install_batches(
     bundle_root: Path | None,
     force: bool,
     quiet: bool,
-) -> tuple[list[str], list[str], list[str], dict[str, list[str]]]:
+) -> tuple[list[str], list[str], list[str], dict[str, list[str]], list[str]]:
     wheel_cache = _pip_wheel_requires_cache(
         spec.pip_packages, python=python, quiet=quiet
     )
@@ -542,7 +672,17 @@ def _collect_install_batches(
 
     pypi_pkgs: list[str] = []
     isolated_pkgs: list[str] = []
+    vcs_pkgs: list[str] = []
     for pkg in spec.pip_packages:
+        if _is_isaac_gr00t_vcs_spec(pkg):
+            if requirement_needs_pip_install(
+                pkg,
+                python=_pip_python(python),
+                bundle_root=bundle_root,
+                force=force,
+            ):
+                vcs_pkgs.append(pkg)
+            continue
         if uses_torch_cuda_wheel_index(pkg):
             continue
         if _host_managed_pip_package(pkg):
@@ -560,7 +700,7 @@ def _collect_install_batches(
         else:
             pypi_pkgs.append(pkg)
 
-    return torch_index_pkgs, pypi_pkgs, isolated_pkgs, wheel_cache
+    return torch_index_pkgs, pypi_pkgs, isolated_pkgs, wheel_cache, vcs_pkgs
 
 
 def _install_runtime_batches(
@@ -568,6 +708,7 @@ def _install_runtime_batches(
     torch_index_pkgs: list[str],
     pypi_pkgs: list[str],
     isolated_pkgs: list[str],
+    vcs_pkgs: list[str],
     wheel_cache: dict[str, list[str]],
     torch_index: str,
     python: Path | None,
@@ -601,6 +742,15 @@ def _install_runtime_batches(
             wheel_cache=wheel_cache,
             python=python,
             quiet=quiet,
+            bundle_root=bundle_root,
+            force=force,
+        )
+    for vcs_spec in vcs_pkgs:
+        _install_isaac_gr00t_vcs_package(
+            vcs_spec,
+            python=python,
+            quiet=quiet,
+            constraints=constraints,
             bundle_root=bundle_root,
             force=force,
         )
@@ -734,6 +884,22 @@ def ensure_bundle_infer_deps(
     ensure_flashcli_bundle_in_venv(python=python, quiet=quiet, force=force, extras=(_INFER_EXTRA,))
 
 
+def _install_missing_packages(
+    missing: list[str],
+    *,
+    python: Path | None,
+    quiet: bool,
+) -> None:
+    """Install each missing spec individually (batch resolver can skip stragglers)."""
+    if not missing:
+        return
+    constraints = _constraints_for_pypi_install(python=python)
+    for spec in missing:
+        if not quiet:
+            print(f"Installing missing bundle dependency: {spec}")
+        _run_pip([spec], quiet=quiet, python=python, constraints=constraints)
+
+
 def ensure_runtime_python_stack(
     *,
     bundle_root: Path | None = None,
@@ -756,7 +922,7 @@ def ensure_runtime_python_stack(
     if not quiet:
         print(f"Installing bundle Python dependencies from: {spec.source}")
 
-    torch_index_pkgs, pypi_pkgs, isolated_pkgs, wheel_cache = _collect_install_batches(
+    torch_index_pkgs, pypi_pkgs, isolated_pkgs, wheel_cache, vcs_pkgs = _collect_install_batches(
         spec,
         python=python,
         bundle_root=bundle_root,
@@ -767,6 +933,7 @@ def ensure_runtime_python_stack(
         torch_index_pkgs=torch_index_pkgs,
         pypi_pkgs=pypi_pkgs,
         isolated_pkgs=isolated_pkgs,
+        vcs_pkgs=vcs_pkgs,
         wheel_cache=wheel_cache,
         torch_index=torch_index,
         python=python,
@@ -779,37 +946,31 @@ def ensure_runtime_python_stack(
         spec, python=python, bundle_root=bundle_root
     )
     if missing:
-        if not quiet:
-            print(f"Retrying missing bundle imports: {', '.join(missing)}")
-        retry_torch, retry_pypi, retry_isolated, retry_cache = _collect_install_batches(
-            spec,
-            python=python,
-            bundle_root=bundle_root,
-            force=True,
-            quiet=quiet,
-        )
-        _install_runtime_batches(
-            torch_index_pkgs=retry_torch,
-            pypi_pkgs=retry_pypi,
-            isolated_pkgs=retry_isolated,
-            wheel_cache=retry_cache,
-            torch_index=torch_index,
-            python=python,
-            quiet=quiet,
-            bundle_root=bundle_root,
-            force=True,
-            force_torch_reinstall=bool(retry_torch),
-        )
+        _install_missing_packages(missing, python=python, quiet=quiet)
         missing = _missing_runtime_imports(
             spec, python=python, bundle_root=bundle_root
         )
     if missing:
-        details = ", ".join(
-            f"{p} (import {import_name_for_requirement(p)})" for p in missing
+        py = _pip_python(python)
+        detail_lines: list[str] = []
+        for pkg in missing:
+            line = f"{pkg} (import {import_name_for_requirement(pkg)})"
+            reason = requirement_import_failure_reason(
+                pkg, python=py, bundle_root=bundle_root
+            )
+            if reason:
+                line = f"{line}: {reason}"
+            detail_lines.append(line)
+        details = "; ".join(detail_lines)
+        hint = (
+            "Probes use the bundle venv with python -I (no host PYTHONPATH). "
+            "If a package is listed in flashcli-bundle.json but still fails, "
+            "check pip install output above or retry after removing the runtime venv."
         )
         raise RuntimeError(
             f"Bundle Python dependencies still missing after pip install: {details}\n"
             f"Spec source: {spec.source}\n"
+            f"{hint}\n"
             "Declare every runtime dependency in flashcli-bundle.json python_dependencies."
         )
 

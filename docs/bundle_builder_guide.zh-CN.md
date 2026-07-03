@@ -8,7 +8,7 @@
 
 **对外 Bundle 发布标准**（manifest / entry / `.so` / FlashHub 目录，不含脚本）→ **[bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)**  
 
-格式摘要见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)；终端用户命令见各 bundle 的 `QUICKSTART.zh-CN.md`。
+格式摘要见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)；终端用户命令见各 bundle 的 `README.zh-CN.md`；构建流程见 `BUILD.zh-CN.md`。
 
 ---
 
@@ -260,7 +260,7 @@ bundles/pi05_libero/dist/
    https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.4
    ```
 
-3. 在 README / QUICKSTART 中更新固定 ref：
+3. 在 README / BUILD 中更新固定 ref：
    - 单 variant：`flashcli-bundle/pi05_libero:1.0.4`
    - 多 variant：`flashcli-bundle/qwen_nvfp4:1.0.1@qwen3`、`@qwen36`（**必须**带 `@variant`）
 

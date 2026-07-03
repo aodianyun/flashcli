@@ -193,6 +193,13 @@ def validate_bundle_layout(
     if not (bundle.bundle_root / "flash_rt").is_dir():
         errors.append("missing flash_rt/ Python tree")
 
+    if bundle.name == "groot_n17":
+        vendor_meta = bundle.bundle_root / "gr00t" / "VENDOR.json"
+        if not vendor_meta.is_file():
+            errors.append(
+                "missing vendored gr00t/ (run bundles/groot_n17/vendor_gr00t.sh or build.sh)"
+            )
+
     return errors
 
 

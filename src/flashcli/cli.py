@@ -192,7 +192,7 @@ def models_show(
     cfg = raw_bundle_cfg(p)
 
     typer.echo(f"flashcli: {__version__} ({sys.executable})")
-    typer.echo(f"FlashHub API: {config.FLASHHUB_API_BASE}")
+    typer.echo(f"FlashHub API: {config.flashhub_api_base()}")
     typer.echo(f"ref: {p.name}")
     if bundle_path is not None:
         typer.echo(f"local_root: {bundle_path}")
@@ -254,7 +254,7 @@ def models_envs(
     gpu = detect_gpu()
     if gpu is None:
         typer.echo("[!] No NVIDIA GPU detected; cannot match an environment.")
-    typer.echo(f"FlashHub API: {config.FLASHHUB_API_BASE}")
+    typer.echo(f"FlashHub API: {config.flashhub_api_base()}")
     typer.echo("")
 
     if preset:
@@ -440,15 +440,6 @@ def bundle_validate(
         for err in errors:
             typer.echo(f"ERROR: {err}", err=True)
         raise typer.Exit(1)
-    from flashcli.bundle.native import verify_native_modules
-
-    try:
-        from flashcli.runtime.detect import detect_gpu
-
-        _gpu = detect_gpu()
-        verify_native_modules(bundle, gpu=_gpu)
-    except RuntimeError:
-        raise
     nm = bundle_runtime_matrix(bundle)
     if nm:
         detail = "ABI probed" if not skip_abi_probe else "matrix only"

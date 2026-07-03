@@ -38,15 +38,16 @@ flashcli is intentionally thin: **inference code lives in the bundle**. The CLI 
 
 ## Supported models & hardware
 
-Browse published bundles on **[FlashHub](https://flashhub.top)**. The table below lists common presets (hardware matrix); per-bundle steps are in each bundle’s QUICKSTART.
+Browse published bundles on **[FlashHub](https://flashhub.top)**. The table below lists common presets; model overview and run commands are in each bundle **README**.
 
 | Ref | Task | GPU | CUDA line | Python | Capabilities |
 |-----|------|-----|-----------|--------|--------------|
-| [`flashcli-bundle/pi05_libero:1.0.4`](bundles/pi05_libero/QUICKSTART.md) | Pi0.5 LIBERO VLA | **SM89**, **SM120** | cu124 (SM89) · cu130 | **3.12** (bundle venv) | `run` |
-| [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen3`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3-8B NVFP4 chat | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
-| [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen36`](bundles/qwen_nvfp4/QUICKSTART.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
-| [`flashcli-bundle/qwen3_vl_nvfp4:1.0.0`](bundles/qwen3_vl_nvfp4/QUICKSTART.md) | Qwen3-VL-8B NVFP4 image+text | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
-| [`bundles/groot_n16`](bundles/groot_n16/QUICKSTART.md) *(local dev)* | GROOT N1.6 VLA | **SM120** | **cu130 only** | **3.12** | `run` |
+| [`flashcli-bundle/pi05_libero:1.0.4`](bundles/pi05_libero/README.md) | Pi0.5 LIBERO VLA | **SM89**, **SM120** | cu124 (SM89) · cu130 | **3.12** (bundle venv) | `run` |
+| [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen3`](bundles/qwen_nvfp4/README.md) | Qwen3-8B NVFP4 chat | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
+| [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen36`](bundles/qwen_nvfp4/README.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
+| [`flashcli-bundle/qwen3_vl_nvfp4:1.0.0`](bundles/qwen3_vl_nvfp4/README.md) | Qwen3-VL-8B NVFP4 image+text | **SM120** | **cu130 only** | **3.12** | `run`, `serve` |
+| [`flashcli-bundle/groot_n16:1.0.0`](bundles/groot_n16/README.md) | GROOT N1.6 VLA | **SM120** | **cu130 only** | **3.12** | `run` |
+| [`flashcli-bundle/groot_n17:1.0.0`](bundles/groot_n17/README.md) | GROOT N1.7 VLA | **SM120** | **cu130 only** | **3.10** | `run` |
 
 Full repo index: [bundles/README.md](bundles/README.md). Published refs: [FlashHub](https://flashhub.top).
 
@@ -153,7 +154,7 @@ bash bundles/qwen_nvfp4/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
 flashcli serve bundles/qwen_nvfp4@qwen36 --port 8000 --K 6 --max-seq 262208
 ```
 
-Step-by-step per bundle: **[qwen_nvfp4 QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md)** · **[qwen3_vl_nvfp4 QUICKSTART](bundles/qwen3_vl_nvfp4/QUICKSTART.md)** · **[pi05_libero QUICKSTART](bundles/pi05_libero/QUICKSTART.md)** · **[groot_n16 QUICKSTART](bundles/groot_n16/QUICKSTART.md)** *(local dev)*
+Per-bundle docs: **[pi05_libero](bundles/pi05_libero/README.md)** · **[qwen_nvfp4](bundles/qwen_nvfp4/README.md)** · **[qwen3_vl_nvfp4](bundles/qwen3_vl_nvfp4/README.md)** · **[groot_n16](bundles/groot_n16/README.md)** · **[groot_n17](bundles/groot_n17/README.md)**. Maintainer build guides: [bundles/README.md](bundles/README.md).
 
 ---
 
@@ -210,7 +211,7 @@ Environment variables: [docs/environment.md](docs/environment.md) (`FLASHCLI_HOM
 
 | Role | Read in order |
 |------|----------------|
-| **End user** | This README → [pi05_libero QUICKSTART](bundles/pi05_libero/QUICKSTART.md) or [qwen_nvfp4 QUICKSTART](bundles/qwen_nvfp4/QUICKSTART.md) → [environment.md](docs/environment.md) |
+| **End user** | This README → bundle [README](bundles/pi05_libero/README.md) → [environment.md](docs/environment.md) |
 | **Integrator** | [FlashHub](https://flashhub.top) → [model_bundle_standard.md](docs/model_bundle_standard.md) — preset ref syntax |
 | **Bundle author** | [bundle_publish_standard.md](docs/bundle_publish_standard.md) → [flashcli-bundle/README.md](flashcli-bundle/README.md) |
 

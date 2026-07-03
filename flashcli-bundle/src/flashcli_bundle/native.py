@@ -89,7 +89,7 @@ def _select_loadable_module(
     last_exc: BaseException | None = None
     for candidate in ranked:
         try:
-            _probe_so_file(candidate, env_key=env_key)
+            _probe_so_file(candidate, env_key=env_key, python_minor=python_minor)
             return candidate
         except (ImportError, RuntimeError) as exc:
             last_exc = exc
@@ -212,7 +212,34 @@ def verify_native_modules(bundle: BundleManifest, *, gpu: GpuInfo | None = None)
     _resolve_host_native_paths(bundle, gpu)
 
 
-def _probe_so_file(path: Path, *, env_key: str | None = None) -> None:
+def _probe_so_file(
+    path: Path,
+    *,
+    env_key: str | None = None,
+    python_minor: str | None = None,
+) -> None:
+    if python_minor is None and env_key:
+        try:
+            from flashcli_bundle.runtime_env import parse_variant_key
+
+            python_minor = parse_variant_key(env_key).python_minor
+        except ValueError:
+            python_minor = None
+
+    from flashcli_bundle.runtime_env import host_python_minor
+
+    if python_minor and host_python_minor() != python_minor:
+        from flashcli_bundle.native_validate import probe_native_so_abi
+
+        err = probe_native_so_abi(path, python_minor=python_minor)
+        if err:
+            raise RuntimeError(
+                f"Failed to load native module {path.name}: {err}\n"
+                f"  Set FLASHCLI_PY{python_minor}_BIN to Python "
+                f"3.{python_minor[1:]} for host-side native probes."
+            )
+        return
+
     name = _so_basename_to_module_name(path.name, env_key=env_key)
     _load_extension_from_path(path, name)
     for key in (name, f"flash_rt.{name}"):

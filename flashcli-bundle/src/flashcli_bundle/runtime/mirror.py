@@ -10,6 +10,7 @@ from flashcli_bundle.paths import FLASHCLI_HOME
 MIRROR_ENV_FILE = "mirror.env"
 
 MIRROR_PIP_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple/"
+DEFAULT_PIP_INDEX_URL = "https://pypi.org/simple"
 MIRROR_PIP_TRUSTED_HOST = "pypi.tuna.tsinghua.edu.cn"
 MIRROR_HF_ENDPOINT = "https://hf-mirror.com"
 MIRROR_TORCH_INDEX_BASE = "https://mirrors.aliyun.com/pytorch-wheels"
@@ -91,6 +92,11 @@ def pip_index_url() -> str | None:
     apply_mirror_env()
     url = os.environ.get("PIP_INDEX_URL", "").strip()
     return url or None
+
+
+def default_pip_index_url() -> str:
+    """PyPI simple index for pip (mirror when enabled, else pypi.org)."""
+    return pip_index_url() or DEFAULT_PIP_INDEX_URL
 
 
 def pip_trusted_host() -> str | None:

@@ -65,7 +65,8 @@ def _validate_extra_weights_cached(
     for key, spec in extra_weights_spec(bundle, variant=variant).items():
         if not isinstance(spec, dict):
             continue
-        if not str(spec.get("repo", "")).strip():
+        source = str(spec.get("source", "huggingface")).lower()
+        if source != "bundled" and not str(spec.get("repo", "")).strip():
             continue
         dest = extra_weight_dir(bundle, key, spec, checkpoint_dir=checkpoint)
         if extra_weights_ready(dest, spec):
@@ -96,7 +97,8 @@ def inject_script_entry_env(
     for key, spec in extra_weights_spec(bundle, variant=variant).items():
         if not isinstance(spec, dict):
             continue
-        if not str(spec.get("repo", "")).strip():
+        source = str(spec.get("source", "huggingface")).lower()
+        if source != "bundled" and not str(spec.get("repo", "")).strip():
             continue
         dest = extra_weight_dir(bundle, key, spec, checkpoint_dir=checkpoint)
         os.environ[extra_weight_env_name(key)] = str(dest.resolve())

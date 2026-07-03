@@ -38,14 +38,18 @@ def download_extra_weights(
     for key, spec in extra.items():
         if not isinstance(spec, dict):
             continue
-        repo = str(spec.get("repo", "")).strip()
-        if not repo:
-            if not quiet:
-                print(f"  extra_weights {key!r}: repo not set, skipping")
-            continue
+        source = str(spec.get("source", "huggingface")).lower()
         dest = _w.extra_weight_dest(
             bundle, key, spec, checkpoint_dir=checkpoint_dir
         )
+        if source == "bundled":
+            payload = dict(spec)
+            payload["_bundle_root"] = str(bundle.bundle_root.resolve())
+            download_weights(payload, dest, quiet=quiet)
+            continue
+        repo = str(spec.get("repo", "")).strip()
+        if not repo:
+            continue
         dest.mkdir(parents=True, exist_ok=True)
         if extra_weights_ready(dest, spec):
             continue

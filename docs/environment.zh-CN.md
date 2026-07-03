@@ -13,7 +13,7 @@ flashcli 通过环境变量配置缓存路径、preset ref、下载行为，以�
 | `FLASHCLI_HOME` | `~/.flashcli` | 缓存根目录。默认子目录：`runtimes/`、`models/`、`cache/`。 |
 | `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | preset marker（`<bundle>/<version>@<variant>/.flashcli_bundle.json`）。 |
 | `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | Hugging Face 权重（`<dir>/<bundle>/<version>@<variant>/checkpoint/`）。 |
-| `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | 短 ref `namespace/bundle:version[@variant]` 的 API 基址。在 [flashhub.top](https://flashhub.top) 浏览 bundle（API 尚未迁移至该域名）。 |
+| `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | **所有** FlashHub 仓库 API 的基址：bundle 短 ref、`python-standalone` 自动安装 Python 等均由此派生。在 [flashhub.top](https://flashhub.top) 浏览 bundle（API 尚未迁移至该域名）。 |
 
 示例：
 
@@ -89,7 +89,8 @@ manifest 中 `weights.source` / `extra_weights.source` 设为 `"modelscope"` 时
 | `FLASHCLI_PYTHON_ENV` | `$FLASHCLI_HOME/python-runtime.env` | 自动安装后写入 `FLASHCLI_PY312_BIN=…` 等（下次解析时会加载）。 |
 | `FLASHCLI_PY312_BIN` | （自动） | 覆盖 bundle venv / native ABI 探测用的 Python 3.12 路径。另有 `FLASHCLI_PY310_BIN`、`FLASHCLI_PY311_BIN` 等。 |
 | `FLASHCLI_PYTHON_STANDALONE_TAG` | `20260602` | python-build-standalone 上游 release tag（GitHub fallback 用）。 |
-| `FLASHCLI_PYTHON_REPO` | [FlashHub 1.0.0](https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/python-standalone/1.0.0) | **优先**从此 FlashHub 仓库拉 `python-standalone.json` 与 tarball；失败再 GitHub → GitHub 代理。设为 `0` 跳过 FlashHub。 |
+| `FLASHCLI_PYTHON_REPO` | （由 `FLASHCLI_FLASHHUB_API` 派生） | 覆盖 standalone Python 仓库完整 URL（默认 `{FLASHCLI_FLASHHUB_API}/flashcli-bundle/python-standalone:1.0.0`）。设为 `0` 跳过 FlashHub，仅用 GitHub fallback。 |
+| `FLASHCLI_PYTHON_STANDALONE_VERSION` | `1.0.0` | 未设置 `FLASHCLI_PYTHON_REPO` 时，python-standalone 仓库版本号（拼入上述默认 URL）。 |
 | `FLASHCLI_PYTHON_STANDALONE_MANIFEST` | （无） | 本地 manifest 路径（FlashHub 不可用时的 fallback，在 GitHub 之前）。 |
 | `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | bundle runtime 缓存（bundle 根、`runtime/`、venv）。 |
 | `FLASHCLI_IN_BUNDLE_VENV` | （内部） | `1` 表示当前进程已在 bundle venv 的 infer 子进程内。 |

@@ -544,7 +544,7 @@ check_serve_log_fatal() {
   [[ -f "${serve_log}" ]] || return 0
   if grep -q 'Invalid model bundle:' "${serve_log}"; then
     tail -n 20 "${serve_log}" >&2 || true
-    die "Bundle not built (missing lib/ flash_rt/). See bundles/qwen_nvfp4/QUICKSTART.md"
+    die "Bundle not built (missing lib/ flash_rt/). See bundles/qwen_nvfp4/BUILD.md"
   fi
   if grep -qE 'Failed to load checkpoint|Cannot import Qwen3_5|does not recognize this architecture|torchvision::nms|requires .accelerate|torchvision are incompatible|CUDA out of memory|OutOfMemoryError|flash_attn_2_cuda.*undefined symbol|Engine core initialization failed' "${serve_log}"; then
     tail -n 40 "${serve_log}" >&2 || true

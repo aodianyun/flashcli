@@ -85,6 +85,64 @@ def test_extra_weights_ready_require_any_incomplete(tmp_path: Path) -> None:
     assert not extra_weights_ready(tok, spec)
 
 
+def test_has_local_weights_require_any_patterns(tmp_path: Path) -> None:
+    """Main weights with require_any_patterns (e.g. PaddleOCR .pdiparams)."""
+    from flashcli_bundle.weights import has_local_weights
+
+    ckpt = tmp_path / "checkpoint"
+    ckpt.mkdir()
+    (ckpt / "inference.pdiparams").write_bytes(b"weights")
+    spec = {
+        "repo": "PaddlePaddle/PP-OCRv5",
+        "allow_patterns": ["*.pdiparams", "*.pdmodel", "*.json"],
+        "require_any_patterns": ["inference.pdiparams"],
+    }
+    assert extra_weights_ready(ckpt, spec)
+    assert has_local_weights(ckpt, weights_spec=spec)
+
+
+def test_has_local_weights_require_any_patterns_incomplete(tmp_path: Path) -> None:
+    from flashcli_bundle.weights import has_local_weights
+
+    ckpt = tmp_path / "checkpoint"
+    ckpt.mkdir()
+    (ckpt / "config.json").write_text("{}", encoding="utf-8")
+    spec = {
+        "repo": "PaddlePaddle/PP-OCRv5",
+        "require_any_patterns": ["inference.pdiparams"],
+    }
+    assert not has_local_weights(ckpt, weights_spec=spec)
+
+
+def test_download_extra_weights_modelscope_not_bundled_branch(tmp_path: Path) -> None:
+    """Non-bundled extra_weights must call module-level download_weights (no shadow import)."""
+    root = Path(__file__).resolve().parents[1] / "bundles" / "groot_n17"
+    manifest = load_bundle_manifest(root)
+    checkpoint = tmp_path / "checkpoint"
+    checkpoint.mkdir()
+    calls: list[tuple[dict, Path]] = []
+
+    def _fake_download(spec, dest, *, quiet=False):
+        del quiet
+        calls.append((dict(spec), dest))
+        dest.mkdir(parents=True, exist_ok=True)
+        for name in ("config.json", "tokenizer.json"):
+            (dest / name).write_text("{}", encoding="utf-8")
+
+    with patch("flashcli.bundle.weights.download_weights", side_effect=_fake_download):
+        download_extra_weights(
+            manifest,
+            checkpoint_dir=checkpoint,
+            quiet=True,
+        )
+
+    assert len(calls) == 1
+    spec, dest = calls[0]
+    assert spec.get("source") == "modelscope"
+    assert spec.get("repo") == "nv-community/Cosmos-Reason2-2B"
+    assert dest == checkpoint / "backbone"
+
+
 def test_download_extra_weights_checkpoint_subdir(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1] / "bundles" / "groot_n16"
     manifest = load_bundle_manifest(root)

@@ -62,6 +62,19 @@ def test_resolve_torch_index_url_cu128() -> None:
     assert "cu128" in url
 
 
+def test_torch_index_pip_args_uses_pypi_primary(monkeypatch) -> None:
+    from flashcli_bundle.infer.deps import _torch_index_pip_args
+
+    monkeypatch.setenv("FLASHCLI_NO_MIRROR", "1")
+    monkeypatch.delenv("PIP_INDEX_URL", raising=False)
+    args = _torch_index_pip_args(["torch==2.7.1"], "cu128")
+    idx = args.index("--index-url")
+    extra_idx = args.index("--extra-index-url")
+    assert "pypi.org" in args[idx + 1]
+    assert "cu128" in args[extra_idx + 1]
+    assert idx < extra_idx
+
+
 def test_pypi_prereqs_for_isolated_install_skips_torch_and_eval_extras() -> None:
     requires = [
         "torch>=2.4",
@@ -75,6 +88,20 @@ def test_pypi_prereqs_for_isolated_install_skips_torch_and_eval_extras() -> None
     assert "numpy" in prereqs
     assert not any("torch" in p for p in prereqs)
     assert not any("jiwer" in p for p in prereqs)
+
+
+def test_venv_purelib_uses_sysconfig(tmp_path: Path) -> None:
+    import subprocess
+
+    from flashcli_bundle.runtime.requirements_spec import venv_purelib
+
+    venv = tmp_path / "venv"
+    subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
+    py = venv / "bin" / "python"
+    site = venv_purelib(py)
+    assert site is not None
+    assert site.name == "site-packages"
+    assert site.is_dir()
 
 
 def test_query_installed_torch_ecosystem_versions_uses_pip_show(tmp_path) -> None:

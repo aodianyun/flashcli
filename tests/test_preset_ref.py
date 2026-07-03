@@ -42,13 +42,7 @@ def test_parse_full_url_with_variant() -> None:
 
 
 def test_custom_flashhub_api_base(monkeypatch: pytest.MonkeyPatch) -> None:
-    import flashcli_bundle.paths as paths
-
-    monkeypatch.setattr(
-        paths,
-        "FLASHHUB_API_BASE",
-        "https://staging.example/api/v1/repos",
-    )
+    monkeypatch.setenv("FLASHCLI_FLASHHUB_API", "https://staging.example/api/v1/repos")
     parsed = parse_preset_ref("flashcli-bundle/pi05_libero:1.0.4")
     assert parsed.repo_url == (
         "https://staging.example/api/v1/repos/flashcli-bundle/pi05_libero:1.0.4"

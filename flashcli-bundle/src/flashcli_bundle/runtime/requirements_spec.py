@@ -15,12 +15,26 @@ from packaging.requirements import Requirement
 _TORCH_NAMES = frozenset({"torch", "pytorch"})
 _TORCH_CUDA_WHEEL_NAMES = frozenset({"torchaudio", "torchvision", "torchtext"})
 
-# PyPI name -> importlib module name (when they differ).
+# PyPI distribution name -> primary importlib module name (when they differ).
 _IMPORT_NAMES: dict[str, str] = {
     "pillow": "PIL",
     "pyyaml": "yaml",
     "opencv-python": "cv2",
+    "opencv-python-headless": "cv2",
+    "opencv-contrib-python": "cv2",
+    "dm-tree": "tree",
+    "huggingface-hub": "huggingface_hub",
     "melband-roformer-infer": "mel_band_roformer",
+    "scikit-learn": "sklearn",
+    "msgpack-numpy": "msgpack_numpy",
+    "gitpython": "git",
+    "paddlepaddle": "paddle",
+    "paddlepaddle-gpu": "paddle",
+}
+
+# Run before probing import (native extensions that expect torch loaded).
+_IMPORT_PREP: dict[str, str] = {
+    "torchcodec": "import torch",
 }
 
 
@@ -340,14 +354,24 @@ def write_runtime_requirements_artifacts(
         }
 
 
-def import_name_for_requirement(spec: str) -> str:
+def import_names_for_requirement(spec: str) -> list[str]:
+    """Candidate import roots for a pip spec (mapping, then PyPI-name heuristic)."""
     name = _req_name(spec)
-    return _IMPORT_NAMES.get(name, re.sub(r"[-.]", "_", name))
+    candidates: list[str] = []
+    mapped = _IMPORT_NAMES.get(name)
+    if mapped:
+        candidates.append(mapped)
+    heuristic = re.sub(r"[-.]", "_", name)
+    if heuristic not in candidates:
+        candidates.append(heuristic)
+    return candidates
+
+
+def import_name_for_requirement(spec: str) -> str:
+    return import_names_for_requirement(spec)[0]
 
 
 def pythonpath_env(bundle_root: Path | None) -> dict[str, str]:
-    import os
-
     env = os.environ.copy()
     if bundle_root is None:
         return env
@@ -357,61 +381,193 @@ def pythonpath_env(bundle_root: Path | None) -> dict[str, str]:
     return env
 
 
+def _import_probe_env() -> dict[str, str]:
+    """Env for pip-package import probes: never inherit host PYTHONPATH/PYTHONHOME."""
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    env.pop("PYTHONHOME", None)
+    return env
+
+
+def _probe_python_argv(python: Path | str) -> list[str]:
+    """Python argv prefix for bundle-venv probes (isolated from host PYTHONPATH)."""
+    return [str(python), "-I"]
+
+
+def venv_purelib(python: Path | str) -> Path | None:
+    """Return the bundle venv ``site-packages`` directory (``sysconfig``-accurate)."""
+    import subprocess
+
+    proc = subprocess.run(
+        _probe_python_argv(python)
+        + ["-c", "import sysconfig; print(sysconfig.get_path('purelib'))"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None
+    site = Path(proc.stdout.strip())
+    return site if site.is_dir() else None
+
+
+def _module_candidates_for_spec(spec: str) -> list[str]:
+    """Import roots to probe for a pip requirement (mapping, heuristic, top_level)."""
+    req = Requirement(spec)
+    candidates = import_names_for_requirement(spec)
+    try:
+        from importlib.metadata import distribution
+
+        top = distribution(req.name).read_text("top_level.txt")
+        if top:
+            for line in top.splitlines():
+                name = line.strip()
+                if name and not name.startswith("_") and name not in candidates:
+                    candidates.append(name)
+    except (ImportError, OSError, TypeError, AttributeError):
+        pass
+    return candidates
+
+
+def _requirement_probe_script(spec: str) -> str:
+    """Subprocess script: distribution in venv purelib + import-root ``find_spec``.
+
+    On success prints ``dist.version`` to stdout and exits 0.
+    Exit codes: 1 module missing, 2 distribution missing/outside venv.
+    Version specifier checks run in the parent (needs ``packaging`` on host only).
+    """
+    req = Requirement(spec)
+    static_candidates = import_names_for_requirement(spec)
+    static_candidates_repr = repr(static_candidates)
+    import_names_json = json.dumps(_IMPORT_NAMES)
+    import_prep_json = json.dumps(_IMPORT_PREP)
+
+    return f"""
+import importlib.metadata as md
+import importlib.util
+import json
+import sysconfig
+from pathlib import Path
+
+dist_name = {req.name!r}
+purelib = Path(sysconfig.get_path("purelib")).resolve()
+
+try:
+    dist = md.distribution(dist_name)
+    anchor = Path(dist.locate_file("")).resolve()
+    anchor.relative_to(purelib)
+except (md.PackageNotFoundError, ValueError, TypeError):
+    raise SystemExit(2)
+
+import_names = json.loads({import_names_json!r})
+import_prep = json.loads({import_prep_json!r})
+candidates: list[str] = []
+mapped = import_names.get(dist_name.lower())
+if mapped:
+    candidates.append(mapped)
+try:
+    top = dist.read_text("top_level.txt")
+    if top:
+        for line in top.splitlines():
+            name = line.strip()
+            if name and not name.startswith("_") and name not in candidates:
+                candidates.append(name)
+except (OSError, TypeError, AttributeError):
+    pass
+for extra in {static_candidates_repr}:
+    if extra not in candidates:
+        candidates.append(extra)
+
+prep = import_prep.get(dist_name.lower(), "")
+if prep:
+    exec(prep, {{}})
+
+for mod in candidates:
+    if importlib.util.find_spec(mod) is not None:
+        print(dist.version)
+        raise SystemExit(0)
+
+raise SystemExit(1)
+"""
+
+
+_PROBE_EXIT_MODULE_MISSING = 1
+_PROBE_EXIT_DIST_MISSING = 2
+_PROBE_EXIT_VERSION_MISMATCH = 3
+
+
+def _run_requirement_probe(
+    spec: str,
+    *,
+    python: Path | str,
+) -> tuple[int, str]:
+    import subprocess
+
+    req = Requirement(spec)
+    proc = subprocess.run(
+        _probe_python_argv(python) + ["-c", _requirement_probe_script(spec)],
+        env=_import_probe_env(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    detail = (proc.stderr or proc.stdout or "").strip()
+    if proc.returncode == _PROBE_EXIT_DIST_MISSING:
+        return proc.returncode, detail
+    if proc.returncode == _PROBE_EXIT_MODULE_MISSING:
+        return proc.returncode, detail
+    if proc.returncode != 0:
+        return proc.returncode, detail
+    installed_ver = proc.stdout.strip().splitlines()[-1].strip()
+    if req.specifier and installed_ver not in req.specifier:
+        return _PROBE_EXIT_VERSION_MISMATCH, installed_ver
+    return 0, installed_ver
+
+
 def requirement_import_satisfied(
     spec: str,
     *,
     python: Path | str,
     bundle_root: Path | None = None,
 ) -> bool:
-    """True when a pip spec is installed in *python* (metadata first, then import)."""
-    import subprocess
+    """True when a pip spec is installed in the bundle venv with matching metadata.
 
-    mod = import_name_for_requirement(spec)
-    py = str(python)
-    env = pythonpath_env(bundle_root)
+    Probes run in the bundle venv with ``python -I`` (no host ``PYTHONPATH``).
+    Satisfaction means: distribution metadata lives under the venv ``purelib``,
+    version matches the specifier, and at least one declared import root is
+    discoverable via ``importlib.util.find_spec`` (pip install verification —
+    not a runtime inference smoke test).
+    """
+    del bundle_root  # kept for API compat; probes must not prepend bundle paths
+    code, _ = _run_requirement_probe(spec, python=python)
+    return code == 0
 
-    script = f"""
-import importlib.metadata as md
-from packaging.requirements import Requirement
 
-spec = {spec!r}
-mod = {mod!r}
-req = Requirement(spec)
-
-def distribution_ok() -> bool:
-    try:
-        ver = md.version(req.name)
-    except md.PackageNotFoundError:
-        return False
-    return not req.specifier or ver in req.specifier
-
-# Pip packages may use a different import root than normalized PyPI name
-# (e.g. melband-roformer-infer installs import mel_band_roformer).
-if distribution_ok():
-    raise SystemExit(0)
-
-# Installed but version does not satisfy the specifier → needs pip upgrade.
-if req.specifier:
-    try:
-        md.version(req.name)
-    except md.PackageNotFoundError:
-        pass
-    else:
-        raise SystemExit(1)
-
-try:
-    __import__(mod)
-except ImportError:
-    raise SystemExit(1)
-raise SystemExit(0)
-"""
-    proc = subprocess.run(
-        [py, "-c", script],
-        env=env,
-        capture_output=True,
-        check=False,
-    )
-    return proc.returncode == 0
+def requirement_import_failure_reason(
+    spec: str,
+    *,
+    python: Path | str,
+    bundle_root: Path | None = None,
+) -> str | None:
+    """Explain why ``requirement_import_satisfied`` is False."""
+    del bundle_root
+    req = Requirement(spec)
+    code, detail = _run_requirement_probe(spec, python=python)
+    if code == 0:
+        return None
+    if code == _PROBE_EXIT_DIST_MISSING:
+        return f"distribution {req.name!r} not installed in bundle venv"
+    if code == _PROBE_EXIT_VERSION_MISMATCH:
+        return f"installed version does not satisfy {req.specifier!r}"
+    if code == _PROBE_EXIT_MODULE_MISSING:
+        roots = ", ".join(_module_candidates_for_spec(spec))
+        msg = f"no import root found in venv ({roots or req.name})"
+        if detail:
+            msg = f"{msg}; {detail.splitlines()[-1]}"
+        return msg
+    if detail:
+        return detail.splitlines()[-1]
+    return "requirement probe failed"
 
 
 def requirement_needs_pip_install(

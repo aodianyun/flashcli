@@ -157,6 +157,7 @@ sequenceDiagram
 | `flashcli-bundle/qwen_nvfp4:1.0.1@qwen36` | `run`, `serve` | Qwen3.6-27B + MTP |
 | `flashcli-bundle/qwen3_vl_nvfp4:1.0.0` | `run`, `serve` | Qwen3-VL-8B |
 | `bundles/groot_n16` *（本地 dev）* | `run` | GROOT N1.6 |
+| `bundles/groot_n17` *（本地 dev）* | `run` | GROOT N1.7 |
 
 见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
 

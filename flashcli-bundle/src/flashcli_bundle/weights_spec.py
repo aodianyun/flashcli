@@ -7,6 +7,7 @@ from typing import Any
 
 from flashcli_bundle.bundle_config import bundle_dict
 from flashcli_bundle.checkpoint import (
+    extra_weights_ready,
     has_checkpoint_weight_files,
     has_usable_checkpoint,
     weights_require_norm_stats,
@@ -46,6 +47,8 @@ def has_local_weights(
     require_ns = weights_require_norm_stats(weights_spec)
     if has_usable_checkpoint(path, require_norm_stats=require_ns):
         return True
+    if weights_spec is not None and extra_weights_ready(path, weights_spec):
+        return True
     if require_ns and has_checkpoint_weight_files(path):
         return False
     for entry in path.iterdir():
@@ -53,9 +56,11 @@ def has_local_weights(
             continue
         if entry.name == ".cache":
             continue
-        if entry.is_dir() and has_usable_checkpoint(
-            entry, require_norm_stats=require_ns
-        ):
+        if not entry.is_dir():
+            continue
+        if has_usable_checkpoint(entry, require_norm_stats=require_ns):
+            return True
+        if weights_spec is not None and extra_weights_ready(entry, weights_spec):
             return True
     return False
 

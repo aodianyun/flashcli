@@ -1,67 +1,59 @@
-# pi05_libero
+# Pi0.5 LIBERO
 
-<p align="right"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a> · <a href="QUICKSTART.md">Quick start</a></p>
+<p align="right"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
 
-Pi0.5 LIBERO VLA; weights [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044).
+**Pi0.5** vision–language–action (VLA) policy fine-tuned on LIBERO manipulation tasks. Given a natural-language instruction and camera images, the model outputs robot actions for tabletop pick-and-place style tasks.
 
-**Ref**: `flashcli-bundle/pi05_libero:1.0.4`. End users sync runtime from FlashHub; flashcli matches manifest `runtime` env keys and loads `.so` from `runtime/<env-key>/`. Run `flashcli models envs flashcli-bundle/pi05_libero:1.0.4` to check a match on this host.
+| | |
+|---|---|
+| **Ref** | `flashcli-bundle/pi05_libero:1.0.4` |
+| **Weights** | [lerobot/pi05_libero_finetuned_v044](https://huggingface.co/lerobot/pi05_libero_finetuned_v044) (~7.5 GB) |
+| **GPU** | NVIDIA **SM89** (Ada) or **SM120** (Blackwell) |
+| **CUDA** | **12.4+** (SM89) · **13.x** (SM120) |
+| **Python** | **3.12** (bundle venv) |
+| **Capabilities** | `run` |
 
-## Files required to run inference (after sync)
+**Inputs:** task prompt + RGB images (LIBERO uses **2** camera views by default).  
+**Output:** action sequence for the robot policy.
 
-```text
-flashcli-bundle.json
-run.py                    # script entry (main)
-run_engine.py             # engine entry (RunEngine); see flashcli-bundle.engine.json
-_pi05_infer.py
-_pi05_compat.py
-flash_rt/
-runtime/<env-key>/         # *.so for this host
-```
+Weights and a PaliGemma tokenizer file are pulled on first run (not in the bundle zip).
 
-Weights are downloaded by flashcli to `~/.flashcli/models/pi05_libero/1.0.4/checkpoint/`, not shipped in the bundle.
-
-## Entry modes
-
-| File | Role |
-|------|------|
-| `flashcli-bundle.json` | **Default script**: `run.main(argv)`; does **not** `import flashcli_bundle` |
-| `flashcli-bundle.engine.json` | **Engine example**: `run_engine.RunEngine`; `cp flashcli-bundle.engine.json flashcli-bundle.json` to try engine locally |
-
-`run.py` (script) and `run_engine.py` (engine) share `_pi05_infer.py`; script reads paths from `FLASHCLI_CHECKPOINT` and related env vars only.
-
-## End users
-
-See **[QUICKSTART.md](QUICKSTART.md)** for copy-paste commands.
+## Run
 
 ```bash
-curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
-flashcli run flashcli-bundle/pi05_libero:1.0.4 --prompt "..." --image /path/to/base.jpg
+flashcli run flashcli-bundle/pi05_libero:1.0.4 \
+  --prompt "pick up the red block and place it in the tray" \
+  --image /path/to/base.jpg
 ```
 
-## Troubleshooting
-
-### HuggingFace weight download fails (`LocalEntryNotFoundError`)
-
-The bundle is runtime-only; ~7.5GB weights are fetched from the Hub. In K8s or restricted networks, both `huggingface.co` and `hf-mirror.com` may fail with this error (usually DNS/firewall/proxy, not a missing repo).
+Two views (comma-separated paths):
 
 ```bash
-rm -rf ~/.flashcli/models/*/checkpoint   # or remove the ref's cache dir from flashcli models show
-export HF_ENDPOINT=https://hf-mirror.com   # pin mirror only; default is official Hub then mirror fallback
-flashcli pull flashcli-bundle/pi05_libero:1.0.4
+flashcli run flashcli-bundle/pi05_libero:1.0.4 \
+  --prompt "pick up the red block and place it in the tray" \
+  --num-views 2 \
+  --image /path/view0.jpg,/path/view1.jpg
 ```
 
-Pre-download on a reachable host, then `flashcli run bundles/pi05_libero --checkpoint ./checkpoint --image ...`.
+Use a local checkpoint directory:
 
-Local dev: positional ref must be a directory containing `flashcli-bundle.json` (e.g. `bundles/pi05_libero` or `bundles/pi05_libero/dist/`), not a `.zip` archive.
+```bash
+flashcli run flashcli-bundle/pi05_libero:1.0.4 \
+  --checkpoint /path/to/checkpoint \
+  --image /path/to/base.jpg
+```
 
-### `no kernel image is available for execution on the device`
+Full flag list: `flashcli run flashcli-bundle/pi05_libero:1.0.4 --help`
 
-Usually **wrong GPU/CUDA cell** or a **stale FlashHub runtime**. Run `flashcli models envs flashcli-bundle/pi05_libero:1.0.4` — expect `sm89-cu124-*`, `sm89-cu130-*`, or `sm120-cu130-*`.
+## Parameters
 
-### `'GemmRunner' object has no attribute 'fp8_nt_dev'`
-
-On SM89, `_pi05_compat.py` shims older `.so` builds, or rebuild FlashRT with `fp8_nt_dev`.
-
-### `FvkContext is already registered`
-
-Use current flashcli; native modules are registered once per process.
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--prompt` | `pick up the red block and place it in the tray` | Task instruction |
+| `--image` | — | Comma-separated RGB image paths (one per view) |
+| `--num-views` | `2` | Number of camera views |
+| `--hardware` | `auto` | FlashRT backend (`rtx_sm89`, `rtx_sm120`, `thor`, …) |
+| `--autotune` | `3` | CUDA graph autotune trials (`0` disables) |
+| `--use-fp8` | on | Load weights in FP8 when supported |
+| `--config` | `pi05` | FlashRT model config name |
+| `--checkpoint` | *(auto)* | Override cached weight directory |

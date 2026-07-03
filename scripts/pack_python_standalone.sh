@@ -256,4 +256,10 @@ done
 write_manifest "${OUTPUT_DIR}/python-standalone.json" "${MANIFEST_ENTRIES[@]}"
 log "Wrote ${OUTPUT_DIR}/python-standalone.json"
 log "FlashHub upload dir: ${OUTPUT_DIR}"
-log "Suggested repo: https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/python-standalone/1.0.0"
+_py_repo="${FLASHCLI_PYTHON_REPO:-}"
+if [[ -z "${_py_repo}" ]]; then
+  _api_base="${FLASHCLI_FLASHHUB_API:-https://flashhub-api.aodianyun.com/api/v1/repos}"
+  _py_ver="${FLASHCLI_PYTHON_STANDALONE_VERSION:-1.0.0}"
+  _py_repo="${_api_base%/}/flashcli-bundle/python-standalone:${_py_ver}"
+fi
+log "Suggested repo: ${_py_repo}"

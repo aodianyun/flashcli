@@ -54,7 +54,7 @@ def test_parse_flashhub_api_payload() -> None:
     }
     index = _parse_index_payload(
         payload,
-        repo_url="https://flashhub.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero/1.0.2",
+        repo_url="https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.2",
     )
     assert isinstance(index, RepoIndex)
     manifest = index.find("flashcli-bundle.json")

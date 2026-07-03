@@ -158,6 +158,7 @@ See [model_bundle_standard.md](model_bundle_standard.md).
 | `flashcli-bundle/qwen_nvfp4:1.0.1@qwen36` | `run`, `serve` |
 | `flashcli-bundle/qwen3_vl_nvfp4:1.0.0` | `run`, `serve` |
 | `bundles/groot_n16` *(local dev)* | `run` |
+| `bundles/groot_n17` *(local dev)* | `run` |
 
 See [model_bundle_standard.md](model_bundle_standard.md).
 

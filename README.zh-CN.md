@@ -38,15 +38,16 @@ flashcli 刻意保持轻薄：**推理代码在 bundle 内**。CLI 从 FlashHub 
 
 ## 支持范围
 
-在 **[FlashHub](https://flashhub.top)** 浏览已发布的 bundle。下表为常用 preset（硬件矩阵）；分 bundle 步骤见各 QUICKSTART。
+在 **[FlashHub](https://flashhub.top)** 浏览已发布的 bundle。下表为常用 preset；模型介绍与运行命令见各 bundle **README**。
 
 | Ref | 任务 | GPU | CUDA 线 | Python | 能力 |
 |-----|------|-----|---------|--------|------|
-| [`flashcli-bundle/pi05_libero:1.0.4`](bundles/pi05_libero/QUICKSTART.zh-CN.md) | Pi0.5 LIBERO VLA | **SM89**、**SM120** | cu124（SM89）· cu130 | **3.12**（bundle venv） | `run` |
-| [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen3`](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) | Qwen3-8B NVFP4 对话 | **SM120** | **仅 cu130** | **3.12** | `run`, `serve` |
-| [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen36`](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **仅 cu130** | **3.12** | `run`, `serve` |
-| [`flashcli-bundle/qwen3_vl_nvfp4:1.0.0`](bundles/qwen3_vl_nvfp4/QUICKSTART.zh-CN.md) | Qwen3-VL-8B NVFP4 图文 | **SM120** | **仅 cu130** | **3.12** | `run`, `serve` |
-| [`bundles/groot_n16`](bundles/groot_n16/QUICKSTART.zh-CN.md) *（本地 dev）* | GROOT N1.6 VLA | **SM120** | **仅 cu130** | **3.12** | `run` |
+| [`flashcli-bundle/pi05_libero:1.0.4`](bundles/pi05_libero/README.zh-CN.md) | Pi0.5 LIBERO VLA | **SM89**、**SM120** | cu124（SM89）· cu130 | **3.12**（bundle venv） | `run` |
+| [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen3`](bundles/qwen_nvfp4/README.zh-CN.md) | Qwen3-8B NVFP4 对话 | **SM120** | **仅 cu130** | **3.12** | `run`, `serve` |
+| [`flashcli-bundle/qwen_nvfp4:1.0.1@qwen36`](bundles/qwen_nvfp4/README.zh-CN.md) | Qwen3.6-27B NVFP4 + MTP | **SM120** | **仅 cu130** | **3.12** | `run`, `serve` |
+| [`flashcli-bundle/qwen3_vl_nvfp4:1.0.0`](bundles/qwen3_vl_nvfp4/README.zh-CN.md) | Qwen3-VL-8B NVFP4 图文 | **SM120** | **仅 cu130** | **3.12** | `run`, `serve` |
+| [`flashcli-bundle/groot_n16:1.0.0`](bundles/groot_n16/README.zh-CN.md) | GROOT N1.6 VLA | **SM120** | **仅 cu130** | **3.12** | `run` |
+| [`flashcli-bundle/groot_n17:1.0.0`](bundles/groot_n17/README.zh-CN.md) | GROOT N1.7 VLA | **SM120** | **仅 cu130** | **3.10** | `run` |
 
 完整索引：[bundles/README.zh-CN.md](bundles/README.zh-CN.md)。已发布 ref：[FlashHub](https://flashhub.top)。
 
@@ -151,7 +152,7 @@ bash bundles/qwen_nvfp4/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
 flashcli serve bundles/qwen_nvfp4@qwen36 --port 8000 --K 6 --max-seq 262208
 ```
 
-分 bundle 步骤：**[qwen_nvfp4 快速上手](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md)** · **[qwen3_vl_nvfp4 快速上手](bundles/qwen3_vl_nvfp4/QUICKSTART.zh-CN.md)** · **[pi05_libero 快速上手](bundles/pi05_libero/QUICKSTART.zh-CN.md)** · **[groot_n16 快速上手](bundles/groot_n16/QUICKSTART.zh-CN.md)** *（本地 dev）*
+各 bundle 文档：**[pi05_libero](bundles/pi05_libero/README.zh-CN.md)** · **[qwen_nvfp4](bundles/qwen_nvfp4/README.zh-CN.md)** · **[qwen3_vl_nvfp4](bundles/qwen3_vl_nvfp4/README.zh-CN.md)** · **[groot_n16](bundles/groot_n16/README.zh-CN.md)** · **[groot_n17](bundles/groot_n17/README.zh-CN.md)**。维护者构建见 [bundles/README.zh-CN.md](bundles/README.zh-CN.md)。
 
 ---
 
@@ -208,7 +209,7 @@ run/serve：
 
 | 角色 | 阅读顺序 |
 |------|----------|
-| **终端用户** | 本 README → [pi05_libero 快速上手](bundles/pi05_libero/QUICKSTART.zh-CN.md) 或 [qwen_nvfp4 快速上手](bundles/qwen_nvfp4/QUICKSTART.zh-CN.md) → [environment.zh-CN.md](docs/environment.zh-CN.md) |
+| **终端用户** | 本 README → bundle [README](bundles/pi05_libero/README.zh-CN.md) → [environment.zh-CN.md](docs/environment.zh-CN.md) |
 | **集成方** | [FlashHub](https://flashhub.top) → [model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md) — preset ref 语法 |
 | **Bundle 作者** | [bundle_publish_standard.zh-CN.md](docs/bundle_publish_standard.zh-CN.md) → [flashcli-bundle/README.md](flashcli-bundle/README.md) |
 

@@ -8,7 +8,7 @@ For **Model Bundle maintainers (internal)**: environment setup, local dev, matri
 
 **External bundle publish standard** (manifest / entry / `.so` / FlashHub layout; no scripts) → **[bundle_publish_standard.md](bundle_publish_standard.md)**
 
-Format summary: [model_bundle_standard.md](model_bundle_standard.md) (preset ref + runtime flow). End-user commands: each bundle’s `QUICKSTART.md`.
+Format summary: [model_bundle_standard.md](model_bundle_standard.md) (preset ref + runtime flow). End-user commands: each bundle’s `README.md`. Build workflow: each bundle’s `BUILD.md`.
 
 > **Full step-by-step guide:** [bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md) (中文). This page is an English summary.
 

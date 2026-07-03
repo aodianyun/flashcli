@@ -114,7 +114,8 @@ resolve_bin() {
 }
 
 apt_pkg_available() {
-  apt-cache show "$1" >/dev/null 2>&1
+  local pkg="$1"
+  apt-cache show "${pkg}" 2>/dev/null | grep -q "^Package: ${pkg}$"
 }
 
 install_apt_minor() {
@@ -133,6 +134,7 @@ install_apt_minor() {
   apt_pkg_available "${ver}-dev" && pkgs+=("${ver}-dev")
   log "py${py}: apt install ${pkgs[*]}"
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${pkgs[@]}"
+  resolve_bin "${py}" >/dev/null 2>&1
 }
 
 install_deadsnakes() {

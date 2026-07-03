@@ -237,6 +237,54 @@ def _weights_source(spec: dict[str, Any]) -> str:
     return str(spec.get("source", "huggingface")).lower()
 
 
+def _copy_bundled_weights(
+    spec: dict[str, Any],
+    dest: Path,
+    *,
+    bundle_root: Path,
+    quiet: bool,
+) -> None:
+    """Copy bundle-shipped files (no Hub download)."""
+    import shutil
+
+    from flashcli.bundle.checkpoint import extra_weights_ready
+
+    relative = str(spec.get("relative_dir", "")).strip().strip("/")
+    if not relative:
+        raise ValueError("bundled weights spec requires non-empty relative_dir")
+    src = (bundle_root / relative).resolve()
+    if not src.is_dir():
+        raise FileNotFoundError(
+            f"Bundled weights missing under bundle: {src}\n"
+            f"  Run: bash bundles/groot_n17/vendor_groot_backbone.sh"
+        )
+    if extra_weights_ready(dest, spec):
+        if not quiet:
+            print(f"Bundled weights already staged: {dest}")
+        return
+    dest.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    for path in sorted(src.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(src)
+        if rel.parts and rel.parts[0] == ".cache":
+            continue
+        target = dest / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, target)
+        copied += 1
+    if copied == 0:
+        raise FileNotFoundError(f"No files to copy from bundled weights: {src}")
+    if not extra_weights_ready(dest, spec):
+        raise RuntimeError(
+            f"Bundled weights incomplete after copy {src} -> {dest}; "
+            "check allow_patterns / require_any_patterns in manifest"
+        )
+    if not quiet:
+        print(f"Staged bundled weights: {src} -> {dest} ({copied} files)")
+
+
 def download_weights(
     spec: dict[str, Any],
     dest: Path,
@@ -245,6 +293,17 @@ def download_weights(
 ) -> None:
     """Download weights per manifest ``weights`` / ``extra_weights`` spec."""
     source = _weights_source(spec)
+    if source == "bundled":
+        bundle_root = spec.get("_bundle_root")
+        if not bundle_root:
+            raise ValueError("bundled download requires _bundle_root in spec")
+        _copy_bundled_weights(
+            spec,
+            dest,
+            bundle_root=Path(bundle_root),
+            quiet=quiet,
+        )
+        return
     if source == "huggingface":
         _download_huggingface(spec, dest, quiet=quiet)
         return

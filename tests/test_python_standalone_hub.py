@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from flashcli.bundle.python_standalone_hub import (
-    DEFAULT_PYTHON_REPO,
     enrich_manifest_from_index,
     python_repo_url,
     resolve_standalone_asset,
@@ -26,7 +25,10 @@ class _FakeIndex:
 
 
 def test_python_repo_url_default() -> None:
-    assert python_repo_url() == DEFAULT_PYTHON_REPO
+    url = python_repo_url()
+    assert url is not None
+    assert url.endswith("/flashcli-bundle/python-standalone:1.0.0")
+    assert "flashhub-api.aodianyun.com" in url
 
 
 def test_python_repo_url_disabled(monkeypatch) -> None:
