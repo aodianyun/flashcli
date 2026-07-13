@@ -1,0 +1,164 @@
+{
+  "format": "flashcli-model-bundle",
+  "format_version": 3,
+  "protocol_version": 1,
+  "name": "wan22",
+  "description": "Wan2.2-TI2V-5B text/image-to-video (official pipeline) on RTX SM120. RunEngine (engine mode) wrapping flash_rt config='wan22_ti2v_5b'.",
+  "python_abi": "310",
+  "entry": {
+    "run": {
+      "module": "run",
+      "attr": "RunEngine"
+    }
+  },
+  "python_dependencies": {
+    "torch": {
+      "package": "torch",
+      "index": "auto"
+    },
+    "pip": [
+      "torchvision",
+      "numpy>=1.24,<2",
+      "transformers==4.51.3",
+      "safetensors",
+      "sentencepiece",
+      "pyyaml",
+      "pillow",
+      "easydict",
+      "ftfy",
+      "einops",
+      "imageio",
+      "imageio-ffmpeg",
+      "diffusers>=0.31.0",
+      "accelerate>=0.31.0",
+      "tqdm"
+    ]
+  },
+  "run_options": [
+    {
+      "name": "prompt",
+      "type": "string",
+      "default": "A cinematic shot of a blue sphere rolling across a wooden table",
+      "help": "Text prompt for video generation.",
+      "phase": "predict"
+    },
+    {
+      "name": "negative_prompt",
+      "type": "string",
+      "help": "Negative prompt (unconditional guidance). Empty uses the pipeline default.",
+      "phase": "predict"
+    },
+    {
+      "name": "mode",
+      "type": "string",
+      "default": "t2v",
+      "help": "Generation mode: t2v (text-to-video) or i2v (image-to-video).",
+      "phase": "predict"
+    },
+    {
+      "name": "image",
+      "type": "string",
+      "help": "Input image path for i2v mode (ignored in t2v).",
+      "phase": "predict"
+    },
+    {
+      "name": "width",
+      "type": "integer",
+      "default": 832,
+      "help": "Output width (multiple of 32). 5060Ti/16GB: 832; RTX 5090: 1280.",
+      "phase": "predict"
+    },
+    {
+      "name": "height",
+      "type": "integer",
+      "default": 480,
+      "help": "Output height (multiple of 32). 5060Ti/16GB: 480; RTX 5090: 704.",
+      "phase": "predict"
+    },
+    {
+      "name": "frames",
+      "type": "integer",
+      "default": 81,
+      "help": "Number of generated frames (must be 4n+1). 5060Ti: 81; RTX 5090: 121.",
+      "phase": "predict"
+    },
+    {
+      "name": "steps",
+      "type": "integer",
+      "default": 20,
+      "help": "Flow-matching denoise steps.",
+      "phase": "predict"
+    },
+    {
+      "name": "shift",
+      "type": "float",
+      "default": 5.0,
+      "help": "Sampler shift.",
+      "phase": "predict"
+    },
+    {
+      "name": "guide_scale",
+      "type": "float",
+      "default": 5.0,
+      "help": "Classifier-free guidance scale.",
+      "phase": "predict"
+    },
+    {
+      "name": "seed",
+      "type": "integer",
+      "default": 1234,
+      "help": "Random seed.",
+      "phase": "predict"
+    },
+    {
+      "name": "sample_solver",
+      "type": "string",
+      "default": "unipc",
+      "help": "Sampling solver (unipc).",
+      "phase": "predict"
+    },
+    {
+      "name": "offload_model",
+      "type": "boolean",
+      "default": true,
+      "help": "Offload model stages between CPU/GPU (keep true on <=16GB; false on RTX 5090 for speed).",
+      "phase": "predict"
+    },
+    {
+      "name": "teacache",
+      "type": "boolean",
+      "default": false,
+      "help": "Enable TeaCache step-skipping acceleration.",
+      "phase": "predict"
+    },
+    {
+      "name": "teacache_threshold",
+      "type": "float",
+      "default": 0.0,
+      "help": "TeaCache threshold (0.15-0.30 typical; must be >0 when teacache=true).",
+      "phase": "predict"
+    },
+    {
+      "name": "out",
+      "type": "string",
+      "default": "wan22_out.mp4",
+      "help": "Output video path (.mp4).",
+      "phase": "predict"
+    },
+    {
+      "name": "hardware",
+      "type": "string",
+      "default": "auto",
+      "help": "FlashRT backend: auto, rtx_sm120, rtx_sm89.",
+      "phase": "load"
+    }
+  ],
+  "weights": {
+    "source": "modelscope",
+    "repo": "Wan-AI/Wan2.2-TI2V-5B",
+    "revision": "master"
+  },
+  "runtime": {
+    "sm120-cu130-linux-x86_64-py310": "runtime/sm120-cu130-linux-x86_64-py310"
+  }
+}

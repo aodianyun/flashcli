@@ -1,0 +1,11 @@
+# Assembled by build.sh
+/flash_rt/
+/wan/
+/flash_rt_*.so
+/runtime/
+/dist/
+/.build/
+
+# Python
+__pycache__/
+*.pyc
