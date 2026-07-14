@@ -8,6 +8,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 from flashcli import config
 from flashcli._version import __version__
@@ -45,10 +46,14 @@ def _manifest_cache_path(repo_url: str) -> Path:
     return config.CACHE_DIR / "python-standalone" / f"{key}-manifest.json"
 
 
+def _entry_basename(path: str) -> str:
+    return unquote(path.strip("/").split("/")[-1])
+
+
 def _files_by_basename(index) -> dict[str, list[Any]]:
     out: dict[str, list[Any]] = {}
     for entry in index.files:
-        name = entry.path.strip("/").split("/")[-1]
+        name = _entry_basename(entry.path)
         if name:
             out.setdefault(name, []).append(entry)
     return out
@@ -56,13 +61,14 @@ def _files_by_basename(index) -> dict[str, list[Any]]:
 
 def flashhub_tarball_urls(index, filename: str) -> list[str]:
     """All FlashHub CDN URLs for *filename* (handles duplicate path layouts)."""
+    want = unquote(filename.strip())
     seen: set[str] = set()
     urls: list[str] = []
     for entry in index.files:
-        if not str(entry.path).endswith(".tar.gz"):
+        name = _entry_basename(entry.path)
+        if not name.endswith(".tar.gz"):
             continue
-        name = entry.path.strip("/").split("/")[-1]
-        if name == filename and entry.url not in seen:
+        if name == want and entry.url not in seen:
             seen.add(entry.url)
             urls.append(entry.url)
     return urls
@@ -95,6 +101,22 @@ def enrich_manifest_from_index(manifest: dict[str, Any], index) -> dict[str, Any
     return {**manifest, "files": enriched}
 
 
+def _manifest_needs_cdn_enrich(manifest: dict[str, Any]) -> bool:
+    """True when any tarball row still points outside FlashHub CDN."""
+    files = manifest.get("files")
+    if not isinstance(files, list) or not files:
+        return True
+    for item in files:
+        if not isinstance(item, dict):
+            continue
+        filename = str(item.get("filename") or Path(str(item.get("path", ""))).name)
+        if not filename.endswith(".tar.gz"):
+            continue
+        if not _is_flashhub_url(str(item.get("url") or "")):
+            return True
+    return False
+
+
 def fetch_flashhub_manifest(
     repo_url: str,
     *,
@@ -110,8 +132,18 @@ def fetch_flashhub_manifest(
         try:
             cached = json.loads(cache.read_text(encoding="utf-8"))
             if isinstance(cached, dict) and cached.get("files"):
-                return cached
-        except (json.JSONDecodeError, TypeError, OSError):
+                if not _manifest_needs_cdn_enrich(cached):
+                    return cached
+                # Stale cache kept GitHub urls when %2B basename matching failed;
+                # re-enrich from the current repo index without re-downloading JSON.
+                index = fetch_repo_index(repo_url, use_cache=True)
+                enriched = enrich_manifest_from_index(cached, index)
+                if not _manifest_needs_cdn_enrich(enriched):
+                    cache.write_text(
+                        json.dumps(enriched, indent=2) + "\n", encoding="utf-8"
+                    )
+                    return enriched
+        except (json.JSONDecodeError, TypeError, OSError, RuntimeError):
             pass
 
     index = fetch_repo_index(repo_url, use_cache=not force)
@@ -169,7 +201,13 @@ def resolve_standalone_asset(
             asset = asset_from_manifest(manifest, py_minor, triplet)
             if asset is not None:
                 if not quiet:
-                    source = "FlashHub" if _is_flashhub_url(asset.url) else repo
+                    if _is_flashhub_url(asset.url):
+                        source = asset.url
+                    else:
+                        source = (
+                            f"{repo} (tarball URL not on CDN yet; "
+                            f"will try FlashHub index then fallback)"
+                        )
                     print(
                         f"Using python-standalone {asset.filename} from {source}",
                         file=sys.stderr,

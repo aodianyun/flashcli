@@ -27,6 +27,54 @@ def test_path_from_download_url() -> None:
     ) == "flashcli-bundle.json"
 
 
+def test_path_from_download_url_unquotes_plus() -> None:
+    url = (
+        "https://flashhub-cdn.aodianyun.com/repo/7/versions/9/"
+        "20260602/x86_64-unknown-linux-gnu/"
+        "cpython-3.10.20%2B20260602-x86_64-unknown-linux-gnu-install_only.tar.gz"
+    )
+    assert _path_from_download_url(url) == (
+        "20260602/x86_64-unknown-linux-gnu/"
+        "cpython-3.10.20+20260602-x86_64-unknown-linux-gnu-install_only.tar.gz"
+    )
+
+
+def test_parse_uses_file_name_when_url_encodes_plus() -> None:
+    payload = {
+        "code": 0,
+        "message": "success",
+        "data": {
+            "files": [
+                {
+                    "download_url": (
+                        "https://flashhub-cdn.aodianyun.com/repo/7/versions/9/"
+                        "20260602/x86_64-unknown-linux-gnu/"
+                        "cpython-3.10.20%2B20260602-x86_64-unknown-linux-gnu-install_only.tar.gz"
+                    ),
+                    "file_name": (
+                        "cpython-3.10.20+20260602-x86_64-unknown-linux-gnu-install_only.tar.gz"
+                    ),
+                    "file_size": 41700000,
+                    "md5_hash": "abc",
+                },
+            ]
+        },
+    }
+    index = _parse_index_payload(
+        payload,
+        repo_url="https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/python-standalone:1.0.0",
+    )
+    entry = index.find(
+        "cpython-3.10.20+20260602-x86_64-unknown-linux-gnu-install_only.tar.gz"
+    )
+    assert entry is not None
+    assert entry.path.endswith(
+        "cpython-3.10.20+20260602-x86_64-unknown-linux-gnu-install_only.tar.gz"
+    )
+    assert "%2B" not in entry.path
+    assert "%2B" in entry.url  # download URL keeps CDN encoding
+
+
 def test_parse_flashhub_api_payload() -> None:
     payload = {
         "code": 0,

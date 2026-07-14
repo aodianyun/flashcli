@@ -9,7 +9,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from flashcli_bundle import paths as config
 from flashcli_bundle.flashhub_errors import flashhub_error_from_fetch
@@ -32,6 +32,14 @@ class RepoFile:
         if not url:
             return None
         path = _path_from_download_url(url)
+        # Prefer API file_name for the basename: CDN URLs often encode '+' as %2B,
+        # which must not break matching against manifest filenames with literal '+'.
+        file_name = str(data.get("file_name") or "").strip()
+        if path and file_name:
+            parent, sep, _base = path.rpartition("/")
+            path = f"{parent}/{file_name}" if sep else file_name
+        elif not path and file_name:
+            path = file_name
         if not path:
             return None
         size_raw = data.get("file_size")
@@ -60,13 +68,17 @@ class RepoIndex:
 
 
 def _path_from_download_url(url: str) -> str | None:
-    """Extract bundle-relative path from FlashHub CDN ``download_url``."""
+    """Extract bundle-relative path from FlashHub CDN ``download_url``.
+
+    Percent-decodes the path (e.g. ``%2B`` → ``+``) so basename matching works
+    against manifest filenames that use literal ``+``.
+    """
     parsed = urlparse(url)
     match = _CDN_PATH_RE.search(parsed.path)
     if match:
-        rel = match.group(1).strip("/")
+        rel = unquote(match.group(1)).strip("/")
         return rel or None
-    tail = parsed.path.lstrip("/")
+    tail = unquote(parsed.path).lstrip("/")
     return tail or None
 
 

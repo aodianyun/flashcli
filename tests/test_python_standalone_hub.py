@@ -66,6 +66,44 @@ def test_enrich_manifest_rewrites_cdn_urls() -> None:
     assert row["size"] == 111092240
 
 
+def test_enrich_manifest_matches_percent_encoded_basename() -> None:
+    """CDN paths may keep %2B until decoded; must still rewrite GitHub urls."""
+    from flashcli.bundle.python_standalone_hub import flashhub_tarball_urls
+
+    filename = "cpython-3.10.20+20260602-x86_64-unknown-linux-gnu-install_only.tar.gz"
+    cdn = (
+        "https://flashhub-cdn.aodianyun.com/repo/7/versions/9/"
+        "20260602/x86_64-unknown-linux-gnu/"
+        "cpython-3.10.20%2B20260602-x86_64-unknown-linux-gnu-install_only.tar.gz"
+    )
+    manifest = {
+        "standalone_tag": "20260602",
+        "files": [
+            {
+                "py_minor": "310",
+                "triplet": "x86_64-unknown-linux-gnu",
+                "filename": filename,
+                "url": f"https://github.com/astral-sh/python-build-standalone/releases/download/20260602/{filename}",
+            }
+        ],
+    }
+    # Simulate pre-fix index paths that still contain %2B in the path string.
+    index = _FakeIndex(
+        [
+            _FakeEntry(
+                "20260602/x86_64-unknown-linux-gnu/"
+                "cpython-3.10.20%2B20260602-x86_64-unknown-linux-gnu-install_only.tar.gz",
+                cdn,
+                md5="deadbeef",
+                size=41_700_000,
+            )
+        ]
+    )
+    enriched = enrich_manifest_from_index(manifest, index)
+    assert enriched["files"][0]["url"] == cdn
+    assert flashhub_tarball_urls(index, filename) == [cdn]
+
+
 def test_standalone_download_urls_flashhub_first() -> None:
     asset = StandaloneAsset(
         py_minor="312",
