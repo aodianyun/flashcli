@@ -1,0 +1,71 @@
+{
+  "format": "flashcli-model-bundle",
+  "format_version": 3,
+  "protocol_version": 1,
+  "name": "higgs_audio",
+  "description": "Higgs Audio v3 TTS-4B — zero-shot text-to-speech (bosonai/higgs-audio-v3-tts-4b). FP8 W8A8 Qwen3-4B backbone + fused 8-codebook head + neural codec. RunEngine (engine mode).",
+  "python_abi": "310",
+  "entry": {
+    "run": {
+      "module": "run",
+      "attr": "RunEngine"
+    }
+  },
+  "python_dependencies": {
+    "torch": {
+      "package": "torch",
+      "index": "auto"
+    },
+    "pip": [
+      "numpy",
+      "safetensors",
+      "transformers>=4.53",
+      "pillow"
+    ]
+  },
+  "run_options": [
+    {
+      "name": "text",
+      "type": "string",
+      "default": "The quick brown fox jumps over the lazy dog.",
+      "help": "Text to synthesise into speech.",
+      "phase": "predict"
+    },
+    {
+      "name": "out",
+      "type": "string",
+      "default": "output.wav",
+      "help": "Output WAV file path (24 kHz mono).",
+      "phase": "predict"
+    },
+    {
+      "name": "fp8",
+      "type": "string",
+      "default": "auto",
+      "help": "Decode precision: auto (FP8 if kernels available, else BF16), true (force FP8), false (force BF16).",
+      "phase": "load"
+    },
+    {
+      "name": "device",
+      "type": "string",
+      "default": "cuda:0",
+      "help": "CUDA device string.",
+      "phase": "load"
+    },
+    {
+      "name": "max_seq",
+      "type": "integer",
+      "default": 2048,
+      "help": "KV-cache length (prompt + generated frames).",
+      "phase": "load"
+    }
+  ],
+  "weights": {
+    "source": "modelscope",
+    "repo": "bosonai/higgs-audio-v3-tts-4b",
+    "revision": "master"
+  },
+  "runtime": {
+    "sm120-cu130-linux-x86_64-py310": "runtime/sm120-cu130-linux-x86_64-py310"
+  }
+}

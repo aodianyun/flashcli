@@ -98,11 +98,41 @@ def test_fetch_manifest_downloads_when_no_cache(
 
 
 def test_resolve_run_target_local_bundle_positional() -> None:
+    from flashcli.models.preset_ref import local_bundle_id
+
     root = Path(__file__).resolve().parents[1] / "bundles" / "qwen_nvfp4"
     preset, bundle_path = resolve_run_target("bundles/qwen_nvfp4@qwen36")
     assert bundle_path == root.resolve()
     assert preset.bundle_variant == "qwen36"
-    assert preset.cache_key == "qwen_nvfp4/local@qwen36"
+    expected_id = local_bundle_id(root)
+    assert expected_id.startswith("qwen_nvfp4-local-")
+    assert preset.cache_key == f"{expected_id}/local@qwen36"
+    assert preset.name == f"local:{expected_id}@qwen36"
+
+
+def test_local_dist_bundles_do_not_share_cache_key(tmp_path: Path) -> None:
+    from flashcli.models.preset_ref import resolve_local_bundle_preset
+
+    def _write_dist(parent: Path, name: str) -> Path:
+        dist = parent / "dist"
+        dist.mkdir(parents=True)
+        (dist / "flashcli-bundle.json").write_text(
+            json.dumps({"name": name}),
+            encoding="utf-8",
+        )
+        return dist
+
+    a = _write_dist(tmp_path / "wan22", "wan22")
+    b = _write_dist(tmp_path / "pi05_libero", "pi05_libero")
+    key_a = resolve_local_bundle_preset(a, None).cache_key
+    key_b = resolve_local_bundle_preset(b, None).cache_key
+    assert key_a != key_b
+    assert key_a.startswith("wan22-local-")
+    assert key_b.startswith("pi05_libero-local-")
+    assert key_a.endswith("/local")
+    assert key_b.endswith("/local")
+    # Same path resolves to a stable key.
+    assert resolve_local_bundle_preset(a, None).cache_key == key_a
 
 
 def test_resolve_run_target_flashhub_ref() -> None:

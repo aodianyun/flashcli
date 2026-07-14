@@ -66,6 +66,21 @@ def test_cache_key_local_dev() -> None:
     assert cache_key("local:qwen_nvfp4@qwen36") == "qwen_nvfp4/local@qwen36"
 
 
+def test_resolve_preset_local_ref() -> None:
+    preset = resolve_preset("local:higgs_audio-local-40da4a4ec462")
+    assert preset.name == "local:higgs_audio-local-40da4a4ec462"
+    assert preset.cache_key == "higgs_audio-local-40da4a4ec462/local"
+    assert preset.bundle_variant is None
+    assert "repo" not in preset.raw.get("bundle", {})
+
+
+def test_resolve_preset_local_ref_with_variant() -> None:
+    preset = resolve_preset("local:qwen_nvfp4-local-abc123def456@qwen36")
+    assert preset.name == "local:qwen_nvfp4-local-abc123def456@qwen36"
+    assert preset.cache_key == "qwen_nvfp4-local-abc123def456/local@qwen36"
+    assert preset.bundle_variant == "qwen36"
+
+
 def test_is_flashhub_ref() -> None:
     from flashcli.models.preset_ref import is_flashhub_ref
 
@@ -102,3 +117,5 @@ def test_resolve_bundle_root_dotdot_relative(
     preset, path = resolve_run_target(f"{rel}/")
     assert path == bundle_root.resolve()
     assert preset.raw["bundle"]["local_root"] == str(bundle_root.resolve())
+    assert "-local-" in preset.cache_key
+    assert preset.cache_key.endswith("/local")

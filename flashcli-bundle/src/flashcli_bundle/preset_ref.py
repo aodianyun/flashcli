@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +20,7 @@ _REF_EXAMPLES = (
 
 _SHORT_REF_RE = re.compile(r"^([^/]+)/([^:]+):([^@]+)$")
 _CACHE_SEGMENT_RE = re.compile(r"[^\w.\-+]+")
+_SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9._+-]+")
 
 
 @dataclass(frozen=True)
@@ -139,17 +142,45 @@ def _is_bundle_root(path: Path) -> bool:
     return is_bundle_root(path)
 
 
+def _read_local_bundle_name(root: Path) -> str:
+    """Read ``name`` from flashcli-bundle.json without full manifest validation."""
+    path = root / "flashcli-bundle.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return root.name
+    if isinstance(data, dict):
+        name = str(data.get("name", "")).strip()
+        if name:
+            return name
+    return root.name
+
+
+def local_bundle_id(root: Path) -> str:
+    """Stable id for a local bundle root: ``{name}-local-{path_digest}``.
+
+    Aligns with ``runtime_id_from_path`` so different paths that share a
+    basename (e.g. ``*/dist``) do not collide in models/bundles caches.
+    """
+    root = root.expanduser().resolve()
+    digest = hashlib.sha256(str(root).encode()).hexdigest()[:12]
+    raw_name = _read_local_bundle_name(root)
+    safe = _SAFE_NAME_RE.sub("-", raw_name.strip()).strip("-") or "bundle"
+    return f"{safe}-local-{digest}"
+
+
 def resolve_local_bundle_preset(root: Path, variant: str | None) -> Preset:
     """Build a preset for local bundle dev (no FlashHub repo URL)."""
     root = root.expanduser().resolve()
     if not _is_bundle_root(root):
         raise ValueError(f"Not a bundle root: {root}")
-    label = f"local:{root.name}"
+    bundle_id = local_bundle_id(root)
+    label = f"local:{bundle_id}"
     canonical = f"{label}@{variant}" if variant else label
     raw_cfg: dict = {"bundle": {"local_root": str(root)}}
     if variant:
         raw_cfg["bundle_variant"] = variant
-    key = cache_key_from_coordinates(root.name, "local", variant)
+    key = cache_key_from_coordinates(bundle_id, "local", variant)
     return Preset(name=canonical, raw=raw_cfg, cache_key=key)
 
 
@@ -219,9 +250,21 @@ def parse_preset_ref(raw: str) -> PresetRef:
 
 
 def resolve_preset(raw: str) -> Preset:
-    """Build a :class:`Preset` from a FlashHub ref string."""
+    """Build a :class:`Preset` from a FlashHub or ``local:`` ref string.
+
+    ``local:`` refs (written into preset markers for path-based bundles) have no
+    FlashHub repo URL; cache identity comes from :func:`cache_key`.
+    """
+    body, variant = _split_variant(raw.strip())
+    if body.startswith("local:"):
+        canonical = f"{body}@{variant}" if variant else body
+        raw_cfg: dict = {"bundle": {}}
+        if variant:
+            raw_cfg["bundle_variant"] = variant
+        return Preset(name=canonical, raw=raw_cfg, cache_key=cache_key(canonical))
+
     parsed = parse_preset_ref(raw)
-    raw_cfg: dict = {"bundle": {"repo": parsed.repo_url}}
+    raw_cfg = {"bundle": {"repo": parsed.repo_url}}
     if parsed.variant:
         raw_cfg["bundle_variant"] = parsed.variant
     return Preset(name=parsed.ref, raw=raw_cfg, cache_key=parsed.cache_key)

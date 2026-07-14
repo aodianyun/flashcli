@@ -148,6 +148,7 @@ def doctor_main(
 def models_list() -> None:
     from flashcli.bundle.marker import list_cached_presets
     from flashcli.models.preset_ref import resolve_preset
+    from flashcli.models.registry import Preset
 
     entries = list_cached_presets()
     if not entries:
@@ -161,6 +162,21 @@ def models_list() -> None:
             preset = resolve_preset(ref)
         except ValueError:
             preset = None
+        # Marker may carry cache_key / local_root that string resolve lacks.
+        cache_key = str(entry.get("cache_key", "")).strip()
+        local_root = str(entry.get("local_root", "")).strip()
+        if preset is None and cache_key:
+            raw_cfg: dict = {"bundle": {}}
+            if local_root:
+                raw_cfg["bundle"]["local_root"] = local_root
+            preset = Preset(name=ref, raw=raw_cfg, cache_key=cache_key)
+        elif preset is not None:
+            if cache_key and not preset.cache_key:
+                preset.cache_key = cache_key
+            if local_root:
+                bundle_cfg = preset.raw.setdefault("bundle", {})
+                if isinstance(bundle_cfg, dict) and not bundle_cfg.get("local_root"):
+                    bundle_cfg["local_root"] = local_root
         variant_tag = ""
         if preset and preset.bundle_variant:
             variant_tag = f", variant={preset.bundle_variant}"
