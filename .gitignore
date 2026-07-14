@@ -13,3 +13,4 @@ build/
 codeplan/
 logs/
 docker/push_auto_install.sh
+.cursorrules

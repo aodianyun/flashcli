@@ -76,6 +76,13 @@ APT_OS_PACKAGES_DISABLED=0
 # pyproject.toml [project] — keep in sync with repo pyproject.toml
 # ---------------------------------------------------------------------------
 REQUIRES_PYTHON_MIN="3.10"
+# Minimum pip that can finish install.sh end-to-end with our flag probing:
+#   - PEP 508 direct URL + #subdirectory= (flashcli-bundle from git)
+#   - new dependency resolver (pip 20.3+); 21.3 is a safe known-good floor
+# Optional flags are NOT part of this floor — they are probed at use time:
+#   --root-user-action       → pip>=22.1  (never used inside venv)
+#   --break-system-packages  → pip>=23.0.1 (only system PEP 668; default path is venv)
+# Do NOT raise this to force "newer is better"; only bump when a real install feature requires it.
 MIN_PIP_VERSION="21.3"
 GET_PIP_URL="https://bootstrap.pypa.io/get-pip.py"
 # Keep in sync with pyproject.toml [project].dependencies — one spec per line for verify/repair.
@@ -864,8 +871,16 @@ should_break_system_packages() {
   python_is_pep668 "$PYTHON" 2>/dev/null
 }
 
+# True if `python -m pip install --help` lists the given long option (e.g. root-user-action).
+pip_has_option() {
+  _opt="$1"
+  [ -n "$_opt" ] || return 1
+  run_py -m pip install --help 2>/dev/null | grep -q -- "--${_opt}"
+}
+
 pip_extra_flags() {
-  if should_break_system_packages; then
+  # Only for system (non-venv) PEP 668 installs; requires pip>=23.0.1.
+  if should_break_system_packages && pip_has_option break-system-packages; then
     printf '%s' '--break-system-packages'
   fi
 }
@@ -972,8 +987,12 @@ run_py() {
 do_pip_install() {
   _log="/tmp/flashcli-pip-$$.log"
   _break="$(pip_extra_flags || true)"
-  if [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ]; then
-    set -- --root-user-action=ignore "$@"
+  # --root-user-action only silences a warning on *system* root installs (pip>=22.1).
+  # Never pass it inside a venv — unnecessary, and breaks Ubuntu 22.04's pip 22.0.x.
+  if [ -z "${VIRTUAL_ENV:-}" ] && [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ]; then
+    if pip_has_option root-user-action; then
+      set -- --root-user-action=ignore "$@"
+    fi
   fi
   _run_pip() {
     if run_py -m pip install "$@" >"$_log" 2>&1; then
@@ -1002,7 +1021,7 @@ do_pip_install() {
         fi
       fi
     fi
-    if should_break_system_packages; then
+    if should_break_system_packages && pip_has_option break-system-packages; then
       warn "PEP 668 — retrying pip with --break-system-packages"
       if run_py -m pip install --break-system-packages "$@" >"$_log" 2>&1; then
         [ "$QUIET" = "1" ] || cat "$_log" >&2
@@ -1194,9 +1213,15 @@ create_flashcli_venv_dir() {
     if [ "$(id -u 2>/dev/null || echo 1)" -ne 0 ]; then
       "$_base" -m pip install --user virtualenv >/dev/null 2>&1 || return 1
     else
-      "$_base" -m pip install virtualenv >/dev/null 2>&1 \
-        || "$_base" -m pip install --break-system-packages virtualenv >/dev/null 2>&1 \
-        || return 1
+      # Prefer plain install; --break-system-packages needs pip>=23.0.1 (PEP 668 hosts).
+      if "$_base" -m pip install virtualenv >/dev/null 2>&1; then
+        :
+      elif "$_base" -m pip install --help 2>/dev/null | grep -q -- '--break-system-packages' \
+        && "$_base" -m pip install --break-system-packages virtualenv >/dev/null 2>&1; then
+        :
+      else
+        return 1
+      fi
     fi
     "$_base" -m virtualenv "$_venv" 2>/dev/null && return 0
   fi
@@ -1222,6 +1247,7 @@ activate_flashcli_venv_python() {
 
 ensure_flashcli_venv() {
   should_use_venv || return 1
+  export FLASHCLI_MIN_PIP_VERSION="$MIN_PIP_VERSION"
 
   _venv="$(flashcli_venv_path)"
   _base_python="${FLASHCLI_BASE_PYTHON:-${PYTHON:-}}"
@@ -1262,13 +1288,13 @@ Fix:
 }
 
 # Match pip3 on PATH to the selected interpreter (some distros split python3 / pip3).
+# Do not upgrade pip here — only confirm the same interpreter already has a working pip.
 try_pip3_same_interpreter() {
   if ! have_cmd pip3; then
     return 1
   fi
   _pip3_py="$(pip3 -c 'import sys; print(sys.executable)' 2>/dev/null || true)"
   if [ -n "$_pip3_py" ] && [ "$_pip3_py" = "$PYTHON" ]; then
-    pip3 install --upgrade pip >/dev/null 2>&1 || true
     pip_works && return 0
   fi
   return 1
@@ -1326,64 +1352,109 @@ check_python_version() {
   fi
 }
 
-ensure_pip() {
+# Upgrade pip only when below MIN_PIP_VERSION. Never pass modern CLI flags that
+# older pip rejects (--root-user-action needs 22.1+; --break-system-packages 23.0.1+).
+upgrade_pip_to_min() {
   export FLASHCLI_MIN_PIP_VERSION="$MIN_PIP_VERSION"
+  pip_works || return 1
+  pip_version_ok && return 0
 
-  if pip_works; then
-    if pip_version_ok; then
-      info "[ok] pip: $(run_py -m pip --version 2>/dev/null | head -n 1)"
+  _log="/tmp/flashcli-pip-upgrade-$$.log"
+  _run_upgrade() {
+    if run_py -m pip install "$@" >"$_log" 2>&1; then
+      [ "$QUIET" = "1" ] || cat "$_log" >&2
       return 0
     fi
-    warn "pip is older than ${MIN_PIP_VERSION}; upgrading ..."
-    do_pip_install --upgrade "pip>=${MIN_PIP_VERSION}" \
-      || do_pip_install --upgrade pip \
-      || warn "pip upgrade failed; continuing with existing pip"
-    if pip_works && pip_version_ok; then
-      info "[ok] pip upgraded: $(run_py -m pip --version 2>/dev/null | head -n 1)"
-      return 0
-    fi
-  fi
+    [ "$QUIET" = "1" ] || cat "$_log" >&2
+    return 1
+  }
 
-  info "pip module missing — trying ensurepip ..."
+  set -- --upgrade "pip>=${MIN_PIP_VERSION}"
   if [ "$PIP_INSTALL_USER" = "1" ]; then
-    run_py -m ensurepip --upgrade --user >/dev/null 2>&1 \
-      || run_py -m ensurepip --user >/dev/null 2>&1 \
-      || true
-  else
-    run_py -m ensurepip --upgrade >/dev/null 2>&1 \
-      || run_py -m ensurepip >/dev/null 2>&1 \
-      || true
+    set -- --user "$@"
   fi
-  if pip_works; then
-    info "[ok] pip via ensurepip: $(run_py -m pip --version 2>/dev/null | head -n 1)"
+  if [ -z "${VIRTUAL_ENV:-}" ] && should_break_system_packages && pip_has_option break-system-packages; then
+    set -- --break-system-packages "$@"
+  fi
+
+  if _run_upgrade "$@"; then
+    rm -f "$_log"
+    pip_version_ok && return 0
+  fi
+
+  # Fallback: unpinned upgrade (still only reached when below MIN_PIP_VERSION).
+  set -- --upgrade pip
+  if [ "$PIP_INSTALL_USER" = "1" ]; then
+    set -- --user "$@"
+  fi
+  if [ -z "${VIRTUAL_ENV:-}" ] && should_break_system_packages && pip_has_option break-system-packages; then
+    set -- --break-system-packages "$@"
+  fi
+  if _run_upgrade "$@"; then
+    rm -f "$_log"
+    pip_version_ok && return 0
+  fi
+  rm -f "$_log"
+  return 1
+}
+
+require_pip_min_or_die() {
+  export FLASHCLI_MIN_PIP_VERSION="$MIN_PIP_VERSION"
+  if pip_works && pip_version_ok; then
+    info "[ok] pip: $(run_py -m pip --version 2>/dev/null | head -n 1) (min ${MIN_PIP_VERSION})"
     return 0
   fi
+  _have="$(run_py -m pip --version 2>/dev/null | head -n 1 || echo 'pip missing')"
+  die "cannot proceed — need pip>=${MIN_PIP_VERSION} (have: ${_have}).
+Reason: install uses PEP 508 git+URL #subdirectory=; pip below ${MIN_PIP_VERSION} is unsupported.
+Fix:
+  $PYTHON -m pip install -U 'pip>=${MIN_PIP_VERSION}'
+  apt install -y python3-pip python3-venv && ./install.sh --mirror
+  rm -rf \"\${HOME:-/root}/.flashcli/venv\" && ./install.sh --mirror"
+}
 
-  try_pip3_same_interpreter && info "[ok] pip via pip3" && return 0
+# Bootstrap any pip onto $PYTHON (version may still be below MIN_PIP_VERSION).
+bootstrap_pip_any() {
+  # Prefer ensurepip without forcing an upgrade of an already-present pip tool chain.
+  if [ "$PIP_INSTALL_USER" = "1" ]; then
+    run_py -m ensurepip --user >/dev/null 2>&1 || true
+  else
+    run_py -m ensurepip >/dev/null 2>&1 || true
+  fi
+  pip_works && return 0
+
+  # Retry with --upgrade only when ensurepip installed nothing usable.
+  if [ "$PIP_INSTALL_USER" = "1" ]; then
+    run_py -m ensurepip --upgrade --user >/dev/null 2>&1 || true
+  else
+    run_py -m ensurepip --upgrade >/dev/null 2>&1 || true
+  fi
+  pip_works && return 0
+
+  try_pip3_same_interpreter && return 0
 
   if try_os_install_pip; then
     if [ -z "${VIRTUAL_ENV:-}" ] && PYTHON="$(discover_python)"; then
       export PYTHON
     fi
-    if pip_works; then
-      info "[ok] pip via OS package manager ($PYTHON)"
-      return 0
-    fi
+    pip_works && return 0
   fi
 
-  if bootstrap_pip_get_pip; then
-    info "[ok] pip via get-pip.py: $(run_py -m pip --version 2>/dev/null | head -n 1)"
-    return 0
-  fi
+  bootstrap_pip_get_pip && return 0
 
-  if ensure_flashcli_venv; then
-    if pip_works; then
-      info "[ok] pip: $(run_py -m pip --version 2>/dev/null | head -n 1)"
-      return 0
-    fi
+  if should_use_venv && [ -z "${VIRTUAL_ENV:-}" ] && ensure_flashcli_venv; then
+    pip_works && return 0
   fi
+  return 1
+}
 
-  die "cannot bootstrap pip for $PYTHON.
+ensure_pip() {
+  export FLASHCLI_MIN_PIP_VERSION="$MIN_PIP_VERSION"
+
+  if ! pip_works; then
+    info "pip missing — installing a pip for $PYTHON (will keep it if >=${MIN_PIP_VERSION}) ..."
+    bootstrap_pip_any \
+      || die "cannot bootstrap pip for $PYTHON.
 Reason: pip/ensurepip/get-pip and OS package install all failed.
 This host may mix interpreters (e.g. Debian /usr/bin/python3.13 + /usr/local python3.12).
 Fix:
@@ -1391,6 +1462,51 @@ Fix:
   apt install -y python3-pip python3-venv   # Debian/Ubuntu (root)
   ./install.sh --mirror                      # slow/blocked network
   FLASHCLI_BREAK_SYSTEM_PACKAGES=1 ./install.sh"
+    info "[ok] pip bootstrapped: $(run_py -m pip --version 2>/dev/null | head -n 1)"
+  fi
+
+  if pip_version_ok; then
+    info "[ok] pip: $(run_py -m pip --version 2>/dev/null | head -n 1) (meets min ${MIN_PIP_VERSION}; not upgrading)"
+    return 0
+  fi
+
+  warn "pip is below required minimum ${MIN_PIP_VERSION}; upgrading only to satisfy that floor ..."
+  if upgrade_pip_to_min; then
+    info "[ok] pip upgraded to minimum: $(run_py -m pip --version 2>/dev/null | head -n 1)"
+    return 0
+  fi
+
+  info "pip upgrade failed — retrying via get-pip.py ..."
+  if bootstrap_pip_get_pip; then
+    if pip_version_ok; then
+      info "[ok] pip via get-pip.py: $(run_py -m pip --version 2>/dev/null | head -n 1)"
+      return 0
+    fi
+    # get-pip may have installed something still oddly below floor — try one pin.
+    if upgrade_pip_to_min; then
+      info "[ok] pip via get-pip.py + pin: $(run_py -m pip --version 2>/dev/null | head -n 1)"
+      return 0
+    fi
+  fi
+
+  require_pip_min_or_die
+}
+
+# When installing to a PEP 668 system site without venv/--user, need pip that
+# supports --break-system-packages (23.0.1+). Prefer failing early over upgrading.
+assert_system_pip_capable() {
+  [ -n "${VIRTUAL_ENV:-}" ] && return 0
+  [ "${PIP_INSTALL_USER:-0}" = "1" ] && return 0
+  python_is_pep668 "$PYTHON" 2>/dev/null || return 0
+  if pip_has_option break-system-packages; then
+    return 0
+  fi
+  die "cannot install into PEP 668 system Python without --break-system-packages (needs pip>=23.0.1).
+Reason: this host marks $PYTHON as externally managed; default flashcli install uses a venv instead.
+Fix:
+  unset FLASHCLI_USE_VENV; ./install.sh          # default: ~/.flashcli/venv
+  FLASHCLI_PIP_USER=1 ./install.sh               # or pip --user
+  $PYTHON -m pip install -U 'pip>=23.0.1' && FLASHCLI_USE_VENV=0 FLASHCLI_BREAK_SYSTEM_PACKAGES=1 ./install.sh"
 }
 
 # packaging is required for version verification; install early if missing.
@@ -1405,8 +1521,11 @@ ensure_packaging() {
   fi
   do_pip_install "$@" \
     || die "cannot install packaging>=23.0.
-Reason: pip/network/permissions failed (venv avoids most PEP 668 issues).
-Fix: ./install.sh --mirror   or   check errors above"
+Reason: pip/network/permissions failed after preflight (venv avoids most PEP 668 issues).
+Fix:
+  ./install.sh --mirror
+  $PYTHON -m pip install -U 'packaging>=23.0'
+  Check errors above"
 }
 
 ensure_build_deps() {
@@ -1570,6 +1689,11 @@ ensure_zip_rsync() {
 }
 
 check_network() {
+  ensure_git_remote_ready
+}
+
+# Fail early if the git ref used by `pip install git+...` is unreachable.
+ensure_git_remote_ready() {
   if ! have_cmd git; then
     return 0
   fi
@@ -1578,7 +1702,117 @@ check_network() {
     info "[ok] git remote reachable: $REPO ($REF)"
     return 0
   fi
-  warn "cannot verify git remote (timeout/offline/firewall?) — pip clone may still fail"
+
+  # Auto-switch GitHub → Gitee before any package download (same as mid-install fallback).
+  if [ "$REPO_FROM_USER" -eq 0 ]; then
+    case "$REPO" in
+      "$DEFAULT_REPO_GITHUB"|https://github.com/aodianyun/flashcli.git)
+        warn "GitHub unreachable — switching to Gitee + mirrors before install"
+        REPO="$DEFAULT_REPO_GITEE"
+        USE_MIRROR=1
+        export FLASHCLI_INSTALL_REPO="$REPO" FLASHCLI_USE_MIRROR="$USE_MIRROR"
+        apply_mirror_endpoints
+        if git_ref_reachable "$REPO" "$REF"; then
+          info "[ok] git remote reachable: $REPO ($REF)"
+          return 0
+        fi
+        ;;
+    esac
+  fi
+
+  die "cannot reach git remote ${REPO} @ ${REF} — install would fail when pip clones the repo.
+Reason: timeout, firewall, DNS, or offline host.
+Fix:
+  ./install.sh --mirror
+  ./install.sh --gitee
+  ./install.sh --repo <reachable-git-url>
+  FLASHCLI_GIT_TIMEOUT=60 ./install.sh"
+}
+
+# Fail early if PyPI (or configured mirror) cannot serve packages.
+check_pypi_ready() {
+  info "Checking PyPI / index reachability ..."
+  _pypi_probe() {
+    PIP_INDEX_URL="${PIP_INDEX_URL:-}" "$PYTHON" - <<'PY'
+import os, urllib.error, urllib.request
+
+index = (os.environ.get("PIP_INDEX_URL") or "https://pypi.org/simple").rstrip("/")
+if index.endswith("/simple"):
+    url = index + "/pip/"
+elif "/simple/" in index:
+    url = index if index.endswith("/") else index + "/"
+else:
+    url = "https://pypi.org/simple/pip/"
+
+try:
+    req = urllib.request.Request(url, headers={"User-Agent": "flashcli-install/1.0"})
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        resp.read(512)
+except Exception as exc:
+    print(str(exc), flush=True)
+    raise SystemExit(1)
+raise SystemExit(0)
+PY
+  }
+
+  if _pypi_probe; then
+    info "[ok] package index reachable (${PIP_INDEX_URL:-https://pypi.org/simple})"
+    return 0
+  fi
+
+  if ! mirror_mode_enabled && [ -z "${PIP_INDEX_URL:-}" ]; then
+    warn "default PyPI unreachable — enabling China mirrors and retrying"
+    USE_MIRROR=1
+    export FLASHCLI_USE_MIRROR="$USE_MIRROR"
+    apply_mirror_endpoints
+    if _pypi_probe; then
+      info "[ok] package index reachable (${PIP_INDEX_URL:-mirror})"
+      return 0
+    fi
+  fi
+
+  die "cannot reach PyPI/package index — pip install would fail mid-way.
+Reason: network blocked, DNS failure, or mirror unreachable (${PIP_INDEX_URL:-https://pypi.org/simple}).
+Fix:
+  ./install.sh --mirror
+  ./install.sh --pip-mirror tuna
+  export PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+  Check proxy/firewall; retry when network is available"
+}
+
+# Final gate: only start the real install once the environment is known-good.
+assert_install_ready() {
+  info "Preflight gate: confirming install can complete ..."
+  export FLASHCLI_MIN_PIP_VERSION="$MIN_PIP_VERSION"
+
+  case "$(uname -s 2>/dev/null || echo unknown)" in
+    Linux) ;;
+    *) die "requires Linux; detected: $(uname -s 2>/dev/null || echo unknown)" ;;
+  esac
+
+  if ! run_py -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" 2>/dev/null; then
+    die "requires Python >= ${REQUIRES_PYTHON_MIN} (interpreter: $PYTHON)"
+  fi
+
+  if should_use_venv && [ -z "${VIRTUAL_ENV:-}" ]; then
+    die "venv mode is on but VIRTUAL_ENV is unset — venv bootstrap failed.
+Fix: apt install -y python3-venv && rm -rf \"\${HOME:-/root}/.flashcli/venv\" && ./install.sh
+  Or: FLASHCLI_USE_VENV=0 ./install.sh"
+  fi
+
+  require_pip_min_or_die
+  assert_system_pip_capable
+
+  if ! run_py -c "import packaging" 2>/dev/null; then
+    die "packaging is not importable after ensure_packaging — cannot verify constraints"
+  fi
+
+  if ! have_cmd git; then
+    die "git is required to install flashcli from git+URL"
+  fi
+
+  check_install_target
+  info "[ok] preflight gate passed — starting package install"
 }
 
 git_ref_reachable() {
@@ -1712,15 +1946,21 @@ warn_python2_only() {
 }
 
 run_preflight() {
+  info "=== Preflight: verify this host can finish install before downloading packages ==="
   ensure_home
   if [ "${FLASHCLI_SKIP_ENV_CHECK:-0}" = "1" ]; then
     warn "FLASHCLI_SKIP_ENV_CHECK=1: minimal pre-flight only"
     resolve_python
     ensure_minimal_base_pip || true
-    ensure_flashcli_venv || true
+    if should_use_venv; then
+      ensure_flashcli_venv
+    fi
     set_pip_install_mode
+    ensure_git || true
+    check_pypi_ready || true
     ensure_pip
     ensure_packaging
+    assert_install_ready
     return 0
   fi
   check_os
@@ -1728,17 +1968,23 @@ run_preflight() {
   warn_python2_only
   resolve_python
   ensure_minimal_base_pip || true
-  ensure_flashcli_venv || true
+  if should_use_venv; then
+    ensure_flashcli_venv
+  else
+    ensure_flashcli_venv || true
+  fi
   set_pip_install_mode
   check_python_version
+  # Reachability before upgrading pip / installing packaging (auto-enables mirrors).
+  ensure_git
+  ensure_zip_rsync
+  check_network
+  check_pypi_ready
   ensure_pip
   ensure_packaging
   preflight_pyproject
   ensure_build_deps
-  ensure_git
-  ensure_zip_rsync
-  check_network
-  check_install_target
+  assert_install_ready
 }
 
 # ---------------------------------------------------------------------------
@@ -1782,22 +2028,28 @@ _pip_install_flashcli_main() {
 # flashcli is installed with --no-deps (flashcli-bundle is git-only); install [project] deps here.
 install_flashcli_runtime_deps() {
   info "Installing flashcli host runtime dependencies (typer, huggingface_hub, …) ..."
-  set -- \
+  set -- --upgrade
+  if [ -n "${FLASHCLI_PIP_USER_FLAG:-}" ]; then
+    set -- "$@" --user
+  fi
+  set -- "$@" \
     'typer>=0.12' \
     'pyyaml>=6.0' \
     'packaging>=23.0' \
     'huggingface_hub>=0.26' \
     'modelscope>=1.11' \
     'tqdm>=4.66'
-  if [ -n "${FLASHCLI_PIP_USER_FLAG:-}" ]; then
-    set -- "$@" --user
-  fi
-  do_pip_install --upgrade "$@" \
+  do_pip_install "$@" \
     || die "cannot install flashcli host runtime dependencies — check pip/network errors above"
   if run_py -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" 2>/dev/null; then
     :
   else
-    do_pip_install --upgrade "tomli>=2.0" \
+    set -- --upgrade
+    if [ -n "${FLASHCLI_PIP_USER_FLAG:-}" ]; then
+      set -- "$@" --user
+    fi
+    set -- "$@" "tomli>=2.0"
+    do_pip_install "$@" \
       || die "cannot install tomli>=2.0 (required for Python < 3.11)"
   fi
   info "[ok] runtime dependencies installed"
