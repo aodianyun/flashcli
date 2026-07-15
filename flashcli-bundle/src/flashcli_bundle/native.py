@@ -54,7 +54,11 @@ def _load_extension_from_path(path: Path, module_name: str) -> Any:
         ):
             raise RuntimeError(
                 f"Failed to load native module {path.name}: {exc}\n"
-                "  Install CUDA libs matching the artifact (cu124 → CUDA 12.x, cu130 → CUDA 13.x)\n"
+                "  Install CUDA libs matching the artifact (cu124 → CUDA 12.x, cu130 → CUDA 13.x).\n"
+                "  ``flashcli pull`` / activate normally auto-install nvidia-cublas into the "
+                "bundle venv; if that was skipped, run pull again or:\n"
+                "    <bundle-venv>/bin/pip install 'nvidia-cublas>=13' 'nvidia-cuda-runtime>=13'\n"
+                "  Or install the system CUDA toolkit and set LD_LIBRARY_PATH.\n"
                 "  Or set FLASHCLI_CUDA_TAG to pick another native build."
             ) from exc
         raise

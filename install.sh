@@ -27,6 +27,8 @@
 #   FLASHCLI_OS_MIRROR=0    With --mirror, skip rewriting OS package-manager sources
 #   FLASHCLI_GIT_PROXY=URL   Opt-in GitHub fetch proxy (e.g. https://mirror.ghproxy.com/)
 #   FLASHCLI_GIT_TIMEOUT=25  Timeout (seconds) for git ls-remote during preflight
+#   FLASHCLI_GIT_RETRIES=3   Retries when git remote probe fails (Gitee rate-limit / 401 jitter)
+#   FLASHCLI_GIT_RETRY_SLEEP=2  Seconds between git remote probe retries
 #   FLASHCLI_PYTHON
 #   FLASHCLI_SKIP_GPU_CHECK=1   skip GPU probe (default: warn if missing, still install)
 #   FLASHCLI_REQUIRE_GPU=1      abort install when no NVIDIA GPU (default: install CLI anyway)
@@ -140,6 +142,8 @@ Environment (override flags):
   FLASHCLI_OS_MIRROR=0      With --mirror, do not rewrite apt/yum/dnf/apk sources
   FLASHCLI_GIT_PROXY=URL    Opt-in GitHub proxy (default --mirror uses Gitee for official repo)
   FLASHCLI_GIT_TIMEOUT=25   git ls-remote timeout during preflight (seconds)
+  FLASHCLI_GIT_RETRIES=3    Retries on flaky Gitee/GitHub reachability (rate-limit / 401)
+  FLASHCLI_GIT_RETRY_SLEEP=2  Sleep between git remote retries (seconds)
   FLASHCLI_AUTO_INSTALL_PYTHON=0  Disable auto OS install of python3+pip (default: on for root)
   FLASHCLI_USE_VENV=0             Install to system/user site instead of ~/.flashcli/venv (default: venv)
   FLASHCLI_REQUIRE_GPU=1          Abort when no NVIDIA GPU (default: warn and continue)
@@ -632,14 +636,74 @@ maybe_apply_default_git_proxy() {
   info "[i] mirror: git fetch via ${REPO}"
 }
 
+# Disable interactive git auth for this process tree (preflight + pip's git clone + tests).
+#
+# Why Username prompts appear on a *public* Gitee repo:
+#   1) Git always tries anonymous HTTPS first.
+#   2) Only if the server returns 401/403 (or equivalent) does Git ask for credentials.
+#   3) Public repos normally return 200 — no prompt. Prompts mean Gitee challenged that
+#      request (IP rate-limit / risk-control jitter) OR a stale credential.helper entry
+#      failed after a challenge. Clean containers have no helpers and often a different
+#      egress IP, so they succeed while a bare host can still pop Username.
+# Install never needs a Gitee login for the official public mirror — fail/retry/fallback
+# instead of blocking on /dev/tty.
+configure_noninteractive_git() {
+  export GIT_TERMINAL_PROMPT=0
+  export GCM_INTERACTIVE=never
+
+  _n="${GIT_CONFIG_COUNT:-0}"
+  case "$_n" in ''|*[!0-9]*) _n=0 ;; esac
+  # Highest-precedence empty helper: ignore store/cache/osxkeychain/manager for install.
+  export "GIT_CONFIG_KEY_${_n}=credential.helper"
+  export "GIT_CONFIG_VALUE_${_n}="
+  _n=$((_n + 1))
+  # Git ≥2.46; older versions ignore unknown keys safely.
+  export "GIT_CONFIG_KEY_${_n}=credential.interactive"
+  export "GIT_CONFIG_VALUE_${_n}=never"
+  _n=$((_n + 1))
+  export GIT_CONFIG_COUNT="$_n"
+
+  _askpass="${TMPDIR:-/tmp}/flashcli-git-askpass.$$"
+  printf '%s\n' \
+    '#!/bin/sh' \
+    'echo "flashcli: refusing interactive git credentials (public clone must be anonymous)" >&2' \
+    'exit 1' >"$_askpass"
+  chmod 700 "$_askpass" 2>/dev/null || chmod +x "$_askpass"
+  export GIT_ASKPASS="$_askpass"
+  # Unset GUI askpass overrides that some desktops inject into the environment.
+  unset SSH_ASKPASS SSH_ASKPASS_REQUIRE GIT_ASKPASS_REQUIRE 2>/dev/null || true
+}
+
+# HTTP status for git-upload-pack advertisement (anonymous). Helps explain 401 vs network.
+probe_git_upload_pack_http() {
+  _repo="$1"
+  case "$_repo" in
+    https://*|http://*) ;;
+    *) printf '%s\n' "n/a"; return 0 ;;
+  esac
+  _base="${_repo%.git}"
+  _url="${_base}.git/info/refs?service=git-upload-pack"
+  if have_cmd curl; then
+    curl -sS -o /dev/null -w '%{http_code}' \
+      --connect-timeout 8 --max-time 20 \
+      -A "flashcli-install/git-probe" \
+      "$_url" 2>/dev/null || printf '%s\n' "000"
+    return 0
+  fi
+  printf '%s\n' "n/a"
+}
+
 # Run git with a network timeout so preflight cannot hang silently on dead proxies.
+# Also force empty credential.helper per-invocation (belt-and-suspenders with configure_*).
 run_git_timeout() {
   _secs="${FLASHCLI_GIT_TIMEOUT:-25}"
   if have_cmd timeout; then
-    timeout "$_secs" git "$@"
+    GIT_TERMINAL_PROMPT=0 timeout "$_secs" git -c credential.helper= \
+      -c credential.interactive=never "$@"
     return $?
   fi
-  git -c http.lowSpeedLimit=1000 -c "http.lowSpeedTime=${_secs}" "$@"
+  GIT_TERMINAL_PROMPT=0 git -c credential.helper= -c credential.interactive=never \
+    -c http.lowSpeedLimit=1000 -c "http.lowSpeedTime=${_secs}" "$@"
 }
 
 parse_args() {
@@ -1692,13 +1756,50 @@ check_network() {
   ensure_git_remote_ready
 }
 
+# Retry git reachability — Gitee anonymous HTTPS is occasionally flaky (auth challenge / rate-limit).
+git_ref_reachable_with_retries() {
+  _repo="$1"
+  _ref="$2"
+  _tries="${FLASHCLI_GIT_RETRIES:-3}"
+  case "$_tries" in
+    ''|*[!0-9]*) _tries=3 ;;
+  esac
+  [ "$_tries" -ge 1 ] || _tries=3
+  _sleep="${FLASHCLI_GIT_RETRY_SLEEP:-2}"
+  _i=1
+  while [ "$_i" -le "$_tries" ]; do
+    if git_ref_reachable "$_repo" "$_ref"; then
+      return 0
+    fi
+    if [ "$_i" -lt "$_tries" ]; then
+      warn "git remote not reachable (try ${_i}/${_tries}): ${_repo} — retrying in ${_sleep}s…"
+      sleep "$_sleep" 2>/dev/null || true
+    fi
+    _i=$((_i + 1))
+  done
+  return 1
+}
+
+_github_install_url_via_proxy() {
+  _proxy="${FLASHCLI_GIT_PROXY:-$DEFAULT_GIT_PROXY_PREFIX}"
+  case "$_proxy" in
+    ""|auto|0|false|no|off)
+      printf '%s\n' "$DEFAULT_REPO_GITHUB"
+      return 0
+      ;;
+  esac
+  _proxy="${_proxy%/}/"
+  printf '%s%s\n' "$_proxy" "$DEFAULT_REPO_GITHUB"
+}
+
 # Fail early if the git ref used by `pip install git+...` is unreachable.
+# Order: current REPO (with retries) → GitHub→Gitee → official Gitee→GitHub proxy→GitHub.
 ensure_git_remote_ready() {
   if ! have_cmd git; then
     return 0
   fi
-  info "Checking git remote (${FLASHCLI_GIT_TIMEOUT:-25}s timeout): $REPO @ $REF"
-  if git_ref_reachable "$REPO" "$REF"; then
+  info "Checking git remote (${FLASHCLI_GIT_TIMEOUT:-25}s timeout, ${FLASHCLI_GIT_RETRIES:-3} tries): $REPO @ $REF"
+  if git_ref_reachable_with_retries "$REPO" "$REF"; then
     info "[ok] git remote reachable: $REPO ($REF)"
     return 0
   fi
@@ -1712,7 +1813,7 @@ ensure_git_remote_ready() {
         USE_MIRROR=1
         export FLASHCLI_INSTALL_REPO="$REPO" FLASHCLI_USE_MIRROR="$USE_MIRROR"
         apply_mirror_endpoints
-        if git_ref_reachable "$REPO" "$REF"; then
+        if git_ref_reachable_with_retries "$REPO" "$REF"; then
           info "[ok] git remote reachable: $REPO ($REF)"
           return 0
         fi
@@ -1720,13 +1821,62 @@ ensure_git_remote_ready() {
     esac
   fi
 
+  # Domestic --mirror path lands on Gitee; if Gitee flakes, fall back to GitHub via proxy
+  # (then direct) so China installs do not hard-fail on a single bad ls-remote.
+  case "$REPO" in
+    "$DEFAULT_REPO_GITEE"|https://gitee.com/aodiansoft/flashcli.git)
+      _gh_proxy="$(_github_install_url_via_proxy)"
+      if [ "$_gh_proxy" != "$DEFAULT_REPO_GITHUB" ]; then
+        warn "Gitee unreachable — trying GitHub via proxy: ${_gh_proxy}"
+        if git_ref_reachable_with_retries "$_gh_proxy" "$REF"; then
+          REPO="$_gh_proxy"
+          export FLASHCLI_INSTALL_REPO="$REPO"
+          info "[ok] git remote reachable: $REPO ($REF)"
+          return 0
+        fi
+      fi
+      warn "trying GitHub direct: ${DEFAULT_REPO_GITHUB}"
+      if git_ref_reachable_with_retries "$DEFAULT_REPO_GITHUB" "$REF"; then
+        REPO="$DEFAULT_REPO_GITHUB"
+        export FLASHCLI_INSTALL_REPO="$REPO"
+        info "[ok] git remote reachable: $REPO ($REF)"
+        return 0
+      fi
+      ;;
+  esac
+
+  _http="$(probe_git_upload_pack_http "$REPO" | tr -d '\n')"
+  _auth_hint=""
+  case "$_http" in
+    401|403)
+      _auth_hint="
+HTTP ${_http} on anonymous git-upload-pack — Gitee/GitHub challenged this IP (rate-limit /
+risk-control), or a stale credential was rejected. This is NOT \"repo is private\".
+Clear bad cached creds, then retry:
+  printf 'protocol=https\\nhost=gitee.com\\n\\n' | git credential reject
+  GIT_TERMINAL_PROMPT=0 git -c credential.helper= ls-remote ${REPO} ${REF}"
+      ;;
+    200)
+      _auth_hint="
+HTTP 200 on upload-pack but git ls-remote still failed — often a local credential.helper /
+proxy issue. Clear gitee.com creds and retry with credential.helper disabled (see below)."
+      ;;
+    000)
+      _auth_hint="
+HTTP probe failed (network/DNS/TLS). Check connectivity to the git host."
+      ;;
+  esac
+
   die "cannot reach git remote ${REPO} @ ${REF} — install would fail when pip clones the repo.
-Reason: timeout, firewall, DNS, or offline host.
+Reason: timeout, firewall, DNS, offline host, or anonymous HTTPS auth challenge
+(Gitee IP rate-limit / risk-control jitter). Install never prompts for Username/Password.
+HTTP git-upload-pack probe: ${_http}${_auth_hint}
 Fix:
-  ./install.sh --mirror
-  ./install.sh --gitee
+  retry:  FLASHCLI_GIT_TIMEOUT=60 FLASHCLI_GIT_RETRIES=5 ./install.sh --mirror --ref ${REF}
+  ./install.sh --github --ref ${REF}
   ./install.sh --repo <reachable-git-url>
-  FLASHCLI_GIT_TIMEOUT=60 ./install.sh"
+  # verify anonymous access (must not ask Username):
+  GIT_TERMINAL_PROMPT=0 git -c credential.helper= ls-remote ${REPO} ${REF}"
 }
 
 # Fail early if PyPI (or configured mirror) cannot serve packages.
@@ -2651,11 +2801,11 @@ run_post_install_tests() {
       || die "cannot checkout ${REF} in ${_src}"
   else
     rm -rf "${_src}" 2>/dev/null || true
-    if git clone --depth 1 --branch "${REF}" "${REPO}" "${_src}" >/dev/null 2>&1; then
+    if GIT_TERMINAL_PROMPT=0 git -c credential.helper= clone --depth 1 --branch "${REF}" "${REPO}" "${_src}" >/dev/null 2>&1; then
       :
-    elif git clone --depth 1 "${REPO}" "${_src}" >/dev/null 2>&1; then
-      git -C "${_src}" fetch --depth 1 origin "${REF}" >/dev/null 2>&1 \
-        || git -C "${_src}" fetch --depth 1 "${REPO}" "${REF}" >/dev/null 2>&1 \
+    elif GIT_TERMINAL_PROMPT=0 git -c credential.helper= clone --depth 1 "${REPO}" "${_src}" >/dev/null 2>&1; then
+      GIT_TERMINAL_PROMPT=0 git -c credential.helper= -C "${_src}" fetch --depth 1 origin "${REF}" >/dev/null 2>&1 \
+        || GIT_TERMINAL_PROMPT=0 git -c credential.helper= -C "${_src}" fetch --depth 1 "${REPO}" "${REF}" >/dev/null 2>&1 \
         || die "git fetch ${REF} failed for post-install tests"
       git -C "${_src}" checkout FETCH_HEAD >/dev/null 2>&1 \
         || die "git checkout ${REF} failed for post-install tests"
@@ -2764,6 +2914,8 @@ print_success() {
 }
 
 main() {
+  # Before any git/pip work: never block on Username for public clone (see configure_*).
+  configure_noninteractive_git
   parse_args "$@"
   apply_mirror_endpoints
   run_preflight

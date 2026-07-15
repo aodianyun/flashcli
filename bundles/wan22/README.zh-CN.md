@@ -15,7 +15,7 @@
 **输入：** 文本 prompt（`t2v`）；或 prompt + 起始图像（`i2v`）。  
 **输出：** MP4 视频（`--out`）。
 
-默认面向 **16 GB** 显存（5060 Ti：832×480、81 帧、`--offload-model true`）。更大显存可上调。权重在首次 `pull` / `run` 时拉取（不在 bundle zip 内）。无需安装 `flash_attn` wheel。
+默认面向 **16 GB** 显存（5060 Ti：832×480、81 帧、`--offload-model true`）。更大显存可上调分辨率/帧数。权重在首次 `pull` / `run` 时拉取（不在 bundle zip 内）。无需安装 `flash_attn` wheel。
 
 ## 运行
 
@@ -33,12 +33,22 @@ PYTHONUNBUFFERED=1 flashcli run flashcli-bundle/wan22:1.0.0 \
   --frames 5 --steps 2 --out smoke.mp4
 ```
 
-RTX 5090（24 GB）—— 官方 720p 基线，模型常驻 GPU：
+RTX 5090（32 GB）—— FlashRT 官方 720p 基线（`1280×704`、121 帧、`steps=20`）。
+保持 `--offload-model true`（FlashRT API 默认；公布峰值约 **24.4 GiB**）。设为 `false` 时 DiT 常驻，VAE decode 阶段容易 OOM。
 
 ```bash
+# 画质基线（约 179 s，无 TeaCache）
 flashcli run flashcli-bundle/wan22:1.0.0 \
   --width 1280 --height 704 --frames 121 --steps 20 \
-  --offload-model false
+  --shift 5.0 --guide-scale 5.0 \
+  --offload-model true
+
+# TeaCache 0.3（约 114 s / ~1.56×；部分 prompt 可能有构图漂移）
+flashcli run flashcli-bundle/wan22:1.0.0 \
+  --width 1280 --height 704 --frames 121 --steps 20 \
+  --shift 5.0 --guide-scale 5.0 \
+  --offload-model true \
+  --teacache --teacache-threshold 0.3
 ```
 
 图像生成视频：
@@ -48,13 +58,6 @@ flashcli run flashcli-bundle/wan22:1.0.0 \
   --mode i2v \
   --image /path/start.png \
   --frames 81
-```
-
-TeaCache 加速：
-
-```bash
-flashcli run flashcli-bundle/wan22:1.0.0 \
-  --teacache --teacache-threshold 0.3
 ```
 
 完整参数：`flashcli run flashcli-bundle/wan22:1.0.0 --help`
@@ -74,7 +77,7 @@ flashcli run flashcli-bundle/wan22:1.0.0 \
 | `--guide-scale` | `5.0` | CFG 引导强度 |
 | `--seed` | `1234` | 随机种子 |
 | `--sample-solver` | `unipc` | 采样求解器 |
-| `--offload-model` | `true` | CPU/GPU 分阶段卸载 —— ≤16 GB 保持 `true`；5090 可设 `false` 加速 |
+| `--offload-model` | `true` | CPU/GPU 分阶段卸载 —— 16 GB 与 5090 720p 均保持 `true`（对齐 FlashRT） |
 | `--teacache` | 关闭 | TeaCache 跳步加速 |
 | `--teacache-threshold` | `0.0` | 开启 TeaCache 时常用 `0.15`–`0.30` |
 | `--out` | `wan22_out.mp4` | 输出 MP4 路径 |
@@ -83,4 +86,4 @@ flashcli run flashcli-bundle/wan22:1.0.0 \
 | 预设 | 分辨率 | 帧数 | `--offload-model` |
 |------|--------|------|-------------------|
 | 5060 Ti（16 GB） | 832×480 | 81 | `true` |
-| 5090（24 GB） | 1280×704 | 121 | `false` |
+| 5090（32 GB） | 1280×704 | 121 | `true` |

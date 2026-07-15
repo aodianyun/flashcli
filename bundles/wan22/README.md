@@ -15,7 +15,7 @@
 **Inputs:** text prompt (`t2v`); or prompt + start image (`i2v`).  
 **Output:** MP4 video (`--out`).
 
-Defaults target **16 GB** (5060 Ti: 832×480, 81 frames, `--offload-model true`). Scale up on larger VRAM. Weights are pulled on first `pull` / `run` (not in the bundle zip). No `flash_attn` wheel is required.
+Defaults target **16 GB** (5060 Ti: 832×480, 81 frames, `--offload-model true`). Scale resolution/frames on larger VRAM. Weights are pulled on first `pull` / `run` (not in the bundle zip). No `flash_attn` wheel is required.
 
 ## Run
 
@@ -33,12 +33,22 @@ PYTHONUNBUFFERED=1 flashcli run flashcli-bundle/wan22:1.0.0 \
   --frames 5 --steps 2 --out smoke.mp4
 ```
 
-RTX 5090 (24 GB) — official 720p baseline, model resident on GPU:
+RTX 5090 (32 GB) — FlashRT official 720p baseline (`1280×704`, 121 frames, `steps=20`).
+Keep `--offload-model true` (FlashRT API default; published peak ~**24.4 GiB**). Setting `false` can OOM in VAE decode when DiT stays resident.
 
 ```bash
+# Quality baseline (~179 s, TeaCache off)
 flashcli run flashcli-bundle/wan22:1.0.0 \
   --width 1280 --height 704 --frames 121 --steps 20 \
-  --offload-model false
+  --shift 5.0 --guide-scale 5.0 \
+  --offload-model true
+
+# TeaCache 0.3 (~114 s / ~1.56×; may change composition on some prompts)
+flashcli run flashcli-bundle/wan22:1.0.0 \
+  --width 1280 --height 704 --frames 121 --steps 20 \
+  --shift 5.0 --guide-scale 5.0 \
+  --offload-model true \
+  --teacache --teacache-threshold 0.3
 ```
 
 Image-to-video:
@@ -48,13 +58,6 @@ flashcli run flashcli-bundle/wan22:1.0.0 \
   --mode i2v \
   --image /path/start.png \
   --frames 81
-```
-
-TeaCache acceleration:
-
-```bash
-flashcli run flashcli-bundle/wan22:1.0.0 \
-  --teacache --teacache-threshold 0.3
 ```
 
 Full flags: `flashcli run flashcli-bundle/wan22:1.0.0 --help`
@@ -74,7 +77,7 @@ Full flags: `flashcli run flashcli-bundle/wan22:1.0.0 --help`
 | `--guide-scale` | `5.0` | Classifier-free guidance |
 | `--seed` | `1234` | RNG seed |
 | `--sample-solver` | `unipc` | Sampling solver |
-| `--offload-model` | `true` | CPU/GPU stage offload — keep `true` on ≤16 GB; `false` on 5090 for speed |
+| `--offload-model` | `true` | CPU/GPU stage offload — keep `true` for 16 GB and for 5090 720p (matches FlashRT) |
 | `--teacache` | off | TeaCache step-skipping |
 | `--teacache-threshold` | `0.0` | Typical `0.15`–`0.30` when TeaCache is on |
 | `--out` | `wan22_out.mp4` | Output MP4 path |
@@ -83,4 +86,4 @@ Full flags: `flashcli run flashcli-bundle/wan22:1.0.0 --help`
 | Preset | Resolution | Frames | `--offload-model` |
 |--------|------------|--------|-------------------|
 | 5060 Ti (16 GB) | 832×480 | 81 | `true` |
-| 5090 (24 GB) | 1280×704 | 121 | `false` |
+| 5090 (32 GB) | 1280×704 | 121 | `true` |

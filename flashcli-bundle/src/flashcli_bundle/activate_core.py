@@ -41,9 +41,6 @@ def activate_bundle_core(
     runtime_id = runtime_id or os.environ.get("FLASHCLI_RUNTIME_ID", "")
 
     gpu = detect_gpu_or_raise()
-    verify_native_modules(bundle, gpu=gpu)
-    check_bundle_python_abi(bundle)
-    probe_native_python_abi(bundle, gpu=gpu)
 
     pip_python: Path | None = None
     if runtime_id:
@@ -51,6 +48,18 @@ def activate_bundle_core(
             pip_python = venv_python(runtime_id)
         except FileNotFoundError:
             pip_python = None
+
+    # Before dlopen of native .so: ensure libcublas/libcudart for the artifact CUDA tag.
+    if pip_python is not None:
+        from flashcli_bundle.cuda_userland import ensure_cuda_userland_for_bundle
+
+        ensure_cuda_userland_for_bundle(
+            bundle, python=pip_python, gpu=gpu, quiet=quiet
+        )
+
+    verify_native_modules(bundle, gpu=gpu)
+    check_bundle_python_abi(bundle)
+    probe_native_python_abi(bundle, gpu=gpu)
 
     if install_python:
         torch_index = bundle_torch_index(bundle, gpu=gpu)

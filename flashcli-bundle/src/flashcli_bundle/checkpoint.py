@@ -110,17 +110,23 @@ def extra_weights_ready(path: Path, spec: dict[str, Any] | None) -> bool:
     if spec is None:
         return False
     require_ns = weights_require_norm_stats(spec)
-    if has_usable_checkpoint(path, require_norm_stats=require_ns):
-        return True
     any_patterns = spec.get("require_any_patterns")
     if isinstance(any_patterns, list) and any_patterns:
-        return _patterns_satisfied(
+        ok = _patterns_satisfied(
             path, [str(p) for p in any_patterns], mode="any"
         )
+        if ok and require_ns and not has_norm_stats_sources(path):
+            return False
+        return ok
     allow_patterns = spec.get("allow_patterns")
     if isinstance(allow_patterns, list) and allow_patterns:
-        return _patterns_satisfied(
-            path, [str(p) for p in allow_patterns], mode="all"
+        # Explicit patterns win over generic safetensors/config detection so
+        # incomplete multi-file hubs (e.g. Wan2.2 missing T5 .pth) are not
+        # treated as ready.
+        return has_cached_weight_files(
+            path,
+            [str(p) for p in allow_patterns],
+            require_norm_stats=require_ns,
         )
     return has_usable_checkpoint(path, require_norm_stats=require_ns)
 
@@ -131,11 +137,17 @@ def has_cached_weight_files(
     *,
     require_norm_stats: bool = False,
 ) -> bool:
-    """True when *path* already contains the requested weight files."""
+    """True when *path* already contains the requested weight files.
+
+    When *allow_patterns* is set, every pattern must match — a partial download
+    that only has ``config.json`` + ``*.safetensors`` is not enough.
+    """
     if not path.is_dir():
         return False
-    if has_usable_checkpoint(path, require_norm_stats=require_norm_stats):
+    if allow_patterns:
+        if not all(_matches_allow_pattern(path, pat) for pat in allow_patterns):
+            return False
+        if require_norm_stats and not has_norm_stats_sources(path):
+            return False
         return True
-    if not allow_patterns:
-        return False
-    return all(_matches_allow_pattern(path, pat) for pat in allow_patterns)
+    return has_usable_checkpoint(path, require_norm_stats=require_norm_stats)

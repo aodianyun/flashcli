@@ -60,6 +60,16 @@ def prepare_bundle_runtime(
             )
 
     ensure_bundle_venv(runtime_id, manifest, quiet=quiet, force=force)
+    # Native cu130/cu124 .so need matching libcublas on the loader path; torch may
+    # only ship CUDA 12 wheels. Probe + pip-install into the bundle venv here so
+    # ``flashcli pull`` fails early (and ``run`` re-exec inherits LD_LIBRARY_PATH).
+    from flashcli_bundle.cuda_userland import ensure_cuda_userland_for_bundle
+
+    ensure_cuda_userland_for_bundle(
+        manifest,
+        python=venv_python(runtime_id),
+        quiet=quiet,
+    )
     os.environ.setdefault("FLASHCLI_RUNTIME_ID", runtime_id)
     os.environ.setdefault("FLASHCLI_BUNDLE_ROOT", str(bundle_root))
     return runtime_id, bundle_root

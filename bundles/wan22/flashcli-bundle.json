@@ -121,7 +121,7 @@
       "name": "offload_model",
       "type": "boolean",
       "default": true,
-      "help": "Offload model stages between CPU/GPU (keep true on <=16GB; false on RTX 5090 for speed).",
+      "help": "Offload model stages between CPU/GPU (keep true on <=16GB and on RTX 5090 720p; matches FlashRT).",
       "phase": "predict"
     },
     {
@@ -156,7 +156,20 @@
   "weights": {
     "source": "modelscope",
     "repo": "Wan-AI/Wan2.2-TI2V-5B",
-    "revision": "master"
+    "revision": "master",
+    "allow_patterns": [
+      "models_t5_umt5-xxl-enc-bf16.pth",
+      "Wan2.2_VAE.pth",
+      "diffusion_pytorch_model-00001-of-00003.safetensors",
+      "diffusion_pytorch_model-00002-of-00003.safetensors",
+      "diffusion_pytorch_model-00003-of-00003.safetensors",
+      "diffusion_pytorch_model.safetensors.index.json",
+      "config.json",
+      "google/umt5-xxl/tokenizer.json",
+      "google/umt5-xxl/tokenizer_config.json",
+      "google/umt5-xxl/special_tokens_map.json",
+      "google/umt5-xxl/spiece.model"
+    ]
   },
   "runtime": {
     "sm120-cu130-linux-x86_64-py310": "runtime/sm120-cu130-linux-x86_64-py310"

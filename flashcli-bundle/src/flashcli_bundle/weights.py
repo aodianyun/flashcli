@@ -10,6 +10,7 @@ from flashcli_bundle import paths as config
 from flashcli_bundle.bundle_config import bundle_dict, bundle_list
 from flashcli_bundle.checkpoint import (
     extra_weights_ready,
+    has_cached_weight_files,
     has_checkpoint_weight_files,
     has_usable_checkpoint,
     weights_require_norm_stats,
@@ -46,6 +47,15 @@ def bundle_weights_dir(
     return (bundle.bundle_root / rel).resolve()
 
 
+def _allow_patterns_from_spec(weights_spec: dict[str, Any] | None) -> list[str] | None:
+    if not weights_spec:
+        return None
+    raw = weights_spec.get("allow_patterns")
+    if isinstance(raw, list) and raw:
+        return [str(p) for p in raw]
+    return None
+
+
 def has_local_weights(
     path: Path,
     *,
@@ -54,6 +64,22 @@ def has_local_weights(
     if not path.is_dir():
         return False
     require_ns = weights_require_norm_stats(weights_spec)
+    patterns = _allow_patterns_from_spec(weights_spec)
+    if patterns is not None:
+        if has_cached_weight_files(
+            path, patterns, require_norm_stats=require_ns
+        ):
+            return True
+        for entry in path.iterdir():
+            if entry.name in _SKIP_WEIGHT_NAMES or entry.name.startswith("."):
+                continue
+            if entry.name == ".cache" or not entry.is_dir():
+                continue
+            if has_cached_weight_files(
+                entry, patterns, require_norm_stats=require_ns
+            ):
+                return True
+        return False
     if has_usable_checkpoint(path, require_norm_stats=require_ns):
         return True
     if weights_spec is not None and extra_weights_ready(path, weights_spec):

@@ -22,6 +22,48 @@ def test_mtp_safetensors_only_is_usable(tmp_path: Path) -> None:
     assert has_cached_weight_files(dest, ["mtp.safetensors"])
 
 
+def test_allow_patterns_not_short_circuited_by_safetensors(tmp_path: Path) -> None:
+    """Wan2.2-like cache: config + diffusion shards must not hide a missing T5 .pth."""
+    dest = tmp_path / "checkpoint"
+    dest.mkdir()
+    (dest / "config.json").write_text("{}", encoding="utf-8")
+    (dest / "diffusion_pytorch_model-00001-of-00003.safetensors").write_bytes(b"x")
+    (dest / "Wan2.2_VAE.pth").write_bytes(b"x")
+    patterns = [
+        "models_t5_umt5-xxl-enc-bf16.pth",
+        "Wan2.2_VAE.pth",
+        "diffusion_pytorch_model-00001-of-00003.safetensors",
+        "config.json",
+    ]
+    assert has_usable_checkpoint(dest)
+    assert not has_cached_weight_files(dest, patterns)
+
+    (dest / "models_t5_umt5-xxl-enc-bf16.pth").write_bytes(b"x")
+    assert has_cached_weight_files(dest, patterns)
+
+
+def test_has_local_weights_honors_allow_patterns(tmp_path: Path) -> None:
+    from flashcli.bundle.weights import has_local_weights
+
+    dest = tmp_path / "checkpoint"
+    dest.mkdir()
+    (dest / "config.json").write_text("{}", encoding="utf-8")
+    (dest / "diffusion_pytorch_model-00001-of-00003.safetensors").write_bytes(b"x")
+    spec = {
+        "source": "modelscope",
+        "repo": "Wan-AI/Wan2.2-TI2V-5B",
+        "allow_patterns": [
+            "models_t5_umt5-xxl-enc-bf16.pth",
+            "Wan2.2_VAE.pth",
+            "diffusion_pytorch_model-00001-of-00003.safetensors",
+        ],
+    }
+    assert not has_local_weights(dest, weights_spec=spec)
+    (dest / "models_t5_umt5-xxl-enc-bf16.pth").write_bytes(b"x")
+    (dest / "Wan2.2_VAE.pth").write_bytes(b"x")
+    assert has_local_weights(dest, weights_spec=spec)
+
+
 def test_pytorch_ckpt_is_usable(tmp_path: Path) -> None:
     dest = tmp_path / "melband"
     dest.mkdir()
