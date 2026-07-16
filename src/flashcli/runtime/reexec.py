@@ -70,6 +70,15 @@ def prepare_bundle_runtime(
         python=venv_python(runtime_id),
         quiet=quiet,
     )
+    # Host glibc/libstdc++ floor is implied by the selected .so (ELF versions),
+    # not by flashcli-bundle.json — fail pull before re-exec when too old.
+    from flashcli_bundle.native_host_abi import ensure_native_host_abi_for_bundle
+
+    ensure_native_host_abi_for_bundle(
+        manifest,
+        python=venv_python(runtime_id),
+        quiet=quiet,
+    )
     os.environ.setdefault("FLASHCLI_RUNTIME_ID", runtime_id)
     os.environ.setdefault("FLASHCLI_BUNDLE_ROOT", str(bundle_root))
     return runtime_id, bundle_root

@@ -140,7 +140,13 @@ def hints_for(exc: BaseException) -> list[str]:
 
 
 def format_user_error(exc: BaseException) -> str:
-    lines = [f"error: {exc}"]
+    msg = str(exc).rstrip()
+    # Multi-line expected failures keep their own layout; prefix only the first line.
+    if "\n" in msg:
+        first, rest = msg.split("\n", 1)
+        lines = [f"error: {first}", rest]
+    else:
+        lines = [f"error: {msg}"]
     for hint in hints_for(exc):
         lines.append(f"hint: {hint}")
     return "\n".join(lines)

@@ -26,6 +26,7 @@ _ABI_MISMATCH_MARKERS = (
     "undefined symbol: Py",
 )
 _CUDA_LOAD_MARKERS = ("libcublas", "libcudart", "libcuda", "cannot open shared object")
+_HOST_ABI_MARKERS = ("GLIBCXX_", "GLIBC_", "CXXABI_")
 _ELF_BAD_MARKERS = ("invalid ELF", "not an ELF", "Exec format error")
 
 _PROBE_SCRIPT = """
@@ -120,6 +121,9 @@ def probe_native_so_abi(
             f"{path.name}: Python ABI does not match filename tag -py{python_minor} "
             f"(probe with {py}): {(proc.stderr or proc.stdout).strip()[:240]}"
         )
+    if kind == "host_abi":
+        detail = (proc.stderr or proc.stdout).strip().replace("\n", " ")[:240]
+        return f"{path.name}: host ABI too old (probe with {py}): {detail}"
     if kind in ("cuda_runtime", "load_failed"):
         return None
     detail = (proc.stderr or proc.stdout).strip().replace("\n", " ")[:240]
@@ -131,6 +135,9 @@ def _classify_probe_failure(stderr: str, stdout: str) -> str:
     lower = combined.lower()
     if any(m in combined for m in _ABI_MISMATCH_MARKERS):
         return "abi_mismatch"
+    # Host libstdc++/glibc before CUDA markers (messages may mention both).
+    if any(m in combined for m in _HOST_ABI_MARKERS):
+        return "host_abi"
     if any(m.lower() in lower for m in _CUDA_LOAD_MARKERS):
         return "cuda_runtime"
     if any(m in combined for m in _ELF_BAD_MARKERS):

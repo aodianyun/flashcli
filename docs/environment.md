@@ -31,8 +31,11 @@ flashcli models list
 | `FLASHCLI_CUDA_TAG` | (auto-detect) | Override detected CUDA userland tag (`124` / `128` / `130`) used to pick native `.so` under `runtime/<env-key>/`. |
 | (automatic) | — | If `nvcc` is missing, flashcli infers from `nvidia-smi` banner (`CUDA Version: 13.0` → `130`); SM89 no longer hard-defaults to `124`. |
 | `FLASHCLI_SKIP_CUDA_USERLAND` | `0` | Set `1` to skip probing/auto-installing `libcublas`/`libcudart` during `pull`/`activate`. |
+| `FLASHCLI_SKIP_NATIVE_HOST_ABI` | `0` | Set `1` to skip host glibc/libstdc++ checks derived from the selected `.so` (GLIBC_/GLIBCXX_). |
 
 `flashcli pull` / `run` check for `libcublas.so.12`/`.13` matching the selected `cu124`/`cu130` cell; if missing, install `nvidia-cublas` / `nvidia-cuda-runtime` into the **bundle venv** and prepend `LD_LIBRARY_PATH`. `nvidia-smi` CUDA Version is driver capability only. If only `.so.12` is missing on a CUDA 13 host, you can also set `export FLASHCLI_CUDA_TAG=130`.
+
+`pull` also reads `GLIBC_*` / `GLIBCXX_*` needs from the **selected** `runtime/<env-key>/*.so` via `readelf`/`objdump`, compares them to the host, and probes load — hard-failing when the host is too old (no `flashcli-bundle.json` config). Fix by upgrading libstdc++ or using a newer GPU container.
 
 ## Downloads and Hugging Face
 

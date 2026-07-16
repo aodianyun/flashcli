@@ -16,6 +16,7 @@ import os
 import subprocess
 from pathlib import Path
 
+from flashcli_bundle.errors import CudaUserlandError
 from flashcli_bundle.manifest import BundleManifest
 from flashcli_bundle.runtime.detect import GpuInfo, detect_gpu
 from flashcli_bundle.runtime.requirements_spec import venv_purelib
@@ -286,10 +287,10 @@ def ensure_cuda_userland_libs(
             if not quiet:
                 print(f"[ok] CUDA userland ready for cu{cuda_tag}: {', '.join(sonames)}")
             return
-        raise RuntimeError(_missing_msg(cuda_tag, still, python, installed=True))
+        raise CudaUserlandError(_missing_msg(cuda_tag, still, python, installed=True))
 
     if not install or not packages:
-        raise RuntimeError(_missing_msg(cuda_tag, missing, python, installed=False))
+        raise CudaUserlandError(_missing_msg(cuda_tag, missing, python, installed=False))
 
     if not quiet:
         print(
@@ -299,7 +300,7 @@ def ensure_cuda_userland_libs(
     try:
         _pip_install(python, packages, quiet=quiet)
     except subprocess.CalledProcessError as exc:
-        raise RuntimeError(
+        raise CudaUserlandError(
             _missing_msg(cuda_tag, missing, python, installed=False)
             + f"\n  pip install failed (exit {exc.returncode}). "
             "Install CUDA toolkit matching the artifact, or fix network/pip."
@@ -309,7 +310,7 @@ def ensure_cuda_userland_libs(
     preload_cuda_libs(python, cuda_tag)
     still = missing_cuda_sonames(cuda_tag, python=python)
     if still:
-        raise RuntimeError(_missing_msg(cuda_tag, still, python, installed=True))
+        raise CudaUserlandError(_missing_msg(cuda_tag, still, python, installed=True))
 
     if not quiet:
         print(f"[ok] CUDA userland ready for cu{cuda_tag}: {', '.join(sonames)}")

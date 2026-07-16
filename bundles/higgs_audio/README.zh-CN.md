@@ -20,8 +20,8 @@
 ## 运行
 
 ```bash
-flashcli pull flashcli-bundle/higgs_audio:latest
-flashcli run flashcli-bundle/higgs_audio:latest \
+flashcli pull flashcli-bundle/higgs_audio:1.0.0
+flashcli run flashcli-bundle/higgs_audio:1.0.0 \
   --text "你好世界，欢迎使用 Higgs Audio。" \
   --out hello.wav
 ```
@@ -29,13 +29,13 @@ flashcli run flashcli-bundle/higgs_audio:latest \
 强制 BF16（或 FP8 内核不可用时）：
 
 ```bash
-flashcli run flashcli-bundle/higgs_audio:latest \
+flashcli run flashcli-bundle/higgs_audio:1.0.0 \
   --fp8 false \
   --text "The quick brown fox jumps over the lazy dog." \
   --out hello.wav
 ```
 
-完整参数：`flashcli run flashcli-bundle/higgs_audio:latest --help`
+完整参数：`flashcli run flashcli-bundle/higgs_audio:1.0.0 --help`
 
 ## 参数
 

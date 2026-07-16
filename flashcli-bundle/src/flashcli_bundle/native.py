@@ -46,6 +46,15 @@ def _load_extension_from_path(path: Path, module_name: str) -> Any:
                 f"{_sys.version_info.minor} ({_sys.executable})\n"
                 "  Native modules must load in the bundle venv matching python_abi."
             ) from exc
+        if "GLIBCXX_" in msg or "GLIBC_" in msg or "CXXABI_" in msg:
+            from flashcli_bundle.native_host_abi import host_abi_fix_hints
+
+            raise RuntimeError(
+                f"Failed to load native module {path.name}: {exc}\n"
+                "  Host glibc/libstdc++ is older than the selected runtime .so requires "
+                "(read from the artifact; not configured in flashcli-bundle.json).\n"
+                f"{host_abi_fix_hints()}"
+            ) from exc
         if (
             "libcublas" in msg
             or "libcudart" in msg

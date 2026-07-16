@@ -31,9 +31,12 @@ flashcli models list
 | `FLASHCLI_CUDA_TAG` | （自动） | 覆盖自动检测的 CUDA 用户态标签（`124` / `128` / `130`），用于从 bundle `runtime/` 选择 `cu124` / `cu130` 等 `.so`。 |
 | （自动） | — | 无 `nvcc` 时从 `nvidia-smi` 横幅 `CUDA Version: 13.0` 推断 `130`；SM89 不再默认 `124`。 |
 | `FLASHCLI_SKIP_CUDA_USERLAND` | `0` | 设为 `1` 时跳过 `pull`/`activate` 对 `libcublas`/`libcudart` 的探测与 pip 自动安装。 |
+| `FLASHCLI_SKIP_NATIVE_HOST_ABI` | `0` | 设为 `1` 时跳过按选中 `.so` 检查主机 glibc/libstdc++（GLIBC_/GLIBCXX_）。 |
 | `PIP_INDEX_URL` / `PIP_TRUSTED_HOST` | （自动） | PyPI 镜像；`flashcli run` 安装 bundle 依赖时会传给 pip（mirror 模式见下方行为开关）。 |
 
 `flashcli pull` / `run` 会按选中的 `cu124`/`cu130` 检查对应 `libcublas.so.12`/`.13`；缺失时向 **bundle venv** 安装 `nvidia-cublas` / `nvidia-cuda-runtime` 并写入 `LD_LIBRARY_PATH`。`nvidia-smi` 的 CUDA Version 只表示驱动能力，不代表已有用户态库。若仅缺 `.so.12` 而驱动为 13，也可设 `export FLASHCLI_CUDA_TAG=130`。
+
+`pull` 还会对**当前匹配的** `runtime/<env-key>/*.so` 用 `readelf`/`objdump` 读取 `GLIBC_*`/`GLIBCXX_*` 需求并与主机对比，再试加载；主机过旧则在 pull 阶段硬失败（无需在 `flashcli-bundle.json` 配置）。修复方向：升级 libstdc++ / 使用较新 GPU 容器。
 
 ## 下载与 Hugging Face
 

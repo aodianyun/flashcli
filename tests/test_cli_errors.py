@@ -48,3 +48,23 @@ def test_bundle_environment_hints() -> None:
 
 def test_internal_error_not_user_facing() -> None:
     assert not is_user_facing_error(KeyError("unexpected"))
+
+
+def test_native_host_abi_error_is_user_facing_multiline() -> None:
+    from flashcli_bundle.errors import NativeHostAbiError
+
+    exc = NativeHostAbiError(
+        "Host system libraries are too old for this bundle's native runtime:\n"
+        "  - host glibc too old: need GLIBC_2.38, host provides GLIBC_2.35\n"
+        "  Fix (pick one):\n"
+        "    - Use Ubuntu 24.04+"
+    )
+    assert is_user_facing_error(exc)
+    text = format_user_error(exc)
+    assert text.startswith("error: Host system libraries are too old")
+    assert "\n  - host glibc too old" in text
+    assert "Traceback" not in text
+
+
+def test_bare_runtime_error_still_not_user_facing() -> None:
+    assert not is_user_facing_error(RuntimeError("unexpected internal boom"))
