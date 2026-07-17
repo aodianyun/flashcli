@@ -25,6 +25,7 @@ from pathlib import Path
 
 from flashcli_bundle import paths as config
 from flashcli_bundle.infer.runtime.mirror import (
+    apply_mirror_env,
     default_pip_index_url,
     pip_install_extra_args,
     pip_trusted_host,
@@ -266,13 +267,42 @@ def _is_isaac_gr00t_vcs_spec(spec: str) -> bool:
 
 
 def _git_clone_url(repo_url: str) -> str:
-    """Optional GitHub proxy prefix (``FLASHCLI_GIT_PROXY``)."""
+    """Optional GitHub proxy prefix (``FLASHCLI_GIT_PROXY``).
+
+    Only rewrite ``github.com`` / ``codeload.github.com`` URLs. Gitee and already
+    proxied URLs are left unchanged.
+    """
     proxy = (os.environ.get("FLASHCLI_GIT_PROXY") or "").strip().rstrip("/")
-    if not proxy or proxy.lower() in ("0", "false", "no", "off"):
+    if not proxy or proxy.lower() in ("0", "false", "no", "off", "auto"):
         return repo_url
     if repo_url.startswith(proxy + "/"):
         return repo_url
+    lower = repo_url.lower()
+    if "github.com/" not in lower and "codeload.github.com/" not in lower:
+        return repo_url
     return f"{proxy}/{repo_url}"
+
+
+def _apply_git_proxy_to_vcs_spec(spec: str) -> str:
+    """Rewrite ``pkg @ git+https://github.com/...@ref#...`` through ``FLASHCLI_GIT_PROXY``."""
+    marker = " @ git+"
+    lower = spec.lower()
+    idx = lower.find(marker)
+    if idx < 0:
+        return spec
+    prefix = spec[:idx]
+    vcs = spec[idx + len(marker) :]
+    main, frag_sep, frag = vcs.partition("#")
+    repo, at, ref = main.rpartition("@")
+    if not at or not repo or not ref:
+        return spec
+    proxied = _git_clone_url(repo)
+    if proxied == repo:
+        return spec
+    out = f"{prefix}{marker}{proxied}@{ref}"
+    if frag_sep:
+        out += f"#{frag}"
+    return out
 
 
 def _isaac_gr00t_source_dir(git_ref: str) -> Path:
@@ -820,6 +850,7 @@ def flashcli_bundle_pip_spec(*, extras: tuple[str, ...] = (_INFER_EXTRA,)) -> st
     import flashcli_bundle
 
     _load_persisted_install_env()
+    apply_mirror_env()
 
     extra_suffix = f"[{','.join(extras)}]" if extras else ""
     pkg_dir = Path(flashcli_bundle.__file__).resolve().parent
@@ -832,20 +863,25 @@ def flashcli_bundle_pip_spec(*, extras: tuple[str, ...] = (_INFER_EXTRA,)) -> st
                 return f"{repo_root}[{','.join(extras)}]"
             return str(repo_root)
 
+    # Prefer install.sh source (Gitee / proxied GitHub) over host package direct_url,
+    # which often still points at raw github.com even after a mirrored install.
+    repo = os.environ.get("FLASHCLI_INSTALL_REPO", "").strip()
+    ref = os.environ.get("FLASHCLI_INSTALL_REF", "main").strip() or "main"
+    if repo:
+        return (
+            f"flashcli-bundle{extra_suffix} @ git+{_git_clone_url(repo)}"
+            f"@{ref}#subdirectory=flashcli-bundle"
+        )
+
     spec = _pip_spec_from_direct_url("flashcli-bundle", extras=extras)
     if spec:
-        return spec
+        return _apply_git_proxy_to_vcs_spec(spec)
 
     spec = _pip_spec_from_direct_url("flashcli", subdirectory="flashcli-bundle", extras=extras)
     if spec:
         if spec.startswith("flashcli @ "):
-            return f"flashcli-bundle{extra_suffix} @ " + spec.split(" @ ", 1)[1]
-        return spec
-
-    repo = os.environ.get("FLASHCLI_INSTALL_REPO", "").strip()
-    ref = os.environ.get("FLASHCLI_INSTALL_REF", "main").strip() or "main"
-    if repo:
-        return f"flashcli-bundle{extra_suffix} @ git+{repo}@{ref}#subdirectory=flashcli-bundle"
+            spec = f"flashcli-bundle{extra_suffix} @ " + spec.split(" @ ", 1)[1]
+        return _apply_git_proxy_to_vcs_spec(spec)
 
     raise RuntimeError(
         "Cannot resolve flashcli-bundle install source for bundle venv. "
