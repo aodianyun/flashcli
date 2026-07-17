@@ -1,0 +1,231 @@
+# flashcli-bundle-build — portable native .so compile + OpenCode agent environment
+#
+# Floor (intentional):
+#   Ubuntu 22.04 (glibc ~2.35) + CUDA 13 devel + g++-11 host compiler
+#   → keep GLIBCXX / GLIBC requirements low enough for Ubuntu 22.04+ hosts.
+#   Also ships Node.js + opencode-ai for in-container agent develop/build.
+#
+# China network defaults (built-in):
+#   apt  → mirrors.aliyun.com
+#   pip  → pypi.tuna.tsinghua.edu.cn
+#   npm  → registry.npmmirror.com
+#   HF   → hf-mirror.com
+#   FLASHCLI_USE_MIRROR=1
+# Re-apply / override inside container: apply-cn-mirrors
+#
+# Build (use --progress=plain to see toolchain OK / tip lines in the log):
+#   docker build -f docker/flashcli-build --progress=plain \
+#     -t flashcli-bundle-build:cu130_u2204_20250717 .
+#
+# Note: default BuildKit progress collapses successful RUN output, so a
+# finished build with no tip text is normal. Enter the container and run
+#   flashcli-bundle-build-help
+# or just start bash (motd prints the same tip).
+#
+# Run (compile + OpenCode web on :8080):
+#   docker run --gpus all -it --rm --shm-size=16g \
+#     -p 8080:8080 \
+#     -v /path/to/FlashRT:/workspace/FlashRT \
+#     -v /path/to/flashcli:/workspace/flashcli \
+#     -w /workspace \
+#     flashcli-bundle-build:cu130_u2204_20250717 bash
+#
+# One-click background OpenCode (from container VNC / shell):
+#   opencode-bg            # start + auto-restart
+#   opencode-bg status
+#   opencode-bg logs -f
+#   opencode-bg stop
+#   # foreground: opencode-bg fg   |   opencode-web
+#
+# Host browser → http://<host>:<mapped-8080>
+#   Settings (bottom-left) → Providers → More providers → search "zhipu"
+#   → Zhipu AI Coding Plan → paste API key
+#
+# Inside the container, prefer:
+#   export CC=gcc-11 CXX=g++-11 CUDAHOSTCXX=g++-11
+#   # or: cmake -DCMAKE_CUDA_HOST_COMPILER=g++-11 ...
+#
+# Override base / Node / mirrors:
+#   docker build -f docker/flashcli-build \
+#     --build-arg BASE_IMAGE=nvidia/cuda:13.3.0-devel-ubuntu22.04 \
+#     --build-arg NODE_VERSION=22.17.0 \
+#     --build-arg APT_MIRROR=https://mirrors.tuna.tsinghua.edu.cn \
+#     --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+#     --build-arg NPM_REGISTRY=https://registry.npmmirror.com \
+#     -t flashcli-bundle-build:cu130_u2204_20250717 .
+
+ARG BASE_IMAGE=nvcr.io/nvidia/cuda:13.0.1-devel-ubuntu22.04
+FROM ${BASE_IMAGE}
+
+LABEL org.opencontainers.image.title="flashcli-bundle-build" \
+      org.opencontainers.image.description="Ubuntu 22.04 + CUDA 13 devel + g++-11 + OpenCode for FlashRT/flashcli native builds (CN mirrors)" \
+      org.opencontainers.image.source="https://github.com/aodianyun/flashcli"
+
+# Node binary from npmmirror (avoids nodesource CDN flakiness in CN).
+ARG NODE_VERSION=22.17.0
+ARG APT_MIRROR=https://mirrors.aliyun.com
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ARG PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+ARG HF_ENDPOINT=https://hf-mirror.com
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=Asia/Shanghai \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    CC=gcc-11 \
+    CXX=g++-11 \
+    CUDAHOSTCXX=g++-11 \
+    CMAKE_CUDA_HOST_COMPILER=/usr/bin/g++-11 \
+    CUDA_HOME=/usr/local/cuda \
+    OPENCODE_PORT=8080 \
+    OPENCODE_HOST=0.0.0.0 \
+    PIP_INDEX_URL=${PIP_INDEX_URL} \
+    PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST} \
+    UV_DEFAULT_INDEX=${PIP_INDEX_URL} \
+    UV_INDEX_URL=${PIP_INDEX_URL} \
+    NPM_CONFIG_REGISTRY=${NPM_REGISTRY} \
+    HF_ENDPOINT=${HF_ENDPOINT} \
+    HF_HUB_DISABLE_XET=1 \
+    FLASHCLI_USE_MIRROR=1 \
+    FLASHCLI_APT_MIRROR=${APT_MIRROR} \
+    PATH=/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Apply CN mirrors before any apt/pip/npm network use.
+COPY docker/apply-cn-mirrors.sh /usr/local/bin/apply-cn-mirrors
+RUN chmod +x /usr/local/bin/apply-cn-mirrors && apply-cn-mirrors
+
+# Toolchain + matrix helpers (zip/rsync used by flashcli release scripts).
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      ca-certificates \
+      curl \
+      wget \
+      git \
+      gnupg \
+      build-essential \
+      gcc-11 \
+      g++-11 \
+      gfortran-11 \
+      cmake \
+      ninja-build \
+      pkg-config \
+      python3 \
+      python3-dev \
+      python3-pip \
+      python3-venv \
+      python3-setuptools \
+      python3-wheel \
+      zip \
+      unzip \
+      rsync \
+      xz-utils \
+      libssl-dev \
+      zlib1g-dev \
+      binutils \
+      patchelf \
+      file \
+      procps \
+      iproute2 \
+      util-linux \
+      psmisc \
+    ; \
+    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 110 \
+      --slave /usr/bin/g++ g++ /usr/bin/g++-11 \
+      --slave /usr/bin/gcov gcov /usr/bin/gcov-11; \
+    update-alternatives --set gcc /usr/bin/gcc-11; \
+    ln -sf /usr/bin/python3 /usr/local/bin/python; \
+    python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel; \
+    rm -rf /var/lib/apt/lists/*
+
+# Node.js from npmmirror binary tarball + opencode via npm CN registry.
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    case "${arch}" in \
+      x86_64) node_arch=x64 ;; \
+      aarch64|arm64) node_arch=arm64 ;; \
+      *) echo "ERROR: unsupported arch ${arch}" >&2; exit 1 ;; \
+    esac; \
+    node_url="https://npmmirror.com/mirrors/node/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${node_arch}.tar.xz"; \
+    echo "Installing Node ${NODE_VERSION} from ${node_url}"; \
+    curl -fsSL "${node_url}" | tar -xJ -C /usr/local --strip-components=1; \
+    node --version; \
+    npm --version; \
+    apply-cn-mirrors; \
+    npm install -g opencode-ai@latest; \
+    npm cache clean --force; \
+    rm -rf /root/.npm/_cacache; \
+    command -v opencode; \
+    opencode --version || true
+
+# Foreground launcher + one-click background manager (auto-restart).
+# supervise loop mirrors codeplan/runopencode.sh; opencode-bg wraps setsid/flock/port-check.
+COPY docker/opencode-supervise.sh /usr/local/lib/flashcli/opencode-supervise
+COPY docker/opencode-bg.sh /usr/local/bin/opencode-bg
+COPY docker/flashcli-bundle-build-help.sh /usr/local/bin/flashcli-bundle-build-help
+RUN set -eux; \
+    chmod +x \
+      /usr/local/lib/flashcli/opencode-supervise \
+      /usr/local/bin/opencode-bg \
+      /usr/local/bin/flashcli-bundle-build-help; \
+    printf '%s\n' \
+      '#!/bin/sh' \
+      'set -eu' \
+      'exec opencode-bg fg "$@"' \
+      > /usr/local/bin/opencode-web; \
+    chmod +x /usr/local/bin/opencode-web; \
+    mkdir -p /var/log /var/lib/opencode-web; \
+    flashcli-bundle-build-help > /etc/motd; \
+    printf '%s\n' \
+      '# flashcli-bundle-build: short tip on interactive bash' \
+      'if [ -n "${PS1:-}" ]; then' \
+      '  echo "[flashcli-bundle-build] opencode-bg | flashcli-bundle-build-help"' \
+      'fi' \
+      >> /etc/bash.bashrc
+
+# Fail the image build early if the portable toolchain / OpenCode is incomplete.
+RUN set -eux; \
+    nvcc --version; \
+    g++ --version | head -1; \
+    case "$(g++ -dumpversion)" in \
+      11|11.*) ;; \
+      *) echo "ERROR: default g++ must be 11.x (got $(g++ -dumpversion))" >&2; exit 1 ;; \
+    esac; \
+    cmake --version; \
+    python3 --version; \
+    node --version; \
+    npm --version; \
+    npm config get registry; \
+    python3 -m pip config list || true; \
+    command -v opencode; \
+    command -v opencode-web; \
+    command -v opencode-bg; \
+    command -v apply-cn-mirrors; \
+    command -v zip; \
+    command -v rsync; \
+    command -v readelf; \
+    command -v flashcli-bundle-build-help; \
+    test -x /usr/local/cuda/bin/nvcc; \
+    echo; \
+    echo '======== flashcli-bundle-build image ready ========'; \
+    printf 'OK: CUDA=%s g++=%s node=%s\n' \
+      "$(nvcc --version | sed -n 's/.*release \([0-9.]*\).*/\1/p' | head -1)" \
+      "$(g++ -dumpversion)" \
+      "$(node --version)"; \
+    echo "CN: apt=${FLASHCLI_APT_MIRROR}"; \
+    echo "CN: pip=${PIP_INDEX_URL}"; \
+    echo "CN: npm=${NPM_CONFIG_REGISTRY}"; \
+    echo "CN: HF=${HF_ENDPOINT}"; \
+    echo 'Next: docker run ... -p 8080:8080 ... bash'; \
+    echo '      then: opencode-bg   |   flashcli-bundle-build-help'; \
+    echo '===================================================='
+
+EXPOSE 8080
+
+WORKDIR /workspace
+
+# Keep NVIDIA entrypoint from the CUDA base image (sets library paths).
+# Default to an interactive shell for compile/test / VNC workflows.
+# One-click agent UI: opencode-bg
+CMD ["bash"]
