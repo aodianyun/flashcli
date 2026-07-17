@@ -58,6 +58,10 @@ REPO_FROM_USER=0
 if [ -n "${FLASHCLI_INSTALL_REPO:-}" ]; then
   REPO_FROM_USER=1
 fi
+# git = pip install git+URL (default); archive = Gitee/GitHub zip when git protocol is blocked.
+INSTALL_MODE="${FLASHCLI_INSTALL_MODE:-git}"
+INSTALL_ARCHIVE_URL="${FLASHCLI_INSTALL_ARCHIVE_URL:-}"
+INSTALL_SRC_DIR=""
 
 # Alternate endpoints when --mirror / FLASHCLI_USE_MIRROR=1 (PyPI default: Tsinghua)
 MIRROR_PIP_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple/"
@@ -619,7 +623,8 @@ maybe_apply_default_git_proxy() {
 
   if [ "$REPO" = "$DEFAULT_REPO_GITHUB" ]; then
     REPO="$DEFAULT_REPO_GITEE"
-    info "[i] mirror: git clone via Gitee ($REPO); pass --github to keep GitHub"
+    # Prefer zip archive over git smart-HTTP (Gitee often `reject by [gitee]` on git).
+    info "[i] mirror: install via Gitee archive zip ($REPO @ $REF); pass --github to keep GitHub"
     return 0
   fi
 
@@ -636,42 +641,27 @@ maybe_apply_default_git_proxy() {
   info "[i] mirror: git fetch via ${REPO}"
 }
 
-# Disable interactive git auth for this process tree (preflight + pip's git clone + tests).
+# Keep git non-interactive for this process tree (preflight + pip git+ + tests).
 #
-# Why Username prompts appear on a *public* Gitee repo:
-#   1) Git always tries anonymous HTTPS first.
-#   2) Only if the server returns 401/403 (or equivalent) does Git ask for credentials.
-#   3) Public repos normally return 200 — no prompt. Prompts mean Gitee challenged that
-#      request (IP rate-limit / risk-control jitter) OR a stale credential.helper entry
-#      failed after a challenge. Clean containers have no helpers and often a different
-#      egress IP, so they succeed while a bare host can still pop Username.
-# Install never needs a Gitee login for the official public mirror — fail/retry/fallback
-# instead of blocking on /dev/tty.
+# Keep this MINIMAL. Sending blank username/password or a custom askpass makes the
+# client look like an auth attempt; Gitee risk-control often answers with
+# `reject by [gitee]` / Authentication failed — including in containers that used to
+# succeed with plain anonymous HTTPS. Only disable prompts and ignore stored helpers.
 configure_noninteractive_git() {
   export GIT_TERMINAL_PROMPT=0
   export GCM_INTERACTIVE=never
+  unset GIT_ASKPASS SSH_ASKPASS SSH_ASKPASS_REQUIRE GIT_ASKPASS_REQUIRE 2>/dev/null || true
 
   _n="${GIT_CONFIG_COUNT:-0}"
   case "$_n" in ''|*[!0-9]*) _n=0 ;; esac
-  # Highest-precedence empty helper: ignore store/cache/osxkeychain/manager for install.
+  # Empty helper: do not use store/cache/osxkeychain (stale creds) and do not send auth.
   export "GIT_CONFIG_KEY_${_n}=credential.helper"
   export "GIT_CONFIG_VALUE_${_n}="
   _n=$((_n + 1))
-  # Git ≥2.46; older versions ignore unknown keys safely.
   export "GIT_CONFIG_KEY_${_n}=credential.interactive"
   export "GIT_CONFIG_VALUE_${_n}=never"
   _n=$((_n + 1))
   export GIT_CONFIG_COUNT="$_n"
-
-  _askpass="${TMPDIR:-/tmp}/flashcli-git-askpass.$$"
-  printf '%s\n' \
-    '#!/bin/sh' \
-    'echo "flashcli: refusing interactive git credentials (public clone must be anonymous)" >&2' \
-    'exit 1' >"$_askpass"
-  chmod 700 "$_askpass" 2>/dev/null || chmod +x "$_askpass"
-  export GIT_ASKPASS="$_askpass"
-  # Unset GUI askpass overrides that some desktops inject into the environment.
-  unset SSH_ASKPASS SSH_ASKPASS_REQUIRE GIT_ASKPASS_REQUIRE 2>/dev/null || true
 }
 
 # HTTP status for git-upload-pack advertisement (anonymous). Helps explain 401 vs network.
@@ -682,19 +672,92 @@ probe_git_upload_pack_http() {
     *) printf '%s\n' "n/a"; return 0 ;;
   esac
   _base="${_repo%.git}"
+  case "$_base" in
+    https://git:@gitee.com/*|https://*@gitee.com/*)
+      _base="https://gitee.com/${_base#*gitee.com/}"
+      ;;
+  esac
   _url="${_base}.git/info/refs?service=git-upload-pack"
   if have_cmd curl; then
     curl -sS -o /dev/null -w '%{http_code}' \
       --connect-timeout 8 --max-time 20 \
-      -A "flashcli-install/git-probe" \
       "$_url" 2>/dev/null || printf '%s\n' "000"
     return 0
   fi
   printf '%s\n' "n/a"
 }
 
+# Zip archive URL when git smart-HTTP is blocked but website/raw still works.
+official_archive_zip_url() {
+  _ref="${1:-$REF}"
+  case "$REPO" in
+    *gitee.com*/aodiansoft/flashcli*)
+      printf 'https://gitee.com/aodiansoft/flashcli/repository/archive/%s.zip\n' "$_ref"
+      ;;
+    *github.com*/aodianyun/flashcli*|*ghproxy.com*github.com/aodianyun/flashcli*)
+      printf 'https://github.com/aodianyun/flashcli/archive/refs/heads/%s.zip\n' "$_ref"
+      ;;
+    *)
+      printf '\n'
+      ;;
+  esac
+}
+
+probe_archive_zip_http() {
+  _url="$1"
+  [ -n "$_url" ] || { printf '%s\n' "000"; return 0; }
+  if have_cmd curl; then
+    # HEAD first; some CDNs dislike HEAD — fall back to a 1-byte ranged GET.
+    _code="$(curl -sS -o /dev/null -w '%{http_code}' \
+      --connect-timeout 8 --max-time 20 -L -I -A "Mozilla/5.0" \
+      "$_url" 2>/dev/null || printf '%s' "000")"
+    case "$_code" in
+      200|301|302|307|308) printf '%s\n' "$_code"; return 0 ;;
+    esac
+    curl -sS -o /dev/null -w '%{http_code}' \
+      --connect-timeout 8 --max-time 25 -L -A "Mozilla/5.0" \
+      -r 0-0 \
+      "$_url" 2>/dev/null || printf '%s\n' "000"
+    return 0
+  fi
+  printf '%s\n' "n/a"
+}
+
+# Download official zip and unpack to a directory containing pyproject.toml.
+# Sets INSTALL_SRC_DIR. Used when Gitee rejects git:// smart-HTTP.
+prepare_install_src_from_archive() {
+  _url="${1:-$INSTALL_ARCHIVE_URL}"
+  [ -n "$_url" ] || die "archive URL is empty"
+  if ! have_cmd unzip; then
+    ensure_host_tool unzip unzip 2>/dev/null || true
+  fi
+  have_cmd unzip || die "unzip is required to install from archive (apt-get install -y unzip)"
+  _home="${FLASHCLI_HOME:-${HOME:-/root}/.flashcli}"
+  _work="${_home}/install-src"
+  _zip="${_home}/install-src.zip"
+  rm -rf "$_work" 2>/dev/null || true
+  mkdir -p "$_home"
+  info "Downloading source archive (git protocol blocked): $_url"
+  if have_cmd curl; then
+    curl -fsSL --connect-timeout 15 --max-time 300 -L -A "Mozilla/5.0" \
+      -o "$_zip" "$_url" \
+      || die "failed to download archive: $_url"
+  else
+    die "curl is required to download install archive"
+  fi
+  mkdir -p "$_work"
+  unzip -q -o "$_zip" -d "$_work" || die "failed to unzip $_zip"
+  _pyproject="$(find "$_work" -maxdepth 3 -type f -name pyproject.toml 2>/dev/null | head -n 1)"
+  [ -n "$_pyproject" ] || die "pyproject.toml not found in archive $_url"
+  INSTALL_SRC_DIR="$(dirname "$_pyproject")"
+  [ -d "${INSTALL_SRC_DIR}/flashcli-bundle" ] \
+    || die "flashcli-bundle/ missing under ${INSTALL_SRC_DIR}"
+  export FLASHCLI_INSTALL_SRC_DIR="$INSTALL_SRC_DIR"
+  info "[ok] source ready from archive: $INSTALL_SRC_DIR"
+}
+
 # Run git with a network timeout so preflight cannot hang silently on dead proxies.
-# Also force empty credential.helper per-invocation (belt-and-suspenders with configure_*).
+# Pure anonymous: empty credential.helper (no Authorization header).
 run_git_timeout() {
   _secs="${FLASHCLI_GIT_TIMEOUT:-25}"
   if have_cmd timeout; then
@@ -1772,11 +1835,31 @@ git_ref_reachable_with_retries() {
       return 0
     fi
     if [ "$_i" -lt "$_tries" ]; then
-      warn "git remote not reachable (try ${_i}/${_tries}): ${_repo} — retrying in ${_sleep}s…"
+      _http="$(probe_git_upload_pack_http "$_repo" | tr -d '\n')"
+      warn "git remote not reachable (try ${_i}/${_tries}): ${_repo} (upload-pack HTTP ${_http}) — retrying in ${_sleep}s…"
       sleep "$_sleep" 2>/dev/null || true
     fi
     _i=$((_i + 1))
   done
+  return 1
+}
+
+# Prefer zip archive when Gitee/GitHub git smart-HTTP is rejected (common in CN NAT).
+try_install_via_archive() {
+  _url="$(official_archive_zip_url "$REF")"
+  [ -n "$_url" ] || return 1
+  _http="$(probe_archive_zip_http "$_url" | tr -d '\n')"
+  case "$_http" in
+    200|302)
+      INSTALL_MODE=archive
+      INSTALL_ARCHIVE_URL="$_url"
+      export FLASHCLI_INSTALL_MODE=archive
+      export FLASHCLI_INSTALL_ARCHIVE_URL="$_url"
+      info "[ok] git protocol blocked — will install from archive (HTTP ${_http}): $_url"
+      return 0
+      ;;
+  esac
+  warn "archive probe failed for ${_url} (HTTP ${_http})"
   return 1
 }
 
@@ -1792,28 +1875,72 @@ _github_install_url_via_proxy() {
   printf '%s%s\n' "$_proxy" "$DEFAULT_REPO_GITHUB"
 }
 
-# Fail early if the git ref used by `pip install git+...` is unreachable.
-# Order: current REPO (with retries) → GitHub→Gitee → official Gitee→GitHub proxy→GitHub.
+# True for the official Gitee mirror of flashcli (zip is the reliable channel).
+is_official_gitee_repo() {
+  case "$1" in
+    "$DEFAULT_REPO_GITEE"|https://gitee.com/aodiansoft/flashcli.git|https://gitee.com/aodiansoft/flashcli)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+# Fail early if neither archive zip nor git+URL can feed pip.
+# Official Gitee: archive zip FIRST (skip flaky git smart-HTTP). Others: git then archive.
 ensure_git_remote_ready() {
+  if [ "$INSTALL_MODE" = "archive" ] && [ -n "$INSTALL_ARCHIVE_URL" ]; then
+    info "[ok] install mode=archive: $INSTALL_ARCHIVE_URL"
+    return 0
+  fi
+
+  # Gitee --mirror / --gitee: go straight to zip. Opt out: FLASHCLI_GITEE_USE_GIT=1
+  _gitee_git="${FLASHCLI_GITEE_USE_GIT:-0}"
+  case "$_gitee_git" in 1|true|yes|on) ;; *)
+    if is_official_gitee_repo "$REPO"; then
+      info "Gitee install: using archive zip (skip git protocol; set FLASHCLI_GITEE_USE_GIT=1 to force git)"
+      if try_install_via_archive; then
+        return 0
+      fi
+      warn "Gitee archive unavailable — falling back to git / GitHub"
+    fi
+    ;;
+  esac
+
   if ! have_cmd git; then
+    if try_install_via_archive; then
+      return 0
+    fi
     return 0
   fi
   info "Checking git remote (${FLASHCLI_GIT_TIMEOUT:-25}s timeout, ${FLASHCLI_GIT_RETRIES:-3} tries): $REPO @ $REF"
   if git_ref_reachable_with_retries "$REPO" "$REF"; then
+    INSTALL_MODE=git
     info "[ok] git remote reachable: $REPO ($REF)"
     return 0
   fi
 
-  # Auto-switch GitHub → Gitee before any package download (same as mid-install fallback).
+  case "$REPO" in
+    *gitee.com*|*github.com*|*ghproxy.com*)
+      if try_install_via_archive; then
+        return 0
+      fi
+      ;;
+  esac
+
+  # Auto-switch GitHub → Gitee archive before any package download.
   if [ "$REPO_FROM_USER" -eq 0 ]; then
     case "$REPO" in
       "$DEFAULT_REPO_GITHUB"|https://github.com/aodianyun/flashcli.git)
-        warn "GitHub unreachable — switching to Gitee + mirrors before install"
+        warn "GitHub unreachable — switching to Gitee archive + mirrors"
         REPO="$DEFAULT_REPO_GITEE"
         USE_MIRROR=1
         export FLASHCLI_INSTALL_REPO="$REPO" FLASHCLI_USE_MIRROR="$USE_MIRROR"
         apply_mirror_endpoints
+        if try_install_via_archive; then
+          return 0
+        fi
         if git_ref_reachable_with_retries "$REPO" "$REF"; then
+          INSTALL_MODE=git
           info "[ok] git remote reachable: $REPO ($REF)"
           return 0
         fi
@@ -1821,62 +1948,41 @@ ensure_git_remote_ready() {
     esac
   fi
 
-  # Domestic --mirror path lands on Gitee; if Gitee flakes, fall back to GitHub via proxy
-  # (then direct) so China installs do not hard-fail on a single bad ls-remote.
-  case "$REPO" in
-    "$DEFAULT_REPO_GITEE"|https://gitee.com/aodiansoft/flashcli.git)
-      _gh_proxy="$(_github_install_url_via_proxy)"
-      if [ "$_gh_proxy" != "$DEFAULT_REPO_GITHUB" ]; then
-        warn "Gitee unreachable — trying GitHub via proxy: ${_gh_proxy}"
-        if git_ref_reachable_with_retries "$_gh_proxy" "$REF"; then
-          REPO="$_gh_proxy"
-          export FLASHCLI_INSTALL_REPO="$REPO"
-          info "[ok] git remote reachable: $REPO ($REF)"
-          return 0
-        fi
-      fi
-      warn "trying GitHub direct: ${DEFAULT_REPO_GITHUB}"
-      if git_ref_reachable_with_retries "$DEFAULT_REPO_GITHUB" "$REF"; then
-        REPO="$DEFAULT_REPO_GITHUB"
+  # Gitee archive failed → GitHub via proxy (then direct / GitHub archive).
+  if is_official_gitee_repo "$REPO"; then
+    _gh_proxy="$(_github_install_url_via_proxy)"
+    if [ "$_gh_proxy" != "$DEFAULT_REPO_GITHUB" ]; then
+      warn "Gitee archive/git unavailable — trying GitHub via proxy: ${_gh_proxy}"
+      if git_ref_reachable_with_retries "$_gh_proxy" "$REF"; then
+        REPO="$_gh_proxy"
+        INSTALL_MODE=git
         export FLASHCLI_INSTALL_REPO="$REPO"
         info "[ok] git remote reachable: $REPO ($REF)"
         return 0
       fi
-      ;;
-  esac
+    fi
+    warn "trying GitHub direct: ${DEFAULT_REPO_GITHUB}"
+    if git_ref_reachable_with_retries "$DEFAULT_REPO_GITHUB" "$REF"; then
+      REPO="$DEFAULT_REPO_GITHUB"
+      INSTALL_MODE=git
+      export FLASHCLI_INSTALL_REPO="$REPO"
+      info "[ok] git remote reachable: $REPO ($REF)"
+      return 0
+    fi
+    REPO="$DEFAULT_REPO_GITHUB"
+    if try_install_via_archive; then
+      return 0
+    fi
+  fi
 
   _http="$(probe_git_upload_pack_http "$REPO" | tr -d '\n')"
-  _auth_hint=""
-  case "$_http" in
-    401|403)
-      _auth_hint="
-HTTP ${_http} on anonymous git-upload-pack — Gitee/GitHub challenged this IP (rate-limit /
-risk-control), or a stale credential was rejected. This is NOT \"repo is private\".
-Clear bad cached creds, then retry:
-  printf 'protocol=https\\nhost=gitee.com\\n\\n' | git credential reject
-  GIT_TERMINAL_PROMPT=0 git -c credential.helper= ls-remote ${REPO} ${REF}"
-      ;;
-    200)
-      _auth_hint="
-HTTP 200 on upload-pack but git ls-remote still failed — often a local credential.helper /
-proxy issue. Clear gitee.com creds and retry with credential.helper disabled (see below)."
-      ;;
-    000)
-      _auth_hint="
-HTTP probe failed (network/DNS/TLS). Check connectivity to the git host."
-      ;;
-  esac
-
-  die "cannot reach git remote ${REPO} @ ${REF} — install would fail when pip clones the repo.
-Reason: timeout, firewall, DNS, offline host, or anonymous HTTPS auth challenge
-(Gitee IP rate-limit / risk-control jitter). Install never prompts for Username/Password.
-HTTP git-upload-pack probe: ${_http}${_auth_hint}
+  die "cannot reach install source for ${REPO} @ ${REF}.
+git upload-pack HTTP: ${_http}
+Gitee git smart-HTTP is often blocked; --mirror uses archive zip by default.
 Fix:
-  retry:  FLASHCLI_GIT_TIMEOUT=60 FLASHCLI_GIT_RETRIES=5 ./install.sh --mirror --ref ${REF}
-  ./install.sh --github --ref ${REF}
-  ./install.sh --repo <reachable-git-url>
-  # verify anonymous access (must not ask Username):
-  GIT_TERMINAL_PROMPT=0 git -c credential.helper= ls-remote ${REPO} ${REF}"
+  ./install.sh --mirror --ref ${REF}
+  ./install.sh --github --mirror --ref ${REF}
+  curl -I -L 'https://gitee.com/aodiansoft/flashcli/repository/archive/${REF}.zip'"
 }
 
 # Fail early if PyPI (or configured mirror) cannot serve packages.
@@ -2224,9 +2330,49 @@ install_flashcli() {
   # when flashcli (already in venv, --no-deps) is checked during flashcli-bundle install.
   install_flashcli_runtime_deps
 
+  if [ "$INSTALL_MODE" = "archive" ]; then
+    prepare_install_src_from_archive "$INSTALL_ARCHIVE_URL"
+    bundle_spec="${INSTALL_SRC_DIR}/flashcli-bundle"
+    info "Installing protocol package from archive: $bundle_spec"
+    _pip_install_flashcli_spec "$bundle_spec" \
+      || die "pip install failed for $bundle_spec"
+    spec="$INSTALL_SRC_DIR"
+    if [ "$PIP_INSTALL_USER" = "1" ]; then
+      info "Installing $spec (--no-deps) → $(pip_scripts_dir 1) (pip --user) ..."
+    elif [ -n "${VIRTUAL_ENV:-}" ]; then
+      info "Installing $spec (--no-deps) → $(pip_scripts_dir 0) (venv) ..."
+    else
+      cleanup_stale_user_install
+      info "Installing $spec (--no-deps) → $(pip_scripts_dir 0) (system site) ..."
+    fi
+    set -- --upgrade --force-reinstall --no-deps
+    if [ "$PIP_INSTALL_USER" = "1" ]; then
+      set -- "$@" --user
+    fi
+    [ "$QUIET" = "1" ] && set -- "$@" -q
+    set -- "$@" "$spec"
+    do_pip_install "$@" || die "pip install failed for archive source $spec"
+    info "[ok] pip install finished (archive)"
+    return 0
+  fi
+
   bundle_spec="flashcli-bundle @ git+${REPO}@${REF}#subdirectory=flashcli-bundle"
   info "Installing protocol package: $bundle_spec"
   if ! _pip_install_flashcli_spec "$bundle_spec"; then
+    if try_install_via_archive; then
+      prepare_install_src_from_archive "$INSTALL_ARCHIVE_URL"
+      _pip_install_flashcli_spec "${INSTALL_SRC_DIR}/flashcli-bundle" \
+        || die "pip install failed for ${INSTALL_SRC_DIR}/flashcli-bundle"
+      set -- --upgrade --force-reinstall --no-deps
+      if [ "$PIP_INSTALL_USER" = "1" ]; then
+        set -- "$@" --user
+      fi
+      [ "$QUIET" = "1" ] && set -- "$@" -q
+      set -- "$@" "$INSTALL_SRC_DIR"
+      do_pip_install "$@" || die "pip install failed for archive source $INSTALL_SRC_DIR"
+      info "[ok] pip install finished (archive fallback)"
+      return 0
+    fi
     if try_mirror_repo_fallback; then
       bundle_spec="flashcli-bundle @ git+${REPO}@${REF}#subdirectory=flashcli-bundle"
       info "Retrying protocol install: $bundle_spec"
@@ -2801,16 +2947,32 @@ run_post_install_tests() {
       || die "cannot checkout ${REF} in ${_src}"
   else
     rm -rf "${_src}" 2>/dev/null || true
-    if GIT_TERMINAL_PROMPT=0 git -c credential.helper= clone --depth 1 --branch "${REF}" "${REPO}" "${_src}" >/dev/null 2>&1; then
+    if [ -n "${INSTALL_SRC_DIR:-}" ] && [ -d "${INSTALL_SRC_DIR}/tests" ]; then
+      mkdir -p "$_src"
+      # shellcheck disable=SC2610
+      cp -a "${INSTALL_SRC_DIR}/." "${_src}/"
+    elif [ "$INSTALL_MODE" = "archive" ] && [ -n "$INSTALL_ARCHIVE_URL" ]; then
+      prepare_install_src_from_archive "$INSTALL_ARCHIVE_URL"
+      mkdir -p "$_src"
+      cp -a "${INSTALL_SRC_DIR}/." "${_src}/"
+    elif GIT_TERMINAL_PROMPT=0 git -c credential.helper= \
+      clone --depth 1 --branch "${REF}" "${REPO}" "${_src}" >/dev/null 2>&1; then
       :
-    elif GIT_TERMINAL_PROMPT=0 git -c credential.helper= clone --depth 1 "${REPO}" "${_src}" >/dev/null 2>&1; then
-      GIT_TERMINAL_PROMPT=0 git -c credential.helper= -C "${_src}" fetch --depth 1 origin "${REF}" >/dev/null 2>&1 \
-        || GIT_TERMINAL_PROMPT=0 git -c credential.helper= -C "${_src}" fetch --depth 1 "${REPO}" "${REF}" >/dev/null 2>&1 \
+    elif GIT_TERMINAL_PROMPT=0 git -c credential.helper= \
+      clone --depth 1 "${REPO}" "${_src}" >/dev/null 2>&1; then
+      GIT_TERMINAL_PROMPT=0 git -c credential.helper= -C "${_src}" \
+        fetch --depth 1 origin "${REF}" >/dev/null 2>&1 \
+        || GIT_TERMINAL_PROMPT=0 git -c credential.helper= -C "${_src}" \
+          fetch --depth 1 "${REPO}" "${REF}" >/dev/null 2>&1 \
         || die "git fetch ${REF} failed for post-install tests"
       git -C "${_src}" checkout FETCH_HEAD >/dev/null 2>&1 \
         || die "git checkout ${REF} failed for post-install tests"
+    elif try_install_via_archive; then
+      prepare_install_src_from_archive "$INSTALL_ARCHIVE_URL"
+      mkdir -p "$_src"
+      cp -a "${INSTALL_SRC_DIR}/." "${_src}/"
     else
-      die "git clone ${REPO} failed (needed for post-install tests)"
+      die "git clone ${REPO} failed (needed for post-install tests); archive also unavailable"
     fi
   fi
 
