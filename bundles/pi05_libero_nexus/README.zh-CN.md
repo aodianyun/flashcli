@@ -1,102 +1,113 @@
-# pi05_libero_nexus
+# Pi0.5 LIBERO Nexus
 
 <p align="right"><a href="README.md">English</a> · <strong>简体中文</strong></p>
 
-**Pi0.5 LIBERO VLA —— 基于 [FlashRT-Nexus](https://github.com/LiangSu8899/FlashRT-Nexus) 的有状态服务。**
+**Pi0.5** 视觉–语言–动作（VLA）策略，在 LIBERO 操作任务上微调，并通过 [FlashRT-Nexus](https://github.com/LiangSu8899/FlashRT-Nexus) 提供服务。与 `pi05_libero` 同一策略，额外支持长驻**有状态 HTTP serve**（episode 快照 / 重置）与 engine 模式 **run**。
 
 | | |
 |---|---|
-| **FlashHub ref** | `flashcli-bundle/pi05_libero_nexus:1.0.0` |
-| **权重** | [`lerobot/pi05_libero_finetuned_v044`](https://huggingface.co/lerobot/pi05_libero_finetuned_v044)（约 7 GB，自动下载）|
-| **Substrate** | FlashRT `d0db114` + Nexus `8f13a3a`（复合标签 `frd0db114.nx8f13a3a`）|
-| **Bundle 格式** | [flashcli-model-bundle v3](../../docs/bundle_publish_standard.zh-CN.md) |
+| **Ref** | `flashcli-bundle/pi05_libero_nexus:1.0.0` |
+| **权重** | [lerobot/pi05_libero_finetuned_v044](https://www.modelscope.cn/models/lerobot/pi05_libero_finetuned_v044)（ModelScope，约 7 GB） |
+| **GPU** | NVIDIA **SM120**（Blackwell）· CUDA **13.x** |
+| **Python** | **3.10**（bundle venv） |
+| **能力** | `run` · `serve` |
 
-本 bundle 在 Pi0.5 LIBERO 策略之上，叠加 FlashRT 推理引擎和 FlashRT-Nexus 服务底座。相比老的 `pi05_libero`（单次推理脚本），本 bundle 提供：
+**输入：** 任务 prompt + RGB 图像（LIBERO 默认 **2** 路相机）。  
+**输出：** 机器人策略动作序列（`run`）；OpenAI 风格 HTTP API + episode 控制（`serve`）。
 
-- 长驻 **HTTP serve** 模式，`/v1/chat/completions` 每次调用执行一次 `act()`
-- **Episode 控制**：`POST /v1/session/snapshot`、`POST /v1/session/reset/{capsule}`，通过 Nexus capsule 实现热启动 / 撤销 / 回合重置
-- 底座信息端点 `GET /v1/substrate`
-- 标准的 **engine 模式 run**，用于单次推理和 benchmark
+权重与 PaliGemma tokenizer 在首次 `pull` / `run` / `serve` 时拉取（不在 bundle zip 内）。`flashcli pull` 完成后推理完全离线。
 
-同一 bundle 同时支持 `flashcli run` 和 `flashcli serve`。
+> **Serve 的 prompt：** Nexus 在**加载模型时**烧入任务指令（`--warmup-prompt` / manifest 默认）。`/v1/chat/completions` 的 `content` 在 act 时**被忽略**——只有 `extras.images` 进入策略。换任务需用不同 `--warmup-prompt` 重启 serve。
 
-> **Prompt 处理**：Pi0.5 Nexus producer **在模型加载时把任务指令烧入**，不暴露动态 prompt port。指令固定为 manifest 的 `model.prompt`（可通过 `--warmup_prompt` serve 选项覆盖）。`/v1/chat/completions` 的 `content` 字段在推理时**被忽略** —— 只有 `extras.images` 真正进入策略。切换任务需要用不同的 `--warmup_prompt` 重启服务。
+## 运行
 
-## 支持环境
+```bash
+flashcli pull flashcli-bundle/pi05_libero_nexus:1.0.0
 
-| 字段 | 值 |
-|---|---|
-| Python ABI | `310`（CPython 3.10）|
-| GPU | SM 120（Blackwell：RTX 50 系列）|
-| CUDA | 13.0 |
-| 系统 / 架构 | linux / x86_64 |
-| Runtime cell | `sm120-cu130-linux-x86_64-py310` |
+flashcli run flashcli-bundle/pi05_libero_nexus:1.0.0 \
+  --prompt "pick up the red block and place it in the tray" \
+  --image /path/view0.jpg,/path/view1.jpg
+```
 
-## 快速开始
+双路相机（默认 `--num-views 2`）：
 
-```sh
-# 1) 校验布局（离线、无需 GPU）
-flashcli bundle validate bundles/pi05_libero_nexus
+```bash
+flashcli run flashcli-bundle/pi05_libero_nexus:1.0.0 \
+  --num-views 2 \
+  --image /path/view0.jpg,/path/view1.jpg
+```
 
-# 2) 拉权重 + PaliGemma tokenizer + 安装 Python 依赖到 bundle venv
-flashcli pull bundles/pi05_libero_nexus
+Benchmark（未传 `--image` 时用零图占位）：
 
-# 3) 单次推理
-flashcli run bundles/pi05_libero_nexus \
-    --prompt "pick up the red block and place it in the tray" \
-    --image cam0.jpg,cam1.jpg
+```bash
+flashcli run flashcli-bundle/pi05_libero_nexus:1.0.0 \
+  --prompt "pick up the red block" \
+  --benchmark 5 --warmup 2
+```
 
-# 4) 长驻有状态服务
-flashcli serve bundles/pi05_libero_nexus --port 8080 &
+完整参数：`flashcli run flashcli-bundle/pi05_libero_nexus:1.0.0 --help`
 
-# 另一个终端：
+## Serve
+
+```bash
+flashcli serve flashcli-bundle/pi05_libero_nexus:1.0.0 --port 8080
+```
+
+每次请求一次 `act()`（`extras.images` 为 base64 JPEG 列表，一路相机一张）：
+
+```bash
 curl -X POST http://127.0.0.1:8080/v1/chat/completions \
-    -H 'Content-Type: application/json' \
-    -d '{"messages":[{"role":"user","content":"pick up the red block"}],
-         "extras":{"images":["<base64-jpeg>","<base64-jpeg>"]}}'
+  -H 'Content-Type: application/json' \
+  -d '{"messages":[{"role":"user","content":"act 时忽略"}],
+       "extras":{"images":["<base64-jpeg>","<base64-jpeg>"]}}'
+```
 
-# Episode 控制：
+Episode 控制与底座探测：
+
+```bash
 curl -X POST 'http://127.0.0.1:8080/v1/session/snapshot?name=after_pickup'
 curl -X POST http://127.0.0.1:8080/v1/session/reset/after_pickup
 curl http://127.0.0.1:8080/v1/substrate
 ```
 
-`flashcli pull` 完成后，所有推理路径**完全离线**——运行时不再下载、不再 pip 安装。
+完整参数：`flashcli serve flashcli-bundle/pi05_libero_nexus:1.0.0 --help`
 
-## 目录结构
+## 参数
 
-```
-bundles/pi05_libero_nexus/
-├── flashcli-bundle.json               # manifest（entry.run + entry.serve + substrate 块）
-├── flash_rt/                          # 精简版 FlashRT Python 包（仅 Pi0.5 子集）
-├── runtime/
-│   └── sm120-cu130-linux-x86_64-py310/
-│       ├── flash_rt_kernels-d0db114-...-py310.so    # Python 扩展（顶层）
-│       ├── flash_rt_fa2-d0db114-...-py310.so        # Python 扩展（顶层）
-│       └── substrate/                                # 子目录：validator 跳过，loader 自取
-│           ├── libflashrt_exec-d0db114-sm120-cu130-linux-x86_64.so
-│           ├── libflashrt_cpp_pi05_c-d0db114-sm120-cu130-linux-x86_64.so
-│           ├── libcapsule_nexus_flashrt-frd0db114.nx8f13a3a-sm120-cu130-linux-x86_64.so
-│           ├── nexus_python/                         # vendor 的 Nexus serve 包
-│           └── VERSION                               # ABI 指纹（单一真相）
-├── run.py                             # RunEngine：单次推理
-├── serve.py                           # ServeEngine：有状态 HTTP 服务
-├── _substrate_loader.py               # 3 个 C 库的 ctypes 加载器 + ABI 校验
-├── _pi05_infer.py / _pi05_compat.py   # Pi0.5 辅助函数（图像加载、FP8 shim）
-├── build.sh / _bundle_build.sh        # 构建流水线
-├── pack.sh / release.sh               # 打包 + FlashHub 发布
-└── release-matrix.env                 # 发布矩阵定义
-```
+### `run`
 
-## 为什么是新 bundle？
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--prompt` | `pick up the red block and place it in the tray` | 任务指令 |
+| `--image` | — | 逗号分隔的 RGB 路径（每路相机一张） |
+| `--num-views` | `2` | 相机路数（LIBERO 为 2） |
+| `--hardware` | `auto` | FlashRT 后端（`auto`、`rtx_sm120` 等） |
+| `--autotune` | `3` | CUDA graph 调优次数（`0` 关闭） |
+| `--use-fp8` | 开启 | 支持时使用 FP8 权重 |
+| `--config` | `pi05` | FlashRT 配置名 |
+| `--framework` | `torch` | FlashRT framework 后端 |
+| `--checkpoint` | *（自动）* | 覆盖缓存权重目录 |
 
-`pi05_libero` 是 smoke test / benchmark 用的单次脚本。本 bundle 是**生产**形态：长驻、有状态、感知 episode，适合真实机器人控制循环。分开避免破坏现有 `pi05_libero` 用户。
+### `serve`
 
-## 底座 ABI 指纹
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--device` | `cuda:0` | Torch 设备 |
+| `--num-views` | `2` | 相机路数 |
+| `--precision` | `fp8` | `fp8` \| `fp16` |
+| `--stage-plan` | `full` | Nexus stage plan：`full` \| `context_action` |
+| `--hardware` | `auto` | FlashRT 后端 |
+| `--capsule-dir` | *（空）* | capsule 落盘目录；空 = 仅内存 |
+| `--warmup-prompt` | `pick up the red block and place it in the tray` | 加载时烧入的任务（见上文） |
+| `--model-name` | `pi05-libero-nexus` | OpenAI API 模型 id |
 
-`runtime/<env_key>/substrate/VERSION` 记录本 bundle 编译时所用的精确 FlashRT + Nexus commit。加载期 fail-fast：如果 `libcapsule_nexus_flashrt.so` 未链接同目录的 `libflashrt_exec.so`（例如有人替换了其中一个），`_substrate_loader` 启动时立即报错。
+## 与 `pi05_libero` 对比
 
-## 构建 / 发布
+| | `pi05_libero` | `pi05_libero_nexus` |
+|---|---|---|
+| 能力 | `run`（脚本 / 冒烟） | `run` + **`serve`**（有状态） |
+| Python | 3.12 | **3.10** |
+| GPU cell | SM89 / SM120 | 仅 **SM120 + cu130** |
+| Episode API | — | Nexus snapshot / reset |
 
-维护者文档：[`BUILD.md`](BUILD.md) / [`BUILD.zh-CN.md`](BUILD.zh-CN.md)。
-
+维护者构建文档：[`BUILD.md`](BUILD.md) / [`BUILD.zh-CN.md`](BUILD.zh-CN.md)。

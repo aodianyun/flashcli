@@ -1,135 +1,116 @@
-# Build & Release — pi05_libero_nexus
+# pi05_libero_nexus — build & smoke test
 
-Maintainer documentation for building and releasing the bundle.
+<p align="right"><strong>English</strong> · <a href="BUILD.zh-CN.md">简体中文</a></p>
 
-## Prerequisites (build host)
+Maintainer workflow: compile FlashRT + FlashRT-Nexus natives, stage into `runtime/<env-key>/` (+ `substrate/`), validate, smoke `run` / `serve`, pack, publish.
 
-- Linux x86_64, **Blackwell GPU** (compute capability 12.0 / `sm_120`)
-- CUDA Toolkit 13.0 (`nvcc` on PATH)
-- cmake ≥ 3.24, gcc ≥ 11
-- python3.10 (CPython 3.10 — must match `python_abi: "310"`)
-- git, rsync (or tar as fallback)
-- CUTLASS v4.4.2 (auto-cloned by the build script if missing)
+**Requires:** Linux · NVIDIA **SM120** · CUDA **13** userland · cmake ≥ 3.24 · gcc ≥ 11 · **Python 3.10** · FlashRT source · FlashRT-Nexus source · flashcli dev checkout.
 
-## Source repos
-
-- **FlashRT** source: must contain `CMakeLists.txt` + `flash_rt/` + `cpp/` + `exec/` + `runtime/`
-- **FlashRT-Nexus** source: must contain `CMakeLists.txt` + `core/` + `serve/`
-
-## Build commands
-
-```sh
-cd /app/flashcli
-
-# Local dev build (uses already-cloned repos). -j 4 is a good balance on a
-# 32 GB RAM host: FA2 templates are memory-heavy, higher -j risks OOM.
-bash bundles/pi05_libero_nexus/build.sh \
-    --repo-root /app/FlashRT \
-    --nexus-src /app/FlashRT-Nexus \
-    -j 4
-
-# Pack-only (skip cmake, stage existing .so — useful after manual rebuild)
-bash bundles/pi05_libero_nexus/build.sh \
-    --repo-root /app/FlashRT \
-    --nexus-src /app/FlashRT-Nexus \
-    --pack-only
-
-# Override defaults
-bash bundles/pi05_libero_nexus/build.sh \
-    --repo-root /app/FlashRT \
-    --nexus-src /app/FlashRT-Nexus \
-    -j 4 \
-    --sm 120 --cuda-tag 130 --python-minor 310 \
-    --build-dir /app/FlashRT/build \
-    --cpp-build-dir /tmp/flashrt-cpp \
-    --nexus-build-dir /tmp/nexus-build \
-    --runtime-version 1.0.0 --nexus-version 1.0.0
+```bash
+cd /path/to/flashcli
+pip install -e ./flashcli-bundle -e .
+export BUNDLE="$(pwd)/bundles/pi05_libero_nexus"
+export FLASHRT_REPO=/path/to/FlashRT
+export NEXUS_REPO=/path/to/FlashRT-Nexus
 ```
 
-## What `_bundle_build.sh` does
+This bundle uses **Python 3.10** (`python_abi: "310"`). Native `.so` files must match py310. Do **not** modify FlashRT / Nexus trees — stage copies only; keep `flash_rt/` and `.so` from the **same** FlashRT commit.
 
-1. Detects SM / CUDA / Python / OS / arch from the build host
-2. **FlashRT root cmake** (`/app/FlashRT`): builds `flash_rt_kernels` + `flash_rt_fa2` pybind extensions
-3. **FlashRT cpp/ standalone cmake** (`/app/FlashRT/cpp`): builds `libflashrt_exec.so` + `libflashrt_runtime.so` + `libflashrt_cpp_pi05_c.so`
-4. **Nexus cmake** (`/app/FlashRT-Nexus`): builds `libcapsule_nexus_flashrt.so` (links libflashrt_exec)
-5. Stages 2 Python extensions to `runtime/<env_key>/*.so`
-6. Stages 3 C libs to `runtime/<env_key>/substrate/*.so` (subdir, validator skips)
-7. Vendors Nexus `serve/` Python pkg to `substrate/nexus_python/` (imports rewritten `serve.*` → `nexus_python.*`)
-8. Stages slim `flash_rt/` Python pkg at bundle root (Pi0.5 subset only)
-9. Writes `substrate/VERSION` (single source of truth for ABI fingerprint)
-10. Runs `ldd` cross-check: Nexus lib MUST link bundled exec
-11. Writes `.build/manifest-overlay.json` (with `nexus_tag`, `features.nexus`)
+## 1. Build
 
-## Validation
+`build.sh` builds FlashRT pybind + C libs + Nexus capsule, stages tagged `.so`, vendors slim `flash_rt/` and `substrate/nexus_python/`, writes `substrate/VERSION`.
 
-```sh
-flashcli bundle validate bundles/pi05_libero_nexus
+```bash
+# -j 4 is a good balance on 32 GB RAM (FA2 templates are memory-heavy)
+bash bundles/pi05_libero_nexus/build.sh \
+  --repo-root "$FLASHRT_REPO" \
+  --nexus-src "$NEXUS_REPO" \
+  -j 4
 ```
 
-Checks:
-- `flashcli-bundle.json` schema (format_version 3, protocol_version 1)
-- `entry.run` / `entry.serve` module files exist
-- `python_abi: "310"` matches runtime cell suffix
-- `runtime/<env_key>/*.so` recognized as pybind extensions (env_key consistency)
-- `flash_rt/` dir at bundle root
-- (substrate validation is done by `_substrate_loader` at runtime, not by `validate`)
+Pack-only (skip cmake, re-stage existing artifacts):
 
-## Smoke test
+```bash
+bash bundles/pi05_libero_nexus/build.sh \
+  --repo-root "$FLASHRT_REPO" \
+  --nexus-src "$NEXUS_REPO" \
+  --pack-only
+```
 
-```sh
-# Validate
-flashcli bundle validate bundles/pi05_libero_nexus
+Outputs: `flash_rt/` · `runtime/sm120-cu130-linux-x86_64-py310/*.so` · `runtime/.../substrate/{*.so,nexus_python/,VERSION}` · `.build/manifest-overlay.json`
 
-# Pull weights (~1.6 GB) + PaliGemma tokenizer + install deps into bundle venv
-flashcli pull bundles/pi05_libero_nexus
+Optional overrides: `--sm` · `--cuda-tag` · `--python-minor` · `--build-dir` · `--cpp-build-dir` · `--nexus-build-dir` · `--runtime-version` · `--nexus-version`.
 
-# Run single inference (uses placeholder zeros if --image not given)
-flashcli run bundles/pi05_libero_nexus \
-    --prompt "pick up the red block" \
-    --benchmark 5 --warmup 2
+## 2. Pack
 
-# Serve
-flashcli serve bundles/pi05_libero_nexus --port 8080 &
+```bash
+bash bundles/pi05_libero_nexus/pack.sh
+export BUNDLE="$(pwd)/bundles/pi05_libero_nexus/dist"
+```
 
+Pack tree follows `release-matrix.env` `RELEASE_PACK_FILES` (manifest, engines, helpers, `flash_rt/`, runtime cell including `substrate/`).
+
+## 3. Validate
+
+```bash
+flashcli bundle validate "$BUNDLE"
+flashcli models envs "$BUNDLE"
+```
+
+## 4. Smoke test
+
+Weights from ModelScope (`lerobot/pi05_libero_finetuned_v044`, ~7 GB) + PaliGemma tokenizer via `post_pull`. After `pull`, inference stays offline.
+
+```bash
+export HF_ENDPOINT=https://hf-mirror.com   # optional (CN)
+
+flashcli pull "$BUNDLE"
+
+flashcli run "$BUNDLE" \
+  --prompt "pick up the red block and place it in the tray" \
+  --image /path/view0.jpg,/path/view1.jpg
+
+flashcli run "$BUNDLE" --benchmark 5 --warmup 2
+
+flashcli serve "$BUNDLE" --port 8080 &
 curl http://127.0.0.1:8080/v1/substrate
 curl -X POST http://127.0.0.1:8080/v1/chat/completions \
-    -H 'Content-Type: application/json' \
-    -d '{"messages":[{"role":"user","content":"pick up the red block"}]}'
-
+  -H 'Content-Type: application/json' \
+  -d '{"messages":[{"role":"user","content":"x"}],
+       "extras":{"images":[]}}'
 curl -X POST 'http://127.0.0.1:8080/v1/session/snapshot?name=t0'
-curl http://127.0.0.1:8080/v1/session/state
 curl -X POST http://127.0.0.1:8080/v1/session/reset/t0
 ```
 
-## Pack and release
+Also validate the packed tree: `flashcli bundle validate dist/pi05_libero_nexus-*/` (path as produced by `pack.sh`).
 
-```sh
-# Pack into a distributable zip under dist/
-bash bundles/pi05_libero_nexus/pack.sh
+## 5. Publish
 
-# Validate the packed bundle
-flashcli bundle validate dist/pi05_libero_nexus-*/
+Upload `dist/` to FlashHub as `flashcli-bundle/pi05_libero_nexus:1.0.0` (bump as needed).
 
-# One-command FlashHub release (uses release-matrix.env)
+```bash
 bash bundles/pi05_libero_nexus/release.sh
+# or matrix:
+bash scripts/release_bundle.sh --bundle pi05_libero_nexus --clean
 ```
 
-## Naming conventions
+`release-matrix.env` pins SM120 / cu130 / py310.
 
-| Artifact | Pattern | Example |
-|---|---|---|
-| Python ext | `flash_rt_*-<fr_abi>-<env_key>.so` | `flash_rt_kernels-d0db114-sm120-cu130-linux-x86_64-py310.so` |
-| FlashRT C lib | `libflashrt_*-<fr_abi>-sm{SM}-cu{CU}-{os}-{arch}.so` | `libflashrt_exec-d0db114-sm120-cu130-linux-x86_64.so` |
-| Nexus C lib | `libcapsule_nexus_flashrt-fr<fr>.nx<nx>-sm{SM}-cu{CU}-{os}-{arch}.so` | `libcapsule_nexus_flashrt-frd0db114.nx8f13a3a-sm120-cu130-linux-x86_64.so` |
+## Notes
 
-C libs **do not** carry `-pyNNN` — they are pure C and do not depend on Python ABI. They live in the `substrate/` subdir of the runtime cell, which the existing flashcli validator skips (top-level glob only).
+- **Substrate layout:** C libs live under `runtime/<env_key>/substrate/` (validator top-level `*.so` glob skips them; `_substrate_loader` loads + ABI-checks at runtime).
+- **ABI fingerprint:** `substrate/VERSION` records FlashRT + Nexus commits; Nexus `.so` must `ldd`-link the bundled `libflashrt_exec.so`.
+- **FA2:** Pi0.5 needs `FA2_HDIMS` including `256` (SigLIP / decoder).
+- **vs `pi05_libero`:** production stateful serve path; keep the smoke-oriented script bundle separate.
 
-## Troubleshooting
+## Troubleshooting (build)
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| `unrecognized native artifact filename` from `flashcli bundle validate` | A C lib `.so` was placed at top-level of `runtime/<env>/` instead of `substrate/` | Move it under `substrate/` |
-| `libcapsule_nexus_flashrt does not link libflashrt_exec` at serve startup | `libflashrt_exec.so` was replaced with a different version after build | Rebuild via `build.sh` |
-| `ImportError: flash_rt_kernels` during `flashcli run` | Wrong Python invoked (host py311 instead of bundle py310) | Let flashcli re-exec into bundle venv; do not bypass |
-| `fvk_attention_fa2: head_dim<=256=256 was not compiled into this build` | FlashRT root CMake was configured without `FA2_HDIMS="64;96;128;256"` (Pi0.5 SigLIP/decoder needs 256) | `cmake -B /app/FlashRT/build -DFA2_HDIMS="64;96;128;256" -DFA2_DTYPES="fp16;bf16" -DGPU_ARCH=120 && cmake --build /app/FlashRT/build -j 4 --target flash_rt_fa2`, then rerun `build.sh` |
-| nvcc OOM-killed (`cicc died due to signal 15`) | Build host RAM < 32 GB or `-j` too high | Drop to `-j 2` or `-j 1`; FA2 templates are heavy |
+| Symptom | Fix |
+|---------|-----|
+| `NativeEnvironmentNotSupportedError` | Rebuild for this host's env key; `flashcli models envs "$BUNDLE"` |
+| `unrecognized native artifact filename` | Move C libs under `substrate/`, not runtime cell top-level |
+| `libcapsule_nexus_flashrt does not link libflashrt_exec` | Rebuild with `build.sh` (do not swap one lib alone) |
+| `ImportError: flash_rt_kernels` | Use flashcli re-exec into bundle py310 venv; do not bypass |
+| `fvk_attention_fa2: head_dim<=256=256 was not compiled` | Reconfigure FlashRT with `-DFA2_HDIMS="64;96;128;256"` then rebuild FA2 + `build.sh` |
+| nvcc OOM (`cicc died due to signal 15`) | Drop to `-j 2` or `-j 1` |
+| Weight download fails | Check ModelScope access; or `--checkpoint` with a local dir |
