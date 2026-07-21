@@ -220,7 +220,7 @@ class ServeEngine:
     def chat_stream(self, request: ChatRequest) -> Iterator[ChatChunk]:
         # Pi0.5 is a single-step policy; map to a single chunk.
         r = self.chat(request)
-        yield ChatChunk(content=r.content, finish_reason="stop")
+        yield ChatChunk(content_delta=r.content, finish_reason="stop")
 
     # ------------------------------------------------------------------
     # Episode control via flashcli's existing register_routes hook
