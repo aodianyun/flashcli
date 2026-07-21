@@ -108,7 +108,6 @@ RUN set -eux; \
       gcc-11 \
       g++-11 \
       gfortran-11 \
-      cmake \
       ninja-build \
       pkg-config \
       python3 \
@@ -136,10 +135,16 @@ RUN set -eux; \
       --slave /usr/bin/gcov gcov /usr/bin/gcov-11; \
     update-alternatives --set gcc /usr/bin/gcc-11; \
     ln -sf /usr/bin/python3 /usr/local/bin/python; \
-    python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel; \
-    rm -rf /var/lib/apt/lists/*
-
-# Node.js from npmmirror binary tarball + opencode via npm CN registry.
+    # Ubuntu 22.04 apt cmake is 3.22; FlashRT needs >=3.24 — install via pip (CN index).
+    # pybind11 is required by FlashRT CMake (find_package(pybind11)).
+    python3 -m pip install --no-cache-dir --upgrade \
+      pip setuptools wheel \
+      'cmake>=3.28,<4' \
+      'pybind11>=2.12'; \
+    ; \
+    cmake --version; \
+    python3 -c 'import pybind11; print("pybind11", pybind11.__version__)'; \
+    rm -rf /var/lib/apt/lists/*# Node.js from npmmirror binary tarball + opencode via npm CN registry.
 RUN set -eux; \
     arch="$(uname -m)"; \
     case "${arch}" in \
@@ -193,6 +198,10 @@ RUN set -eux; \
       *) echo "ERROR: default g++ must be 11.x (got $(g++ -dumpversion))" >&2; exit 1 ;; \
     esac; \
     cmake --version; \
+    cmake_maj_min="$(cmake --version | head -1 | sed -n 's/.* \([0-9]\+\.[0-9]\+\).*/\1/p')"; \
+    cmake_ok="$(python3 -c "print(int(tuple(map(int,'${cmake_maj_min}'.split('.')))>=(3,24)))")"; \
+    test "${cmake_ok}" = "1" || { echo "ERROR: cmake>=3.24 required (got ${cmake_maj_min})" >&2; exit 1; }; \
+    python3 -c 'import pybind11'; \
     python3 --version; \
     node --version; \
     npm --version; \
