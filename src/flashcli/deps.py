@@ -179,48 +179,11 @@ def _pip_spec_from_direct_url(
     return None
 
 
-def flashcli_bundle_pip_spec(*, extras: tuple[str, ...] = ()) -> str:
+def flashcli_bundle_pip_spec(*, extras: tuple[str, ...] = ("infer",)) -> str:
     """Pip spec for installing ``flashcli-bundle`` into a bundle venv."""
-    import os
+    from flashcli_bundle.infer.deps import flashcli_bundle_pip_spec as _impl
 
-    import flashcli_bundle
-
-    _load_persisted_install_env()
-
-    extra_suffix = f"[{','.join(extras)}]" if extras else ""
-    pkg_dir = Path(flashcli_bundle.__file__).resolve().parent
-    src_root = pkg_dir.parent
-    repo_root = src_root.parent
-    if src_root.name == "src" and (repo_root / "pyproject.toml").is_file():
-        text = (repo_root / "pyproject.toml").read_text(encoding="utf-8")
-        if 'name = "flashcli-bundle"' in text:
-            if extras:
-                return f"{repo_root}[{','.join(extras)}]"
-            return str(repo_root)
-
-    spec = _pip_spec_from_direct_url("flashcli-bundle")
-    if spec and extras:
-        if spec.startswith("flashcli-bundle @ "):
-            return f"flashcli-bundle{extra_suffix} @ " + spec.split(" @ ", 1)[1]
-    if spec:
-        return spec
-
-    spec = _pip_spec_from_direct_url("flashcli", subdirectory="flashcli-bundle")
-    if spec:
-        if spec.startswith("flashcli @ "):
-            return f"flashcli-bundle{extra_suffix} @ " + spec.split(" @ ", 1)[1]
-        return spec
-
-    repo = os.environ.get("FLASHCLI_INSTALL_REPO", "").strip()
-    ref = os.environ.get("FLASHCLI_INSTALL_REF", "main").strip() or "main"
-    if repo:
-        return f"flashcli-bundle{extra_suffix} @ git+{repo}@{ref}#subdirectory=flashcli-bundle"
-
-    raise RuntimeError(
-        "Cannot resolve flashcli-bundle install source for bundle venv. "
-        "Reinstall flashcli from git (install.sh) or set "
-        "FLASHCLI_INSTALL_REPO / FLASHCLI_INSTALL_REF (or ~/.flashcli/install.env)."
-    )
+    return _impl(extras=extras)
 
 
 def _infer_module_available(*, python: Path) -> bool:

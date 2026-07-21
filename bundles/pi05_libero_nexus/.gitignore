@@ -1,0 +1,21 @@
+# Assembled by build.sh (Linux + NVIDIA SM120 GPU + FlashRT-Nexus)
+/flash_rt/
+/runtime/
+/dist/
+/.build/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+
+# Local build scratch (developers may stage checkpoints here for testing)
+checkpoint/
+capsules/
+*.wav
+*.mp4
+
+# Editor
+.vscode/
+.idea/

@@ -39,7 +39,9 @@
 #   FLASHCLI_STRICT_PIP_CHECK=1   fail on any pip check conflict (default: flashcli-only)
 #   FLASHCLI_AUTO_INSTALL_PYTHON=0  disable auto OS install of python3+pip+git (default: on when root)
 #   FLASHCLI_BREAK_SYSTEM_PACKAGES=1  pass pip --break-system-packages (PEP 668 images)
-#   FLASHCLI_USE_VENV=0             skip venv; install to system/user site (default: ~/.flashcli/venv)
+#   FLASHCLI_USE_VENV=0             skip venv; install to system/user site (default: $FLASHCLI_HOME/venv)
+#   FLASHCLI_HOME                   data + venv root (default: ~/.flashcli); mirror.env / install.env / venv
+#   FLASHCLI_VENV                   override venv path (default: $FLASHCLI_HOME/venv)
 
 set -eu
 
@@ -146,7 +148,9 @@ Environment (override flags):
   FLASHCLI_GIT_RETRIES=3    Retries on flaky Gitee/GitHub reachability (rate-limit / 401)
   FLASHCLI_GIT_RETRY_SLEEP=2  Sleep between git remote retries (seconds)
   FLASHCLI_AUTO_INSTALL_PYTHON=0  Disable auto OS install of python3+pip (default: on for root)
-  FLASHCLI_USE_VENV=0             Install to system/user site instead of ~/.flashcli/venv (default: venv)
+  FLASHCLI_HOME=~/.flashcli       Data + CLI venv root (mirror.env, install.env, venv)
+  FLASHCLI_VENV=PATH              Override CLI venv (default: $FLASHCLI_HOME/venv)
+  FLASHCLI_USE_VENV=0             Install to system/user site instead of $FLASHCLI_HOME/venv
   FLASHCLI_REQUIRE_GPU=1          Abort when no NVIDIA GPU (default: warn and continue)
   FLASHCLI_SKIP_GPU_CHECK=1       Skip GPU probe entirely
   FLASHCLI_RUN_TESTS=1            Same as --run-tests
@@ -974,8 +978,17 @@ should_use_venv() {
   esac
 }
 
+flashcli_home_path() {
+  printf '%s' "${FLASHCLI_HOME:-${HOME:-/root}/.flashcli}"
+}
+
 flashcli_venv_path() {
-  printf '%s' "${FLASHCLI_VENV:-${HOME:-/root}/.flashcli/venv}"
+  # Prefer FLASHCLI_VENV; else $FLASHCLI_HOME/venv (same root as mirror.env / install.env).
+  if [ -n "${FLASHCLI_VENV:-}" ]; then
+    printf '%s' "$FLASHCLI_VENV"
+    return 0
+  fi
+  printf '%s' "$(flashcli_home_path)/venv"
 }
 
 try_auto_install_python() {
@@ -2684,7 +2697,7 @@ persist_path_config() {
 
 write_flashcli_mirror_env() {
   mirror_mode_enabled || return 0
-  _home="${FLASHCLI_HOME:-${HOME:-/root}/.flashcli}"
+  _home="$(flashcli_home_path)"
   mkdir -p "$_home"
   {
     printf '%s\n' "FLASHCLI_USE_MIRROR=1"
@@ -2698,7 +2711,7 @@ write_flashcli_mirror_env() {
 }
 
 write_flashcli_install_env() {
-  _home="${FLASHCLI_HOME:-${HOME:-/root}/.flashcli}"
+  _home="$(flashcli_home_path)"
   mkdir -p "$_home"
   {
     printf 'FLASHCLI_INSTALL_REPO=%s\n' "$REPO"
@@ -2769,7 +2782,7 @@ run_post_install_tests() {
   fi
   have_cmd git || die "post-install tests require git (clone ${REPO} @ ${REF})"
 
-  _home="${FLASHCLI_HOME:-${HOME:-/root}/.flashcli}"
+  _home="$(flashcli_home_path)"
   _src="${_home}/test-src"
   info "Post-install tests: preparing source checkout at ${_src} ..."
 

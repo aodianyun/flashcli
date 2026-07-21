@@ -1,0 +1,173 @@
+{
+  "format": "flashcli-model-bundle",
+  "format_version": 3,
+  "protocol_version": 1,
+  "name": "pi05_libero_nexus",
+  "description": "Pi0.5 LIBERO VLA via FlashRT-Nexus — stateful serving with episode snapshot/reset, plus single-shot run",
+  "python_abi": "310",
+  "entry": {
+    "run": {
+      "module": "run",
+      "attr": "RunEngine"
+    },
+    "serve": {
+      "module": "serve",
+      "attr": "ServeEngine"
+    }
+  },
+  "python_dependencies": {
+    "torch": {
+      "package": "torch",
+      "index": "auto"
+    },
+    "pip": [
+      "numpy",
+      "pyyaml",
+      "safetensors",
+      "sentencepiece",
+      "ml_dtypes",
+      "transformers<4.56",
+      "pillow",
+      "fastapi",
+      "pydantic"
+    ]
+  },
+  "runtime": {
+    "sm120-cu130-linux-x86_64-py310": "runtime/sm120-cu130-linux-x86_64-py310"
+  },
+  "substrate": {
+    "kind": "flashrt-nexus",
+    "layout": "runtime/<env_key>/substrate/",
+    "modules": [
+      "libflashrt_exec",
+      "libflashrt_cpp_pi05_c",
+      "libcapsule_nexus_flashrt"
+    ]
+  },
+  "weights": {
+    "source": "modelscope",
+    "repo": "lerobot/pi05_libero_finetuned_v044",
+    "revision": "main",
+    "require_norm_stats": true
+  },
+  "post_pull": [
+    {
+      "tokenizer": "paligemma"
+    }
+  ],
+  "run_options": [
+    {
+      "name": "prompt",
+      "type": "string",
+      "default": "pick up the red block and place it in the tray",
+      "help": "Natural-language task instruction for the robot policy.",
+      "phase": "predict"
+    },
+    {
+      "name": "image",
+      "type": "string",
+      "help": "Comma-separated RGB image paths (one per camera view).",
+      "phase": "predict"
+    },
+    {
+      "name": "num_views",
+      "type": "integer",
+      "default": 2,
+      "help": "Number of camera views (LIBERO uses 2).",
+      "phase": "load"
+    },
+    {
+      "name": "hardware",
+      "type": "string",
+      "default": "auto",
+      "help": "FlashRT backend: auto, rtx_sm120.",
+      "phase": "load"
+    },
+    {
+      "name": "autotune",
+      "type": "integer",
+      "default": 3,
+      "help": "CUDA graph autotune trials (0 disables).",
+      "phase": "load"
+    },
+    {
+      "name": "use_fp8",
+      "type": "boolean",
+      "default": true,
+      "help": "Load policy weights in FP8 when supported.",
+      "phase": "load"
+    },
+    {
+      "name": "config",
+      "type": "string",
+      "default": "pi05",
+      "help": "FlashRT model config name.",
+      "phase": "load"
+    },
+    {
+      "name": "framework",
+      "type": "string",
+      "default": "torch",
+      "help": "FlashRT framework backend.",
+      "phase": "load"
+    }
+  ],
+  "serve_options": [
+    {
+      "name": "device",
+      "type": "string",
+      "default": "cuda:0",
+      "help": "Torch device for inference.",
+      "phase": "load"
+    },
+    {
+      "name": "num_views",
+      "type": "integer",
+      "default": 2,
+      "help": "Number of camera views (LIBERO uses 2).",
+      "phase": "load"
+    },
+    {
+      "name": "precision",
+      "type": "string",
+      "default": "fp8",
+      "help": "Policy precision: fp8 | fp16.",
+      "phase": "load"
+    },
+    {
+      "name": "stage_plan",
+      "type": "string",
+      "default": "full",
+      "help": "Nexus stage plan: full | context_action.",
+      "phase": "load"
+    },
+    {
+      "name": "hardware",
+      "type": "string",
+      "default": "auto",
+      "help": "FlashRT backend: auto, rtx_sm120.",
+      "phase": "load"
+    },
+    {
+      "name": "capsule_dir",
+      "type": "string",
+      "default": "",
+      "help": "Directory for persisted capsules; empty = ephemeral (in-memory only).",
+      "phase": "load"
+    },
+    {
+      "name": "warmup_prompt",
+      "type": "string",
+      "default": "pick up the red block and place it in the tray",
+      "help": "Prompt used for the warmup tick.",
+      "phase": "warmup"
+    },
+    {
+      "name": "model_name",
+      "type": "string",
+      "default": "pi05-libero-nexus",
+      "help": "OpenAI API model id exposed by serve.",
+      "phase": "load"
+    }
+  ]
+}
