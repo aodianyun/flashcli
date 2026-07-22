@@ -3,7 +3,7 @@
   "format_version": 3,
   "protocol_version": 1,
   "name": "qwen_nvfp4",
-  "description": "Qwen3-8B + Qwen3.6-27B NVFP4 (SM120) — single runtime, @variant selects weights",
+  "description": "Qwen3-8B + Qwen3.6-27B NVFP4 — per-env runtime cells, @variant selects weights",
   "python_abi": "312",
   "python_dependencies": {
     "torch": { "package": "torch", "index": "auto" },

@@ -74,7 +74,9 @@ Options:
   --finalize-matrix-manifest  After full matrix, scan lib/ and write multi-env manifest
   -h, --help
 
-Note: Qwen NVFP4 requires SM120. Release: bash release.sh or scripts/release_bundle.sh --bundle qwen_nvfp4.
+Note: Qwen NVFP4 targets Blackwell-class GPUs (SM120+); host SM is auto-detected
+  and passed to FlashRT CMake (-DGPU_ARCH=). Release matrix defaults to SM120×cu130×x86_64.
+  Release: bash release.sh or scripts/release_bundle.sh --bundle qwen_nvfp4.
 EOF
 }
 
@@ -303,6 +305,34 @@ stage_flash_rt_python() {
   sync_tree "${flash_rt_src}" "${py_dir}" "${excludes[@]}"
 }
 
+# Lock flash_rt/ Python to the FlashRT commit that built the .so (wan22 / nexus style).
+write_bundle_version() {
+  local py_dir="$1"
+  local git_commit git_short flashrt_tag flashrt_abi env_key
+  git_commit="$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)"
+  git_short="$(git -C "${REPO_ROOT}" rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
+  flashrt_tag="${FLASHRT_TAG:-$(git -C "${REPO_ROOT}" describe --tags --always 2>/dev/null || echo dev)}"
+  flashrt_abi="$(sanitize_flashrt_abi "${flashrt_tag}" "${git_commit}")"
+  env_key="$(runtime_env_key "${SM}" "${CUDA_TAG}" "${OS_NAME}" "${CPU_ARCH}" "${PYTHON_MINOR}")"
+  mkdir -p "${py_dir}"
+  cat > "${py_dir}/BUNDLE_VERSION" <<EOF
+flashrt_commit=${git_commit}
+flashrt_commit_short=${git_short}
+flashrt_tag=${flashrt_tag}
+flashrt_abi=${flashrt_abi}
+source_repo=${REPO_ROOT}
+env_key=${env_key}
+sm=${SM}
+cuda_tag=${CUDA_TAG}
+os=${OS_NAME}
+arch=${CPU_ARCH}
+python_abi=${PYTHON_MINOR}
+variant=${VARIANT}
+built_at=$(date -u +%FT%TZ)
+EOF
+  log "Wrote ${py_dir}/BUNDLE_VERSION (commit ${git_short} abi ${flashrt_abi})"
+}
+
 stage_qwen_serve_modules() {
   local py_dir="$1"
   local serve_dir="${py_dir}/serve"
@@ -366,8 +396,12 @@ stage_bundle_runtime() {
   else
     rm -rf "${py_dir}"
   fi
-  rm -rf "${BUNDLE_DIR}/runtime"
-  # v2 spec: native *.so live under lib/ only (not bundle root).
+  # Build-time staging: lib/ (matrix) + runtime/<env-key>/ (load path, wan22-style).
+  # With --merge-native keep sibling cells; otherwise replace the whole runtime tree.
+  if [[ "${MERGE_NATIVE}" -ne 1 ]]; then
+    rm -rf "${BUNDLE_DIR}/runtime"
+  fi
+  # v2 spec: native *.so live under lib/ / runtime/ (not bundle root).
   rm -f "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so
   for legacy_so in "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so; do
     [[ -f "${legacy_so}" ]] || continue
@@ -379,16 +413,18 @@ stage_bundle_runtime() {
     PYTHON_MINOR="$("${py_bin}" -c 'import sys; print(f"{sys.version_info.major}{sys.version_info.minor:02d}")')"
   fi
 
-  local git_commit flashrt_tag build_id torch_idx min_drv flashrt_abi native_tag
+  local git_commit flashrt_tag build_id torch_idx min_drv flashrt_abi native_tag env_key
   git_commit="$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)"
   flashrt_tag="${FLASHRT_TAG:-$(git -C "${REPO_ROOT}" describe --tags --always 2>/dev/null || echo dev)}"
   flashrt_abi="$(sanitize_flashrt_abi "${flashrt_tag}" "${git_commit}")"
   native_tag="$(native_artifact_tag "${flashrt_abi}" "${SM}" "${CUDA_TAG}" "${OS_NAME}" "${CPU_ARCH}" "${PYTHON_MINOR}")"
+  env_key="$(runtime_env_key "${SM}" "${CUDA_TAG}" "${OS_NAME}" "${CPU_ARCH}" "${PYTHON_MINOR}")"
   local kernels_name fa2_name fp4_name
   kernels_name="$(native_so_filename flash_rt_kernels "${native_tag}")"
   fa2_name="$(native_so_filename flash_rt_fa2 "${native_tag}")"
   fp4_name="$(native_so_filename flash_rt_fp4 "${native_tag}")"
   log "Native artifact tag: ${native_tag}"
+  log "  env_key: ${env_key}"
   log "  ${kernels_name}"
   log "  ${fa2_name}"
   [[ "${VARIANT}" == "qwen36" || "${VARIANT}" == "all" ]] && log "  ${fp4_name} (optional)"
@@ -416,25 +452,27 @@ stage_bundle_runtime() {
 
   [[ "${has_kernels}" -eq 1 ]] || die "${kernels_name} missing (build FlashRT or use --pack-only)"
   [[ "${has_fa2}" -eq 1 ]] || die "${fa2_name} missing (required for Qwen FA2 attention)"
-  # SM120 Qwen NVFP4 is compiled into flash_rt_kernels (CUTLASS sm_120a).
-  # flash_rt_fp4.so is a separate Thor/SM100 add-on (CMake ENABLE_SM100_CUTLASS only).
+  # flash_rt_fp4.so is a separate Thor/SM100-style add-on (CMake ENABLE_SM100_CUTLASS).
+  # On arches where FlashRT folds NVFP4 into flash_rt_kernels, the standalone module
+  # is absent — that is OK. Do not gate on an SM allowlist; unsupported GPUs fail at
+  # CMake/nvcc, same as wan22 / pi05_libero*.
   if [[ "${has_fp4}" -eq 0 ]]; then
-    if [[ "${SM}" == "120" ]]; then
-      log "flash_rt_fp4.so not built (expected on SM120 — NVFP4 is in ${kernels_name})"
-    else
-      die "${fp4_name} missing (flash_rt_fp4 required when sm != 120)"
-    fi
+    log "flash_rt_fp4.so not built (OK if NVFP4 is in ${kernels_name} for this GPU_ARCH)"
   fi
+  # This bundle is NVFP4-capable whenever kernels (or optional fp4) staged successfully.
   local nvfp4_feature=0
-  if [[ "${SM}" == "120" && "${has_kernels}" -eq 1 ]]; then
-    nvfp4_feature=1
-  elif [[ "${has_fp4}" -eq 1 ]]; then
+  if [[ "${has_kernels}" -eq 1 || "${has_fp4}" -eq 1 ]]; then
     nvfp4_feature=1
   fi
 
-  if [[ "${SM}" != "120" ]]; then
-    log "WARNING: Qwen NVFP4 needs SM120; detected sm=${SM}"
-  fi
+  # Mirror tagged .so into runtime/<env-key>/ so local + pack load paths match (wan22).
+  local rt_dir="${BUNDLE_DIR}/runtime/${env_key}"
+  rm -rf "${rt_dir}"
+  mkdir -p "${rt_dir}"
+  cp -f "${lib_dir}/${kernels_name}" "${rt_dir}/"
+  cp -f "${lib_dir}/${fa2_name}" "${rt_dir}/"
+  [[ "${has_fp4}" -eq 1 ]] && cp -f "${lib_dir}/${fp4_name}" "${rt_dir}/"
+  log "Staged runtime/${env_key}/ ($(find "${rt_dir}" -maxdepth 1 -name '*.so' | wc -l | tr -d ' ') .so)"
 
   _verify_staged_native_abi() {
     local name="$1"
@@ -464,6 +502,8 @@ stage_bundle_runtime() {
     stage_qwen_serve_modules "${py_dir}"
     find "${py_dir}" -name '*.so' -type f -delete 2>/dev/null || true
   fi
+  # Always refresh version lock so flash_rt/ matches the .so FlashRT commit.
+  write_bundle_version "${py_dir}"
 
   build_id="${BUILD_ID:-$(date -u +%Y%m%d)-sm${SM}}"
   torch_idx="$(recommended_torch_index)"
@@ -581,7 +621,7 @@ if [[ "${SKIP_BUILD}" -eq 0 ]]; then
   [[ -n "${SM}" ]] || detect_sm
   [[ -n "${CUDA_TAG}" ]] || detect_cuda_tag
   if [[ "${CUDA_TAG}" == "124" ]]; then
-    die "qwen_nvfp4 (SM120/NVFP4) cannot build cu124: nvcc 12.4 lacks sm_120/sm_120a. Use cu130 only (25.10-py3 container or --cuda-tag 130)."
+    die "qwen_nvfp4 (NVFP4) cannot build cu124: nvcc 12.4 lacks modern Blackwell gencode. Use cu130 (25.10-py3 container or --cuda-tag 130)."
   fi
   GPU_ARCH="${GPU_ARCH:-${SM}}"
   command -v cmake >/dev/null 2>&1 || die "cmake not found"
@@ -603,7 +643,9 @@ fi
 maybe_write_tarball
 
 log "Bundle ready: ${BUNDLE_DIR}"
-log "  flashcli bundle validate ${BUNDLE_DIR}"
-log "  flashcli run ${BUNDLE_DIR}@qwen3 --prompt 'Hello'"
-log "  flashcli serve ${BUNDLE_DIR}@qwen3"
+log "  flash_rt/BUNDLE_VERSION + runtime/${SM:+sm}${SM}-… staged"
+log "  Next: bash bundles/qwen_nvfp4/pack.sh   # writes runnable dist/"
+log "  flashcli bundle validate ${BUNDLE_DIR}/dist"
+log "  flashcli run ${BUNDLE_DIR}/dist@qwen3 --prompt 'Hello'"
+log "  flashcli serve ${BUNDLE_DIR}/dist@qwen3"
 log "  Release: cd bundles/qwen_nvfp4 && bash release.sh"

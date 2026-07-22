@@ -5,30 +5,47 @@
 ```bash
 cd /path/to/flashcli
 pip install -e ./flashcli-bundle -e .
-export BUNDLE="$(pwd)/bundles/qwen_nvfp4"
-export FLASHRT_REPO=/path/to/FlashRT
+export FLASHRT_REPO=/path/to/FlashRT   # same commit as flash_rt/BUNDLE_VERSION / published build.git_commit
 ```
 
 ## 1. Build natives
 
 ```bash
 bash bundles/qwen_nvfp4/build.sh --repo-root "$FLASHRT_REPO" -j "$(nproc)"
-ENV_KEY="$(python3 -c "import json; print(next(iter(json.load(open('bundles/qwen_nvfp4/flashcli-bundle.json'))['runtime'])))")"
-mkdir -p "bundles/qwen_nvfp4/${ENV_KEY}"
-cp bundles/qwen_nvfp4/lib/*.so "bundles/qwen_nvfp4/${ENV_KEY}/"
+```
+
+Produces:
+
+| Path | Purpose |
+|------|---------|
+| `flash_rt/` | FlashRT Python (same commit as `.so`) |
+| `flash_rt/BUNDLE_VERSION` | FlashRT commit / abi lock |
+| `lib/*.so` | Matrix staging |
+| `runtime/<env-key>/*.so` | Host load path (e.g. `sm121-cu130-linux-aarch64-py312`) |
+| `.build/manifest-overlay.json` | `build.git_commit` + scanned `runtime` map |
+
+Supports host-detected SM (e.g. **SM120**, **SM121**/GB10); NVFP4 usually lives in `flash_rt_kernels` (standalone `flash_rt_fp4` optional). Unsupported arches fail in FlashRT CMake, not via an SM allowlist.
+
+## 2. Pack (runnable `dist/`)
+
+```bash
+bash bundles/qwen_nvfp4/pack.sh --repo-root "$FLASHRT_REPO"
+# or one-shot FlashHub matrix build:
+bash bundles/qwen_nvfp4/release.sh --clean
+
+export BUNDLE="$(pwd)/bundles/qwen_nvfp4/dist"
 flashcli bundle validate "$BUNDLE"
 ```
 
-Missing `runtime/<env-key>/flash_rt_kernels*.so` → `ImportError: flash_rt_kernels` at load time.
+`pack.sh` (vs bare `pack_bundle.sh`):
 
-## 2. Pack / release
+- Mirrors `lib/` → `runtime/<env-key>/` when needed
+- Ensures `flash_rt/BUNDLE_VERSION`
+- Auto `--skip-matrix-verify` when host cells ≠ `release-matrix.env` (e.g. SM121 / aarch64)
+- Merges overlay into `dist/flashcli-bundle.json` so **`dist/` is runnable**
+- Checks kernels + version lock after pack
 
-```bash
-bash bundles/qwen_nvfp4/pack.sh
-# or one-shot FlashHub build:
-bash bundles/qwen_nvfp4/release.sh --clean
-export BUNDLE="$(pwd)/bundles/qwen_nvfp4/dist"
-```
+Use **`dist/`** for `pull` / `run` / `serve` (author `flashcli-bundle.json` may only list the official SM120×x86_64 cell).
 
 ## 3. Pull weights
 
@@ -62,6 +79,9 @@ curl -s http://127.0.0.1:8000/health | jq
 
 | Symptom | Fix |
 |---------|-----|
-| `ImportError: flash_rt_kernels` | Copy `lib/*.so` into `runtime/<env-key>/` |
-| Stale FlashHub runtime | Rebuild locally; use `bundles/qwen_nvfp4@qwen36` path |
+| `flash_rt_fp4 … missing (sm != 120)` | Stale script; current build treats `flash_rt_fp4` as optional |
+| `ImportError: flash_rt_kernels` | Re-run `build.sh` / `pack.sh`; confirm `dist/runtime/<env-key>/` |
+| `Missing flash_rt/` on pack | `build.sh` must finish (stages `flash_rt/` + `BUNDLE_VERSION`) |
+| FlashRT version skew | Match `flash_rt/BUNDLE_VERSION` ↔ `build.git_commit` ↔ FlashRT checkout |
+| Stale FlashHub runtime | Rebuild locally; serve `bundles/qwen_nvfp4/dist@qwen36` |
 | `max_tokens must be <= N` | Raise `--max-output-tokens` (qwen36 serve) |
