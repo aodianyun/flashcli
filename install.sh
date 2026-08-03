@@ -18,12 +18,13 @@
 # Optional env:
 #   FLASHCLI_INSTALL_REPO / FLASHCLI_INSTALL_REF   (default: main @ GitHub)
 #   FLASHCLI_USE_MIRROR=1   China-friendly mirrors: pip/HF/git + apt/yum/dnf/apk (root)
-#   FLASHCLI_PIP_MIRROR=tuna     Pin PyPI mirror (tuna|aliyun|tencent|ustc|huawei); skips probe
+#   FLASHCLI_PIP_MIRROR=tuna     Pin PyPI (tuna|aliyun|tencent|ustc|huawei|pypi); skips probe
 #   FLASHCLI_PIP_MIRROR_PROBE=0  Default: Tsinghua (tuna). Set 1 or use install.sh --pip-probe to benchmark.
 #   FLASHCLI_PIP_MIRROR_PROBE_TIMEOUT=30  Per-mirror probe timeout (seconds)
 #   FLASHCLI_PIP_MIRROR_PROBE_SAMPLE_BYTES=5242880  Bytes to download per mirror (HTTP Range)
 #   FLASHCLI_PIP_MIRROR_PROBE_MIN_BYTES=1048576  Min bytes for a valid throughput sample
 #   FLASHCLI_PIP_MIRROR_PROBE_PACKAGE=numpy  PEP 503 project for large-wheel probe
+#   FLASHCLI_PIP_FAILOVER=1     With --mirror and no --pip-mirror, try next PyPI mirrors on network/index errors
 #   FLASHCLI_OS_MIRROR=0    With --mirror, skip rewriting OS package-manager sources
 #   FLASHCLI_GIT_PROXY=URL   GitHub fetch proxy prefix (default https://gh-proxy.com/)
 #   FLASHCLI_GIT_TIMEOUT=25  Timeout (seconds) for git ls-remote during preflight
@@ -59,6 +60,11 @@ RUN_CORE_TESTS="${FLASHCLI_RUN_CORE_TESTS:-0}"
 REPO_FROM_USER=0
 if [ -n "${FLASHCLI_INSTALL_REPO:-}" ]; then
   REPO_FROM_USER=1
+fi
+# Preserve user-exported PIP_INDEX_URL — auto failover must not override it.
+PIP_INDEX_URL_USER_SET=0
+if [ -n "${PIP_INDEX_URL:-}" ]; then
+  PIP_INDEX_URL_USER_SET=1
 fi
 
 # Alternate endpoints when --mirror / FLASHCLI_USE_MIRROR=1 (PyPI default: Tsinghua)
@@ -128,7 +134,10 @@ Options:
   --repo URL, --git-url URL Git remote for pip install (GitHub, Gitee, self-hosted, …)
   --mirror                  Use China-friendly mirrors (default PyPI: Tsinghua; pip/HF/git; root: apt/yum/dnf/apk)
   --pip-probe               With --mirror, benchmark PyPI mirrors (5 MiB sample download; opt-in)
-  --pip-mirror, --pypi-mirror NAME  Pin PyPI mirror (tuna|aliyun|tencent|ustc|huawei); skips probe
+  --pip-mirror, --pypi-mirror NAME  Pin PyPI index (tuna|aliyun|tencent|ustc|huawei|pypi); skips probe
+                                    pypi = https://pypi.org/simple/ (works with --mirror for HF/git/OS)
+                                    Without pin, --mirror auto-fails over tuna→aliyun→ustc→tencent→huawei
+                                    on network/index errors (disable: FLASHCLI_PIP_FAILOVER=0)
   --global, --no-mirror     Disable mirror endpoints (force direct official endpoints)
   --gitee                   Shortcut: --repo https://gitee.com/aodiansoft/flashcli.git
   --github                  Shortcut: --repo https://github.com/aodianyun/flashcli.git
@@ -138,10 +147,11 @@ Options:
 Environment (override flags):
   FLASHCLI_INSTALL_REPO, FLASHCLI_INSTALL_REF
   FLASHCLI_USE_MIRROR=1
-  FLASHCLI_PIP_MIRROR=tuna    Pin PyPI mirror (also via --pip-mirror); skips probe
+  FLASHCLI_PIP_MIRROR=tuna    Pin PyPI (tuna|aliyun|tencent|ustc|huawei|pypi); skips probe
   FLASHCLI_PIP_MIRROR_PROBE=0  Default: Tsinghua. Set 1 or pass --pip-probe to benchmark mirrors.
   FLASHCLI_PIP_MIRROR_PROBE_TIMEOUT=30
   FLASHCLI_PIP_MIRROR_PROBE_SAMPLE_BYTES=5242880
+  FLASHCLI_PIP_FAILOVER=1     Auto-try next PyPI mirrors under --mirror when unpinned (0=off)
   FLASHCLI_OS_MIRROR=0      With --mirror, do not rewrite apt/yum/dnf/apk sources
   FLASHCLI_GIT_PROXY=URL    GitHub git proxy prefix (default https://gh-proxy.com/; used as 3rd fallback)
   FLASHCLI_GIT_TIMEOUT=25   git ls-remote timeout during preflight (seconds)
@@ -165,6 +175,7 @@ Examples:
   ./install.sh --ref develop
   ./install.sh --mirror --ref main
   ./install.sh --mirror --pip-mirror tuna
+  ./install.sh --mirror --pip-mirror pypi
   ./install.sh --pip-mirror aliyun --repo https://gitee.com/aodiansoft/flashcli.git
   ./install.sh --gitee --ref main
   ./install.sh --repo https://gitee.com/aodiansoft/flashcli.git --ref main
@@ -188,13 +199,30 @@ os_mirror_enabled() {
 }
 
 get_pip_bootstrap_url() {
-  if [ -z "${GET_PIP_URL_OVERRIDE:-}" ]; then
-    if mirror_mode_enabled || [ -n "${PIP_MIRROR_CHOICE:-}" ]; then
-      printf '%s\n' "$MIRROR_GET_PIP_URL"
-      return 0
-    fi
+  if [ -n "${GET_PIP_URL_OVERRIDE:-}" ]; then
+    printf '%s\n' "$GET_PIP_URL_OVERRIDE"
+    return 0
   fi
-  printf '%s\n' "${GET_PIP_URL_OVERRIDE:-$GET_PIP_URL}"
+  # --pip-mirror pypi keeps official get-pip even under --mirror.
+  case "${MIRROR_PIP_LABEL:-}" in
+    pypi)
+      printf '%s\n' "$GET_PIP_URL"
+      return 0
+      ;;
+  esac
+  if [ -n "${PIP_MIRROR_CHOICE:-}" ]; then
+    case "$(normalize_pypi_mirror_label "$PIP_MIRROR_CHOICE" 2>/dev/null || true)" in
+      pypi)
+        printf '%s\n' "$GET_PIP_URL"
+        return 0
+        ;;
+    esac
+  fi
+  if mirror_mode_enabled || [ -n "${PIP_MIRROR_CHOICE:-}" ]; then
+    printf '%s\n' "$MIRROR_GET_PIP_URL"
+    return 0
+  fi
+  printf '%s\n' "$GET_PIP_URL"
 }
 
 # Best-effort rewrite of OS package sources to Aliyun (root, Linux). Idempotent.
@@ -363,6 +391,7 @@ normalize_pypi_mirror_label() {
     tencent|腾讯) printf '%s\n' "tencent" ;;
     ustc|中科大) printf '%s\n' "ustc" ;;
     huawei|华为) printf '%s\n' "huawei" ;;
+    pypi|official|global|upstream|官方) printf '%s\n' "pypi" ;;
     *) return 1 ;;
   esac
 }
@@ -390,6 +419,10 @@ apply_pypi_mirror_label() {
     huawei)
       MIRROR_PIP_INDEX_URL="https://mirrors.huaweicloud.com/repository/pypi/simple/"
       MIRROR_PIP_TRUSTED_HOST="mirrors.huaweicloud.com"
+      ;;
+    pypi)
+      MIRROR_PIP_INDEX_URL="https://pypi.org/simple/"
+      MIRROR_PIP_TRUSTED_HOST="pypi.org files.pythonhosted.org"
       ;;
     *) return 1 ;;
   esac
@@ -563,7 +596,7 @@ configure_pypi_mirror() {
 
   if [ -n "${PIP_MIRROR_CHOICE:-}" ]; then
     apply_pypi_mirror_label "$PIP_MIRROR_CHOICE" \
-      || die "unknown PyPI mirror: $PIP_MIRROR_CHOICE (try: tuna, aliyun, tencent, ustc, huawei)"
+      || die "unknown PyPI mirror: $PIP_MIRROR_CHOICE (try: tuna, aliyun, tencent, ustc, huawei, pypi)"
     info "[i] pip: using mirror ${MIRROR_PIP_LABEL} (${MIRROR_PIP_INDEX_URL})"
     return 0
   fi
@@ -575,6 +608,58 @@ configure_pypi_mirror() {
 
   apply_pypi_mirror_label "tuna" || true
   info "[i] pip: default mirror ${MIRROR_PIP_LABEL} (${MIRROR_PIP_INDEX_URL}) — use --pip-probe to benchmark or --pip-mirror to pin"
+}
+
+# Auto PyPI failover: --mirror, no --pip-mirror / FLASHCLI_PIP_MIRROR, no user PIP_INDEX_URL.
+pypi_auto_failover_enabled() {
+  mirror_mode_enabled || return 1
+  [ -n "${PIP_MIRROR_CHOICE:-}" ] && return 1
+  [ "${PIP_INDEX_URL_USER_SET:-0}" = "1" ] && return 1
+  case "${FLASHCLI_PIP_FAILOVER:-1}" in
+    0|false|no|off) return 1 ;;
+  esac
+  return 0
+}
+
+# Ordered China mirrors used when unpinned --mirror hits network/index errors.
+pypi_failover_labels() {
+  printf '%s\n' tuna aliyun ustc tencent huawei
+}
+
+# Labels after $_from in the failover chain (does not include $_from).
+pypi_failover_labels_after() {
+  _from="${1:-tuna}"
+  _pass=0
+  for _lab in tuna aliyun ustc tencent huawei; do
+    if [ "$_pass" -eq 0 ]; then
+      if [ "$_lab" = "$_from" ]; then
+        _pass=1
+      fi
+      continue
+    fi
+    printf '%s\n' "$_lab"
+  done
+}
+
+switch_active_pypi_mirror() {
+  apply_pypi_mirror_label "$1" || return 1
+  export PIP_INDEX_URL="$MIRROR_PIP_INDEX_URL"
+  export PIP_TRUSTED_HOST="$MIRROR_PIP_TRUSTED_HOST"
+  info "[i] pip: switched index → ${MIRROR_PIP_LABEL} (${PIP_INDEX_URL})"
+}
+
+# True when pip log looks like index/network/sync issues (not resolver/build/perm errors).
+pip_log_is_pypi_failover_candidate() {
+  _f="${1:-}"
+  [ -n "$_f" ] && [ -f "$_f" ] || return 1
+  if grep -qiE \
+    'ResolutionImpossible|conflicting dependencies|Cannot uninstall|externally-managed-environment|Permission denied|Disk quota|No space left|Invalid requirement|metadata-generation-failed|Failed building wheel|error: command .* failed|Microsoft Visual C\+\+|Could not build wheels' \
+    "$_f" 2>/dev/null; then
+    return 1
+  fi
+  grep -qiE \
+    'HTTP Error 40[0345]|403 Forbidden|404 Client Error|404 Not Found|Could not fetch URL|Connection refused|Connection reset|Connection timed out|Read timed out|timed out\.|Max retries exceeded|Failed to establish|Name or service not known|Temporary failure in name resolution|Network is unreachable|SSLError|SSLEOFError|urlopen error|ProxyError|Remote end closed|IncompleteRead|No matching distribution found|Could not find a version that satisfies' \
+    "$_f" 2>/dev/null
 }
 
 # Apply mirror endpoints unless the user already exported overrides.
@@ -727,7 +812,7 @@ parse_args() {
         shift
         ;;
       --pip-mirror|--pypi-mirror)
-        [ $# -ge 2 ] || die "$1 requires a mirror name (tuna|aliyun|tencent|ustc|huawei)"
+        [ $# -ge 2 ] || die "$1 requires a mirror name (tuna|aliyun|tencent|ustc|huawei|pypi)"
         PIP_MIRROR_CHOICE="$2"
         shift 2
         ;;
@@ -1046,9 +1131,10 @@ run_py() {
   "$PYTHON" "$@"
 }
 
-# pip install with PEP 668 / old pip fallbacks. Streams to stderr unless --quiet.
-do_pip_install() {
+# pip install once (PEP 668 / old pip fallbacks). On failure keeps FLASHCLI_LAST_PIP_LOG.
+_do_pip_install_once() {
   _log="/tmp/flashcli-pip-$$.log"
+  FLASHCLI_LAST_PIP_LOG=""
   _break="$(pip_extra_flags || true)"
   # --root-user-action only silences a warning on *system* root installs (pip>=22.1).
   # Never pass it inside a venv — unnecessary, and breaks Ubuntu 22.04's pip 22.0.x.
@@ -1093,8 +1179,47 @@ do_pip_install() {
       fi
     fi
   fi
+  FLASHCLI_LAST_PIP_LOG="$_log"
   cat "$_log" >&2
-  rm -f "$_log"
+  return 1
+}
+
+# pip install with optional PyPI mirror failover (unpinned --mirror only).
+do_pip_install() {
+  if _do_pip_install_once "$@"; then
+    return 0
+  fi
+  if ! pypi_auto_failover_enabled; then
+    rm -f "${FLASHCLI_LAST_PIP_LOG:-}" 2>/dev/null || true
+    FLASHCLI_LAST_PIP_LOG=""
+    return 1
+  fi
+  if ! pip_log_is_pypi_failover_candidate "${FLASHCLI_LAST_PIP_LOG:-}"; then
+    rm -f "${FLASHCLI_LAST_PIP_LOG:-}" 2>/dev/null || true
+    FLASHCLI_LAST_PIP_LOG=""
+    return 1
+  fi
+
+  _failed_label="${MIRROR_PIP_LABEL:-tuna}"
+  _last_log="${FLASHCLI_LAST_PIP_LOG:-}"
+  for _lab in $(pypi_failover_labels_after "$_failed_label"); do
+    warn "pip via ${_failed_label} failed (network/index) — retrying with ${_lab} ..."
+    rm -f "$_last_log" 2>/dev/null || true
+    switch_active_pypi_mirror "$_lab" || continue
+    if _do_pip_install_once "$@"; then
+      info "[ok] pip install succeeded via ${_lab}"
+      return 0
+    fi
+    if ! pip_log_is_pypi_failover_candidate "${FLASHCLI_LAST_PIP_LOG:-}"; then
+      rm -f "${FLASHCLI_LAST_PIP_LOG:-}" 2>/dev/null || true
+      FLASHCLI_LAST_PIP_LOG=""
+      return 1
+    fi
+    _failed_label="$_lab"
+    _last_log="${FLASHCLI_LAST_PIP_LOG:-}"
+  done
+  rm -f "${FLASHCLI_LAST_PIP_LOG:-}" 2>/dev/null || true
+  FLASHCLI_LAST_PIP_LOG=""
   return 1
 }
 
@@ -1915,12 +2040,27 @@ PY
     fi
   fi
 
+  # Unpinned --mirror: walk tuna→aliyun→ustc→tencent→huawei on preflight failure.
+  if pypi_auto_failover_enabled; then
+    _failed_label="${MIRROR_PIP_LABEL:-tuna}"
+    for _lab in $(pypi_failover_labels_after "$_failed_label"); do
+      warn "package index ${_failed_label} unreachable — trying ${_lab} ..."
+      switch_active_pypi_mirror "$_lab" || continue
+      if _pypi_probe; then
+        info "[ok] package index reachable (${PIP_INDEX_URL})"
+        return 0
+      fi
+      _failed_label="$_lab"
+    done
+  fi
+
   die "cannot reach PyPI/package index — pip install would fail mid-way.
 Reason: network blocked, DNS failure, or mirror unreachable (${PIP_INDEX_URL:-https://pypi.org/simple}).
 Fix:
   ./install.sh --mirror
-  ./install.sh --pip-mirror tuna
-  export PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+  ./install.sh --pip-mirror aliyun
+  ./install.sh --mirror --pip-mirror pypi
+  export PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
   Check proxy/firewall; retry when network is available"
 }
 
@@ -2720,6 +2860,58 @@ write_flashcli_install_env() {
   info "Wrote ${_home}/install.env (git source for flashcli-bundle in bundle venvs)"
 }
 
+# Keep a local copy at $FLASHCLI_HOME/install.sh for re-runs after curl|sh installs.
+persist_install_script() {
+  _home="$(flashcli_home_path)"
+  _dest="${_home}/install.sh"
+  mkdir -p "$_home"
+
+  # Already running from the persisted path.
+  case "$0" in
+    "$_dest")
+      [ -x "$_dest" ] || chmod +x "$_dest" 2>/dev/null || true
+      return 0
+      ;;
+  esac
+
+  # Local file invocation: copy self.
+  if [ -f "$0" ] && [ -r "$0" ] && [ "$0" != "sh" ] && [ "$0" != "-sh" ] && [ "$0" != "/bin/sh" ]; then
+    if cp "$0" "$_dest" 2>/dev/null; then
+      chmod +x "$_dest" 2>/dev/null || true
+      info "Wrote ${_dest} (re-run: ${_dest} --mirror)"
+      return 0
+    fi
+  fi
+
+  # Piped install (curl|sh): re-fetch from the same channel as this install.
+  _url="https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh"
+  if mirror_mode_enabled; then
+    _url="https://gitee.com/aodiansoft/flashcli/raw/main/install.sh"
+  fi
+  case "${REPO:-}" in
+    *gitee.com*) _url="https://gitee.com/aodiansoft/flashcli/raw/main/install.sh" ;;
+  esac
+
+  _tmp="${_dest}.tmp.$$"
+  if command -v curl >/dev/null 2>&1; then
+    if curl -fsSL --connect-timeout 8 --max-time 60 -o "$_tmp" "$_url" 2>/dev/null; then
+      mv -f "$_tmp" "$_dest"
+      chmod +x "$_dest" 2>/dev/null || true
+      info "Wrote ${_dest} (re-run: ${_dest} --mirror)"
+      return 0
+    fi
+  elif command -v wget >/dev/null 2>&1; then
+    if wget -q --timeout=60 -O "$_tmp" "$_url" 2>/dev/null; then
+      mv -f "$_tmp" "$_dest"
+      chmod +x "$_dest" 2>/dev/null || true
+      info "Wrote ${_dest} (re-run: ${_dest} --mirror)"
+      return 0
+    fi
+  fi
+  rm -f "$_tmp" 2>/dev/null || true
+  return 0
+}
+
 # Verify flashcli works in parent shell (minimal PATH / no /usr/local/bin is common in containers).
 verify_cli_usable() {
   cli="$(flashcli_script_path || true)"
@@ -2740,6 +2932,7 @@ verify_cli_usable() {
   persist_path_config "$cli_dir"
   write_flashcli_mirror_env
   write_flashcli_install_env
+  persist_install_script
 
   resolved="$(command -v flashcli 2>/dev/null || true)"
   if [ -z "$resolved" ]; then
