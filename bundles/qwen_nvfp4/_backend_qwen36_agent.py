@@ -16,6 +16,11 @@ from flashcli_bundle.protocol import ChatChunk, ChatRequest, ChatResult
 from _flashrt_qwen36_agent import import_qwen36_agent_modules
 
 from _qwen36_thinking import Qwen36ThinkingStreamSplitter, enable_thinking_from_request
+from _qwen_util import (
+    agent_result_to_chat,
+    chat_request_to_openai_body,
+    usage_from_qwen36_engine,
+)
 from _serve_backend import bridge_sync_chunk_iterator
 
 log = logging.getLogger(__name__)

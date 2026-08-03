@@ -6,7 +6,5 @@ COPY auto_install.sh install.sh /usr/share/nginx/html/flashcli/
 RUN chmod -R 755 /usr/share/nginx/html/flashcli
 
 # docker build -f docker/auto_install -t flashcli-auto-install:latest .
-# docker run -d --name flashcli-auto-install -p 8080:80 flashcli-auto-install:latest
-# curl http://localhost:8080/flashcli/auto_install.sh
-
-# ./docker/push_auto_install.sh flashcli-auto-install:xxx
+# docker run -d --name flashcli-auto-install -p 8996:80 flashcli-auto-install:latest
+# curl -fsSL http://localhost:8996/flashcli/auto_install.sh | head
