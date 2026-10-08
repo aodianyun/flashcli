@@ -122,6 +122,15 @@ func loadable(path string) bool {
 	return true
 }
 
+func loadableBare(soname string) bool {
+	handle, err := purego.Dlopen(soname, purego.RTLD_NOW)
+	if err != nil {
+		return false
+	}
+	_ = purego.Dlclose(handle)
+	return true
+}
+
 // PrependLDLibraryPath prepends dirs (deduped) to LD_LIBRARY_PATH; returns added.
 func PrependLDLibraryPath(dirs []string) []string {
 	if len(dirs) == 0 {
@@ -185,10 +194,15 @@ func Ensure(ctx context.Context, python, cudaTag string, quiet, install bool, ru
 	missing := func() []string {
 		var out []string
 		for _, name := range sonames {
-			path := FindSoname(purelib, name)
-			if path == "" || !loadable(path) {
-				out = append(out, name)
+			if path := FindSoname(purelib, name); path != "" && loadable(path) {
+				continue
 			}
+			// System loader fallback (ld.so.cache / LD_LIBRARY_PATH): a host CUDA
+			// toolkit providing the SONAME means no pip install is needed.
+			if loadableBare(name) {
+				continue
+			}
+			out = append(out, name)
 		}
 		return out
 	}
