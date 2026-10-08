@@ -13,7 +13,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
 #   curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
 #   ./install.sh                       # release
-#   ./install.sh --from-source --ref dev
+#   ./install.sh --from-source --branch dev
 #   ./install.sh --version 1.2.3 --dir /usr/local/bin
 #
 # Env: FLASHCLI_INSTALL_REPO, FLASHCLI_INSTALL_REF, FLASHCLI_GO_VERSION,
@@ -40,7 +40,7 @@ have_cmd() { command -v "$1" >/dev/null 2>&1; }
 
 usage() {
   if [ -f "$0" ]; then sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; else
-    echo "usage: install.sh [--mirror] [--from-source] [--ref REF] [--version V] [--dir DIR] [--source-dir DIR]"
+    echo "usage: install.sh [--mirror] [--from-source] [--ref REF|--branch REF] [--version V] [--dir DIR] [--source-dir DIR]"
   fi
 }
 
@@ -48,7 +48,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --mirror|--gitee) MIRROR=1; shift ;;
     --github) MIRROR=0; shift ;;
-    --ref) REF="$2"; shift 2 ;;
+    --ref|--branch) REF="$2"; shift 2 ;;
     --version) VERSION="$2"; shift 2 ;;
     --dir) INSTALL_DIR="$2"; shift 2 ;;
     --from-source|--source) FROM_SOURCE=1; shift ;;
