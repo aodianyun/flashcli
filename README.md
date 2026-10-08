@@ -79,8 +79,8 @@ Full history: `git log`.
 **One-click (recommended)**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
-# CN mirror: curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
+curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/dev/install.sh | sh
+# CN mirror: curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/dev/install.sh | sh -s -- --mirror
 ```
 
 `install.sh` installs the `flashcli` binary: by default it downloads

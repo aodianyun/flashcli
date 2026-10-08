@@ -17,8 +17,9 @@
 
 set -eu
 
-GITHUB_INSTALL="https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh"
-GITEE_INSTALL="https://gitee.com/aodiansoft/flashcli/raw/main/install.sh"
+REF="${FLASHCLI_INSTALL_REF:-dev}"
+GITHUB_INSTALL="https://raw.githubusercontent.com/aodianyun/flashcli/${REF}/install.sh"
+GITEE_INSTALL="https://gitee.com/aodiansoft/flashcli/raw/${REF}/install.sh"
 PROBE_TIMEOUT="${FLASHCLI_PROBE_TIMEOUT:-8}"
 DOWNLOAD_TIMEOUT="${FLASHCLI_DOWNLOAD_TIMEOUT:-60}"
 

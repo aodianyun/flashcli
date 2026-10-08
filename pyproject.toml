@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flashcli"
-version = "0.3.3.2026.6.29"
+version = "1.0.0.2026.10.8"
 description = "FlashRT distribution CLI — Go host (bundles, sync, runtime)."
 readme = "README.md"
 license = {text = "Apache-2.0"}

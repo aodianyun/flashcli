@@ -81,8 +81,8 @@ Qwen3 与 Qwen3.6 **共用** 同一 FlashHub repo；ref 中 `@qwen3` / `@qwen36`
 **一键（推荐）**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
-# 国内镜像：curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
+curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/dev/install.sh | sh
+# 国内镜像：curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/dev/install.sh | sh -s -- --mirror
 ```
 
 `install.sh` 安装 `flashcli` 二进制：默认从最新 release 下载
