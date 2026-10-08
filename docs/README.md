@@ -29,6 +29,7 @@ Build, pack, and publish bundles — [bundle_builder_guide.md](bundle_builder_gu
 | Doc | Purpose |
 |-----|---------|
 | [bundle_publish_standard.md](bundle_publish_standard.md) | Manifest, entry, `.so`, FlashHub layout (authoritative spec) |
+| [bundle_execution_abi.md](bundle_execution_abi.md) | Execution backends (`entry.kind`), native process / `.so` contract, conformance |
 | [model_bundle_standard.md](model_bundle_standard.md) | Preset ref syntax + end-user runtime flow |
 | [architecture.md](architecture.md) | Host CLI, bundle venv, re-exec, module map |
 | [environment.md](environment.md) | Environment variables |

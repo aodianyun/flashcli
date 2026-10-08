@@ -10,12 +10,12 @@ Three runtime layers share one protocol package (`flashcli-bundle`). This docume
 
 | Used by | Lives in | Do not put in |
 |---------|----------|---------------|
-| **Host only** (`flashcli`) | `src/flashcli/` | `flashcli_bundle/` |
+| **Host only** (Go `flashcli`) | `go/internal/` | `flashcli_bundle/` |
 | **Infer only** (`flashcli_bundle.infer`) | `flashcli_bundle/infer/` | `flashcli_bundle/` protocol root |
 | **Both host and infer** | `flashcli_bundle/` (protocol) | duplicated copies in host/infer |
 
 ```text
-host only  → src/flashcli/
+host only  → go/internal/
 infer only → flashcli_bundle/infer/
 both       → flashcli_bundle/ (protocol, dependencies = [])
 ```
@@ -29,24 +29,23 @@ both       → flashcli_bundle/ (protocol, dependencies = [])
 
 **Shared orchestration allowed in protocol** (host/infer inject deps via callbacks):
 
-- `activate_core.py`, `cache.py`, `post_pull.py`, resolve paths in `weights.py` / `resolve.py` — HF download and per-file `extra_weights` fetch stay in host (`models/pull.py`)
+- `activate_core.py`, `cache.py`, `post_pull.py`, resolve paths in `weights.py` / `resolve.py` — the Go host injects HF/ModelScope download and per-file `extra_weights` fetch.
 
-**Host-only modules** (examples, not exhaustive): `python_paths.py`, `python_resolve.py`, `runtime/mirror_github.py`, `bundle/weights.py` (HF download), `models/hf_hub.py`, `models/pull.py`, `bundle/artifacts.py`, `runtime/reexec.py`.
+**Host-only code** lives in `go/internal/` (Go). Examples: `weights` (HF/ModelScope download, `post_pull`), `flashhub` (sync), `venv`/`pythonprovision`, `inferexec`/`nativeexec`/`nativeabi`, `cli`.
 
 ## Layer overview
 
-| Layer | pip install | May import | Must not import |
-|-------|-------------|------------|-----------------|
-| **Protocol** | `flashcli-bundle` (`dependencies = []`) | `flashcli_bundle.*` (except `infer`) | `flashcli`, fastapi/uvicorn/torch, `flashcli_bundle.infer` |
-| **Host** | `flashcli` + `flashcli-bundle` | `flashcli.*`, `flashcli_bundle.*` (protocol) | `flashcli_bundle.infer` |
-| **Infer** | `flashcli-bundle[infer]` + manifest deps | `flashcli_bundle.*` (incl. `infer`) | `flashcli`, `huggingface_hub` (weight download) |
+| Layer | Language / install | May import | Must not import |
+|-------|--------------------|------------|-----------------|
+| **Protocol** | Python `flashcli-bundle` (`dependencies = []`) | `flashcli_bundle.*` (except `infer`) | fastapi/uvicorn/torch, `flashcli_bundle.infer` |
+| **Host** | Go binary (`go/`) | `flashcli_bundle.*` (protocol) at the exec boundary | `flashcli_bundle.infer` |
+| **Infer** | Python `flashcli-bundle[infer]` + manifest deps | `flashcli_bundle.*` (incl. `infer`) | `huggingface_hub` (weight download) |
 
 ```text
-Host venv:     flashcli ──► flashcli_bundle (protocol)
-Bundle venv:   flashcli_bundle.infer ──► flashcli_bundle (protocol + [infer] extra)
+Host (Go)  ──re-exec/exec──►  flashcli_bundle.infer ──► flashcli_bundle (protocol + [infer])
 ```
 
-Host and infer must never cross-import each other.
+The Go host never imports the Python infer package; it starts it as a subprocess (or drives a native backend).
 
 ## Protocol modules (`flashcli_bundle/`)
 
@@ -66,24 +65,22 @@ Canonical home for shared types, manifest/options, paths, FlashHub client, prese
 | `util/download_progress.py` | HTTP download (lazy tqdm) |
 | `cache.py`, `post_pull.py`, `resolve.py`, `weights.py` (resolve), `activate_core.py` | Shared when both layers import; download/HF stays host |
 
-**Not protocol (host-only examples):** `models/pull.py`, `bundle/artifacts.py`, `runtime/reexec.py`, `bundle/python_install.py`, GitHub release mirror helpers (target: host).
+**Not protocol (host-only):** weight download, FlashHub sync assembly, venv provisioning, re-exec — all in `go/internal/`.
 
-## Host modules (`flashcli/`)
+## Host (Go, `go/internal/`)
 
-Typer CLI, HF weight download, bundle sync/distribution, re-exec into bundle venv.
+Command tree, FlashHub sync, weight download, preflight, venv, and backend dispatch. Never imports Python infer code.
 
-| Module | Role |
-|--------|------|
-| `cli.py`, `doctor.py` | User-facing commands |
-| `models/pull.py`, `models/hf_hub.py` | Hugging Face weight download (host only) |
-| `bundle/artifacts.py`, `preflight.py`, `python_install.py` | Runtime assembly |
-| `runtime/reexec.py`, `runtime/bundle_venv.py` | Re-exec + venv creation |
-| `deps.py` | Host pip (`FLASHCLI_HOST_PACKAGES` + plain `flashcli-bundle`) |
-| `bundle/run_help.py`, `bundle/run_argv.py` | Manifest-only help + host flags |
-
-**Re-export only** (no duplicate logic): `config.py`, `models/registry.py`, `models/preset_ref.py`, `bundle/marker.py`, `bundle/catalog.py`, `bundle/manifest.py`, `runtime/detect.py`, `runtime/requirements_spec.py`, `runtime/mirror.py`, `util/download_progress.py`, `models/cache.py`, `models/post_pull.py`, `bundle/resolve.py`.
-
-**Host-only wrappers**: `bundle/weights.py` (injects HF download), `bundle/activate.py` (injects host deps + venv).
+| Package | Role |
+|---------|------|
+| `cli` | User-facing commands (`run`/`serve`/`pull`/`bundle`/`models`/`doctor`/`upgrade`) |
+| `ref`, `flashhub` | Ref parsing, FlashHub index + tree sync |
+| `weights` | HF/ModelScope download, cache, `post_pull`, `extra_pull` |
+| `preflight`, `native`, `hostabi`, `cuda` | Env-key match, native cell validation, host ABI, CUDA userland |
+| `venv`, `pythonprovision` | Bundle venv creation + base Python provisioning |
+| `inferexec`, `nativeexec`, `nativeabi` | Execution backends (`entry.kind`) |
+| `manifest` | Manifest parse + validation |
+| `paths`, `runtime`, `selfupdate`, `postpull`, `version`, `errs` | Support |
 
 ## Infer modules (`flashcli_bundle/infer/`)
 
@@ -102,17 +99,9 @@ Bundle venv entry: `python -m flashcli_bundle.infer run|serve`.
 
 ## Enforcement
 
-Structural rules live in `tests/test_architecture_layers.py`:
-
-- Host tree never imports `flashcli_bundle.infer`
-- Protocol `pyproject.toml` has `dependencies = []`
-- Infer extra includes serve stack, excludes `huggingface_hub`
-- Listed re-export modules must not duplicate protocol implementations
-- `Preset` exposes `engine` and `description`
-- **Placement rule:** new protocol modules must be imported from both host and infer
-- `HOST_ONLY_PROTOCOL_MODULES` allowlist must not grow
-- Infer `runtime/mirror` must not re-export GitHub release download APIs
-- Infer must not import `flashcli`; protocol must not import `huggingface_hub`
-- Obsolete compatibility shims must stay deleted (see `tests/test_architecture_layers.py`)
+- **Protocol** `flashcli-bundle/pyproject.toml` keeps `dependencies = []`; the infer extra includes the serve stack and excludes `huggingface_hub`.
+- **Execution ABI / host parity** is enforced by `tests/conformance/` (command-surface parity, Py↔Go execution-ABI agreement, re-exec/native backends).
+- **Go host** packages are checked by `go test ./...` (manifest/native/preflight/weights/venv/backends).
+- The Python host (`src/flashcli/`) was removed; do not reintroduce host-only code under `flashcli_bundle/`.
 
 See also [architecture.md](architecture.md) for runtime flow and directory layout.

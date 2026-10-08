@@ -69,9 +69,9 @@ When `weights.source` / `extra_weights.source` is `"modelscope"`, the host CLI p
 | `MODELSCOPE_API_TOKEN` | (none) | ModelScope token for gated models. |
 | `FLASHCLI_MS_DOWNLOAD_RETRIES` | `3` | ModelScope download retries. |
 
-`install.sh` installs `modelscope>=1.11` alongside `huggingface_hub` for host weight pulls.
+Weight download runs in the **Go host** (native HTTP clients); `modelscope`/`huggingface_hub` are not host dependencies.
 
-`install.sh` / `auto_install.sh` install `flashcli-bundle` from git, then `flashcli` (`--no-deps`) and runtime deps including `huggingface_hub>=0.26` (`hf` / `huggingface-cli`). Post-install verification also checks Hub CLI availability; if scripts dir is not on `PATH`, flashcli falls back to `python -m huggingface_hub.cli.hf`.
+`install.sh` fetches the static Go binary via `scripts/install_go.sh` (no Python host). `flashcli-bundle` is installed into **bundle venvs** as `flashcli-bundle[infer]` (source: `FLASHCLI_BUNDLE_PIP_SPEC` / local `flashcli-bundle/` / `~/.flashcli/install.env` `FLASHCLI_INSTALL_REPO`+`REF`).
 
 ## Behavior switches
 
@@ -107,12 +107,12 @@ Bundle Python deps (torch, etc.) are installed by `activate_bundle` from `flashc
 
 | Layer | Where installed | Package / source | Purpose |
 |-------|-----------------|------------------|---------|
-| Host CLI | `~/.flashcli/venv` | `flashcli` (`pyproject.toml`) | typer, huggingface_hub, sync/pull |
-| Protocol | Host venv | `flashcli-bundle` (no extras) | manifest, options, native validation |
+| Host CLI | PATH | Go binary (`go/`, `install.sh`) | sync/pull, weights, preflight, backends |
+| Protocol | Build/CLI + bundle venv | `flashcli-bundle` (`dependencies = []`) | manifest, options, native validation |
 | Infer runtime | Bundle venv | `flashcli-bundle[infer]` | `python -m flashcli_bundle.infer`, fastapi/uvicorn |
 | Model stack | Bundle venv | `flashcli-bundle.json` → `python_dependencies` | torch, transformers, … |
 
-Host **must not** `import flashcli_bundle.infer`. Bundle venv **must not** `pip install flashcli`.
+The Go host never imports Python infer code. Bundle venv **must not** `pip install flashcli`.
 
 ## Host CLI vs bundle infer
 

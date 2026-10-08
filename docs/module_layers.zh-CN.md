@@ -2,7 +2,7 @@
 
 <p align="right"><a href="module_layers.md">English</a> · <strong>简体中文</strong></p>
 
-三层运行时共享一个协议包（`flashcli-bundle`）。本文是**模块放哪**的判定清单与 import 规则。
+三层：**Go 主机** + 协议包（`flashcli-bundle`）+ infer。本文是**模块放哪**的判定清单与 import 规则。
 
 ## 模块归属判定（核心）
 
@@ -10,12 +10,12 @@
 
 | 使用情况 | 放哪里 | 不要放 |
 |----------|--------|--------|
-| **只有** `flashcli`（host）用到 | `src/flashcli/` | `flashcli_bundle/` |
+| **只有** `flashcli`（Go host）用到 | `go/internal/` | `flashcli_bundle/` |
 | **只有** `flashcli_bundle.infer` 用到 | `flashcli_bundle/infer/` | `flashcli_bundle/` 协议根 |
 | **host 与 infer 都用** | `flashcli_bundle/`（protocol） | 拆成两份拷贝 |
 
 ```text
-仅 host  → src/flashcli/
+仅 host  → go/internal/
 仅 infer → flashcli_bundle/infer/
 两者都用 → flashcli_bundle/（protocol，dependencies = []）
 ```
@@ -33,33 +33,27 @@
 
 **Re-export 不是放 protocol 的理由：** host/infer 的薄 re-export 仅为稳定 import 路径；若逻辑只在一层使用，应直接放在该层。
 
-**Host 专有模块示例**（非穷举）：`python_paths.py`、`python_resolve.py`、`runtime/mirror_github.py`、`bundle/weights.py`（HF 下载）、`models/hf_hub.py`、`models/pull.py`、`bundle/artifacts.py`、`runtime/reexec.py`。
+**Host 专有代码**位于 `go/internal/`（Go）。示例：`weights`（HF/ModelScope 下载、`post_pull`）、`flashhub`（sync）、`venv`/`pythonprovision`、`inferexec`/`nativeexec`/`nativeabi`、`cli`。
 
 ## 分层概览
 
-| 层 | pip 安装 | 可 import | 禁止 |
-|----|----------|-----------|------|
-| **Protocol** | `flashcli-bundle`（`dependencies = []`） | `flashcli_bundle.*`（除 `infer`） | `flashcli`、fastapi/uvicorn/torch、`flashcli_bundle.infer` |
-| **Host** | `flashcli` + `flashcli-bundle` | `flashcli.*`、`flashcli_bundle.*` | `flashcli_bundle.infer` |
-| **Infer** | `flashcli-bundle[infer]` + manifest deps | `flashcli_bundle.*`（含 `infer`） | `flashcli`、`huggingface_hub` |
+| 层 | 语言 / 安装 | 可 import | 禁止 |
+|----|-------------|-----------|------|
+| **Protocol** | Python `flashcli-bundle`（`dependencies = []`） | `flashcli_bundle.*`（除 `infer`） | fastapi/uvicorn/torch、`flashcli_bundle.infer` |
+| **Host** | Go 二进制（`go/`） | 执行边界上的 `flashcli_bundle.*`（protocol） | `flashcli_bundle.infer` |
+| **Infer** | Python `flashcli-bundle[infer]` + manifest deps | `flashcli_bundle.*`（含 `infer`） | `huggingface_hub`（权重下载） |
 
 ```text
-Host venv:     flashcli ──► flashcli_bundle (protocol)
-Bundle venv:   flashcli_bundle.infer ──► flashcli_bundle (protocol + [infer] extra)
+Host (Go) ──re-exec/exec──► flashcli_bundle.infer ──► flashcli_bundle (protocol + [infer])
 ```
 
-Host 与 infer **不得**相互 import。
+Go 主机**不** import Python infer 包；它以子进程启动（或驱动原生 backend）。
 
-##  enforcement
+## Enforcement
 
-结构规则见 `tests/test_architecture_layers.py`：
-
-- Host 不 import `flashcli_bundle.infer`
-- Protocol `dependencies = []`
-- Infer extra 含 serve 栈、不含 `huggingface_hub`
-- `HOST_ONLY_PROTOCOL_MODULES` 白名单不得扩大
-- Infer `runtime/mirror` 不得 re-export GitHub release 下载 API
-- Infer 不得 import `flashcli`；protocol 不得 import `huggingface_hub`
-- 过时兼容 shim（如 `infer/config.py`、`bundle/standalone_release.py`）不得恢复
+- **Protocol** `flashcli-bundle/pyproject.toml` 保持 `dependencies = []`；infer extra 含 serve 栈、不含 `huggingface_hub`。
+- **执行 ABI / host 对等**由 `tests/conformance/` 强制（命令面对等、Py↔Go execution ABI 一致、re-exec/原生 backend）。
+- **Go host** 由 `go test ./...` 覆盖。
+- Python host（`src/flashcli/`）已移除；不要重新把 host 专有代码放回 `flashcli_bundle/`。
 
 详见 [architecture.zh-CN.md](architecture.zh-CN.md)。

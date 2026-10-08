@@ -29,6 +29,7 @@
 | 文档 | 用途 |
 |------|------|
 | [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) | manifest、entry、`.so`、FlashHub（权威规范） |
+| [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) | 执行 backend（`entry.kind`）、原生进程/`.so` 契约、conformance |
 | [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | preset ref 语法 + 运行时流程 |
 | [architecture.zh-CN.md](architecture.zh-CN.md) | 主机 CLI、bundle venv、re-exec |
 | [environment.zh-CN.md](environment.zh-CN.md) | 环境变量 |

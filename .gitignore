@@ -10,6 +10,7 @@ uv.lock
 .vscode
 .native-cache
 build/
+dist/
 codeplan/
 logs/
 docker/push_auto_install.sh

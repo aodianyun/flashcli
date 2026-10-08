@@ -5,32 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "flashcli"
 version = "0.3.3.2026.6.29"
-description = "FlashRT distribution CLI — model bundles, sync, and bundle runtime host."
+description = "FlashRT distribution CLI — Go host (bundles, sync, runtime)."
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
-dependencies = [
-    "typer>=0.12",
-    "pyyaml>=6.0",
-    "packaging>=23.0",
-    "huggingface_hub>=0.26",
-    "modelscope>=1.11",
-    "tqdm>=4.66",
-    "tomli>=2.0; python_version < '3.11'",
-]
-
-[project.optional-dependencies]
-# Dev convenience only — production installs from runtime manifest / FlashRT pyproject.
-dev = ["flash-rt[torch,server]"]
-
-[project.scripts]
-flashcli = "flashcli.cli:app"
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-flashcli = ["py.typed"]
+# The host is now a static Go binary under go/. This project remains the single
+# source of truth for the version (read by scripts/build_go.sh) and keeps the
+# protocol + infer package (flashcli-bundle/) buildable for bundle venvs.
+dependencies = []
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

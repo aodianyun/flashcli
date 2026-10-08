@@ -71,6 +71,18 @@ Weights are **not** in the bundle; cached under `~/.flashcli/models/<bundle>/<ve
 
 **Env key** (`flashcli models envs <ref>`): `sm{SM}-cu{CUDA}-linux-x86_64-py{PY}`.
 
+## Execution backends (`entry.kind`)
+
+A bundle's `entry` selects how flashcli invokes inference. The user command is unchanged either way:
+
+| `entry.kind` | Backend |
+|--------------|---------|
+| `python` (default) | bundle venv re-exec → `python -m flashcli_bundle.infer` |
+| `native-exec` | host spawns a bundle executable (NDJSON stdio / HTTP) |
+| `native-abi` | host `dlopen`s an `frt_model_runtime_v1` `.so` and drives it in-process |
+
+Bundles without `entry.kind` behave exactly as before. Full contract: [bundle_execution_abi.md](bundle_execution_abi.md).
+
 ## Quick checks
 
 ```bash

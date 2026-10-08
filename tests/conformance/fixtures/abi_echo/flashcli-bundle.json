@@ -1,0 +1,23 @@
+{
+  "format": "flashcli-model-bundle",
+  "format_version": 3,
+  "protocol_version": 1,
+  "runtime_abi_version": 1,
+  "name": "abi_echo",
+  "description": "Conformance fixture: native-abi frt_model_runtime_open_v1 stub (docs/bundle_execution_abi.md section 7)",
+  "python_abi": "310",
+  "entry": {
+    "kind": "native-abi",
+    "native": {
+      "library": "{runtime_dir}/libabi_echo.so",
+      "open_symbol": "frt_model_runtime_open_v1"
+    },
+    "run": { "kind": "native-abi" }
+  },
+  "run_options": [
+    { "name": "precision", "type": "string", "default": "fp16", "help": "Fixture option.", "phase": "load" }
+  ],
+  "runtime": {
+    "sm89-cu124-linux-x86_64-py310": "runtime/sm89-cu124-linux-x86_64-py310"
+  }
+}

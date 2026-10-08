@@ -6,44 +6,34 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 
 **不负责**具体模型 forward、CUDA kernel；这些在 bundle 的 `run.py`（及 `flash_rt/`、`.so`）中实现。
 
+> **Go host。** 主机 CLI 是 `go/`（module `github.com/aodianyun/flashcli/go`）下的静态 Go 二进制；Python host 已移除。`flashcli-bundle/` 保留：它是装进 bundle venv 的 **protocol** + **infer** 包（`flashcli-bundle[infer]`）。执行 backend（`entry.kind`）规范见 [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md)。
+
 ## 核心原则
 
 1. **推理在 bundle 内** — `flashcli-bundle.json` 的 `entry` 指向模块；flashcli 只做 `importlib` 加载。
 2. **Preset ref** — 用户使用 `namespace/bundle:version[@variant]`；`FLASHCLI_FLASHHUB_API` 配置 API 基址。
 3. **manifest-first + 分包下载** — 先拉 manifest → preflight 匹配 `runtime` env key → 只下载本 env 的 `runtime/<env-key>/`。
 4. **固定 Python ABI** — 每个 bundle 一个 venv（`python_abi`）；CLI 准备完成后 **re-exec** 进 bundle venv。
-5. **主机只装一份 flashcli** — 主机 venv 仅 pip **`flashcli-bundle`**（协议）；bundle venv pip **`flashcli-bundle[infer]`**。主机代码**禁止** `import flashcli_bundle.infer`。
+5. **单一 Go 主机** — 主机为 `go/` 静态二进制；bundle venv 仅 pip **`flashcli-bundle[infer]`**（protocol + infer）。
 6. **一条命令** — `flashcli run <preset>` 串联：sync → 依赖 → 权重（主机缺失则下载）→ `post_pull` → bundle venv 内离线推理。
 
 ### 模块放哪（必读）
 
-**只有 host 用到 → `src/flashcli/`；只有 infer 用到 → `flashcli_bundle/infer/`；两层都用 → `flashcli_bundle/` protocol。** Re-export 不能作为把 host/infer 专有逻辑塞进 protocol 的理由。详见 [module_layers.zh-CN.md](module_layers.zh-CN.md)。
+**主机（Go）→ `go/internal/*`；只有 infer 用到 → `flashcli_bundle/infer/`；两层都用 → `flashcli_bundle/` protocol。** Re-export 不能作为把逻辑塞进 protocol 的理由。详见 [module_layers.zh-CN.md](module_layers.zh-CN.md)。
 
 ## 主机 CLI 与 bundle infer（必读）
 
-`flashcli pull` / `bundle sync` / 权重下载在**主机 CLI venv**（如 `install.sh` 的 Python 3.10）中执行。  
-`flashcli run` / `serve` 先准备 bundle，再 **re-exec** 到 **bundle venv**（如 manifest 的 Python 3.12）。
+`flashcli pull` / `bundle sync` / 权重下载在 **Go 主机**中执行。  
+`flashcli run` / `serve` 先准备 bundle，随后：`entry.kind: python` 时 **re-exec** 到 **bundle venv**（`python -m flashcli_bundle.infer`）；`native-exec` / `native-abi` 时驱动原生 backend。
 
 | 内容 | 位置 | 安装方式 |
 |------|------|----------|
-| `flashcli` CLI | 仅主机（`~/.flashcli/venv` 或 editable `src/`） | `install.sh` / `auto_install.sh` |
-| **`huggingface_hub`**（Hub CLI、拉权重） | **仅主机** | `pyproject.toml` — **不**装进 bundle venv |
-| **`flashcli-bundle`**（协议） | 仅主机 | Git：`flashcli-bundle @ git+…#subdirectory=flashcli-bundle` |
-| **`flashcli-bundle[infer]`** | 仅 bundle venv | 同上，带 `[infer]` extra |
+| `flashcli` CLI | PATH 上的 Go 二进制（`go/`） | `install.sh` → `scripts/install_go.sh` |
+| **`flashcli-bundle`**（协议） | 主机（build/开发） | `flashcli-bundle/` 源码 |
+| **`flashcli-bundle[infer]`** | 仅 bundle venv | `venv.Ensure` → pip（`FLASHCLI_BUNDLE_PIP_SPEC` / repo / 本地 checkout） |
 | 推理栈（torch、transformers…） | `~/.flashcli/runtimes/<id>/venv/` | `flashcli-bundle.json` → `python_dependencies` |
 
-**依赖隔离：** 主机与 bundle venv 相互独立。flashcli 不为 bundle 栈 pin `transformers` 或限制 `huggingface_hub` 版本 — bundle 的 `python_dependencies`（如 `transformers<4.56`）在 bundle venv 内自行解析传递依赖。权重下载（`flashcli pull`，或 `run`/`serve` 前自动 pull）仅在**主机**执行；bundle infer 子进程只解析缓存或 bundle 本地路径。
-
-### Pip 依赖分层
-
-| 层级 | Venv | 安装方式 | 禁止 |
-|------|------|----------|------|
-| `flashcli` | 主机 | `pyproject.toml` | import `flashcli_bundle.infer` |
-| `flashcli-bundle` | 主机 | `install.sh`（无 extras） | — |
-| `flashcli-bundle[infer]` | Bundle | `ensure_flashcli_bundle_in_venv(..., extras=("infer",))` | import 主机 `flashcli` |
-| Manifest `python_dependencies` | Bundle | `activate_bundle` / `bundle install` | pin 主机 `huggingface_hub` |
-
-结构测试：`tests/test_architecture_layers.py`。
+**依赖隔离：** 主机除 `flashcli-bundle[infer]` 与 manifest `python_dependencies` 外不向 bundle venv 安装任何东西。权重下载仅在**主机**执行；bundle infer 子进程只解析缓存或 bundle 本地路径（`HF_HUB_OFFLINE=1`）。
 
 **Re-exec 命令**（在 bundle venv 内）：
 
@@ -51,7 +41,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 bundle_venv/bin/python -m flashcli_bundle.infer run|serve …
 ```
 
-bundle venv **不** prepend 主机 `PYTHONPATH`，**不** import 主机 `flashcli`。实现：`runtime/reexec.py`、`flashcli-bundle` 的 `flashcli_bundle.infer` 包。
+bundle venv **不** prepend 主机 `PYTHONPATH`。实现：Go `internal/{inferexec,nativeexec,nativeabi}` + `flashcli-bundle` 的 `flashcli_bundle.infer`。
 
 ### 禁止事项（避免再次跑偏）
 
@@ -79,40 +69,38 @@ flashcli **不** pip 依赖 `flash-rt`。`import flash_rt` 仅在 `activate_bund
 ```mermaid
 sequenceDiagram
   participant U as 用户
-  participant CLI as cli（主机 venv）
+  participant CLI as flashcli（Go host）
+  participant FH as flashhub
+  participant Pre as preflight
+  participant W as weights
+  participant Venv as venv
   participant Infer as flashcli_bundle.infer
-  participant FH as bundle.flashhub
-  participant Art as bundle.artifacts
-  participant Venv as runtime.bundle_venv
-  participant Act as bundle.activate
-  participant Cache as models.cache
-  participant Ldr as engines.loader
 
   U->>CLI: flashcli run flashcli-bundle/pi05_libero:1.0.4
-  CLI->>Art: ensure_runtime（若无缓存）
-  Art->>FH: fetch_repo_index(repo URL)
-  FH-->>Art: files[] + download_url
-  Art->>Art: manifest + preflight + 下载 runtime/
-  Art->>Venv: 创建 bundle venv + torch 依赖
+  CLI->>FH: 拉取 repo index（若未 sync）
+  FH-->>CLI: files[] + download_url
+  CLI->>FH: 同步 entry 树 + runtime/<env-key>/
+  CLI->>Pre: env key + native cell + host ABI + CUDA userland
+  CLI->>W: ensure 权重（+ post_pull/extra_pull）
+  CLI->>Venv: 创建 bundle venv + torch 依赖
   CLI->>Infer: re-exec: bundle python -m flashcli_bundle.infer
   Note over Infer: bundle venv: flashcli-bundle[infer] only
-  Infer->>Act: activate_bundle
-  Infer->>Cache: ensure_model_cached + post_pull
-  Infer->>Ldr: entry.run (engine: RunEngine; script: main(argv))
-  Ldr->>U: actions
+  Infer->>Infer: activate + 本地 checkpoint + RunEngine/ServeEngine/script
 ```
 
 **Entry modes**: `engine`（默认）加载 `RunEngine`/`ServeEngine` 并解析 manifest CLI 选项；`script` 将 argv 透传给 bundle 入口脚本，主机侧仅根据 `--checkpoint` 决定权重拉取。
 
-**Bundle 解析顺序**：本地 positional path（含 `flashcli-bundle.json` 的目录）> 已 sync 的 runtime 缓存（`FLASHCLI_BUNDLE_ROOT` / preset marker）；FlashHub ref 的 `repo` 由 `bundle sync` 填充缓存。
+**Backends**：`entry.kind` 选择 `python`（re-exec，如上）、`native-exec`（主机 spawn）或 `native-abi`（主机 `dlopen`）。见 [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md)。
+
+**Bundle 解析顺序**：本地 positional path（含 `flashcli-bundle.json` 的目录）> 已 sync 的 bundle 缓存（`bundles/<cache-key>/` 下 preset marker）；FlashHub ref 由 `bundle sync` 同步。
 
 ## 本机目录
 
 ```text
 ~/.flashcli/
-├── venv/                    # 主机 CLI（flashcli 只装此处）
+├── install.env              # flashcli-bundle[infer] 来源提示（repo/ref）
 ├── python/                  # 可选：standalone Python，供 bundle venv 使用
-├── runtimes/<id>/           # sync 后的 bundle 根 + bundle venv
+├── runtimes/<id>/           # bundle venv + .runtime.json marker
 ├── bundles/<bundle>/<version>@<variant>/.flashcli_bundle.json
 ├── cache/repo-index/        # FlashHub listing 缓存
 └── models/<bundle>/<version>@<variant>/checkpoint/
@@ -132,21 +120,28 @@ sequenceDiagram
 
 ## 模块划分
 
+主机（Go，`go/internal/`）：
+
 | 包 | 职责 |
 |----|------|
-| `models/preset_ref.py` | 解析 ref → repo URL + variant + cache key |
-| `bundle/catalog.py` | 从 preset ref 解析 `bundle.repo`（无 bundled catalog 文件） |
-| `bundle/flashhub.py` | FlashHub API  listing / 文件下载 |
-| `bundle/artifacts.py` | manifest-first 组装 runtime |
-| `bundle/preflight.py` | env key 与 `runtime` 匹配 |
-| `bundle/resolve.py` | 本地 path / 已 sync 缓存 |
-| `bundle/activate.py` | PYTHONPATH、依赖、预加载 `.so` |
-| `runtime/bundle_venv.py` | 按 `python_abi` 创建 venv |
-| `runtime/reexec.py` | 主机准备 → re-exec：`python -m flashcli_bundle.infer` |
-| `flashcli_bundle.infer` | 在 bundle venv 内执行 `run` / `serve`（`flashcli-bundle[infer]`） |
-| `deps.py` | 主机 pip + `flashcli-bundle`；bundle venv 经 `ensure_flashcli_bundle_in_venv(..., extras=("infer",))` |
-| `models/cache.py` | 主机拉权重 + 缓存；bundle infer 仅解析（`download=False`） |
-| `engines/loader.py` | 加载 `entry` |
+| `ref` | 解析 ref → repo URL + variant + cache key |
+| `flashhub` | FlashHub API listing / 文件下载 / 树同步 |
+| `preflight` | env key 与 `runtime` 匹配；native cell + host ABI + CUDA userland |
+| `weights` | 权重缓存、HF/ModelScope 下载、`post_pull`、`extra_pull` |
+| `venv` | 按 `python_abi` 创建 bundle venv；解析 `flashcli-bundle[infer]` spec |
+| `pythonprovision` | 解析/安装 bundle 基础 Python（standalone） |
+| `inferexec` | re-exec `python -m flashcli_bundle.infer`（python backend） |
+| `nativeexec` | 启动 `native-exec` backend（NDJSON/HTTP） |
+| `nativeabi` | `dlopen` `native-abi` 模型运行时（`frt_model_runtime_v1`） |
+| `manifest`/`native`/`hostabi`/`cuda` | manifest 与 native 校验、宿主检查 |
+| `cli` | 命令树 |
+
+bundle venv（Python，`flashcli-bundle/`）：
+
+| 模块 | 职责 |
+|------|------|
+| `flashcli_bundle`（protocol） | manifest/options/paths/FlashHub 类型 |
+| `flashcli_bundle.infer` | bundle venv 内的 `run` / `serve` 入口 |
 
 ## 示例 ref
 
@@ -166,3 +161,4 @@ sequenceDiagram
 - [module_layers.md](module_layers.md) — 三层模块归属与 import 规则
 - [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) — preset ref + 运行时流程
 - [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) — manifest 与 entry 规范
+- [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) — 执行 backend（`entry.kind`）与原生契约

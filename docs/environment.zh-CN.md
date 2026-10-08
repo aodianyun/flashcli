@@ -62,7 +62,7 @@ flashcli models list
 
 ## ModelScope（魔搭）
 
-manifest 中 `weights.source` / `extra_weights.source` 设为 `"modelscope"` 时，由主机 CLI 调用 ModelScope SDK 拉取（`repo` 为魔搭 model id，如 `Qwen/Qwen2-7B`）。
+manifest 中 `weights.source` / `extra_weights.source` 设为 `"modelscope"` 时，由 **Go host** 原生 HTTP 客户端拉取（`repo` 为魔搭 model id，如 `Qwen/Qwen2-7B`）。
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
@@ -70,9 +70,9 @@ manifest 中 `weights.source` / `extra_weights.source` 设为 `"modelscope"` 时
 | `MODELSCOPE_API_TOKEN` | （无） | 魔搭访问令牌（gated 模型）。 |
 | `FLASHCLI_MS_DOWNLOAD_RETRIES` | `3` | ModelScope 下载重试次数。 |
 
-`install.sh` 会安装 `modelscope>=1.11`（与 `huggingface_hub` 同为 host 权重依赖）。
+权重下载在 **Go host** 内执行（原生 HTTP 客户端）；`modelscope`/`huggingface_hub` 不是 host 依赖。
 
-`install.sh` / `auto_install.sh` 从 git 安装 `flashcli-bundle`，再装 `flashcli`（`--no-deps`）与运行时依赖（含 `huggingface_hub>=0.26`，提供 `hf` / `huggingface-cli`）。
+`install.sh` 经 `scripts/install_go.sh` 安装静态 Go 二进制（无 Python 主机）。`flashcli-bundle` 仅装进 **bundle venv**（`flashcli-bundle[infer]`，来源：`FLASHCLI_BUNDLE_PIP_SPEC` / 本地 `flashcli-bundle/` / `~/.flashcli/install.env` 的 `FLASHCLI_INSTALL_REPO`+`REF`）。
 
 ## 行为开关
 
@@ -108,12 +108,12 @@ Bundle 的 Python 依赖（torch 等）由 `activate_bundle` 按 `flashcli-bundl
 
 | 层级 | 安装位置 | 包 / 来源 | 用途 |
 |------|----------|-----------|------|
-| Host CLI | `~/.flashcli/venv` | `flashcli`（`pyproject.toml`） | typer、huggingface_hub、sync/pull |
-| Protocol | 主机 venv | `flashcli-bundle`（无 extras） | manifest、options、native 校验 |
+| Host CLI | PATH | Go 二进制（`go/`、`install.sh`） | sync/pull、权重、preflight、backend |
+| Protocol | 构建/CLI + bundle venv | `flashcli-bundle`（`dependencies = []`） | manifest、options、native 校验 |
 | Infer runtime | Bundle venv | `flashcli-bundle[infer]` | `python -m flashcli_bundle.infer`、fastapi/uvicorn |
 | Model stack | Bundle venv | `flashcli-bundle.json` → `python_dependencies` | torch、transformers… |
 
-主机**禁止** `import flashcli_bundle.infer`。Bundle venv **禁止** `pip install flashcli`。
+Go host 不 import Python infer 代码。Bundle venv **禁止** `pip install flashcli`。
 
 ## 主机 CLI 与 bundle infer
 

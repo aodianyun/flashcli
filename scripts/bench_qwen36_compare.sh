@@ -154,7 +154,7 @@ resolve_default_bundle() {
   py_root="$(
     python3 - <<'PY' 2>/dev/null || true
 try:
-    from flashcli.bundle.marker import list_cached_presets
+    from flashcli_bundle.marker import list_cached_presets
 
     for entry in list_cached_presets():
         ref = str(entry.get("ref", "")).lower()

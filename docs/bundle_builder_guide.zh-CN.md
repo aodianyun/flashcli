@@ -71,13 +71,13 @@ Qwen 矩阵容器镜像：`nvcr.io/nvidia/pytorch:25.10-py3`（见各 bundle 的
 ```text
 workspace/
 ├── flashcli/                 # git clone 本仓库
-│   ├── flashcli-bundle/      # 协议包（与 flashcli 同 repo）
+│   ├── flashcli-bundle/      # 协议 + infer 包（与 flashcli 同 repo）
+│   ├── go/                    # 主机 CLI（Go 二进制）
 │   ├── bundles/
 │   │   ├── pi05_libero/
 │   │   └── qwen_nvfp4/
 │   ├── scripts/
 │   │   └── release_bundle.sh
-│   └── src/flashcli/
 └── FlashRT/                  # 推理内核（release 脚本可自动 clone）
 ```
 

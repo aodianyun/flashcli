@@ -110,6 +110,8 @@ flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
 | `format` | 是 | 固定 `"flashcli-model-bundle"` |
 | `format_version` | 是 | 固定 **3** |
 | `protocol_version` | 是 | 固定 **1**（与 flashcli 所带 `flashcli-bundle` 协议一致） |
+| `runtime_abi_version` | 条件 | 当任意 `entry.*.kind == "native-abi"` 时必填；固定 **1**（FlashRT `frt_model_runtime_v1`）。否则禁止出现。 |
+| `exec_protocol_version` | 条件 | 当任意 `entry.*.kind == "native-exec"` 时必填；固定 **1**（NDJSON/HTTP 帧协议）。否则禁止出现。 |
 | `name` | 是 | bundle 标识，与目录/FlashHub repo 名一致为佳 |
 | `description` | 推荐 | 人类可读说明 |
 | `python_abi` | 是 | bundle 固定 Python ABI，三位数字字符串，如 `"312"` = CPython 3.12 |
@@ -147,10 +149,25 @@ script 示例：
 | `module` | 相对 bundle 根的 Python 模块名（不含 `.py`），如 `"run"` → `run.py` |
 | `attr` | engine 模式：类名（`RunEngine`/`ServeEngine`）；script 模式：可调用入口（如 `main`） |
 | `mode` | 可选，`engine`（默认）或 `script` |
+| `kind` | 可选（也可置于 `entry.kind`）：`python`（默认）、`native-exec`、`native-abi` —— 选择该 capability 的**执行 backend** |
 
 能力由 `entry` 推断：有 `run` 即支持 `flashcli run`；有 `serve` 即支持 `flashcli serve`。
 
 entry 执行前由 flashcli 注入、供 bundle 代码读取的环境变量见 **§4.4**（engine 与 script 不同）。
+
+#### 3.2.1 `entry.kind` —— 执行 backend（语言无关）
+
+bundle 可以交付**原生**入口而非 Python。`kind` 是 manifest 细节 —— 用户命令不变。
+
+| `kind` | backend | `module`/`attr` |
+|--------|---------|-----------------|
+| `python`（默认） | 经 bundle venv re-exec 的 Python 入口 | 必填 |
+| `native-exec` | host 启动可执行文件；经 stdio NDJSON 或 HTTP 通信 | 忽略；改用 `entry.*.native` |
+| `native-abi` | host `dlopen` 模型运行时 `.so` 并在进程内驱动 | 忽略；改用 `entry.*.native` |
+
+`kind` 可置于 `entry.kind`（对两个 capability 生效），也可按 capability 覆盖（`entry.run.kind` / `entry.serve.kind`）。原生 backend 在同级 `native` 块声明（共享于 `entry.native`，可按 capability 覆盖）。
+
+**权威规范：** [bundle_execution_abi.md](bundle_execution_abi.md) —— `native` spec 字段、进程/传输契约、`frt_model_runtime_open_v1` 工厂、ABI 前缀规则与 conformance 套件。没有 `entry.kind` 的 bundle 行为完全不变（向后兼容）。
 
 ### 3.3 `variants`（多 preset 共用同一 repo）
 
@@ -547,6 +564,7 @@ flash_rt_fp4-v1.2.0-sm120-cu130-linux-x86_64-py312.so
 ## 6. 发布前自检清单
 
 - [ ] `format_version: 3`、`protocol_version: 1`
+- [ ] 原生 entry：按声明的 `entry.kind` 精确设置 `runtime_abi_version` / `exec_protocol_version` —— 见 [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md)
 - [ ] `flashcli-bundle.json` 位于发布根目录
 - [ ] `entry` 指向的 `{module}.py` 均存在且类名匹配
 - [ ] `runtime` 每个 key 在包内均有目录，且含 **至少一个** 可识别的 tagged native `.so`

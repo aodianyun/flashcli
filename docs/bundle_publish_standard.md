@@ -110,6 +110,8 @@ Full syntax: [model_bundle_standard.md](model_bundle_standard.md).
 | `format` | yes | Must be `"flashcli-model-bundle"` |
 | `format_version` | yes | Must be **3** |
 | `protocol_version` | yes | Must be **1** (matches the `flashcli-bundle` protocol shipped with flashcli) |
+| `runtime_abi_version` | conditional | Required when any `entry.*.kind == "native-abi"`; must be **1** (FlashRT `frt_model_runtime_v1`). Forbidden otherwise. |
+| `exec_protocol_version` | conditional | Required when any `entry.*.kind == "native-exec"`; must be **1** (NDJSON/HTTP framing). Forbidden otherwise. |
 | `name` | yes | Bundle id; should match directory / FlashHub repo name |
 | `description` | recommended | Human-readable summary |
 | `python_abi` | yes | Fixed Python ABI as a three-digit string, e.g. `"312"` = CPython 3.12 |
@@ -147,10 +149,25 @@ Script example:
 | `module` | Python module name relative to bundle root (no `.py`), e.g. `"run"` → `run.py` |
 | `attr` | Engine mode: class name (`RunEngine`/`ServeEngine`); script mode: callable entry (e.g. `main`) |
 | `mode` | Optional: `engine` (default) or `script` |
+| `kind` | Optional (can also be set at `entry.kind`): `python` (default), `native-exec`, or `native-abi` — selects the **execution backend** for the capability |
 
 Capabilities are inferred from `entry`: `run` enables `flashcli run`; `serve` enables `flashcli serve`.
 
 Environment variables injected before entry runs are documented in **§4.4** (engine vs script differ).
+
+#### 3.2.1 `entry.kind` — execution backends (language-agnostic)
+
+A bundle may ship a **native** entry instead of Python. `kind` is a manifest detail — end-user commands are unchanged.
+
+| `kind` | Backend | `module`/`attr` |
+|--------|---------|-----------------|
+| `python` (default) | Python entry via bundle venv re-exec | required |
+| `native-exec` | Host spawns an executable; NDJSON over stdio or HTTP | ignored; use `entry.*.native` |
+| `native-abi` | Host `dlopen`s a model-runtime `.so` and drives it in-process | ignored; use `entry.*.native` |
+
+`kind` may be set at `entry.kind` (applies to both capabilities) and overridden per capability (`entry.run.kind` / `entry.serve.kind`). Native backends declare a sibling `native` block (shared under `entry.native`, overridable per capability).
+
+**Authoritative specification:** [bundle_execution_abi.md](bundle_execution_abi.md) — `native` spec fields, process/transport contract, `frt_model_runtime_open_v1` factory, ABI prefix rules, and the conformance suite. Bundles without `entry.kind` behave exactly as before (backward compatible).
 
 ### 3.3 `variants` (multiple presets, one repo)
 
@@ -547,6 +564,7 @@ At load time, pybind import names remain `flash_rt_kernels`, `flash_rt_fa2`, etc
 ## 6. Pre-publish checklist
 
 - [ ] `format_version: 3`, `protocol_version: 1`
+- [ ] Native entries: `runtime_abi_version` / `exec_protocol_version` set exactly for the declared `entry.kind` — see [bundle_execution_abi.md](bundle_execution_abi.md)
 - [ ] `flashcli-bundle.json` at publish root
 - [ ] Every `entry.*.module` has a matching `{module}.py` and class name
 - [ ] Every `runtime` key has a directory with **at least one** recognizable tagged native `.so`

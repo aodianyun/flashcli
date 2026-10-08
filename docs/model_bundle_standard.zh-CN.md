@@ -71,6 +71,18 @@ flashcli pull bundles/qwen_nvfp4@qwen36
 
 **环境键**（`flashcli models envs <ref>`）：`sm{SM}-cu{CUDA}-linux-x86_64-py{PY}`。
 
+## 执行 backend（`entry.kind`）
+
+bundle 的 `entry` 决定 flashcli 如何调用推理。无论哪种，用户命令都不变：
+
+| `entry.kind` | backend |
+|--------------|---------|
+| `python`（默认） | bundle venv re-exec → `python -m flashcli_bundle.infer` |
+| `native-exec` | host 启动 bundle 可执行文件（NDJSON stdio / HTTP） |
+| `native-abi` | host `dlopen` 一个 `frt_model_runtime_v1` `.so` 并在进程内驱动 |
+
+没有 `entry.kind` 的 bundle 行为完全不变。完整契约见 [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md)。
+
 ## 快速校验
 
 ```bash

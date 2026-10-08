@@ -14,8 +14,8 @@ Thank you for contributing. This project is intended for open source on GitHub. 
 
 ```text
 flashcli/
-├── flashcli-bundle/        # Bundle protocol package (flashcli_bundle)
-├── src/flashcli/           # CLI, preset ref, bundle loader (no model forward passes)
+├── flashcli-bundle/        # Bundle protocol + infer package (flashcli_bundle)
+├── go/                     # Host CLI (Go binary; no model forward passes)
 ├── bundles/                  # Model bundle sources + release-matrix.env
 ├── scripts/                  # Shared release pipeline
 └── docs/                     # User-facing documentation (maintainer docs: see CONTRIBUTING)
@@ -50,7 +50,7 @@ pytest tests/ tests/bench/ # full suite including bench
 ## Pull request guidelines
 
 1. **Scope** — Keep changes in `flashcli/`. Do not commit FlashRT source changes inside flashcli PRs.
-2. **No inference in CLI** — Do not add model-specific forward logic under `src/flashcli/`. Use bundle `entry` modules.
+2. **No inference in CLI** — Do not add model-specific forward logic under `go/`. Use bundle `entry` modules.
 3. **Host CLI vs bundle venv (invariants)** — See [docs/architecture.md](docs/architecture.md#host-cli-vs-bundle-infer-important).
 
    | Allowed in bundle venv | Host only (never bundle venv) |

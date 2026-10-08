@@ -92,8 +92,11 @@ curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh 
 
 ```bash
 git clone https://github.com/aodianyun/flashcli.git && cd flashcli
-pip install -e ./flashcli-bundle -e .
+bash scripts/build_go.sh        # builds go/ → dist/go/flashcli-<os>-<arch>
 ```
+
+The host is a static Go binary (no Python host). Bundle venvs still get
+`flashcli-bundle[infer]` on demand (source: [flashcli-bundle/](flashcli-bundle/)).
 
 ### 2. Preflight
 
@@ -166,10 +169,14 @@ Per-bundle docs: **[pi05_libero](bundles/pi05_libero/README.md)** · **[qwen_nvf
 | `flashcli serve <ref>` | OpenAI HTTP API (Qwen) |
 | `flashcli pull <ref>` | Pre-fetch runtime + weights (same download path as first `run`) |
 | `flashcli models list` | Locally cached refs + weight status (discover bundles on [FlashHub](https://flashhub.top)) |
+| `flashcli models show <ref>` | Cached runtime, repo, and paths for a ref |
 | `flashcli models envs [ref]` | Native matrix cells vs this GPU |
-| `flashcli doctor [--install]` | Environment / GPU preflight |
+| `flashcli doctor` | Environment / GPU preflight |
 | `flashcli bundle sync <ref>` | Pre-fetch bundle runtime from FlashHub |
-| `flashcli bundle validate PATH` | Layout + native matrix check |
+| `flashcli bundle validate PATH` | Layout + native matrix (+ ABI probe) check |
+| `flashcli bundle install PATH` | Create the bundle venv + inference deps |
+| `flashcli bundle clean [ref]` | Remove cached runtimes (`--full` for weights/bundles) |
+| `flashcli upgrade` | Self-update the Go binary from release assets |
 
 **Common flags**: `--no-auto-install`, `--checkpoint`, `--quiet`  
 **Ref syntax**: FlashHub `flashcli-bundle/name:version[@variant]` or local `bundles/name[@variant]` (directory must contain `flashcli-bundle.json`). Multi-variant bundles require `@variant`. Details: [model_bundle_standard.md](docs/model_bundle_standard.md).
@@ -181,8 +188,8 @@ Qwen `serve` highlights: `--max-seq`, `--max-q-seq` (qwen3), `--K`, `--max-outpu
 ## How it works
 
 ```text
-Host: install.sh → ~/.flashcli/venv (flashcli once)
-  pull / run preflight → host Python (sync, weights, extra_weights, post_pull)
+Host: install.sh → Go binary on PATH (no Python host venv)
+  pull / run preflight → host Go process (sync, weights, extra_weights, post_pull)
 
 run/serve:
   ref → FlashHub → manifest + preflight → runtime/<env-key>/
@@ -190,15 +197,18 @@ run/serve:
   → bundle venv (python_abi, torch, …)
   → re-exec: bundle python -m flashcli_bundle.infer  (HF hub offline)
   → activate bundle → local checkpoint → RunEngine / ServeEngine / script main
+
+Native bundles (entry.kind native-exec / native-abi) bypass the Python
+re-exec: the host spawns, or dlopens, the bundle's native backend.
 ```
 
-**Do not** pip-install flashcli into bundle venvs. Details: [docs/architecture.md](docs/architecture.md#host-cli-vs-bundle-infer-important).
+**Do not** pip-install flashcli into bundle venvs. Details: [docs/architecture.md](docs/architecture.md).
 
 **Local cache**
 
 | Path | Contents |
 |------|----------|
-| `~/.flashcli/venv/` | Host CLI (single flashcli install) |
+| `~/.flashcli/` | Host data root (markers, install.env) |
 | `~/.flashcli/runtimes/<id>/` | Synced bundle root (`runtime/<env-key>/`, entry tree), bundle venv |
 | `~/.flashcli/models/<bundle>/<version>@<variant>/checkpoint/` | Model weights |
 | `~/.cache/flash_rt/` | Pi0.5 PaliGemma tokenizer (post-pull) |

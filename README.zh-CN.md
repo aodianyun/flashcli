@@ -131,8 +131,11 @@ curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- 
 ```bash
 git clone https://github.com/aodianyun/flashcli.git && cd flashcli
 # 或：git clone https://gitee.com/aodiansoft/flashcli.git && cd flashcli
-pip install -e ./flashcli-bundle -e .
+bash scripts/build_go.sh        # 构建 go/ → dist/go/flashcli-<os>-<arch>
 ```
+
+主机为静态 Go 二进制（已移除 Python host）。bundle venv 仍按需安装
+`flashcli-bundle[infer]`（来源：[flashcli-bundle/](flashcli-bundle/)）。
 
 ### 2. 预检
 
@@ -203,10 +206,14 @@ flashcli serve bundles/qwen_nvfp4@qwen36 --port 8000 --K 6 --max-seq 262208
 | `flashcli serve <ref>` | OpenAI HTTP（Qwen） |
 | `flashcli pull <ref>` | 预拉 runtime + 权重（与首次 `run` 相同的下载路径） |
 | `flashcli models list` | 本地已缓存 ref 与权重状态（在 [FlashHub](https://flashhub.top) 发现 bundle） |
+| `flashcli models show <ref>` | 查看 ref 的缓存 runtime、repo 与路径 |
 | `flashcli models envs [ref]` | 矩阵档位 vs 本机 GPU |
-| `flashcli doctor [--install]` | 环境 / GPU 预检 |
+| `flashcli doctor` | 环境 / GPU 预检 |
 | `flashcli bundle sync <ref>` | 从 FlashHub 预拉 bundle runtime |
-| `flashcli bundle validate PATH` | 布局与 native 矩阵校验 |
+| `flashcli bundle validate PATH` | 布局与 native 矩阵（含 ABI probe）校验 |
+| `flashcli bundle install PATH` | 创建 bundle venv 与推理依赖 |
+| `flashcli bundle clean [ref]` | 清理缓存 runtime（`--full` 含权重/bundle） |
+| `flashcli upgrade` | 从 release 资产自更新 Go 二进制 |
 
 **常用参数**：`--no-auto-install`、`--checkpoint`、`--quiet`  
 **Ref 语法**：FlashHub `flashcli-bundle/name:version[@variant]` 或本地 `bundles/name[@variant]`（目录须含 `flashcli-bundle.json`）。多 variant bundle 必须带 `@variant`。详见 [model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md)。
@@ -218,8 +225,8 @@ Qwen `serve` 要点：`--max-seq`、`--max-q-seq`（qwen3）、`--K`、`--max-ou
 ## 工作原理
 
 ```text
-主机：install.sh → ~/.flashcli/venv（flashcli 只装一次）
-  pull / run 预检 → 主机 Python（sync、权重、extra_weights、post_pull）
+主机：install.sh → PATH 上的 Go 二进制（无 Python 主机 venv）
+  pull / run 预检 → 主机 Go 进程（sync、权重、extra_weights、post_pull）
 
 run/serve：
   ref → FlashHub → manifest + preflight → runtime/<env-key>/
@@ -227,15 +234,18 @@ run/serve：
   → bundle venv（python_abi、torch…）
   → re-exec：bundle python -m flashcli_bundle.infer（HF hub 离线）
   → activate bundle → 本地 checkpoint → RunEngine / ServeEngine / script main
+
+原生 bundle（entry.kind native-exec / native-abi）跳过 Python re-exec：
+  主机改为 spawn 或 dlopen bundle 的原生 backend。
 ```
 
-**不要**在 bundle venv 里 pip 安装 flashcli。详见 [docs/architecture.zh-CN.md](docs/architecture.zh-CN.md#主机-cli-与-bundle-infer必读)。
+**不要**在 bundle venv 里 pip 安装 flashcli。详见 [docs/architecture.zh-CN.md](docs/architecture.zh-CN.md)。
 
 **本机缓存**
 
 | 路径 | 内容 |
 |------|------|
-| `~/.flashcli/venv/` | 主机 CLI（flashcli 唯一安装位置） |
+| `~/.flashcli/` | 主机数据根（marker、install.env） |
 | `~/.flashcli/runtimes/<id>/` | sync 后的 bundle 根（`runtime/<env-key>/`、entry 树）、bundle venv |
 | `~/.flashcli/models/<bundle>/<version>@<variant>/checkpoint/` | 模型权重 |
 | `~/.cache/flash_rt/` | Pi0.5 PaliGemma tokenizer |
