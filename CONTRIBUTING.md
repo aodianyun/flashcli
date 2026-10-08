@@ -59,9 +59,24 @@ pytest tests/ tests/bench/ # full suite including bench
 Rules:
 
 - Branch work off `dev`; open PRs **into `dev`**. `main` is updated from `dev` only after validation.
-- Sync `dev` → `main`:
-  - If `main` is an ancestor of `dev`: **fast-forward** (`git push origin dev:main`).
-  - If `main` has diverged (or a reviewable merge is preferred): merge `dev` into `main` with a **merge commit** (`git merge --no-ff dev`, or GitHub "Create a merge commit"), **preserving all `dev` commit messages**; `main` then gains exactly **one** commit (the merge commit). **Never squash `dev` into `main`.**
+- Sync `dev` → `main` (**squash-and-record**):
+
+  ```bash
+  # main: collapse dev into a single commit (keeps main linear)
+  git switch main && git pull origin main
+  git merge --squash dev
+  git commit -m "chore(sync): squash merge dev into main"
+  git push origin main
+
+  # dev: record the squash so future syncs don't replay changes / re-conflict
+  git switch dev
+  git merge -s ours main -m "chore: record squash merge from main (ours)"
+  git push origin dev
+  ```
+
+  - `main` gains exactly **one** commit per sync and stays linear; `dev` keeps its granular history.
+  - `dev` individual commit messages are **not** carried into `main` (they remain on `dev`) — this is the accepted trade-off of the squash flow.
+  - Always do the `-s ours` record step on `dev` after squashing; otherwise the next `main`→`dev` merge replays squashed changes and conflicts.
 - **Never rewrite pushed history** — no force-push to `main`/`dev`; fix forward with new commits.
 - Rebase your branch on `dev` before merging; resolve conflicts locally (do not merge `main` into a feature branch just to update it).
 
@@ -98,7 +113,8 @@ refactor(weights): share cache-key resolution between pull and run
 
 - PRs target `dev` and must pass `go test ./...`, `pytest tests/` (protocol/infer + conformance), and `gofmt -w .` clean.
 - Feature branch → `dev`: prefer **squash merge** (one logical commit) or **rebase** for a clean linear history; avoid merge-commit noise.
-- `dev` → `main`: **preserve history** — fast-forward when possible, else a **merge commit** (`--no-ff`) that carries all `dev` commits; `main` gains exactly one commit (the merge commit). Do **not** squash `dev` into `main`, and do not push directly to `main` for routine work.
+- `dev` → `main`: **squash-and-record** (see above) — `main` gets one linear squash commit per sync, and `dev` records it with `git merge -s ours main`. Do not `--no-ff` merge or rely on fast-forward, and do not push directly to `main` for routine work.
+- Squash commit summary: `chore(sync): squash merge dev into main` (or a concise `type(scope): …` describing the release).
 
 ### Releases
 
