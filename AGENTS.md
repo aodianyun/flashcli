@@ -59,7 +59,10 @@ Details: `docs/module_layers.md`, `docs/architecture.md`, `docs/bundle_execution
 
 ## Conventions
 - Code, shell, and JSON/YAML comments in **English**; user docs English with optional `*.zh-CN.md` mirrors — update the zh-CN copy when behavior docs change.
+- **Git**: `main` = stable/release (default), `dev` = integration/validation. Branch off `dev`, PR into `dev`; sync `dev` → `main` (fast-forward preferred) only after validation. **Never force-push `main`/`dev`; fix forward.**
+- **Commits**: Conventional Commits `type(scope): imperative summary` (`feat|fix|refactor|perf|docs|test|build|ci|chore`), **one logical change per commit**, no mixing code + unrelated docs. See `CONTRIBUTING.md` "Git workflow".
+- Do not commit secrets/tokens, `dist/`, `build/`, `.native-cache/`, `logs/`, weights, or FlashRT source.
 - `bundles/<name>/README.md` is user-facing (FlashHub); `BUILD.md` is maintainer-facing.
 - Do not commit FlashRT source into this repo; it is a sibling clone used only as build input.
 - Version is single-sourced from root `pyproject.toml [project].version`; `scripts/build_go.sh` injects it into the Go binary via `-ldflags`.
-- `build/` and `.native-cache/` are build artifacts (gitignored).
+- `build/`, `dist/`, and `.native-cache/` are build artifacts (gitignored).

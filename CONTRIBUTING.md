@@ -46,6 +46,63 @@ pytest tests/bench/        # bench script helpers (scripts/bench_*.py)
 pytest tests/ tests/bench/ # full suite including bench
 ```
 
+## Git workflow
+
+### Branches
+
+| Branch | Purpose |
+|--------|---------|
+| `main` | Stable / release branch (default). Only validated changes land here. |
+| `dev` | Integration + validation branch. Day-to-day work and testing land here; synced to `main` after validation. |
+| `feat/<topic>`, `fix/<topic>` | Short-lived work branches off `dev`; PR back into `dev`. |
+
+Rules:
+
+- Branch work off `dev`; open PRs **into `dev`**. `main` is updated from `dev` only after validation.
+- Sync `dev` → `main` as a **fast-forward** when possible (`git push origin dev:main`); otherwise via a reviewed merge PR.
+- **Never rewrite pushed history** — no force-push to `main`/`dev`; fix forward with new commits.
+- Rebase your branch on `dev` before merging; resolve conflicts locally (do not merge `main` into a feature branch just to update it).
+
+### Commit messages (Conventional Commits)
+
+```
+type(scope): imperative summary
+```
+
+- **type** ∈ `feat | fix | refactor | perf | docs | test | build | ci | chore`.
+- **scope** is optional but preferred: `host`, `install`, `weights`, `venv`, `manifest`, `native`, `cli`, `flashhub`, `bundle`, `docs`, `go`, `python`.
+- **summary**: imperative mood ("add", not "added"), ≤ ~72 chars, no trailing period.
+- **body** (optional): *why* + notable changes, wrapped at ~72 cols.
+- **breaking changes**: add a `BREAKING CHANGE:` footer describing the impact.
+- **issue refs**: add `Refs: #123` / `Closes: #123` in the footer.
+
+Rules:
+
+- **One logical change per commit.** Don't mix unrelated code, refactors, and docs. A pure docs change is `docs: …` (or `docs(scope): …`); a bug fix is `fix(…)` even when it also touches a doc.
+- Don't mix pure formatting/renames with behavior changes in one commit.
+- Don't commit secrets/tokens, `dist/`, `build/`, `.native-cache/`, `logs/`, model weights, or FlashRT source.
+- Keep subjects/bodies in **English** (see Language policy).
+
+Examples:
+
+```
+feat(install): add --branch alias for --ref (default main)
+fix(cuda): use host loader before pip-installing CUDA userland
+docs(environment): document only variables the Go host reads
+refactor(weights): share cache-key resolution between pull and run
+```
+
+### Merging
+
+- PRs target `dev` and must pass `go test ./...`, `pytest tests/` (protocol/infer + conformance), and `gofmt -w .` clean.
+- Prefer **squash merge** for a feature branch (one logical commit) or **rebase** for a clean linear history; avoid merge-commit noise.
+- After validation, sync `dev` → `main` (fast-forward preferred). Do not push directly to `main` for routine work.
+
+### Releases
+
+- **Host (Go)**: bump `[project].version` in `pyproject.toml`, commit (`chore(release): bump version to X`), tag `vX` on the release commit, then `bash scripts/release_go.sh --upload` (GitHub) and upload the same assets to Gitee.
+- **Bundles**: follow the maintainer checklist below and [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md).
+
 ## Pull request guidelines
 
 1. **Scope** — Keep changes in `flashcli/`. Do not commit FlashRT source changes inside flashcli PRs.
@@ -62,7 +119,7 @@ pytest tests/ tests/bench/ # full suite including bench
 4. **Preset refs** — Upload to [FlashHub](https://flashhub.top); document the ref in the bundle README (and BUILD for maintainers). No bundled catalog file.
 5. **Docs** — Update English docs when behavior or release workflow changes. Mirror important changes in `*.zh-CN.md` when applicable.
 6. **Comments** — New code comments and script headers in English.
-7. **Commits** — Clear, imperative subject lines; one logical change per commit when possible.
+7. **Commits** — Follow the [Git workflow](#git-workflow) section: Conventional Commits (`type(scope): imperative`), **one logical change per commit**, no pushed-history rewrites.
 
 ## Adding a new bundle / preset ref
 
