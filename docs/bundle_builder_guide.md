@@ -18,8 +18,8 @@ Format summary: [model_bundle_standard.md](model_bundle_standard.md) (preset ref
 
 | Role | Goal | Install |
 |------|------|---------|
-| **Bundle builder** | Edit `run.py` / manifest, compile FlashRT, publish | `pip install -e ./flashcli-bundle -e .` + FlashRT + Docker/GPU |
-| **End user** | `flashcli run <ref>` | `install.sh` / `auto_install.sh` (git: flashcli-bundle + flashcli) |
+| **Bundle builder** | Edit `run.py` / manifest, compile FlashRT, publish | `./install.sh --from-source` (Go host) + `pip install -e ./flashcli-bundle` + FlashRT + Docker/GPU |
+| **End user** | `flashcli run <ref>` | `install.sh` / `auto_install.sh` (Go binary; bundle venv gets `flashcli-bundle[infer]`) |
 
 Entry modules import **`flashcli_bundle` only** — not the full `flashcli` CLI package.
 
@@ -48,7 +48,8 @@ export PIP_TRUSTED_HOST=mirrors.aliyun.com
 ```bash
 git clone https://github.com/aodianyun/flashcli.git
 cd flashcli
-pip install -e ./flashcli-bundle -e .
+./install.sh --from-source          # install the Go host (release: curl install.sh | sh)
+pip install -e ./flashcli-bundle    # protocol (local dev/tests)
 flashcli doctor
 ```
 

@@ -10,8 +10,8 @@
 # Always writes ~/.flashcli/install.env for bundle venvs (flashcli-bundle[infer]).
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/dev/install.sh | sh
-#   curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/dev/install.sh | sh -s -- --mirror
+#   curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
+#   curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
 #   ./install.sh                       # release
 #   ./install.sh --from-source --ref dev
 #   ./install.sh --version 1.2.3 --dir /usr/local/bin
@@ -24,7 +24,7 @@ set -eu
 REPO_GITHUB="https://github.com/aodianyun/flashcli.git"
 REPO_GITEE="https://gitee.com/aodiansoft/flashcli.git"
 REPO="${FLASHCLI_INSTALL_REPO:-$REPO_GITHUB}"
-REF="${FLASHCLI_INSTALL_REF:-dev}"
+REF="${FLASHCLI_INSTALL_REF:-main}"
 VERSION="${FLASHCLI_GO_VERSION:-}"
 SOURCE_DIR="${FLASHCLI_SOURCE_DIR:-}"
 CLONE_DIR="${FLASHCLI_CLONE_DIR:-/opt/flashcli}"

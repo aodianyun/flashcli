@@ -2,199 +2,156 @@
 
 <p align="right"><strong>English</strong> · <a href="environment.zh-CN.md">简体中文</a></p>
 
-flashcli uses environment variables for cache locations, preset refs, download behavior, and Hugging Face / preset-specific integration. Variables not listed here have **no effect** on flashcli.
-
-Boolean flags: `1`, `true`, or `yes` (case-insensitive) enable the switch.
+flashcli (the Go host) reads these variables for cache locations, FlashHub, GPU/native
+preflight, weight downloads, the bundle venv, and serve. Anything not listed here has
+**no effect**. Boolean flags: `1`, `true`, `yes`, `on` (case-insensitive).
 
 ## Paths and FlashHub
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FLASHCLI_HOME` | `~/.flashcli` | Cache root. Default subdirs: `runtimes/`, `models/`, `bundles/`, `cache/`. |
-| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | Preset marker cache (`<bundle>/<version>@<variant>/.flashcli_bundle.json`). |
-| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | Hugging Face weights (`<dir>/<bundle>/<version>@<variant>/checkpoint/`). |
-| `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | **Single** FlashHub API base for bundle short refs, `python-standalone` auto-install, etc. Browse bundles at [flashhub.top](https://flashhub.top) (API host is not yet on that domain). |
+| `FLASHCLI_HOME` | `~/.flashcli` | Data root (`runtimes/`, `models/`, `bundles/`, `cache/`, `install.env`). |
+| `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | Bundle venv + `.runtime.json` markers. |
+| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | Synced bundle tree + `.flashcli_bundle.json` markers. |
+| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | Weights cache (`<dir>/<bundle>/<version>[@<variant>]/checkpoint/`). |
+| `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | FlashHub API base for bundle refs and python-standalone. Browse at [flashhub.top](https://flashhub.top). |
 
-Example:
-
-```bash
-export FLASHCLI_HOME=/data/flashcli
-export FLASHCLI_FLASHHUB_API=https://flashhub-api.aodianyun.com/api/v1/repos
-flashcli run flashcli-bundle/pi05_libero:1.0.4
-flashcli models list
-```
-
-## GPU / CUDA and native libraries
+## GPU / native preflight
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FLASHCLI_CUDA_TAG` | (auto-detect) | Override detected CUDA userland tag (`124` / `128` / `130`) used to pick native `.so` under `runtime/<env-key>/`. |
-| (automatic) | — | If `nvcc` is missing, flashcli infers from `nvidia-smi` banner (`CUDA Version: 13.0` → `130`); SM89 no longer hard-defaults to `124`. |
-| `FLASHCLI_SKIP_CUDA_USERLAND` | `0` | Set `1` to skip probing/auto-installing `libcublas`/`libcudart` during `pull`/`activate`. |
-| `FLASHCLI_SKIP_NATIVE_HOST_ABI` | `0` | Set `1` to skip host glibc/libstdc++ checks derived from the selected `.so` (GLIBC_/GLIBCXX_). |
+| `FLASHCLI_CUDA_TAG` | auto | Override detected CUDA tag (`124`/`128`/`130`) for env-key matching and torch index. |
+| `FLASHCLI_RUNTIME_ENV_KEY` | auto | Force the `runtime/<env-key>/` cell (e.g. `sm120-cu130-linux-x86_64-py312`). |
+| `FLASHCLI_TORCH_INDEX` | auto | Override torch wheel index name (`cu124`/`cu128`). |
+| `FLASHCLI_SKIP_CUDA_USERLAND` | `0` | Skip `libcublas`/`libcudart` probing/install (host CUDA userland). |
+| `FLASHCLI_SKIP_NATIVE_HOST_ABI` | `0` | Skip host glibc/libstdc++ (`GLIBC_`/`GLIBCXX_`) gate against the selected `.so`. |
+| `FLASHCLI_SKIP_PREFLIGHT` | `0` | Skip env-key + native cell + host ABI + CUDA preflight (debug only). |
 
-`flashcli pull` / `run` check for `libcublas.so.12`/`.13` matching the selected `cu124`/`cu130` cell; if missing, install `nvidia-cublas` / `nvidia-cuda-runtime` into the **bundle venv** and prepend `LD_LIBRARY_PATH`. `nvidia-smi` CUDA Version is driver capability only. If only `.so.12` is missing on a CUDA 13 host, you can also set `export FLASHCLI_CUDA_TAG=130`.
+`run`/`serve`/`pull`/`bundle sync` match the host GPU against manifest `runtime` keys, verify the
+selected cell has tagged `.so`, check host glibc/libstdc++, and ensure CUDA userland
+(`libcublas`/`libcudart`) — using the host loader when already present, else `pip install` the
+matching `nvidia-*` wheels into the bundle venv.
 
-`pull` also reads `GLIBC_*` / `GLIBCXX_*` needs from the **selected** `runtime/<env-key>/*.so` via `readelf`/`objdump`, compares them to the host, and probes load — hard-failing when the host is too old (no `flashcli-bundle.json` config). Fix by upgrading libstdc++ or using a newer GPU container.
+## Weight downloads
 
-## Downloads and Hugging Face
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `HF_ENDPOINT` | (official Hub) | Hub endpoint override. Mirror example: `https://hf-mirror.com`. When set, flashcli uses only that endpoint. |
-| (automatic) | — | If `HF_ENDPOINT` is **not** set, flashcli tries official Hub first, then mirror (internally via `hf download`). |
-| `FLASHCLI_PREFER_HF_MIRROR` | `0` | When `1`, try mirror before official Hub. |
-| `HF_TOKEN` | (none) | Hugging Face token for gated repos (`hf auth login` or this variable). |
-| `HF_HUB_ETAG_TIMEOUT` | `30` | Hub CLI metadata/HEAD timeout (seconds); flashcli default 30 if unset. |
-| `HF_HUB_DOWNLOAD_TIMEOUT` | `300` | Hub CLI per-request timeout (seconds); flashcli default 300 if unset. |
-| `FLASHCLI_HF_ETAG_TIMEOUT` | `30` | Used only when `HF_HUB_ETAG_TIMEOUT` is unset. |
-| `FLASHCLI_HF_DOWNLOAD_TIMEOUT` | `300` | Used only when `HF_HUB_DOWNLOAD_TIMEOUT` is unset. |
-| `FLASHCLI_HF_DOWNLOAD_RETRIES` | `3` | Retries per endpoint on transient failures (resume partial downloads). |
-| `FLASHCLI_HF_RETRY_DELAY` | `5` | Base delay (seconds) between retries; grows linearly up to 60s. |
-| `FLASHCLI_HF_MAX_WORKERS` | (Hub default) | Pass `--max-workers` to `hf download` (e.g. `1` on flaky networks). |
-| `FLASHCLI_HF_PROBE_TIMEOUT` | `3` | Timeout (seconds) for probing official Hub reachability before fallback. |
-| `FLASHCLI_SKIP_HF_PROBE` | `0` | When `1`, skip probe and still try official first (may be slower under blocked networks). |
-| `FLASHCLI_DISABLE_XET` | (unset) | When not `0`/`false`, mirror downloads set `HF_HUB_DISABLE_XET=1` (avoids xet on hf-mirror.com). |
-| `FLASHCLI_HF_VERBOSE` | `0` | When `1`, print Hub CLI download commands and progress details. |
-
-Weight download behavior matches `hf download`; on failures, test the same `HF_ENDPOINT` manually with Hub CLI.
-
-## ModelScope
-
-When `weights.source` / `extra_weights.source` is `"modelscope"`, the host CLI pulls via the ModelScope SDK (`repo` is the ModelScope model id).
+Hugging Face:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MODELSCOPE_ENDPOINT` | (official) | Custom ModelScope API endpoint; manifest `weights.endpoint` overrides. |
-| `MODELSCOPE_API_TOKEN` | (none) | ModelScope token for gated models. |
-| `FLASHCLI_MS_DOWNLOAD_RETRIES` | `3` | ModelScope download retries. |
+| `HF_ENDPOINT` | official Hub | Hub endpoint (e.g. `https://hf-mirror.com`). When set, only this endpoint is used. |
+| `HF_TOKEN` / `HUGGING_FACE_HUB_TOKEN` | none | Token for gated repos. |
+| `FLASHCLI_PREFER_HF_MIRROR` | `0` | Try `hf-mirror.com` before official Hub. |
+| `FLASHCLI_NO_MIRROR` | `0` | Disable mirror fallback. |
+| `FLASHCLI_SKIP_HF_PROBE` | `0` | Try official Hub without the short reachability probe. |
+| `FLASHCLI_HF_DOWNLOAD_RETRIES` | `3` | Retries per endpoint (resumes partial files). |
+| `FLASHCLI_HF_RETRY_DELAY` | `5` | Base delay (s) between retries (capped at 60s). |
 
-Weight download runs in the **Go host** (native HTTP clients); `modelscope`/`huggingface_hub` are not host dependencies.
-
-`install.sh` installs the static Go binary (default: release assets; `--from-source` builds with Go; no Python host). `flashcli-bundle` is installed into **bundle venvs** as `flashcli-bundle[infer]` (source: `FLASHCLI_BUNDLE_PIP_SPEC` / local `flashcli-bundle/` / `~/.flashcli/install.env` `FLASHCLI_INSTALL_REPO`+`REF`).
-
-## Behavior switches
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `FLASHCLI_SKIP_AUTO_INSTALL` | `0` | When `1`, `flashcli run` / `serve` / `pull` do **not** auto pip-install flashcli CLI deps (typer, huggingface_hub, …). Same as `--no-auto-install`. |
-| `FLASHCLI_USE_MIRROR` | `0` | When `1` or `~/.flashcli/mirror.env` exists: probed China PyPI mirror (from `install.sh --mirror`), Aliyun PyTorch wheels, `hf-mirror.com`, and GitHub release proxy for bundle Python downloads. |
-| `FLASHCLI_PIP_MIRROR` | (none) | Pin PyPI mirror: `tuna`, `aliyun`, `tencent`, `ustc`, `huawei` (skips probe). Same as `install.sh --pip-mirror`. |
-| `FLASHCLI_PIP_MIRROR_PROBE` | `0` | Default: **Tsinghua (tuna)** without probing. Set `1` or use `install.sh --mirror --pip-probe` to benchmark mirrors (5 MiB sample). |
-| `FLASHCLI_PIP_MIRROR_PROBE_TIMEOUT` | `30` | Per-mirror probe timeout (seconds). |
-| `FLASHCLI_PIP_MIRROR_PROBE_SAMPLE_BYTES` | `5242880` | Bytes downloaded per mirror during probe (HTTP Range). |
-| `FLASHCLI_PIP_MIRROR_PROBE_PACKAGE` | `numpy` | PEP 503 package used for large-wheel throughput probe. |
-| `FLASHCLI_NO_MIRROR` | `0` | When `1`, ignore mirror mode even if `mirror.env` exists. |
-| `FLASHCLI_GIT_PROXY` | (mirror default) | GitHub HTTPS proxy for release downloads (e.g. `https://mirror.ghproxy.com/`). `--mirror` sets this; `0` disables. |
-| `FLASHCLI_PREFER_GITHUB_MIRROR` | `0` | When `1`, try GitHub proxy before direct GitHub (also default when mirror mode is on). |
-| `FLASHCLI_AUTO_INSTALL_BUNDLE_PYTHON` | `1` | When `1`, if the bundle’s `python_abi` (e.g. 3.12) is missing, download **python-build-standalone** into `$FLASHCLI_HOME/python/` and use it for the bundle venv. Uses GitHub mirror when mirror mode is on. Does **not** modify system `/usr/bin/python3`. Set `0` to disable. |
-| `FLASHCLI_PYTHON_ROOT` | `$FLASHCLI_HOME/python` | Standalone Python install prefix (bundle runtime). Matrix builds may use `/opt/flashcli-python` when set explicitly. |
-| `FLASHCLI_PYTHON_ENV` | `$FLASHCLI_HOME/python-runtime.env` | Env file written with `FLASHCLI_PY312_BIN=…` after auto-install (sourced on next resolve). |
-| `FLASHCLI_PY312_BIN` | (auto) | Override path to Python 3.12 for bundle venv / native ABI probes. Also `FLASHCLI_PY310_BIN`, `FLASHCLI_PY311_BIN`, … |
-| `FLASHCLI_PYTHON_STANDALONE_TAG` | `20260602` | Upstream python-build-standalone release tag (GitHub fallback). |
-| `FLASHCLI_PYTHON_REPO` | (derived from `FLASHCLI_FLASHHUB_API`) | Override full standalone-Python repo URL (default `{FLASHCLI_FLASHHUB_API}/flashcli-bundle/python-standalone:1.0.0`). Set `0` to skip FlashHub and use GitHub fallback only. |
-| `FLASHCLI_PYTHON_STANDALONE_VERSION` | `1.0.0` | python-standalone repo version when `FLASHCLI_PYTHON_REPO` is unset. |
-| `FLASHCLI_PYTHON_STANDALONE_MANIFEST` | (none) | Local manifest path (fallback before GitHub when FlashHub fails). |
-| `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | Bundle runtime cache (bundle root, `runtime/`, venv). |
-| `FLASHCLI_IN_BUNDLE_VENV` | (internal) | `1` when the infer subprocess is running inside the bundle venv. |
-| (infer re-exec) | bundle venv | Bundle venv pip-installs **`flashcli-bundle[infer]`** and runs `python -m flashcli_bundle.infer`. Does **not** load host `flashcli` or `huggingface_hub`. |
-| `FLASHCLI_RUNTIME_ID` | (internal) | Active runtime identifier. |
-| `FLASHCLI_BUNDLE_ROOT` | (internal) | Active bundle root directory. |
-
-Bundle Python deps (torch, etc.) are installed by `activate_bundle` from `flashcli-bundle.json` → `python_dependencies`; independent of `FLASHCLI_SKIP_AUTO_INSTALL`.
-
-## Dependency layers (pip)
-
-| Layer | Where installed | Package / source | Purpose |
-|-------|-----------------|------------------|---------|
-| Host CLI | PATH | Go binary (`go/`, `install.sh`) | sync/pull, weights, preflight, backends |
-| Protocol | Build/CLI + bundle venv | `flashcli-bundle` (`dependencies = []`) | manifest, options, native validation |
-| Infer runtime | Bundle venv | `flashcli-bundle[infer]` | `python -m flashcli_bundle.infer`, fastapi/uvicorn |
-| Model stack | Bundle venv | `flashcli-bundle.json` → `python_dependencies` | torch, transformers, … |
-
-The Go host never imports Python infer code. Bundle venv **must not** `pip install flashcli`.
-
-## Host CLI vs bundle infer
-
-See [architecture.md](architecture.md#host-cli-vs-bundle-infer-important). Do **not** `pip install flashcli` into bundle venvs.
-
-## Model / preset related
+ModelScope:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FLASH_RT_PALIGEMMA_TOKENIZER` | (auto-download) | **Engine mode:** PaliGemma tokenizer file path from Pi0.5 `post_pull`. |
-| `FLASHRT_QWEN36_MTP_CKPT_DIR` | (manifest / CLI) | **Engine mode:** Qwen3.6 MTP weights; from manifest `env` or `--mtp-checkpoint`. |
+| `MODELSCOPE_ENDPOINT` | official | ModelScope API endpoint (manifest `weights.endpoint` overrides). |
+| `MODELSCOPE_API_TOKEN` | none | Token for gated models. |
+| `FLASHCLI_MS_DOWNLOAD_RETRIES` | `3` | Download retries. |
 
-Top-level / variant **`env:`** in `flashcli-bundle.json` is applied only for **engine mode** entries (see **Bundle entry environment variables** below). Script mode uses platform `FLASHCLI_*` variables with resolved absolute paths instead.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FLASHCLI_SKIP_WEIGHTS` | `0` | Skip weight download/ensure (debug; requires a cached checkpoint). |
+
+## Bundle venv and Python
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FLASHCLI_BUNDLE_PIP_SPEC` | — | Pip spec for `flashcli-bundle[infer]` installed into bundle venvs (e.g. a local `…/flashcli-bundle[infer]`). Highest precedence. |
+| `FLASHCLI_INSTALL_REPO` / `FLASHCLI_INSTALL_REF` | from `~/.flashcli/install.env` | Git source for `flashcli-bundle[infer]` when no local checkout/spec is set. |
+| `FLASHCLI_BASE_PYTHON` | auto | Base interpreter for the bundle venv. |
+| `FLASHCLI_PY<abi>_BIN` | auto | Pin the interpreter for a `python_abi` (e.g. `FLASHCLI_PY312_BIN`, `FLASHCLI_PY310_BIN`). |
+| `FLASHCLI_FORCE_VENV` | `0` | Rebuild the bundle venv. |
+| `FLASHCLI_SKIP_VENV_SETUP` | `0` | Skip venv creation/pip (debug; use an existing venv). |
+| `PIP_INDEX_URL` / `PIP_TRUSTED_HOST` | — | pip index used when installing into bundle venvs (torch/deps). |
+
+Standalone Python provisioning (when the bundle `python_abi` is missing):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FLASHCLI_AUTO_INSTALL_BUNDLE_PYTHON` | `1` | Auto-install python-build-standalone into `$FLASHCLI_HOME/python/`. `0` disables. |
+| `FLASHCLI_PYTHON_ROOT` | `$FLASHCLI_HOME/python` | Standalone Python prefix. |
+| `FLASHCLI_PYTHON_ENV` | `$FLASHCLI_HOME/python-runtime.env` | Env file written with `FLASHCLI_PY<abi>_BIN=…`. |
+| `FLASHCLI_PYTHON_REPO` | `{FLASHCLI_FLASHHUB_API}/flashcli-bundle/python-standalone:1.0.0` | python-standalone repo URL. |
+| `FLASHCLI_PYTHON_STANDALONE_URL` | — | Direct tarball URL (overrides manifest resolution). |
+| `FLASHCLI_PYTHON_STANDALONE_MANIFEST` | — | Local `python-standalone.json` path. |
+| `FLASHCLI_PYTHON_STANDALONE_TAG` | `20260602` | python-build-standalone tag. |
+
+## Behavior and upgrade
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FLASHCLI_QUIET` | `0` | Less output from `run`/`serve`/`pull`/`sync`. |
+| `FLASHCLI_GO_RELEASE_BASE` / `FLASHCLI_GO_RELEASE_API` | GitHub releases | Override for `flashcli upgrade` (e.g. Gitee). |
+
+The pip mirror for bundle venvs is `PIP_INDEX_URL` (there is no `--pip-mirror` flag anymore).
+For CN networks: `export PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/`,
+`export HF_ENDPOINT=https://hf-mirror.com`.
 
 ## Bundle entry environment variables (engine / script)
 
-Injected in the **bundle venv infer process** before `RunEngine` / `ServeEngine` or script `main(argv)`. Third-party entries should rely only on names listed here; other `FLASHCLI_*` values (e.g. `FLASHCLI_RUNTIME_ID`) are internal and **not a stable API**.
+Injected in the **bundle venv infer process** before the entry runs. Third-party entries should
+rely only on the names below; other `FLASHCLI_*` values are internal.
 
 ### Script mode (`entry.*.mode: "script"`)
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `FLASHCLI_CHECKPOINT` | yes | **Main weights** directory (absolute path, validated). |
-| `FLASHCLI_BUNDLE_ROOT` | yes | Bundle root (absolute path). |
-| `FLASHCLI_PRESET` | yes | Preset ref string (same as CLI positional ref). |
-| `FLASHCLI_VARIANT` | no | Set when ref includes `@variant`. |
-| `FLASHCLI_EXTRA_WEIGHT_<KEY>` | no | One per manifest `extra_weights` key; `<KEY>` is uppercased manifest key (non-alphanumeric → `_`). Example: `mtp_fp8` → `FLASHCLI_EXTRA_WEIGHT_MTP_FP8`. |
-
-Script entries should **not** depend on `{models_dir}` placeholders or global cache layout.
+| `FLASHCLI_CHECKPOINT` | yes | Main weights directory (absolute, validated). |
+| `FLASHCLI_BUNDLE_ROOT` | yes | Bundle root (absolute). |
+| `FLASHCLI_PRESET` | yes | Preset ref string. |
+| `FLASHCLI_VARIANT` | no | Set when the ref includes `@variant`. |
+| `FLASHCLI_EXTRA_WEIGHT_<KEY>` | no | One per manifest `extra_weights` key (uppercased; non-alphanumeric → `_`). |
 
 ### Engine mode (default)
 
 | Source | Description |
 |--------|-------------|
-| manifest **`env`** / variant **`env`** | Applied before entry runs; `{bundle_root}`, `{models_dir}` placeholders. |
+| manifest **`env`** / variant **`env`** | Applied before the entry; `{bundle_root}`, `{models_dir}` placeholders are expanded. |
 | **`post_pull`** | e.g. `FLASH_RT_PALIGEMMA_TOKENIZER`. |
-| **`--mtp-checkpoint`** | Overrides `FLASHRT_QWEN36_MTP_CKPT_DIR` (engine host/infer only). |
+| **`--mtp-checkpoint`** | Sets `FLASHRT_QWEN36_MTP_CKPT_DIR`. |
 
-Engine mode does **not** set `FLASHCLI_CHECKPOINT` (weights passed to `RunEngine.load(...)`).
-
-### Internal (do not use in entry code)
-
-| Variable | Description |
-|----------|-------------|
-| `FLASHCLI_RUNTIME_ID` | Runtime matrix key at re-exec. |
-| `FLASHCLI_IN_BUNDLE_VENV` | `1` in infer subprocess. |
-| `FLASHCLI_BUNDLE_ROOT` (at re-exec) | Internal manifest resolve; script entry injection sets the documented value. |
-| `VIRTUAL_ENV` | Bundle venv (Python standard). |
+Engine mode does **not** set `FLASHCLI_CHECKPOINT` (weights are passed to `RunEngine.load(...)`).
 
 ## Infer / serve (bundle venv)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HF_HUB_OFFLINE` | `1` (set by flashcli) | Blocks Hugging Face Hub network access during bundle inference. Weights and `extra_weights` must be prepared by `flashcli pull` or host preflight in `run`/`serve`. |
-| `TRANSFORMERS_OFFLINE` | `1` (set by flashcli) | Same for `transformers` / `AutoTokenizer` — fails fast if local tokenizer files are incomplete. |
-| `HF_DATASETS_OFFLINE` | `1` (set by flashcli) | Blocks datasets hub access in the infer subprocess. |
+| `HF_HUB_OFFLINE` | `1` (set by host) | Blocks Hub network access during inference. |
+| `TRANSFORMERS_OFFLINE` | `1` (set by host) | Same for `transformers`. |
+| `HF_DATASETS_OFFLINE` | `1` (set by host) | Same for `datasets`. |
 | `FLASHCLI_SERVE_LOG_LEVEL` | `INFO` | Application log level for `flashcli serve`. |
-| `FLASHCLI_UVICORN_LOG_LEVEL` | `info` | Uvicorn access/error log level. |
-| `FLASHCLI_SERVE_BUSY_TIMEOUT_SEC` | `0` | Max seconds to wait when the engine is busy (`0` = no limit). |
+| `FLASHCLI_UVICORN_LOG_LEVEL` | `info` | Uvicorn access/error level. |
+| `FLASHCLI_SERVE_BUSY_TIMEOUT_SEC` | `0` | Max wait when the engine is busy (`0` = no limit). |
 
-## Development and debugging
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `FLASHCLI_DEBUG` | (unset) | When set, print full tracebacks for CLI errors. |
-| `FLASHCLI_INSTALL_REPO` / `FLASHCLI_INSTALL_REF` | (from `install.env`) | Git source for `flashcli-bundle` when installing into bundle venvs. |
-| `FLASHCLI_REFRESH_RELEASE_CACHE` | (unset) | When `1`, refresh cached python-build-standalone GitHub release JSON. |
-| `FLASHCLI_PYTHON_RELEASE_CACHE` | `~/.flashcli/python/.cache` | Cache dir for standalone Python release index JSON. |
-| `GITHUB_TOKEN` / `GH_TOKEN` | (none) | Optional token for GitHub API when fetching python-build-standalone releases. |
-| `FLASHRT_REPO_ROOT` | (auto-detect) | FlashRT source repo root. Fallback when resolving `python_dependencies` from FlashRT `pyproject.toml` (`runtime/requirements_spec.py`). Useful in a FlashRT + flashcli monorepo. |
-
-## Set by flashcli at runtime (internal)
-
-Not part of the bundle entry stable API (see **Bundle entry environment variables** above):
+## Internal (do not rely on in entry code)
 
 | Variable | Description |
 |----------|-------------|
-| `PYTHONPATH` | **Activate:** bundle root on `sys.path` for `entry` / `flash_rt`. **Re-exec:** host `PYTHONPATH` cleared. |
+| `FLASHCLI_RUNTIME_ID` | Runtime id at re-exec. |
+| `FLASHCLI_IN_BUNDLE_VENV` | `1` in the infer subprocess. |
+| `FLASHCLI_BUNDLE_ROOT` | Bundle root at re-exec. |
+| `VIRTUAL_ENV` | Bundle venv (Python standard). |
+| `LD_LIBRARY_PATH` | Extended with the venv nvidia lib dirs (`cuda`) |
+
+## Dependency layers (pip)
+
+| Layer | Where installed | Package / source |
+|-------|-----------------|------------------|
+| Host CLI | PATH | Go binary (`go/`, `install.sh`) |
+| Protocol | build/dev + bundle venv | `flashcli-bundle` (`dependencies = []`) |
+| Infer runtime | bundle venv | `flashcli-bundle[infer]` |
+| Model stack | bundle venv | `flashcli-bundle.json` → `python_dependencies` |
+
+The Go host never imports Python infer code. Bundle venv **must not** `pip install flashcli`.
 
 ## Related docs
 
 - [README.md](../README.md) — quick start and cache layout
 - [architecture.md](architecture.md) — host / protocol / infer flow
-- [module_layers.md](module_layers.md) — module placement rules
-- [model_bundle_standard.md](model_bundle_standard.md) — preset ref and runtime flow
+- [bundle_execution_abi.md](bundle_execution_abi.md) — execution backends (`entry.kind`)

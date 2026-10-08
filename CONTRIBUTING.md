@@ -31,12 +31,11 @@ flashcli **distributes and loads** Model Bundles; inference lives in bundle `ent
 
 ```bash
 cd flashcli
-pip install -e "./flashcli-bundle"   # protocol (host CLI)
-pip install -e ".[dev]"            # flashcli host CLI
+./install.sh --from-source          # build+install the Go host (or: bash scripts/build_go.sh)
+pip install -e "./flashcli-bundle"   # protocol (for pytest)
 # To run infer module tests locally:
 pip install -e "./flashcli-bundle[infer]"
 flashcli doctor
-flashcli models list
 ```
 
 Run tests:
@@ -55,10 +54,10 @@ pytest tests/ tests/bench/ # full suite including bench
 
    | Allowed in bundle venv | Host only (never bundle venv) |
    |--------------------------|-----------------------------------------------------------|
-   | ``flashcli-bundle[infer]`` | ``flashcli`` CLI package (pip) |
-   | ``python_dependencies`` from manifest (torch, transformers, …) | ``huggingface_hub`` (weight pull) |
+   | ``flashcli-bundle[infer]`` | ``flashcli`` (Go binary — never pip) |
+   | ``python_dependencies`` from manifest (torch, transformers, …) | weight download / Hub clients (Go) |
 
-   Bundle re-exec runs ``python -m flashcli_bundle.infer`` inside the bundle venv. Tests: ``test_reexec_argv.py``, ``test_flashcli_bundle_infer.py``. **Do not** prepend host ``site-packages`` or pip-install ``flashcli`` into bundle venvs.
+   Bundle re-exec runs ``python -m flashcli_bundle.infer`` inside the bundle venv. Tests: ``tests/conformance/``. **Do not** prepend host ``site-packages`` or pip-install ``flashcli`` into bundle venvs.
 
 4. **Preset refs** — Upload to [FlashHub](https://flashhub.top); document the ref in the bundle README (and BUILD for maintainers). No bundled catalog file.
 5. **Docs** — Update English docs when behavior or release workflow changes. Mirror important changes in `*.zh-CN.md` when applicable.

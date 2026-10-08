@@ -17,7 +17,7 @@
 
 set -eu
 
-REF="${FLASHCLI_INSTALL_REF:-dev}"
+REF="${FLASHCLI_INSTALL_REF:-main}"
 GITHUB_INSTALL="https://raw.githubusercontent.com/aodianyun/flashcli/${REF}/install.sh"
 GITEE_INSTALL="https://gitee.com/aodiansoft/flashcli/raw/${REF}/install.sh"
 PROBE_TIMEOUT="${FLASHCLI_PROBE_TIMEOUT:-8}"

@@ -6,27 +6,22 @@ Minimal Python package for **Model Bundle** authors and runtime entry modules (`
 
 ## Install
 
-**End users** — `install.sh` installs `flashcli-bundle` on the host and `flashcli-bundle[infer]` in bundle venvs:
+The **host** is a static Go binary (`flashcli`); this package is only for bundle
+venvs and bundle authors.
+
+**End users** — install the host with `install.sh`; bundle venvs receive
+`flashcli-bundle[infer]` on demand:
 
 ```bash
-curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
-# mirror: ... | sh -s -- --mirror
-```
-
-Manual equivalent (host CLI venv only — **do not** install these into bundle venvs):
-
-```bash
-pip install "flashcli-bundle @ git+https://github.com/aodianyun/flashcli.git@main#subdirectory=flashcli-bundle"
-pip install --no-deps "flashcli @ git+https://github.com/aodianyun/flashcli.git@main"
-# flashcli pulls host deps (typer, huggingface_hub, …) via install.sh / deps.ensure_flashcli_core_stack
+curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
+# mirror: curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
 ```
 
 **Bundle authors / monorepo dev:**
 
 ```bash
-# host CLI + protocol (build, validate, pull, run from repo)
-pip install -e "./flashcli-bundle"
-pip install -e ".[dev]"
+./install.sh --from-source          # build+install the Go host (or: bash scripts/build_go.sh)
+pip install -e "./flashcli-bundle"   # protocol (build, validate, tests)
 # optional: infer subprocess tests
 pip install -e "./flashcli-bundle[infer]"
 ```
@@ -37,7 +32,8 @@ pip install -e "./flashcli-bundle[infer]"
 pip install "flashcli-bundle[infer] @ git+https://github.com/aodianyun/flashcli.git@main#subdirectory=flashcli-bundle"
 ```
 
-Bundle venvs pip-install `flashcli-bundle[infer]` via `ensure_flashcli_bundle_in_venv()` (see `~/.flashcli/install.env` for git source).
+Bundle venvs resolve `flashcli-bundle[infer]` from `FLASHCLI_BUNDLE_PIP_SPEC`, a local
+`flashcli-bundle/` checkout, or `~/.flashcli/install.env` (`FLASHCLI_INSTALL_REPO` + `FLASHCLI_INSTALL_REF`).
 
 ## Usage in bundle entry code
 

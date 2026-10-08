@@ -4,10 +4,10 @@
 
 **Production CLI for shipping [FlashRT](https://github.com/flashrt-project/FlashRT) inference.**
 
-One install, one preset name — flashcli resolves the right native runtime for your GPU, fetches a versioned **Model Bundle**, installs Python dependencies, caches Hugging Face weights, and runs **`run`** (engine) or **`serve`** (OpenAI-compatible HTTP) without hand-wiring FlashRT, CUDA tags, or pip matrices.
+One install, one preset name — flashcli resolves the right native runtime for your GPU, fetches a versioned **Model Bundle**, installs its Python dependencies, caches weights, and runs **`run`** (inference) or **`serve`** (OpenAI-compatible HTTP) without hand-wiring FlashRT, CUDA tags, or pip matrices.
 
 ```bash
-curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
 flashcli run flashcli-bundle/pi05_libero:1.0.4
 ```
 
@@ -79,8 +79,8 @@ Full history: `git log`.
 **One-click (recommended)**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/dev/install.sh | sh
-# CN mirror: curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/dev/install.sh | sh -s -- --mirror
+curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
+# CN mirror: curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
 ```
 
 `install.sh` installs the `flashcli` binary: by default it downloads

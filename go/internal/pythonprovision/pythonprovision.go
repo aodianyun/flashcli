@@ -81,7 +81,7 @@ func LoadEnvFile() {
 
 // Enabled reports whether auto-install is allowed.
 func Enabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("FLASHCLi_AUTO_INSTALL_BUNDLE_PYTHON"))) {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("FLASHCLI_AUTO_INSTALL_BUNDLE_PYTHON"))) {
 	case "0", "false", "no", "off":
 		return false
 	}

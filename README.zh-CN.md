@@ -4,10 +4,10 @@
 
 **用于分发与运行 [FlashRT](https://github.com/flashrt-project/FlashRT) 推理的生产级 CLI。**
 
-安装一次、记住 preset 名称即可：flashcli 按 GPU 解析原生 runtime、拉取版本化 **Model Bundle**、安装 Python 依赖、缓存 Hugging Face 权重，并执行 **`run`**（引擎推理）或 **`serve`**（OpenAI 兼容 HTTP），无需手工拼接 FlashRT、CUDA 线与 pip 矩阵。
+安装一次、记住 preset 名称即可：flashcli 按 GPU 解析原生 runtime、拉取版本化 **Model Bundle**、安装其 Python 依赖、缓存权重，并执行 **`run`**（推理）或 **`serve`**（OpenAI 兼容 HTTP），无需手工拼接 FlashRT、CUDA 线与 pip 矩阵。
 
 ```bash
-curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
 flashcli run flashcli-bundle/pi05_libero:1.0.4
 ```
 
@@ -81,8 +81,8 @@ Qwen3 与 Qwen3.6 **共用** 同一 FlashHub repo；ref 中 `@qwen3` / `@qwen36`
 **一键（推荐）**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/dev/install.sh | sh
-# 国内镜像：curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/dev/install.sh | sh -s -- --mirror
+curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
+# 国内镜像：curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
 ```
 
 `install.sh` 安装 `flashcli` 二进制：默认从最新 release 下载
