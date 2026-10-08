@@ -190,33 +190,37 @@ install_source() {
 install_release() {
   ensure_download_tool
   ensure_sha256_tool
-  base=""; api=""
+  GH_B="https://github.com/aodianyun/flashcli/releases/download"
+  GH_A="https://api.github.com/repos/aodianyun/flashcli/releases/latest"
+  GE_B="https://gitee.com/aodiansoft/flashcli/releases/download"
+  GE_A="https://gitee.com/api/v5/repos/aodiansoft/flashcli/releases/latest"
   case "$REPO" in
-    *gitee*) base="https://gitee.com/aodiansoft/flashcli/releases/download"; api="https://gitee.com/api/v5/repos/aodiansoft/flashcli/releases/latest" ;;
-    *)       base="https://github.com/aodianyun/flashcli/releases/download"; api="https://api.github.com/repos/aodianyun/flashcli/releases/latest" ;;
+    *gitee*) FIRST_B="$GE_B"; FIRST_A="$GE_A"; SECOND_B="$GH_B"; SECOND_A="$GH_A" ;;
+    *)       FIRST_B="$GH_B"; FIRST_A="$GH_A"; SECOND_B="$GE_B"; SECOND_A="$GE_A" ;;
   esac
-  if [ -z "$VERSION" ]; then
-    tmpj="$(mktemp)"
-    if ! fetch "$api" "$tmpj" 2>/dev/null; then
-      rm -f "$tmpj"
-      die "no release found (and no --version). Build from source instead: $0 --from-source"
-    fi
-    VERSION="$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' "$tmpj" | head -1)"
-    rm -f "$tmpj"
-  fi
-  [ -n "$VERSION" ] || die "could not resolve a release version (pass --version or use --from-source)"
-  info "installing flashcli $VERSION from release assets"
   tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-  fetch "${base}/v${VERSION}/${asset}" "$tmp/$asset" \
-    || die "release asset not found: ${base}/v${VERSION}/${asset} (use --from-source)"
-  fetch "${base}/v${VERSION}/sha256sums.txt" "$tmp/sha256sums.txt" \
-    || die "release checksums not found: ${base}/v${VERSION}/sha256sums.txt"
+  if try_release "$FIRST_B" "$FIRST_A"; then return 0; fi
+  if try_release "$SECOND_B" "$SECOND_A"; then return 0; fi
+  die "no release found (and no --version). Build from source instead: re-run with --from-source"
+}
+
+try_release() {
+  base="$1"; api="$2"; ver="$VERSION"
+  [ -n "$REPO" ] || return 1
+  if [ -z "$ver" ]; then
+    if ! fetch "$api" "$tmp/release.json" 2>/dev/null; then return 1; fi
+    ver="$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' "$tmp/release.json" | head -1)"
+  fi
+  [ -n "$ver" ] || return 1
+  if ! fetch "${base}/v${ver}/${asset}" "$tmp/$asset" 2>/dev/null; then return 1; fi
+  if ! fetch "${base}/v${ver}/sha256sums.txt" "$tmp/sha256sums.txt" 2>/dev/null; then return 1; fi
   want="$(awk -v a="$asset" '$2==a {print $1}' "$tmp/sha256sums.txt" | head -1)"
-  [ -n "$want" ] || die "$asset not listed in sha256sums.txt"
+  [ -n "$want" ] || return 1
   have="$($SHA "$tmp/$asset" | awk '{print $1}')"
-  [ "$have" = "$want" ] || die "checksum mismatch for $asset (have $have, want $want)"
+  [ "$have" = "$want" ] || { warn "checksum mismatch for $asset (have $have, want $want)"; return 1; }
   install -m 0755 "$tmp/$asset" "$INSTALL_DIR/flashcli"
-  info "installed $INSTALL_DIR/flashcli"
+  info "installed $INSTALL_DIR/flashcli ($ver)"
+  return 0
 }
 
 if [ "$FROM_SOURCE" = 1 ]; then install_source; else install_release; fi
