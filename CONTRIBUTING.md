@@ -59,7 +59,9 @@ pytest tests/ tests/bench/ # full suite including bench
 Rules:
 
 - Branch work off `dev`; open PRs **into `dev`**. `main` is updated from `dev` only after validation.
-- Sync `dev` → `main` as a **fast-forward** when possible (`git push origin dev:main`); otherwise via a reviewed merge PR.
+- Sync `dev` → `main`:
+  - If `main` is an ancestor of `dev`: **fast-forward** (`git push origin dev:main`).
+  - If `main` has diverged (or a reviewable merge is preferred): merge `dev` into `main` with a **merge commit** (`git merge --no-ff dev`, or GitHub "Create a merge commit"), **preserving all `dev` commit messages**; `main` then gains exactly **one** commit (the merge commit). **Never squash `dev` into `main`.**
 - **Never rewrite pushed history** — no force-push to `main`/`dev`; fix forward with new commits.
 - Rebase your branch on `dev` before merging; resolve conflicts locally (do not merge `main` into a feature branch just to update it).
 
@@ -95,8 +97,8 @@ refactor(weights): share cache-key resolution between pull and run
 ### Merging
 
 - PRs target `dev` and must pass `go test ./...`, `pytest tests/` (protocol/infer + conformance), and `gofmt -w .` clean.
-- Prefer **squash merge** for a feature branch (one logical commit) or **rebase** for a clean linear history; avoid merge-commit noise.
-- After validation, sync `dev` → `main` (fast-forward preferred). Do not push directly to `main` for routine work.
+- Feature branch → `dev`: prefer **squash merge** (one logical commit) or **rebase** for a clean linear history; avoid merge-commit noise.
+- `dev` → `main`: **preserve history** — fast-forward when possible, else a **merge commit** (`--no-ff`) that carries all `dev` commits; `main` gains exactly one commit (the merge commit). Do **not** squash `dev` into `main`, and do not push directly to `main` for routine work.
 
 ### Releases
 
