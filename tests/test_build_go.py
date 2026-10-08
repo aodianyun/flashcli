@@ -51,7 +51,7 @@ def test_build_go_injects_version(tmp_path: Path) -> None:
 def test_installer_scripts_syntax() -> None:
     if shutil.which("sh") is None:
         pytest.skip("sh not available")
-    for script in ["install.sh", "scripts/install_go.sh", "scripts/build_go.sh", "scripts/release_go.sh"]:
+    for script in ["install.sh", "auto_install.sh", "scripts/build_go.sh", "scripts/release_go.sh"]:
         proc = subprocess.run(["sh", "-n", str(ROOT / script)], capture_output=True, text=True)
         assert proc.returncode == 0, f"{script}: {proc.stderr}"
     for script in ["scripts/build_go.sh", "scripts/release_go.sh"]:
@@ -60,18 +60,31 @@ def test_installer_scripts_syntax() -> None:
             assert proc.returncode == 0, f"{script}: {proc.stderr}"
 
 
-def test_install_sh_delegates_to_go(tmp_path: Path) -> None:
-    if shutil.which("sh") is None:
-        pytest.skip("sh not available")
-    fake = tmp_path / "fake_install_go.sh"
-    fake.write_text("#!/bin/sh\necho \"GO-INSTALLER args=$*\"\nexit 0\n", encoding="utf-8")
-    env = dict(os.environ, FLASHCLI_GO_SCRIPT_URL=f"file://{fake}")
+def test_install_sh_builds_from_source(tmp_path: Path) -> None:
+    if shutil.which("sh") is None or shutil.which("go") is None or shutil.which("bash") is None:
+        pytest.skip("sh/go/bash not available")
+    bindir = tmp_path / "bin"
+    home = tmp_path / "home"
+    env = dict(
+        os.environ,
+        FLASHCLI_HOME=str(home),
+        FLASHCLI_GO_TARGETS="linux/amd64",
+    )
     proc = subprocess.run(
-        ["sh", str(ROOT / "install.sh"), "--mirror"],
+        ["sh", str(ROOT / "install.sh"), "--source-dir", str(ROOT), "--dir", str(bindir)],
+        cwd=tmp_path,
+        env=env,
         capture_output=True,
         text=True,
-        env=env,
+        timeout=300,
     )
     assert proc.returncode == 0, proc.stderr
-    assert "GO-INSTALLER args=--mirror" in proc.stdout
+    binary = bindir / "flashcli"
+    assert binary.is_file()
+    version = subprocess.run([str(binary), "version"], capture_output=True, text=True)
+    assert version.stdout.strip() == _pyproject_version()
+
+    install_env = home / "install.env"
+    assert install_env.is_file()
+    assert "FLASHCLI_BUNDLE_PIP_SPEC=" in install_env.read_text(encoding="utf-8")
 

@@ -71,7 +71,7 @@ When `weights.source` / `extra_weights.source` is `"modelscope"`, the host CLI p
 
 Weight download runs in the **Go host** (native HTTP clients); `modelscope`/`huggingface_hub` are not host dependencies.
 
-`install.sh` fetches the static Go binary via `scripts/install_go.sh` (no Python host). `flashcli-bundle` is installed into **bundle venvs** as `flashcli-bundle[infer]` (source: `FLASHCLI_BUNDLE_PIP_SPEC` / local `flashcli-bundle/` / `~/.flashcli/install.env` `FLASHCLI_INSTALL_REPO`+`REF`).
+`install.sh` installs the static Go binary (build-from-source or release assets; no Python host). `flashcli-bundle` is installed into **bundle venvs** as `flashcli-bundle[infer]` (source: `FLASHCLI_BUNDLE_PIP_SPEC` / local `flashcli-bundle/` / `~/.flashcli/install.env` `FLASHCLI_INSTALL_REPO`+`REF`).
 
 ## Behavior switches
 

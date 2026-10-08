@@ -17,10 +17,11 @@ Go host needs Go >= 1.24. In CN networks set `GOPROXY=https://goproxy.cn,direct`
 
 Distribution:
 ```bash
+bash install.sh [--mirror]          # one-click host install (build-from-source, else release assets)
 bash scripts/build_go.sh [OUT]      # cross-compile + sha256sums (version from pyproject)
 bash scripts/release_go.sh [--upload]  # build, optionally publish via `gh`
 ```
-`install.sh` fetches and runs `scripts/install_go.sh`, which downloads `flashcli-<os>-<arch>` + `sha256sums.txt` (GitHub, or `--mirror` for Gitee) and verifies sha256. `flashcli upgrade` self-updates from the same release assets. `scripts/install_go.sh` writes `~/.flashcli/install.env` so bundle venvs can install `flashcli-bundle[infer]`.
+`install.sh` installs the `flashcli` binary and writes `~/.flashcli/install.env` (bundle venv source: local checkout or repo/ref). `auto_install.sh` picks GitHub/Gitee by reachability then runs `install.sh`. `flashcli upgrade` self-updates from the same release assets.
 
 ## Tests
 ```bash

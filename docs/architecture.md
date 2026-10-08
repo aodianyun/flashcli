@@ -28,7 +28,7 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 
 | What | Where it lives | Installed how |
 |------|----------------|---------------|
-| `flashcli` CLI (pull, sync, doctor) | Go binary on PATH (`go/`) | `install.sh` → `scripts/install_go.sh` |
+| `flashcli` CLI (pull, sync, doctor) | Go binary on PATH (`go/`) | `install.sh` |
 | **`flashcli-bundle`** (protocol) | Host (build/dev) | `flashcli-bundle/` source |
 | **`flashcli-bundle[infer]`** | Bundle venv only | `venv.Ensure` → pip (`FLASHCLI_BUNDLE_PIP_SPEC` / repo / local checkout) |
 | Bundle inference stack (torch, transformers, …) | `~/.flashcli/runtimes/<id>/venv/` | From `flashcli-bundle.json` → `python_dependencies` |

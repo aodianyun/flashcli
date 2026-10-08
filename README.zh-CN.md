@@ -76,54 +76,22 @@ Qwen3 与 Qwen3.6 **共用** 同一 FlashHub repo；ref 中 `@qwen3` / `@qwen36`
 
 ### 1. 安装
 
-**自动（推荐）**
+### 1. 安装主机（`flashcli`）
 
-```bash
-curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
-```
-
-向 `install.sh` 透传参数时须加 `sh -s --`（`| sh` 本身不会把后面的参数交给脚本）：
-
-```bash
-curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh -s -- --mirror --pip-mirror aliyun
-```
-
-`auto_install.sh` 选源规则：
-
-- 带 `--mirror` / `--gitee` → **直接走 Gitee** 拉 `install.sh`（避免 GitHub raw 半通卡住）
-- 带 `--github` → 强制 GitHub
-- 默认 → 先探测 GitHub；失败或下载超时再回退 Gitee，并自动加 `--mirror`
-
-会先把 `install.sh` 保存到 `~/.flashcli/install.sh` 再执行；之后可本地重装：
-
-```bash
-~/.flashcli/install.sh --mirror --pip-mirror aliyun
-```
-
-下载 `install.sh` 有超时（默认 60s，可用 `FLASHCLI_DOWNLOAD_TIMEOUT` 调整）。
-
-**GitHub**
+**一键（推荐）**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
+# 国内镜像：curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
 ```
 
-**Gitee（国内网络推荐加 `--mirror`）**
+`install.sh` 安装 `flashcli` 二进制：有 checkout（+Go）时从源码构建，否则从 release
+资产下载 `flashcli-<os>-<arch>` + `sha256sums.txt`；写 `~/.flashcli/install.env`，可重复执行。
+
+**自动选源（按可达性选 GitHub/Gitee）**
 
 ```bash
-curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
-```
-
-清华 PyPI 若返回 403，可换其它源，例如：
-
-```bash
-curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror --pip-mirror aliyun
-```
-
-可选 `--pip-mirror`：`tuna`（默认）| `aliyun` | `tencent` | `ustc` | `huawei` | `pypi`（官方 `pypi.org`，可与 `--mirror` 同用，仅 pip 走官方，HF/git/OS 仍用镜像）。
-
-```bash
-curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror --pip-mirror pypi
+curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
 ```
 
 **源码（开发者）**

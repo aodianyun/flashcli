@@ -28,7 +28,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 
 | 内容 | 位置 | 安装方式 |
 |------|------|----------|
-| `flashcli` CLI | PATH 上的 Go 二进制（`go/`） | `install.sh` → `scripts/install_go.sh` |
+| `flashcli` CLI | PATH 上的 Go 二进制（`go/`） | `install.sh` |
 | **`flashcli-bundle`**（协议） | 主机（build/开发） | `flashcli-bundle/` 源码 |
 | **`flashcli-bundle[infer]`** | 仅 bundle venv | `venv.Ensure` → pip（`FLASHCLI_BUNDLE_PIP_SPEC` / repo / 本地 checkout） |
 | 推理栈（torch、transformers…） | `~/.flashcli/runtimes/<id>/venv/` | `flashcli-bundle.json` → `python_dependencies` |

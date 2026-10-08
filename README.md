@@ -74,18 +74,23 @@ Full history: `git log`.
 
 ## Getting started
 
-### 1. Install
+### 1. Install the host (`flashcli`)
 
-**Auto (recommended)**
-
-```bash
-curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
-```
-
-**Github**
+**One-click (recommended)**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
+# CN mirror: curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
+```
+
+`install.sh` installs the `flashcli` binary — builds from source when a checkout
+(+ Go) is available, otherwise downloads `flashcli-<os>-<arch>` + `sha256sums.txt`
+from release assets — writes `~/.flashcli/install.env`, and is safe to re-run.
+
+**Auto (picks GitHub/Gitee by reachability)**
+
+```bash
+curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
 ```
 
 **From source (developers)**

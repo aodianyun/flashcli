@@ -7,7 +7,7 @@
 #   FLASHCLI_GO_TARGETS="linux/amd64" bash scripts/release_go.sh
 #
 # Artifacts (dist/go/):
-#   flashcli-<os>-<arch>   (raw binaries; consumed by scripts/install_go.sh)
+#   flashcli-<os>-<arch>   (raw binaries; consumed by install.sh)
 #   sha256sums.txt
 set -euo pipefail
 
