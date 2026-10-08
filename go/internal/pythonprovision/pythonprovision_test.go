@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -79,6 +80,24 @@ func makeTarGz(t *testing.T, entries map[string]string, symlinks map[string]stri
 		t.Fatal(err)
 	}
 	return buf.Bytes()
+}
+
+// TestLiveFlashHubStandalone resolves a real FlashHub standalone asset (no
+// tarball download). Skipped unless FLASHCLI_LIVE_PYTHON=1.
+func TestLiveFlashHubStandalone(t *testing.T) {
+	if os.Getenv("FLASHCLI_LIVE_PYTHON") == "" {
+		t.Skip("set FLASHCLI_LIVE_PYTHON=1 to hit the real FlashHub python-standalone repo")
+	}
+	asset, err := ResolveAsset(context.Background(), "312", "x86_64-unknown-linux-gnu", DefaultStandaloneTag, standaloneRepoURL())
+	if err != nil {
+		t.Fatalf("ResolveAsset: %v", err)
+	}
+	if !strings.Contains(asset.Filename, "cpython-3.12") {
+		t.Fatalf("filename = %q", asset.Filename)
+	}
+	if asset.URL == "" {
+		t.Fatalf("empty url")
+	}
 }
 
 func TestInstallStandalone(t *testing.T) {
