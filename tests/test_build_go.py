@@ -71,7 +71,7 @@ def test_install_sh_builds_from_source(tmp_path: Path) -> None:
         FLASHCLI_GO_TARGETS="linux/amd64",
     )
     proc = subprocess.run(
-        ["sh", str(ROOT / "install.sh"), "--source-dir", str(ROOT), "--dir", str(bindir)],
+        ["sh", str(ROOT / "install.sh"), "--from-source", "--source-dir", str(ROOT), "--dir", str(bindir)],
         cwd=tmp_path,
         env=env,
         capture_output=True,

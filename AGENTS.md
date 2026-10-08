@@ -21,7 +21,7 @@ bash install.sh [--mirror]          # one-click host install (build-from-source,
 bash scripts/build_go.sh [OUT]      # cross-compile + sha256sums (version from pyproject)
 bash scripts/release_go.sh [--upload]  # build, optionally publish via `gh`
 ```
-`install.sh` installs the `flashcli` binary and writes `~/.flashcli/install.env` (bundle venv source: local checkout or repo/ref). `auto_install.sh` picks GitHub/Gitee by reachability then runs `install.sh`. `flashcli upgrade` self-updates from the same release assets.
+`install.sh` installs the `flashcli` binary (default: latest release assets + sha256; `--from-source` builds with Go) and writes `~/.flashcli/install.env` (bundle venv source: local checkout or repo/ref). Missing OS tools are auto-installed via the package manager. `auto_install.sh` picks GitHub/Gitee by reachability then runs `install.sh`. `flashcli upgrade` self-updates from the same release assets.
 
 ## Tests
 ```bash

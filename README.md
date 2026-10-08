@@ -83,9 +83,11 @@ curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh 
 # CN mirror: curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
 ```
 
-`install.sh` installs the `flashcli` binary — builds from source when a checkout
-(+ Go) is available, otherwise downloads `flashcli-<os>-<arch>` + `sha256sums.txt`
-from release assets — writes `~/.flashcli/install.env`, and is safe to re-run.
+`install.sh` installs the `flashcli` binary: by default it downloads
+`flashcli-<os>-<arch>` + `sha256sums.txt` from the latest release (no Go needed),
+verifies sha256, and writes `~/.flashcli/install.env`. Pass `--from-source` to
+clone and build with Go instead. Missing system tools (curl/wget, sha256, git)
+are auto-installed via the OS package manager when running as root.
 
 **Auto (picks GitHub/Gitee by reachability)**
 

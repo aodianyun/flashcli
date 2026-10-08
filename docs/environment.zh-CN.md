@@ -72,7 +72,7 @@ manifest 中 `weights.source` / `extra_weights.source` 设为 `"modelscope"` 时
 
 权重下载在 **Go host** 内执行（原生 HTTP 客户端）；`modelscope`/`huggingface_hub` 不是 host 依赖。
 
-`install.sh` 安装静态 Go 二进制（源码构建或 release 资产；无 Python 主机）。`flashcli-bundle` 仅装进 **bundle venv**（`flashcli-bundle[infer]`，来源：`FLASHCLI_BUNDLE_PIP_SPEC` / 本地 `flashcli-bundle/` / `~/.flashcli/install.env` 的 `FLASHCLI_INSTALL_REPO`+`REF`）。
+`install.sh` 安装静态 Go 二进制（默认 release 资产；`--from-source` 用 Go 源码构建；无 Python 主机）。`flashcli-bundle` 仅装进 **bundle venv**（`flashcli-bundle[infer]`，来源：`FLASHCLI_BUNDLE_PIP_SPEC` / 本地 `flashcli-bundle/` / `~/.flashcli/install.env` 的 `FLASHCLI_INSTALL_REPO`+`REF`）。
 
 ## 行为开关
 

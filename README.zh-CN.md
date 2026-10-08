@@ -85,8 +85,10 @@ curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh 
 # 国内镜像：curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
 ```
 
-`install.sh` 安装 `flashcli` 二进制：有 checkout（+Go）时从源码构建，否则从 release
-资产下载 `flashcli-<os>-<arch>` + `sha256sums.txt`；写 `~/.flashcli/install.env`，可重复执行。
+`install.sh` 安装 `flashcli` 二进制：默认从最新 release 下载
+`flashcli-<os>-<arch>` + `sha256sums.txt`（无需 Go），校验 sha256，并写
+`~/.flashcli/install.env`；加 `--from-source` 则用 Go 拉源码编译。缺系统工具
+（curl/wget、sha256、git）时，以 root 运行会自动通过系统包管理器安装。
 
 **自动选源（按可达性选 GitHub/Gitee）**
 
