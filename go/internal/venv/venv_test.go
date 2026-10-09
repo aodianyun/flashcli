@@ -1,6 +1,7 @@
 package venv
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/aodianyun/flashcli/go/internal/manifest"
+	"github.com/aodianyun/flashcli/go/internal/progress"
 	"github.com/aodianyun/flashcli/go/internal/runtime"
 )
 
@@ -112,6 +114,34 @@ func TestEnsureReusesMatchingVenv(t *testing.T) {
 		t.Fatalf("python = %q, want %q", got, python)
 	}
 }
+
+func TestEnsureReportsInstallOrigin(t *testing.T) {
+	t.Setenv("FLASHCLI_RUNTIMES_DIR", t.TempDir())
+	t.Setenv("FLASHCLI_NO_MIRROR", "1")
+	t.Setenv("FLASHCLI_BUNDLE_PIP_SPEC", "")
+	var buf bytes.Buffer
+	progress.SetOutput(&buf)
+	progress.SetQuiet(false)
+	t.Cleanup(func() {
+		progress.SetOutput(os.Stderr)
+		progress.SetQuiet(false)
+	})
+
+	m := testManifest(t)
+	_, _ = Ensure(context.Background(), "t-report-1", m, Options{BasePython: "/bin/false", Runner: okRunner{}})
+
+	got := buf.String()
+	if !strings.Contains(got, "flashcli-bundle[infer] from") {
+		t.Fatalf("missing install-origin note: %q", got)
+	}
+	if !strings.Contains(got, "from ") || !strings.Contains(got, "torch") {
+		t.Fatalf("missing torch source note: %q", got)
+	}
+}
+
+type okRunner struct{}
+
+func (okRunner) Run(context.Context, []string, []string) error { return nil }
 
 func TestEnsureSkipSetup(t *testing.T) {
 	t.Setenv("FLASHCLI_RUNTIMES_DIR", t.TempDir())

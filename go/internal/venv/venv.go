@@ -111,6 +111,16 @@ func Ensure(ctx context.Context, runtimeID string, m *manifest.Manifest, opt Opt
 	}
 	if !opt.Quiet {
 		progress.Note("venv: creating %s (Python 3.%s, base %s)", venv, abi[1:], basePython)
+		if _, origin, oerr := FlashcliBundleSpecOrigin(); oerr == nil {
+			progress.Note("venv: flashcli-bundle[infer] from %s", origin)
+		}
+		if torchPkg, _ := ParseTorchDependency(m.PythonDependencies()["torch"]); torchPkg != "" {
+			idx := "PyPI default index"
+			if torchIndex != "" {
+				idx = mirror.TorchIndexURL(torchIndex)
+			}
+			progress.Note("venv: torch %s from %s", torchPkg, idx)
+		}
 	}
 	if err := os.RemoveAll(venv); err != nil {
 		return "", err

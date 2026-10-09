@@ -42,12 +42,20 @@ func LoadInstallEnv() {
 // Order: FLASHCLI_BUNDLE_PIP_SPEC → local repo checkout → FLASHCLI_INSTALL_REPO/REF
 // (git) → default GitHub repo.
 func FlashcliBundleSpec() (string, error) {
+	spec, _, err := FlashcliBundleSpecOrigin()
+	return spec, err
+}
+
+// FlashcliBundleSpecOrigin returns the pip spec plus a human-readable origin
+// describing where it will be installed from (for status output).
+func FlashcliBundleSpecOrigin() (spec, origin string, err error) {
 	LoadInstallEnv()
-	if spec := strings.TrimSpace(os.Getenv("FLASHCLI_BUNDLE_PIP_SPEC")); spec != "" {
-		return spec, nil
+	if s := strings.TrimSpace(os.Getenv("FLASHCLI_BUNDLE_PIP_SPEC")); s != "" {
+		return s, "FLASHCLI_BUNDLE_PIP_SPEC=" + s, nil
 	}
 	if root, ok := localBundleRepo(); ok {
-		return filepath.Join(root, "flashcli-bundle") + "[infer]", nil
+		dir := filepath.Join(root, "flashcli-bundle")
+		return dir + "[infer]", "local checkout " + dir, nil
 	}
 	repo := strings.TrimSpace(os.Getenv("FLASHCLI_INSTALL_REPO"))
 	if repo == "" {
@@ -57,7 +65,8 @@ func FlashcliBundleSpec() (string, error) {
 	if ref == "" {
 		ref = "main"
 	}
-	return fmt.Sprintf("flashcli-bundle[infer] @ git+%s@%s#subdirectory=flashcli-bundle", repo, ref), nil
+	s := fmt.Sprintf("flashcli-bundle[infer] @ git+%s@%s#subdirectory=flashcli-bundle", repo, ref)
+	return s, fmt.Sprintf("git+%s@%s", repo, ref), nil
 }
 
 func localBundleRepo() (string, bool) {

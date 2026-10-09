@@ -32,6 +32,9 @@ func init() {
 // SetQuiet enables/disables status output (warnings still print).
 func SetQuiet(q bool) { mu.Lock(); quiet = q; mu.Unlock() }
 
+// SetOutput redirects status output (tests/embedding).
+func SetOutput(w io.Writer) { mu.Lock(); out = w; mu.Unlock() }
+
 // IsQuiet reports whether status output is suppressed.
 func IsQuiet() bool { mu.Lock(); defer mu.Unlock(); return quiet }
 
