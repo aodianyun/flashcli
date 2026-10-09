@@ -108,8 +108,10 @@ and GitHub downloads.
 `~/.flashcli/mirror.env` (written by `--mirror`): `FLASHCLI_USE_MIRROR=1`,
 `PIP_INDEX_URL`, `PIP_TRUSTED_HOST`, `HF_ENDPOINT`, `FLASHCLI_PREFER_HF_MIRROR=1`,
 `FLASHCLI_GIT_PROXY`. PyTorch wheels resolve to
-`https://mirrors.aliyun.com/pytorch-wheels/<cu>/` in mirror mode (else
-`download.pytorch.org/whl`).
+`https://mirror.sjtu.edu.cn/pytorch-wheels/<cu>/` in mirror mode (else
+`download.pytorch.org/whl`). The mirror must expose a PEP 503 index (project
+pages like `/cu128/torch/`); Aliyun's flat `pytorch-wheels` listing is not
+usable as `pip --index-url`.
 
 Installer flags: `--mirror` / `--gitee` (also Gitee source), `--pip-mirror NAME`
 (`tuna|aliyun|tencent|ustc|huawei|pypi`), `--pip-probe` (benchmark PyPI mirrors),

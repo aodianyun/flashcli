@@ -13,7 +13,7 @@ MIRROR_PIP_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple/"
 DEFAULT_PIP_INDEX_URL = "https://pypi.org/simple"
 MIRROR_PIP_TRUSTED_HOST = "pypi.tuna.tsinghua.edu.cn"
 MIRROR_HF_ENDPOINT = "https://hf-mirror.com"
-MIRROR_TORCH_INDEX_BASE = "https://mirrors.aliyun.com/pytorch-wheels"
+MIRROR_TORCH_INDEX_BASE = "https://mirror.sjtu.edu.cn/pytorch-wheels"
 DEFAULT_GIT_PROXY_PREFIX = "https://gh-proxy.com/"
 
 _APPLIED = False

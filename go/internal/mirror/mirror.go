@@ -17,7 +17,10 @@ const (
 	DefaultPipIndexURL    = "https://pypi.tuna.tsinghua.edu.cn/simple/"
 	DefaultPipTrustedHost = "pypi.tuna.tsinghua.edu.cn"
 	DefaultHFEndpoint     = "https://hf-mirror.com"
-	TorchIndexBase        = "https://mirrors.aliyun.com/pytorch-wheels"
+	// SJTU exposes a PEP 503 index (project pages like /cu128/torch/), so it can
+	// be used as pip --index-url. Aliyun's pytorch-wheels is a flat file listing
+	// (404 on /cu128/torch/) and does NOT work as an index.
+	TorchIndexBase        = "https://mirror.sjtu.edu.cn/pytorch-wheels"
 	OfficialTorchBase     = "https://download.pytorch.org/whl"
 	DefaultGitProxyPrefix = "https://gh-proxy.com/"
 )

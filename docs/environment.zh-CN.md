@@ -104,8 +104,9 @@ Standalone Python 自动供给（当 bundle `python_abi` 缺失）：
 
 `~/.flashcli/mirror.env`（`--mirror` 写入）：`FLASHCLI_USE_MIRROR=1`、`PIP_INDEX_URL`、
 `PIP_TRUSTED_HOST`、`HF_ENDPOINT`、`FLASHCLI_PREFER_HF_MIRROR=1`、`FLASHCLI_GIT_PROXY`。
-镜像模式下 PyTorch wheel 走 `https://mirrors.aliyun.com/pytorch-wheels/<cu>/`（否则
-`download.pytorch.org/whl`）。
+镜像模式下 PyTorch wheel 走 `https://mirror.sjtu.edu.cn/pytorch-wheels/<cu>/`（否则
+`download.pytorch.org/whl`）。镜像需提供 PEP 503 索引（项目页如 `/cu128/torch/`）；
+阿里云 `pytorch-wheels` 是扁平文件列表，不能作为 `pip --index-url` 使用。
 
 安装器参数：`--mirror`/`--gitee`（并用 Gitee 源）、`--pip-mirror NAME`
 （`tuna|aliyun|tencent|ustc|huawei|pypi`）、`--pip-probe`（PyPI 镜像测速）、
