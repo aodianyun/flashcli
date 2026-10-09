@@ -34,8 +34,8 @@ FROM_SOURCE=0
 APT_DISABLED=0
 
 # Mirror endpoints (defaults mirror flashcli_bundle.runtime.mirror).
-MIRROR_PIP_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple/"
-MIRROR_PIP_TRUSTED_HOST="pypi.tuna.tsinghua.edu.cn"
+MIRROR_PIP_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/"
+MIRROR_PIP_TRUSTED_HOST="mirrors.aliyun.com"
 MIRROR_HF_ENDPOINT="https://hf-mirror.com"
 DEFAULT_GIT_PROXY_PREFIX="https://gh-proxy.com/"
 PIP_MIRROR_CHOICE="${FLASHCLI_PIP_MIRROR:-}"
@@ -63,7 +63,7 @@ set_pip_mirror() {
 probe_pip_mirror() {
   have_cmd curl || return 0
   _best=""; _best_speed=0
-  for _label in tuna aliyun tencent ustc huawei; do
+  for _label in aliyun tuna tencent ustc huawei; do
     set_pip_mirror "$_label" || continue
     _sp="$(curl -sS -o /dev/null -w '%{speed_download}' --max-time 10 "${MIRROR_PIP_INDEX_URL}numpy/" 2>/dev/null || echo 0)"
     _sp="${_sp%%.*}"; [ -z "$_sp" ] && _sp=0

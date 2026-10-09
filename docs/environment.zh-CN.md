@@ -96,7 +96,7 @@ Standalone Python 自动供给（当 bundle `python_abi` 缺失）：
 |------|--------|------|
 | `FLASHCLI_USE_MIRROR` | `0` | 强制开启镜像。 |
 | `FLASHCLI_NO_MIRROR` | `0` | 强制关闭（优先于 `mirror.env`）。 |
-| `PIP_INDEX_URL` | （无） | bundle venv 的 pip 索引；`--mirror` 默认清华。 |
+| `PIP_INDEX_URL` | （无） | bundle venv 的 pip 索引；`--mirror` 默认阿里云。 |
 | `PIP_TRUSTED_HOST` | （无） | 对应 trusted host。 |
 | `HF_ENDPOINT` | （无） | HF 端点；`--mirror` 默认 `https://hf-mirror.com`。 |
 | `FLASHCLI_GIT_PROXY` | （无） | GitHub 代理前缀；`--mirror` 默认 `https://gh-proxy.com/`；`0` 关闭。 |

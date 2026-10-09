@@ -14,8 +14,8 @@ const (
 	// EnvFile is the persisted mirror config under FLASHCLI_HOME.
 	EnvFile = "mirror.env"
 
-	DefaultPipIndexURL    = "https://pypi.tuna.tsinghua.edu.cn/simple/"
-	DefaultPipTrustedHost = "pypi.tuna.tsinghua.edu.cn"
+	DefaultPipIndexURL    = "https://mirrors.aliyun.com/pypi/simple/"
+	DefaultPipTrustedHost = "mirrors.aliyun.com"
 	DefaultHFEndpoint     = "https://hf-mirror.com"
 	// SJTU exposes a PEP 503 index (project pages like /cu128/torch/), so it can
 	// be used as pip --index-url. Aliyun's pytorch-wheels is a flat file listing

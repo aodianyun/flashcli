@@ -99,7 +99,7 @@ and GitHub downloads.
 |----------|---------|-------------|
 | `FLASHCLI_USE_MIRROR` | `0` | Force mirror mode on. |
 | `FLASHCLI_NO_MIRROR` | `0` | Force mirror mode off (wins over `mirror.env`). |
-| `PIP_INDEX_URL` | (unset) | pip index for bundle venvs; `--mirror` defaults to Tsinghua. |
+| `PIP_INDEX_URL` | (unset) | pip index for bundle venvs; `--mirror` defaults to Aliyun. |
 | `PIP_TRUSTED_HOST` | (unset) | Matching trusted host. |
 | `HF_ENDPOINT` | (unset) | Hugging Face endpoint; `--mirror` defaults to `https://hf-mirror.com`. |
 | `FLASHCLI_GIT_PROXY` | (unset) | GitHub proxy prefix; `--mirror` defaults to `https://gh-proxy.com/`; `0` disables. |
