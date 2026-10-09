@@ -13,6 +13,7 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/doctor"
 	"github.com/aodianyun/flashcli/go/internal/errs"
 	"github.com/aodianyun/flashcli/go/internal/manifest"
+	"github.com/aodianyun/flashcli/go/internal/mirror"
 	"github.com/aodianyun/flashcli/go/internal/native"
 	"github.com/aodianyun/flashcli/go/internal/pythonprovision"
 	"github.com/aodianyun/flashcli/go/internal/venv"
@@ -62,6 +63,9 @@ func doctorCmd() *cobra.Command {
 					failed = true
 				}
 				fmt.Fprintf(out, "%s %-12s %s\n", mark, c.Name, c.Detail)
+			}
+			for _, line := range mirror.StatusLines() {
+				fmt.Fprintln(out, line)
 			}
 			if failed {
 				return ErrFailed
@@ -185,7 +189,8 @@ func weightsPullCmd() *cobra.Command {
 
 // Main runs the CLI and returns a process exit code.
 func Main(args []string) int {
-	venv.LoadInstallEnv() // apply ~/.flashcli/install.env (bundle source + mirror env)
+	venv.LoadInstallEnv() // apply ~/.flashcli/install.env (bundle source)
+	mirror.Apply()        // apply ~/.flashcli/mirror.env + mirror defaults
 	root := New()
 	root.SetArgs(normalizeVersionAlias(args))
 	if err := root.Execute(); err != nil {

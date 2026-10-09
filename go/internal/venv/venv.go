@@ -19,6 +19,7 @@ import (
 
 	"github.com/aodianyun/flashcli/go/internal/errs"
 	"github.com/aodianyun/flashcli/go/internal/manifest"
+	"github.com/aodianyun/flashcli/go/internal/mirror"
 	"github.com/aodianyun/flashcli/go/internal/pythonprovision"
 	"github.com/aodianyun/flashcli/go/internal/runtime"
 )
@@ -146,19 +147,24 @@ func InstallPlan(python string, m *manifest.Manifest, torchIndex string) [][]str
 	if err != nil {
 		spec = "flashcli-bundle[infer]"
 	}
-	plan = append(plan, []string{python, "-m", "pip", "install", "-q", spec})
+	specCmd := []string{python, "-m", "pip", "install", "-q"}
+	specCmd = append(specCmd, mirror.PipExtraArgs()...)
+	specCmd = append(specCmd, spec)
+	plan = append(plan, specCmd)
 
 	torchPkg, _ := ParseTorchDependency(m.PythonDependencies()["torch"])
 	if torchPkg != "" {
 		argv := []string{python, "-m", "pip", "install", "-q"}
 		if torchIndex != "" {
-			argv = append(argv, "--index-url", "https://download.pytorch.org/whl/"+torchIndex)
+			argv = append(argv, "--index-url", mirror.TorchIndexURL(torchIndex))
 		}
 		argv = append(argv, torchPkg)
 		plan = append(plan, argv)
 	}
 	if deps := pipDependencies(m); len(deps) > 0 {
-		argv := append([]string{python, "-m", "pip", "install", "-q"}, deps...)
+		argv := []string{python, "-m", "pip", "install", "-q"}
+		argv = append(argv, mirror.PipExtraArgs()...)
+		argv = append(argv, deps...)
 		plan = append(plan, argv)
 	}
 	return plan

@@ -87,8 +87,29 @@ Standalone Python 自动供给（当 bundle `python_abi` 缺失）：
 | `FLASHCLI_QUIET` | `0` | 减少 `run`/`serve`/`pull`/`sync` 输出。 |
 | `FLASHCLI_GO_RELEASE_BASE` / `FLASHCLI_GO_RELEASE_API` | GitHub releases | `flashcli upgrade` 覆盖（如 Gitee）。 |
 
-bundle venv 的 pip 镜像用 `PIP_INDEX_URL`（已无 `--pip-mirror` 参数）。国内：
-`export PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/`、`export HF_ENDPOINT=https://hf-mirror.com`。
+## 镜像（国内友好）
+
+`install.sh --mirror` 会写 `~/.flashcli/mirror.env`；Go host 启动时加载（`mirror.Apply`），
+因此对 bundle venv 的 pip、HF 权重下载、GitHub 下载一并生效。
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `FLASHCLI_USE_MIRROR` | `0` | 强制开启镜像。 |
+| `FLASHCLI_NO_MIRROR` | `0` | 强制关闭（优先于 `mirror.env`）。 |
+| `PIP_INDEX_URL` | （无） | bundle venv 的 pip 索引；`--mirror` 默认清华。 |
+| `PIP_TRUSTED_HOST` | （无） | 对应 trusted host。 |
+| `HF_ENDPOINT` | （无） | HF 端点；`--mirror` 默认 `https://hf-mirror.com`。 |
+| `FLASHCLI_GIT_PROXY` | （无） | GitHub 代理前缀；`--mirror` 默认 `https://gh-proxy.com/`；`0` 关闭。 |
+| `FLASHCLI_PREFER_HF_MIRROR` | `0` | 优先 hf-mirror。 |
+
+`~/.flashcli/mirror.env`（`--mirror` 写入）：`FLASHCLI_USE_MIRROR=1`、`PIP_INDEX_URL`、
+`PIP_TRUSTED_HOST`、`HF_ENDPOINT`、`FLASHCLI_PREFER_HF_MIRROR=1`、`FLASHCLI_GIT_PROXY`。
+镜像模式下 PyTorch wheel 走 `https://mirrors.aliyun.com/pytorch-wheels/<cu>/`（否则
+`download.pytorch.org/whl`）。
+
+安装器参数：`--mirror`/`--gitee`（并用 Gitee 源）、`--pip-mirror NAME`
+（`tuna|aliyun|tencent|ustc|huawei|pypi`）、`--pip-probe`（PyPI 镜像测速）、
+`--no-mirror`/`--global`（关闭）、`--github`（GitHub 源）。
 
 ## Bundle entry 环境变量（engine / script）
 

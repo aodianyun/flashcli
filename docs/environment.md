@@ -89,9 +89,31 @@ Standalone Python provisioning (when the bundle `python_abi` is missing):
 | `FLASHCLI_QUIET` | `0` | Less output from `run`/`serve`/`pull`/`sync`. |
 | `FLASHCLI_GO_RELEASE_BASE` / `FLASHCLI_GO_RELEASE_API` | GitHub releases | Override for `flashcli upgrade` (e.g. Gitee). |
 
-The pip mirror for bundle venvs is `PIP_INDEX_URL` (there is no `--pip-mirror` flag anymore).
-For CN networks: `export PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/`,
-`export HF_ENDPOINT=https://hf-mirror.com`.
+## Mirrors (China-friendly)
+
+`install.sh --mirror` writes `~/.flashcli/mirror.env`; the Go host loads it at
+startup (`mirror.Apply`), so it applies to bundle venv pip, HF weight downloads,
+and GitHub downloads.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FLASHCLI_USE_MIRROR` | `0` | Force mirror mode on. |
+| `FLASHCLI_NO_MIRROR` | `0` | Force mirror mode off (wins over `mirror.env`). |
+| `PIP_INDEX_URL` | (unset) | pip index for bundle venvs; `--mirror` defaults to Tsinghua. |
+| `PIP_TRUSTED_HOST` | (unset) | Matching trusted host. |
+| `HF_ENDPOINT` | (unset) | Hugging Face endpoint; `--mirror` defaults to `https://hf-mirror.com`. |
+| `FLASHCLI_GIT_PROXY` | (unset) | GitHub proxy prefix; `--mirror` defaults to `https://gh-proxy.com/`; `0` disables. |
+| `FLASHCLI_PREFER_HF_MIRROR` | `0` | Prefer hf-mirror before official Hub. |
+
+`~/.flashcli/mirror.env` (written by `--mirror`): `FLASHCLI_USE_MIRROR=1`,
+`PIP_INDEX_URL`, `PIP_TRUSTED_HOST`, `HF_ENDPOINT`, `FLASHCLI_PREFER_HF_MIRROR=1`,
+`FLASHCLI_GIT_PROXY`. PyTorch wheels resolve to
+`https://mirrors.aliyun.com/pytorch-wheels/<cu>/` in mirror mode (else
+`download.pytorch.org/whl`).
+
+Installer flags: `--mirror` / `--gitee` (also Gitee source), `--pip-mirror NAME`
+(`tuna|aliyun|tencent|ustc|huawei|pypi`), `--pip-probe` (benchmark PyPI mirrors),
+`--no-mirror` / `--global` (disable), `--github` (GitHub source).
 
 ## Bundle entry environment variables (engine / script)
 

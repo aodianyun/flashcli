@@ -33,14 +33,68 @@ MIRROR=0
 FROM_SOURCE=0
 APT_DISABLED=0
 
+# Mirror endpoints (defaults mirror flashcli_bundle.runtime.mirror).
+MIRROR_PIP_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple/"
+MIRROR_PIP_TRUSTED_HOST="pypi.tuna.tsinghua.edu.cn"
+MIRROR_HF_ENDPOINT="https://hf-mirror.com"
+DEFAULT_GIT_PROXY_PREFIX="https://gh-proxy.com/"
+PIP_MIRROR_CHOICE="${FLASHCLI_PIP_MIRROR:-}"
+PIP_MIRROR_PROBE="${FLASHCLI_PIP_MIRROR_PROBE:-0}"
+case "${FLASHCLI_USE_MIRROR:-0}" in 1|true|yes|on) MIRROR=1 ;; esac
+
 info() { printf '[i] %s\n' "$*"; }
 warn() { printf '[!] %s\n' "$*" >&2; }
 die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 
+set_pip_mirror() {
+  case "$1" in
+    tuna)    MIRROR_PIP_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple/";          MIRROR_PIP_TRUSTED_HOST="pypi.tuna.tsinghua.edu.cn" ;;
+    aliyun)  MIRROR_PIP_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/";            MIRROR_PIP_TRUSTED_HOST="mirrors.aliyun.com" ;;
+    tencent) MIRROR_PIP_INDEX_URL="https://mirrors.cloud.tencent.com/pypi/simple/";     MIRROR_PIP_TRUSTED_HOST="mirrors.cloud.tencent.com" ;;
+    ustc)    MIRROR_PIP_INDEX_URL="https://mirrors.ustc.edu.cn/pypi/web/simple/";       MIRROR_PIP_TRUSTED_HOST="mirrors.ustc.edu.cn" ;;
+    huawei)  MIRROR_PIP_INDEX_URL="https://mirrors.huaweicloud.com/repository/pypi/simple/"; MIRROR_PIP_TRUSTED_HOST="mirrors.huaweicloud.com" ;;
+    pypi)    MIRROR_PIP_INDEX_URL="https://pypi.org/simple/";                           MIRROR_PIP_TRUSTED_HOST="pypi.org" ;;
+    *) warn "unknown --pip-mirror $1 (tuna|aliyun|tencent|ustc|huawei|pypi)"; return 1 ;;
+  esac
+  return 0
+}
+
+probe_pip_mirror() {
+  have_cmd curl || return 0
+  _best=""; _best_speed=0
+  for _label in tuna aliyun tencent ustc huawei; do
+    set_pip_mirror "$_label" || continue
+    _sp="$(curl -sS -o /dev/null -w '%{speed_download}' --max-time 10 "${MIRROR_PIP_INDEX_URL}numpy/" 2>/dev/null || echo 0)"
+    _sp="${_sp%%.*}"; [ -z "$_sp" ] && _sp=0
+    if [ "$_sp" -gt "$_best_speed" ]; then _best_speed="$_sp"; _best="$_label"; fi
+  done
+  [ -n "$_best" ] && set_pip_mirror "$_best" || true
+  [ -n "$_best" ] && info "pip mirror probe → ${_best} (${_best_speed} B/s)"
+  return 0
+}
+
+apply_mirror_endpoints() {
+  [ "$MIRROR" = 1 ] || return 0
+  [ -n "$PIP_MIRROR_CHOICE" ] && set_pip_mirror "$PIP_MIRROR_CHOICE" || true
+  case "${PIP_MIRROR_PROBE:-0}" in 1|true|yes|on) [ -z "$PIP_MIRROR_CHOICE" ] && probe_pip_mirror ;; esac
+  export PIP_INDEX_URL="${PIP_INDEX_URL:-$MIRROR_PIP_INDEX_URL}"
+  export PIP_TRUSTED_HOST="${PIP_TRUSTED_HOST:-$MIRROR_PIP_TRUSTED_HOST}"
+  export HF_ENDPOINT="${HF_ENDPOINT:-$MIRROR_HF_ENDPOINT}"
+  export FLASHCLI_PREFER_HF_MIRROR=1
+  case "${FLASHCLI_GIT_PROXY:-}" in
+    0|false|no|off) ;;
+    *) export FLASHCLI_GIT_PROXY="${FLASHCLI_GIT_PROXY:-$DEFAULT_GIT_PROXY_PREFIX}" ;;
+  esac
+  info "mirror: PIP_INDEX_URL=${PIP_INDEX_URL}"
+  info "mirror: HF_ENDPOINT=${HF_ENDPOINT}"
+  [ -n "${FLASHCLI_GIT_PROXY:-}" ] && info "mirror: FLASHCLI_GIT_PROXY=${FLASHCLI_GIT_PROXY}"
+  return 0
+}
+
 usage() {
   if [ -f "$0" ]; then sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; else
-    echo "usage: install.sh [--mirror] [--from-source] [--ref REF|--branch REF] [--version V] [--dir DIR] [--source-dir DIR]"
+    echo "usage: install.sh [--mirror|--gitee] [--github] [--no-mirror] [--pip-mirror NAME] [--pip-probe] [--from-source] [--ref REF|--branch REF] [--version V] [--dir DIR] [--source-dir DIR]"
   fi
 }
 
@@ -48,6 +102,9 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --mirror|--gitee) MIRROR=1; shift ;;
     --github) MIRROR=0; shift ;;
+    --global|--no-mirror) MIRROR=0; shift ;;
+    --pip-mirror|--pypi-mirror) PIP_MIRROR_CHOICE="$2"; MIRROR=1; shift 2 ;;
+    --pip-probe) PIP_MIRROR_PROBE=1; shift ;;
     --ref|--branch) REF="$2"; shift 2 ;;
     --version) VERSION="$2"; shift 2 ;;
     --dir) INSTALL_DIR="$2"; shift 2 ;;
@@ -61,8 +118,7 @@ done
 
 if [ "$MIRROR" = 1 ]; then
   REPO="${FLASHCLI_INSTALL_REPO:-$REPO_GITEE}"
-  export PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}"
-  export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
+  apply_mirror_endpoints
 fi
 
 if [ -z "$INSTALL_DIR" ]; then
@@ -225,18 +281,25 @@ home="${FLASHCLI_HOME:-$HOME/.flashcli}"
 mkdir -p "$home" 2>/dev/null || true
 {
   if [ -n "$SOURCE_USED" ] && [ -f "$SOURCE_USED/flashcli-bundle/pyproject.toml" ]; then
-    echo "export FLASHCLI_BUNDLE_PIP_SPEC=$SOURCE_USED/flashcli-bundle[infer]"
+    echo "FLASHCLI_BUNDLE_PIP_SPEC=$SOURCE_USED/flashcli-bundle[infer]"
   else
-    echo "export FLASHCLI_INSTALL_REPO=$REPO"
-    echo "export FLASHCLI_INSTALL_REF=$REF"
-  fi
-  if [ "$MIRROR" = 1 ]; then
-    echo "# mirror mode (--mirror): persisted for run/serve (bundle venv pip + HF weights)"
-    echo "export PIP_INDEX_URL=${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}"
-    echo "export PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST:-mirrors.aliyun.com}"
-    echo "export HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}"
+    echo "FLASHCLI_INSTALL_REPO=$REPO"
+    echo "FLASHCLI_INSTALL_REF=$REF"
   fi
 } > "$home/install.env"
+info "Wrote $home/install.env"
 
-echo "[ok] flashcli -> $INSTALL_DIR/flashcli ; wrote $home/install.env"
+if [ "$MIRROR" = 1 ]; then
+  {
+    echo "FLASHCLI_USE_MIRROR=1"
+    echo "PIP_INDEX_URL=${PIP_INDEX_URL:-$MIRROR_PIP_INDEX_URL}"
+    echo "PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST:-$MIRROR_PIP_TRUSTED_HOST}"
+    echo "HF_ENDPOINT=${HF_ENDPOINT:-$MIRROR_HF_ENDPOINT}"
+    echo "FLASHCLI_PREFER_HF_MIRROR=1"
+    echo "FLASHCLI_GIT_PROXY=${FLASHCLI_GIT_PROXY:-$DEFAULT_GIT_PROXY_PREFIX}"
+  } > "$home/mirror.env"
+  info "Wrote $home/mirror.env (run/serve use mirrors: pip/HF/GitHub)"
+fi
+
+echo "[ok] flashcli -> $INSTALL_DIR/flashcli"
 case ":$PATH:" in *":$INSTALL_DIR:"*) ;; *) echo "[i] add $INSTALL_DIR to PATH" ;; esac
