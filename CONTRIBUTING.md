@@ -25,7 +25,7 @@ FlashRT/                      # Sibling clone — inference kernels (build input
 
 flashcli **distributes and loads** Model Bundles; inference lives in bundle `entry` modules and FlashRT.
 
-**Maintainers:** build/release workflow → [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md) · [docs/bundle_builder_guide.zh-CN.md](docs/bundle_builder_guide.zh-CN.md) · [docs/runtime-matrix.md](docs/runtime-matrix.md) (linked from this file only).
+**Maintainers:** build/release workflow → [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md) · [docs/runtime-matrix.md](docs/runtime-matrix.md). Full index: [docs/README.md](docs/README.md).
 
 ## Development setup
 
@@ -153,7 +153,7 @@ refactor(weights): share cache-key resolution between pull and run
 
 ## Release bundle checklist (maintainers)
 
-**Full steps:** [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md) (English summary) · [docs/bundle_builder_guide.zh-CN.md](docs/bundle_builder_guide.zh-CN.md) (complete, 中文) · matrix reference [docs/runtime-matrix.md](docs/runtime-matrix.md).
+**Full steps:** [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md) (English, complete) · [docs/bundle_builder_guide.zh-CN.md](docs/bundle_builder_guide.zh-CN.md) (中文) · matrix reference [docs/runtime-matrix.md](docs/runtime-matrix.md).
 
 After uploading `dist/` to FlashHub:
 
@@ -162,6 +162,18 @@ After uploading `dist/` to FlashHub:
 - [ ] Document ref strings in README / BUILD (Qwen: same repo, different `@variant`)
 
 Matrix constraints: pi05 **SM89 + SM120** (cu124 on SM89; cu130 on both); qwen / qwen3_vl / groot_n16 **cu130 / SM120 / py312**; **groot_n17** **cu130 / SM120 / py310** (Isaac-GR00T) — see runtime-matrix doc.
+
+## Documentation
+
+Docs are part of the product and this is a **public repository** — treat them as code. Every doc must be **clear, concise, accurate, and complete**: no verbosity, no redundancy, no stale content.
+
+- **Audience first.** User-facing docs live in root `README` / `bundles/<name>/README.md`; contracts/specs in `docs/`; maintainer workflows in `docs/bundle_builder_guide.md`. Keep `docs/README.md` as the index.
+- **English is authoritative; keep the `*.zh-CN.md` mirror in sync** in the same change. Missing/outdated zh mirrors are a bug.
+- **Delete or fix outdated content** instead of appending. Prefer editing the authoritative doc over creating a new one; avoid doc proliferation.
+- **One concept, one home.** Do not duplicate a spec across docs — link to the authoritative one.
+- **Prefer tables and small diagrams** over prose when clearer.
+- **Verify relative links** after moving/renaming files.
+- **When behavior changes**, update together: the authoritative spec (`docs/*.md`), the affected bundle `README`/`BUILD`, and `docs/environment.md` if env vars changed.
 
 ## Reporting issues
 

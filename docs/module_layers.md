@@ -22,6 +22,8 @@ both       → flashcli_bundle/ (protocol, dependencies = [])
 
 **Re-export is not a reason to add protocol code.** Thin re-exports exist only for stable import paths. If only one layer needs the logic, implement it in that layer.
 
+**Model-specific logic is never host-only.** The forward pass, preprocessing/postprocessing, modality shapes/dtypes, and option→port mapping/defaults belong to the bundle: a Python `entry`, or — for native kinds — the model-runtime `.so` plus the manifest `native` declarations / runtime port descriptors. `go/internal/` carries only **model-agnostic protocol plumbing** (e.g. building ABI payloads for ports the bundle declares). Hardcoding a model's constants, shapes, or preprocessing in the host is a bug.
+
 **Protocol must not contain** (even with `dependencies = []`):
 
 - Host-only: Hugging Face weight download, `huggingface_hub`, GitHub release download, standalone Python install/probe, FlashHub sync assembly, re-exec

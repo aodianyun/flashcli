@@ -53,6 +53,8 @@ flashcli pull bundles/qwen_nvfp4@qwen36
 └── runtime/<env-key>/
 ```
 
+> 仅原生 bundle（`entry.kind = native-abi|native-exec`）省略 `run.py`/`serve.py` 与 `flash_rt/`；C 库放在 `runtime/<env-key>/substrate/`。
+
 权重不在 bundle 内，缓存在 `~/.flashcli/models/<bundle>/<version>@<variant>/`。
 
 ## 终端用户运行时流程
@@ -60,10 +62,10 @@ flashcli pull bundles/qwen_nvfp4@qwen36
 1. 解析 REF → 若为本地目录则用 `local_root`；否则 `bundle.repo`（或已 sync 的 marker）
 2. FlashHub manifest → 本机 **preflight** env key
 3. 下载 entry + 匹配的 `runtime/<env-key>/`
-4. 创建 bundle venv（`python_abi`、manifest 中的 torch）
-5. 在 bundle venv 内 **re-exec** infer — [architecture.zh-CN.md](architecture.zh-CN.md)
-6. **主机**（re-exec 前）：若 cache 不完整则下载 `weights` + `extra_weights` + 执行 `post_pull` — 与 `flashcli pull` 同一代码路径
-7. **bundle venv**：仅解析本地 checkpoint（`HF_HUB_OFFLINE=1`）；运行 `entry`
+4. `kind=python`：创建 bundle venv（`python_abi`、manifest 中的 torch）。native kind 跳过 venv。
+5. `kind=python`：在 bundle venv 内 **re-exec** infer — [architecture.zh-CN.md](architecture.zh-CN.md)。`native-exec`/`native-abi`：host 直接 spawn / `dlopen` bundle backend。
+6. **主机**（推理前）：若 cache 不完整则下载 `weights` + `extra_weights` + 执行 `post_pull` — 与 `flashcli pull` 同一代码路径
+7. **bundle**：仅解析本地 checkpoint（`HF_HUB_OFFLINE=1`）；运行 `entry`（或原生 backend）
 
 `flashcli pull <ref>` 执行步骤 1–6，不进入推理。首次 `flashcli run` / `serve` 在 cache 为空时也会自动执行 1–6。
 

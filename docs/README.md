@@ -4,35 +4,23 @@
 
 ## By role
 
-### End users
-
-Install and run presets — [../README.md](../README.md), then each bundle [README](../bundles/pi05_libero/README.md). Mirrors and cache paths: [environment.md](environment.md).
-
-### Integrators
-
-Pin preset refs from [FlashHub](https://flashhub.top). Ref syntax: [model_bundle_standard.md](model_bundle_standard.md).
-
-### External bundle authors
-
-Publish a bundle to FlashHub — [bundle_publish_standard.md](bundle_publish_standard.md) + [flashcli-bundle/README.md](../flashcli-bundle/README.md).
-
-### Architecture (optional)
-
-Host CLI vs bundle venv, sync flow, module map — [architecture.md](architecture.md). Maintainer-oriented layer split: [module_layers.md](module_layers.md).
-
-### Maintainers (internal)
-
-Build, pack, and publish bundles — [bundle_builder_guide.md](bundle_builder_guide.md) · runtime matrix [runtime-matrix.md](runtime-matrix.md) (indexed from [CONTRIBUTING.md](../CONTRIBUTING.md) only).
+- **End users** — install and run presets: [../README.md](../README.md), then each bundle [README](../bundles/README.md). Mirrors and cache paths: [environment.md](environment.md).
+- **Integrators** — pin preset refs from [FlashHub](https://flashhub.top): [model_bundle_standard.md](model_bundle_standard.md).
+- **External bundle authors** — publish to FlashHub: [bundle_publish_standard.md](bundle_publish_standard.md) (+ [flashcli-bundle/README.md](../flashcli-bundle/README.md)); execution backends: [bundle_execution_abi.md](bundle_execution_abi.md).
+- **Maintainers** — build/release bundles: [bundle_builder_guide.md](bundle_builder_guide.md) · [runtime-matrix.md](runtime-matrix.md).
+- **Contributors / architecture** — [architecture.md](architecture.md), [module_layers.md](module_layers.md); rules: [../CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ## Doc index
 
-| Doc | Purpose |
-|-----|---------|
-| [bundle_publish_standard.md](bundle_publish_standard.md) | Manifest, entry, `.so`, FlashHub layout (authoritative spec) |
-| [bundle_execution_abi.md](bundle_execution_abi.md) | Execution backends (`entry.kind`), native process / `.so` contract, conformance |
-| [model_bundle_standard.md](model_bundle_standard.md) | Preset ref syntax + end-user runtime flow |
-| [architecture.md](architecture.md) | Host CLI, bundle venv, re-exec, module map |
-| [environment.md](environment.md) | Environment variables |
-| [module_layers.md](module_layers.md) | Host CLI vs `flashcli_bundle` package boundaries |
+| Doc | Audience | Purpose |
+|-----|----------|---------|
+| [bundle_publish_standard.md](bundle_publish_standard.md) | external authors | **Authoritative** manifest, entry, `.so`, FlashHub layout |
+| [bundle_execution_abi.md](bundle_execution_abi.md) | external authors | `entry.kind` backends, native process / `.so` contracts, conformance |
+| [model_bundle_standard.md](model_bundle_standard.md) | integrators | Preset ref syntax + end-user runtime flow |
+| [environment.md](environment.md) | users | Environment variables, mirrors, cache paths |
+| [architecture.md](architecture.md) | contributors | Runtime flow, core principles, host vs bundle |
+| [module_layers.md](module_layers.md) | contributors | Host / infer / protocol package boundaries |
+| [bundle_builder_guide.md](bundle_builder_guide.md) | maintainers | Build, matrix release, FlashHub upload |
+| [runtime-matrix.md](runtime-matrix.md) | maintainers | SM × CUDA × Python release matrix |
 
-Per-preset commands: [bundles/](../bundles/)
+Per-bundle commands and build docs: [`bundles/`](../bundles/README.md).

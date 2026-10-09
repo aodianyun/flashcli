@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Write build-time manifest overlay (read-only author ``flashcli-bundle.json``).
 
-See docs/bundle_manifest_policy.md — publishers maintain ``flashcli-bundle.json``;
+See docs/bundle_publish_standard.md §3.0 — publishers maintain ``flashcli-bundle.json``;
 this script only writes ``--output-json`` (typically ``.build/manifest-overlay.json``).
 """
 

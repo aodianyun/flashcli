@@ -69,6 +69,18 @@ Rules:
 
 Capabilities are still inferred: a `run` block enables `flashcli run`, a `serve` block enables `flashcli serve`.
 
+**Variants may override `entry`.** A `variants.<name>.entry` block deep-merges over the top-level `entry` (objects merge; scalars/lists replace), per capability. This lets one bundle expose the same model through different backends, selected by the standard `@variant` ref suffix — e.g. `@abi` (native-abi) and `@exec` (native-exec) for the same weights. The effective entry is resolved after the variant is chosen; version-axis validation considers every variant's effective entries.
+
+### 3.1 Native bundle authoring checklist
+
+A **native-only** bundle (no Python entry) publishes:
+
+- `flashcli-bundle.json`: `format_version: 3`, `protocol_version: 1`; `entry.kind = native-abi|native-exec`; the matching native version axis (`runtime_abi_version` and/or `exec_protocol_version` = `1`); a `runtime` map with py-less keys (`sm{SM}-cu{CUDA}-{os}-{arch}`); `weights`; and `run_options`/`serve_options`. **Omit** `python_abi`, `python_dependencies`, and `flash_rt/`.
+- `runtime/<env-key>/substrate/`: the model-runtime `.so`(s). `native-abi` ships the producer `.so` exporting `frt_model_runtime_open_v1` (plus any `preload` libs); `native-exec` ships an executable (any language) referenced by `native.command`.
+- The **bundle owns every model-specific detail** (preprocessing, modality shapes/dtypes, defaults, option→port mapping). The host is generic and must not hardcode any of it (§4).
+
+`native-abi` may instead declare `native.session_library` + `loader_symbol` to drive via the Nexus embedded session (§7.6). `native-exec` reads nothing but its `native.command`; the process speaks NDJSON `stdio` or `http` (§6).
+
 ---
 
 ## 4. Common lifecycle (all kinds)
@@ -77,6 +89,7 @@ At invocation time the host has already: resolved the ref, synced the bundle tre
 
 Shared guarantees:
 
+- **Model-agnostic host.** Every model-specific detail — preprocessing/postprocessing, modality shapes/dtypes, defaults, and option→port mapping — is declared by the bundle: `run_options`/`serve_options`, the manifest `native` block, and the runtime's own port descriptors. The host builds ABI payloads for the declared ports only; it must **not** hardcode a model's constants, shapes, or preprocessing.
 - **Weight paths** follow §4.4.1 of [bundle_publish_standard.md](bundle_publish_standard.md). Native script-like starts (i.e. `native-exec`) receive the same `FLASHCLI_CHECKPOINT` / `FLASHCLI_BUNDLE_ROOT` / `FLASHCLI_PRESET` / `FLASHCLI_VARIANT` / `FLASHCLI_EXTRA_WEIGHT_<KEY>` variables. `native-abi` receives the checkpoint path through `open_symbol`'s `config_json`.
 - **`run_options` / `serve_options`** remain the single source of defaults and `--help`, regardless of kind. The host maps them to the native call (payload fields or CLI args).
 - **Weights stay offline at inference**: `HF_HUB_OFFLINE=1` semantics apply to Python and to any hub access; missing assets are fixed by `flashcli pull`, not at inference time.
@@ -131,9 +144,9 @@ Readiness: the process emits `{"v":1,"op":"ready","payload":{...}}` before servi
 
 ### 6.3 http transport
 
-The process binds an endpoint (host/port chosen by the host, passed via env or `command` placeholders) and prints a readiness line `{"v":1,"op":"ready","endpoint":"<url>"}` to stdout. The host:
+The process binds an endpoint (host/port chosen by the host, passed via env or `command` placeholders) and prints a readiness line `{"v":1,"op":"ready","payload":{"endpoint":"<url>"}}` to stdout. The host:
 - **run**: `POST /run` with the run payload, read the response, then `shutdown`.
-- **serve**: supervise the process and forward traffic (or hand the endpoint to the user) until SIGINT; then graceful shutdown.
+- **serve**: supervise the process (spawn → readiness → keep alive → graceful stop on SIGINT/SIGTERM) and hand the endpoint to the user. The host does **not** run a reverse proxy; clients talk to the bundle process's endpoint directly. (stdio `serve` is not implemented.)
 
 ### 6.4 Lifecycle
 
@@ -213,6 +226,45 @@ A process may load **only one** `libflashrt_exec` (`libflashrt_exec.so.1`). The 
 3. Refuse to load a second bundle's `libflashrt_exec` in the same process (hard error, not a stale handle).
 
 This is why `native-abi` serves **one** bundle per process. Multi-bundle scheduling is a separate process concern.
+
+### 7.6 Nexus embedded session lane (`session_library`)
+
+An optional, additive field lets the host drive the adopted runtime through the
+FlashRT-Nexus embedded C session instead of the raw producer verbs — still
+in-process, still Python-free:
+
+```jsonc
+"native": {
+  "library":         "{runtime_dir}/substrate/libflashrt_cpp_pi05_c-*.so",      // producer (open_symbol)
+  "session_library": "{runtime_dir}/substrate/libcapsule_nexus_flashrt-*.so",   // Nexus host
+  "loader_symbol":   "flashrt_loaded_model_open",   // default; loads + adopts in one call
+  "preload":         ["{runtime_dir}/substrate/libflashrt_exec-*.so"],
+  "config": { "io": "native_v2", "checkpoint_path": "{checkpoint}", "...": "..." }
+}
+```
+
+When `session_library` is present the host:
+
+1. loads `preload` entries `RTLD_GLOBAL`, then `session_library`;
+2. calls `loader_symbol(provider_dso=library, config_json, &loader, &model)` to
+   open the producer DSO and adopt its `frt_model_runtime_v1`;
+3. opens a resident `nexus_embedded_session` over the adopted model and drives
+   `nexus_embedded_set_input` / `_tick` / `_get_output`, plus `_snapshot` /
+   `_restore` for serve sessions.
+
+Ports are addressed by name: `native.inputs` (`prompt` / `state` / `images`) and
+`native.output_port` (default `actions`). IMAGE payloads are `frt_image_view[]`
+(RGB8); TEXT is UTF-8 bytes; STATE/ACTION are f32. Config values may use the
+placeholders of §6.1 plus `{option:<name>}` and `{tokenizer}`.
+
+`flashcli serve` exposes the session over HTTP:
+`GET /healthz`, `GET /v1/substrate`, `GET /v1/session/state`,
+`POST /v1/session/snapshot`, `POST /v1/session/reset/{capsule}`, and
+`POST /v1/act` (also `POST /v1/chat/completions`).
+
+Validation: `session_library` is optional; when present, `loader_symbol` (if
+given) must be a C identifier. A bundle without `session_library` behaves
+exactly as §7.4.
 
 ---
 

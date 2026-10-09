@@ -69,6 +69,18 @@ flashcli **如何调用某个 bundle 的推理入口**的权威契约，且与�
 
 capability 仍按 `entry` 推断：`run` 块启用 `flashcli run`，`serve` 块启用 `flashcli serve`。
 
+**variants 可覆盖 `entry`。** `variants.<name>.entry` 对顶层 `entry` 做深合并（对象合并、标量/数组覆盖），按 capability 生效。这样同一个 bundle 可以让同一份权重通过不同后端暴露，用既有 `@variant` 后缀选择——例如同一权重同时提供 `@abi`（native-abi）与 `@exec`（native-exec）。生效 entry 在选定 variant 之后解析；版本轴校验会遍历所有 variant 的生效 entry。
+
+### 3.1 仅原生 bundle 作者清单
+
+**仅原生** bundle（无 Python entry）需发布：
+
+- `flashcli-bundle.json`：`format_version: 3`、`protocol_version: 1`；`entry.kind = native-abi|native-exec`；对应的原生版本轴（`runtime_abi_version` 和/或 `exec_protocol_version` = `1`）；`runtime` map 用**无 py** 的 key（`sm{SM}-cu{CUDA}-{os}-{arch}`）；`weights`；以及 `run_options`/`serve_options`。**省略** `python_abi`、`python_dependencies`、`flash_rt/`。
+- `runtime/<env-key>/substrate/`：model-runtime `.so`。`native-abi` 放导出 `frt_model_runtime_open_v1` 的 producer `.so`（及 `preload` 库）；`native-exec` 放由 `native.command` 引用的可执行文件（任意语言）。
+- **模型专属细节全部归 bundle**（预处理、模态形状/dtype、默认值、option→端口映射）；host 是通用的，不得写死这些（§4）。
+
+`native-abi` 也可声明 `native.session_library` + `loader_symbol`，经 Nexus 内嵌 session 驱动（§7.6）。`native-exec` 除 `native.command` 外不需要知道任何东西；进程讲 NDJSON `stdio` 或 `http`（§6）。
+
 ---
 
 ## 4. 公共生命周期（所有 kind）
@@ -77,6 +89,7 @@ capability 仍按 `entry` 推断：`run` 块启用 `flashcli run`，`serve` 块�
 
 共享保证：
 
+- **与模型无关的 host。** 所有模型专属细节——预处理/后处理、模态形状/dtype、默认值、option→端口映射——都由 bundle 声明：`run_options`/`serve_options`、manifest `native` 块、以及运行时自身的端口描述符。host 只按声明的端口构造 ABI 载荷，**不得**写死某模型的常量、形状或预处理。
 - **权重路径**遵循 [bundle_publish_standard.md](bundle_publish_standard.md) §4.4.1。类 script 的原生启动（即 `native-exec`）收到同样的 `FLASHCLI_CHECKPOINT` / `FLASHCLI_BUNDLE_ROOT` / `FLASHCLI_PRESET` / `FLASHCLI_VARIANT` / `FLASHCLI_EXTRA_WEIGHT_<KEY>` 变量。`native-abi` 通过 `open_symbol` 的 `config_json` 收到 checkpoint 路径。
 - **`run_options` / `serve_options`** 仍是默认值与 `--help` 的唯一来源，与 kind 无关。host 将其映射到原生调用（payload 字段或 CLI 参数）。
 - **推理期权重离线**：`HF_HUB_OFFLINE=1` 语义对 Python 及任何 hub 访问生效；缺失资源由 `flashcli pull` 修复，而非推理期。
@@ -131,10 +144,10 @@ stdin/stdout 上的 NDJSON，UTF-8，每行一个 JSON 对象，行内不含换�
 
 ### 6.3 http 传输
 
-进程绑定一个端点（host/port 由 host 选定，经 env 或 `command` 占位符传入），并向 stdout 输出就绪行 `{"v":1,"op":"ready","endpoint":"<url>"}`。host：
+进程绑定一个端点（host/port 由 host 选定，经 env 或 `command` 占位符传入），并向 stdout 输出就绪行 `{"v":1,"op":"ready","payload":{"endpoint":"<url>"}}`。host：
 
 - **run**：`POST /run` 发送 run payload，读取响应，然后 `shutdown`。
-- **serve**：监管进程并转发流量（或把端点交给用户），直到 SIGINT；随后优雅关闭。
+- **serve**：监管进程（spawn → 就绪 → 保活 → 收到 SIGINT/SIGTERM 优雅停止）并把端点交给用户。host **不做**反向代理，客户端直连 bundle 进程的端点。（stdio 的 `serve` 未实现。）
 
 ### 6.4 生命周期
 
@@ -214,6 +227,35 @@ host 通过 **capsule** face（`FlashRT-Nexus/host/include/capsule/model_runtime
 3. 拒绝在同一进程加载第二个 bundle 的 `libflashrt_exec`（硬错误，而非陈旧句柄）。
 
 这也是 `native-abi` **每进程仅服务一个** bundle 的原因。多 bundle 调度是独立的进程级问题。
+
+### 7.6 Nexus 内嵌 session 通道（`session_library`）
+
+可选、只增字段：让 host 通过 FlashRT-Nexus 的内嵌 C session 驱动被采纳的运行时，而非直接调用原始 producer verbs —— 仍然是进程内、仍然无 Python：
+
+```jsonc
+"native": {
+  "library":         "{runtime_dir}/substrate/libflashrt_cpp_pi05_c-*.so",      // producer（open_symbol）
+  "session_library": "{runtime_dir}/substrate/libcapsule_nexus_flashrt-*.so",   // Nexus host
+  "loader_symbol":   "flashrt_loaded_model_open",   // 默认；一次调用完成加载+采纳
+  "preload":         ["{runtime_dir}/substrate/libflashrt_exec-*.so"],
+  "config": { "io": "native_v2", "checkpoint_path": "{checkpoint}", "...": "..." }
+}
+```
+
+当存在 `session_library` 时，host：
+
+1. 以 `RTLD_GLOBAL` 依序加载 `preload`，再加载 `session_library`；
+2. 调用 `loader_symbol(provider_dso=library, config_json, &loader, &model)` 打开 producer DSO 并采纳其 `frt_model_runtime_v1`；
+3. 在采纳的模型上开启常驻 `nexus_embedded_session`，驱动 `nexus_embedded_set_input` / `_tick` / `_get_output`，serve 场景再用 `_snapshot` / `_restore`。
+
+端口按名寻址：`native.inputs`（`prompt` / `state` / `images`）与 `native.output_port`（默认 `actions`）。IMAGE 载荷为 `frt_image_view[]`（RGB8）；TEXT 为 UTF-8 字节；STATE/ACTION 为 f32。`config` 支持 §6.1 的占位符，外加 `{option:<name>}` 与 `{tokenizer}`。
+
+`flashcli serve` 将 session 映射到 HTTP：
+`GET /healthz`、`GET /v1/substrate`、`GET /v1/session/state`、
+`POST /v1/session/snapshot`、`POST /v1/session/reset/{capsule}`，以及
+`POST /v1/act`（兼容 `POST /v1/chat/completions`）。
+
+校验：`session_library` 可选；存在时，若给了 `loader_symbol` 必须是 C 标识符。未声明 `session_library` 的 bundle 行为与 §7.4 完全一致。
 
 ---
 

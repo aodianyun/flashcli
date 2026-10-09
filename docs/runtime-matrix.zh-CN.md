@@ -11,6 +11,7 @@
 | Bundle | SM | CUDA 线 | Python ABI | Native 模块 |
 |--------|-----|---------|------------|-------------|
 | `pi05_libero` | **89**、**120** | cu124（SM89）、cu130 | **3.12**（`python_abi: 312`） | `flash_rt_kernels`, `flash_rt_fa2` |
+| `pi05_libero_nexus` | **120** | **仅 cu130** | **无**（仅原生；key `sm120-cu130-linux-x86_64`） | `runtime/<env>/substrate/` 下 C 库 + `bin/pi05_exec_server`（`@abi` native-abi、`@exec` native-exec） |
 | `qwen_nvfp4` | **120** | **仅 cu130** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2`, `flash_rt_fp4` |
 | `qwen3_vl_nvfp4` | **120** | **仅 cu130** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2`, `flash_rt_fp4`, `flash_rt_qwen3_vl_kernels` |
 | `groot_n16` | **120** | **仅 cu130** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2` *（本地 dev；尚未上 FlashHub）* |

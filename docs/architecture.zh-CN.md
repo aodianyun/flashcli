@@ -4,13 +4,13 @@
 
 flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub 拉取 Model Bundle、按 GPU 环境 preflight、创建 bundle venv、缓存权重，并调用 bundle 内 **`entry`** 的 `RunEngine` / `ServeEngine`。
 
-**不负责**具体模型 forward、CUDA kernel；这些在 bundle 的 `run.py`（及 `flash_rt/`、`.so`）中实现。
+**不负责**具体模型 forward、CUDA kernel；这些在 bundle 的 `run.py`（及 `flash_rt/`、`.so`）中实现。**仅原生** bundle 则改用原生 model-runtime ABI、无 Python entry（`entry.kind = native-abi|native-exec`；见 [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md)）。
 
 > **Go host。** 主机 CLI 是 `go/`（module `github.com/aodianyun/flashcli/go`）下的静态 Go 二进制；Python host 已移除。`flashcli-bundle/` 保留：它是装进 bundle venv 的 **protocol** + **infer** 包（`flashcli-bundle[infer]`）。执行 backend（`entry.kind`）规范见 [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md)。
 
 ## 核心原则
 
-1. **推理在 bundle 内** — `flashcli-bundle.json` 的 `entry` 指向模块；flashcli 只做 `importlib` 加载。
+1. **推理在 bundle 内** — bundle 拥有**全部模型专属逻辑**：前向、预处理/后处理、模态形状与 dtype、输入/输出语义、option→端口映射与默认值。flashcli 只是**通用、与模型无关的驱动器**：解析 ref、准备环境、调用 bundle 提供的接口——`kind=python` 用 `entry`，`native-exec`/`native-abi` 用声明的 model-runtime ABI + manifest `native` 块。**host（`go/`）中不得出现任何模型专属常量、形状或预处理。**
 2. **Preset ref** — 用户使用 `namespace/bundle:version[@variant]`；`FLASHCLI_FLASHHUB_API` 配置 API 基址。
 3. **manifest-first + 分包下载** — 先拉 manifest → preflight 匹配 `runtime` env key → 只下载本 env 的 `runtime/<env-key>/`。
 4. **固定 Python ABI** — 每个 bundle 一个 venv（`python_abi`）；CLI 准备完成后 **re-exec** 进 bundle venv。
@@ -56,7 +56,7 @@ bundle venv **不** prepend 主机 `PYTHONPATH`。实现：Go `internal/{inferex
 |------|----------|----------------|
 | Preset ref / FlashHub | ✓ | |
 | `flashcli-bundle.json` | | ✓ |
-| FlashHub 拉取 / 本地 `local_root` | ✓ | |
+| FlashHub 拉取 / 本地 `path` | ✓ | |
 | bundle venv、PYTHONPATH、pip | ✓ | `python_dependencies` |
 | OpenAI HTTP（`serve`） | ✓ | |
 | `RunEngine` / `ServeEngine` | | ✓ |
@@ -116,32 +116,13 @@ sequenceDiagram
 └── runtime/<env-key>/       # 本机 native *.so（就地加载，不拷贝到 lib/）
 ```
 
+> 仅原生 bundle 省略 `run.py` / `flash_rt/`，C 库放在 `runtime/<env-key>/substrate/`。
+
 详见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
 
 ## 模块划分
 
-主机（Go，`go/internal/`）：
-
-| 包 | 职责 |
-|----|------|
-| `ref` | 解析 ref → repo URL + variant + cache key |
-| `flashhub` | FlashHub API listing / 文件下载 / 树同步 |
-| `preflight` | env key 与 `runtime` 匹配；native cell + host ABI + CUDA userland |
-| `weights` | 权重缓存、HF/ModelScope 下载、`post_pull`、`extra_pull` |
-| `venv` | 按 `python_abi` 创建 bundle venv；解析 `flashcli-bundle[infer]` spec |
-| `pythonprovision` | 解析/安装 bundle 基础 Python（standalone） |
-| `inferexec` | re-exec `python -m flashcli_bundle.infer`（python backend） |
-| `nativeexec` | 启动 `native-exec` backend（NDJSON/HTTP） |
-| `nativeabi` | `dlopen` `native-abi` 模型运行时（`frt_model_runtime_v1`） |
-| `manifest`/`native`/`hostabi`/`cuda` | manifest 与 native 校验、宿主检查 |
-| `cli` | 命令树 |
-
-bundle venv（Python，`flashcli-bundle/`）：
-
-| 模块 | 职责 |
-|------|------|
-| `flashcli_bundle`（protocol） | manifest/options/paths/FlashHub 类型 |
-| `flashcli_bundle.infer` | bundle venv 内的 `run` / `serve` 入口 |
+权威的 host / infer / protocol 包划分与归属规则见 [module_layers.zh-CN.md](module_layers.zh-CN.md)。
 
 ## 示例 ref
 

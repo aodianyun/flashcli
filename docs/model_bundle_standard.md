@@ -53,6 +53,8 @@ Multi-variant bundles **require** `@variant` in the ref.
 └── runtime/<env-key>/      # FlashHub sync; load .so from here at runtime
 ```
 
+> Native-only bundles (`entry.kind = native-abi|native-exec`) omit `run.py`/`serve.py` and `flash_rt/`; C libraries live under `runtime/<env-key>/substrate/`.
+
 Weights are **not** in the bundle; cached under `~/.flashcli/models/<bundle>/<version>@<variant>/`.
 
 ## End-user runtime flow
@@ -60,10 +62,10 @@ Weights are **not** in the bundle; cached under `~/.flashcli/models/<bundle>/<ve
 1. Parse REF → local directory uses `local_root`; otherwise `bundle.repo` URL (or synced marker)
 2. FlashHub manifest → **preflight** env key on this host
 3. Download entry tree + **only** matching `runtime/<env-key>/`
-4. Create bundle venv (`python_abi`, manifest torch)
-5. **Re-exec** infer inside bundle venv — [architecture.md](architecture.md)
-6. **Host** (before re-exec): download `weights` + `extra_weights` + `post_pull` if cache is incomplete — same code path as `flashcli pull`
-7. **Bundle venv**: resolve local checkpoint only (`HF_HUB_OFFLINE=1`); run `entry`
+4. `kind=python`: create bundle venv (`python_abi`, manifest torch). Native kinds skip the venv.
+5. `kind=python`: **re-exec** infer inside the bundle venv — [architecture.md](architecture.md). `native-exec`/`native-abi`: the host spawns / `dlopen`s the bundle backend directly.
+6. **Host** (before inference): download `weights` + `extra_weights` + `post_pull` if cache is incomplete — same code path as `flashcli pull`
+7. **Bundle**: resolve local checkpoint only (`HF_HUB_OFFLINE=1`); run `entry` (or the native backend)
 
 `flashcli pull <ref>` runs steps 1–6 without inference. First `flashcli run` / `serve` also runs 1–6 automatically when cache is cold.
 

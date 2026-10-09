@@ -4,13 +4,13 @@
 
 flashcli is the **distribution and runtime host** for FlashRT: it resolves presets, fetches Model Bundles from FlashHub, preflights the host GPU environment, creates a bundle venv, caches weights, and calls `RunEngine` / `ServeEngine` from each bundle’s **`entry`**.
 
-It does **not** implement model forward passes or CUDA kernels; those live in bundle modules such as `run.py` (and optional `flash_rt/` / `.so` files).
+It does **not** implement model forward passes or CUDA kernels; those live in bundle modules such as `run.py` (and optional `flash_rt/` / `.so` files). A **native-only** bundle may instead drive a native model-runtime ABI with no Python entry (`entry.kind = native-abi|native-exec`; see [bundle_execution_abi.md](bundle_execution_abi.md)).
 
 > **Go host.** The host CLI is a static Go binary under `go/` (module `github.com/aodianyun/flashcli/go`); the Python host was removed. `flashcli-bundle/` remains: it is the **protocol** + **infer** package installed into bundle venvs (`flashcli-bundle[infer]`). Execution backends (`entry.kind`) are specified in [bundle_execution_abi.md](bundle_execution_abi.md).
 
 ## Core principles
 
-1. **Inference lives in the bundle** — `entry` in `flashcli-bundle.json`; flashcli only `importlib`-loads it.
+1. **Inference lives in the bundle** — the bundle owns **all model-specific logic**: the forward pass, preprocessing/postprocessing, modality shapes and dtypes, input/output semantics, and option→port mapping/defaults. flashcli is a **generic, model-agnostic driver**: it resolves the ref, prepares the environment, and invokes the bundle-provided interface — `entry` for `kind=python`, or the declared model-runtime ABI + manifest `native` block for `native-exec`/`native-abi`. **No model-specific constants, shapes, or preprocessing may live in the host** (`go/`).
 2. **Preset ref** — users pass `namespace/bundle:version[@variant]`; `FLASHCLI_FLASHHUB_API` sets the API base.
 3. **Manifest-first + split download** — fetch manifest → preflight against `runtime` keys → download only this host’s `runtime/<env-key>/`.
 4. **Fixed Python ABI** — one venv per bundle (`python_abi`); CLI **re-execs** into that venv after prepare.
@@ -117,32 +117,13 @@ sequenceDiagram
 └── runtime/<env-key>/       # native *.so for this host (loaded in place)
 ```
 
+> Native-only bundles omit `run.py` / `flash_rt/` and keep their C libraries under `runtime/<env-key>/substrate/`.
+
 See [model_bundle_standard.md](model_bundle_standard.md).
 
 ## Module map
 
-Host (Go, `go/internal/`):
-
-| Package | Role |
-|---------|------|
-| `ref` | Parse ref → repo URL + variant + cache key |
-| `flashhub` | FlashHub API listing, file download, tree sync |
-| `preflight` | Match host env key to `runtime`; native cell + host ABI + CUDA userland |
-| `weights` | Weight cache, HF/ModelScope download, `post_pull`, `extra_pull` |
-| `venv` | Create bundle venv from `python_abi`; resolve `flashcli-bundle[infer]` spec |
-| `pythonprovision` | Resolve/install bundle base Python (standalone) |
-| `inferexec` | Re-exec `python -m flashcli_bundle.infer` (python backend) |
-| `nativeexec` | Spawn `native-exec` backend (NDJSON/HTTP) |
-| `nativeabi` | `dlopen` `native-abi` model runtime (`frt_model_runtime_v1`) |
-| `manifest`/`native`/`hostabi`/`cuda` | Manifest + native validation and host checks |
-| `cli` | Command tree |
-
-Bundle venv (Python, `flashcli-bundle/`):
-
-| Module | Role |
-|--------|------|
-| `flashcli_bundle` (protocol) | Manifest/options/paths/FlashHub types |
-| `flashcli_bundle.infer` | `run` / `serve` entry inside the bundle venv |
+See [module_layers.md](module_layers.md) for the authoritative host / infer / protocol package map and placement rules.
 
 ## Example refs
 

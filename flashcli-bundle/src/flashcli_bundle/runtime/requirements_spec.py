@@ -333,7 +333,7 @@ def write_runtime_requirements_artifacts(
     """Write requirements-runtime.txt (author reference only).
 
     ``merge_into_manifest`` is deprecated: ``flashcli-bundle.json`` is publisher-owned;
-    build must not overwrite ``python_dependencies``. See docs/bundle_manifest_policy.md.
+    build must not overwrite ``python_dependencies``. See docs/bundle_publish_standard.md §3.0.
     """
     stage_dir = stage_dir.resolve()
     lines = spec.pip_packages_for_bundle()
@@ -344,7 +344,7 @@ def write_runtime_requirements_artifacts(
     if merge_into_manifest is not None:
         warnings.warn(
             "merge_into_manifest is deprecated; maintain python_dependencies in "
-            "flashcli-bundle.json instead (see docs/bundle_manifest_policy.md)",
+            "flashcli-bundle.json instead (see docs/bundle_publish_standard.md §3.0)",
             DeprecationWarning,
             stacklevel=2,
         )

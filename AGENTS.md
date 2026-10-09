@@ -41,7 +41,7 @@ Python tests only cover `flashcli_bundle` (protocol/infer) + conformance now; in
 - Protocol `flashcli-bundle` keeps `dependencies = []` — no fastapi/uvicorn/torch/`huggingface_hub` there.
 - The Go host never imports Python infer code; it re-execs `python -m flashcli_bundle.infer` (or drives a native backend). Never prepend host site-packages/PYTHONPATH.
 - Bundle venvs get `flashcli-bundle[infer]` + manifest `python_dependencies` only; resolution source is `FLASHCLI_BUNDLE_PIP_SPEC` / local `flashcli-bundle/` / `FLASHCLI_INSTALL_REPO`+`REF` (see `go/internal/venv/spec.go`).
-- No model-specific forward logic outside bundle `entry`.
+- The host is a **generic, model-agnostic driver**: no model-specific logic (forward, preprocessing/postprocessing, modality shapes/dtypes, option→port mapping/defaults) outside the bundle. Python bundles own it in `entry`; native bundles declare it in the manifest `native` block + runtime port descriptors. Never hardcode a model's constants/shapes/preprocessing in `go/`.
 - Manifest `protocol_version` must equal `flashcli_bundle.version.PROTOCOL_VERSION` (currently `1`); native kinds add `runtime_abi_version` / `exec_protocol_version` = `1`.
 
 Details: `docs/module_layers.md`, `docs/architecture.md`, `docs/bundle_execution_abi.md`.
@@ -58,11 +58,10 @@ Details: `docs/module_layers.md`, `docs/architecture.md`, `docs/bundle_execution
 - Weights are never stored in the bundle; cached under `~/.flashcli/models/<bundle>/<version>@<variant>/`.
 
 ## Conventions
-- Code, shell, and JSON/YAML comments in **English**; user docs English with optional `*.zh-CN.md` mirrors — update the zh-CN copy when behavior docs change.
-- **Git**: `main` = stable/release (default), `dev` = integration/validation. Branch off `dev`, PR into `dev`. Sync `dev` → `main` after validation via **squash-and-record**: `git merge --squash dev` + one commit on `main` (`chore(sync): squash merge dev into main`), then on `dev` `git merge -s ours main -m "chore: record squash merge from main (ours)"` (keeps ancestry so future merges don't replay). `main` stays linear (+1 commit/sync); dev commit messages are not carried into `main`. **Never force-push `main`/`dev`; fix forward.**
-- **Commits**: Conventional Commits `type(scope): imperative summary` (`feat|fix|refactor|perf|docs|test|build|ci|chore`), **one logical change per commit**, no mixing code + unrelated docs. See `CONTRIBUTING.md` "Git workflow".
+- Code, shell, and JSON/YAML comments in **English**; user docs English with a **`*.zh-CN.md` mirror kept in sync in the same change**.
+- **Docs**: see [CONTRIBUTING.md](CONTRIBUTING.md) → Documentation. Keep docs clear, concise, accurate, complete; one concept per doc, no duplication; **delete/fix outdated content**; update the authoritative spec + bundle README/BUILD + `environment.md` when behavior changes.
+- **Git / commits**: see [CONTRIBUTING.md](CONTRIBUTING.md) → Git workflow. In short: branch off `dev`, PR into `dev`; Conventional Commits, **one logical change per commit**; sync `dev` → `main` via squash-and-record; never force-push `main`/`dev`.
 - Do not commit secrets/tokens, `dist/`, `build/`, `.native-cache/`, `logs/`, weights, or FlashRT source.
 - `bundles/<name>/README.md` is user-facing (FlashHub); `BUILD.md` is maintainer-facing.
 - Do not commit FlashRT source into this repo; it is a sibling clone used only as build input.
 - Version is single-sourced from root `pyproject.toml [project].version`; `scripts/build_go.sh` injects it into the Go binary via `-ldflags`.
-- `build/`, `dist/`, and `.native-cache/` are build artifacts (gitignored).

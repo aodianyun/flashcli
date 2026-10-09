@@ -2,7 +2,7 @@
 
 <p align="right"><a href="bundle_builder_guide.md">English</a> · <strong>简体中文</strong></p>
 
-> **内部维护者文档** — 不在对外 README / `docs/README` 索引中。入口：[CONTRIBUTING.md](../CONTRIBUTING.md)。
+> **维护者文档。** 入口：[CONTRIBUTING.md](../CONTRIBUTING.md)；文档索引：[docs/README.zh-CN.md](README.zh-CN.md)。
 
 面向 **Model Bundle 维护者（内部）**：环境安装、本地开发、矩阵编译、打包校验、FlashHub 上传与 ref 文档更新。
 
@@ -27,6 +27,8 @@ from flashcli_bundle.options import option_value, run_option_defaults
 from flashcli_bundle.protocol import ChatRequest, RunEngine
 from flashcli_bundle.preset import Preset
 ```
+
+**仅原生** bundle 没有 Python entry（见 §5）。
 
 ---
 
@@ -113,6 +115,8 @@ pi05_libero/
 └── dist/                     # 发布产物（上传 FlashHub）
 ```
 
+**仅原生** bundle（`entry.kind = native-abi|native-exec`）省略 `run.py` / `flash_rt/`，C 库放在 `runtime/<env-key>/substrate/`。
+
 ### manifest 必填要点（format_version 3）
 
 ```json
@@ -153,6 +157,8 @@ bash bundles/pi05_libero/build.sh --repo-root "$FLASHRT_REPO" -j "$(nproc)"
 ```
 
 **做什么**：`_bundle_build.sh` 调 FlashRT cmake，产出 `lib/flash_rt_*.so`，并 staging `flash_rt/`。
+
+**仅原生** bundle：构建 Python-free 的 C 库（如 FA2 raw → `flashrt_exec`/producer → Nexus），stage 到 `runtime/<env-key>/substrate/`。
 
 ### 步骤 B — 校验 manifest 与 layout
 
@@ -313,6 +319,7 @@ bundles/pi05_libero/dist/
 | 文档 | 内容 |
 |------|------|
 | [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) | **对外**发布标准：manifest、entry、.so、FlashHub 目录 |
+| [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) | `entry.kind` 后端与原生契约 |
 | [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | preset ref 语法 + 运行时流程 |
 | [architecture.zh-CN.md](architecture.zh-CN.md) | 主机 CLI vs bundle venv vs flashcli-bundle |
 | [environment.zh-CN.md](environment.zh-CN.md) | 环境变量 |
