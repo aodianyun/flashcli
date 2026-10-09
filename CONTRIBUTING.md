@@ -123,40 +123,27 @@ refactor(weights): share cache-key resolution between pull and run
 
 #### Release notes standard
 
-Every release description (GitHub **and** Gitee) follows the same template. Keep only the latest release; delete superseded ones.
+Concise; **Features** and **Fixes** only. Bold the key terms. Same text on GitHub and Gitee; keep only the latest release.
 
 ```markdown
 # flashcli <version>
 
-## Overview
-<1–3 sentences: what this release is about and who it affects.>
+<one-line overview; bold the headline>
 
-## What's Changed
+## Features
+- **<area>**: <what changed, user-visible>
 
-### Features
-- <user-visible feature>
-
-### Fixes
-- <user-visible fix>
-
-### Build / Docs            (optional sections)
-- <change>
-
-## Install
-<install command(s)>
+## Fixes
+- **<area>**: <what was broken → fixed>
 
 ## Assets
-- `flashcli-linux-amd64` — sha256 `<…>`
-- `flashcli-linux-arm64` — sha256 `<…>`
+- `flashcli-linux-amd64` sha256 `<…>`
+- `flashcli-linux-arm64` sha256 `<…>`
 
 **Full Changelog**: <compare or commits link>
 ```
 
-Rules:
-- Write in **English**; a concise `> 简体中文` summary line in **Overview** is welcome but optional.
-- Group by [Conventional Commit](https://www.conventionalcommits.org) type (Features / Fixes / …); describe user-visible behavior, not raw commits.
-- Include the asset names and their sha256 (from `dist/go/sha256sums.txt`).
-- Apply to **both** GitHub and Gitee; verify the body rendered and assets are downloadable.
+Rules: short bullets, no raw commit dump, no extra sections; English (an optional one-line `> 简体中文` is fine); include asset sha256.
 
 ## Pull request guidelines
 
