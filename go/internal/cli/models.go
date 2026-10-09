@@ -19,6 +19,7 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/ref"
 	"github.com/aodianyun/flashcli/go/internal/runtime"
 	"github.com/aodianyun/flashcli/go/internal/venv"
+	"github.com/aodianyun/flashcli/go/internal/version"
 	"github.com/aodianyun/flashcli/go/internal/weights"
 )
 
@@ -240,6 +241,7 @@ func modelsShowCmd() *cobra.Command {
 			if err != nil {
 				return failed(cmd, err)
 			}
+			fmt.Fprintf(out, "flashcli %s\n", version.Version)
 			fmt.Fprintf(out, "ref: %s\n", p.Name)
 			if p.Variant != "" {
 				fmt.Fprintf(out, "variant: %s\n", p.Variant)

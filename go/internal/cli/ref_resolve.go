@@ -174,7 +174,7 @@ func pullCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&quiet, "quiet", false, "Suppress progress output")
+	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress output")
 	cmd.Flags().BoolVar(&noAutoInstall, "no-auto-install", false, "Do not auto-install the Python stack")
 	return cmd
 }
@@ -204,7 +204,7 @@ func bundleSyncCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&quiet, "quiet", false, "Suppress progress output")
+	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress output")
 	cmd.Flags().BoolVar(&force, "force", false, "Re-download manifest and artifacts")
 	return cmd
 }
