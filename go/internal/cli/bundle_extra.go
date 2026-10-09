@@ -44,6 +44,10 @@ func bundleInstallCmd() *cobra.Command {
 			if err != nil {
 				return failed(cmd, err)
 			}
+			if !m.NeedsPythonVenv() {
+				fmt.Fprintln(cmd.OutOrStdout(), "No Python dependencies (native-only bundle); nothing to install.")
+				return nil
+			}
 			runtimeID := runtime.IDFromPath(abs, m.Name)
 			if _, err := venv.Ensure(context.Background(), runtimeID, m, venv.Options{
 				Force: force, Quiet: quiet,
