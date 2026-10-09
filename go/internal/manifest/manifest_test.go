@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -118,6 +119,36 @@ func TestNativeSpecInheritanceAndOverride(t *testing.T) {
 	}
 	if _, ok := m.EntryRun.Native["config"]; !ok {
 		t.Fatalf("capability config missing: %v", m.EntryRun.Native)
+	}
+}
+
+func TestResolveVariant(t *testing.T) {
+	plain := baseData(map[string]any{"run": map[string]any{"module": "run", "attr": "RunEngine"}})
+	if _, err := LoadData(plain, "/tmp"); err != nil {
+		t.Fatal(err)
+	}
+	mp, _ := LoadData(plain, "/tmp")
+	if v, err := ResolveVariant(mp, ""); err != nil || v != "" {
+		t.Fatalf("no-variant empty: %q %v", v, err)
+	}
+	if v, err := ResolveVariant(mp, "x"); err != nil || v != "x" {
+		t.Fatalf("no-variant named: %q %v", v, err)
+	}
+
+	multi := baseData(map[string]any{"run": map[string]any{"module": "run", "attr": "RunEngine"}})
+	multi["variants"] = map[string]any{"qwen3": map[string]any{}, "qwen36": map[string]any{}}
+	mm, err := LoadData(multi, "/tmp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ResolveVariant(mm, "qwen36"); err != nil {
+		t.Fatalf("known variant: %v", err)
+	}
+	if _, err := ResolveVariant(mm, ""); err == nil || !strings.Contains(err.Error(), "add @variant") {
+		t.Fatalf("missing variant should error: %v", err)
+	}
+	if _, err := ResolveVariant(mm, "qwen359"); err == nil || !strings.Contains(err.Error(), "Unknown model variant") {
+		t.Fatalf("unknown variant should error: %v", err)
 	}
 }
 

@@ -62,6 +62,9 @@ func ensureBundleRef(refStr string, quiet, force bool) (string, string, string, 
 	if err != nil {
 		return "", "", "", err
 	}
+	if _, err := manifest.ResolveVariant(m, variant); err != nil {
+		return "", "", "", err
+	}
 	envKey := resolveEnvKey(m)
 	if envKey == "" {
 		return "", "", "", fmt.Errorf("bundle %q has no runtime environment for this machine", m.Name)
@@ -156,6 +159,9 @@ func pullCmd() *cobra.Command {
 			}
 			m, err := manifest.Load(bundleRoot)
 			if err != nil {
+				return failed(cmd, err)
+			}
+			if _, err := manifest.ResolveVariant(m, variant); err != nil {
 				return failed(cmd, err)
 			}
 			if _, _, err := ensureBundleRuntime(m, bundleRoot, ver, variant, quiet, noAutoInstall); err != nil {

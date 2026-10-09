@@ -77,12 +77,7 @@ func runPrelude(capability string, args []string, hf hostFlags) error {
 	if err != nil {
 		return err
 	}
-	if version == "local" {
-		if _, err := writeLocalMarkers(m, bundleRoot, variant); err != nil {
-			return err
-		}
-	}
-	if _, err := preflightBundle(m, bundleRoot, "", quiet, !hf.NoAutoInstall); err != nil {
+	if _, err := manifest.ResolveVariant(m, variant); err != nil {
 		return err
 	}
 	spec := capSpec(m, capability)
@@ -92,6 +87,14 @@ func runPrelude(capability string, args []string, hf hostFlags) error {
 	if hf.WantsHelp {
 		fmt.Fprint(os.Stdout, bundleHelp(m, capability, variant))
 		return nil
+	}
+	if version == "local" {
+		if _, err := writeLocalMarkers(m, bundleRoot, variant); err != nil {
+			return err
+		}
+	}
+	if _, err := preflightBundle(m, bundleRoot, "", quiet, !hf.NoAutoInstall); err != nil {
+		return err
 	}
 	switch spec.Kind {
 	case "native-exec":

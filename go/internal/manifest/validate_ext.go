@@ -29,6 +29,31 @@ func mapString(v any, fallback string) string {
 	return fallback
 }
 
+// ResolveVariant validates a ref's @variant against the manifest, mirroring
+// flashcli_bundle.variants.resolve_bundle_variant:
+//   - no variants: any/empty variant is returned as-is;
+//   - variants present and variant empty: error (must specify @variant);
+//   - variants present and unknown variant: error.
+func ResolveVariant(m *Manifest, variant string) (string, error) {
+	blocks := variantBlocksRaw(m)
+	key := strings.TrimSpace(variant)
+	if len(blocks) == 0 {
+		return key, nil
+	}
+	keys := make([]string, 0, len(blocks))
+	for k := range blocks {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	if key == "" {
+		return "", fmt.Errorf("Bundle %q has variants; add @variant to the ref (choose from: %s)", m.Name, strings.Join(keys, ", "))
+	}
+	if _, ok := blocks[key]; !ok {
+		return "", fmt.Errorf("Unknown model variant %q for bundle %q; choose from: %s", key, m.Name, strings.Join(keys, ", "))
+	}
+	return key, nil
+}
+
 func validatePythonDependencies(m *Manifest) []string {
 	if _, ok := m.Raw["python_dependencies"].(map[string]any); !ok {
 		return []string{"flashcli-bundle.json missing python_dependencies"}
