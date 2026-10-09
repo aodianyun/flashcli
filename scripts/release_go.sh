@@ -114,20 +114,21 @@ publish_gitee() {
   esac
   api="https://gitee.com/api/v5/repos/${GITEE_REPO}"
 
-  # Ensure the tag exists on Gitee (mirror syncs git, but tags can lag).
-  gcode="$(curl -sS -o /dev/null -w '%{http_code}' "${api}/tags/${TAG}?access_token=${GITEE_TOKEN}")"
-  if [ "$gcode" != "200" ]; then
-    echo "Gitee: creating tag ${TAG} ..."
-    sha="$(git -C "$ROOT" rev-parse "refs/tags/$TAG")"
-    resp="$(curl -sS -w $'\n%{http_code}' -X POST "${api}/tags" \
-      -d "access_token=${GITEE_TOKEN}" -d "tag_name=${TAG}" -d "refs=${sha}" -d "message=flashcli ${VERSION}")"
-    code="$(printf '%s' "$resp" | tail -n1)"; body="$(printf '%s' "$resp" | sed '$d')"
-    if [ "$code" != "201" ] && [ "$code" != "200" ]; then
-      echo "[!] Gitee create tag failed (HTTP ${code}): ${body}" >&2
-      echo "    - ensure commit ${sha} exists on Gitee (repo sync), and GITEE_TOKEN is a Gitee token." >&2
-      return 1
-    fi
-    echo "[ok] Gitee tag ${TAG}"
+  # Ensure the tag exists on Gitee. Gitee has no single-tag GET; create and
+  # treat "already exists" as success.
+  echo "Gitee: ensuring tag ${TAG} ..."
+  sha="$(git -C "$ROOT" rev-parse "refs/tags/$TAG")"
+  resp="$(curl -sS -w $'\n%{http_code}' -X POST "${api}/tags" \
+    -d "access_token=${GITEE_TOKEN}" -d "tag_name=${TAG}" -d "refs=${sha}" -d "message=flashcli ${VERSION}")"
+  code="$(printf '%s' "$resp" | tail -n1)"; body="$(printf '%s' "$resp" | sed '$d')"
+  if [ "$code" = "201" ] || [ "$code" = "200" ]; then
+    echo "[ok] Gitee tag ${TAG} created"
+  elif printf '%s' "$body" | grep -qiE '已存在|already exists|exist'; then
+    echo "[i] Gitee tag ${TAG} already exists"
+  else
+    echo "[!] Gitee create tag failed (HTTP ${code}): ${body}" >&2
+    echo "    - ensure commit ${sha} exists on Gitee (repo sync), and GITEE_TOKEN is a Gitee token." >&2
+    return 1
   fi
 
   rid="$(curl -sS "${api}/releases/tags/${TAG}?access_token=${GITEE_TOKEN}" | _json_id)"
