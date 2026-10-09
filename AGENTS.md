@@ -60,6 +60,7 @@ Details: `docs/module_layers.md`, `docs/architecture.md`, `docs/bundle_execution
 ## Conventions
 - Code, shell, and JSON/YAML comments in **English**; user docs English with a **`*.zh-CN.md` mirror kept in sync in the same change**.
 - **Docs**: see [CONTRIBUTING.md](CONTRIBUTING.md) → Documentation. Keep docs clear, concise, accurate, complete; one concept per doc, no duplication; **delete/fix outdated content**; update the authoritative spec + bundle README/BUILD + `environment.md` when behavior changes.
+- **Release notes**: follow [CONTRIBUTING.md](CONTRIBUTING.md) → Release notes standard (Overview / What's Changed / Install / Assets+sha256 / Full Changelog) on **both** GitHub and Gitee; keep only the latest release.
 - **Git / commits**: see [CONTRIBUTING.md](CONTRIBUTING.md) → Git workflow. In short: branch off `dev`, PR into `dev`; Conventional Commits, **one logical change per commit**; sync `dev` → `main` via squash-and-record; never force-push `main`/`dev`.
 - Do not commit secrets/tokens, `dist/`, `build/`, `.native-cache/`, `logs/`, weights, or FlashRT source.
 - `bundles/<name>/README.md` is user-facing (FlashHub); `BUILD.md` is maintainer-facing.

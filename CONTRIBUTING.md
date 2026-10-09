@@ -121,6 +121,43 @@ refactor(weights): share cache-key resolution between pull and run
 - **Host (Go)**: bump `[project].version` in `pyproject.toml`, commit (`chore(release): bump version to X`), tag `vX` on the release commit, then `bash scripts/release_go.sh --upload` (GitHub) and upload the same assets to Gitee.
 - **Bundles**: follow the maintainer checklist below and [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md).
 
+#### Release notes standard
+
+Every release description (GitHub **and** Gitee) follows the same template. Keep only the latest release; delete superseded ones.
+
+```markdown
+# flashcli <version>
+
+## Overview
+<1–3 sentences: what this release is about and who it affects.>
+
+## What's Changed
+
+### Features
+- <user-visible feature>
+
+### Fixes
+- <user-visible fix>
+
+### Build / Docs            (optional sections)
+- <change>
+
+## Install
+<install command(s)>
+
+## Assets
+- `flashcli-linux-amd64` — sha256 `<…>`
+- `flashcli-linux-arm64` — sha256 `<…>`
+
+**Full Changelog**: <compare or commits link>
+```
+
+Rules:
+- Write in **English**; a concise `> 简体中文` summary line in **Overview** is welcome but optional.
+- Group by [Conventional Commit](https://www.conventionalcommits.org) type (Features / Fixes / …); describe user-visible behavior, not raw commits.
+- Include the asset names and their sha256 (from `dist/go/sha256sums.txt`).
+- Apply to **both** GitHub and Gitee; verify the body rendered and assets are downloadable.
+
 ## Pull request guidelines
 
 1. **Scope** — Keep changes in `flashcli/`. Do not commit FlashRT source changes inside flashcli PRs.
