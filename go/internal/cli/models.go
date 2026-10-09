@@ -160,17 +160,17 @@ func modelsEnvsOne(out interface{ Write([]byte) (int, error) }, refStr string, g
 	if gpu == nil {
 		return
 	}
-	abi, err := m.PythonABI()
-	if err != nil {
-		fmt.Fprintf(out, "  native envs: %s\n", err)
-		return
-	}
+	abi := m.PythonABIOrEmpty()
 	hostKey := preflight.VariantDirName(gpu, abi)
-	fmt.Fprintf(out, "  this machine: %s (python_abi=%s)\n", hostKey, abi)
-	if py, perr := venv.ResolveBasePython(abi); perr == nil {
-		fmt.Fprintf(out, "  python 3.%s: %s\n", abi[1:], py)
+	if abi == "" {
+		fmt.Fprintf(out, "  this machine: %s (native, no python_abi)\n", hostKey)
 	} else {
-		fmt.Fprintf(out, "  python 3.%s: NOT FOUND (will auto-install on run, or set FLASHCLI_PY%s_BIN)\n", abi[1:], abi)
+		fmt.Fprintf(out, "  this machine: %s (python_abi=%s)\n", hostKey, abi)
+		if py, perr := venv.ResolveBasePython(abi); perr == nil {
+			fmt.Fprintf(out, "  python 3.%s: %s\n", abi[1:], py)
+		} else {
+			fmt.Fprintf(out, "  python 3.%s: NOT FOUND (will auto-install on run, or set FLASHCLI_PY%s_BIN)\n", abi[1:], abi)
+		}
 	}
 	keys := make([]string, 0, len(m.RuntimeMap()))
 	for k := range m.RuntimeMap() {

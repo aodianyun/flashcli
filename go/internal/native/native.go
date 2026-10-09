@@ -203,6 +203,11 @@ func ValidateRuntimeCell(root, envKey, nativeDir string) []string {
 		matched[parsed.ModuleBase] = true
 	}
 	if len(matched) == 0 {
+		// Native-only cell: C libraries live under substrate/ (no top-level
+		// pybind/extension artifacts).
+		if matches, _ := filepath.Glob(filepath.Join(nativeDir, "substrate", "*.so")); len(matches) > 0 {
+			return errors
+		}
 		return append(errors, rel+"/ has no recognized native .so artifacts (expected tagged files such as *-*-"+envKey+".so)")
 	}
 

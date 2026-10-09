@@ -24,10 +24,7 @@ func preflightBundle(m *manifest.Manifest, root, venvPython string, quiet, autoI
 	if envBool("FLASHCLI_SKIP_PREFLIGHT") {
 		return resolveEnvKey(m), nil
 	}
-	abi, err := m.PythonABI()
-	if err != nil {
-		return "", err
-	}
+	abi := m.PythonABIOrEmpty()
 	gpu := preflight.DetectGPU()
 	hostKey := ""
 	if gpu != nil {
@@ -42,7 +39,7 @@ func preflightBundle(m *manifest.Manifest, root, venvPython string, quiet, autoI
 	}
 	rel := m.RuntimeMap()[envKey]
 	dir := filepath.Join(root, filepath.FromSlash(rel))
-	if len(native.DiscoverModuleBases(dir, envKey)) == 0 {
+	if len(native.DiscoverModuleBases(dir, envKey)) == 0 && !hasSubstrateSO(dir) {
 		return "", errs.Envf("Bundle %s missing native .so under %s for %q. Run pack/release or build into runtime/%s/.", root, rel, envKey, envKey)
 	}
 	if err := hostabi.Ensure(native.NativeSOPaths(dir, envKey), quiet); err != nil {
@@ -56,6 +53,11 @@ func preflightBundle(m *manifest.Manifest, root, venvPython string, quiet, autoI
 		}
 	}
 	return envKey, nil
+}
+
+func hasSubstrateSO(dir string) bool {
+	matches, _ := filepath.Glob(filepath.Join(dir, "substrate", "*.so"))
+	return len(matches) > 0
 }
 
 func sortedKeys(m map[string]string) []string {
@@ -80,6 +82,10 @@ func ensureBundleRuntime(m *manifest.Manifest, bundleRoot, version, variant stri
 	}
 	if _, err := preflightBundle(m, bundleRoot, "", quiet, !noAutoInstall); err != nil {
 		return "", "", err
+	}
+	if !m.NeedsPythonVenv() {
+		// Native-only bundle: no Python venv / CUDA-userland venv step.
+		return runtimeID, "", nil
 	}
 	if envBool("FLASHCLI_SKIP_VENV_SETUP") {
 		return runtimeID, "", nil

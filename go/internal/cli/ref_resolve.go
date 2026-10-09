@@ -73,7 +73,7 @@ func ensureBundleRef(refStr string, quiet, force bool) (string, string, string, 
 		return "", "", "", err
 	}
 	runtimeID := runtime.IDFromRepo(repoURL, p.Name)
-	abi, _ := m.PythonABI()
+	abi := m.PythonABIOrEmpty()
 	if err := runtime.WriteMarker(runtimeID, map[string]any{
 		"runtime_id":  runtimeID,
 		"source":      "repo",
@@ -132,10 +132,8 @@ func writeLocalMarkers(m *manifest.Manifest, root, variant string) (string, erro
 
 func resolveEnvKey(m *manifest.Manifest) string {
 	if gpu := preflight.DetectGPU(); gpu != nil {
-		if abi, err := m.PythonABI(); err == nil {
-			if k := preflight.ResolveRuntimeEnvKey(m.RuntimeMap(), preflight.VariantDirName(gpu, abi)); k != "" {
-				return k
-			}
+		if k := preflight.ResolveRuntimeEnvKey(m.RuntimeMap(), preflight.VariantDirName(gpu, m.PythonABIOrEmpty())); k != "" {
+			return k
 		}
 	}
 	if k := strings.TrimSpace(os.Getenv("FLASHCLI_RUNTIME_ENV_KEY")); k != "" {

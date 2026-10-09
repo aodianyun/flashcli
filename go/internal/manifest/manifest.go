@@ -49,6 +49,17 @@ type EntrySpec struct {
 // IsNative reports whether the capability uses a native backend.
 func (e *EntrySpec) IsNative() bool { return nativeEntryKinds[e.Kind] }
 
+// NeedsPythonVenv reports whether any capability uses the Python backend
+// (and therefore requires a bundle venv). Native-only bundles return false.
+func (m *Manifest) NeedsPythonVenv() bool {
+	for _, e := range m.effectiveEntries() {
+		if e.Spec.Kind == "" || e.Spec.Kind == "python" {
+			return true
+		}
+	}
+	return false
+}
+
 // Manifest is a parsed bundle manifest.
 type Manifest struct {
 	Root         string
@@ -77,6 +88,16 @@ func (m *Manifest) PythonABI() (string, error) {
 		return "", fmt.Errorf("Bundle %q missing valid python_abi (expected e.g. '312')", m.Name)
 	}
 	return abi, nil
+}
+
+// PythonABIOrEmpty returns python_abi or "" when absent. Native-only bundles
+// omit python_abi; their runtime cell key then has no "-py{NNN}" segment.
+func (m *Manifest) PythonABIOrEmpty() string {
+	abi := strings.TrimSpace(str(m.Raw["python_abi"]))
+	if len(abi) == 3 && allDigits(abi) {
+		return abi
+	}
+	return ""
 }
 
 // PythonDependencies returns the raw python_dependencies block.
@@ -257,10 +278,8 @@ func (m *Manifest) ExecProtocolVersionOrNil() (int, bool) {
 // CheckExecutionVersions raises on missing/mismatched native version axes.
 func CheckExecutionVersions(m *Manifest) error {
 	kinds := map[string]bool{}
-	for _, spec := range []*EntrySpec{m.EntryRun, m.EntryServe} {
-		if spec != nil {
-			kinds[spec.Kind] = true
-		}
+	for _, e := range m.effectiveEntries() {
+		kinds[e.Spec.Kind] = true
 	}
 	abiVer, abiSet := m.RuntimeABIVersionOrNil()
 	execVer, execSet := m.ExecProtocolVersionOrNil()
@@ -293,23 +312,21 @@ func CheckExecutionVersions(m *Manifest) error {
 // Mirrors Python validate_bundle_execution.
 func ValidateExecution(m *Manifest) []string {
 	var errors []string
-	for _, capSpec := range []struct {
-		cap  string
-		spec *EntrySpec
-	}{{"run", m.EntryRun}, {"serve", m.EntryServe}} {
-		spec := capSpec.spec
-		if spec == nil {
-			continue
+	for _, e := range m.effectiveEntries() {
+		spec := e.Spec
+		label := "entry." + e.Cap
+		if e.Variant != "" {
+			label = "variants." + e.Variant + ".entry." + e.Cap
 		}
 		if !ValidEntryKinds[spec.Kind] {
-			errors = append(errors, fmt.Sprintf("entry.%s.kind %q is not one of [native-abi native-exec python]", capSpec.cap, spec.Kind))
+			errors = append(errors, fmt.Sprintf("%s.kind %q is not one of [native-abi native-exec python]", label, spec.Kind))
 			continue
 		}
 		switch spec.Kind {
 		case "native-exec":
-			errors = append(errors, validateNativeExec(capSpec.cap, spec.Native)...)
+			errors = append(errors, validateNativeExec(label, spec.Native)...)
 		case "native-abi":
-			errors = append(errors, validateNativeABI(capSpec.cap, spec.Native)...)
+			errors = append(errors, validateNativeABI(label, spec.Native)...)
 		}
 	}
 	if err := CheckExecutionVersions(m); err != nil {
@@ -322,11 +339,11 @@ func validateNativeExec(cap string, native map[string]any) []string {
 	var errors []string
 	command, ok := native["command"].([]any)
 	if !ok || len(command) == 0 {
-		errors = append(errors, fmt.Sprintf("entry.%s.native.command must be a non-empty array of strings", cap))
+		errors = append(errors, fmt.Sprintf("%s.native.command must be a non-empty array of strings", cap))
 	} else {
 		for _, a := range command {
 			if s, ok := a.(string); !ok || s == "" {
-				errors = append(errors, fmt.Sprintf("entry.%s.native.command must be a non-empty array of strings", cap))
+				errors = append(errors, fmt.Sprintf("%s.native.command must be a non-empty array of strings", cap))
 				break
 			}
 		}
@@ -336,14 +353,14 @@ func validateNativeExec(cap string, native map[string]any) []string {
 		transport = "stdio"
 	}
 	if transport != "stdio" && transport != "http" {
-		errors = append(errors, fmt.Sprintf("entry.%s.native.transport must be 'stdio' or 'http', got %q", cap, transport))
+		errors = append(errors, fmt.Sprintf("%s.native.transport must be 'stdio' or 'http', got %q", cap, transport))
 	}
 	cwd := strings.TrimSpace(str(native["cwd"]))
 	if cwd == "" {
 		cwd = "bundle"
 	}
 	if cwd != "bundle" && !strings.HasPrefix(cwd, "/") {
-		errors = append(errors, fmt.Sprintf("entry.%s.native.cwd must be 'bundle' or an absolute path, got %q", cap, cwd))
+		errors = append(errors, fmt.Sprintf("%s.native.cwd must be 'bundle' or an absolute path, got %q", cap, cwd))
 	}
 	return errors
 }
@@ -351,24 +368,34 @@ func validateNativeExec(cap string, native map[string]any) []string {
 func validateNativeABI(cap string, native map[string]any) []string {
 	var errors []string
 	if strings.TrimSpace(str(native["library"])) == "" {
-		errors = append(errors, fmt.Sprintf("entry.%s.native.library is required for native-abi", cap))
+		errors = append(errors, fmt.Sprintf("%s.native.library is required for native-abi", cap))
 	}
 	openSymbol := strings.TrimSpace(str(native["open_symbol"]))
 	if openSymbol == "" {
 		openSymbol = "frt_model_runtime_open_v1"
 	}
 	if !isCIdentifier(openSymbol) {
-		errors = append(errors, fmt.Sprintf("entry.%s.native.open_symbol must be a C identifier, got %q", cap, openSymbol))
+		errors = append(errors, fmt.Sprintf("%s.native.open_symbol must be a C identifier, got %q", cap, openSymbol))
+	}
+	// Optional Nexus session lane: session_library + loader_symbol.
+	if sl := strings.TrimSpace(str(native["session_library"])); sl != "" {
+		loader := strings.TrimSpace(str(native["loader_symbol"]))
+		if loader == "" {
+			loader = "flashrt_loaded_model_open"
+		}
+		if !isCIdentifier(loader) {
+			errors = append(errors, fmt.Sprintf("%s.native.loader_symbol must be a C identifier, got %q", cap, loader))
+		}
 	}
 	if preload, ok := native["preload"].([]any); ok {
 		for _, p := range preload {
 			if s, ok := p.(string); !ok || s == "" {
-				errors = append(errors, fmt.Sprintf("entry.%s.native.preload must be an array of strings", cap))
+				errors = append(errors, fmt.Sprintf("%s.native.preload must be an array of strings", cap))
 				break
 			}
 		}
 	} else if _, present := native["preload"]; present {
-		errors = append(errors, fmt.Sprintf("entry.%s.native.preload must be an array of strings", cap))
+		errors = append(errors, fmt.Sprintf("%s.native.preload must be an array of strings", cap))
 	}
 	return errors
 }
@@ -376,9 +403,10 @@ func validateNativeABI(cap string, native map[string]any) []string {
 // Validate runs structural + execution validation (no native .so probing yet).
 func Validate(m *Manifest) []string {
 	var errors []string
-	abi := strings.TrimSpace(str(m.Raw["python_abi"]))
-	if len(abi) != 3 || !allDigits(abi) {
-		errors = append(errors, fmt.Sprintf("Bundle %q missing valid python_abi (expected e.g. '312')", m.Name))
+	if m.NeedsPythonVenv() {
+		if abi := m.PythonABIOrEmpty(); abi == "" {
+			errors = append(errors, fmt.Sprintf("Bundle %q has a python entry but no valid python_abi (expected e.g. '312')", m.Name))
+		}
 	}
 	if rt, ok := m.Raw["runtime"].(map[string]any); !ok || len(rt) == 0 {
 		errors = append(errors, "missing runtime map (env_key → runtime/<env-key>/ path)")

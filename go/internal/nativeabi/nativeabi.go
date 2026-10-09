@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"unsafe"
 
@@ -237,7 +238,18 @@ func resolveConfig(config map[string]any, ph nativeexec.Placeholders) (string, e
 func resolveValue(v any, ph nativeexec.Placeholders) any {
 	switch t := v.(type) {
 	case string:
-		return ph.Resolve(t)
+		out := ph.Resolve(t)
+		// A value that is purely a placeholder and resolves to a number must
+		// stay numeric in JSON (e.g. "{option:num_views}" -> 2, not "2").
+		if strings.Contains(t, "{") {
+			if i, err := strconv.ParseInt(out, 10, 64); err == nil {
+				return i
+			}
+			if f, err := strconv.ParseFloat(out, 64); err == nil {
+				return f
+			}
+		}
+		return out
 	case map[string]any:
 		out := make(map[string]any, len(t))
 		for k, val := range t {

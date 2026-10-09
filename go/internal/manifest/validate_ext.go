@@ -54,7 +54,16 @@ func ResolveVariant(m *Manifest, variant string) (string, error) {
 	return key, nil
 }
 
+// hasPythonEntry reports whether any capability (top-level or variant) uses the
+// Python backend.
+func hasPythonEntry(m *Manifest) bool {
+	return m.NeedsPythonVenv()
+}
+
 func validatePythonDependencies(m *Manifest) []string {
+	if !hasPythonEntry(m) {
+		return nil
+	}
 	if _, ok := m.Raw["python_dependencies"].(map[string]any); !ok {
 		return []string{"flashcli-bundle.json missing python_dependencies"}
 	}
@@ -62,8 +71,9 @@ func validatePythonDependencies(m *Manifest) []string {
 }
 
 func validateRuntimeSuffix(m *Manifest) []string {
-	abi, err := m.PythonABI()
-	if err != nil {
+	abi := m.PythonABIOrEmpty()
+	if abi == "" {
+		// Native-only: runtime keys carry no "-py{NNN}" segment.
 		return nil
 	}
 	var errors []string
@@ -233,8 +243,10 @@ func validateOptions(m *Manifest) []string {
 
 func validateBundleSpecifics(m *Manifest) []string {
 	var errors []string
-	if info, err := os.Stat(filepath.Join(m.Root, "flash_rt")); err != nil || !info.IsDir() {
-		errors = append(errors, "missing flash_rt/ Python tree")
+	if hasPythonEntry(m) {
+		if info, err := os.Stat(filepath.Join(m.Root, "flash_rt")); err != nil || !info.IsDir() {
+			errors = append(errors, "missing flash_rt/ Python tree")
+		}
 	}
 	if m.Name == "groot_n17" {
 		if _, err := os.Stat(filepath.Join(m.Root, "gr00t", "VENDOR.json")); err != nil {

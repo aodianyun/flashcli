@@ -72,12 +72,13 @@ type Placeholders struct {
 	Preset     string
 	Variant    string
 	RuntimeDir string
+	Tokenizer  string
 	Extra      map[string]string
 	Options    map[string]string
 }
 
 // Resolve substitutes {checkpoint}, {bundle_root}, {models_dir}, {preset},
-// {variant}, {runtime_dir}, {extra:<key>} and {option:<name>} in s.
+// {variant}, {runtime_dir}, {tokenizer}, {extra:<key>} and {option:<name>} in s.
 func (p Placeholders) Resolve(s string) string {
 	repl := map[string]string{
 		"checkpoint":  p.Checkpoint,
@@ -86,6 +87,7 @@ func (p Placeholders) Resolve(s string) string {
 		"preset":      p.Preset,
 		"variant":     p.Variant,
 		"runtime_dir": p.RuntimeDir,
+		"tokenizer":   p.Tokenizer,
 	}
 	for k, v := range repl {
 		s = strings.ReplaceAll(s, "{"+k+"}", v)
@@ -163,6 +165,9 @@ type Process struct {
 
 // Ready returns the backend's readiness payload.
 func (p *Process) Ready() map[string]any { return p.ready }
+
+// Endpoint returns the http endpoint (empty for stdio).
+func (p *Process) Endpoint() string { return p.endpoint }
 
 // Start spawns the backend and waits for its readiness message.
 func Start(ctx context.Context, spec Spec, ph Placeholders, extraEnv []string) (*Process, error) {

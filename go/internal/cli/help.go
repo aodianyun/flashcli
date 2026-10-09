@@ -60,6 +60,18 @@ func bundleHelp(m *manifest.Manifest, capability, variant string) string {
 	if m.Description != "" {
 		fmt.Fprintf(&b, "\n%s\n", m.Description)
 	}
+	if variants, ok := m.Raw["variants"].(map[string]any); ok && len(variants) > 0 {
+		names := make([]string, 0, len(variants))
+		for k := range variants {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+		sel := variant
+		if sel == "" {
+			sel = "(none — add @<variant> to the ref)"
+		}
+		fmt.Fprintf(&b, "\nVariants: %s   selected: %s\n", strings.Join(names, ", "), sel)
+	}
 	fmt.Fprintf(&b, "\nHost options:\n")
 	fmt.Fprintf(&b, "  --checkpoint PATH     Use local weights instead of the cache\n")
 	fmt.Fprintf(&b, "  --quiet, -q           Suppress progress output\n")

@@ -20,6 +20,7 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/nativeabi"
 	"github.com/aodianyun/flashcli/go/internal/nativeexec"
 	"github.com/aodianyun/flashcli/go/internal/paths"
+	"github.com/aodianyun/flashcli/go/internal/postpull"
 	"github.com/aodianyun/flashcli/go/internal/preflight"
 	"github.com/aodianyun/flashcli/go/internal/progress"
 	"github.com/aodianyun/flashcli/go/internal/runtime"
@@ -61,13 +62,6 @@ func runServeCmd(capability string) *cobra.Command {
 	}
 }
 
-func capSpec(m *manifest.Manifest, capability string) *manifest.EntrySpec {
-	if capability == "run" {
-		return m.EntryRun
-	}
-	return m.EntryServe
-}
-
 func runPrelude(capability string, args []string, hf hostFlags) error {
 	quiet := hf.Quiet || envBool("FLASHCLI_QUIET")
 	progress.SetQuiet(quiet)
@@ -79,16 +73,17 @@ func runPrelude(capability string, args []string, hf hostFlags) error {
 	if err != nil {
 		return err
 	}
+	if hf.WantsHelp {
+		// Help is variant-optional: surface available variants without requiring @variant.
+		fmt.Fprint(os.Stdout, bundleHelp(m, capability, variant))
+		return nil
+	}
 	if _, err := manifest.ResolveVariant(m, variant); err != nil {
 		return err
 	}
-	spec := capSpec(m, capability)
+	spec := m.EntryFor(capability, variant)
 	if spec == nil {
 		return fmt.Errorf("bundle %q does not support %s", m.Name, capability)
-	}
-	if hf.WantsHelp {
-		fmt.Fprint(os.Stdout, bundleHelp(m, capability, variant))
-		return nil
 	}
 	if version == "local" {
 		if _, err := writeLocalMarkers(m, bundleRoot, variant); err != nil {
@@ -102,6 +97,9 @@ func runPrelude(capability string, args []string, hf hostFlags) error {
 	case "native-exec":
 		return runNativeExec(m, spec, bundleRoot, version, variant, capability, args, hf)
 	case "native-abi":
+		if nativeabi.HasSessionLibrary(spec) {
+			return runNativeSession(m, spec, bundleRoot, version, variant, capability, args, hf)
+		}
 		return runNativeABI(m, spec, bundleRoot, version, variant, capability, hf)
 	default:
 		return runPythonBackend(m, bundleRoot, version, variant, capability, args, hf)
@@ -148,7 +146,7 @@ func runPythonBackend(m *manifest.Manifest, root, version, variant, capability s
 	argv := inferexec.BuildArgv(python, capability, args)
 	env := inferexec.BuildEnv(os.Environ(), runtimeID, root, filepath.Dir(filepath.Dir(python)))
 	env = append(env, extraEnv...)
-	if spec := capSpec(m, capability); spec != nil && spec.Mode != "script" && hf.MTPCheckpoint != "" {
+	if spec := m.EntryFor(capability, variant); spec != nil && spec.Mode != "script" && hf.MTPCheckpoint != "" {
 		env = append(env, "FLASHRT_QWEN36_MTP_CKPT_DIR="+hf.MTPCheckpoint)
 	}
 	return inferexec.Exec(python, argv, env)
@@ -160,9 +158,7 @@ func runNativeABI(m *manifest.Manifest, entry *manifest.EntrySpec, root, version
 	}
 	key := ""
 	if gpu := preflight.DetectGPU(); gpu != nil {
-		if abi, abiErr := m.PythonABI(); abiErr == nil {
-			key = preflight.ResolveRuntimeEnvKey(m.RuntimeMap(), preflight.VariantDirName(gpu, abi))
-		}
+		key = preflight.ResolveRuntimeEnvKey(m.RuntimeMap(), preflight.VariantDirName(gpu, m.PythonABIOrEmpty()))
 	}
 	if key == "" {
 		key = strings.TrimSpace(os.Getenv("FLASHCLI_RUNTIME_ENV_KEY"))
@@ -271,13 +267,25 @@ func runNativeExec(m *manifest.Manifest, entry *manifest.EntrySpec, root, versio
 	if err != nil {
 		return err
 	}
+	_, rel, err := resolveRuntimeRel(m)
+	if err != nil {
+		return err
+	}
+	tokenizer := strings.TrimSpace(os.Getenv("FLASH_RT_PALIGEMMA_TOKENIZER"))
+	if tokenizer == "" {
+		tokenizer = postpull.DefaultPaligemmaPath()
+	}
+	opts := mergeOptions(optionDefaults(m, capability, variant), parseFlags(args))
 	ph := nativeexec.Placeholders{
 		Checkpoint: checkpoint,
 		BundleRoot: root,
 		ModelsDir:  paths.Models(),
 		Preset:     m.Name,
 		Variant:    variant,
+		RuntimeDir: filepath.Join(root, filepath.FromSlash(rel)),
+		Tokenizer:  tokenizer,
 		Extra:      extra,
+		Options:    opts,
 	}
 	process, err := nativeexec.Start(context.Background(), spec, ph, extraEnv)
 	if err != nil {
@@ -285,16 +293,27 @@ func runNativeExec(m *manifest.Manifest, entry *manifest.EntrySpec, root, versio
 	}
 	defer func() { _ = process.Close(context.Background()) }()
 
+	// Payload = option defaults overlaid with CLI flags (the backend maps
+	// option→port generically).
+	payload := map[string]any{}
+	for k, v := range opts {
+		payload[k] = v
+	}
+	for k, v := range parseFlags(args) {
+		payload[k] = v
+	}
+
 	if capability == "serve" {
 		if spec.Transport == "http" {
-			fmt.Fprintln(os.Stderr, "native-exec serve endpoint ready")
+			endpoint := process.Endpoint()
+			progress.Note("native-exec serve: %s (no Python)", endpoint)
 			waitForSignal()
 			return nil
 		}
 		return fmt.Errorf("native-exec serve over stdio is not implemented yet")
 	}
 
-	out, err := process.Run(context.Background(), parseFlags(args))
+	out, err := process.Run(context.Background(), payload)
 	if err != nil {
 		return err
 	}
