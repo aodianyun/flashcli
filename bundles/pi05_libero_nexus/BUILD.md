@@ -2,32 +2,31 @@
 
 <p align="right"><strong>English</strong> · <a href="BUILD.zh-CN.md">简体中文</a></p>
 
-Maintainer workflow: compile FlashRT + FlashRT-Nexus natives, stage into `runtime/<env-key>/` (+ `substrate/`), validate, smoke `run` / `serve`, pack, publish.
+Maintainer workflow: compile FlashRT + FlashRT-Nexus **native** libraries, stage into `runtime/<env-key>/substrate/`, validate, smoke `run` / `serve`, pack, publish. **No Python is used at inference** — the bundle drives the FlashRT pi05 model-runtime ABI through the Nexus embedded session.
 
-**Requires:** Linux · NVIDIA **SM120** · CUDA **13** userland · cmake ≥ 3.24 · gcc ≥ 11 · **Python 3.10** · FlashRT source · FlashRT-Nexus source · flashcli dev checkout.
+**Requires:** Linux · NVIDIA **SM120** · CUDA **13** userland · cmake ≥ 3.24 · gcc ≥ 11 · CUTLASS (auto-cloned) · FlashRT source · FlashRT-Nexus source · flashcli dev checkout.
 
 ```bash
 cd /path/to/flashcli
-# Host: install the Go binary (release or source), then the protocol pkg for local dev
+# Host: install the Go binary (release or source)
 ./install.sh --from-source          # or: curl -fsSL <repo>/install.sh | sh
-pip install -e ./flashcli-bundle
 export BUNDLE="$(pwd)/bundles/pi05_libero_nexus"
 export FLASHRT_REPO=/path/to/FlashRT
 export NEXUS_REPO=/path/to/FlashRT-Nexus
 ```
 
-This bundle uses **Python 3.10** (`python_abi: "310"`). Native `.so` files must match py310. Do **not** modify FlashRT / Nexus trees — stage copies only; keep `flash_rt/` and `.so` from the **same** FlashRT commit.
+The manifest keeps `python_abi: "310"` only as the runtime **cell label** (`runtime/...-py310/`); no Python interpreter or venv is created. Do **not** modify FlashRT / Nexus trees — stage copies only; keep the three `.so` files from the **same** FlashRT/FlashRT-Nexus build.
 
 ## 1. Build
 
-`build.sh` builds FlashRT pybind + C libs + Nexus capsule, stages tagged `.so`, vendors slim `flash_rt/` and `substrate/nexus_python/`, writes `substrate/VERSION`.
+`build.sh` compiles the Python-free FA2 C library (`flashrt_fa2_raw`), the FlashRT C libs (`libflashrt_exec`, `libflashrt_cpp_pi05_c`, native_v2), and the Nexus host (`libcapsule_nexus_flashrt`), then stages them into `runtime/<env-key>/substrate/` and writes `substrate/VERSION`. No pybind extensions or vendored Python are produced.
 
 ```bash
-# -j 4 is a good balance on 32 GB RAM (FA2 templates are memory-heavy)
+# parallel jobs (FA2 templates are memory-heavy; keep some cores free)
 bash bundles/pi05_libero_nexus/build.sh \
   --repo-root "$FLASHRT_REPO" \
   --nexus-src "$NEXUS_REPO" \
-  -j 4
+  -j 7
 ```
 
 Pack-only (skip cmake, re-stage existing artifacts):
@@ -39,7 +38,9 @@ bash bundles/pi05_libero_nexus/build.sh \
   --pack-only
 ```
 
-Outputs: `flash_rt/` · `runtime/sm120-cu130-linux-x86_64-py310/*.so` · `runtime/.../substrate/{*.so,nexus_python/,VERSION}` · `.build/manifest-overlay.json`
+Outputs: `runtime/sm120-cu130-linux-x86_64-py310/substrate/{libflashrt_exec-*,libflashrt_cpp_pi05_c-*,libcapsule_nexus_flashrt-*,libflashrt_fa2_raw-*,VERSION}` · `.build/manifest-overlay.json`
+
+Native-only cell (no `-py`): `runtime/sm120-cu130-linux-x86_64/substrate/*`. The build also compiles the **native-exec server** (bundle-owned, self-contained `native_exec/`) to `runtime/<env>/bin/pi05_exec_server` and copies `exec_server.json`, exposing the same model via `@exec`.
 
 Optional overrides: `--sm` · `--cuda-tag` · `--python-minor` · `--build-dir` · `--cpp-build-dir` · `--nexus-build-dir` · `--runtime-version` · `--nexus-version`.
 
@@ -88,7 +89,7 @@ Also validate the packed tree: `flashcli bundle validate dist/pi05_libero_nexus-
 
 ## 5. Publish
 
-Upload `dist/` to FlashHub as `flashcli-bundle/pi05_libero_nexus:1.0.0` (bump as needed).
+Upload `dist/` to FlashHub as `flashcli-bundle/pi05_libero_nexus:<version>@abi` / `@exec` (bump as needed).
 
 ```bash
 bash bundles/pi05_libero_nexus/release.sh
@@ -100,9 +101,9 @@ bash scripts/release_bundle.sh --bundle pi05_libero_nexus --clean
 
 ## Notes
 
-- **Substrate layout:** C libs live under `runtime/<env_key>/substrate/` (validator top-level `*.so` glob skips them; `_substrate_loader` loads + ABI-checks at runtime).
-- **ABI fingerprint:** `substrate/VERSION` records FlashRT + Nexus commits; Nexus `.so` must `ldd`-link the bundled `libflashrt_exec.so`.
-- **FA2:** Pi0.5 needs `FA2_HDIMS` including `256` (SigLIP / decoder).
+- **Substrate layout:** the three C libs live under `runtime/<env_key>/substrate/`; the Go host loads them through the Nexus embedded session (`flashrt_loaded_model_open` + `nexus_embedded_*`). There is no `_substrate_loader` / Python at runtime.
+- **ABI fingerprint:** `substrate/VERSION` records FlashRT + Nexus commits; Nexus `.so` should `ldd`-link the bundled `libflashrt_exec.so` (kept loadable via the manifest `preload`).
+- **FA2:** Pi0.5 encoder/decoder use head_dim `256`; the default full FA2 matrix covers it. Slim to `-DFA2_HDIMS=256 -DFA2_DTYPES=bf16` only after confirming no other path needs the rest.
 - **vs `pi05_libero`:** production stateful serve path; keep the smoke-oriented script bundle separate.
 
 ## Troubleshooting (build)
@@ -112,7 +113,7 @@ bash scripts/release_bundle.sh --bundle pi05_libero_nexus --clean
 | `NativeEnvironmentNotSupportedError` | Rebuild for this host's env key; `flashcli models envs "$BUNDLE"` |
 | `unrecognized native artifact filename` | Move C libs under `substrate/`, not runtime cell top-level |
 | `libcapsule_nexus_flashrt does not link libflashrt_exec` | Rebuild with `build.sh` (do not swap one lib alone) |
-| `ImportError: flash_rt_kernels` | Use flashcli re-exec into bundle py310 venv; do not bypass |
+| `no file matches {runtime_dir}/substrate/...` | Ensure the three `.so` are staged and the manifest `library`/`session_library`/`preload` globs each match exactly one file |
 | `fvk_attention_fa2: head_dim<=256=256 was not compiled` | Reconfigure FlashRT with `-DFA2_HDIMS="64;96;128;256"` then rebuild FA2 + `build.sh` |
 | nvcc OOM (`cicc died due to signal 15`) | Drop to `-j 2` or `-j 1` |
 | Weight download fails | Check ModelScope access; or `--checkpoint` with a local dir |

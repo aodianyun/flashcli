@@ -1,0 +1,28 @@
+{
+  "library": "{runtime_dir}/substrate/libflashrt_cpp_pi05_c-*.so",
+  "session_library": "{runtime_dir}/substrate/libcapsule_nexus_flashrt-*.so",
+  "preload": [
+    "{runtime_dir}/substrate/libflashrt_exec-*.so",
+    "{runtime_dir}/substrate/libflashrt_runtime-*.so",
+    "{runtime_dir}/substrate/libflashrt_fa2_raw-*.so"
+  ],
+  "config": {
+    "io": "native_v2",
+    "checkpoint_path": "{checkpoint}",
+    "tokenizer_model_path": "{tokenizer}",
+    "state_prompt_mode": "fixed",
+    "precision": "auto",
+    "stage_plan": "{option:stage_plan}",
+    "num_views": "{option:num_views}",
+    "chunk": 10,
+    "state_dim": 8,
+    "num_steps": 10,
+    "max_prompt_tokens": 64
+  },
+  "inputs": [
+    { "port": "prompt", "kind": "text", "option": "prompt" },
+    { "port": "state", "kind": "f32", "option": "state", "dim": 8 },
+    { "port": "images", "kind": "rgb8", "option": "image", "views": 2, "size": [224, 224] }
+  ],
+  "output": { "port": "actions", "shape": [10, 7] }
+}

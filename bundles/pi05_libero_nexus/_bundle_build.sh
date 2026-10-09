@@ -229,33 +229,43 @@ ensure_cutlass() {
 # -----------------------------------------------------------------------------
 
 run_flashrt_root_build() {
-  # Build pybind extensions (flash_rt_kernels + flash_rt_fa2) via FlashRT root.
+  # Native-only: build the Python-free FA2 C library, a prerequisite for the
+  # SM120 PI0.5 native frontend (FLASHRT_CPP_FA2_LIBRARY). No pybind extensions.
   ensure_cutlass
-  BUILD_DIR="${BUILD_DIR:-${REPO_ROOT}/build}"
+  BUILD_DIR="${BUILD_DIR:-${REPO_ROOT}/build-fa2raw}"
   local py_bin="${PYTHON_BIN:-python3}"
-  local -a cmake_args=(
-    -B "${BUILD_DIR}"
-    -S "${REPO_ROOT}"
-    -DGPU_ARCH="${GPU_ARCH}"
+  log "FlashRT root cmake (native fa2_raw): GPU_ARCH=${GPU_ARCH} py=${py_bin}"
+  cmake -S "${REPO_ROOT}" -B "${BUILD_DIR}" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DGPU_ARCH="${GPU_ARCH}" \
+    -DFLASHRT_ENABLE_NATIVE_CPP=ON \
     -DPython3_EXECUTABLE="${py_bin}"
-  )
-  clean_flashrt_shared_native_outputs "${REPO_ROOT}"
-  log "FlashRT root cmake (pybind ext): GPU_ARCH=${GPU_ARCH} py=${py_bin}"
-  cmake "${cmake_args[@]}"
-  cmake --build "${BUILD_DIR}" -j"${JOBS}" --target flash_rt_kernels flash_rt_fa2
-  snapshot_flashrt_native_to_build_dir "${REPO_ROOT}" "${BUILD_DIR}"
+  cmake --build "${BUILD_DIR}" -j"${JOBS}" --target flashrt_fa2_raw
 }
 
 run_flashrt_cpp_build() {
-  # Standalone cpp/ build → libflashrt_exec + libflashrt_runtime + libflashrt_cpp_pi05_c
+  # Standalone cpp/ build → libflashrt_exec + libflashrt_cpp_pi05_c (native_v2).
   CPP_BUILD_DIR="${CPP_BUILD_DIR:-${BUNDLE_DIR}/.build/cpp}"
-  local py_bin="${PYTHON_BIN:-python3}"
-  log "FlashRT cpp/ standalone cmake at ${CPP_BUILD_DIR}"
-  cmake -S "${REPO_ROOT}/cpp" -B "${CPP_BUILD_DIR}" \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DFLASHRT_CPP_WITH_EXEC=ON \
-    -DFLASHRT_CPP_WITH_CUDA_STAGING=ON \
+  local fa2="${REPO_ROOT}/flash_rt/libflashrt_fa2_raw.so"
+  [[ -f "${fa2}" ]] || die "libflashrt_fa2_raw.so missing at ${fa2} (run the FA2 native build first)"
+  local -a args=(
+    -S "${REPO_ROOT}/cpp" -B "${CPP_BUILD_DIR}"
+    -DCMAKE_BUILD_TYPE=Release
+    -DFLASHRT_ENABLE_NATIVE_CPP=ON
+    -DFLASHRT_CPP_WITH_EXEC=ON
+    -DFLASHRT_CPP_WITH_CUDA_STAGING=ON
     -DFLASHRT_CPP_WITH_CUDA_KERNELS=ON
+    -DFLASHRT_CPP_WITH_PI05=ON
+    -DFLASHRT_CPP_WITH_SENTENCEPIECE=ON
+    -DFLASHRT_CPP_FA2_LIBRARY="${fa2}"
+  )
+  case "${SM}" in
+    120) args+=(-DFLASHRT_CPP_WITH_PI05_SM120_TARGET=ON) ;;
+    110) args+=(-DFLASHRT_CPP_WITH_PI05_SM110_TARGET=ON) ;;
+    *)   die "Unsupported SM=${SM} for the PI0.5 native target (need 120/110)" ;;
+  esac
+  log "FlashRT cpp/ standalone cmake at ${CPP_BUILD_DIR} (ptx sm${SM}, fa2=${fa2})"
+  cmake "${args[@]}"
   cmake --build "${CPP_BUILD_DIR}" -j"${JOBS}" --target \
     flashrt_exec flashrt_cpp_pi05_c
 }
@@ -278,95 +288,6 @@ run_nexus_build() {
 # Staging
 # -----------------------------------------------------------------------------
 
-stage_pi05_flash_rt_minimal() {
-  local dst="$1"
-  local src="${REPO_ROOT}/flash_rt"
-  if [[ "${MERGE_NATIVE}" -eq 1 && -d "${dst}" ]]; then
-    log "Keeping existing flash_rt/ (--merge-native)"
-    return 0
-  fi
-  rm -rf "${dst}"
-  mkdir -p "${dst}"
-
-  _cp_file() {
-    local rel="$1"
-    mkdir -p "${dst}/$(dirname "${rel}")"
-    cp -a "${src}/${rel}" "${dst}/${rel}"
-  }
-
-  for rel in __init__.py api.py models/__init__.py; do
-    _cp_file "${rel}"
-  done
-
-  mkdir -p "${dst}/models/pi05"
-  sync_tree "${src}/models/pi05" "${dst}/models/pi05" 'pipeline_thor*' '__pycache__'
-
-  for rel in \
-    frontends/__init__.py \
-    frontends/_fp8_layout.py \
-    frontends/torch/__init__.py \
-    frontends/torch/pi05_rtx.py \
-    frontends/torch/pi05_rtx_fp16.py \
-    frontends/torch/pi05_rtx_batched.py \
-    frontends/torch/pi05_rtx_cfg.py \
-    frontends/torch/pi05_rtx_cfg_batched.py; do
-    [[ -f "${src}/${rel}" ]] && _cp_file "${rel}"
-  done
-
-  _cp_file hardware/__init__.py
-  [[ -f "${src}/hardware/backend.py" ]] && _cp_file hardware/backend.py
-
-  mkdir -p "${dst}/hardware/rtx"
-  for rel in attn_backend.py attn_backend_batched_pi05.py; do
-    [[ -f "${src}/hardware/rtx/${rel}" ]] && \
-      cp -a "${src}/hardware/rtx/${rel}" "${dst}/hardware/rtx/${rel}"
-  done
-
-  mkdir -p "${dst}/core"
-  sync_tree "${src}/core" "${dst}/core" '*.so' '__pycache__'
-
-  mkdir -p "${dst}/executors"
-  for rel in __init__.py torch_weights.py weight_loader.py; do
-    [[ -f "${src}/executors/${rel}" ]] && cp -a "${src}/executors/${rel}" "${dst}/executors/${rel}"
-  done
-
-  mkdir -p "${dst}/utils"
-  sync_tree "${src}/utils" "${dst}/utils" '__pycache__'
-
-  # Nexus producer needs runtime/ (export.py) + subgraphs/ (stage_plan)
-  mkdir -p "${dst}/runtime"
-  sync_tree "${src}/runtime" "${dst}/runtime" '__pycache__'
-  mkdir -p "${dst}/subgraphs"
-  sync_tree "${src}/subgraphs" "${dst}/subgraphs" '__pycache__'
-
-  log "Staged flash_rt/ ($(find "${dst}" -type f -name '*.py' | wc -l) py files)"
-}
-
-stage_nexus_python() {
-  local dst="$1"   # <env_key>/substrate/nexus_python/
-  local src="${NEXUS_SRC}/serve"
-  rm -rf "${dst}"
-  mkdir -p "${dst}/producer_plugins" "${dst}/transports"
-  for f in __init__.py embedded.py deployment.py session.py ffi.py manifest.py producers.py; do
-    [[ -f "${src}/${f}" ]] && cp -a "${src}/${f}" "${dst}/${f}"
-  done
-  [[ -f "${src}/producer_plugins/__init__.py" ]] && \
-    cp -a "${src}/producer_plugins/__init__.py" "${dst}/producer_plugins/__init__.py"
-  [[ -f "${src}/producer_plugins/pi05.py" ]] && \
-    cp -a "${src}/producer_plugins/pi05.py" "${dst}/producer_plugins/pi05.py"
-  if [[ -d "${src}/transports" ]]; then
-    rsync -a --exclude='__pycache__' "${src}/transports/" "${dst}/transports/" \
-      2>/dev/null || copy_dir "${src}/transports" "${dst}/transports"
-  fi
-  # Rewrite imports: serve.* → nexus_python.*
-  find "${dst}" -name '*.py' -exec sed -i \
-    -e 's/from serve\./from nexus_python./g' \
-    -e 's/import serve\./import nexus_python./g' \
-    -e 's/"serve\./"nexus_python./g' \
-    -e 's|serve\.producer_plugins|nexus_python.producer_plugins|g' {} +
-  log "Staged nexus_python/ ($(find "${dst}" -type f -name '*.py' | wc -l) py files)"
-}
-
 write_version_file() {
   local dst="$1"   # <env_key>/substrate/VERSION
   local fr_full fr_short nx_full nx_short
@@ -383,9 +304,8 @@ write_version_file() {
   "nexus_version": "${NEXUS_VERSION}",
   "cuda":          "$(cuda_toolkit_version)",
   "sm":            "${SM}",
-  "python_abi":    "${PYTHON_MINOR}",
   "platform_key":  "sm${SM}-cu${CUDA_TAG}-${OS_NAME}-${CPU_ARCH}",
-  "env_key":       "sm${SM}-cu${CUDA_TAG}-${OS_NAME}-${CPU_ARCH}-py${PYTHON_MINOR}",
+  "env_key":       "sm${SM}-cu${CUDA_TAG}-${OS_NAME}-${CPU_ARCH}",
   "composite_tag": "fr${fr_short}.nx${nx_short}",
   "build_id":      "${BUILD_ID:-$(date -u +%Y%m%d)-sm${SM}}",
   "built_at":      "$(date -u +%FT%TZ)"
@@ -394,96 +314,57 @@ EOF
   log "Wrote ${dst} (fr=${fr_short} nx=${nx_short})"
 }
 
-stage_bundle_runtime() {
-  local py_bin="${PYTHON_BIN:-python3}"
-  if [[ -z "${PYTHON_MINOR}" ]]; then
-    PYTHON_MINOR="$("${py_bin}" -c 'import sys; print(f"{sys.version_info.major}{sys.version_info.minor:02d}")')"
-  fi
-
-  local env_key="sm${SM}-cu${CUDA_TAG}-${OS_NAME}-${CPU_ARCH}-py${PYTHON_MINOR}"
-  local platform_key="sm${SM}-cu${CUDA_TAG}-${OS_NAME}-${CPU_ARCH}"
+# Native-only staging: only the C libraries under runtime/<env>/substrate/.
+# No pybind extensions, no nexus_python, no flash_rt/ — inference is Python-free.
+stage_bundle_runtime_native() {
+  # Native-only: runtime cell key carries no "-py{NNN}" segment.
+  local env_key="sm${SM}-cu${CUDA_TAG}-${OS_NAME}-${CPU_ARCH}"
   local rt_dir="${BUNDLE_DIR}/runtime/${env_key}"
   local sub_dir="${rt_dir}/substrate"
-  local build_src="${BUILD_DIR:-${REPO_ROOT}/build}/native-out"
-
   rm -rf "${rt_dir}"
   mkdir -p "${sub_dir}"
 
-  local fr_short nx_short
-  fr_short="$(git -C "${REPO_ROOT}" rev-parse --short=7 HEAD 2>/dev/null || echo dev)"
-  nx_short="$(git -C "${NEXUS_SRC}" rev-parse --short=7 HEAD 2>/dev/null || echo dev)"
-  local composite="fr${fr_short}.nx${nx_short}"
-  local py_tag="${fr_short}-${env_key}"
-  local c_tag="${fr_short}-${platform_key}"
-  local nexus_tag="${composite}-${platform_key}"
-
-  # 1) Python extensions to runtime/<env>/ (top level — flashcli loader finds them)
-  if [[ ! -d "${build_src}" ]] || ! compgen -G "${build_src}"/*.so >/dev/null; then
-    build_src="${REPO_ROOT}/flash_rt"
-  fi
-  stage_native_module_to_lib "${build_src}" "${rt_dir}" flash_rt_kernels \
-    "$(native_so_filename flash_rt_kernels "${py_tag}")" "${PYTHON_MINOR}" \
-    || die "flash_rt_kernels missing (rebuild FlashRT or --pack-only with existing .so)"
-  stage_native_module_to_lib "${build_src}" "${rt_dir}" flash_rt_fa2 \
-    "$(native_so_filename flash_rt_fa2 "${py_tag}")" "${PYTHON_MINOR}" \
-    || die "flash_rt_fa2 missing"
-  log "Staged py extensions: flash_rt_kernels flash_rt_fa2 (-py${PYTHON_MINOR})"
-
-  # 2) C libraries to runtime/<env>/substrate/ (subdir — validator skips)
   local exec_src="${CPP_BUILD_DIR}/exec/libflashrt_exec.so"
   local prod_src="${CPP_BUILD_DIR}/libflashrt_cpp_pi05_c.so"
   local nex_src="${NEXUS_BUILD_DIR}/libcapsule_nexus_flashrt.so"
+  local fa2_src="${REPO_ROOT}/flash_rt/libflashrt_fa2_raw.so"
   [[ -f "${exec_src}" ]] || die "missing ${exec_src} (run cpp build)"
   [[ -f "${prod_src}" ]] || die "missing ${prod_src}"
   [[ -f "${nex_src}"  ]] || die "missing ${nex_src} (run Nexus build)"
+
+  local fr_short nx_short composite c_tag nexus_tag
+  fr_short="$(git -C "${REPO_ROOT}" rev-parse --short=7 HEAD 2>/dev/null || echo dev)"
+  nx_short="$(git -C "${NEXUS_SRC}" rev-parse --short=7 HEAD 2>/dev/null || echo dev)"
+  composite="fr${fr_short}.nx${nx_short}"
+  c_tag="${fr_short}-sm${SM}-cu${CUDA_TAG}-${OS_NAME}-${CPU_ARCH}"
+  nexus_tag="${composite}-sm${SM}-cu${CUDA_TAG}-${OS_NAME}-${CPU_ARCH}"
+
   cp -f "${exec_src}" "${sub_dir}/libflashrt_exec-${c_tag}.so"
   cp -f "${prod_src}" "${sub_dir}/libflashrt_cpp_pi05_c-${c_tag}.so"
   cp -f "${nex_src}"  "${sub_dir}/libcapsule_nexus_flashrt-${nexus_tag}.so"
-  log "Staged C libs: libflashrt_exec libflashrt_cpp_pi05_c libcapsule_nexus_flashrt"
+  local rt_src="${CPP_BUILD_DIR}/runtime/libflashrt_runtime.so"
+  [[ -f "${rt_src}" ]] || die "missing ${rt_src}"
+  cp -f "${rt_src}" "${sub_dir}/libflashrt_runtime-${c_tag}.so"
+  [[ -f "${fa2_src}" ]] && cp -f "${fa2_src}" "${sub_dir}/libflashrt_fa2_raw-${c_tag}.so"
+  log "Staged native substrate: exec + runtime + pi05_c + nexus_flashrt (+fa2_raw)"
 
-  # 2b) _flashrt_exec + _flashrt_runtime pybind dev modules.
-  #     flash_rt/runtime/exec.py imports _flashrt_exec, flash_rt/runtime/export.py
-  #     imports _flashrt_runtime. The Nexus producer plugin transitively loads
-  #     these. Lives in substrate/ (loader puts substrate/ on sys.path).
-  #     Python-native filenames so import finds them.
-  local exec_pybind_src="${CPP_BUILD_DIR}/exec/_flashrt_exec.cpython-310-x86_64-linux-gnu.so"
-  local runtime_pybind_src="${CPP_BUILD_DIR}/runtime/_flashrt_runtime.cpython-310-x86_64-linux-gnu.so"
-  if [[ ! -f "${exec_pybind_src}" || ! -f "${runtime_pybind_src}" ]]; then
-    log "Building _flashrt_exec + _flashrt_runtime pybind modules (standalone)"
-    local exec_bld="${BUNDLE_DIR}/.build/exec-pybind"
-    local runtime_bld="${BUNDLE_DIR}/.build/runtime-pybind"
-    cmake -S "${REPO_ROOT}/exec" -B "${exec_bld}" -DCMAKE_BUILD_TYPE=Release
-    cmake --build "${exec_bld}" -j"${JOBS}" --target _flashrt_exec
-    cmake -S "${REPO_ROOT}/runtime" -B "${runtime_bld}" -DCMAKE_BUILD_TYPE=Release
-    cmake --build "${runtime_bld}" -j"${JOBS}" --target _flashrt_runtime
-    exec_pybind_src="${exec_bld}/_flashrt_exec.cpython-310-x86_64-linux-gnu.so"
-    runtime_pybind_src="${runtime_bld}/_flashrt_runtime.cpython-310-x86_64-linux-gnu.so"
-  fi
-  [[ -f "${exec_pybind_src}" ]] || die "missing _flashrt_exec pybind module"
-  [[ -f "${runtime_pybind_src}" ]] || die "missing _flashrt_runtime pybind module"
-  cp -f "${exec_pybind_src}"    "${sub_dir}/_flashrt_exec.cpython-310-x86_64-linux-gnu.so"
-  cp -f "${runtime_pybind_src}" "${sub_dir}/_flashrt_runtime.cpython-310-x86_64-linux-gnu.so"
-  log "Staged _flashrt_exec + _flashrt_runtime pybind modules"
+  # Native-exec lane: bundle-owned Go server (self-contained) + ABI descriptor.
+  local bin_dir="${rt_dir}/bin"
+  mkdir -p "${bin_dir}"
+  log "Building native-exec server (bundle native_exec/)"
+  ( cd "${BUNDLE_DIR}/native_exec" && CGO_ENABLED=0 go build -trimpath \
+      -o "${bin_dir}/pi05_exec_server" . )
+  cp -f "${BUNDLE_DIR}/exec_server.json" "${rt_dir}/exec_server.json"
+  log "Staged native-exec server: bin/pi05_exec_server + exec_server.json"
 
-  # 3) Nexus Python package (vendored, import paths rewritten)
-  stage_nexus_python "${sub_dir}/nexus_python"
-
-  # 4) VERSION — single source of truth for the ABI fingerprint
   write_version_file "${sub_dir}/VERSION"
 
-  # 5) slim flash_rt/ at bundle root
-  if [[ "${MERGE_NATIVE}" -ne 1 ]] || [[ ! -d "${BUNDLE_DIR}/flash_rt" ]]; then
-    stage_pi05_flash_rt_minimal "${BUNDLE_DIR}/flash_rt"
-  fi
-  find "${BUNDLE_DIR}/flash_rt" -name '*.so' -type f -delete 2>/dev/null || true
-
-  # 6) ldd cross-check: nexus MUST link exec
   if command -v ldd >/dev/null 2>&1; then
-    if ! ldd "${sub_dir}/libcapsule_nexus_flashrt-${nexus_tag}.so" \
-            | grep -q 'libflashrt_exec'; then
-      die "libcapsule_nexus_flashrt does not link libflashrt_exec — build is broken"
+    if ldd "${sub_dir}/libcapsule_nexus_flashrt-${nexus_tag}.so" | grep -q 'libflashrt_exec'; then
+      log "ldd OK: nexus links bundled libflashrt_exec"
+    else
+      log "note: nexus does not link libflashrt_exec (kept loadable via preload)"
     fi
-    log "ldd OK: nexus links bundled libflashrt_exec"
   fi
 }
 
@@ -610,7 +491,7 @@ else
   log "Skipping cmake (--pack-only); using existing .so from ${CPP_BUILD_DIR} + ${NEXUS_BUILD_DIR}"
 fi
 
-stage_bundle_runtime
+stage_bundle_runtime_native
 
 if [[ "${SKIP_MANIFEST}" -eq 0 ]]; then
   write_manifest_overlay

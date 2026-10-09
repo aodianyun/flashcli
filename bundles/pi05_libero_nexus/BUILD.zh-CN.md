@@ -2,32 +2,31 @@
 
 <p align="right"><a href="BUILD.md">English</a> · <strong>简体中文</strong></p>
 
-维护者流程：编译 FlashRT + FlashRT-Nexus native，stage 到 `runtime/<env-key>/`（含 `substrate/`），校验，冒烟 `run` / `serve`，打包，发布。
+维护者流程：编译 FlashRT + FlashRT-Nexus 的 **native** 库，stage 到 `runtime/<env-key>/substrate/`，校验，冒烟 `run` / `serve`，打包，发布。**推理全程无 Python** —— bundle 通过 Nexus 内嵌 session 驱动 FlashRT pi05 的 model-runtime ABI。
 
-**要求：** Linux · NVIDIA **SM120** · CUDA **13** 用户态 · cmake ≥ 3.24 · gcc ≥ 11 · **Python 3.10** · FlashRT 源码 · FlashRT-Nexus 源码 · flashcli 开发环境。
+**要求：** Linux · NVIDIA **SM120** · CUDA **13** 用户态 · cmake ≥ 3.24 · gcc ≥ 11 · CUTLASS（自动克隆）· FlashRT 源码 · FlashRT-Nexus 源码 · flashcli 开发环境。
 
 ```bash
 cd /path/to/flashcli
-# Host: install the Go binary (release or source), then the protocol pkg for local dev
-./install.sh --from-source          # or: curl -fsSL <repo>/install.sh | sh
-pip install -e ./flashcli-bundle
+# Host: 安装 Go 二进制（release 或源码）
+./install.sh --from-source          # 或 curl -fsSL <repo>/install.sh | sh
 export BUNDLE="$(pwd)/bundles/pi05_libero_nexus"
 export FLASHRT_REPO=/path/to/FlashRT
 export NEXUS_REPO=/path/to/FlashRT-Nexus
 ```
 
-本 bundle 使用 **Python 3.10**（`python_abi: "310"`）。native `.so` 须与 py310 匹配。**不要修改** FlashRT / Nexus 源码树——仅 stage 拷贝；`flash_rt/` 与 `.so` 须来自**同一** FlashRT commit。
+manifest 保留 `python_abi: "310"` 仅作运行单元的**标签**（`runtime/...-py310/`），**不会**创建 Python 解释器或 venv。**不要修改** FlashRT / Nexus 源码树——仅 stage 拷贝；三个 `.so` 须来自**同一** FlashRT/FlashRT-Nexus 构建。
 
 ## 1. 构建
 
-`build.sh` 编译 FlashRT pybind + C 库 + Nexus capsule，stage 带标签 `.so`，vendor 精简 `flash_rt/` 与 `substrate/nexus_python/`，写入 `substrate/VERSION`。
+`build.sh` 编译 Python-free 的 FA2 C 库（`flashrt_fa2_raw`）、FlashRT C 库（`libflashrt_exec`、`libflashrt_cpp_pi05_c`，native_v2）、以及 Nexus host（`libcapsule_nexus_flashrt`），再 stage 到 `runtime/<env-key>/substrate/` 并写 `substrate/VERSION`。**不再**产出 pybind 扩展或 vendored Python。
 
 ```bash
-# 32 GB 内存主机建议 -j 4（FA2 模板编译很吃内存）
+# 并行编译（FA2 模板吃内存，留些核给其它任务）
 bash bundles/pi05_libero_nexus/build.sh \
   --repo-root "$FLASHRT_REPO" \
   --nexus-src "$NEXUS_REPO" \
-  -j 4
+  -j 7
 ```
 
 仅打包（跳过 cmake，重新 stage 已有产物）：
@@ -39,7 +38,9 @@ bash bundles/pi05_libero_nexus/build.sh \
   --pack-only
 ```
 
-产出：`flash_rt/` · `runtime/sm120-cu130-linux-x86_64-py310/*.so` · `runtime/.../substrate/{*.so,nexus_python/,VERSION}` · `.build/manifest-overlay.json`
+产出：`runtime/sm120-cu130-linux-x86_64-py310/substrate/{libflashrt_exec-*,libflashrt_cpp_pi05_c-*,libcapsule_nexus_flashrt-*,libflashrt_fa2_raw-*,VERSION}` · `.build/manifest-overlay.json`
+
+仅原生单元（无 `-py`）：`runtime/sm120-cu130-linux-x86_64/substrate/*`。构建还会编译 **native-exec 服务器**（bundle 自带、自包含 `native_exec/`）到 `runtime/<env>/bin/pi05_exec_server` 并拷贝 `exec_server.json`，通过 `@exec` 暴露同一模型。
 
 可选覆盖：`--sm` · `--cuda-tag` · `--python-minor` · `--build-dir` · `--cpp-build-dir` · `--nexus-build-dir` · `--runtime-version` · `--nexus-version`。
 
@@ -88,7 +89,7 @@ curl -X POST http://127.0.0.1:8080/v1/session/reset/t0
 
 ## 5. 发布
 
-将 `dist/` 上传 FlashHub，ref 如 `flashcli-bundle/pi05_libero_nexus:1.0.0`（按实际版本调整）。
+将 `dist/` 上传 FlashHub，ref 如 `flashcli-bundle/pi05_libero_nexus:<version>@abi` / `@exec`（按实际版本调整）。
 
 ```bash
 bash bundles/pi05_libero_nexus/release.sh
@@ -100,9 +101,9 @@ bash scripts/release_bundle.sh --bundle pi05_libero_nexus --clean
 
 ## 说明
 
-- **Substrate 布局：** C 库放在 `runtime/<env_key>/substrate/`（validator 只扫顶层 `*.so`；运行时由 `_substrate_loader` 加载并做 ABI 校验）。
-- **ABI 指纹：** `substrate/VERSION` 记录 FlashRT + Nexus commit；Nexus `.so` 必须 `ldd` 链接到 bundle 内的 `libflashrt_exec.so`。
-- **FA2：** Pi0.5 需要 `FA2_HDIMS` 含 `256`（SigLIP / decoder）。
+- **Substrate 布局：** 三个 C 库放在 `runtime/<env_key>/substrate/`；Go host 通过 Nexus 内嵌 session（`flashrt_loaded_model_open` + `nexus_embedded_*`）加载。运行时**没有** `_substrate_loader`/Python。
+- **ABI 指纹：** `substrate/VERSION` 记录 FlashRT + Nexus commit；Nexus `.so` 应 `ldd` 链接到 bundle 内的 `libflashrt_exec.so`（并通过 manifest `preload` 保持可加载）。
+- **FA2：** Pi0.5 的 encoder/decoder head_dim 为 `256`；默认完整 FA2 矩阵已覆盖。只有在确认无其它路径需要时才裁到 `-DFA2_HDIMS=256 -DFA2_DTYPES=bf16`。
 - **与 `pi05_libero`：** 本 bundle 走生产有状态 serve；冒烟向脚本 bundle 保持独立。
 
 ## 故障排查（构建）
@@ -112,7 +113,7 @@ bash scripts/release_bundle.sh --bundle pi05_libero_nexus --clean
 | `NativeEnvironmentNotSupportedError` | 为本机 env key 重编；`flashcli models envs "$BUNDLE"` |
 | `unrecognized native artifact filename` | C 库放到 `substrate/`，不要放在 runtime cell 顶层 |
 | `libcapsule_nexus_flashrt does not link libflashrt_exec` | 用 `build.sh` 整套重编（不要只替换其中一个库） |
-| `ImportError: flash_rt_kernels` | 让 flashcli re-exec 进 bundle py310 venv；不要绕过 |
+| `no file matches {runtime_dir}/substrate/...` | 确认三个 `.so` 已 stage，且 manifest 的 `library`/`session_library`/`preload` glob 各只匹配一个文件 |
 | `fvk_attention_fa2: head_dim<=256=256 was not compiled` | FlashRT 用 `-DFA2_HDIMS="64;96;128;256"` 重配后编 FA2，再跑 `build.sh` |
 | nvcc OOM（`cicc died due to signal 15`） | 降到 `-j 2` 或 `-j 1` |
 | 权重下载失败 | 检查 ModelScope；或本地目录 `--checkpoint` |

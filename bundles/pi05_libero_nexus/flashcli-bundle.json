@@ -2,38 +2,45 @@
   "format": "flashcli-model-bundle",
   "format_version": 3,
   "protocol_version": 1,
+  "runtime_abi_version": 1,
+  "exec_protocol_version": 1,
   "name": "pi05_libero_nexus",
-  "description": "Pi0.5 LIBERO VLA via FlashRT-Nexus — stateful serving with episode snapshot/reset, plus single-shot run",
-  "python_abi": "310",
+  "description": "Pi0.5 LIBERO VLA via FlashRT-Nexus — no Python at inference. Variants: @abi (native-abi, host dlopen) and @exec (native-exec, standalone HTTP server).",
   "entry": {
-    "run": {
-      "module": "run",
-      "attr": "RunEngine"
+    "kind": "native-abi",
+    "native": {
+      "library": "{runtime_dir}/substrate/libflashrt_cpp_pi05_c-*.so",
+      "session_library": "{runtime_dir}/substrate/libcapsule_nexus_flashrt-*.so",
+      "preload": [
+        "{runtime_dir}/substrate/libflashrt_exec-*.so",
+        "{runtime_dir}/substrate/libflashrt_runtime-*.so",
+        "{runtime_dir}/substrate/libflashrt_fa2_raw-*.so"
+      ],
+      "config": {
+        "io": "native_v2",
+        "checkpoint_path": "{checkpoint}",
+        "tokenizer_model_path": "{tokenizer}",
+        "state_prompt_mode": "fixed",
+        "precision": "auto",
+        "stage_plan": "{option:stage_plan}",
+        "num_views": "{option:num_views}",
+        "chunk": 10,
+        "state_dim": 8,
+        "num_steps": 10,
+        "max_prompt_tokens": 64
+      },
+      "inputs": [
+        { "port": "prompt", "kind": "text", "option": "prompt" },
+        { "port": "state", "kind": "f32", "option": "state", "dim": 8 },
+        { "port": "images", "kind": "rgb8", "option": "image", "views": 2, "size": [224, 224] }
+      ],
+      "output": { "port": "actions", "shape": [10, 7] }
     },
-    "serve": {
-      "module": "serve",
-      "attr": "ServeEngine"
-    }
-  },
-  "python_dependencies": {
-    "torch": {
-      "package": "torch",
-      "index": "auto"
-    },
-    "pip": [
-      "numpy",
-      "pyyaml",
-      "safetensors",
-      "sentencepiece",
-      "ml_dtypes",
-      "transformers<4.56",
-      "pillow",
-      "fastapi",
-      "pydantic"
-    ]
+    "run": { "kind": "native-abi" },
+    "serve": { "kind": "native-abi" }
   },
   "runtime": {
-    "sm120-cu130-linux-x86_64-py310": "runtime/sm120-cu130-linux-x86_64-py310"
+    "sm120-cu130-linux-x86_64": "runtime/sm120-cu130-linux-x86_64"
   },
   "substrate": {
     "kind": "flashrt-nexus",
@@ -44,130 +51,77 @@
       "libcapsule_nexus_flashrt"
     ]
   },
-  "weights": {
-    "source": "modelscope",
-    "repo": "lerobot/pi05_libero_finetuned_v044",
-    "revision": "main",
-    "require_norm_stats": true
-  },
   "post_pull": [
     {
       "tokenizer": "paligemma"
     }
   ],
-  "run_options": [
-    {
-      "name": "prompt",
-      "type": "string",
-      "default": "pick up the red block and place it in the tray",
-      "help": "Natural-language task instruction for the robot policy.",
-      "phase": "predict"
+  "variants": {
+    "abi": {
+      "description": "native-abi — host dlopen + Nexus embedded session (in-process)",
+      "weights_dir": "checkpoint",
+      "weights": {
+        "source": "modelscope",
+        "repo": "lerobot/pi05_libero_finetuned_v044",
+        "revision": "main",
+        "require_norm_stats": true
+      },
+      "run_options": [
+        { "name": "prompt", "type": "string", "default": "pick up the red block and place it in the tray", "help": "Natural-language task instruction.", "phase": "predict" },
+        { "name": "image", "type": "string", "help": "Comma-separated RGB image paths (one per view).", "phase": "predict" },
+        { "name": "state", "type": "string", "help": "Comma-separated proprio state (defaults to zeros).", "phase": "predict" },
+        { "name": "num_views", "type": "integer", "default": 2, "help": "Number of camera views.", "phase": "load" },
+        { "name": "stage_plan", "type": "string", "default": "full", "help": "Nexus stage plan: full | context_action.", "phase": "load" }
+      ],
+      "serve_options": [
+        { "name": "host", "type": "string", "default": "127.0.0.1", "help": "HTTP bind host.", "phase": "load" },
+        { "name": "port", "type": "integer", "default": 8080, "help": "HTTP bind port.", "phase": "load" },
+        { "name": "num_views", "type": "integer", "default": 2, "help": "Number of camera views.", "phase": "load" },
+        { "name": "stage_plan", "type": "string", "default": "full", "help": "Nexus stage plan: full | context_action.", "phase": "load" },
+        { "name": "warmup_prompt", "type": "string", "default": "pick up the red block and place it in the tray", "help": "Prompt for the optional warmup tick.", "phase": "warmup" }
+      ]
     },
-    {
-      "name": "image",
-      "type": "string",
-      "help": "Comma-separated RGB image paths (one per camera view).",
-      "phase": "predict"
-    },
-    {
-      "name": "num_views",
-      "type": "integer",
-      "default": 2,
-      "help": "Number of camera views (LIBERO uses 2).",
-      "phase": "load"
-    },
-    {
-      "name": "hardware",
-      "type": "string",
-      "default": "auto",
-      "help": "FlashRT backend: auto, rtx_sm120.",
-      "phase": "load"
-    },
-    {
-      "name": "autotune",
-      "type": "integer",
-      "default": 3,
-      "help": "CUDA graph autotune trials (0 disables).",
-      "phase": "load"
-    },
-    {
-      "name": "use_fp8",
-      "type": "boolean",
-      "default": true,
-      "help": "Load policy weights in FP8 when supported.",
-      "phase": "load"
-    },
-    {
-      "name": "config",
-      "type": "string",
-      "default": "pi05",
-      "help": "FlashRT model config name.",
-      "phase": "load"
-    },
-    {
-      "name": "framework",
-      "type": "string",
-      "default": "torch",
-      "help": "FlashRT framework backend.",
-      "phase": "load"
+    "exec": {
+      "description": "native-exec — standalone Go HTTP server (separate process)",
+      "weights_dir": "checkpoint",
+      "weights": {
+        "source": "modelscope",
+        "repo": "lerobot/pi05_libero_finetuned_v044",
+        "revision": "main",
+        "require_norm_stats": true
+      },
+      "entry": {
+        "kind": "native-exec",
+        "native": {
+          "command": [
+            "{runtime_dir}/bin/pi05_exec_server",
+            "--config", "{runtime_dir}/exec_server.json",
+            "--checkpoint", "{checkpoint}",
+            "--runtime-dir", "{runtime_dir}",
+            "--tokenizer", "{tokenizer}",
+            "--transport", "http",
+            "--opt", "num_views={option:num_views}",
+            "--opt", "stage_plan={option:stage_plan}"
+          ],
+          "transport": "http"
+        },
+        "run": { "kind": "native-exec" },
+        "serve": { "kind": "native-exec" }
+      },
+      "run_options": [
+        { "name": "prompt", "type": "string", "default": "pick up the red block and place it in the tray", "help": "Natural-language task instruction.", "phase": "predict" },
+        { "name": "image", "type": "string", "help": "Comma-separated RGB image paths (one per view).", "phase": "predict" },
+        { "name": "state", "type": "string", "help": "Comma-separated proprio state (defaults to zeros).", "phase": "predict" },
+        { "name": "num_views", "type": "integer", "default": 2, "help": "Number of camera views.", "phase": "load" },
+        { "name": "stage_plan", "type": "string", "default": "full", "help": "Nexus stage plan: full | context_action.", "phase": "load" }
+      ],
+      "serve_options": [
+        { "name": "host", "type": "string", "default": "127.0.0.1", "help": "Advertised host (server binds its own port).", "phase": "load" },
+        { "name": "port", "type": "integer", "default": 8080, "help": "Advertised port (server binds its own port).", "phase": "load" },
+        { "name": "num_views", "type": "integer", "default": 2, "help": "Number of camera views.", "phase": "load" },
+        { "name": "stage_plan", "type": "string", "default": "full", "help": "Nexus stage plan: full | context_action.", "phase": "load" },
+        { "name": "warmup_prompt", "type": "string", "default": "pick up the red block and place it in the tray", "help": "Prompt for the optional warmup tick.", "phase": "warmup" }
+      ]
     }
-  ],
-  "serve_options": [
-    {
-      "name": "device",
-      "type": "string",
-      "default": "cuda:0",
-      "help": "Torch device for inference.",
-      "phase": "load"
-    },
-    {
-      "name": "num_views",
-      "type": "integer",
-      "default": 2,
-      "help": "Number of camera views (LIBERO uses 2).",
-      "phase": "load"
-    },
-    {
-      "name": "precision",
-      "type": "string",
-      "default": "fp8",
-      "help": "Policy precision: fp8 | fp16.",
-      "phase": "load"
-    },
-    {
-      "name": "stage_plan",
-      "type": "string",
-      "default": "full",
-      "help": "Nexus stage plan: full | context_action.",
-      "phase": "load"
-    },
-    {
-      "name": "hardware",
-      "type": "string",
-      "default": "auto",
-      "help": "FlashRT backend: auto, rtx_sm120.",
-      "phase": "load"
-    },
-    {
-      "name": "capsule_dir",
-      "type": "string",
-      "default": "",
-      "help": "Directory for persisted capsules; empty = ephemeral (in-memory only).",
-      "phase": "load"
-    },
-    {
-      "name": "warmup_prompt",
-      "type": "string",
-      "default": "pick up the red block and place it in the tray",
-      "help": "Prompt used for the warmup tick.",
-      "phase": "warmup"
-    },
-    {
-      "name": "model_name",
-      "type": "string",
-      "default": "pi05-libero-nexus",
-      "help": "OpenAI API model id exposed by serve.",
-      "phase": "load"
-    }
-  ]
+  }
 }
