@@ -15,6 +15,7 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/manifest"
 	"github.com/aodianyun/flashcli/go/internal/mirror"
 	"github.com/aodianyun/flashcli/go/internal/native"
+	"github.com/aodianyun/flashcli/go/internal/progress"
 	"github.com/aodianyun/flashcli/go/internal/pythonprovision"
 	"github.com/aodianyun/flashcli/go/internal/venv"
 	"github.com/aodianyun/flashcli/go/internal/version"
@@ -191,6 +192,7 @@ func weightsPullCmd() *cobra.Command {
 func Main(args []string) int {
 	venv.LoadInstallEnv() // apply ~/.flashcli/install.env (bundle source)
 	mirror.Apply()        // apply ~/.flashcli/mirror.env + mirror defaults
+	progress.SetQuiet(envBool("FLASHCLI_QUIET"))
 	root := New()
 	root.SetArgs(normalizeVersionAlias(args))
 	if err := root.Execute(); err != nil {

@@ -21,6 +21,7 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/nativeexec"
 	"github.com/aodianyun/flashcli/go/internal/paths"
 	"github.com/aodianyun/flashcli/go/internal/preflight"
+	"github.com/aodianyun/flashcli/go/internal/progress"
 	"github.com/aodianyun/flashcli/go/internal/runtime"
 	"github.com/aodianyun/flashcli/go/internal/venv"
 	"github.com/aodianyun/flashcli/go/internal/weights"
@@ -69,6 +70,7 @@ func capSpec(m *manifest.Manifest, capability string) *manifest.EntrySpec {
 
 func runPrelude(capability string, args []string, hf hostFlags) error {
 	quiet := hf.Quiet || envBool("FLASHCLI_QUIET")
+	progress.SetQuiet(quiet)
 	bundleRoot, version, variant, err := ensureBundleRef(hf.Ref, quiet, false)
 	if err != nil {
 		return err

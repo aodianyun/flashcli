@@ -146,7 +146,8 @@ func copyFile(src, dst string) error {
 }
 
 // downloadFileWithResume downloads url to destPath, resuming a .incomplete file.
-func downloadFileWithResume(ctx context.Context, url, destPath string, size int64, headers http.Header) error {
+// onBytes (optional) receives transferred byte counts for progress.
+func downloadFileWithResume(ctx context.Context, url, destPath string, size int64, headers http.Header, onBytes func(int)) error {
 	if info, err := os.Stat(destPath); err == nil && size > 0 && info.Size() == size {
 		return nil
 	}
@@ -208,9 +209,28 @@ func downloadFileWithResume(ctx context.Context, url, destPath string, size int6
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(out, resp.Body); err != nil {
-		out.Close()
-		return err
+	if start > 0 && onBytes != nil {
+		onBytes(int(start))
+	}
+	buf := make([]byte, 1<<20)
+	for {
+		n, rerr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, werr := out.Write(buf[:n]); werr != nil {
+				out.Close()
+				return werr
+			}
+			if onBytes != nil {
+				onBytes(n)
+			}
+		}
+		if rerr == io.EOF {
+			break
+		}
+		if rerr != nil {
+			out.Close()
+			return rerr
+		}
 	}
 	if err := out.Close(); err != nil {
 		return err

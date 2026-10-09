@@ -64,8 +64,9 @@ func TestParseTorchDependency(t *testing.T) {
 }
 
 func TestInstallPlan(t *testing.T) {
+	t.Setenv("FLASHCLI_NO_MIRROR", "1")
 	m := testManifest(t)
-	plan := InstallPlan("/v/bin/python", m, "cu124")
+	plan := InstallPlan("/v/bin/python", m, "cu124", true)
 	if len(plan) != 3 {
 		t.Fatalf("plan len = %d: %v", len(plan), plan)
 	}

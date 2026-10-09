@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/aodianyun/flashcli/go/internal/progress"
 )
 
 const (
@@ -214,12 +216,23 @@ func hfDownloadOnce(ctx context.Context, base string, spec Spec, dest string, he
 	if len(spec.AllowPatterns) > 0 && len(selected) == 0 {
 		return fmt.Errorf("no files in %s matched allow_patterns %v", spec.Repo, spec.AllowPatterns)
 	}
+	st := progress.Start("weights", spec.Repo)
+	var _totalBytes int64
+	for _, f := range selected {
+		_totalBytes += f.Size
+	}
+	st.Totals(len(selected), _totalBytes)
+
 	for _, f := range selected {
 		target := dest + string(os.PathSeparator) + strings.ReplaceAll(f.Path, "/", string(os.PathSeparator))
-		if err := downloadFileWithResume(ctx, hfResolveURL(base, spec.Repo, rev, f.Path), target, f.Size, headers); err != nil {
+		err := downloadFileWithResume(ctx, hfResolveURL(base, spec.Repo, rev, f.Path), target, f.Size, headers, st.Add)
+		if err != nil {
+			st.Done()
 			return err
 		}
+		st.FileDone()
 	}
+	st.Done()
 	if !weightsCacheReady(dest, spec) {
 		return errors.New("Hub download completed but checkpoint files are missing")
 	}

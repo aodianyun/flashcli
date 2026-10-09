@@ -20,6 +20,7 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/errs"
 	"github.com/aodianyun/flashcli/go/internal/manifest"
 	"github.com/aodianyun/flashcli/go/internal/mirror"
+	"github.com/aodianyun/flashcli/go/internal/progress"
 	"github.com/aodianyun/flashcli/go/internal/pythonprovision"
 	"github.com/aodianyun/flashcli/go/internal/runtime"
 )
@@ -109,7 +110,7 @@ func Ensure(ctx context.Context, runtimeID string, m *manifest.Manifest, opt Opt
 		}
 	}
 	if !opt.Quiet {
-		fmt.Fprintf(os.Stderr, "Creating bundle venv (Python 3.%s) at %s (base: %s) ...\n", abi[1:], venv, basePython)
+		progress.Note("venv: creating %s (Python 3.%s, base %s)", venv, abi[1:], basePython)
 	}
 	if err := os.RemoveAll(venv); err != nil {
 		return "", err
@@ -126,7 +127,7 @@ func Ensure(ctx context.Context, runtimeID string, m *manifest.Manifest, opt Opt
 		return "", fmt.Errorf("venv created but no interpreter under %s", venv)
 	}
 	_ = opt.Runner.Run(ctx, []string{python, "-m", "pip", "install", "-q", "--upgrade", "pip"}, env)
-	for _, argv := range InstallPlan(python, m, torchIndex) {
+	for _, argv := range InstallPlan(python, m, torchIndex, opt.Quiet) {
 		if err := opt.Runner.Run(ctx, argv, env); err != nil {
 			return "", err
 		}
@@ -140,21 +141,26 @@ func Ensure(ctx context.Context, runtimeID string, m *manifest.Manifest, opt Opt
 	return python, nil
 }
 
-// InstallPlan returns the pip install commands for the bundle venv.
-func InstallPlan(python string, m *manifest.Manifest, torchIndex string) [][]string {
+// InstallPlan returns the pip install commands for the bundle venv. When quiet,
+// `pip -q` is used (progress hidden); otherwise pip shows its own progress.
+func InstallPlan(python string, m *manifest.Manifest, torchIndex string, quiet bool) [][]string {
+	pip := func(extra ...string) []string {
+		argv := []string{python, "-m", "pip", "install"}
+		if quiet {
+			argv = append(argv, "-q")
+		}
+		return append(argv, extra...)
+	}
 	var plan [][]string
 	spec, err := FlashcliBundleSpec()
 	if err != nil {
 		spec = "flashcli-bundle[infer]"
 	}
-	specCmd := []string{python, "-m", "pip", "install", "-q"}
-	specCmd = append(specCmd, mirror.PipExtraArgs()...)
-	specCmd = append(specCmd, spec)
-	plan = append(plan, specCmd)
+	plan = append(plan, pip(append(mirror.PipExtraArgs(), spec)...))
 
 	torchPkg, _ := ParseTorchDependency(m.PythonDependencies()["torch"])
 	if torchPkg != "" {
-		argv := []string{python, "-m", "pip", "install", "-q"}
+		argv := pip()
 		if torchIndex != "" {
 			argv = append(argv, "--index-url", mirror.TorchIndexURL(torchIndex))
 		}
@@ -162,10 +168,7 @@ func InstallPlan(python string, m *manifest.Manifest, torchIndex string) [][]str
 		plan = append(plan, argv)
 	}
 	if deps := pipDependencies(m); len(deps) > 0 {
-		argv := []string{python, "-m", "pip", "install", "-q"}
-		argv = append(argv, mirror.PipExtraArgs()...)
-		argv = append(argv, deps...)
-		plan = append(plan, argv)
+		plan = append(plan, pip(append(mirror.PipExtraArgs(), deps...)...))
 	}
 	return plan
 }
