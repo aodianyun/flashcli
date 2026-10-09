@@ -223,14 +223,20 @@ if [ "$FROM_SOURCE" = 1 ]; then install_source; else install_release; fi
 
 home="${FLASHCLI_HOME:-$HOME/.flashcli}"
 mkdir -p "$home" 2>/dev/null || true
-if [ -n "$SOURCE_USED" ] && [ -f "$SOURCE_USED/flashcli-bundle/pyproject.toml" ]; then
-  echo "export FLASHCLI_BUNDLE_PIP_SPEC=$SOURCE_USED/flashcli-bundle[infer]" > "$home/install.env"
-else
-  {
+{
+  if [ -n "$SOURCE_USED" ] && [ -f "$SOURCE_USED/flashcli-bundle/pyproject.toml" ]; then
+    echo "export FLASHCLI_BUNDLE_PIP_SPEC=$SOURCE_USED/flashcli-bundle[infer]"
+  else
     echo "export FLASHCLI_INSTALL_REPO=$REPO"
     echo "export FLASHCLI_INSTALL_REF=$REF"
-  } > "$home/install.env"
-fi
+  fi
+  if [ "$MIRROR" = 1 ]; then
+    echo "# mirror mode (--mirror): persisted for run/serve (bundle venv pip + HF weights)"
+    echo "export PIP_INDEX_URL=${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}"
+    echo "export PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST:-mirrors.aliyun.com}"
+    echo "export HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}"
+  fi
+} > "$home/install.env"
 
 echo "[ok] flashcli -> $INSTALL_DIR/flashcli ; wrote $home/install.env"
 case ":$PATH:" in *":$INSTALL_DIR:"*) ;; *) echo "[i] add $INSTALL_DIR to PATH" ;; esac

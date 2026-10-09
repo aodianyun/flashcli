@@ -185,6 +185,7 @@ func weightsPullCmd() *cobra.Command {
 
 // Main runs the CLI and returns a process exit code.
 func Main(args []string) int {
+	venv.LoadInstallEnv() // apply ~/.flashcli/install.env (bundle source + mirror env)
 	root := New()
 	root.SetArgs(normalizeVersionAlias(args))
 	if err := root.Execute(); err != nil {
