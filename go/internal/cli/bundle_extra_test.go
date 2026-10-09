@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/aodianyun/flashcli/go/internal/paths"
 )
 
 func writeBundle(t *testing.T, root string) {
@@ -50,4 +52,82 @@ func TestModelsShowLocal(t *testing.T) {
 	if code := Main([]string{"models", "show", bundle}); code != 0 {
 		t.Fatalf("exit = %d", code)
 	}
+}
+
+func writeRuntimeMarker(t *testing.T, id, preset string) string {
+	t.Helper()
+	dir := filepath.Join(paths.Runtimes(), id)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	blob, _ := json.Marshal(map[string]any{"preset": preset, "runtime_id": id})
+	if err := os.WriteFile(filepath.Join(dir, ".runtime.json"), blob, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func mustStat(t *testing.T, path string, wantExist bool) {
+	t.Helper()
+	_, err := os.Stat(path)
+	if (err == nil) != wantExist {
+		t.Fatalf("stat %s: exists=%v want %v", path, err == nil, wantExist)
+	}
+}
+
+func TestBundleCleanAll(t *testing.T) {
+	t.Setenv("FLASHCLI_HOME", t.TempDir())
+	if err := os.MkdirAll(paths.Runtimes(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if code := Main([]string{"bundle", "clean", "--all"}); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	mustStat(t, paths.Runtimes(), false)
+}
+
+func TestBundleCleanByRef(t *testing.T) {
+	t.Setenv("FLASHCLI_HOME", t.TempDir())
+	keep := writeRuntimeMarker(t, "other-local-1", "other")
+	drop := writeRuntimeMarker(t, "pi05-local-1", "pi05_libero")
+	if code := Main([]string{"bundle", "clean", "flashcli-bundle/pi05_libero:1.0.0"}); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	mustStat(t, drop, false)
+	mustStat(t, keep, true)
+}
+
+func TestBundleCleanByRefNoMatch(t *testing.T) {
+	t.Setenv("FLASHCLI_HOME", t.TempDir())
+	if code := Main([]string{"bundle", "clean", "flashcli-bundle/none:1.0.0"}); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+}
+
+func TestBundleCleanFull(t *testing.T) {
+	t.Setenv("FLASHCLI_HOME", t.TempDir())
+	for _, d := range []string{paths.Runtimes(), paths.Models(), paths.Bundles()} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	repoIndex := filepath.Join(paths.Cache(), "repo-index")
+	if err := os.MkdirAll(repoIndex, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if code := Main([]string{"bundle", "clean", "--full"}); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	mustStat(t, paths.Runtimes(), false)
+	mustStat(t, paths.Models(), false)
+	mustStat(t, paths.Bundles(), false)
+	mustStat(t, repoIndex, true) // --flashhub-cache not set
+
+	if err := os.MkdirAll(repoIndex, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if code := Main([]string{"bundle", "clean", "--full", "--flashhub-cache"}); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	mustStat(t, repoIndex, false)
 }
