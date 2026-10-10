@@ -46,7 +46,8 @@ if overlay.is_file():
     for key in ("format_version", "build"):
         if key in o:
             manifest[key] = o[key]
-    if o.get("python_abi"):
+    # Native-only bundles have no python_abi; never inject it from the overlay.
+    if o.get("python_abi") and manifest.get("python_abi"):
         manifest["python_abi"] = o["python_abi"]
     if o.get("runtime"):
         manifest["runtime"] = o["runtime"]

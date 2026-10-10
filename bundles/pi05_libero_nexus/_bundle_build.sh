@@ -399,7 +399,7 @@ write_manifest_overlay() {
     --has-fa2 1 \
     --has-fp4 0 \
     --has-fmha 0 \
-    --python-minor "${PYTHON_MINOR}" \
+    --python-minor "${PYTHON_MINOR:-310}" \
     --native-artifact-tag "${flashrt_tag}-sm${SM}-cu${CUDA_TAG}-${OS_NAME}-${CPU_ARCH}-py${PYTHON_MINOR}"
 
   # Augment overlay with Nexus fields (idempotent Python edit)
@@ -416,6 +416,10 @@ d.setdefault("build", {}).update({
     "nexus_tag":    "${composite}",
 })
 d["build"].setdefault("features", {})["nexus"] = True
+# Native-only: do not record python_abi (there is no Python entry).
+if '"python_abi"' not in pathlib.Path("${BUNDLE_DIR}/flashcli-bundle.json").read_text():
+    d.pop("python_abi", None)
+    d.get("build", {}).get("target", {}).pop("python_abi", None)
 p.write_text(json.dumps(d, indent=2))
 print(f"[pi05-nexus-bundle] overlay: {p}")
 PY
