@@ -40,7 +40,7 @@ bash bundles/pi05_libero_nexus/build.sh \
 
 Outputs: `runtime/sm120-cu130-linux-x86_64-py310/substrate/{libflashrt_exec-*,libflashrt_cpp_pi05_c-*,libcapsule_nexus_flashrt-*,libflashrt_fa2_raw-*,VERSION}` · `.build/manifest-overlay.json`
 
-Native-only cell (no `-py`): `runtime/sm120-cu130-linux-x86_64/substrate/*`. The build also compiles the **native-exec server** (bundle-owned, self-contained `native_exec/`) to `runtime/<env>/bin/pi05_exec_server` and copies `exec_server.json`, exposing the same model via `@exec`.
+Native-only cell (no `-py`): `runtime/sm120-cu130-linux-x86_64/substrate/*`. The build also compiles the **native-exec server** (bundle-owned, self-contained `native_exec/`) to `runtime/<env>/bin/pi05_exec_server` and copies `exec_server.json`, exposing the same model via `@exec`. The server embeds the release version (from `pyproject.toml`) — `pi05_exec_server --version` — and reports it in its readiness payload.
 
 Optional overrides: `--sm` · `--cuda-tag` · `--python-minor` · `--build-dir` · `--cpp-build-dir` · `--nexus-build-dir` · `--runtime-version` · `--nexus-version`.
 

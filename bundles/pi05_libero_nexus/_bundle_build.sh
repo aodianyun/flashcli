@@ -351,8 +351,12 @@ stage_bundle_runtime_native() {
   # Native-exec lane: bundle-owned Go server (self-contained) + ABI descriptor.
   local bin_dir="${rt_dir}/bin"
   mkdir -p "${bin_dir}"
-  log "Building native-exec server (bundle native_exec/)"
+  local srv_version
+  srv_version="$(sed -n 's/^version *= *"\(.*\)"/\1/p' "${FLASHCLI_ROOT}/pyproject.toml" | head -1)"
+  [[ -n "${srv_version}" ]] || srv_version="dev"
+  log "Building native-exec server (bundle native_exec/) version ${srv_version}"
   ( cd "${BUNDLE_DIR}/native_exec" && CGO_ENABLED=0 go build -trimpath \
+      -ldflags "-X main.version=${srv_version}" \
       -o "${bin_dir}/pi05_exec_server" . )
   cp -f "${BUNDLE_DIR}/exec_server.json" "${rt_dir}/exec_server.json"
   log "Staged native-exec server: bin/pi05_exec_server + exec_server.json"

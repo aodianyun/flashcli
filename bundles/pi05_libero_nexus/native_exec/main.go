@@ -29,20 +29,28 @@ type stringList []string
 func (s *stringList) String() string     { return strings.Join(*s, ",") }
 func (s *stringList) Set(v string) error { *s = append(*s, v); return nil }
 
+// version is injected at build time (-ldflags "-X main.version=...").
+var version = "dev"
+
 func main() {
 	var (
-		configPath = flag.String("config", "", "ABI descriptor JSON")
-		checkpoint = flag.String("checkpoint", "", "checkpoint directory")
-		runtimeDir = flag.String("runtime-dir", "", "selected runtime/<env-key> directory")
-		tokenizer  = flag.String("tokenizer", "", "tokenizer model path")
-		bundleRoot = flag.String("bundle-root", "", "bundle root (default cwd)")
-		transport  = flag.String("transport", "stdio", "stdio | http")
-		host       = flag.String("host", "127.0.0.1", "http bind host")
-		port       = flag.Int("port", 0, "http bind port (0 = ephemeral)")
-		opts       stringList
+		showVersion = flag.Bool("version", false, "Print version and exit")
+		configPath  = flag.String("config", "", "ABI descriptor JSON")
+		checkpoint  = flag.String("checkpoint", "", "checkpoint directory")
+		runtimeDir  = flag.String("runtime-dir", "", "selected runtime/<env-key> directory")
+		tokenizer   = flag.String("tokenizer", "", "tokenizer model path")
+		bundleRoot  = flag.String("bundle-root", "", "bundle root (default cwd)")
+		transport   = flag.String("transport", "stdio", "stdio | http")
+		host        = flag.String("host", "127.0.0.1", "http bind host")
+		port        = flag.Int("port", 0, "http bind port (0 = ephemeral)")
+		opts        stringList
 	)
 	flag.Var(&opts, "opt", "option override k=v (repeatable; feeds {option:<name>})")
 	flag.Parse()
+	if *showVersion {
+		fmt.Printf("pi05_exec_server %s\n", version)
+		return
+	}
 
 	root := *bundleRoot
 	if root == "" {
@@ -123,7 +131,7 @@ func (s *server) run(payload map[string]any) (map[string]any, error) {
 func (s *server) serveStdio() {
 	fmt.Fprintln(os.Stderr, "pi05_exec_server: stdio ready")
 	out := bufio.NewWriter(os.Stdout)
-	writeLine(out, map[string]any{"v": 1, "op": "ready", "payload": map[string]any{}})
+	writeLine(out, map[string]any{"v": 1, "op": "ready", "payload": map[string]any{"version": version}})
 	in := bufio.NewScanner(os.Stdin)
 	in.Buffer(make([]byte, 0, 1<<20), 64<<20)
 	for in.Scan() {
@@ -182,7 +190,7 @@ func (s *server) serveHTTP(host string, port int) {
 	addr := ln.Addr().(*net.TCPAddr)
 	endpoint := fmt.Sprintf("http://%s:%d", host, addr.Port)
 	fmt.Fprintln(os.Stderr, "pi05_exec_server: http", endpoint)
-	fmt.Fprintf(os.Stdout, "{\"v\":1,\"op\":\"ready\",\"payload\":{\"endpoint\":%q}}\n", endpoint)
+	fmt.Fprintf(os.Stdout, "{\"v\":1,\"op\":\"ready\",\"payload\":{\"endpoint\":%q,\"version\":%q}}\n", endpoint, version)
 
 	srv := &http.Server{Handler: mux}
 	go func() { _ = srv.Serve(ln) }()

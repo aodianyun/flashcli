@@ -40,7 +40,7 @@ bash bundles/pi05_libero_nexus/build.sh \
 
 产出：`runtime/sm120-cu130-linux-x86_64-py310/substrate/{libflashrt_exec-*,libflashrt_cpp_pi05_c-*,libcapsule_nexus_flashrt-*,libflashrt_fa2_raw-*,VERSION}` · `.build/manifest-overlay.json`
 
-仅原生单元（无 `-py`）：`runtime/sm120-cu130-linux-x86_64/substrate/*`。构建还会编译 **native-exec 服务器**（bundle 自带、自包含 `native_exec/`）到 `runtime/<env>/bin/pi05_exec_server` 并拷贝 `exec_server.json`，通过 `@exec` 暴露同一模型。
+仅原生单元（无 `-py`）：`runtime/sm120-cu130-linux-x86_64/substrate/*`。构建还会编译 **native-exec 服务器**（bundle 自带、自包含 `native_exec/`）到 `runtime/<env>/bin/pi05_exec_server` 并拷贝 `exec_server.json`，通过 `@exec` 暴露同一模型。该服务器内嵌发布版本（取自 `pyproject.toml`）—— `pi05_exec_server --version`，并在就绪 payload 中报告。
 
 可选覆盖：`--sm` · `--cuda-tag` · `--python-minor` · `--build-dir` · `--cpp-build-dir` · `--nexus-build-dir` · `--runtime-version` · `--nexus-version`。
 
