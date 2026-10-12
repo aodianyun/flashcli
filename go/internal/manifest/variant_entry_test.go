@@ -155,3 +155,21 @@ func TestVariantsSharedWeightsDirConflict(t *testing.T) {
 		t.Fatalf("different weights with same weights_dir must be rejected: %v", errs)
 	}
 }
+
+func TestVariantWeightsRel(t *testing.T) {
+	a := map[string]any{"weights": map[string]any{"source": "huggingface", "repo": "org/m", "revision": "main"}}
+	b := map[string]any{"weights": map[string]any{"source": "huggingface", "repo": "org/m", "revision": "main"}}
+	c := map[string]any{"weights": map[string]any{"repo": "org/other"}}
+	if VariantWeightsRel(a, "x") != VariantWeightsRel(b, "y") {
+		t.Fatal("identical weights identity must share a dir")
+	}
+	if VariantWeightsRel(a, "x") == VariantWeightsRel(c, "x") {
+		t.Fatal("different weights must map to different dirs")
+	}
+	if got := VariantWeightsRel(map[string]any{"weights_dir": "checkpoint"}, "x"); got != "checkpoint" {
+		t.Fatalf("explicit weights_dir ignored: %q", got)
+	}
+	if got := VariantWeightsRel(map[string]any{}, "x"); got != "checkpoint/x" {
+		t.Fatalf("local default = %q", got)
+	}
+}

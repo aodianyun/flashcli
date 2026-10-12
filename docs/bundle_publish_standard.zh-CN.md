@@ -195,7 +195,7 @@ bundle 可以交付**原生**入口而非 Python。`kind` 是 manifest 细节 �
 - **禁止** 顶层 `run_options` / `serve_options` / `weights`（校验报错）。
 - **每个 variant** 必须自带完整的 `run_options`、`serve_options`（若该 variant 需要对应能力）、`weights` 等。
 
-**变体间共享。** 同步的 bundle 树以 `<name>/<version>` 为键，**所有 variant 共享**。权重缓存在 `models/<name>/<version>/<weights_dir>`；声明了**相同 `weights_dir`** 的两个 variant 共享权重，因此**必须声明相同的 `weights`**（source/repo/revision）——由校验强制。权重不同时必须使用不同的 `weights_dir`。
+**变体间共享。** 同步的 bundle 树以 `<name>/<version>` 为键，**所有 variant 共享**。权重缓存在 `models/<name>/<version>/<weights_dir>`；未设 `weights_dir` 时**按权重身份（source/repo/revision）派生**，因此相同权重共享同一目录、不同权重绝不相撞。显式 `weights_dir` 仅当各 variant 声明了**相同 `weights`** 时才可共享（由校验强制）。
 
 variant 块常用字段：
 

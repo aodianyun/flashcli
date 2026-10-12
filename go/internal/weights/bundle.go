@@ -40,10 +40,7 @@ func ManifestSpecs(m *manifest.Manifest, variant string) (Spec, string, map[stri
 			sort.Strings(keys)
 			return Spec{}, "", nil, fmt.Errorf("Unknown model variant %q for bundle %q; choose from: %s", key, m.Name, strings.Join(keys, ", "))
 		}
-		rel := "checkpoint/" + key
-		if r := strings.TrimSpace(str(block["weights_dir"])); r != "" {
-			rel = strings.Trim(r, "/")
-		}
+		rel := manifest.VariantWeightsRel(block, key)
 		main := SpecFromMap(asStringMap(block["weights"]))
 		extra := map[string]Spec{}
 		for k, v := range asStringMap(block["extra_weights"]) {

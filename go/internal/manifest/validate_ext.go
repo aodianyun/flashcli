@@ -95,11 +95,7 @@ func HasLocalWeights(m *Manifest, variant string) bool {
 	rel := "checkpoint"
 	if variants := variantBlocksRaw(m); len(variants) > 0 {
 		if block, ok := variants[variant]; ok {
-			if r := mapString(block["weights_dir"], ""); r != "" {
-				rel = r
-			} else {
-				rel = "checkpoint/" + variant
-			}
+			rel = VariantWeightsRel(block, variant)
 		}
 	} else if r := mapString(m.Raw["weights_dir"], ""); r != "" {
 		rel = r
@@ -156,12 +152,7 @@ func validateWeights(m *Manifest) []string {
 		// (weights_dir) is identical; require identical weights in that case.
 		byRel := map[string][]string{}
 		for _, name := range names {
-			block := variants[name]
-			rel := "checkpoint/" + name
-			if r := strings.TrimSpace(str(block["weights_dir"])); r != "" {
-				rel = strings.Trim(r, "/")
-			}
-			byRel[rel] = append(byRel[rel], name)
+			byRel[VariantWeightsRel(variants[name], name)] = append(byRel[VariantWeightsRel(variants[name], name)], name)
 		}
 		for rel, names2 := range byRel {
 			if len(names2) < 2 {
