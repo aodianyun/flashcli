@@ -119,7 +119,7 @@ func TestDownloadFileMD5Mismatch(t *testing.T) {
 
 	client := &Client{HTTP: srv.Client()}
 	dest := filepath.Join(t.TempDir(), "f.bin")
-	err := client.DownloadFile(context.Background(), File{Path: "f.bin", URL: srv.URL, MD5: "deadbeef"}, dest, true, true)
+	err := client.DownloadFile(context.Background(), File{Path: "f.bin", URL: srv.URL, MD5: "deadbeef"}, dest, true, true, nil)
 	if err == nil {
 		t.Fatal("expected md5 mismatch")
 	}

@@ -246,7 +246,7 @@ func assetFromFlashHub(ctx context.Context, repoURL, abi, triplet string) (Asset
 		return Asset{}, fmt.Errorf("no %s in FlashHub repo %q", manifestName, repoURL)
 	}
 	dest := filepath.Join(paths.Cache(), "python-standalone", "manifest.json")
-	if err := client.DownloadFile(ctx, *entry, dest, false, true); err != nil {
+	if err := client.DownloadFile(ctx, *entry, dest, false, true, nil); err != nil {
 		return Asset{}, err
 	}
 	asset, err := assetFromManifestFile(dest, abi, triplet)

@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/aodianyun/flashcli/go/internal/paths"
+	"github.com/aodianyun/flashcli/go/internal/progress"
 )
 
 // DefaultAPIBase is the default FlashHub repos API.
@@ -206,7 +207,8 @@ func pathFromDownloadURL(rawURL string) string {
 }
 
 // DownloadFile fetches a repo file to dest, verifying MD5 when known.
-func (c *Client) DownloadFile(ctx context.Context, f File, dest string, force, quiet bool) error {
+// onBytes (optional) receives transferred byte counts.
+func (c *Client) DownloadFile(ctx context.Context, f File, dest string, force, quiet bool, onBytes func(int)) error {
 	if !force {
 		if info, err := os.Stat(dest); err == nil && !info.IsDir() {
 			if f.MD5 == "" {
@@ -240,9 +242,25 @@ func (c *Client) DownloadFile(ctx context.Context, f File, dest string, force, q
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(out, resp.Body); err != nil {
-		out.Close()
-		return err
+	buf := make([]byte, 1<<20)
+	for {
+		n, rerr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, werr := out.Write(buf[:n]); werr != nil {
+				out.Close()
+				return werr
+			}
+			if onBytes != nil {
+				onBytes(n)
+			}
+		}
+		if rerr == io.EOF {
+			break
+		}
+		if rerr != nil {
+			out.Close()
+			return rerr
+		}
 	}
 	if err := out.Close(); err != nil {
 		return err
@@ -267,7 +285,7 @@ func (c *Client) DownloadManifest(ctx context.Context, repoURL, dest string, for
 	if entry == nil {
 		return nil, fmt.Errorf("No %s in FlashHub repo %q", ManifestPath, repoURL)
 	}
-	if err := c.DownloadFile(ctx, *entry, dest, force, quiet); err != nil {
+	if err := c.DownloadFile(ctx, *entry, dest, force, quiet, nil); err != nil {
 		return nil, err
 	}
 	blob, err := os.ReadFile(dest)
@@ -309,7 +327,7 @@ func (c *Client) SyncBundle(ctx context.Context, repoURL, bundleDir, envKey stri
 		return nil, fmt.Errorf("No %s in FlashHub repo %q", ManifestPath, repoURL)
 	}
 	manifestDest := filepath.Join(bundleDir, ManifestPath)
-	if err := c.DownloadFile(ctx, *manifestEntry, manifestDest, false, quiet); err != nil {
+	if err := c.DownloadFile(ctx, *manifestEntry, manifestDest, false, quiet, nil); err != nil {
 		return nil, err
 	}
 	blob, err := os.ReadFile(manifestDest)
@@ -321,15 +339,26 @@ func (c *Client) SyncBundle(ctx context.Context, repoURL, bundleDir, envKey stri
 		return nil, fmt.Errorf("parse %s: %w", ManifestPath, err)
 	}
 
+	var wanted []File
+	var totalBytes int64
 	for _, f := range ix.Files {
 		if !WantFile(f.Path, envKey) {
 			continue
 		}
+		wanted = append(wanted, f)
+		totalBytes += f.Size
+	}
+	st := progress.Start("sync", repoURL)
+	st.Totals(len(wanted), totalBytes)
+	for _, f := range wanted {
 		dest := filepath.Join(bundleDir, filepath.FromSlash(f.Path))
-		if err := c.DownloadFile(ctx, f, dest, false, quiet); err != nil {
+		if err := c.DownloadFile(ctx, f, dest, false, quiet, st.Add); err != nil {
+			st.Done()
 			return nil, err
 		}
+		st.FileDone()
 	}
+	st.Done()
 	return manifest, nil
 }
 
