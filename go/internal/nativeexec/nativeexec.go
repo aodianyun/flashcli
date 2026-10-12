@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -117,6 +118,18 @@ func (p Placeholders) ScriptEnv() []string {
 	return env
 }
 
+// ensureExecutable sets the exec bit on a bundle-provided file when missing
+// (FlashHub does not preserve the file mode on sync).
+func ensureExecutable(path string) {
+	fi, err := os.Stat(path)
+	if err != nil || fi.IsDir() {
+		return
+	}
+	if fi.Mode()&0o111 == 0 {
+		_ = os.Chmod(path, 0o755)
+	}
+}
+
 func envKey(key string) string {
 	var b strings.Builder
 	for _, r := range strings.ToUpper(key) {
@@ -175,13 +188,19 @@ func Start(ctx context.Context, spec Spec, ph Placeholders, extraEnv []string) (
 	for i, a := range spec.Command {
 		argv[i] = ph.Resolve(a)
 	}
+	dir := ph.BundleRoot
+	if spec.Cwd != "bundle" && spec.Cwd != "" {
+		dir = spec.Cwd
+	}
+	// Bundle-provided binaries arrive from FlashHub without the exec bit
+	// (mode is not preserved); resolve and ensure it is executable.
+	if !strings.ContainsRune(argv[0], '/') {
+		argv[0] = filepath.Join(dir, argv[0])
+	}
+	ensureExecutable(argv[0])
 
 	cmd := exec.Command(argv[0], argv[1:]...)
-	if spec.Cwd == "bundle" {
-		cmd.Dir = ph.BundleRoot
-	} else {
-		cmd.Dir = spec.Cwd
-	}
+	cmd.Dir = dir
 	env := append(os.Environ(), ph.ScriptEnv()...)
 	for k, v := range spec.Env {
 		env = append(env, k+"="+v)

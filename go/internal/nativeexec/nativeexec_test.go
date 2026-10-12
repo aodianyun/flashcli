@@ -2,6 +2,7 @@ package nativeexec
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -104,4 +105,20 @@ func containsLine(haystack, needle string) bool {
 		}
 	}
 	return false
+}
+
+func TestEnsureExecutable(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "srv")
+	if err := os.WriteFile(f, []byte("#!/bin/sh\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ensureExecutable(f)
+	fi, err := os.Stat(f)
+	if err != nil || fi.Mode()&0o111 == 0 {
+		t.Fatalf("exec bit not set: %v", err)
+	}
+	// missing path / dir: must be a no-op, not a panic
+	ensureExecutable(filepath.Join(dir, "nope"))
+	ensureExecutable(dir)
 }
