@@ -42,7 +42,7 @@ func ensureBundleRef(refStr string, quiet, force bool) (string, string, string, 
 	if err != nil {
 		return "", "", "", err
 	}
-	cacheKey := weights.CacheKey(p.Name, p.Version, variant)
+	cacheKey := weights.TreeKey(p.Name, p.Version)
 	bundleDir := filepath.Join(paths.Bundles(), filepath.FromSlash(cacheKey))
 	manifestPath := filepath.Join(bundleDir, flashhub.ManifestPath)
 
@@ -82,6 +82,7 @@ func ensureBundleRef(refStr string, quiet, force bool) (string, string, string, 
 		"python_abi":  abi,
 		"bundle_root": bundleDir,
 		"preset":      m.Name,
+		"variant":     variant,
 	}); err != nil {
 		return "", "", "", err
 	}
@@ -93,6 +94,7 @@ func ensureBundleRef(refStr string, quiet, force bool) (string, string, string, 
 		"bundle_root": bundleDir,
 		"ref":         refStr,
 		"runtime_id":  runtimeID,
+		"variant":     variant,
 	}); err != nil {
 		return "", "", "", err
 	}
@@ -116,7 +118,7 @@ func writeLocalMarkers(m *manifest.Manifest, root, variant string) (string, erro
 	}); err != nil {
 		return "", err
 	}
-	key := weights.CacheKey(m.Name, "local", variant)
+	key := weights.TreeKey(m.Name, "local")
 	if err := runtime.WritePresetMarker(key, map[string]any{
 		"source":      "local",
 		"local_root":  root,

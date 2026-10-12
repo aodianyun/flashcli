@@ -26,6 +26,14 @@ func cacheSegment(s string) string {
 	return cacheSegmentRe.ReplaceAllString(strings.TrimSpace(s), "-")
 }
 
+// TreeKey is the variant-independent cache key ("<bundle>/<version>") shared by
+// every variant: the synced bundle tree and the per-version weights base live
+// under it. Variants are disambiguated by their checkpoint-relative dir
+// (`weights_dir`), not by the key.
+func TreeKey(bundle, version string) string {
+	return cacheSegment(bundle) + "/" + cacheSegment(version)
+}
+
 // CheckpointDir returns the default checkpoint directory for a preset.
 func CheckpointDir(bundle, version, variant string) string {
 	return filepath.Join(paths.Models(), filepath.FromSlash(CacheKey(bundle, version, variant)), "checkpoint")

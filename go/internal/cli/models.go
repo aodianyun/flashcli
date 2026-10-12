@@ -58,13 +58,24 @@ func bundleMarkers() []map[string]any {
 	return out
 }
 
-func weightsCached(cacheKey string) bool {
-	checkpoint, ok := weights.ReadMarker(filepath.Join(paths.Models(), filepath.FromSlash(cacheKey)))
-	if !ok {
-		return false
+func weightsCachedFor(p ref.Parsed, refStr string) bool {
+	ver := p.Version
+	if p.Local || ver == "" {
+		ver = "local"
 	}
-	info, err := os.Stat(checkpoint)
-	return err == nil && info.IsDir()
+	rel := "checkpoint"
+	if m, err := loadManifestForRef(refStr, p); err == nil {
+		if _, r, _, err := weights.ManifestSpecs(m, p.Variant); err == nil && r != "" {
+			rel = r
+		}
+	}
+	dir := filepath.Join(paths.Models(), filepath.FromSlash(weights.TreeKey(p.Name, ver)), filepath.FromSlash(rel))
+	if cp, ok := weights.ReadMarker(dir); ok {
+		if info, err := os.Stat(cp); err == nil && info.IsDir() {
+			return true
+		}
+	}
+	return false
 }
 
 func modelsListCmd() *cobra.Command {
@@ -88,15 +99,15 @@ func modelsListCmd() *cobra.Command {
 					refName = cacheKey
 				}
 				variant := ""
-				if i := strings.Index(cacheKey, "@"); i >= 0 {
-					variant = ", variant=" + cacheKey[i+1:]
+				if v := strOf(m["variant"]); v != "" {
+					variant = ", variant=" + v
 				}
 				bundleState := "bundle:missing"
 				if br := strOf(m["bundle_root"]); br != "" {
 					bundleState = fmt.Sprintf("bundle:cached (%s)", strOf(m["env_key"]))
 				}
 				weightsState := "weights:missing"
-				if weightsCached(cacheKey) {
+				if weightsCachedFromMarker(m) {
 					weightsState = "weights:cached"
 				}
 				fmt.Fprintf(out, "%s [%s%s, %s]\n", refName, bundleState, variant, weightsState)
@@ -143,6 +154,28 @@ func modelsEnvsCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func weightsCachedFromMarker(m map[string]any) bool {
+	key := fmt.Sprint(m["cache_key"])
+	if key == "" || key == "<nil>" {
+		return false
+	}
+	rel := "checkpoint"
+	if br := strOf(m["bundle_root"]); br != "" {
+		if man, err := manifest.Load(br); err == nil {
+			if _, r, _, err := weights.ManifestSpecs(man, strOf(m["variant"])); err == nil && r != "" {
+				rel = r
+			}
+		}
+	}
+	dir := filepath.Join(paths.Models(), filepath.FromSlash(key), filepath.FromSlash(rel))
+	if cp, ok := weights.ReadMarker(dir); ok {
+		if info, err := os.Stat(cp); err == nil && info.IsDir() {
+			return true
+		}
+	}
+	return false
 }
 
 func modelsEnvsOne(out interface{ Write([]byte) (int, error) }, refStr string, gpu *preflight.GpuInfo) {
@@ -210,7 +243,7 @@ func loadManifestForRef(refStr string, p ref.Parsed) (*manifest.Manifest, error)
 		}
 		return manifest.Load(abs)
 	}
-	cacheKey := weights.CacheKey(p.Name, p.Version, p.Variant)
+	cacheKey := weights.TreeKey(p.Name, p.Version)
 	marker := runtime.ReadPresetMarker(cacheKey)
 	if br := strOf(marker["bundle_root"]); br != "" {
 		if m, err := manifest.Load(br); err == nil {
@@ -281,7 +314,7 @@ func modelsShowCmd() *cobra.Command {
 				}
 			}
 
-			if weightsCached(key) {
+			if weightsCachedFor(p, args[0]) {
 				fmt.Fprintln(out, "weights: cached")
 			} else {
 				fmt.Fprintln(out, "weights: missing")

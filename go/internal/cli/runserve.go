@@ -111,7 +111,7 @@ func runPythonBackend(m *manifest.Manifest, root, version, variant, capability s
 	// FlashHub refs; local paths use the path-derived id.
 	runtimeID := runtime.IDFromPath(root, m.Name)
 	if version != "local" {
-		if marker := runtime.ReadPresetMarker(weights.CacheKey(m.Name, version, variant)); marker != nil {
+		if marker := runtime.ReadPresetMarker(weights.TreeKey(m.Name, version)); marker != nil {
 			if rid := strOf(marker["runtime_id"]); rid != "" {
 				runtimeID = rid
 			}

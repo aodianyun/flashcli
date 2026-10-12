@@ -121,3 +121,37 @@ func TestCheckExecutionVersionsAcrossVariants(t *testing.T) {
 		t.Fatal("expected failure: native-exec variant without exec_protocol_version")
 	}
 }
+
+func sharedWeightsManifest(repoA, repoB string) *Manifest {
+	data := map[string]any{
+		"format": "flashcli-model-bundle", "format_version": float64(3), "protocol_version": float64(1),
+		"exec_protocol_version": float64(1), "name": "t",
+		"entry":   map[string]any{"kind": "native-exec", "native": map[string]any{"command": []any{"bin/x"}}, "run": map[string]any{"kind": "native-exec"}, "serve": map[string]any{"kind": "native-exec"}},
+		"runtime": map[string]any{"sm120-cu130-linux-x86_64": "runtime/x"},
+		"variants": map[string]any{
+			"a": map[string]any{"weights_dir": "checkpoint", "weights": map[string]any{"repo": repoA}},
+			"b": map[string]any{"weights_dir": "checkpoint", "weights": map[string]any{"repo": repoB}},
+		},
+	}
+	m, err := LoadData(data, "/tmp")
+	if err != nil {
+		panic(err)
+	}
+	return m
+}
+
+func TestVariantsSharedWeightsDirConflict(t *testing.T) {
+	if errs := validateWeights(sharedWeightsManifest("org/m", "org/m")); len(errs) != 0 {
+		t.Fatalf("same weights should be allowed: %v", errs)
+	}
+	errs := validateWeights(sharedWeightsManifest("org/m", "org/other"))
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "share weights_dir") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("different weights with same weights_dir must be rejected: %v", errs)
+	}
+}

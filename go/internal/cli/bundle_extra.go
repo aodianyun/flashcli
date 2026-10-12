@@ -157,8 +157,12 @@ func cleanPresetCache(refArg string, flashhubCache bool) []string {
 	key := refCacheKey(p)
 	marker := runtime.ReadPresetMarker(key)
 
+	rel := "checkpoint"
 	if br := strOf(marker["bundle_root"]); br != "" {
 		if m, err := manifest.Load(br); err == nil {
+			if _, r, _, err := weights.ManifestSpecs(m, p.Variant); err == nil && r != "" {
+				rel = r
+			}
 			_, _, extras, _ := weights.ManifestSpecs(m, p.Variant)
 			for k, spec := range extras {
 				dest := weights.ExtraWeightDest("", br, k, spec)
@@ -173,7 +177,7 @@ func cleanPresetCache(refArg string, flashhubCache bool) []string {
 			}
 		}
 	}
-	if d, ok := rmtree(filepath.Join(paths.Models(), filepath.FromSlash(key))); ok {
+	if d, ok := rmtree(filepath.Join(paths.Models(), filepath.FromSlash(key), filepath.FromSlash(rel))); ok {
 		removed = append(removed, d)
 	}
 	if d, ok := rmtree(filepath.Join(paths.Bundles(), filepath.FromSlash(key))); ok {
@@ -205,7 +209,7 @@ func refCacheKey(p ref.Parsed) string {
 	if p.Local || version == "" {
 		version = "local"
 	}
-	return weights.CacheKey(p.Name, version, p.Variant)
+	return weights.TreeKey(p.Name, version)
 }
 
 // findRuntimeForRef scans runtime markers for one whose preset/local_root match.

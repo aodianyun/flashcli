@@ -75,7 +75,7 @@ func DownloadBundle(ctx context.Context, m *manifest.Manifest, version, variant 
 	if err != nil {
 		return "", err
 	}
-	cacheDir := filepath.Join(paths.Models(), filepath.FromSlash(CacheKey(m.Name, version, variant)))
+	cacheDir := filepath.Join(paths.Models(), filepath.FromSlash(TreeKey(m.Name, version)))
 	checkpoint := filepath.Join(cacheDir, filepath.FromSlash(rel))
 
 	if main.HasSource() {
@@ -93,7 +93,7 @@ func DownloadBundle(ctx context.Context, m *manifest.Manifest, version, variant 
 			return "", err
 		}
 	}
-	if err := WriteMarker(cacheDir, m.Name, checkpoint); err != nil {
+	if err := WriteMarker(checkpoint, m.Name, checkpoint); err != nil {
 		return "", err
 	}
 	return checkpoint, nil

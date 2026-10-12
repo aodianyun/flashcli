@@ -116,6 +116,19 @@ func HasLocalWeights(m *Manifest, variant string) bool {
 	return false
 }
 
+// sameWeights reports whether two variant weights specs resolve to the same
+// upstream (source/repo/revision), ignoring unknown keys.
+func sameWeights(a, b map[string]any) bool {
+	norm := func(spec map[string]any) [3]string {
+		return [3]string{
+			strings.ToLower(mapString(spec["source"], "huggingface")),
+			strings.TrimSpace(mapString(spec["repo"], "")),
+			strings.TrimSpace(mapString(spec["revision"], "main")),
+		}
+	}
+	return norm(a) == norm(b)
+}
+
 func validateWeights(m *Manifest) []string {
 	variants := variantBlocksRaw(m)
 	if len(variants) > 0 {
@@ -137,6 +150,38 @@ func validateWeights(m *Manifest) []string {
 			source := strings.ToLower(mapString(spec["source"], "huggingface"))
 			if (source == "huggingface" || source == "modelscope") && mapString(spec["repo"], "") == "" {
 				errors = append(errors, fmt.Sprintf("variants.%s.weights.repo is required", name))
+			}
+		}
+		// Variants share on-disk weights when their checkpoint-relative dir
+		// (weights_dir) is identical; require identical weights in that case.
+		byRel := map[string][]string{}
+		for _, name := range names {
+			block := variants[name]
+			rel := "checkpoint/" + name
+			if r := strings.TrimSpace(str(block["weights_dir"])); r != "" {
+				rel = strings.Trim(r, "/")
+			}
+			byRel[rel] = append(byRel[rel], name)
+		}
+		for rel, names2 := range byRel {
+			if len(names2) < 2 {
+				continue
+			}
+			var base map[string]any
+			mismatch := false
+			for _, name := range names2 {
+				spec, _ := variants[name]["weights"].(map[string]any)
+				if base == nil {
+					base = spec
+					continue
+				}
+				if !sameWeights(base, spec) {
+					mismatch = true
+					break
+				}
+			}
+			if mismatch {
+				errors = append(errors, fmt.Sprintf("variants %v share weights_dir %q but declare different weights — give them distinct weights_dir", names2, rel))
 			}
 		}
 		return errors
