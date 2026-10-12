@@ -18,10 +18,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 )
 
 type stringList []string
@@ -115,17 +117,69 @@ type server struct {
 func (s *server) run(payload map[string]any) (map[string]any, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.sess.Apply(s.inputs, valuesFromPayload(s.inputs, payload)); err != nil {
-		return nil, err
+	benchmark := intFrom(payload["benchmark"])
+	warmup := intFrom(payload["warmup"])
+	vals := valuesFromPayload(s.inputs, payload)
+
+	one := func() ([]float32, error) {
+		if err := s.sess.Apply(s.inputs, vals); err != nil {
+			return nil, err
+		}
+		if err := s.sess.Tick(); err != nil {
+			return nil, err
+		}
+		return s.sess.GetF32(s.out.Port, s.out.Elements())
 	}
-	if err := s.sess.Tick(); err != nil {
-		return nil, err
+
+	for i := 0; i < warmup; i++ {
+		if _, err := one(); err != nil {
+			return nil, err
+		}
 	}
-	actions, err := s.sess.GetF32(s.out.Port, s.out.Elements())
-	if err != nil {
-		return nil, err
+	switch {
+	case benchmark > 0:
+		times := make([]float64, 0, benchmark)
+		for i := 0; i < benchmark; i++ {
+			t0 := time.Now()
+			if _, err := one(); err != nil {
+				return nil, err
+			}
+			times = append(times, time.Since(t0).Seconds())
+		}
+		if len(times) > 0 {
+			sort.Float64s(times)
+			var sum float64
+			for _, t := range times {
+				sum += t
+			}
+			fmt.Fprintf(os.Stderr, "benchmark n=%d mean=%.3fs p50=%.3fs\n", len(times), sum/float64(len(times)), times[len(times)/2])
+		}
+	default:
+		t0 := time.Now()
+		if _, err := one(); err != nil {
+			return nil, err
+		}
+		fmt.Fprintf(os.Stderr, "[pi05_libero_nexus] predict %.3fs actions shape=%v\n", time.Since(t0).Seconds(), s.out.Shape)
 	}
-	return map[string]any{"actions": actions, "shape": s.out.Shape}, nil
+
+	return map[string]any{
+		"actions_shape": s.out.Shape,
+		"benchmark":     benchmark,
+		"warmup":        warmup,
+	}, nil
+}
+
+func intFrom(v any) int {
+	switch t := v.(type) {
+	case float64:
+		return int(t)
+	case int:
+		return t
+	case string:
+		n, _ := strconv.Atoi(strings.TrimSpace(t))
+		return n
+	}
+	return 0
 }
 
 func (s *server) serveStdio() {

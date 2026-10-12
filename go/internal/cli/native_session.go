@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -80,21 +81,66 @@ func runNativeSession(m *manifest.Manifest, entry *manifest.EntrySpec, root, ver
 func sessionRun(sess *nativeabi.Session, entry *manifest.EntrySpec, opts map[string]string) error {
 	inputs := nativeabi.InputSpecs(entry)
 	out := nativeabi.OutputSpecFromEntry(entry)
-	if err := sess.Apply(inputs, inputValuesFromOptions(inputs, opts)); err != nil {
-		return err
+	vals := inputValuesFromOptions(inputs, opts)
+
+	benchmark := intOption(opts, "benchmark", 0)
+	warmup := intOption(opts, "warmup", 0)
+	quiet := progress.IsQuiet()
+
+	one := func() ([]float32, error) {
+		if err := sess.Apply(inputs, vals); err != nil {
+			return nil, err
+		}
+		if err := sess.Tick(); err != nil {
+			return nil, err
+		}
+		return sess.GetF32(out.Port, out.Elements())
 	}
-	if err := sess.Tick(); err != nil {
-		return err
+
+	for i := 0; i < warmup; i++ {
+		if _, err := one(); err != nil {
+			return err
+		}
 	}
-	actions, err := sess.GetF32(out.Port, out.Elements())
-	if err != nil {
-		return err
+
+	var actions []float32
+	switch {
+	case benchmark > 0:
+		times := make([]float64, 0, benchmark)
+		for i := 0; i < benchmark; i++ {
+			t0 := time.Now()
+			a, err := one()
+			if err != nil {
+				return err
+			}
+			actions = a
+			times = append(times, time.Since(t0).Seconds())
+		}
+		if !quiet && len(times) > 0 {
+			sort.Float64s(times)
+			var sum float64
+			for _, t := range times {
+				sum += t
+			}
+			fmt.Fprintf(os.Stdout, "benchmark n=%d mean=%.3fs p50=%.3fs\n", len(times), sum/float64(len(times)), times[len(times)/2])
+		}
+	default:
+		t0 := time.Now()
+		a, err := one()
+		if err != nil {
+			return err
+		}
+		actions = a
+		if !quiet {
+			fmt.Fprintf(os.Stderr, "[pi05_libero_nexus] predict %.3fs actions shape=%v\n", time.Since(t0).Seconds(), out.Shape)
+		}
 	}
+	_ = actions
+
 	resp := map[string]any{
-		"kind":          "native-abi",
-		"session":       "nexus-embedded",
 		"actions_shape": out.Shape,
-		"actions_flat":  len(actions),
+		"benchmark":     benchmark,
+		"warmup":        warmup,
 	}
 	blob, _ := json.MarshalIndent(resp, "", "  ")
 	fmt.Fprintln(os.Stdout, string(blob))
