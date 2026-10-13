@@ -82,3 +82,25 @@ func TestBundleValidateExec(t *testing.T) {
 		t.Fatalf("validate exit = %d", code)
 	}
 }
+
+func TestWithCheckpoint(t *testing.T) {
+	base := []string{"flashcli-bundle/x:1@v", "--prompt", "hi"}
+	got := withCheckpoint(base, "/cache/x/1/checkpoint", false)
+	want := append(append([]string(nil), base...), "--checkpoint", "/cache/x/1/checkpoint")
+	if len(got) != len(want) {
+		t.Fatalf("len=%d want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got[%d]=%q want %q", i, got[i], want[i])
+		}
+	}
+	// User-provided checkpoint: untouched.
+	if g := withCheckpoint(base, "/cache/x", true); len(g) != len(base) {
+		t.Fatalf("user-provided should be untouched: %v", g)
+	}
+	// Nothing resolved: untouched.
+	if g := withCheckpoint(base, "", false); len(g) != len(base) {
+		t.Fatalf("empty checkpoint should be untouched: %v", g)
+	}
+}
