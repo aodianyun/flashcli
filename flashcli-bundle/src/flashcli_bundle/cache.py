@@ -41,15 +41,20 @@ def _read_marker(cache: Path) -> dict | None:
 
 
 def _checkpoint_from_cache(cache: Path) -> Path | None:
-    marker = _read_marker(cache)
-    if marker:
-        ckpt = Path(str(marker.get("checkpoint", ""))).expanduser()
-        if ckpt.is_dir():
-            return ckpt
+    if not cache.is_dir():
+        return None
+    # The weights dir may be nested under a variant ``weights_dir`` (see
+    # docs/bundle_publish_standard.md §4.4.1); find any cache marker below.
+    for marker_path in sorted(cache.glob("**/.flashcli_model.json")):
+        marker = _read_marker(marker_path.parent)
+        if marker:
+            ckpt = Path(str(marker.get("checkpoint", ""))).expanduser()
+            if ckpt.is_dir():
+                return ckpt
     nested = cache / "checkpoint"
     if nested.is_dir() and any(nested.iterdir()):
         return nested
-    if cache.is_dir() and any(cache.iterdir()):
+    if any(cache.iterdir()):
         skip = {".flashcli_model.json"}
         if any(p.name not in skip for p in cache.iterdir()):
             return cache

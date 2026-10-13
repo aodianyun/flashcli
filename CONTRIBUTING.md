@@ -14,8 +14,8 @@ Thank you for contributing. This project is intended for open source on GitHub. 
 
 ```text
 flashcli/
-├── flashcli-bundle/        # Bundle protocol package (flashcli_bundle)
-├── src/flashcli/           # CLI, preset ref, bundle loader (no model forward passes)
+├── flashcli-bundle/        # Bundle protocol + infer package (flashcli_bundle)
+├── go/                     # Host CLI (Go binary; no model forward passes)
 ├── bundles/                  # Model bundle sources + release-matrix.env
 ├── scripts/                  # Shared release pipeline
 └── docs/                     # User-facing documentation (maintainer docs: see CONTRIBUTING)
@@ -25,18 +25,17 @@ FlashRT/                      # Sibling clone — inference kernels (build input
 
 flashcli **distributes and loads** Model Bundles; inference lives in bundle `entry` modules and FlashRT.
 
-**Maintainers:** build/release workflow → [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md) · [docs/bundle_builder_guide.zh-CN.md](docs/bundle_builder_guide.zh-CN.md) · [docs/runtime-matrix.md](docs/runtime-matrix.md) (linked from this file only).
+**Maintainers:** build/release workflow → [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md) · [docs/runtime-matrix.md](docs/runtime-matrix.md). Full index: [docs/README.md](docs/README.md).
 
 ## Development setup
 
 ```bash
 cd flashcli
-pip install -e "./flashcli-bundle"   # protocol (host CLI)
-pip install -e ".[dev]"            # flashcli host CLI
+./install.sh --from-source          # build+install the Go host (or: bash scripts/build_go.sh)
+pip install -e "./flashcli-bundle"   # protocol (for pytest)
 # To run infer module tests locally:
 pip install -e "./flashcli-bundle[infer]"
 flashcli doctor
-flashcli models list
 ```
 
 Run tests:
@@ -47,23 +46,139 @@ pytest tests/bench/        # bench script helpers (scripts/bench_*.py)
 pytest tests/ tests/bench/ # full suite including bench
 ```
 
+## Git workflow
+
+### Branches
+
+| Branch | Purpose |
+|--------|---------|
+| `main` | Stable / release branch (default). Only validated changes land here. |
+| `dev` | Integration + validation branch. Day-to-day work and testing land here; synced to `main` after validation. |
+| `feat/<topic>`, `fix/<topic>` | Short-lived work branches off `dev`; PR back into `dev`. |
+
+Rules:
+
+- Branch work off `dev`; open PRs **into `dev`**. `main` is updated from `dev` only after validation.
+- Sync `dev` → `main` (**squash-and-record**):
+
+  ```bash
+  # main: collapse dev into a single commit (keeps main linear)
+  git switch main && git pull origin main
+  git merge --squash dev
+  git commit -m "chore(sync): squash merge dev into main"
+  git push origin main
+
+  # dev: record the squash so future syncs don't replay changes / re-conflict
+  git switch dev
+  git merge -s ours main -m "chore: record squash merge from main (ours)"
+  git push origin dev
+  ```
+
+  - `main` gains exactly **one** commit per sync and stays linear; `dev` keeps its granular history.
+  - `dev` individual commit messages are **not** carried into `main` (they remain on `dev`) — this is the accepted trade-off of the squash flow.
+  - Always do the `-s ours` record step on `dev` after squashing; otherwise the next `main`→`dev` merge replays squashed changes and conflicts.
+- **Never rewrite pushed history** — no force-push to `main`/`dev`; fix forward with new commits.
+- Rebase your branch on `dev` before merging; resolve conflicts locally (do not merge `main` into a feature branch just to update it).
+
+### Commit messages (Conventional Commits)
+
+```
+type(scope): imperative summary
+```
+
+- **type** ∈ `feat | fix | refactor | perf | docs | test | build | ci | chore`.
+- **scope** is optional but preferred: `host`, `install`, `weights`, `venv`, `manifest`, `native`, `cli`, `flashhub`, `bundle`, `docs`, `go`, `python`.
+- **summary**: imperative mood ("add", not "added"), ≤ ~72 chars, no trailing period.
+- **body** (optional): *why* + notable changes, wrapped at ~72 cols.
+- **breaking changes**: add a `BREAKING CHANGE:` footer describing the impact.
+- **issue refs**: add `Refs: #123` / `Closes: #123` in the footer.
+
+Rules:
+
+- **One logical change per commit.** Don't mix unrelated code, refactors, and docs. A pure docs change is `docs: …` (or `docs(scope): …`); a bug fix is `fix(…)` even when it also touches a doc.
+- Don't mix pure formatting/renames with behavior changes in one commit.
+- Don't commit secrets/tokens, `dist/`, `build/`, `.native-cache/`, `logs/`, model weights, or FlashRT source.
+- Keep subjects/bodies in **English** (see Language policy).
+
+Examples:
+
+```
+feat(install): add --branch alias for --ref (default main)
+fix(cuda): use host loader before pip-installing CUDA userland
+docs(environment): document only variables the Go host reads
+refactor(weights): share cache-key resolution between pull and run
+```
+
+### Merging
+
+- PRs target `dev` and must pass `go test ./...`, `pytest tests/` (protocol/infer + conformance), and `gofmt -w .` clean.
+- Feature branch → `dev`: prefer **squash merge** (one logical commit) or **rebase** for a clean linear history; avoid merge-commit noise.
+- `dev` → `main`: **squash-and-record** (see above) — `main` gets one linear squash commit per sync, and `dev` records it with `git merge -s ours main`. Do not `--no-ff` merge or rely on fast-forward, and do not push directly to `main` for routine work.
+- Squash commit summary: `chore(sync): squash merge dev into main` (or a concise `type(scope): …` describing the release).
+
+### Releases
+
+Releases are cut from **`main`** (stable) only. **Never publish an intermediate release
+from `dev`.** Validate host changes by building from `dev` locally — `bash install.sh
+--from-source --branch dev`, or `bash scripts/build_go.sh` + install the binary. Note
+`install.sh --branch dev` **without** `--from-source` still installs the latest
+*published* release, so it does **not** exercise dev host code.
+
+**Host (Go) release checklist:**
+
+1. Bump `[project].version` in `pyproject.toml` on `dev`; commit (`chore(release): bump version to X`).
+2. Sync `dev` → `main` (squash-and-record, above) so `main` carries the validated commit.
+3. Remove any previous/test release **and** its tag on GitHub and Gitee (keep only the latest).
+4. Tag `vX` on the `main` release commit; push the tag.
+5. `bash scripts/release_go.sh --upload` builds and publishes both GitHub and Gitee
+   (target branch defaults to `main`; override with `FLASHCLI_RELEASE_TARGET`).
+6. Write the release notes per the standard below on **both** platforms.
+7. Verify the published assets in a clean environment:
+   `bash scripts/verify_release.sh --version X` (isolated prefix; add `--mirror` for Gitee).
+
+- **Bundles**: follow the maintainer checklist below and [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md).
+
+#### Release notes standard
+
+Concise; **Features** and **Fixes** only. Bold the key terms. Same text on GitHub and Gitee; keep only the latest release.
+
+```markdown
+# flashcli <version>
+
+<one-line overview; bold the headline>
+
+## Features
+- **<area>**: <what changed, user-visible>
+
+## Fixes
+- **<area>**: <what was broken → fixed>
+
+## Assets
+- `flashcli-linux-amd64` sha256 `<…>`
+- `flashcli-linux-arm64` sha256 `<…>`
+
+**Full Changelog**: <compare or commits link>
+```
+
+Rules: short bullets, no raw commit dump, no extra sections; English (an optional one-line `> 简体中文` is fine); include asset sha256.
+
 ## Pull request guidelines
 
 1. **Scope** — Keep changes in `flashcli/`. Do not commit FlashRT source changes inside flashcli PRs.
-2. **No inference in CLI** — Do not add model-specific forward logic under `src/flashcli/`. Use bundle `entry` modules.
+2. **No inference in CLI** — Do not add model-specific forward logic under `go/`. Use bundle `entry` modules.
 3. **Host CLI vs bundle venv (invariants)** — See [docs/architecture.md](docs/architecture.md#host-cli-vs-bundle-infer-important).
 
    | Allowed in bundle venv | Host only (never bundle venv) |
    |--------------------------|-----------------------------------------------------------|
-   | ``flashcli-bundle[infer]`` | ``flashcli`` CLI package (pip) |
-   | ``python_dependencies`` from manifest (torch, transformers, …) | ``huggingface_hub`` (weight pull) |
+   | ``flashcli-bundle[infer]`` | ``flashcli`` (Go binary — never pip) |
+   | ``python_dependencies`` from manifest (torch, transformers, …) | weight download / Hub clients (Go) |
 
-   Bundle re-exec runs ``python -m flashcli_bundle.infer`` inside the bundle venv. Tests: ``test_reexec_argv.py``, ``test_flashcli_bundle_infer.py``. **Do not** prepend host ``site-packages`` or pip-install ``flashcli`` into bundle venvs.
+   Bundle re-exec runs ``python -m flashcli_bundle.infer`` inside the bundle venv. Tests: ``tests/conformance/``. **Do not** prepend host ``site-packages`` or pip-install ``flashcli`` into bundle venvs.
 
 4. **Preset refs** — Upload to [FlashHub](https://flashhub.top); document the ref in the bundle README (and BUILD for maintainers). No bundled catalog file.
 5. **Docs** — Update English docs when behavior or release workflow changes. Mirror important changes in `*.zh-CN.md` when applicable.
 6. **Comments** — New code comments and script headers in English.
-7. **Commits** — Clear, imperative subject lines; one logical change per commit when possible.
+7. **Commits** — Follow the [Git workflow](#git-workflow) section: Conventional Commits (`type(scope): imperative`), **one logical change per commit**, no pushed-history rewrites.
 
 ## Adding a new bundle / preset ref
 
@@ -79,7 +194,7 @@ pytest tests/ tests/bench/ # full suite including bench
 
 ## Release bundle checklist (maintainers)
 
-**Full steps:** [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md) (English summary) · [docs/bundle_builder_guide.zh-CN.md](docs/bundle_builder_guide.zh-CN.md) (complete, 中文) · matrix reference [docs/runtime-matrix.md](docs/runtime-matrix.md).
+**Full steps:** [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md) (English, complete) · [docs/bundle_builder_guide.zh-CN.md](docs/bundle_builder_guide.zh-CN.md) (中文) · matrix reference [docs/runtime-matrix.md](docs/runtime-matrix.md).
 
 After uploading `dist/` to FlashHub:
 
@@ -88,6 +203,18 @@ After uploading `dist/` to FlashHub:
 - [ ] Document ref strings in README / BUILD (Qwen: same repo, different `@variant`)
 
 Matrix constraints: pi05 **SM89 + SM120** (cu124 on SM89; cu130 on both); qwen / qwen3_vl / groot_n16 **cu130 / SM120 / py312**; **groot_n17** **cu130 / SM120 / py310** (Isaac-GR00T) — see runtime-matrix doc.
+
+## Documentation
+
+Docs are part of the product and this is a **public repository** — treat them as code. Every doc must be **clear, concise, accurate, and complete**: no verbosity, no redundancy, no stale content.
+
+- **Audience first.** User-facing docs live in root `README` / `bundles/<name>/README.md`; contracts/specs in `docs/`; maintainer workflows in `docs/bundle_builder_guide.md`. Keep `docs/README.md` as the index.
+- **English is authoritative; keep the `*.zh-CN.md` mirror in sync** in the same change. Missing/outdated zh mirrors are a bug.
+- **Delete or fix outdated content** instead of appending. Prefer editing the authoritative doc over creating a new one; avoid doc proliferation.
+- **One concept, one home.** Do not duplicate a spec across docs — link to the authoritative one.
+- **Prefer tables and small diagrams** over prose when clearer.
+- **Verify relative links** after moving/renaming files.
+- **When behavior changes**, update together: the authoritative spec (`docs/*.md`), the affected bundle `README`/`BUILD`, and `docs/environment.md` if env vars changed.
 
 ## Reporting issues
 

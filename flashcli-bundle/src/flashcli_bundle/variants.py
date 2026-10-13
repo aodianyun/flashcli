@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 from flashcli_bundle.manifest import BundleManifest
@@ -64,11 +65,46 @@ def variant_section(
     return dict(block) if isinstance(block, dict) else {}
 
 
+def _derived_weights_dir(name: str, spec: dict[str, Any]) -> str:
+    """Derive a checkpoint-relative weights dir from the weights identity.
+
+    Mirrors the host's ``manifest.VariantWeightsRel`` (Go): an explicit
+    ``weights_dir`` wins; otherwise a directory derived from source/repo/
+    revision/url/relative_dir so identical weights share a directory and
+    different weights never collide; ``checkpoint/<name>`` when the spec is
+    local/uncertain.
+    """
+    source = str(spec.get("source", "huggingface")).strip().lower() or "huggingface"
+    repo = str(spec.get("repo", "")).strip()
+    revision = str(spec.get("revision", "")).strip() or "main"
+    url = str(spec.get("url", "")).strip()
+    relative = str(spec.get("relative_dir", "")).strip()
+    if not repo and not url and not relative:
+        return f"checkpoint/{name}"
+    digest = hashlib.sha256(
+        "|".join([source, repo, revision, url, relative]).encode()
+    ).hexdigest()[:12]
+    return f"checkpoint/{digest}"
+
+
 def variant_weights_dir(bundle: BundleManifest, variant: str) -> str:
     rel = str(variant_section(bundle, variant, "weights_dir")).strip()
     if rel:
-        return rel
-    return f"checkpoint/{variant}"
+        return rel.strip("/")
+    return _derived_weights_dir(variant, variant_section(bundle, variant, "weights"))
+
+
+def bundle_weights_rel(bundle: BundleManifest, variant: str | None = None) -> str:
+    """Checkpoint-relative weights directory for a bundle/variant.
+
+    Single-variant (no ``variants`` block) bundles use the top-level
+    ``weights_dir`` (default ``checkpoint``).
+    """
+    if has_bundle_variants(bundle):
+        key = resolve_bundle_variant(bundle, variant)
+        return variant_weights_dir(bundle, key)
+    rel = str(bundle.raw.get("weights_dir", "checkpoint")).strip().strip("/")
+    return rel or "checkpoint"
 
 
 def variant_weights_spec(bundle: BundleManifest, variant: str) -> dict[str, Any]:

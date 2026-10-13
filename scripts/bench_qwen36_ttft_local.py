@@ -95,8 +95,8 @@ def _resolve_bundle_dir(explicit: Path | None) -> Path:
 
 
 def _activate_bundle(bundle_root: Path) -> None:
-    from flashcli.bundle.activate import activate_bundle
-    from flashcli.bundle.manifest import load_bundle_manifest
+    from flashcli_bundle.infer.bundle.activate import activate_bundle
+    from flashcli_bundle.manifest import load_bundle_manifest
 
     bundle = load_bundle_manifest(bundle_root)
     activate_bundle(

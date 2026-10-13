@@ -1,0 +1,18 @@
+{
+  "format": "flashcli-model-bundle",
+  "format_version": 3,
+  "protocol_version": 1,
+  "name": "python_echo",
+  "description": "Conformance fixture: baseline python entry (docs/bundle_execution_abi.md section 5)",
+  "python_abi": "310",
+  "entry": {
+    "run": { "module": "run", "attr": "RunEngine" }
+  },
+  "python_dependencies": { "pip": [] },
+  "run_options": [
+    { "name": "prompt", "type": "string", "default": "hello", "help": "Text to echo.", "phase": "predict" }
+  ],
+  "runtime": {
+    "sm89-cu124-linux-x86_64-py310": "runtime/sm89-cu124-linux-x86_64-py310"
+  }
+}

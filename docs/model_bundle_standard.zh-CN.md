@@ -53,23 +53,37 @@ flashcli pull bundles/qwen_nvfp4@qwen36
 └── runtime/<env-key>/
 ```
 
-权重不在 bundle 内，缓存在 `~/.flashcli/models/<bundle>/<version>@<variant>/`。
+> 仅原生 bundle（`entry.kind = native-abi|native-exec`）省略 `run.py`/`serve.py` 与 `flash_rt/`；C 库放在 `runtime/<env-key>/substrate/`。
+
+权重不在 bundle 内，缓存在 `~/.flashcli/models/<name>/<version>/<weights_dir>/`（bundle 树按 `<name>/<version>` 共享；各 `@variant` 用自己的 `weights_dir`，默认 `checkpoint/`）。
 
 ## 终端用户运行时流程
 
 1. 解析 REF → 若为本地目录则用 `local_root`；否则 `bundle.repo`（或已 sync 的 marker）
 2. FlashHub manifest → 本机 **preflight** env key
 3. 下载 entry + 匹配的 `runtime/<env-key>/`
-4. 创建 bundle venv（`python_abi`、manifest 中的 torch）
-5. 在 bundle venv 内 **re-exec** infer — [architecture.zh-CN.md](architecture.zh-CN.md)
-6. **主机**（re-exec 前）：若 cache 不完整则下载 `weights` + `extra_weights` + 执行 `post_pull` — 与 `flashcli pull` 同一代码路径
-7. **bundle venv**：仅解析本地 checkpoint（`HF_HUB_OFFLINE=1`）；运行 `entry`
+4. `kind=python`：创建 bundle venv（`python_abi`、manifest 中的 torch）。native kind 跳过 venv。
+5. `kind=python`：在 bundle venv 内 **re-exec** infer — [architecture.zh-CN.md](architecture.zh-CN.md)。`native-exec`/`native-abi`：host 直接 spawn / `dlopen` bundle backend。
+6. **主机**（推理前）：若 cache 不完整则下载 `weights` + `extra_weights` + 执行 `post_pull` — 与 `flashcli pull` 同一代码路径
+7. **bundle**：仅解析本地 checkpoint（`HF_HUB_OFFLINE=1`）；运行 `entry`（或原生 backend）
 
 `flashcli pull <ref>` 执行步骤 1–6，不进入推理。首次 `flashcli run` / `serve` 在 cache 为空时也会自动执行 1–6。
 
 `flashcli bundle sync <ref>` 仅预拉 FlashHub 目录树（不含权重）。
 
 **环境键**（`flashcli models envs <ref>`）：`sm{SM}-cu{CUDA}-linux-x86_64-py{PY}`。
+
+## 执行 backend（`entry.kind`）
+
+bundle 的 `entry` 决定 flashcli 如何调用推理。无论哪种，用户命令都不变：
+
+| `entry.kind` | backend |
+|--------------|---------|
+| `python`（默认） | bundle venv re-exec → `python -m flashcli_bundle.infer` |
+| `native-exec` | host 启动 bundle 可执行文件（NDJSON stdio / HTTP） |
+| `native-abi` | host `dlopen` 一个 `frt_model_runtime_v1` `.so` 并在进程内驱动 |
+
+没有 `entry.kind` 的 bundle 行为完全不变。完整契约见 [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md)。
 
 ## 快速校验
 

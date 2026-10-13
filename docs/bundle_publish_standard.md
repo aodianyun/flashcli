@@ -15,6 +15,8 @@ External specification for **third-party bundle authors**: directory layout, `fl
 | **protocol_version** | `flashcli-bundle` protocol API version; currently **1** |
 | **Weights** | **Not** shipped in the bundle; declared in the manifest (e.g. Hugging Face) and fetched on first run by end users |
 
+**Python vs native-only bundles.** A bundle normally uses a Python entry (`entry.<cap>.module` / `.attr`) plus its `flash_rt/` tree. A **native-only** bundle instead sets `entry.kind` to `native-abi` or `native-exec` (see [bundle_execution_abi.md](bundle_execution_abi.md) §6–7): it ships **no** Python entry and **no** `flash_rt/`, and places its C libraries under `runtime/<env-key>/substrate/`. All other rules below still apply.
+
 End users resolve bundles via inline ref strings (`flashcli-bundle/<name>:<version>[@variant]`). flashcli downloads `flashcli-bundle.json` first, matches the host GPU/CUDA/Python against `runtime` env keys, then downloads only the matching `runtime/<env-key>/` tree.
 
 ---
@@ -101,7 +103,24 @@ Full syntax: [model_bundle_standard.md](model_bundle_standard.md).
 
 ### 3.0 Author manifest (do not auto-modify)
 
-**`flashcli-bundle.json` in the bundle source tree is authoritative and complete.** Publishers maintain all product fields (`python_dependencies`, `weights`, `run_options`, …) by hand in git. Build and pack scripts **must not** overwrite this file; they only write `.build/manifest-overlay.json` (build metadata) and merge into **`dist/flashcli-bundle.json`** at pack time. See [bundle_manifest_policy.md](bundle_manifest_policy.md).
+**`flashcli-bundle.json` in the bundle source tree is authoritative and complete.** Publishers own all author fields (`entry`, `python_dependencies`, `weights`, `run_options`/`serve_options`, `env`, …), edited by hand in git and reviewed in PRs. Build / pack / release tooling **must not modify** this file.
+
+Generated artifacts (never committed):
+
+| File | Written by | Contents |
+|------|-----------|----------|
+| `.build/manifest-overlay.json` | `build.sh` / matrix finalize | build metadata: `runtime` map scan, `build`, `python_abi` |
+| `dist/flashcli-bundle.json` | `pack.sh` | publishable manifest = author manifest + overlay + per-env `runtime/` |
+
+Script contracts:
+
+- **build / matrix cell** MAY add tagged native libs (`lib/`, or `runtime/<env>/substrate/` for native-only) and MAY write `.build/manifest-overlay.json`; MUST NOT modify `flashcli-bundle.json`.
+- **pack** reads the author manifest read-only, MAY merge the overlay + native libs into `runtime/`, and MUST write the merged manifest only to `dist/flashcli-bundle.json`.
+- **`generate_runtime_manifest.py`** takes `--bundle-json` read-only; `--output-json` is required (the overlay). It MUST NOT sync `python_dependencies` unless `--sync-python-dependencies` (deprecated) is passed.
+
+Rationale: tooling once overwrote `python_dependencies` from FlashRT's global requirements, breaking bundles with different needs; separating the author manifest from the generated overlay keeps publisher intent intact.
+
+End users and FlashHub consume **`dist/flashcli-bundle.json`**, never the overlay alone.
 
 ### 3.1 Top-level required and recommended fields
 
@@ -110,12 +129,14 @@ Full syntax: [model_bundle_standard.md](model_bundle_standard.md).
 | `format` | yes | Must be `"flashcli-model-bundle"` |
 | `format_version` | yes | Must be **3** |
 | `protocol_version` | yes | Must be **1** (matches the `flashcli-bundle` protocol shipped with flashcli) |
+| `runtime_abi_version` | conditional | Required when any `entry.*.kind == "native-abi"`; must be **1** (FlashRT `frt_model_runtime_v1`). Forbidden otherwise. |
+| `exec_protocol_version` | conditional | Required when any `entry.*.kind == "native-exec"`; must be **1** (NDJSON/HTTP framing). Forbidden otherwise. |
 | `name` | yes | Bundle id; should match directory / FlashHub repo name |
 | `description` | recommended | Human-readable summary |
-| `python_abi` | yes | Fixed Python ABI as a three-digit string, e.g. `"312"` = CPython 3.12 |
+| `python_abi` | conditional | Required when a Python entry exists. Fixed Python ABI as a three-digit string, e.g. `"312"` = CPython 3.12. Native-only bundles omit it and their runtime key has no `-py{NNN}` segment. |
 | `entry` | yes | At least one of `run` or `serve` (see §4) |
 | `runtime` | yes | env key → relative path map (see §5) |
-| `python_dependencies` | yes | pip deps for the bundle venv (see §3.4) |
+| `python_dependencies` | conditional | pip deps for the bundle venv (see §3.4); required when a Python entry exists, omit for native-only |
 | `run_options` | conditional | Required when there is no `variants` and `run` is supported |
 | `serve_options` | conditional | Required when there is no `variants` and `serve` is supported |
 | `weights` | conditional | Weight source for a single-preset bundle |
@@ -147,10 +168,25 @@ Script example:
 | `module` | Python module name relative to bundle root (no `.py`), e.g. `"run"` → `run.py` |
 | `attr` | Engine mode: class name (`RunEngine`/`ServeEngine`); script mode: callable entry (e.g. `main`) |
 | `mode` | Optional: `engine` (default) or `script` |
+| `kind` | Optional (can also be set at `entry.kind`): `python` (default), `native-exec`, or `native-abi` — selects the **execution backend** for the capability |
 
 Capabilities are inferred from `entry`: `run` enables `flashcli run`; `serve` enables `flashcli serve`.
 
 Environment variables injected before entry runs are documented in **§4.4** (engine vs script differ).
+
+#### 3.2.1 `entry.kind` — execution backends (language-agnostic)
+
+A bundle may ship a **native** entry instead of Python. `kind` is a manifest detail — end-user commands are unchanged.
+
+| `kind` | Backend | `module`/`attr` |
+|--------|---------|-----------------|
+| `python` (default) | Python entry via bundle venv re-exec | required |
+| `native-exec` | Host spawns an executable; NDJSON over stdio or HTTP | ignored; use `entry.*.native` |
+| `native-abi` | Host `dlopen`s a model-runtime `.so` and drives it in-process | ignored; use `entry.*.native` |
+
+`kind` may be set at `entry.kind` (applies to both capabilities) and overridden per capability (`entry.run.kind` / `entry.serve.kind`). Native backends declare a sibling `native` block (shared under `entry.native`, overridable per capability).
+
+**Authoritative specification:** [bundle_execution_abi.md](bundle_execution_abi.md) — `native` spec fields, process/transport contract, `frt_model_runtime_open_v1` factory, ABI prefix rules, and the conformance suite. Bundles without `entry.kind` behave exactly as before (backward compatible).
 
 ### 3.3 `variants` (multiple presets, one repo)
 
@@ -158,6 +194,8 @@ When `variants` is present:
 
 - Top-level `run_options` / `serve_options` / `weights` are **forbidden** (validation fails).
 - **Each variant** must define its own complete `run_options`, `serve_options` (when needed), `weights`, etc.
+
+**Sharing across variants.** The synced bundle tree is keyed by `<name>/<version>` and is **shared by all variants**. Weights cache under `models/<name>/<version>/<weights_dir>`; when `weights_dir` is unset it is **derived from the weights identity** (source/repo/revision), so identical weights share a directory and different weights never collide. An explicit `weights_dir` may be shared by several variants only when they declare identical `weights` (validated). The Python protocol (`flashcli_bundle`) resolves these **same** variant-independent keys; this on-disk layout is versioned by `flashcli_bundle.version.CACHE_SCHEMA_VERSION` (the host upgrades a stale protocol in an existing venv in place — see [architecture.md](architecture.md)).
 
 Common variant fields:
 
@@ -168,6 +206,7 @@ Common variant fields:
 | `weights` | `{ "source": "huggingface", "repo": "…", "revision": "…" }` |
 | `extra_weights` | Additional weights (e.g. Qwen MTP, GROOT tokenizer); see §3.5.1 |
 | `env` | **Engine mode:** process env before entry runs; `{models_dir}`, `{bundle_root}` (see §4.4.2). Script mode does not apply manifest `env` (see §4.4.1). |
+| `entry` | Optional execution-backend override, deep-merged over the top-level `entry` (per capability). Lets one bundle expose the same weights through different `entry.kind` backends selected by `@variant`; see [bundle_execution_abi.md](bundle_execution_abi.md) §3. |
 | `run_options` / `serve_options` | Variant-specific CLI options (see §3.6) |
 
 ### 3.4 `python_dependencies`
@@ -547,11 +586,13 @@ At load time, pybind import names remain `flash_rt_kernels`, `flash_rt_fa2`, etc
 ## 6. Pre-publish checklist
 
 - [ ] `format_version: 3`, `protocol_version: 1`
+- [ ] Native entries: `runtime_abi_version` / `exec_protocol_version` set exactly for the declared `entry.kind` — see [bundle_execution_abi.md](bundle_execution_abi.md)
 - [ ] `flashcli-bundle.json` at publish root
-- [ ] Every `entry.*.module` has a matching `{module}.py` and class name
-- [ ] Every `runtime` key has a directory with **at least one** recognizable tagged native `.so`
+- [ ] Every `entry.*.module` has a matching `{module}.py` and class name (Python entries only)
+- [ ] `python_abi` + `python_dependencies` present when a Python entry exists (native-only bundles omit both; runtime key then has no `-py{NNN}`)
+- [ ] Every `runtime` key has a directory with **at least one** recognizable tagged native `.so` (a native-only cell may instead hold `substrate/*.so`)
 - [ ] No stray `.so` at bundle root or under `lib/`
-- [ ] `flash_rt/` Python tree present
+- [ ] `flash_rt/` Python tree present (Python entries only; native-only bundles omit it)
 - [ ] With `variants`: no top-level `run_options` / `serve_options` / `weights`; each variant complete
 - [ ] After FlashHub upload, `bundle.repo` returns a full `files[]` list (including `.so` `download_url`s under subdirectories)
 

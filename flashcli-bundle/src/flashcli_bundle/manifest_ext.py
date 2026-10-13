@@ -157,7 +157,7 @@ def validate_bundle_layout(
         ("run", bundle.entry_run),
         ("serve", bundle.entry_serve),
     ):
-        if spec is None:
+        if spec is None or spec.kind != "python":
             continue
         entry_raw = (bundle.raw.get("entry") or {}).get(cap)
         if isinstance(entry_raw, dict):
@@ -175,7 +175,10 @@ def validate_bundle_layout(
 
     from flashcli_bundle.native_validate import validate_native_runtime
     from flashcli_bundle.weights_spec import validate_weights_spec
-    from flashcli_bundle.manifest import validate_bundle_protocol_version
+    from flashcli_bundle.manifest import (
+        validate_bundle_execution,
+        validate_bundle_protocol_version,
+    )
     from flashcli_bundle.options import validate_bundle_options
 
     errors.extend(
@@ -189,6 +192,7 @@ def validate_bundle_layout(
     errors.extend(validate_weights_spec(bundle))
     errors.extend(validate_bundle_options(bundle))
     errors.extend(validate_bundle_protocol_version(bundle))
+    errors.extend(validate_bundle_execution(bundle))
 
     if not (bundle.bundle_root / "flash_rt").is_dir():
         errors.append("missing flash_rt/ Python tree")

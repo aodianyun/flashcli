@@ -8,7 +8,9 @@ Maintainer workflow: stage FlashRT Python + Wan package + tagged `.so`, pack, va
 
 ```bash
 cd /path/to/flashcli
-pip install -e ./flashcli-bundle -e .
+# Host: install the Go binary (release or source), then the protocol pkg for local dev
+./install.sh --from-source          # or: curl -fsSL <repo>/install.sh | sh
+pip install -e ./flashcli-bundle
 export BUNDLE="$(pwd)/bundles/wan22"
 export FLASHRT_REPO=/path/to/FlashRT
 export WAN_ROOT=/path/to/Wan2.2

@@ -4,47 +4,39 @@
 
 flashcli is the **distribution and runtime host** for FlashRT: it resolves presets, fetches Model Bundles from FlashHub, preflights the host GPU environment, creates a bundle venv, caches weights, and calls `RunEngine` / `ServeEngine` from each bundle’s **`entry`**.
 
-It does **not** implement model forward passes or CUDA kernels; those live in bundle modules such as `run.py` (and optional `flash_rt/` / `.so` files).
+It does **not** implement model forward passes or CUDA kernels; those live in bundle modules such as `run.py` (and optional `flash_rt/` / `.so` files). A **native-only** bundle may instead drive a native model-runtime ABI with no Python entry (`entry.kind = native-abi|native-exec`; see [bundle_execution_abi.md](bundle_execution_abi.md)).
+
+> **Go host.** The host CLI is a static Go binary under `go/` (module `github.com/aodianyun/flashcli/go`); the Python host was removed. `flashcli-bundle/` remains: it is the **protocol** + **infer** package installed into bundle venvs (`flashcli-bundle[infer]`). Execution backends (`entry.kind`) are specified in [bundle_execution_abi.md](bundle_execution_abi.md).
 
 ## Core principles
 
-1. **Inference lives in the bundle** — `entry` in `flashcli-bundle.json`; flashcli only `importlib`-loads it.
+1. **Inference lives in the bundle** — the bundle owns **all model-specific logic**: the forward pass, preprocessing/postprocessing, modality shapes and dtypes, input/output semantics, and option→port mapping/defaults. flashcli is a **generic, model-agnostic driver**: it resolves the ref, prepares the environment, and invokes the bundle-provided interface — `entry` for `kind=python`, or the declared model-runtime ABI + manifest `native` block for `native-exec`/`native-abi`. **No model-specific constants, shapes, or preprocessing may live in the host** (`go/`).
 2. **Preset ref** — users pass `namespace/bundle:version[@variant]`; `FLASHCLI_FLASHHUB_API` sets the API base.
 3. **Manifest-first + split download** — fetch manifest → preflight against `runtime` keys → download only this host’s `runtime/<env-key>/`.
 4. **Fixed Python ABI** — one venv per bundle (`python_abi`); CLI **re-execs** into that venv after prepare.
-5. **Single host flashcli install** — host venv installs **`flashcli-bundle`** (protocol only); bundle venvs install **`flashcli-bundle[infer]`**. Host code **must not** `import flashcli_bundle.infer`.
+5. **Single Go host** — the host is a static Go binary; bundle venvs pip-install **`flashcli-bundle[infer]`** (never a host `flashcli` package).
 6. **One command** — `flashcli run <ref>` chains sync → deps → weights (host download if missing) → `post_pull` → offline inference in bundle venv.
 
 ### Where modules live (required reading)
 
-**Host-only → `src/flashcli/`. Infer-only → `flashcli_bundle/infer/`. Both → `flashcli_bundle/` protocol.** Re-export is not an excuse to put single-layer logic in protocol. See [module_layers.md](module_layers.md).
+**Host-only → `go/internal/`. Infer-only → `flashcli_bundle/infer/`. Both → `flashcli_bundle/` protocol.** Re-export is not an excuse to put single-layer logic in protocol. See [module_layers.md](module_layers.md).
 
 ## Host CLI vs bundle infer (important)
 
-`flashcli pull` / `bundle sync` / weight download run in the **host CLI venv** (e.g. Python 3.10 from `install.sh`).  
-`flashcli run` / `serve` prepare the bundle, then **re-exec** into the **bundle venv** (e.g. Python 3.12 from `python_abi`).
+`flashcli pull` / `bundle sync` / weight download run in the **Go host**.  
+`flashcli run` / `serve` prepare the bundle, then either **re-exec** into the **bundle venv** (`python -m flashcli_bundle.infer`) for `entry.kind: python`, or drive a **native** backend for `native-exec` / `native-abi`.
 
 | What | Where it lives | Installed how |
 |------|----------------|---------------|
-| `flashcli` CLI (pull, sync, doctor) | Host only (`~/.flashcli/venv` or editable `src/`) | `install.sh` / `auto_install.sh` **once** |
-| **`huggingface_hub`** (Hub CLI, weight pull) | **Host only** | `pyproject.toml` — **not** installed into bundle venv |
-| **`flashcli-bundle`** (protocol) | Host only | Git: `flashcli-bundle @ git+…#subdirectory=flashcli-bundle` |
-| **`flashcli-bundle[infer]`** | Bundle venv only | Same git source with `[infer]` extra |
+| `flashcli` CLI (pull, sync, doctor) | Go binary on PATH (`go/`) | `install.sh` |
+| **`flashcli-bundle`** (protocol) | Host (build/dev) | `flashcli-bundle/` source |
+| **`flashcli-bundle[infer]`** | Bundle venv only | `venv.Ensure` → pip (`FLASHCLI_BUNDLE_PIP_SPEC` / repo / local checkout) |
 | Bundle inference stack (torch, transformers, …) | `~/.flashcli/runtimes/<id>/venv/` | From `flashcli-bundle.json` → `python_dependencies` |
-| Bundle venv infer entrypoint | Same bundle venv | `ensure_flashcli_bundle_in_venv(..., extras=("infer",))` — **no** host `flashcli` package |
+| Bundle venv infer entrypoint | Same bundle venv | `python -m flashcli_bundle.infer` — **no** host package |
 
-**Dependency isolation:** Host and bundle venvs are separate. flashcli never pins `transformers` or caps `huggingface_hub` for the bundle stack — bundle `python_dependencies` (e.g. `transformers<4.56`) resolve their own transitive deps inside the bundle venv. Weight download (`flashcli pull`, or auto-pull before `run`/`serve`) runs on the **host** only; the bundle infer subprocess resolves cached or bundle-local paths only.
+**Dependency isolation:** the host never installs into the bundle venv except `flashcli-bundle[infer]` and manifest `python_dependencies`. Weight download runs on the **host** only; the bundle infer subprocess resolves cached or bundle-local paths only (`HF_HUB_OFFLINE=1`).
 
-### Pip dependency layers
-
-| Layer | Venv | Installed via | Must not |
-|-------|------|---------------|----------|
-| `flashcli` | Host | `pyproject.toml` | import `flashcli_bundle.infer` |
-| `flashcli-bundle` | Host | `install.sh` (no extras) | — |
-| `flashcli-bundle[infer]` | Bundle | `ensure_flashcli_bundle_in_venv(..., extras=("infer",))` | import host `flashcli` |
-| Manifest `python_dependencies` | Bundle | `activate_bundle` / `bundle install` | pin host `huggingface_hub` |
-
-Structural tests: `tests/test_architecture_layers.py`.
+**Protocol cache schema:** the venv fingerprint tracks only manifest `python_dependencies` — it does **not** track the `flashcli-bundle` git ref. When the on-disk cache layout changes (`flashcli_bundle.version.CACHE_SCHEMA_VERSION`), `venv.EnsureProtocolCacheSchema` upgrades `flashcli-bundle` in an existing venv **in place** (`pip install --upgrade --force-reinstall --no-deps`, from the same source) before re-exec, so old venvs keep matching the host's cache paths without a full rebuild (no torch/dependency reinstall).
 
 **Re-exec command** (inside bundle venv):
 
@@ -52,12 +44,12 @@ Structural tests: `tests/test_architecture_layers.py`.
 bundle_venv/bin/python -m flashcli_bundle.infer run|serve …
 ```
 
-The bundle venv does **not** prepend host `PYTHONPATH` or import host `flashcli`. Implementation: `runtime/reexec.py`, `flashcli_bundle.infer` in `flashcli-bundle[infer]`.
+The bundle venv does **not** prepend host `PYTHONPATH`. Implementation: Go `internal/{inferexec,nativeexec,nativeabi}` + `flashcli_bundle.infer` in `flashcli-bundle[infer]`.
 
 ### Do not (common mistakes)
 
-- **Do not** `pip install flashcli` into the bundle venv — dev versions are often absent from PyPI; use `flashcli-bundle[infer]` instead.
-- **Do not** prepend host `PYTHONPATH` or import host `flashcli` in the bundle infer process.
+- **Do not** prepend host `PYTHONPATH` or import a host `flashcli` package in the bundle infer process.
+- **Do not** assume `flashcli` is pip-installable — it is a Go binary; only `flashcli-bundle` is Python.
 
 During `activate_bundle()`, `PYTHONPATH` prepends the **bundle root** so `entry` and `flash_rt` import correctly.
 
@@ -80,43 +72,41 @@ flashcli does **not** pip-depend on `flash-rt`. `import flash_rt` is only valid 
 ```mermaid
 sequenceDiagram
   participant U as User
-  participant CLI as cli (host venv)
+  participant CLI as flashcli (Go host)
+  participant FH as flashhub
+  participant Pre as preflight
+  participant W as weights
+  participant Venv as venv
   participant Infer as flashcli_bundle.infer
-  participant FH as bundle.flashhub
-  participant Art as bundle.artifacts
-  participant Venv as runtime.bundle_venv
-  participant Act as bundle.activate
-  participant Cache as models.cache
-  participant Ldr as engines.loader
 
   U->>CLI: flashcli run flashcli-bundle/pi05_libero:1.0.4
-  CLI->>Art: ensure_runtime (if not cached)
-  Art->>FH: fetch_repo_index(repo URL)
-  FH-->>Art: files[] + download_url
-  Art->>Art: manifest + preflight + download runtime/
-  Art->>Venv: create bundle venv + torch deps
+  CLI->>FH: fetch repo index (if not synced)
+  FH-->>CLI: files[] + download_url
+  CLI->>FH: sync entry tree + runtime/<env-key>/
+  CLI->>Pre: env key + native cell + host ABI + CUDA userland
+  CLI->>W: ensure weights (+ post_pull/extra_pull)
+  CLI->>Venv: create bundle venv + torch deps
   CLI->>Infer: re-exec: bundle python -m flashcli_bundle.infer
   Note over Infer: bundle venv: flashcli-bundle[infer] only
-  Infer->>Act: activate_bundle
-  Infer->>Cache: ensure_model_cached + post_pull
-  Infer->>Ldr: entry.run (engine: RunEngine; script: main(argv))
-  Ldr->>U: actions
+  Infer->>Infer: activate + local checkpoint + RunEngine/ServeEngine/script
 ```
 
 **Entry modes**: `engine` (default) loads `RunEngine`/`ServeEngine` and parses manifest CLI options; `script` passes argv through to the bundle entry script; the host only uses `--checkpoint` for weight pull.
 
-**Resolution order**: local positional path (directory with `flashcli-bundle.json`) > synced runtime cache (`FLASHCLI_BUNDLE_ROOT` / preset marker); FlashHub ref `repo` is populated via `bundle sync`.
+**Backends**: `entry.kind` selects `python` (re-exec, above), `native-exec` (host spawns), or `native-abi` (host `dlopen`s). See [bundle_execution_abi.md](bundle_execution_abi.md).
+
+**Resolution order**: local positional path (directory with `flashcli-bundle.json`) > synced bundle cache (preset marker under `bundles/<cache-key>/`); FlashHub refs are synced via `bundle sync`.
 
 ## Local directories
 
 ```text
 ~/.flashcli/
-├── venv/                    # host CLI (flashcli installed once)
+├── install.env              # source hints for flashcli-bundle[infer] (repo/ref)
 ├── python/                  # optional standalone Pythons for bundle venv base
-├── runtimes/<id>/           # synced bundle root + bundle venv
-├── bundles/<bundle>/<version>@<variant>/.flashcli_bundle.json
+├── runtimes/<id>/           # bundle venv + .runtime.json marker
+├── bundles/<name>/<version>/.flashcli_bundle.json   # synced tree (shared by all @variant)
 ├── cache/repo-index/        # FlashHub listing cache
-└── models/<bundle>/<version>@<variant>/checkpoint/
+└── models/<name>/<version>/<weights_dir>/           # per-variant weights (default checkpoint/)
 ```
 
 ## Bundle layout (after sync)
@@ -129,25 +119,13 @@ sequenceDiagram
 └── runtime/<env-key>/       # native *.so for this host (loaded in place)
 ```
 
+> Native-only bundles omit `run.py` / `flash_rt/` and keep their C libraries under `runtime/<env-key>/substrate/`.
+
 See [model_bundle_standard.md](model_bundle_standard.md).
 
 ## Module map
 
-| Package | Role |
-|---------|------|
-| `models/preset_ref.py` | Parse ref → repo URL + variant + cache key |
-| `bundle/catalog.py` | Resolve `bundle.repo` from preset ref (no bundled catalog file) |
-| `bundle/flashhub.py` | FlashHub API listing and file download |
-| `bundle/artifacts.py` | Manifest-first runtime assembly |
-| `bundle/preflight.py` | Match host env key to `runtime` |
-| `bundle/resolve.py` | Local path / synced cache |
-| `bundle/activate.py` | PYTHONPATH, deps, preload `.so` |
-| `runtime/bundle_venv.py` | Create venv from `python_abi` |
-| `runtime/reexec.py` | Host prepare → `execve` `python -m flashcli_bundle.infer` |
-| `flashcli_bundle.infer` | `run` / `serve` inside bundle venv |
-| `deps.py` | Host pip + `flashcli-bundle`; bundle venv gets `[infer]` via `ensure_flashcli_bundle_in_venv` |
-| `models/cache.py` | Host weight pull + cache; bundle infer resolve-only (`download=False`) |
-| `engines/loader.py` | Load `entry` |
+See [module_layers.md](module_layers.md) for the authoritative host / infer / protocol package map and placement rules.
 
 ## Example refs
 
@@ -167,3 +145,4 @@ See [model_bundle_standard.md](model_bundle_standard.md).
 - [module_layers.md](module_layers.md) — three-layer module ownership and import rules
 - [model_bundle_standard.md](model_bundle_standard.md) — preset ref + runtime flow
 - [bundle_publish_standard.md](bundle_publish_standard.md) — manifest and entry spec
+- [bundle_execution_abi.md](bundle_execution_abi.md) — execution backends (`entry.kind`) and native contracts

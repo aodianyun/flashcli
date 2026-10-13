@@ -4,7 +4,9 @@
 
 ```bash
 cd /path/to/flashcli
-pip install -e ./flashcli-bundle -e .
+# Host: install the Go binary (release or source), then the protocol pkg for local dev
+./install.sh --from-source          # or: curl -fsSL <repo>/install.sh | sh
+pip install -e ./flashcli-bundle
 export FLASHRT_REPO=/path/to/FlashRT   # same commit as flash_rt/BUNDLE_VERSION / published build.git_commit
 ```
 

@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+"""Conformance fixture: minimal native-exec backend over NDJSON.
+
+Reference implementation of docs/bundle_execution_abi.md section 6.2. Any
+language may replace this stub; it exists so every host (Python today, Go in
+the migration) can be checked against the same wire protocol.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+
+
+def _emit(obj: dict) -> None:
+    sys.stdout.write(json.dumps(obj, separators=(",", ":")) + "\n")
+    sys.stdout.flush()
+
+
+def main() -> int:
+    _emit(
+        {
+            "v": 1,
+            "op": "ready",
+            "payload": {
+                "checkpoint": os.environ.get("FLASHCLI_CHECKPOINT", ""),
+                "bundle_root": os.environ.get("FLASHCLI_BUNDLE_ROOT", ""),
+            },
+        }
+    )
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        req = json.loads(line)
+        op = req.get("op")
+        req_id = req.get("id")
+        if op == "run":
+            prompt = str((req.get("payload") or {}).get("prompt", ""))
+            _emit({"v": 1, "id": req_id, "ok": True, "payload": {"echo": prompt}})
+        elif op == "health":
+            _emit({"v": 1, "id": req_id, "ok": True, "payload": {"status": "ok"}})
+        elif op == "shutdown":
+            _emit({"v": 1, "id": req_id, "ok": True, "payload": {}})
+            return 0
+        else:
+            _emit(
+                {
+                    "v": 1,
+                    "id": req_id,
+                    "ok": False,
+                    "error": {"code": 2, "message": f"unknown op {op!r}"},
+                }
+            )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

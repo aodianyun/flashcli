@@ -2,7 +2,7 @@
 
 <p align="right"><a href="bundle_builder_guide.md">English</a> · <strong>简体中文</strong></p>
 
-> **内部维护者文档** — 不在对外 README / `docs/README` 索引中。入口：[CONTRIBUTING.md](../CONTRIBUTING.md)。
+> **维护者文档。** 入口：[CONTRIBUTING.md](../CONTRIBUTING.md)；文档索引：[docs/README.zh-CN.md](README.zh-CN.md)。
 
 面向 **Model Bundle 维护者（内部）**：环境安装、本地开发、矩阵编译、打包校验、FlashHub 上传与 ref 文档更新。
 
@@ -16,8 +16,8 @@
 
 | 角色 | 目标 | 需要装什么 |
 |------|------|------------|
-| **Bundle 构建者** | 改 `run.py` / `flashcli-bundle.json`，编译 FlashRT，发布到 FlashHub | flashcli + flashcli-bundle（editable）+ FlashRT + Docker/GPU |
-| **终端用户** | `flashcli run <ref>` | `install.sh` / `auto_install.sh`（git 安装 flashcli-bundle + flashcli） |
+| **Bundle 构建者** | 改 `run.py` / `flashcli-bundle.json`，编译 FlashRT，发布到 FlashHub | `./install.sh --from-source`（Go host）+ `pip install -e ./flashcli-bundle` + FlashRT + Docker/GPU |
+| **终端用户** | `flashcli run <ref>` | `install.sh` / `auto_install.sh`（Go 二进制；bundle venv 按需装 `flashcli-bundle[infer]`） |
 
 Bundle **entry 代码只 import `flashcli_bundle`**，不要 import `flashcli` CLI 包：
 
@@ -27,6 +27,8 @@ from flashcli_bundle.options import option_value, run_option_defaults
 from flashcli_bundle.protocol import ChatRequest, RunEngine
 from flashcli_bundle.preset import Preset
 ```
+
+**仅原生** bundle 没有 Python entry（见 §5）。
 
 ---
 
@@ -51,13 +53,13 @@ from flashcli_bundle.preset import Preset
 # 1) 安装 flashcli（Gitee + pip/HF 镜像）
 curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
 
-# 2) 或指定分支
-curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror --ref main
+# 2) 或从源码构建（需 Go/git；脚本会自动安装）
+curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --from-source
 
 # 3) Hugging Face 权重镜像（pull/run 前）
 export HF_ENDPOINT=https://hf-mirror.com
 
-# 4) pip 镜像（install.sh --mirror 已设；手动 pip 时）
+# 4) bundle venv 的 pip 镜像（装入 torch/依赖时）
 export PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 export PIP_TRUSTED_HOST=mirrors.aliyun.com
 ```
@@ -71,13 +73,13 @@ Qwen 矩阵容器镜像：`nvcr.io/nvidia/pytorch:25.10-py3`（见各 bundle 的
 ```text
 workspace/
 ├── flashcli/                 # git clone 本仓库
-│   ├── flashcli-bundle/      # 协议包（与 flashcli 同 repo）
+│   ├── flashcli-bundle/      # 协议 + infer 包（与 flashcli 同 repo）
+│   ├── go/                    # 主机 CLI（Go 二进制）
 │   ├── bundles/
 │   │   ├── pi05_libero/
 │   │   └── qwen_nvfp4/
 │   ├── scripts/
 │   │   └── release_bundle.sh
-│   └── src/flashcli/
 └── FlashRT/                  # 推理内核（release 脚本可自动 clone）
 ```
 
@@ -86,7 +88,7 @@ git clone https://gitee.com/aodiansoft/flashcli.git   # 或 GitHub
 cd flashcli
 
 # 开发安装（构建者必做）
-pip install -e ./flashcli-bundle -e .
+pip install -e ./flashcli-bundle
 
 flashcli doctor
 flashcli models list
@@ -112,6 +114,8 @@ pi05_libero/
 ├── release.sh                # → scripts/release_bundle.sh
 └── dist/                     # 发布产物（上传 FlashHub）
 ```
+
+**仅原生** bundle（`entry.kind = native-abi|native-exec`）省略 `run.py` / `flash_rt/`，C 库放在 `runtime/<env-key>/substrate/`。
 
 ### manifest 必填要点（format_version 3）
 
@@ -153,6 +157,8 @@ bash bundles/pi05_libero/build.sh --repo-root "$FLASHRT_REPO" -j "$(nproc)"
 ```
 
 **做什么**：`_bundle_build.sh` 调 FlashRT cmake，产出 `lib/flash_rt_*.so`，并 staging `flash_rt/`。
+
+**仅原生** bundle：构建 Python-free 的 C 库（如 FA2 raw → `flashrt_exec`/producer → Nexus），stage 到 `runtime/<env-key>/substrate/`。
 
 ### 步骤 B — 校验 manifest 与 layout
 
@@ -298,10 +304,10 @@ bundles/pi05_libero/dist/
 
 | 现象 | 处理 |
 |------|------|
-| `protocol_version` 校验失败 | 升级主机 `pip install -e ./flashcli-bundle -e .`；manifest 写 `"protocol_version": 1` |
+| `protocol_version` 校验失败 | 升级主机 `pip install -e ./flashcli-bundle`；manifest 写 `"protocol_version": 1` |
 | run 仍用旧 bundle | 看输出里的 `runtime_id` 与 `repo`；`flashcli doctor` / `flashcli models envs <ref>` 对比 cached repo。然后 `flashcli bundle sync <ref> --force` |
 | bundle venv 缺 `flashcli_bundle` | 删 `~/.flashcli/runtimes/<id>/` 重跑；或 `flashcli run` 触发 venv 重建 |
-| `pip install flashcli` 缺 flashcli-bundle / typer 等 | **勿**裸 `pip install flashcli`（PyPI 无 flashcli-bundle）。用 `install.sh`，或手动：`pip install 'flashcli-bundle[infer] @ git+…#subdirectory=flashcli-bundle'` 再 `pip install --no-deps 'flashcli @ git+…'` |
+| bundle venv 缺 `flashcli-bundle` | 设 `FLASHCLI_BUNDLE_PIP_SPEC=/path/to/flashcli-bundle[infer]` 或 `~/.flashcli/install.env` 的 `FLASHCLI_INSTALL_REPO/REF`；**勿**在 bundle venv 内 `pip install flashcli` |
 | HF 权重失败 | `export HF_ENDPOINT=https://hf-mirror.com` 后 `flashcli pull` |
 | pi05 `NativeEnvironmentNotSupportedError` | 确认 manifest 含本机 env key（含 `sm120-cu130`）；`flashcli bundle sync flashcli-bundle/pi05_libero:1.0.4 --force` |
 | qwen 在 cu124 上编译失败 | qwen **仅 cu130**；用 25.10-py3 容器 |
@@ -313,6 +319,7 @@ bundles/pi05_libero/dist/
 | 文档 | 内容 |
 |------|------|
 | [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) | **对外**发布标准：manifest、entry、.so、FlashHub 目录 |
+| [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) | `entry.kind` 后端与原生契约 |
 | [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | preset ref 语法 + 运行时流程 |
 | [architecture.zh-CN.md](architecture.zh-CN.md) | 主机 CLI vs bundle venv vs flashcli-bundle |
 | [environment.zh-CN.md](environment.zh-CN.md) | 环境变量 |

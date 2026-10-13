@@ -19,3 +19,6 @@ capsules/
 # Editor
 .vscode/
 .idea/
+
+# Go build artifact (server)
+/native_exec/native_exec

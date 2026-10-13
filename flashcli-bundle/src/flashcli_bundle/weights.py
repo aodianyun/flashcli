@@ -19,6 +19,7 @@ from flashcli_bundle.manifest import BundleManifest
 from flashcli_bundle.preset import Preset
 from flashcli_bundle.preset_ref import preset_cache_key
 from flashcli_bundle.variants import (
+    bundle_weights_rel,
     has_bundle_variants,
     resolve_bundle_variant,
     variant_extra_weights,
@@ -39,12 +40,7 @@ def bundle_weights_dir(
     *,
     variant: str | None = None,
 ) -> Path:
-    if has_bundle_variants(bundle):
-        key = resolve_bundle_variant(bundle, variant)
-        rel = variant_weights_dir(bundle, key)
-    else:
-        rel = str(bundle.raw.get("weights_dir", "checkpoint")).strip() or "checkpoint"
-    return (bundle.bundle_root / rel).resolve()
+    return (bundle.bundle_root / bundle_weights_rel(bundle, variant)).resolve()
 
 
 def _allow_patterns_from_spec(weights_spec: dict[str, Any] | None) -> list[str] | None:
@@ -242,7 +238,16 @@ def resolve_checkpoint(
         local = bundle_weights_dir(bundle, variant=variant)
         if has_local_weights(local, weights_spec=spec):
             return local
-    cache = config.MODELS_DIR / preset_cache_key(preset)
+    # Cache base is variant-independent (``models/<name>/<version>``); the
+    # checkpoint lives under the variant's ``weights_dir`` (see
+    # docs/bundle_publish_standard.md §4.4.1).
+    base = config.MODELS_DIR / preset_cache_key(preset)
+    rel = bundle_weights_rel(bundle, variant) if bundle is not None else "checkpoint"
+    return _checkpoint_at(base / rel, spec)
+
+
+def _checkpoint_at(cache: Path, spec: dict[str, Any]) -> Path | None:
+    """Resolve a checkpoint from a concrete weights dir (marker then weights)."""
     marker = cache / ".flashcli_model.json"
     if marker.is_file():
         try:
@@ -252,9 +257,8 @@ def resolve_checkpoint(
                 return ckpt.resolve()
         except json.JSONDecodeError:
             pass
-    nested = cache / "checkpoint"
-    if has_local_weights(nested, weights_spec=spec):
-        return nested.resolve()
+    if has_local_weights(cache, weights_spec=spec):
+        return cache.resolve()
     return None
 
 
