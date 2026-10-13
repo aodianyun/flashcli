@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -43,7 +44,7 @@ func TestProbeCacheSchema(t *testing.T) {
 func TestEnsureProtocolCacheSchemaSkipsCurrent(t *testing.T) {
 	t.Setenv("FLASHCLI_BUNDLE_PIP_SPEC", "flashcli-bundle[infer]")
 	r := &captureRunner{}
-	err := EnsureProtocolCacheSchema(context.Background(), stubPython(t, "2"), Options{Runner: r, Quiet: true})
+	err := EnsureProtocolCacheSchema(context.Background(), stubPython(t, strconv.Itoa(RequiredCacheSchema)), Options{Runner: r, Quiet: true})
 	if err != nil {
 		t.Fatal(err)
 	}
