@@ -46,11 +46,16 @@ def cache_key_from_coordinates(
     version: str,
     variant: str | None = None,
 ) -> str:
-    """Return ``bundle/version`` or ``bundle/version@variant`` (relative cache path)."""
+    """Return ``bundle/version`` (relative cache path).
+
+    The key is **variant-independent**: the synced bundle tree and the per-version
+    weights base are shared by every ``@variant`` (see
+    ``docs/bundle_publish_standard.md`` §4.4.1). Variants are disambiguated by
+    their ``weights_dir`` inside the base, not by the key. ``variant`` is kept in
+    the signature for API compatibility and is intentionally ignored.
+    """
     b = _cache_segment(bundle)
     v = _cache_segment(version)
-    if variant:
-        return f"{b}/{v}@{_cache_segment(variant)}"
     return f"{b}/{v}"
 
 

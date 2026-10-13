@@ -4,6 +4,14 @@ from __future__ import annotations
 
 PROTOCOL_VERSION = 1
 
+# On-disk cache layout version (bundle tree + weights paths).
+#
+# Bump when the cache layout changes so the host can upgrade an already-created
+# bundle venv's ``flashcli-bundle`` in place (the venv fingerprint does not track
+# the protocol's git ref). v2: variant-independent keys ``<name>/<version>`` with
+# per-variant weights under ``weights_dir`` (docs/bundle_publish_standard.md §4.4.1).
+CACHE_SCHEMA_VERSION = 2
+
 # Native model-runtime face (`frt_model_runtime_v1`). Mirrors
 # FRT_MODEL_RUNTIME_ABI_VERSION in FlashRT's runtime/include/flashrt/model_runtime.h.
 RUNTIME_ABI_VERSION = 1
@@ -11,4 +19,4 @@ RUNTIME_ABI_VERSION = 1
 # Process framing used by `entry.kind == "native-exec"` (see docs/bundle_execution_abi.md).
 EXEC_PROTOCOL_VERSION = 1
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
