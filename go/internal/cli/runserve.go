@@ -154,15 +154,15 @@ func runPythonBackend(m *manifest.Manifest, root, version, variant, capability s
 	}
 
 	quiet := hf.Quiet || envBool("FLASHCLI_QUIET")
-	checkpoint, _, extraEnv, err := resolveWeights(m, root, version, variant, quiet, hf)
+	// The host downloads weights into the documented cache layout
+	// (models/<name>/<version>/<weights_dir>, bundle_publish_standard.md §4.4.1);
+	// the infer process resolves them from there (FLASHCLI_CHECKPOINT in script
+	// mode, load(checkpoint) in engine mode). Do not inject --checkpoint: it
+	// would break script entries whose argparse does not accept it.
+	_, _, extraEnv, err := resolveWeights(m, root, version, variant, quiet, hf)
 	if err != nil {
 		return err
 	}
-	// The host resolves weights into the cache layout in
-	// bundle_publish_standard.md §4.4.1 (models/<name>/<version>/<weights_dir>).
-	// Forward that path so the infer process does not re-derive its own cache
-	// key. Skip when the user already passed --checkpoint (it stays in argv).
-	args = withCheckpoint(args, checkpoint, hf.Checkpoint != "")
 	python, err := venv.Ensure(context.Background(), runtimeID, m, venv.Options{
 		SkipSetup:     envBool("FLASHCLI_SKIP_VENV_SETUP"),
 		Force:         envBool("FLASHCLI_FORCE_VENV"),
@@ -294,16 +294,6 @@ func resolveWeights(m *manifest.Manifest, abs, version, variant string, quiet bo
 		extra[key] = weights.ExtraWeightDest(checkpoint, abs, key, ex)
 	}
 	return checkpoint, extra, mapEnv(env), nil
-}
-
-// withCheckpoint appends the host-resolved weights path as --checkpoint so the
-// infer process reuses it instead of re-deriving its own cache key. It is a
-// no-op when no path was resolved or the user already passed --checkpoint.
-func withCheckpoint(args []string, checkpoint string, userProvided bool) []string {
-	if userProvided || checkpoint == "" {
-		return args
-	}
-	return append(append([]string(nil), args...), "--checkpoint", checkpoint)
 }
 
 func mapEnv(env map[string]string) []string {
