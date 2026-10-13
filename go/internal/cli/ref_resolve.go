@@ -45,8 +45,11 @@ func ensureBundleRef(refStr string, quiet, force bool) (string, string, string, 
 	cacheKey := weights.TreeKey(p.Name, p.Version)
 	bundleDir := filepath.Join(paths.Bundles(), filepath.FromSlash(cacheKey))
 	manifestPath := filepath.Join(bundleDir, flashhub.ManifestPath)
+	doneMarker := filepath.Join(bundleDir, flashhub.MarkerName)
 
-	if _, err := os.Stat(manifestPath); err == nil && !force {
+	// Only treat the tree as synced when the completion marker exists (written
+	// after a full sync). A lone manifest (interrupted sync) must re-sync.
+	if _, err := os.Stat(doneMarker); err == nil && !force {
 		return bundleDir, p.Version, variant, nil
 	}
 

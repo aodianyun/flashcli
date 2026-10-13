@@ -318,7 +318,9 @@ var ErrNotFound = errors.New("flashhub: not found")
 // SyncBundle downloads the bundle entry tree plus only the matching
 // runtime/<envKey>/ cell into bundleDir, and returns the parsed manifest.
 func (c *Client) SyncBundle(ctx context.Context, repoURL, bundleDir, envKey string, quiet bool) (map[string]any, error) {
-	ix, err := c.FetchIndex(ctx, repoURL, true)
+	// Always fetch a fresh index: a cached one may list artifacts from an
+	// earlier upload (stale download URLs → 404).
+	ix, err := c.FetchIndex(ctx, repoURL, false)
 	if err != nil {
 		return nil, err
 	}
