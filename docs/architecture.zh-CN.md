@@ -35,6 +35,8 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 
 **依赖隔离：** 主机除 `flashcli-bundle[infer]` 与 manifest `python_dependencies` 外不向 bundle venv 安装任何东西。权重下载仅在**主机**执行；bundle infer 子进程只解析缓存或 bundle 本地路径（`HF_HUB_OFFLINE=1`）。
 
+**协议缓存 schema：** venv 的 fingerprint 只跟踪 manifest `python_dependencies`，**不跟踪** `flashcli-bundle` 的 git ref。当磁盘缓存布局变化（`flashcli_bundle.version.CACHE_SCHEMA_VERSION`）时，`venv.EnsureProtocolCacheSchema` 会在 re-exec 前把已有 venv 里的 `flashcli-bundle` **就地升级**（`pip install --upgrade --force-reinstall --no-deps`，来源不变），使旧 venv 无需整体重建即可与主机缓存路径保持一致（不重装 torch/依赖）。
+
 **Re-exec 命令**（在 bundle venv 内）：
 
 ```text

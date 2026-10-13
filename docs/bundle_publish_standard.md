@@ -195,7 +195,7 @@ When `variants` is present:
 - Top-level `run_options` / `serve_options` / `weights` are **forbidden** (validation fails).
 - **Each variant** must define its own complete `run_options`, `serve_options` (when needed), `weights`, etc.
 
-**Sharing across variants.** The synced bundle tree is keyed by `<name>/<version>` and is **shared by all variants**. Weights cache under `models/<name>/<version>/<weights_dir>`; when `weights_dir` is unset it is **derived from the weights identity** (source/repo/revision), so identical weights share a directory and different weights never collide. An explicit `weights_dir` may be shared by several variants only when they declare identical `weights` (validated).
+**Sharing across variants.** The synced bundle tree is keyed by `<name>/<version>` and is **shared by all variants**. Weights cache under `models/<name>/<version>/<weights_dir>`; when `weights_dir` is unset it is **derived from the weights identity** (source/repo/revision), so identical weights share a directory and different weights never collide. An explicit `weights_dir` may be shared by several variants only when they declare identical `weights` (validated). The Python protocol (`flashcli_bundle`) resolves these **same** variant-independent keys; this on-disk layout is versioned by `flashcli_bundle.version.CACHE_SCHEMA_VERSION` (the host upgrades a stale protocol in an existing venv in place — see [architecture.md](architecture.md)).
 
 Common variant fields:
 
