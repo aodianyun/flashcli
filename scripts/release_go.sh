@@ -42,7 +42,11 @@ print(m.group(1) if m else "")
 PY
 )"
 TAG="v${VERSION}"
+# Releases are cut from the stable branch; override with FLASHCLI_RELEASE_TARGET
+# (e.g. a release branch). Never point a published release at dev.
+TARGET="${FLASHCLI_RELEASE_TARGET:-main}"
 echo "release version: ${VERSION}"
+echo "release target:  ${TARGET}"
 
 _json_id() { python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true; }
 
@@ -84,7 +88,7 @@ publish_github() {
   if [ -z "$rid" ]; then
     resp="$(curl -sS -w $'\n%{http_code}' -X POST -H "Authorization: token ${tok}" \
       -H "Accept: application/vnd.github+json" "${api}/releases" \
-      -d "{\"tag_name\":\"${TAG}\",\"target_commitish\":\"dev\",\"name\":\"flashcli ${VERSION}\",\"body\":\"flashcli-go ${VERSION} (static binaries + sha256sums)\"}")"
+      -d "{\"tag_name\":\"${TAG}\",\"target_commitish\":\"${TARGET}\",\"name\":\"flashcli ${VERSION}\",\"body\":\"flashcli-go ${VERSION} (static binaries + sha256sums)\"}")"
     code="$(printf '%s' "$resp" | tail -n1)"; body="$(printf '%s' "$resp" | sed '$d')"
     rid="$(printf '%s' "$body" | _json_id)"
     if [ -z "$rid" ]; then
@@ -137,7 +141,7 @@ publish_gitee() {
     resp="$(curl -sS -w $'\n%{http_code}' -X POST "${api}/releases" \
       -d "access_token=${GITEE_TOKEN}" -d "tag_name=${TAG}" \
       -d "name=flashcli ${VERSION}" -d "body=flashcli-go ${VERSION} (static binaries + sha256sums)" \
-      -d "target_commitish=dev")"
+      -d "target_commitish=${TARGET}")"
     code="$(printf '%s' "$resp" | tail -n1)"; body="$(printf '%s' "$resp" | sed '$d')"
     rid="$(printf '%s' "$body" | _json_id)"
     if [ -z "$rid" ]; then
