@@ -277,7 +277,7 @@ func (c *Client) DownloadFile(ctx context.Context, f File, dest string, force, q
 
 // DownloadManifest fetches flashcli-bundle.json from a repo into dest.
 func (c *Client) DownloadManifest(ctx context.Context, repoURL, dest string, force, quiet bool) (map[string]any, error) {
-	ix, err := c.FetchIndex(ctx, repoURL, true)
+	ix, err := c.FetchIndex(ctx, repoURL, false)
 	if err != nil {
 		return nil, err
 	}

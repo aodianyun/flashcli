@@ -23,6 +23,7 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/postpull"
 	"github.com/aodianyun/flashcli/go/internal/preflight"
 	"github.com/aodianyun/flashcli/go/internal/progress"
+	"github.com/aodianyun/flashcli/go/internal/ref"
 	"github.com/aodianyun/flashcli/go/internal/runtime"
 	"github.com/aodianyun/flashcli/go/internal/venv"
 	"github.com/aodianyun/flashcli/go/internal/weights"
@@ -30,6 +31,36 @@ import (
 
 func runCmd() *cobra.Command   { return runServeCmd("run") }
 func serveCmd() *cobra.Command { return runServeCmd("serve") }
+
+// resolveManifestOnly resolves just the bundle manifest for --help: a local
+// path is read directly; a FlashHub ref downloads only flashcli-bundle.json
+// (no bundle tree, weights, or runtime).
+func resolveManifestOnly(refStr string) (*manifest.Manifest, string, error) {
+	body, variant, err := ref.SplitVariant(refStr)
+	if err != nil {
+		return nil, "", err
+	}
+	if !ref.IsFlashHub(refStr) {
+		abs, err := filepath.Abs(body)
+		if err != nil {
+			return nil, "", err
+		}
+		m, err := manifest.Load(abs)
+		if err != nil {
+			return nil, "", err
+		}
+		return m, variant, nil
+	}
+	p, err := ref.Parse(refStr)
+	if err != nil {
+		return nil, "", err
+	}
+	m, err := loadManifestForRef(refStr, p)
+	if err != nil {
+		return nil, "", err
+	}
+	return m, variant, nil
+}
 
 func runServeCmd(capability string) *cobra.Command {
 	short := "Run a bundle once"
@@ -65,6 +96,15 @@ func runServeCmd(capability string) *cobra.Command {
 func runPrelude(capability string, args []string, hf hostFlags) error {
 	quiet := hf.Quiet || envBool("FLASHCLI_QUIET")
 	progress.SetQuiet(quiet)
+	// --help only needs the manifest (no bundle tree / weights / runtime).
+	if hf.WantsHelp {
+		m, variant, err := resolveManifestOnly(hf.Ref)
+		if err != nil {
+			return err
+		}
+		fmt.Fprint(os.Stdout, bundleHelp(m, capability, variant))
+		return nil
+	}
 	bundleRoot, version, variant, err := ensureBundleRef(hf.Ref, quiet, false)
 	if err != nil {
 		return err
@@ -72,11 +112,6 @@ func runPrelude(capability string, args []string, hf hostFlags) error {
 	m, err := manifest.Load(bundleRoot)
 	if err != nil {
 		return err
-	}
-	if hf.WantsHelp {
-		// Help is variant-optional: surface available variants without requiring @variant.
-		fmt.Fprint(os.Stdout, bundleHelp(m, capability, variant))
-		return nil
 	}
 	if _, err := manifest.ResolveVariant(m, variant); err != nil {
 		return err
