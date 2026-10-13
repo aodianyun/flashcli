@@ -103,9 +103,9 @@ sequenceDiagram
 ├── install.env              # flashcli-bundle[infer] 来源提示（repo/ref）
 ├── python/                  # 可选：standalone Python，供 bundle venv 使用
 ├── runtimes/<id>/           # bundle venv + .runtime.json marker
-├── bundles/<bundle>/<version>@<variant>/.flashcli_bundle.json
+├── bundles/<name>/<version>/.flashcli_bundle.json   # 同步树（所有 @variant 共享）
 ├── cache/repo-index/        # FlashHub listing 缓存
-└── models/<bundle>/<version>@<variant>/checkpoint/
+└── models/<name>/<version>/<weights_dir>/           # 各 variant 权重（默认 checkpoint/）
 ```
 
 ## Bundle 布局（sync 后）

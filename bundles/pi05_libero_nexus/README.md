@@ -24,7 +24,7 @@ Same weights, two execution backends selected by the ref suffix:
 - **`@abi`** — `native-abi`: the host `dlopen`s the model-runtime `.so` and drives it in-process (Nexus embedded session). Lowest latency.
 - **`@exec`** — `native-exec`: a standalone Go HTTP server shipped in the bundle run as a separate process; `flashcli serve` supervises it and prints the endpoint (no reverse proxy).
 
-`flashcli pull` is **per-variant**; weights are cached under `.../<version>@<variant>/`. Pull each variant you use (or symlink the cache to share the checkpoint).
+Both backends **share** the same weights and synced tree: the tree is `~/.flashcli/bundles/pi05_libero_nexus/<version>/` and the checkpoint `~/.flashcli/models/pi05_libero_nexus/<version>/checkpoint/`. Pull once, then run either `@abi` or `@exec`.
 
 ## Run
 

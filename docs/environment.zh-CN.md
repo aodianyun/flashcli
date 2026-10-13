@@ -11,8 +11,8 @@ serve。未列出的变量**无效**。布尔开关：`1`、`true`、`yes`、`on
 |------|--------|------|
 | `FLASHCLI_HOME` | `~/.flashcli` | 数据根（`runtimes/`、`models/`、`bundles/`、`cache/`、`install.env`）。 |
 | `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | bundle venv 与 `.runtime.json` marker。 |
-| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | 同步后的 bundle 树与 `.flashcli_bundle.json` marker。 |
-| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | 权重缓存（`<dir>/<bundle>/<version>[@<variant>]/checkpoint/`）。 |
+| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | 同步后的 bundle 树与 `.flashcli_bundle.json` marker（`<dir>/<name>/<version>`，所有 `@variant` 共享）。 |
+| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | 权重缓存（`<dir>/<name>/<version>/<weights_dir>/`，`weights_dir` 默认 `checkpoint`）。 |
 | `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | bundle ref 与 python-standalone 的 FlashHub API 基址；浏览 [flashhub.top](https://flashhub.top)。 |
 
 ## GPU / 原生预检

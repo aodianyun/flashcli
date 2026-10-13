@@ -24,7 +24,7 @@
 - **`@abi`** —— `native-abi`：host 进程内 `dlopen` model-runtime `.so` 并驱动（Nexus 内嵌 session），延迟最低。
 - **`@exec`** —— `native-exec`：bundle 内自带的独立 Go HTTP 服务进程；`flashcli serve` 监管它并打印端点（不做反向代理）。
 
-`flashcli pull` 是**按 variant** 的，权重缓存在 `.../<version>@<variant>/` 下。用哪个 variant 就 pull 哪个（或软链缓存共享同一 checkpoint）。
+两个后端**共享**同一份权重与 sync 树：树在 `~/.flashcli/bundles/pi05_libero_nexus/<version>/`，checkpoint 在 `~/.flashcli/models/pi05_libero_nexus/<version>/checkpoint/`。pull 一次即可运行 `@abi` 或 `@exec`。
 
 ## 运行
 

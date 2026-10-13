@@ -55,7 +55,7 @@ Details: `docs/module_layers.md`, `docs/architecture.md`, `docs/bundle_execution
   ```
 - Release: `bash scripts/release_bundle.sh --bundle <name> --clean` (Docker cu124/cu130 matrix) or `cd bundles/<name> && bash release.sh --clean`; validate with `flashcli bundle validate bundles/<name>`.
 - Long builds/serves: `bash scripts/run_bg.sh --name JOB -- <cmd>`, then `--status` / `--tail` / `--wait` / `--stop` (logs under `logs/`).
-- Weights are never stored in the bundle; cached under `~/.flashcli/models/<bundle>/<version>@<variant>/`.
+- Weights are never stored in the bundle; the tree is shared at `~/.flashcli/bundles/<name>/<version>/` and weights cache under `~/.flashcli/models/<name>/<version>/<weights_dir>/` (per-variant `weights_dir`, default `checkpoint/`).
 
 ## Conventions
 - Code, shell, and JSON/YAML comments in **English**; user docs English with a **`*.zh-CN.md` mirror kept in sync in the same change**.

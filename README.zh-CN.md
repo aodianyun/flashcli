@@ -57,7 +57,7 @@ flashcli 刻意保持轻薄：**推理代码在 bundle 内**。CLI 从 FlashHub 
 - **容器**：NVIDIA CUDA 运行时镜像（Qwen SM120 推荐 `nvcr.io/nvidia/pytorch:25.10-py3`），勿用纯 `python:3.x`
 - **网络**：首次需 FlashHub bundle sync + Hugging Face 权重（Pi0.5 另需 Google Storage 拉 PaliGemma tokenizer）
 
-Qwen3 与 Qwen3.6 **共用** 同一 FlashHub repo；ref 中 `@qwen3` / `@qwen36` 区分权重。权重**不打进** bundle，缓存在 `~/.flashcli/models/<bundle>/<version>@<variant>/`。
+Qwen3 与 Qwen3.6 **共用** 同一 FlashHub repo 与**同一份** sync 后的 bundle 树（`~/.flashcli/bundles/qwen_nvfp4/<version>/`）；ref 中 `@qwen3` / `@qwen36` 区分权重。权重**不打进** bundle，缓存在 `~/.flashcli/models/<name>/<version>/<weights_dir>/`（按 variant 的 `weights_dir`，默认 `checkpoint/`）。
 
 ---
 
@@ -216,8 +216,9 @@ run/serve：
 | 路径 | 内容 |
 |------|------|
 | `~/.flashcli/` | 主机数据根（marker、install.env） |
-| `~/.flashcli/runtimes/<id>/` | sync 后的 bundle 根（`runtime/<env-key>/`、entry 树）、bundle venv |
-| `~/.flashcli/models/<bundle>/<version>@<variant>/checkpoint/` | 模型权重 |
+| `~/.flashcli/bundles/<name>/<version>/` | sync 后的 bundle 树（所有 `@variant` 共享；`runtime/<env-key>/`、entry 树） |
+| `~/.flashcli/runtimes/<id>/venv/` | bundle venv（Python 依赖） |
+| `~/.flashcli/models/<name>/<version>/<weights_dir>/` | 模型权重（`weights_dir` 默认 `checkpoint`） |
 | `~/.cache/flash_rt/` | Pi0.5 PaliGemma tokenizer |
 
 环境变量：[docs/environment.zh-CN.md](docs/environment.zh-CN.md)。

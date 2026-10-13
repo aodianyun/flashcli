@@ -104,9 +104,9 @@ sequenceDiagram
 ├── install.env              # source hints for flashcli-bundle[infer] (repo/ref)
 ├── python/                  # optional standalone Pythons for bundle venv base
 ├── runtimes/<id>/           # bundle venv + .runtime.json marker
-├── bundles/<bundle>/<version>@<variant>/.flashcli_bundle.json
+├── bundles/<name>/<version>/.flashcli_bundle.json   # synced tree (shared by all @variant)
 ├── cache/repo-index/        # FlashHub listing cache
-└── models/<bundle>/<version>@<variant>/checkpoint/
+└── models/<name>/<version>/<weights_dir>/           # per-variant weights (default checkpoint/)
 ```
 
 ## Bundle layout (after sync)

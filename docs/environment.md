@@ -12,8 +12,8 @@ preflight, weight downloads, the bundle venv, and serve. Anything not listed her
 |----------|---------|-------------|
 | `FLASHCLI_HOME` | `~/.flashcli` | Data root (`runtimes/`, `models/`, `bundles/`, `cache/`, `install.env`). |
 | `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | Bundle venv + `.runtime.json` markers. |
-| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | Synced bundle tree + `.flashcli_bundle.json` markers. |
-| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | Weights cache (`<dir>/<bundle>/<version>[@<variant>]/checkpoint/`). |
+| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | Synced bundle tree + `.flashcli_bundle.json` markers (`<dir>/<name>/<version>`, shared by all `@variant`). |
+| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | Weights cache (`<dir>/<name>/<version>/<weights_dir>/`, default `weights_dir` = `checkpoint`). |
 | `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | FlashHub API base for bundle refs and python-standalone. Browse at [flashhub.top](https://flashhub.top). |
 
 ## GPU / native preflight

@@ -57,7 +57,7 @@ Full repo index: [bundles/README.md](bundles/README.md). Published refs: [FlashH
 - **Containers**: NVIDIA CUDA runtime images (e.g. `nvcr.io/nvidia/pytorch:25.10-py3` for Qwen SM120), not plain `python:3.x`
 - **Network**: FlashHub bundle sync + Hugging Face weights on first run (Pi0.5 also needs Google Storage for PaliGemma tokenizer)
 
-Qwen3 and Qwen3.6 share **one** FlashHub repo; `@qwen3` / `@qwen36` in the ref selects weights. Weights are **never** inside the bundle — cached under `~/.flashcli/models/<bundle>/<version>@<variant>/`.
+Qwen3 and Qwen3.6 share **one** FlashHub repo and **one** synced bundle tree (`~/.flashcli/bundles/qwen_nvfp4/<version>/`); `@qwen3` / `@qwen36` in the ref selects weights. Weights are **never** inside the bundle — cached under `~/.flashcli/models/<name>/<version>/<weights_dir>/` (per-variant `weights_dir`, default `checkpoint/`).
 
 ---
 
@@ -216,8 +216,9 @@ re-exec: the host spawns, or dlopens, the bundle's native backend.
 | Path | Contents |
 |------|----------|
 | `~/.flashcli/` | Host data root (markers, install.env) |
-| `~/.flashcli/runtimes/<id>/` | Synced bundle root (`runtime/<env-key>/`, entry tree), bundle venv |
-| `~/.flashcli/models/<bundle>/<version>@<variant>/checkpoint/` | Model weights |
+| `~/.flashcli/bundles/<name>/<version>/` | Synced bundle tree (shared by all `@variant`; `runtime/<env-key>/`, entry tree) |
+| `~/.flashcli/runtimes/<id>/venv/` | Bundle venv (Python deps) |
+| `~/.flashcli/models/<name>/<version>/<weights_dir>/` | Model weights (default `weights_dir` = `checkpoint`) |
 | `~/.cache/flash_rt/` | Pi0.5 PaliGemma tokenizer (post-pull) |
 
 Environment variables: [docs/environment.md](docs/environment.md) (`FLASHCLI_HOME`, `HF_ENDPOINT`, `FLASHRT_QWEN36_*`, …).

@@ -55,7 +55,7 @@ Multi-variant bundles **require** `@variant` in the ref.
 
 > Native-only bundles (`entry.kind = native-abi|native-exec`) omit `run.py`/`serve.py` and `flash_rt/`; C libraries live under `runtime/<env-key>/substrate/`.
 
-Weights are **not** in the bundle; cached under `~/.flashcli/models/<bundle>/<version>@<variant>/`.
+Weights are **not** in the bundle; cached under `~/.flashcli/models/<name>/<version>/<weights_dir>/` (shared tree per `<name>/<version>`; each `@variant` uses its `weights_dir`, default `checkpoint/`).
 
 ## End-user runtime flow
 

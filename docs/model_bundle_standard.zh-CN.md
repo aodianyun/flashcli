@@ -55,7 +55,7 @@ flashcli pull bundles/qwen_nvfp4@qwen36
 
 > 仅原生 bundle（`entry.kind = native-abi|native-exec`）省略 `run.py`/`serve.py` 与 `flash_rt/`；C 库放在 `runtime/<env-key>/substrate/`。
 
-权重不在 bundle 内，缓存在 `~/.flashcli/models/<bundle>/<version>@<variant>/`。
+权重不在 bundle 内，缓存在 `~/.flashcli/models/<name>/<version>/<weights_dir>/`（bundle 树按 `<name>/<version>` 共享；各 `@variant` 用自己的 `weights_dir`，默认 `checkpoint/`）。
 
 ## 终端用户运行时流程
 
