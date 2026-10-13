@@ -87,11 +87,18 @@ def _derived_weights_dir(name: str, spec: dict[str, Any]) -> str:
     return f"checkpoint/{digest}"
 
 
+def variant_block(bundle: BundleManifest, variant: str) -> dict[str, Any]:
+    """Raw variant block (scalars included, unlike :func:`variant_section`)."""
+    return bundle_variants(bundle).get(variant, {})
+
+
 def variant_weights_dir(bundle: BundleManifest, variant: str) -> str:
-    rel = str(variant_section(bundle, variant, "weights_dir")).strip()
+    block = variant_block(bundle, variant)
+    rel = str(block.get("weights_dir", "")).strip()
     if rel:
         return rel.strip("/")
-    return _derived_weights_dir(variant, variant_section(bundle, variant, "weights"))
+    spec = block.get("weights")
+    return _derived_weights_dir(variant, spec if isinstance(spec, dict) else {})
 
 
 def bundle_weights_rel(bundle: BundleManifest, variant: str | None = None) -> str:

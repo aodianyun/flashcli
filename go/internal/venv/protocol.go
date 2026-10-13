@@ -22,7 +22,8 @@ import (
 //
 // v2: variant-independent keys <name>/<version> with per-variant weights under
 // weights_dir (docs/bundle_publish_standard.md §4.4.1).
-const RequiredCacheSchema = 2
+// v3: resolve the variant weights_dir from the raw block (scalar weights_dir).
+const RequiredCacheSchema = 3
 
 // EnsureProtocolCacheSchema probes flashcli_bundle.CACHE_SCHEMA_VERSION in the
 // venv and, when stale or unavailable, reinstalls only flashcli-bundle.
