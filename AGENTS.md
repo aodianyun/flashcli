@@ -19,9 +19,12 @@ Distribution:
 ```bash
 bash install.sh [--mirror]          # one-click host install (build-from-source, else release assets)
 bash scripts/build_go.sh [OUT]      # cross-compile + sha256sums (version from pyproject)
-bash scripts/release_go.sh [--upload]  # build, optionally publish via `gh`
+bash scripts/release_go.sh [--upload]  # build, optionally publish to GitHub + Gitee
+bash scripts/verify_release.sh [--version X]  # isolated install + smoke (never touches host state)
 ```
 `install.sh` installs the `flashcli` binary (default: latest release assets + sha256; `--from-source` builds with Go) and writes `~/.flashcli/install.env` (bundle venv source: local checkout or repo/ref). Missing OS tools are auto-installed via the package manager. `auto_install.sh` picks GitHub/Gitee by reachability then runs `install.sh`. `flashcli upgrade` self-updates from the same release assets.
+
+**Releases come from `main` only.** Validate `dev` by building from source (`install.sh --from-source --branch dev`, or `build_go.sh` + install the binary) — do **not** cut intermediate releases from `dev`. `release_go.sh` targets `main` (`FLASHCLI_RELEASE_TARGET` overrides). Full checklist: [CONTRIBUTING.md](CONTRIBUTING.md) → Releases.
 
 ## Tests
 ```bash

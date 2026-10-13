@@ -118,7 +118,24 @@ refactor(weights): share cache-key resolution between pull and run
 
 ### Releases
 
-- **Host (Go)**: bump `[project].version` in `pyproject.toml`, commit (`chore(release): bump version to X`), tag `vX` on the release commit, then `bash scripts/release_go.sh --upload` (GitHub) and upload the same assets to Gitee.
+Releases are cut from **`main`** (stable) only. **Never publish an intermediate release
+from `dev`.** Validate host changes by building from `dev` locally — `bash install.sh
+--from-source --branch dev`, or `bash scripts/build_go.sh` + install the binary. Note
+`install.sh --branch dev` **without** `--from-source` still installs the latest
+*published* release, so it does **not** exercise dev host code.
+
+**Host (Go) release checklist:**
+
+1. Bump `[project].version` in `pyproject.toml` on `dev`; commit (`chore(release): bump version to X`).
+2. Sync `dev` → `main` (squash-and-record, above) so `main` carries the validated commit.
+3. Remove any previous/test release **and** its tag on GitHub and Gitee (keep only the latest).
+4. Tag `vX` on the `main` release commit; push the tag.
+5. `bash scripts/release_go.sh --upload` builds and publishes both GitHub and Gitee
+   (target branch defaults to `main`; override with `FLASHCLI_RELEASE_TARGET`).
+6. Write the release notes per the standard below on **both** platforms.
+7. Verify the published assets in a clean environment:
+   `bash scripts/verify_release.sh --version X` (isolated prefix; add `--mirror` for Gitee).
+
 - **Bundles**: follow the maintainer checklist below and [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md).
 
 #### Release notes standard
