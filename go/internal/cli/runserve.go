@@ -172,6 +172,14 @@ func runPythonBackend(m *manifest.Manifest, root, version, variant, capability s
 	if err != nil {
 		return err
 	}
+	if !envBool("FLASHCLI_SKIP_VENV_SETUP") {
+		if err := venv.EnsureProtocolCacheSchema(context.Background(), python, venv.Options{
+			Quiet:         quiet,
+			NoAutoInstall: hf.NoAutoInstall,
+		}); err != nil {
+			return err
+		}
+	}
 	if !envBool("FLASHCLI_SKIP_PREFLIGHT") {
 		if envKey := resolveEnvKey(m); envKey != "" {
 			if parsed, perr := preflight.ParseEnvKey(envKey); perr == nil {
