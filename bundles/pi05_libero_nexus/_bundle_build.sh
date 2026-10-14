@@ -361,6 +361,13 @@ stage_bundle_runtime_native() {
   cp -f "${BUNDLE_DIR}/exec_server.json" "${rt_dir}/exec_server.json"
   log "Staged native-exec server: bin/pi05_exec_server + exec_server.json"
 
+  # FP8 calibration artifact(s): tracked under calib/, staged into the cell so
+  # the manifest's {runtime_dir}/calib/... path resolves.
+  if [[ -d "${BUNDLE_DIR}/calib" ]] && compgen -G "${BUNDLE_DIR}/calib/*" >/dev/null; then
+    cp -a "${BUNDLE_DIR}/calib" "${rt_dir}/calib"
+    log "Staged FP8 calibration: $(cd "${BUNDLE_DIR}/calib" && ls | tr '\n' ' ')"
+  fi
+
   write_version_file "${sub_dir}/VERSION"
 
   if command -v ldd >/dev/null 2>&1; then

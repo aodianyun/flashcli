@@ -6,10 +6,11 @@
 
 | | |
 |---|---|
-| **Ref** | `flashcli-bundle/pi05_libero_nexus:1.0.0@abi` · `@exec` |
+| **Ref** | `flashcli-bundle/pi05_libero_nexus:1.0.2@abi` · `@exec` |
 | **Weights** | [lerobot/pi05_libero_finetuned_v044](https://www.modelscope.cn/models/lerobot/pi05_libero_finetuned_v044) (ModelScope, ~7 GB) |
 | **GPU** | NVIDIA **SM120** (Blackwell) · CUDA **13.x** |
 | **Runtime** | Native `.so` (no Python interpreter, no venv) |
+| **Precision** | Native **FP8** (SM120, calibrated) — ≈2× faster than BF16 |
 | **Capabilities** | `run` · `serve` (both variants) |
 
 **Inputs:** task prompt + RGB images (LIBERO default **2** views), optional proprio state.  
@@ -29,30 +30,30 @@ Both backends **share** the same weights and synced tree: the tree is `~/.flashc
 ## Run
 
 ```bash
-flashcli pull flashcli-bundle/pi05_libero_nexus:1.0.0@abi
+flashcli pull flashcli-bundle/pi05_libero_nexus:1.0.2@abi
 
-flashcli run flashcli-bundle/pi05_libero_nexus:1.0.0@abi \
+flashcli run flashcli-bundle/pi05_libero_nexus:1.0.2@abi \
   --prompt "pick up the red block and place it in the tray" \
   --image /path/view0.jpg,/path/view1.jpg
 
 # same, through the standalone native-exec server backend
-flashcli run flashcli-bundle/pi05_libero_nexus:1.0.0@exec \
+flashcli run flashcli-bundle/pi05_libero_nexus:1.0.2@exec \
   --prompt "pick up the red block and place it in the tray" \
   --image /path/view0.jpg,/path/view1.jpg
 ```
 
 Omit `--image` to use placeholder frames; pass `--state` as comma-separated floats to set proprioception (defaults to zeros).
 
-Full flags: `flashcli run flashcli-bundle/pi05_libero_nexus:1.0.0@abi --help`
+Full flags: `flashcli run flashcli-bundle/pi05_libero_nexus:1.0.2@abi --help`
 
 ## Serve
 
 ```bash
 # native-abi: the host serves the HTTP surface over the in-process session
-flashcli serve flashcli-bundle/pi05_libero_nexus:1.0.0@abi --host 0.0.0.0 --port 8080
+flashcli serve flashcli-bundle/pi05_libero_nexus:1.0.2@abi --host 0.0.0.0 --port 8080
 
 # native-exec: the host supervises the bundle's HTTP server and prints its endpoint
-flashcli serve flashcli-bundle/pi05_libero_nexus:1.0.0@exec
+flashcli serve flashcli-bundle/pi05_libero_nexus:1.0.2@exec
 ```
 
 Act (one tick per request; `images[].data` = base64 RGB8, `width*height*3` bytes):
@@ -79,7 +80,7 @@ curl http://127.0.0.1:8080/healthz
 
 `POST /v1/chat/completions` is accepted as an alias and takes the same act payload.
 
-Full flags: `flashcli serve flashcli-bundle/pi05_libero_nexus:1.0.0@abi --help`
+Full flags: `flashcli serve flashcli-bundle/pi05_libero_nexus:1.0.2@abi --help`
 
 ## Parameters
 
