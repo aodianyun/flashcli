@@ -6,10 +6,11 @@
 
 | | |
 |---|---|
-| **Ref** | `flashcli-bundle/pi05_libero_nexus:1.0.0@abi` · `@exec` |
+| **Ref** | `flashcli-bundle/pi05_libero_nexus:1.0.2@abi` · `@exec` |
 | **权重** | [lerobot/pi05_libero_finetuned_v044](https://www.modelscope.cn/models/lerobot/pi05_libero_finetuned_v044)（ModelScope，约 7 GB） |
 | **GPU** | NVIDIA **SM120**（Blackwell）· CUDA **13.x** |
 | **运行时** | 原生 `.so`（无 Python 解释器、无 venv） |
+| **精度** | 原生 **FP8**（SM120，已校准）—— 约为 BF16 的 2× 速度 |
 | **能力** | `run` · `serve`（两个 variant 均支持） |
 
 **输入：** 任务 prompt + RGB 图像（LIBERO 默认 **2** 路相机），可选本体 state。  
@@ -29,30 +30,30 @@
 ## 运行
 
 ```bash
-flashcli pull flashcli-bundle/pi05_libero_nexus:1.0.0@abi
+flashcli pull flashcli-bundle/pi05_libero_nexus:1.0.2@abi
 
-flashcli run flashcli-bundle/pi05_libero_nexus:1.0.0@abi \
+flashcli run flashcli-bundle/pi05_libero_nexus:1.0.2@abi \
   --prompt "pick up the red block and place it in the tray" \
   --image /path/view0.jpg,/path/view1.jpg
 
 # 同一模型，走独立 native-exec 服务器后端
-flashcli run flashcli-bundle/pi05_libero_nexus:1.0.0@exec \
+flashcli run flashcli-bundle/pi05_libero_nexus:1.0.2@exec \
   --prompt "pick up the red block and place it in the tray" \
   --image /path/view0.jpg,/path/view1.jpg
 ```
 
 省略 `--image` 则使用占位帧；用 `--state` 传逗号分隔的浮点数设置本体状态（默认全 0）。
 
-完整参数：`flashcli run flashcli-bundle/pi05_libero_nexus:1.0.0@abi --help`
+完整参数：`flashcli run flashcli-bundle/pi05_libero_nexus:1.0.2@abi --help`
 
 ## 服务
 
 ```bash
 # native-abi：host 基于进程内 session 直接提供 HTTP 面
-flashcli serve flashcli-bundle/pi05_libero_nexus:1.0.0@abi --host 0.0.0.0 --port 8080
+flashcli serve flashcli-bundle/pi05_libero_nexus:1.0.2@abi --host 0.0.0.0 --port 8080
 
 # native-exec：host 监管 bundle 自带的 HTTP 服务并打印其端点
-flashcli serve flashcli-bundle/pi05_libero_nexus:1.0.0@exec
+flashcli serve flashcli-bundle/pi05_libero_nexus:1.0.2@exec
 ```
 
 Act（每请求一次 tick；`images[].data` 为 base64 RGB8，长度 `width*height*3`）：
@@ -79,7 +80,7 @@ curl http://127.0.0.1:8080/healthz
 
 `POST /v1/chat/completions` 作为别名，载荷与 act 相同。
 
-完整参数：`flashcli serve flashcli-bundle/pi05_libero_nexus:1.0.0@abi --help`
+完整参数：`flashcli serve flashcli-bundle/pi05_libero_nexus:1.0.2@abi --help`
 
 ## 参数
 

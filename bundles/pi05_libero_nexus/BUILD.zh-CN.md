@@ -44,6 +44,22 @@ bash bundles/pi05_libero_nexus/build.sh \
 
 可选覆盖：`--sm` · `--cuda-tag` · `--python-minor` · `--build-dir` · `--cpp-build-dir` · `--nexus-build-dir` · `--runtime-version` · `--nexus-version`。
 
+## 1b. FP8 校准（性能）
+
+bundle 以原生 **FP8** 运行 PI0.5（SM120 上 `precision: "fp8_e4m3fn"`），约为 BF16 的 2× 速度。运行时**不会**隐式校准：它校验一个静态 FP8 产物，其路径来自 native config 的 `calibration_path`（`{runtime_dir}/calib/pi05_sm120_fp8.calib`）。没有该产物会回退 BF16。
+
+用**真实 LIBERO 帧**（推荐）重新生成：
+
+```bash
+FLASHRT_REPO=/path/to/FlashRT \
+bash bundles/pi05_libero_nexus/calibrate_fp8.sh \
+  --checkpoint /path/to/pi05_libero_finetuned_v044
+```
+
+`calibrate_fp8.sh` 会下载一小片 `lerobot/libero`，经 `native_calib/extract_libero_obs.py` 提取 2 路观测（帧 + state + prompt），用已 staging 的 substrate 编译 `native_calib/pi05_calib.cpp`，并写出 `calib/pi05_sm120_fp8.calib`。`build.sh` 会把 `calib/` staging 到 `runtime/<env>/calib/`；`pack.sh` 带入 `dist/`。
+
+产物身份绑定 checkpoint + tokenizer + 形状（`num_views`、`chunk`、`state_dim`、`num_steps`、`max_prompt_tokens`、`stage_plan`）——任一项变化都需重新生成。需要 pyarrow + ffmpeg。
+
 ## 2. 打包
 
 ```bash

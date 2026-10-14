@@ -44,6 +44,22 @@ Native-only cell (no `-py`): `runtime/sm120-cu130-linux-x86_64/substrate/*`. The
 
 Optional overrides: `--sm` · `--cuda-tag` · `--python-minor` · `--build-dir` · `--cpp-build-dir` · `--nexus-build-dir` · `--runtime-version` · `--nexus-version`.
 
+## 1b. FP8 calibration (performance)
+
+The bundle runs PI0.5 in native **FP8** (`precision: "fp8_e4m3fn"` on SM120), ≈2× faster than BF16. The runtime does **not** calibrate implicitly: it validates a static FP8 artifact whose path is `calibration_path` in the native config (`{runtime_dir}/calib/pi05_sm120_fp8.calib`). Without it the runtime falls back to BF16.
+
+Regenerate the artifact from **real LIBERO frames** (recommended) with:
+
+```bash
+FLASHRT_REPO=/path/to/FlashRT \
+bash bundles/pi05_libero_nexus/calibrate_fp8.sh \
+  --checkpoint /path/to/pi05_libero_finetuned_v044
+```
+
+`calibrate_fp8.sh` downloads a small `lerobot/libero` slice, extracts 2-view observations (frames + state + prompt) via `native_calib/extract_libero_obs.py`, compiles `native_calib/pi05_calib.cpp` against the staged substrate, and writes `calib/pi05_sm120_fp8.calib`. `build.sh` stages `calib/` into `runtime/<env>/calib/`; `pack.sh` carries it into `dist/`.
+
+The artifact identity binds the checkpoint + tokenizer + shape (`num_views`, `chunk`, `state_dim`, `num_steps`, `max_prompt_tokens`, `stage_plan`) — regenerate it if any of those change. Requires pyarrow + ffmpeg.
+
 ## 2. Pack
 
 ```bash
