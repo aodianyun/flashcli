@@ -131,7 +131,7 @@ End users and FlashHub consume **`dist/flashcli-bundle.json`**, never the overla
 | `protocol_version` | yes | Must be **1** (matches the `flashcli-bundle` protocol shipped with flashcli) |
 | `runtime_abi_version` | conditional | Required when any `entry.*.kind == "native-abi"`; must be **1** (FlashRT `frt_model_runtime_v1`). Forbidden otherwise. |
 | `exec_protocol_version` | conditional | Required when any `entry.*.kind == "native-exec"`; must be **1** (NDJSON/HTTP framing). Forbidden otherwise. |
-| `name` | yes | Bundle id; should match directory / FlashHub repo name |
+| `name` | yes | Bundle id (**descriptive only**). Cache/tree/weight keys derive from the **FlashHub repo name + version** (the `flashcli-bundle` ref), not from this field; matching the repo name is a readability convention, not required |
 | `description` | recommended | Human-readable summary |
 | `python_abi` | conditional | Required when a Python entry exists. Fixed Python ABI as a three-digit string, e.g. `"312"` = CPython 3.12. Native-only bundles omit it and their runtime key has no `-py{NNN}` segment. |
 | `entry` | yes | At least one of `run` or `serve` (see §4) |

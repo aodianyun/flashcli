@@ -131,7 +131,7 @@ flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
 | `protocol_version` | 是 | 固定 **1**（与 flashcli 所带 `flashcli-bundle` 协议一致） |
 | `runtime_abi_version` | 条件 | 当任意 `entry.*.kind == "native-abi"` 时必填；固定 **1**（FlashRT `frt_model_runtime_v1`）。否则禁止出现。 |
 | `exec_protocol_version` | 条件 | 当任意 `entry.*.kind == "native-exec"` 时必填；固定 **1**（NDJSON/HTTP 帧协议）。否则禁止出现。 |
-| `name` | 是 | bundle 标识，与目录/FlashHub repo 名一致为佳 |
+| `name` | 是 | bundle 标识（**仅描述**）。缓存/树/权重键取自 **FlashHub 仓库名 + 版本**（`flashcli-bundle` ref），**不使用**该字段；与仓库名一致只是可读性约定，非必需 |
 | `description` | 推荐 | 人类可读说明 |
 | `python_abi` | 条件 | 仅当存在 Python entry 时必填；bundle 固定 Python ABI，三位数字字符串，如 `"312"` = CPython 3.12。仅原生 bundle 省略它，其 runtime key 无 `-py{NNN}` 段。 |
 | `entry` | 是 | 至少含 `run` 或 `serve` 之一（见 §4） |

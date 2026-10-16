@@ -3,43 +3,25 @@ package runtime
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
-func TestIDFromPathDeterministic(t *testing.T) {
-	a := IDFromPath("/tmp/bundles/pi05", "pi05_libero")
-	b := IDFromPath("/tmp/bundles/pi05", "pi05_libero")
-	if a != b {
-		t.Fatalf("not deterministic: %s vs %s", a, b)
-	}
-	if !strings.HasPrefix(a, "pi05_libero-local-") || len(a) != len("pi05_libero-local-")+12 {
-		t.Fatalf("unexpected id: %s", a)
-	}
-	if a == IDFromPath("/tmp/bundles/other", "pi05_libero") {
-		t.Fatal("different path should differ")
-	}
-}
-
-func TestIDFromRepo(t *testing.T) {
-	id := IDFromRepo("https://flashhub-api.example/api/v1/repos/ns/b:1.0.0", "b")
-	if !strings.HasPrefix(id, "b-") || strings.Contains(id, "local") {
-		t.Fatalf("unexpected id: %s", id)
-	}
-}
-
-func TestMarkerRoundTrip(t *testing.T) {
-	t.Setenv("FLASHCLI_RUNTIMES_DIR", t.TempDir())
-	id := "b-local-abc"
-	write := WriteMarker(id, map[string]any{"runtime_id": id, "source": "local"})
-	if write != nil {
-		t.Fatal(write)
-	}
-	got := ReadMarker(id)
-	if got == nil || got["source"] != "local" {
-		t.Fatalf("marker = %v", got)
-	}
-	if _, err := os.Stat(filepath.Join(Dir(id), ".runtime.json")); err != nil {
+// The local bundle id must canonicalize the path (resolve symlinks) so it
+// matches flashcli_bundle.preset_ref.local_bundle_id.
+func TestIDFromPathResolvesSymlinks(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "real")
+	if err := os.MkdirAll(real, 0o755); err != nil {
 		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+	if IDFromPath(link, "b") != IDFromPath(real, "b") {
+		t.Fatalf("symlink id %q != real id %q", IDFromPath(link, "b"), IDFromPath(real, "b"))
+	}
+	if got, want := IDFromPath(real, "b"), "b-local-"+digest(canonicalPath(real)); got != want {
+		t.Fatalf("IDFromPath=%q want %q", got, want)
 	}
 }

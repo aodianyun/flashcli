@@ -63,13 +63,15 @@ func weightsCachedFor(p ref.Parsed, refStr string) bool {
 	if p.Local || ver == "" {
 		ver = "local"
 	}
+	key := weights.TreeKey(p.Name, ver)
 	rel := "checkpoint"
 	if m, err := loadManifestForRef(refStr, p); err == nil {
+		key = weights.CacheKeyFor(m, ver)
 		if _, r, _, err := weights.ManifestSpecs(m, p.Variant); err == nil && r != "" {
 			rel = r
 		}
 	}
-	dir := filepath.Join(paths.Models(), filepath.FromSlash(weights.TreeKey(p.Name, ver)), filepath.FromSlash(rel))
+	dir := filepath.Join(paths.Models(), filepath.FromSlash(key), filepath.FromSlash(rel))
 	if cp, ok := weights.ReadMarker(dir); ok {
 		if info, err := os.Stat(cp); err == nil && info.IsDir() {
 			return true
