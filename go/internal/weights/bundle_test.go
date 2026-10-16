@@ -2,6 +2,7 @@ package weights
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/aodianyun/flashcli/go/internal/manifest"
@@ -25,5 +26,19 @@ func TestCacheKeyForLocalUsesLocalID(t *testing.T) {
 	want := runtime.IDFromPath(root, "somebundle") + "/local"
 	if got := CacheKeyFor(m, "local"); got != want {
 		t.Fatalf("CacheKeyFor=%q want %q", got, want)
+	}
+}
+
+// The cache base key is variant-independent: it must never contain "@variant"
+// (the variant only selects weights_dir / runtime cell).
+func TestCacheKeyForIsVariantIndependent(t *testing.T) {
+	root := filepath.Join(paths.Bundles(), "qwen_nvfp4", "1.0.1")
+	m := &manifest.Manifest{Name: "qwen_nvfp4", Root: root}
+	got := CacheKeyFor(m, "1.0.1")
+	if got != "qwen_nvfp4/1.0.1" {
+		t.Fatalf("CacheKeyFor=%q want qwen_nvfp4/1.0.1", got)
+	}
+	if strings.Contains(got, "@") {
+		t.Fatalf("cache key must not contain @variant: %q", got)
 	}
 }

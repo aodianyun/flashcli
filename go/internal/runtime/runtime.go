@@ -23,9 +23,29 @@ func IDFromRepo(repoURL, bundleName string) string {
 	return safeName(bundleName) + "-" + digest(repoURL)
 }
 
-// IDFromPath returns "<name>-local-<sha12>" for a local bundle directory.
+// IDFromPath returns "<name>-local-<sha12>" for a local bundle directory. The
+// path is canonicalized (expanduser + absolute + symlink-resolved) to match
+// flashcli_bundle.preset_ref.local_bundle_id (Path.expanduser().resolve()).
 func IDFromPath(path, bundleName string) string {
-	return safeName(bundleName) + "-local-" + digest(path)
+	return safeName(bundleName) + "-local-" + digest(canonicalPath(path))
+}
+
+// canonicalPath mirrors the protocol's Path.expanduser().resolve().
+func canonicalPath(p string) string {
+	s := strings.TrimSpace(p)
+	if strings.HasPrefix(s, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			s = filepath.Join(home, s[2:])
+		}
+	}
+	abs, err := filepath.Abs(s)
+	if err != nil {
+		return s
+	}
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		return real
+	}
+	return abs
 }
 
 func safeName(name string) string {
