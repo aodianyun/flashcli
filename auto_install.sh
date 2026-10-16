@@ -81,6 +81,17 @@ run_saved_install_sh() {
   sh "$_dest" "$@"
 }
 
+# Run install.sh from Gitee with --mirror (used both when GitHub is
+# unreachable and as a runtime fallback when a GitHub install.sh fails).
+install_via_gitee() {
+  INSTALL_URL="$GITEE_INSTALL"
+  if ! has_flag --mirror "$@"; then
+    set -- --mirror "$@"
+  fi
+  download_install_sh "$GITEE_INSTALL" "$INSTALL_DEST" || return $?
+  run_saved_install_sh "$INSTALL_DEST" "$@"
+}
+
 # Prefer Gitee when user asked for China mirrors / Gitee; --github forces GitHub.
 if has_flag --github "$@"; then
   info "[i] --github: using GitHub install.sh"
@@ -111,14 +122,23 @@ else
   rm -f "${INSTALL_DEST}.tmp.$$" 2>/dev/null || true
   if [ "$INSTALL_URL" = "$GITHUB_INSTALL" ]; then
     warn "[!] GitHub install.sh failed or timed out (exit ${_ec}) — retrying via Gitee"
-    INSTALL_URL="$GITEE_INSTALL"
-    if ! has_flag --mirror "$@"; then
-      set -- --mirror "$@"
-    fi
-    download_install_sh "$INSTALL_URL" "$INSTALL_DEST" || exit $?
-  else
-    exit "$_ec"
+    install_via_gitee "$@"
+    exit $?
   fi
+  exit "$_ec"
+fi
+
+# Runtime fallback: the reachability probe only checks install.sh, not the
+# release-asset CDN. If the chosen (GitHub) install.sh fails at runtime
+# (e.g. a transient asset download reset), retry once via Gitee + --mirror.
+if [ "$INSTALL_URL" = "$GITHUB_INSTALL" ]; then
+  if ! run_saved_install_sh "$INSTALL_DEST" "$@"; then
+    _ec=$?
+    warn "[!] GitHub install.sh exited ${_ec} — retrying via Gitee (--mirror)"
+    install_via_gitee "$@"
+    exit $?
+  fi
+  exit 0
 fi
 
 run_saved_install_sh "$INSTALL_DEST" "$@"

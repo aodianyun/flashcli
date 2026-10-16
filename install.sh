@@ -193,8 +193,7 @@ fetch_retry() {
   _url="$1"; _dest="$2"; _tries="${3:-3}"; _n=1
   while [ "$_n" -le "$_tries" ]; do
     rm -f "$_dest"
-    if fetch "$_url" "$_dest"; then return 0; fi
-    _rc=$?
+    if fetch "$_url" "$_dest"; then return 0; else _rc=$?; fi
     warn "download failed (attempt ${_n}/${_tries}, exit ${_rc}): ${_url}"
     _n=$((_n + 1))
     [ "$_n" -le "$_tries" ] && sleep 3
