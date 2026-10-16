@@ -187,6 +187,20 @@ ensure_download_tool() {
 fetch() {
   if [ "$DL" = curl ]; then curl -fsSL "$1" -o "$2"; else wget -qO "$2" "$1"; fi
 }
+# fetch_retry URL DEST [TRIES] — retry transient transfer failures
+# (curl 18/28/56, wget connection resets) instead of reporting them as 404.
+fetch_retry() {
+  _url="$1"; _dest="$2"; _tries="${3:-3}"; _n=1
+  while [ "$_n" -le "$_tries" ]; do
+    rm -f "$_dest"
+    if fetch "$_url" "$_dest"; then return 0; fi
+    _rc=$?
+    warn "download failed (attempt ${_n}/${_tries}, exit ${_rc}): ${_url}"
+    _n=$((_n + 1))
+    [ "$_n" -le "$_tries" ] && sleep 3
+  done
+  return 1
+}
 ensure_sha256_tool() {
   have_cmd sha256sum && { SHA=sha256sum; return 0; }
   have_cmd shasum && { SHA="shasum -a 256"; return 0; }
@@ -246,27 +260,36 @@ install_source() {
 install_release() {
   ensure_download_tool
   ensure_sha256_tool
-  base=""; api=""
+  # Primary host (from $REPO) plus the alternate host as a transfer fallback:
+  # a reachable probe does not guarantee a clean asset download (transient resets).
+  GH_BASE="https://github.com/aodianyun/flashcli/releases/download"
+  GH_API="https://api.github.com/repos/aodianyun/flashcli/releases/latest"
+  GY_BASE="https://gitee.com/aodiansoft/flashcli/releases/download"
+  GY_API="https://gitee.com/api/v5/repos/aodiansoft/flashcli/releases/latest"
   case "$REPO" in
-    *gitee*) base="https://gitee.com/aodiansoft/flashcli/releases/download"; api="https://gitee.com/api/v5/repos/aodiansoft/flashcli/releases/latest" ;;
-    *)       base="https://github.com/aodianyun/flashcli/releases/download"; api="https://api.github.com/repos/aodianyun/flashcli/releases/latest" ;;
+    *gitee*) base="$GY_BASE"; api="$GY_API"; alt_base="$GH_BASE"; alt_api="$GH_API" ;;
+    *)       base="$GH_BASE"; api="$GH_API"; alt_base="$GY_BASE"; alt_api="$GY_API" ;;
   esac
   if [ -z "$VERSION" ]; then
     tmpj="$(mktemp)"
-    if ! fetch "$api" "$tmpj" 2>/dev/null; then
+    fetch_retry "$api" "$tmpj" 2 || fetch_retry "$alt_api" "$tmpj" 2 || {
       rm -f "$tmpj"
       die "no release found for $REPO (and no --version). Publish the release for this source, or re-run with --from-source."
-    fi
+    }
     VERSION="$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' "$tmpj" | head -1)"
     rm -f "$tmpj"
   fi
   [ -n "$VERSION" ] || die "could not resolve a release version (pass --version or use --from-source)"
   info "installing flashcli $VERSION from release assets"
   tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-  fetch "${base}/v${VERSION}/${asset}" "$tmp/$asset" \
-    || die "release asset not found: ${base}/v${VERSION}/${asset} (publish it for this source, or use --from-source)"
-  fetch "${base}/v${VERSION}/sha256sums.txt" "$tmp/sha256sums.txt" \
-    || die "release checksums not found: ${base}/v${VERSION}/sha256sums.txt"
+  fetch_retry "${base}/v${VERSION}/${asset}" "$tmp/$asset" 3 \
+    || { warn "falling back to alternate release host: ${alt_base}"; \
+         fetch_retry "${alt_base}/v${VERSION}/${asset}" "$tmp/$asset" 3; } \
+    || die "could not download release asset ${asset} (tried ${base} and ${alt_base}; publish it for this source, or use --from-source)"
+  fetch_retry "${base}/v${VERSION}/sha256sums.txt" "$tmp/sha256sums.txt" 3 \
+    || { warn "falling back to alternate release host: ${alt_base}"; \
+         fetch_retry "${alt_base}/v${VERSION}/sha256sums.txt" "$tmp/sha256sums.txt" 3; } \
+    || die "could not download sha256sums.txt (tried ${base} and ${alt_base})"
   want="$(awk -v a="$asset" '$2==a {print $1}' "$tmp/sha256sums.txt" | head -1)"
   [ -n "$want" ] || die "$asset not listed in sha256sums.txt"
   have="$($SHA "$tmp/$asset" | awk '{print $1}')"
