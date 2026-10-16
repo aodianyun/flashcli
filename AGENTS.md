@@ -31,7 +31,9 @@ bash scripts/verify_release.sh [--version X]  # isolated install + smoke (never 
 pytest tests/            # protocol/infer + conformance; tests/bench excluded via pyproject addopts
 pytest tests/bench/      # bench helper tests (scripts/bench_*.py)
 cd go && go build ./... && go test ./...   # gofmt is the formatter; run `gofmt -w .`
+bash scripts/verify_cache.sh   # cache-key parity / cache-hit smoke (remote+local, @variant, GPU-free)
 ```
+Cache-key derivation is covered by `go/internal/weights/bundle_test.go` (remote repo-name / local id / variant-independent) and `go/internal/runtime/runtime_test.go` (symlink canonicalization) — keep these in sync with the `flashcli-bundle` protocol. `verify_cache.sh` is the integration counterpart (needs pulled bundles; missing prereqs SKIP).
 Python tests only cover `flashcli_bundle` (protocol/infer) + conformance now; install editable first. There is **no** Python lint/typecheck/formatter/CI config — do not invent commands.
 
 `tests/conformance/` is the language-agnostic execution-ABI gate (`docs/bundle_execution_abi.md`): fixtures for `python` / `native-exec` / `native-abi`. It runs Go via `FLASHCLI_GO_BIN` or a fresh `go build`; skips when Go is unavailable.
