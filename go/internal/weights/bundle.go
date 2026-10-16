@@ -10,7 +10,25 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/manifest"
 	"github.com/aodianyun/flashcli/go/internal/paths"
 	"github.com/aodianyun/flashcli/go/internal/postpull"
+	"github.com/aodianyun/flashcli/go/internal/runtime"
 )
+
+// CacheKeyFor returns the protocol cache base key ("<name>/<version>") for a
+// bundle, mirroring flashcli_bundle.preset_ref.cache_key:
+//
+//   - FlashHub ref: the **repo name** + version (the synced tree lives at
+//     bundles/<repoName>/<version>, so the name is the tree's parent dir);
+//   - local path: the local bundle id ("<name>-local-<sha12>") + "local".
+//
+// The manifest `name` is descriptive metadata: it is never used for the remote
+// key, and only appears in the local id prefix (per the protocol).
+func CacheKeyFor(m *manifest.Manifest, version string) string {
+	root := filepath.Clean(m.Root)
+	if version != "" && version != "local" && filepath.Base(root) == version {
+		return TreeKey(filepath.Base(filepath.Dir(root)), version)
+	}
+	return TreeKey(runtime.IDFromPath(root, m.Name), "local")
+}
 
 // HasSource reports whether a spec declares any downloadable source.
 func (s Spec) HasSource() bool {
@@ -72,7 +90,7 @@ func DownloadBundle(ctx context.Context, m *manifest.Manifest, version, variant 
 	if err != nil {
 		return "", err
 	}
-	cacheDir := filepath.Join(paths.Models(), filepath.FromSlash(TreeKey(m.Name, version)))
+	cacheDir := filepath.Join(paths.Models(), filepath.FromSlash(CacheKeyFor(m, version)))
 	checkpoint := filepath.Join(cacheDir, filepath.FromSlash(rel))
 
 	if main.HasSource() {

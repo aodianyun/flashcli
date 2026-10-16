@@ -121,7 +121,7 @@ func writeLocalMarkers(m *manifest.Manifest, root, variant string) (string, erro
 	}); err != nil {
 		return "", err
 	}
-	key := weights.TreeKey(m.Name, "local")
+	key := weights.CacheKeyFor(m, "local")
 	if err := runtime.WritePresetMarker(key, map[string]any{
 		"source":      "local",
 		"local_root":  root,

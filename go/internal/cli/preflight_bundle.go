@@ -74,7 +74,7 @@ func sortedKeys(m map[string]string) []string {
 func ensureBundleRuntime(m *manifest.Manifest, bundleRoot, version, variant string, quiet, noAutoInstall bool) (string, string, error) {
 	runtimeID := runtime.IDFromPath(bundleRoot, m.Name)
 	if version != "local" {
-		if marker := runtime.ReadPresetMarker(weights.TreeKey(m.Name, version)); marker != nil {
+		if marker := runtime.ReadPresetMarker(weights.CacheKeyFor(m, version)); marker != nil {
 			if rid := strOf(marker["runtime_id"]); rid != "" {
 				runtimeID = rid
 			}
