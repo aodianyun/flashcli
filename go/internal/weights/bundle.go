@@ -85,7 +85,7 @@ func ManifestSpecs(m *manifest.Manifest, variant string) (Spec, string, map[stri
 
 // DownloadBundle fetches a bundle's main + extra weights into the cache.
 // version feeds the cache key; use "local" for a bare local directory.
-func DownloadBundle(ctx context.Context, m *manifest.Manifest, version, variant string, quiet bool) (string, error) {
+func DownloadBundle(ctx context.Context, m *manifest.Manifest, version, variant string, quiet, verifyRemote bool) (string, error) {
 	main, rel, extra, err := ManifestSpecs(m, variant)
 	if err != nil {
 		return "", err
@@ -94,7 +94,7 @@ func DownloadBundle(ctx context.Context, m *manifest.Manifest, version, variant 
 	checkpoint := filepath.Join(cacheDir, filepath.FromSlash(rel))
 
 	if main.HasSource() {
-		if err := Download(ctx, main, checkpoint, quiet); err != nil {
+		if err := Download(ctx, main, checkpoint, quiet, verifyRemote); err != nil {
 			return "", err
 		}
 	}
@@ -104,7 +104,7 @@ func DownloadBundle(ctx context.Context, m *manifest.Manifest, version, variant 
 		if dest == "" {
 			return "", fmt.Errorf("extra_weights.%s: cannot resolve destination", key)
 		}
-		if err := Download(ctx, spec, dest, quiet); err != nil {
+		if err := Download(ctx, spec, dest, quiet, verifyRemote); err != nil {
 			return "", err
 		}
 	}
@@ -139,8 +139,8 @@ func EnvMap(m *manifest.Manifest, variant string) map[string]string {
 
 // PrepareBundle downloads main + extra_weights + extra_pull, runs post_pull, and
 // returns the checkpoint plus the manifest/post-pull env to pass to the entry.
-func PrepareBundle(ctx context.Context, m *manifest.Manifest, version, variant string, quiet bool) (string, map[string]string, error) {
-	checkpoint, err := DownloadBundle(ctx, m, version, variant, quiet)
+func PrepareBundle(ctx context.Context, m *manifest.Manifest, version, variant string, quiet, verifyRemote bool) (string, map[string]string, error) {
+	checkpoint, err := DownloadBundle(ctx, m, version, variant, quiet, verifyRemote)
 	if err != nil {
 		return "", nil, err
 	}
@@ -159,7 +159,7 @@ func PrepareBundle(ctx context.Context, m *manifest.Manifest, version, variant s
 				name = key
 			}
 			dest := filepath.Join(paths.Models(), name)
-			if err := Download(ctx, spec, dest, quiet); err != nil {
+			if err := Download(ctx, spec, dest, quiet, verifyRemote); err != nil {
 				return "", nil, err
 			}
 		}

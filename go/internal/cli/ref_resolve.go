@@ -170,7 +170,7 @@ func pullCmd() *cobra.Command {
 			if _, _, err := ensureBundleRuntime(m, bundleRoot, ver, variant, quiet, noAutoInstall); err != nil {
 				return failed(cmd, err)
 			}
-			checkpoint, _, err := weights.PrepareBundle(context.Background(), m, ver, variant, quiet)
+			checkpoint, _, err := weights.PrepareBundle(context.Background(), m, ver, variant, quiet, true)
 			if err != nil {
 				fmt.Fprintf(cmd.OutOrStderr(), "[!] %s\n", err)
 				return ErrFailed

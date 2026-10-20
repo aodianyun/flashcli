@@ -94,7 +94,7 @@ func TestDownloadHuggingFace(t *testing.T) {
 
 	dest := t.TempDir()
 	spec := Spec{Source: "huggingface", Repo: "o/r", Endpoint: srv.URL, Raw: map[string]any{}}
-	if err := Download(context.Background(), spec, dest, true); err != nil {
+	if err := Download(context.Background(), spec, dest, true, true); err != nil {
 		t.Fatalf("Download: %v", err)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dest, "model.safetensors")); string(b) != "weightsdata" {
@@ -124,7 +124,7 @@ func TestDownloadHuggingFaceResumes(t *testing.T) {
 	dest := t.TempDir()
 	writeFile(t, filepath.Join(dest, "model.safetensors.incomplete"), "wei")
 	spec := Spec{Source: "huggingface", Repo: "o/r", Endpoint: srv.URL, Raw: map[string]any{}}
-	if err := Download(context.Background(), spec, dest, true); err != nil {
+	if err := Download(context.Background(), spec, dest, true, true); err != nil {
 		t.Fatalf("Download: %v", err)
 	}
 	if got, _ := os.ReadFile(filepath.Join(dest, "model.safetensors")); string(got) != body {
@@ -164,7 +164,7 @@ func TestDownloadModelScope(t *testing.T) {
 
 	dest := t.TempDir()
 	spec := Spec{Source: "modelscope", Repo: "o/r", Endpoint: srv.URL, Raw: map[string]any{}}
-	if err := Download(context.Background(), spec, dest, true); err != nil {
+	if err := Download(context.Background(), spec, dest, true, true); err != nil {
 		t.Fatalf("Download: %v", err)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dest, "model.safetensors")); string(b) != "msdata" {
@@ -205,7 +205,7 @@ func TestModelScopeRevisionFallback(t *testing.T) {
 
 	dest := t.TempDir()
 	spec := Spec{Source: "modelscope", Repo: "o/r", Revision: "main", Endpoint: srv.URL, Raw: map[string]any{}}
-	if err := Download(context.Background(), spec, dest, true); err != nil {
+	if err := Download(context.Background(), spec, dest, true, true); err != nil {
 		t.Fatalf("Download: %v", err)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dest, "model.safetensors")); string(b) != "ms22" {
@@ -229,7 +229,7 @@ func TestLiveHuggingFaceMirror(t *testing.T) {
 		AllowPatterns: []string{"config.json"},
 		Raw:           map[string]any{},
 	}
-	if err := Download(context.Background(), spec, dest, true); err != nil {
+	if err := Download(context.Background(), spec, dest, true, true); err != nil {
 		t.Fatalf("Download: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dest, "config.json")); err != nil {
@@ -253,7 +253,7 @@ func TestLiveModelScope(t *testing.T) {
 		AllowPatterns: []string{"config.json"},
 		Raw:           map[string]any{},
 	}
-	if err := Download(context.Background(), spec, dest, true); err != nil {
+	if err := Download(context.Background(), spec, dest, true, true); err != nil {
 		t.Fatalf("Download: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dest, "config.json")); err != nil {

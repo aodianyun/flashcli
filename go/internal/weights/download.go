@@ -26,27 +26,41 @@ type remoteFile struct {
 	Size int64
 }
 
-// Download fetches spec into dest, resuming partial downloads. It is a no-op
-// when the destination already satisfies the spec's readiness rules.
-func Download(ctx context.Context, spec Spec, dest string, quiet bool) error {
+// Download fetches spec into dest, resuming partial downloads.
+//
+// Two independent concerns:
+//   - host download completeness: the per-destination manifest
+//     (.flashcli_download.json) records the expected remote file set; the cache
+//     is complete only when every file is present with its size;
+//   - bundle readiness: bundleWeightsReady applies flashcli-bundle.json rules.
+//
+// verifyRemote is true only for an explicit pull: it forces a remote listing so
+// completeness is verified and the manifest is (re)written. run/serve pass
+// false: when a manifest exists the check is local-only, and a legacy cache
+// (no manifest) that satisfies the bundle's declared readiness is accepted
+// without touching the network — so a completed pull always runs offline.
+func Download(ctx context.Context, spec Spec, dest string, quiet, verifyRemote bool) error {
 	if dest == "" {
 		return errors.New("weights: empty destination")
 	}
-	if weightsCacheReady(dest, spec) {
-		if !quiet {
-			fmt.Fprintf(os.Stderr, "Weights already cached: %s\n", dest)
-		}
-		return nil
-	}
-	if err := prepareDest(dest, quiet, spec); err != nil {
-		return err
-	}
 	switch spec.Source {
-	case "huggingface":
-		return downloadHuggingFace(ctx, spec, dest, quiet)
-	case "modelscope":
-		return downloadModelScope(ctx, spec, dest, quiet)
+	case "huggingface", "modelscope":
+		return downloadRemote(ctx, spec, dest, quiet, verifyRemote, func() error {
+			if spec.Source == "modelscope" {
+				return downloadModelScope(ctx, spec, dest, quiet)
+			}
+			return downloadHuggingFace(ctx, spec, dest, quiet)
+		})
 	case "bundled":
+		if bundleWeightsReady(dest, spec) {
+			if !quiet {
+				fmt.Fprintf(os.Stderr, "Weights already cached: %s\n", dest)
+			}
+			return nil
+		}
+		if err := prepareDest(dest, quiet, spec); err != nil {
+			return err
+		}
 		return copyBundled(spec, dest, quiet)
 	case "url":
 		return errors.New("weights.source=url is reserved; use huggingface or modelscope repo")
@@ -55,8 +69,36 @@ func Download(ctx context.Context, spec Spec, dest string, quiet bool) error {
 	}
 }
 
-// weightsCacheReady mirrors Python _weights_cache_ready.
-func weightsCacheReady(dest string, spec Spec) bool {
+// downloadRemote enforces host completeness and bundle readiness separately.
+func downloadRemote(ctx context.Context, spec Spec, dest string, quiet, verifyRemote bool, download func() error) error {
+	man, hasManifest := readDownloadManifest(dest, spec.Repo)
+	if hasManifest {
+		if len(manifestMissing(dest, manifestFiles(man))) == 0 {
+			if !quiet {
+				fmt.Fprintf(os.Stderr, "Weights already cached: %s\n", dest)
+			}
+			return nil
+		}
+		// Manifest present but incomplete: the download did not complete.
+	} else if !verifyRemote && bundleWeightsReady(dest, spec) {
+		// Legacy cache (pre-manifest) on run/serve: accept locally, no network.
+		if !quiet {
+			fmt.Fprintf(os.Stderr, "Weights already cached (bundle readiness; no download manifest): %s\n", dest)
+		}
+		return nil
+	}
+	if err := download(); err != nil {
+		return err
+	}
+	if !bundleWeightsReady(dest, spec) {
+		return fmt.Errorf("bundle weight requirements not met in %s: check require_norm_stats / allow_patterns / require_any_patterns against the downloaded files", dest)
+	}
+	return nil
+}
+
+// bundleWeightsReady is the bundle-side readiness check: it applies rules
+// declared in flashcli-bundle.json. It is NOT the download-completeness check.
+func bundleWeightsReady(dest string, spec Spec) bool {
 	if len(spec.RequireAnyPatterns) > 0 || spec.CheckpointSubdir != "" {
 		return ExtraWeightsReady(dest, spec)
 	}

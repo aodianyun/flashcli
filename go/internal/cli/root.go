@@ -173,7 +173,7 @@ func weightsPullCmd() *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStderr(), "[!] %s\n", err)
 				return ErrFailed
 			}
-			checkpoint, err := weights.DownloadBundle(context.Background(), m, ver, variant, quiet)
+			checkpoint, err := weights.DownloadBundle(context.Background(), m, ver, variant, quiet, true)
 			if err != nil {
 				fmt.Fprintf(cmd.OutOrStderr(), "[!] %s\n", err)
 				return ErrFailed
