@@ -97,6 +97,37 @@ sequenceDiagram
 
 **Resolution order**: local positional path (directory with `flashcli-bundle.json`) > synced bundle cache (preset marker under `bundles/<cache-key>/`); FlashHub refs are synced via `bundle sync`.
 
+## Weights cache: completeness vs readiness (offline guarantee)
+
+Two independent checks, deliberately separated:
+
+1. **Host — download completeness.** After a successful download the host writes
+   `<weights_dir>/.flashcli_download.json`, recording the remote file set
+   (`path`, `size`). A cache is complete only when every recorded file exists
+   with its recorded size. This is model-agnostic: it never encodes
+   bundle-specific filenames.
+2. **Bundle — readiness.** `flashcli-bundle.json` declares what the entry needs
+   (`allow_patterns`, `require_any_patterns`, `require_norm_stats`); the host
+   evaluates those rules only to decide whether the bundle is usable.
+
+**Network policy — `run`/`serve` are local-first:**
+
+- a **complete download manifest** → local verification only (no network);
+- a **legacy cache without a manifest** → evaluate the bundle's declared
+  readiness **locally** (no network);
+- only when the cache is genuinely **absent/incomplete** does `run`/`serve`
+  auto-prepare (the download needs network); a successful download writes the
+  manifest.
+
+Therefore **once preparation succeeds** (bundle tree + weights + venv/deps),
+every later `run`/`serve` runs **offline**. Network is only needed when artifacts
+are missing, on an explicit `flashcli pull` (which forces remote verification),
+or when a protocol `CACHE_SCHEMA_VERSION` change requires upgrading the venv's
+`flashcli-bundle`.
+
+A manifest that exists but is **incomplete is never accepted**, even if the
+lenient bundle readiness would otherwise pass.
+
 ## Local directories
 
 ```text
@@ -106,7 +137,7 @@ sequenceDiagram
 ├── runtimes/<id>/           # bundle venv + .runtime.json marker
 ├── bundles/<name>/<version>/.flashcli_bundle.json   # synced tree (shared by all @variant)
 ├── cache/repo-index/        # FlashHub listing cache
-└── models/<name>/<version>/<weights_dir>/           # per-variant weights (default checkpoint/)
+└── models/<name>/<version>/<weights_dir>/           # per-variant weights (default checkpoint/) + .flashcli_download.json
 ```
 
 ## Bundle layout (after sync)

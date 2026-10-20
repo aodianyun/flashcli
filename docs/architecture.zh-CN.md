@@ -96,6 +96,28 @@ sequenceDiagram
 
 **Bundle 解析顺序**：本地 positional path（含 `flashcli-bundle.json` 的目录）> 已 sync 的 bundle 缓存（`bundles/<cache-key>/` 下 preset marker）；FlashHub ref 由 `bundle sync` 同步。
 
+## 权重缓存：下载完整性 vs 就绪（离线保证）
+
+两项独立检查，刻意分开：
+
+1. **主机 —— 下载完整性。** 下载成功后主机写入
+   `<weights_dir>/.flashcli_download.json`，记录远端文件集（`path`、`size`）。
+   只有当清单内每个文件都存在且 size 匹配时才算完整。该检查与模型无关，绝不含
+   bundle 专属文件名。
+2. **Bundle —— 就绪。** `flashcli-bundle.json` 声明 entry 需要什么
+   （`allow_patterns`、`require_any_patterns`、`require_norm_stats`）；主机仅用这些
+   规则判断“该 bundle 是否可用”。
+
+**网络策略 —— `run`/`serve` 本地优先：**
+
+- 有**完整的下载清单** → 纯本地校验（不联网）；
+- **无清单的旧缓存** → 按 bundle 声明在**本地**判断就绪（不联网）；
+- 仅当缓存确实**缺失/不完整**时，`run`/`serve` 才自动准备（下载需要联网）；下载成功后写入清单。
+
+因此**一旦准备成功**（bundle 树 + 权重 + venv/依赖），此后每次 `run`/`serve` 都**离线可用**。只有产物缺失、显式 `flashcli pull`（强制远端校验）或协议 `CACHE_SCHEMA_VERSION` 变化需要升级 venv 内 `flashcli-bundle` 时才需要联网。
+
+清单存在但**不完整时绝不接受**，即使宽松的 bundle 就绪判定会通过。
+
 ## 本机目录
 
 ```text
@@ -105,7 +127,7 @@ sequenceDiagram
 ├── runtimes/<id>/           # bundle venv + .runtime.json marker
 ├── bundles/<name>/<version>/.flashcli_bundle.json   # 同步树（所有 @variant 共享）
 ├── cache/repo-index/        # FlashHub listing 缓存
-└── models/<name>/<version>/<weights_dir>/           # 各 variant 权重（默认 checkpoint/）
+└── models/<name>/<version>/<weights_dir>/           # 各 variant 权重（默认 checkpoint/）+ .flashcli_download.json
 ```
 
 ## Bundle 布局（sync 后）

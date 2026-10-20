@@ -48,6 +48,8 @@ Python tests only cover `flashcli_bundle` (protocol/infer) + conformance now; in
 - Bundle venvs get `flashcli-bundle[infer]` + manifest `python_dependencies` only; resolution source is `FLASHCLI_BUNDLE_PIP_SPEC` / local `flashcli-bundle/` / `FLASHCLI_INSTALL_REPO`+`REF` (see `go/internal/venv/spec.go`).
 - The host is a **generic, model-agnostic driver**: no model-specific logic (forward, preprocessing/postprocessing, modality shapes/dtypes, option→port mapping/defaults) outside the bundle. Python bundles own it in `entry`; native bundles declare it in the manifest `native` block + runtime port descriptors. Never hardcode a model's constants/shapes/preprocessing in `go/`.
 - Manifest `protocol_version` must equal `flashcli_bundle.version.PROTOCOL_VERSION` (currently `1`); native kinds add `runtime_abi_version` / `exec_protocol_version` = `1`.
+- **Weights: download completeness ≠ bundle readiness.** The host owns download completeness (`.flashcli_download.json`: remote `path`+`size`, model-agnostic); the bundle owns readiness via `flashcli-bundle.json` (`allow_patterns`/`require_any_patterns`/`require_norm_stats`). Never encode model-specific filenames in `go/`.
+- **Offline guarantee:** `run`/`serve` are local-first — a complete manifest or a legacy cache that satisfies bundle readiness is accepted **without network**; network is used only when artifacts are missing, on an explicit `flashcli pull` (forces remote verification), or for a protocol `CACHE_SCHEMA_VERSION` upgrade. Once preparation succeeds, later runs must work offline. A manifest that is present but incomplete is never accepted.
 
 Details: `docs/module_layers.md`, `docs/architecture.md`, `docs/bundle_execution_abi.md`.
 
