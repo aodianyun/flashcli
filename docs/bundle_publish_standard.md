@@ -488,7 +488,7 @@ manifest `env` example (Qwen variant, excerpt):
 | manifest `env` | **not applied** | **applied** |
 | `post_pull` env | `post_pull` may still run to prepare files on disk; script entry should prefer `FLASHCLI_*` above | e.g. `FLASH_RT_PALIGEMMA_TOKENIZER` |
 | `run_options` / `serve_options` | `--help` documentation only; flags in `argv` | parsed by flashcli and passed to engine |
-| `--checkpoint` | stays in `argv`; also used for validation → `FLASHCLI_CHECKPOINT` | parsed by flashcli → `load()`, no `FLASHCLI_CHECKPOINT` |
+| `--checkpoint` | **consumed by flashcli** (not forwarded to the entry); provided as `FLASHCLI_CHECKPOINT` | parsed by flashcli → `load()`, no `FLASHCLI_CHECKPOINT` |
 | `--mtp-checkpoint` | **not** parsed by flashcli (passed in `argv`); use `FLASHCLI_EXTRA_WEIGHT_*` | sets `FLASHRT_QWEN36_MTP_CKPT_DIR` |
 
 #### 4.4.4 Do not rely on in entry code

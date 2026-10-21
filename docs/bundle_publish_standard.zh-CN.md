@@ -488,7 +488,7 @@ manifest `env` 示例（Qwen variant，节选）：
 | manifest `env` | **不应用** | **应用** |
 | `post_pull` 写入的 env | 若 manifest 含 `post_pull` 仍会执行（准备磁盘文件）；script entry 一般 **不依赖** 其 env，优先用上表 `FLASHCLI_*` | 可读，如 `FLASH_RT_PALIGEMMA_TOKENIZER` |
 | `run_options` / `serve_options` | 仅 `--help` 文档；参数在 `argv` 中 | 由 flashcli 解析并传入 engine |
-| `--checkpoint` | 留在 `argv`；同时用于 flashcli 校验并写入 `FLASHCLI_CHECKPOINT` | flashcli 解析；传入 `load()`，不写 `FLASHCLI_CHECKPOINT` |
+| `--checkpoint` | **由 flashcli 消费**（不转发给 entry）；通过 `FLASHCLI_CHECKPOINT` 提供 | flashcli 解析；传入 `load()`，不写 `FLASHCLI_CHECKPOINT` |
 | `--mtp-checkpoint` | **不** 由 flashcli 解析（原样在 `argv`）；扩展权重用 `FLASHCLI_EXTRA_WEIGHT_*` | 写入 `FLASHRT_QWEN36_MTP_CKPT_DIR` |
 
 #### 4.4.4 请勿在 entry 中依赖
