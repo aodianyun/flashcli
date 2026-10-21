@@ -117,7 +117,7 @@ func ExtraWeightsReady(dir string, spec Spec) bool {
 func MatchFileUnder(dir, pattern string) bool {
 	found := false
 	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+		if err != nil || d.IsDir() || isDownloadMetadata(d.Name()) {
 			return nil
 		}
 		rel, relErr := filepath.Rel(dir, path)

@@ -75,10 +75,16 @@ const incompleteMarker = ".flashcli_download.incomplete"
 func downloadRemote(ctx context.Context, spec Spec, dest string, quiet, verifyRemote bool, download func(relist bool) error) error {
 	man, hasManifest := readDownloadManifest(dest, spec.Repo)
 	marker := filepath.Join(dest, incompleteMarker)
+	// A manifest file that cannot be parsed (or belongs to another repo) must
+	// not be mistaken for a legacy cache: force a fresh listing.
+	manifestPresent := fileExists(downloadManifestPath(dest))
 	// An explicit pull re-lists the remote even when the local manifest is
 	// complete, so upstream changes are picked up.
 	if hasManifest && !verifyRemote {
 		if len(manifestMissing(dest, manifestFiles(man))) == 0 {
+			if !bundleWeightsReady(dest, spec) {
+				return fmt.Errorf("bundle weight requirements not met in %s: check require_norm_stats / allow_patterns / require_any_patterns against the downloaded files", dest)
+			}
 			_ = os.Remove(marker)
 			if !quiet {
 				fmt.Fprintf(os.Stderr, "Weights already cached: %s\n", dest)
@@ -86,7 +92,7 @@ func downloadRemote(ctx context.Context, spec Spec, dest string, quiet, verifyRe
 			return nil
 		}
 		// Manifest present but incomplete: the download did not complete.
-	} else if !hasManifest && !verifyRemote && !fileExists(marker) && bundleWeightsReady(dest, spec) {
+	} else if !hasManifest && !manifestPresent && !verifyRemote && !fileExists(marker) && bundleWeightsReady(dest, spec) {
 		// Legacy cache (pre-manifest) on run/serve: accept locally, no network.
 		// An interrupted download leaves incompleteMarker, so it is never
 		// mistaken for a legacy ready cache.
@@ -105,6 +111,11 @@ func downloadRemote(ctx context.Context, spec Spec, dest string, quiet, verifyRe
 		return err
 	}
 	if !bundleWeightsReady(dest, spec) {
+		// The download itself may be complete while the bundle's readiness
+		// rules fail; the marker describes download state, so clear it.
+		if man, ok := readDownloadManifest(dest, spec.Repo); ok && len(manifestMissing(dest, manifestFiles(man))) == 0 {
+			_ = os.Remove(marker)
+		}
 		return fmt.Errorf("bundle weight requirements not met in %s: check require_norm_stats / allow_patterns / require_any_patterns against the downloaded files", dest)
 	}
 	_ = os.Remove(marker)
@@ -128,12 +139,20 @@ func prepareDest(dest string, quiet bool, spec Spec) error {
 	if err != nil {
 		return err
 	}
-	if len(entries) > 0 && !quiet {
+	count := 0
+	for _, e := range entries {
+		switch e.Name() {
+		case downloadManifestName, incompleteMarker:
+			continue
+		}
+		count++
+	}
+	if count > 0 && !quiet {
 		hub := "HuggingFace"
 		if spec.Source == "modelscope" {
 			hub = "ModelScope"
 		}
-		fmt.Fprintf(os.Stderr, "Resuming incomplete %s download (%d cached entries): %s\n", hub, len(entries), dest)
+		fmt.Fprintf(os.Stderr, "Resuming incomplete %s download (%d cached entries): %s\n", hub, count, dest)
 	}
 	return nil
 }

@@ -27,6 +27,14 @@ func downloadManifestPath(dest string) string {
 	return filepath.Join(dest, downloadManifestName)
 }
 
+// isDownloadMetadata reports host bookkeeping files that must never satisfy a
+// bundle's allow_patterns / require_any_patterns readiness check.
+func isDownloadMetadata(name string) bool {
+	return name == downloadManifestName ||
+		name == incompleteMarker ||
+		strings.HasPrefix(name, downloadManifestName+".tmp-")
+}
+
 // readDownloadManifest loads the manifest for dest if it belongs to repo.
 // Revision is intentionally not part of the match: bundles pin immutable
 // revisions, and ModelScope may resolve a fallback revision name.
@@ -57,7 +65,27 @@ func writeDownloadManifest(dest, repo, rev string, files []remoteFile) error {
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(downloadManifestPath(dest), append(blob, '\n'), 0o644)
+	tmp, err := os.CreateTemp(dest, downloadManifestName+".tmp-")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if _, err := tmp.Write(append(blob, '\n')); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpName, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, downloadManifestPath(dest))
 }
 
 func manifestFiles(m *downloadManifest) []remoteFile {

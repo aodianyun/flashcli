@@ -267,3 +267,86 @@ func TestHuggingFaceWritesManifestBeforeDownload(t *testing.T) {
 		t.Fatalf("manifest before download = %+v ok=%v", man, ok)
 	}
 }
+
+// A complete manifest must still satisfy the bundle's declared readiness.
+func TestDownloadRemoteCompleteManifestChecksReadiness(t *testing.T) {
+	dir := t.TempDir()
+	fakeCheckpoint(t, dir)
+	if err := writeDownloadManifest(dir, "repo", "rev", []remoteFile{
+		{Path: "config.json", Size: 2}, {Path: "model.safetensors", Size: 8},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	err := downloadRemote(context.Background(),
+		Spec{Source: "huggingface", Repo: "repo", RequireAnyPatterns: []string{"missing.bin"}},
+		dir, true, false,
+		func(bool) error { called = true; return nil })
+	if err == nil {
+		t.Fatal("complete manifest with failed bundle readiness must error")
+	}
+	if called {
+		t.Fatal("no download should be attempted for a complete manifest")
+	}
+}
+
+// A corrupt manifest must force a fresh listing instead of the legacy shortcut.
+func TestDownloadRemoteCorruptManifestIsNotLegacy(t *testing.T) {
+	dir := t.TempDir()
+	fakeCheckpoint(t, dir)
+	if err := os.WriteFile(downloadManifestPath(dir), []byte("{invalid"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	err := downloadRemote(context.Background(),
+		Spec{Source: "huggingface", Repo: "repo"}, dir, true, false,
+		func(bool) error {
+			called = true
+			return writeDownloadManifest(dir, "repo", "rev", []remoteFile{
+				{Path: "config.json", Size: 2}, {Path: "model.safetensors", Size: 8},
+			})
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("corrupt manifest must not be treated as a legacy cache")
+	}
+}
+
+// Host bookkeeping files must not satisfy bundle readiness patterns.
+func TestHostMetadataDoesNotSatisfyReadiness(t *testing.T) {
+	dir := t.TempDir()
+	if err := writeDownloadManifest(dir, "repo", "rev", []remoteFile{
+		{Path: "a.bin", Size: 1},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if HasCachedWeightFiles(dir, []string{"*.json"}, false) {
+		t.Fatal("manifest must not satisfy allow_patterns=*.json")
+	}
+	if ExtraWeightsReady(dir, Spec{RequireAnyPatterns: []string{"*.json"}}) {
+		t.Fatal("manifest must not satisfy require_any_patterns=*.json")
+	}
+}
+
+// A complete download with failed readiness is not an in-progress download.
+func TestDownloadRemoteReadinessFailureClearsMarker(t *testing.T) {
+	dir := t.TempDir()
+	fakeCheckpoint(t, dir)
+	if err := writeDownloadManifest(dir, "repo", "rev", []remoteFile{
+		{Path: "config.json", Size: 2}, {Path: "model.safetensors", Size: 8},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	err := downloadRemote(context.Background(),
+		Spec{Source: "huggingface", Repo: "repo", RequireAnyPatterns: []string{"missing.bin"}},
+		dir, true, true,
+		func(bool) error { return nil })
+	if err == nil {
+		t.Fatal("expected readiness failure")
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, incompleteMarker)); statErr == nil {
+		t.Fatal("complete download with failed readiness must not leave the incomplete marker")
+	}
+}
