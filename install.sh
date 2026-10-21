@@ -82,12 +82,15 @@ apply_mirror_endpoints() {
   export PIP_TRUSTED_HOST="${PIP_TRUSTED_HOST:-$MIRROR_PIP_TRUSTED_HOST}"
   export HF_ENDPOINT="${HF_ENDPOINT:-$MIRROR_HF_ENDPOINT}"
   export FLASHCLI_PREFER_HF_MIRROR=1
+  export GOPROXY="${GOPROXY:-https://goproxy.cn,direct}"
+  export GOSUMDB="${GOSUMDB:-sum.golang.google.cn}"
   case "${FLASHCLI_GIT_PROXY:-}" in
     0|false|no|off) ;;
     *) export FLASHCLI_GIT_PROXY="${FLASHCLI_GIT_PROXY:-$DEFAULT_GIT_PROXY_PREFIX}" ;;
   esac
   info "mirror: PIP_INDEX_URL=${PIP_INDEX_URL}"
   info "mirror: HF_ENDPOINT=${HF_ENDPOINT}"
+  info "mirror: GOPROXY=${GOPROXY}"
   [ -n "${FLASHCLI_GIT_PROXY:-}" ] && info "mirror: FLASHCLI_GIT_PROXY=${FLASHCLI_GIT_PROXY}"
   return 0
 }
@@ -215,20 +218,43 @@ ensure_git() {
   install_os_packages git || true
   have_cmd git || { die "git is required for --from-source"; tool_hint git; }
 }
+# go_version_ok: Go >= 1.24 (go.mod requires it).
+go_version_ok() {
+  have_cmd go || return 1
+  v="$(go env GOVERSION 2>/dev/null | sed 's/^go//')"
+  [ -n "$v" ] || return 1
+  major="$(printf '%s' "$v" | cut -d. -f1)"
+  minor="$(printf '%s' "$v" | cut -d. -f2)"
+  [ "$major" -gt 1 ] 2>/dev/null && return 0
+  [ "$major" -eq 1 ] 2>/dev/null && [ "$minor" -ge 24 ] 2>/dev/null
+}
 ensure_go() {
-  have_cmd go && return 0
-  warn "Go not found — installing ..."
-  install_os_packages golang-go || install_os_packages golang || true
-  have_cmd go && return 0
+  go_version_ok && return 0
+  if have_cmd go; then
+    warn "Go $(go env GOVERSION 2>/dev/null) is older than 1.24 — provisioning Go 1.24"
+  else
+    warn "Go not found — installing ..."
+  fi
+  # Prefer the pinned release tarball: distro packages often ship < 1.24 and
+  # with an unreachable proxy.golang.org the auto toolchain download fails.
   gover="${FLASHCLI_GO_TOOLCHAIN_VERSION:-1.24.0}"
   dest="${FLASHCLI_GO_ROOT:-$HOME/.local}"; mkdir -p "$dest"
   if [ "$MIRROR" = 1 ]; then gbase="https://mirrors.aliyun.com/golang"; else gbase="https://go.dev/dl"; fi
-  tgz="$dest/go${gover}.linux-${goarch}.tar.gz"
-  info "downloading Go ${gover} -> $dest"
-  fetch "${gbase}/go${gover}.linux-${goarch}.tar.gz" "$tgz"
-  tar -C "$dest" -xzf "$tgz" && rm -f "$tgz"
-  export PATH="$dest/go/bin:$PATH"
-  have_cmd go || die "failed to provision Go; install Go >= 1.24 and re-run"; 
+  if ensure_download_tool; then
+    tgz="$dest/go${gover}.linux-${goarch}.tar.gz"
+    info "downloading Go ${gover} -> $dest"
+    if fetch "${gbase}/go${gover}.linux-${goarch}.tar.gz" "$tgz"; then
+      rm -rf "$dest/go"
+      tar -C "$dest" -xzf "$tgz" && rm -f "$tgz"
+      export PATH="$dest/go/bin:$PATH"
+    else
+      warn "failed to download Go ${gover} from ${gbase}; trying the OS package manager"
+    fi
+  fi
+  if ! go_version_ok; then
+    install_os_packages golang-go || install_os_packages golang || true
+  fi
+  go_version_ok || die "Go >= 1.24 is required; install Go 1.24 and re-run (or set FLASHCLI_GO_ROOT)"
 }
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -248,6 +274,7 @@ install_source() {
   fi
   [ -f "$SOURCE_DIR/scripts/build_go.sh" ] || die "not a flashcli source checkout: $SOURCE_DIR"
   ensure_go
+  export GOTOOLCHAIN=local
   info "building flashcli from $SOURCE_DIR"
   ( cd "$SOURCE_DIR" && bash scripts/build_go.sh >/dev/null )
   [ -f "$SOURCE_DIR/dist/go/$asset" ] || die "build did not produce $SOURCE_DIR/dist/go/$asset"
