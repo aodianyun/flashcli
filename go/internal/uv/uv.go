@@ -6,7 +6,9 @@
 package uv
 
 import (
+	"archive/tar"
 	"archive/zip"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -30,6 +32,11 @@ import (
 
 // MinVersion is the oldest uv accepted (uv venv/pip CLI we rely on).
 const MinVersion = "0.5.0"
+
+// DefaultVersion is used for the GitHub fallback when the PyPI index cannot be
+// queried (and FLASHCLI_UV_VERSION is unset). The PyPI path normally resolves
+// the latest stable version from the index.
+const DefaultVersion = "0.13.4"
 
 // HTTPClient is replaceable in tests.
 var HTTPClient = &http.Client{}
@@ -142,7 +149,7 @@ func Ensure(ctx context.Context, quiet, autoInstall bool) (string, error) {
 		ver = latestVersion(ctx, quiet)
 	}
 	if ver == "" {
-		return "", fmt.Errorf("cannot resolve a uv version from the PyPI index (set FLASHCLI_UV_VERSION or FLASHCLI_UV_BIN)")
+		ver = DefaultVersion
 	}
 	return Provision(ctx, ver, quiet)
 }
@@ -306,9 +313,25 @@ func latestVersion(ctx context.Context, quiet bool) string {
 	return versions[len(versions)-1]
 }
 
-// Provision downloads uv <version> from the PyPI index and extracts the binary.
+// Provision downloads uv <version>: the PyPI wheel first (CN mirror), then the
+// GitHub release tarball as a fallback.
 func Provision(ctx context.Context, version string, quiet bool) (string, error) {
 	version = strings.TrimPrefix(strings.TrimSpace(version), "v")
+	bin, pypiErr := provisionPyPI(ctx, version, quiet)
+	if pypiErr == nil {
+		return bin, nil
+	}
+	if !quiet {
+		progress.Warn("uv: PyPI provisioning failed (%v); trying the GitHub release", pypiErr)
+	}
+	bin, ghErr := provisionGitHub(ctx, version, quiet)
+	if ghErr == nil {
+		return bin, nil
+	}
+	return "", fmt.Errorf("cannot provision uv %s: pypi: %v; github: %v", version, pypiErr, ghErr)
+}
+
+func provisionPyPI(ctx context.Context, version string, quiet bool) (string, error) {
 	ws, err := wheels(ctx)
 	if err != nil {
 		return "", err
@@ -438,4 +461,132 @@ func extractBinary(wheelPath, destDir string) (string, error) {
 		return "", err
 	}
 	return dest, nil
+}
+
+func githubArch() (string, error) {
+	if runtime.GOOS != "linux" {
+		return "", fmt.Errorf("unsupported platform %s (uv GitHub fallback is linux-only)", runtime.GOOS)
+	}
+	switch runtime.GOARCH {
+	case "amd64":
+		return "x86_64", nil
+	case "arm64":
+		return "aarch64", nil
+	default:
+		return "", fmt.Errorf("unsupported arch %s", runtime.GOARCH)
+	}
+}
+
+var sha256Re = regexp.MustCompile(`\b[0-9a-fA-F]{64}\b`)
+
+func firstSHA256(text string) string {
+	return strings.ToLower(sha256Re.FindString(text))
+}
+
+func fetchBytes(ctx context.Context, rawURL string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch %s: HTTP %d", rawURL, resp.StatusCode)
+	}
+	return io.ReadAll(resp.Body)
+}
+
+// provisionGitHub downloads the pinned uv release tarball (sha256-verified) and
+// extracts the binary. Used when the PyPI index is unavailable.
+func provisionGitHub(ctx context.Context, version string, quiet bool) (string, error) {
+	arch, err := githubArch()
+	if err != nil {
+		return "", err
+	}
+	base := fmt.Sprintf("https://github.com/astral-sh/uv/releases/download/%s/uv-%s-unknown-linux-gnu.tar.gz", version, arch)
+	sumBlob, err := fetchBytes(ctx, base+".sha256")
+	if err != nil {
+		return "", err
+	}
+	want := firstSHA256(string(sumBlob))
+	if want == "" {
+		return "", fmt.Errorf("no sha256 found at %s.sha256", base)
+	}
+	if !quiet {
+		progress.Note("uv: provisioning %s from the GitHub release", version)
+	}
+	tmp, err := os.CreateTemp("", "uv-*.tar.gz")
+	if err != nil {
+		return "", err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if err := download(ctx, base, tmp); err != nil {
+		tmp.Close()
+		return "", err
+	}
+	if err := tmp.Close(); err != nil {
+		return "", err
+	}
+	if err := verifyFile(tmpName, want); err != nil {
+		return "", err
+	}
+	return extractTarGzBinary(tmpName, toolsDir(version))
+}
+
+func extractTarGzBinary(archivePath, destDir string) (string, error) {
+	f, err := os.Open(archivePath)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return "", err
+	}
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		if hdr.Typeflag != tar.TypeReg || filepath.Base(hdr.Name) != "uv" {
+			continue
+		}
+		if err := os.MkdirAll(destDir, 0o755); err != nil {
+			return "", err
+		}
+		dest := filepath.Join(destDir, "uv")
+		tmp := dest + ".tmp"
+		out, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+		if err != nil {
+			return "", err
+		}
+		if _, err := io.Copy(out, tr); err != nil {
+			out.Close()
+			os.Remove(tmp)
+			return "", err
+		}
+		if err := out.Close(); err != nil {
+			os.Remove(tmp)
+			return "", err
+		}
+		if err := os.Chmod(tmp, 0o755); err != nil {
+			os.Remove(tmp)
+			return "", err
+		}
+		if err := os.Rename(tmp, dest); err != nil {
+			os.Remove(tmp)
+			return "", err
+		}
+		return dest, nil
+	}
+	return "", fmt.Errorf("uv binary not found in GitHub archive")
 }

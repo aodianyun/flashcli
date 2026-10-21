@@ -92,3 +92,13 @@ func (in *Installer) uvIndexArgs(args []string) []string {
 	}
 	return nil
 }
+
+// InstallArgs installs pip-style *args* into the venv using the selected
+// backend (uv by default, pip escape hatch).
+func InstallArgs(ctx context.Context, runner Runner, python string, args []string, quiet bool) error {
+	inst, err := SelectInstaller(ctx, Options{Quiet: quiet, Runner: runner})
+	if err != nil {
+		return err
+	}
+	return inst.Install(ctx, python, args)
+}

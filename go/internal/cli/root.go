@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -278,6 +279,21 @@ func cacheCmd() *cobra.Command {
 	clean.Flags().BoolVar(&useUV, "uv", false, "Remove the uv package cache (UV_CACHE_DIR)")
 	clean.Flags().BoolVar(&useTools, "tools", false, "Remove provisioned uv binaries (~/.flashcli/tools/uv)")
 	clean.Flags().BoolVar(&useAll, "all", false, "Remove both")
-	root.AddCommand(clean)
+	prune := &cobra.Command{
+		Use:   "prune",
+		Short: "Prune unused uv cache entries",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			bin, err := uv.Ensure(context.Background(), true, false)
+			if err != nil {
+				fmt.Fprintln(cmd.OutOrStdout(), "[i] uv not available; nothing to prune")
+				return nil
+			}
+			c := exec.CommandContext(context.Background(), bin, "cache", "prune")
+			c.Stdout = cmd.OutOrStdout()
+			c.Stderr = cmd.OutOrStderr()
+			return c.Run()
+		},
+	}
+	root.AddCommand(clean, prune)
 	return root
 }

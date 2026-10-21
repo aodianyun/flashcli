@@ -122,10 +122,11 @@ sequenceDiagram
 
 bundle venv 默认用 **uv** 创建与安装（仍保持每模型隔离）。uv **不随 flashcli 发布**：`uv.Ensure` 依次解析 `FLASHCLI_UV_BIN` → `PATH` 上的 `uv` → 已供给的副本；否则从配置的 PyPI 索引（国内镜像）按需下载并校验 sha256，安装到 `~/.flashcli/tools/uv/<version>/`。
 
-- `uv venv --python <base> --seed` 建 venv；`uv pip install --python …` 安装 `flashcli-bundle[infer]`、torch 与 manifest 依赖。
+- 供给优先使用配置的 **PyPI 索引**（wheel，校验 sha256），失败回退 **GitHub Release** 的 tarball（校验 sha256）。
+- `uv venv --python <base> --seed` 建 venv；`uv pip install --python …` 安装 `flashcli-bundle[infer]`、torch 与 manifest 依赖。协议升级与 CUDA userland 安装也走同一安装器。
 - `UV_CACHE_DIR` 默认 `~/.flashcli/cache/uv`（与 `runtimes/` 同文件系统，uv 用**硬链接**共享 wheel，torch/CUDA 重层只存一份）；`UV_LINK_MODE=hardlink`。
 - `FLASHCLI_VENV_BACKEND=pip` 是显式逃生口（已弃用）；默认 `uv` 在不可用时明确报错。native bundle 不需要 uv。
-- venv 建好后即可离线使用（uv 只在安装时需要）；`flashcli cache clean [--uv|--tools|--all]` 可清理 uv 缓存/已供给二进制，不影响已建 venv。
+- venv 建好后即可离线使用（uv 只在安装时需要）；`flashcli cache clean [--uv|--tools|--all]` 可清理 uv 缓存/已供给二进制，不影响已建 venv；`flashcli cache prune` 清理未使用的 uv 缓存项。
 
 ## 本机目录
 

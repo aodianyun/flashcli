@@ -1,9 +1,12 @@
 package uv
 
 import (
+	"archive/tar"
 	"archive/zip"
+	"compress/gzip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -95,5 +98,77 @@ func TestEnvDefaults(t *testing.T) {
 		if !strings.Contains(env, want) {
 			t.Fatalf("Env missing %q:\n%s", want, env)
 		}
+	}
+}
+
+func TestFirstSHA256(t *testing.T) {
+	h := strings.Repeat("a1", 32)
+	if got := firstSHA256(h + "  uv-x86_64.tar.gz\n"); got != h {
+		t.Fatalf("got %q want %q", got, h)
+	}
+	if got := firstSHA256("no hash here"); got != "" {
+		t.Fatalf("got %q want empty", got)
+	}
+}
+
+func TestGithubArch(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("linux only")
+	}
+	got, err := githubArch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	switch runtime.GOARCH {
+	case "amd64":
+		if got != "x86_64" {
+			t.Fatalf("got %q", got)
+		}
+	case "arm64":
+		if got != "aarch64" {
+			t.Fatalf("got %q", got)
+		}
+	}
+}
+
+func TestExtractTarGzBinary(t *testing.T) {
+	dir := t.TempDir()
+	archive := filepath.Join(dir, "uv.tar.gz")
+	f, err := os.Create(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gz := gzip.NewWriter(f)
+	tw := tar.NewWriter(gz)
+	body := []byte("#!/bin/sh\necho uv2\n")
+	if err := tw.WriteHeader(&tar.Header{Name: "uv-x86_64-unknown-linux-gnu/uv", Mode: 0o755, Size: int64(len(body)), Typeflag: tar.TypeReg}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(body); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	bin, err := extractTarGzBinary(archive, filepath.Join(dir, "out"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&0o111 == 0 {
+		t.Fatalf("not executable: %v", info.Mode())
+	}
+	blob, _ := os.ReadFile(bin)
+	if !strings.Contains(string(blob), "echo uv2") {
+		t.Fatalf("unexpected contents: %q", blob)
 	}
 }

@@ -74,14 +74,16 @@ uv 安装器（Python bundle venv；uv **不随包发布**，按需供给）：
 |------|--------|------|
 | `FLASHCLI_VENV_BACKEND` | `uv` | `uv`（必需）、`pip`（已弃用的逃生口）或 `auto`（有 uv 用 uv，否则 pip）。 |
 | `FLASHCLI_UV_BIN` | — | 显式指定 uv 二进制（最高优先级）。 |
-| `FLASHCLI_UV_VERSION` | 索引上的最新版 | 要供给的 uv 版本。 |
+| `FLASHCLI_UV_VERSION` | 索引上的最新稳定版 | 要供给的 uv 版本（GitHub 回退使用内置默认版本）。 |
 | `FLASHCLI_UV_AUTO_INSTALL` | `1` | 允许从 PyPI 索引供给 uv。`0` 关闭。 |
 | `UV_CACHE_DIR` | `$FLASHCLI_HOME/cache/uv` | uv 缓存（与 `runtimes/` 同盘，硬链接共享重层）。 |
 | `UV_LINK_MODE` | `hardlink` | uv 链接模式；保持硬链接以避免复制 torch/CUDA。 |
 | `UV_INDEX_URL` | `PIP_INDEX_URL` | uv 使用的 PyPI 索引（未设时取 `PIP_INDEX_URL`）。 |
 
+供给优先使用配置的 PyPI 索引（wheel），失败回退 GitHub Release 的 tarball。
 已供给的 uv 位于 `$FLASHCLI_HOME/tools/uv/<version>/uv`；用
-`flashcli cache clean --tools`（或 `--all` 同时清缓存）删除。
+`flashcli cache clean --tools`（或 `--all` 同时清缓存）删除；
+`flashcli cache prune` 清理未使用的缓存项。
 
 Standalone Python 自动供给（当 bundle `python_abi` 缺失）：
 

@@ -33,3 +33,22 @@ func TestProvisionIntegration(t *testing.T) {
 		t.Fatalf("version %q err %v", got, err)
 	}
 }
+
+// Opt-in GitHub fallback: FLASHCLI_UV_TEST=1 (needs github.com).
+func TestProvisionGitHubIntegration(t *testing.T) {
+	if os.Getenv("FLASHCLI_UV_TEST") != "1" {
+		t.Skip("set FLASHCLI_UV_TEST=1 to provision uv from the GitHub release")
+	}
+	home := t.TempDir()
+	t.Setenv("FLASHCLI_HOME", home)
+	bin, err := provisionGitHub(context.Background(), DefaultVersion, true)
+	if err != nil {
+		t.Skipf("github unreachable: %v", err)
+	}
+	if want := filepath.Join(home, "tools", "uv", DefaultVersion, "uv"); bin != want {
+		t.Fatalf("provisioned %q want %q", bin, want)
+	}
+	if got, err := Version(context.Background(), bin); err != nil || !AtLeast(got, MinVersion) {
+		t.Fatalf("version %q err %v", got, err)
+	}
+}

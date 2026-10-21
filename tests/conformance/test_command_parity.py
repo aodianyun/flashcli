@@ -35,6 +35,7 @@ GO_ONLY_COMMANDS = {
     "weights pull",
     "cache",
     "cache clean",
+    "cache prune",
 }
 
 _COBRA_BUILTINS = {"completion", "help"}
