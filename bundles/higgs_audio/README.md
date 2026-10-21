@@ -6,7 +6,7 @@
 
 | | |
 |---|---|
-| **Ref** | `flashcli-bundle/higgs_audio:latest` |
+| **Ref** | `flashcli-bundle/higgs_audio:1.0.0` |
 | **Weights** | [bosonai/higgs-audio-v3-tts-4b](https://modelscope.cn/models/bosonai/higgs-audio-v3-tts-4b) (ModelScope) |
 | **GPU** | NVIDIA **SM120** (Blackwell; e.g. RTX 5060 Ti / 5090) Â· CUDA **13.x** |
 | **Python** | **3.10** (bundle venv) |
@@ -20,8 +20,8 @@ Weights are pulled on first `pull` / `run` (not in the bundle zip). Peak VRAM â‰
 ## Run
 
 ```bash
-flashcli pull flashcli-bundle/higgs_audio:latest
-flashcli run flashcli-bundle/higgs_audio:latest \
+flashcli pull flashcli-bundle/higgs_audio:1.0.0
+flashcli run flashcli-bundle/higgs_audio:1.0.0 \
   --text "The quick brown fox jumps over the lazy dog." \
   --out hello.wav
 ```
@@ -29,13 +29,13 @@ flashcli run flashcli-bundle/higgs_audio:latest \
 Force BF16 (or when FP8 kernels are unavailable):
 
 ```bash
-flashcli run flashcli-bundle/higgs_audio:latest \
+flashcli run flashcli-bundle/higgs_audio:1.0.0 \
   --fp8 false \
   --text "The quick brown fox jumps over the lazy dog." \
   --out hello.wav
 ```
 
-Full flags: `flashcli run flashcli-bundle/higgs_audio:latest --help`
+Full flags: `flashcli run flashcli-bundle/higgs_audio:1.0.0 --help`
 
 ## Parameters
 

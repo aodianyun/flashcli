@@ -6,7 +6,7 @@
 
 | | |
 |---|---|
-| **Ref** | `flashcli-bundle/higgs_audio:latest` |
+| **Ref** | `flashcli-bundle/higgs_audio:1.0.0` |
 | **权重** | [bosonai/higgs-audio-v3-tts-4b](https://modelscope.cn/models/bosonai/higgs-audio-v3-tts-4b)（ModelScope） |
 | **GPU** | NVIDIA **SM120**（Blackwell；如 RTX 5060 Ti / 5090）· CUDA **13.x** |
 | **Python** | **3.10**（bundle venv） |
