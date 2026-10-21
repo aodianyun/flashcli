@@ -70,22 +70,34 @@ func Download(ctx context.Context, spec Spec, dest string, quiet, verifyRemote b
 }
 
 // downloadRemote enforces host completeness and bundle readiness separately.
+const incompleteMarker = ".flashcli_download.incomplete"
+
 func downloadRemote(ctx context.Context, spec Spec, dest string, quiet, verifyRemote bool, download func() error) error {
 	man, hasManifest := readDownloadManifest(dest, spec.Repo)
+	marker := filepath.Join(dest, incompleteMarker)
 	if hasManifest {
 		if len(manifestMissing(dest, manifestFiles(man))) == 0 {
+			_ = os.Remove(marker)
 			if !quiet {
 				fmt.Fprintf(os.Stderr, "Weights already cached: %s\n", dest)
 			}
 			return nil
 		}
 		// Manifest present but incomplete: the download did not complete.
-	} else if !verifyRemote && bundleWeightsReady(dest, spec) {
+	} else if !verifyRemote && !fileExists(marker) && bundleWeightsReady(dest, spec) {
 		// Legacy cache (pre-manifest) on run/serve: accept locally, no network.
+		// An interrupted download leaves incompleteMarker, so it is never
+		// mistaken for a legacy ready cache.
 		if !quiet {
 			fmt.Fprintf(os.Stderr, "Weights already cached (bundle readiness; no download manifest): %s\n", dest)
 		}
 		return nil
+	}
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(marker, []byte("incomplete\n"), 0o644); err != nil {
+		return err
 	}
 	if err := download(); err != nil {
 		return err
@@ -93,6 +105,7 @@ func downloadRemote(ctx context.Context, spec Spec, dest string, quiet, verifyRe
 	if !bundleWeightsReady(dest, spec) {
 		return fmt.Errorf("bundle weight requirements not met in %s: check require_norm_stats / allow_patterns / require_any_patterns against the downloaded files", dest)
 	}
+	_ = os.Remove(marker)
 	return nil
 }
 
@@ -190,6 +203,18 @@ func copyFile(src, dst string) error {
 // downloadFileWithResume downloads url to destPath, resuming a .incomplete file.
 // onBytes (optional) receives transferred byte counts for progress.
 func downloadFileWithResume(ctx context.Context, url, destPath string, size int64, headers http.Header, onBytes func(int)) error {
+	// Zero-byte hub markers (e.g. HuggingFace SUCCESS) need no network; a
+	// 429 on them must not abort the whole download.
+	if size == 0 {
+		if info, err := os.Stat(destPath); err == nil && info.Size() == 0 {
+			return nil
+		}
+		if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+			return err
+		}
+		_ = os.Remove(destPath + ".incomplete")
+		return os.WriteFile(destPath, nil, 0o644)
+	}
 	if info, err := os.Stat(destPath); err == nil && size > 0 && info.Size() == size {
 		return nil
 	}

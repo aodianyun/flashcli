@@ -121,3 +121,42 @@ func TestDownloadRemotePartialManifestForcesDownload(t *testing.T) {
 		t.Fatal("partial manifest must force a download")
 	}
 }
+
+// An interrupted download leaves incompleteMarker so run/serve cannot mistake
+// a partial cache for a legacy ready cache.
+func TestDownloadRemoteIncompleteMarkerForcesDownload(t *testing.T) {
+	dir := t.TempDir()
+	fakeCheckpoint(t, dir) // bundleWeightsReady would pass
+	if err := os.WriteFile(filepath.Join(dir, incompleteMarker), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	err := downloadRemote(context.Background(),
+		Spec{Source: "huggingface", Repo: "repo"}, dir, true, false,
+		func() error {
+			called = true
+			return writeDownloadManifest(dir, "repo", "rev", []remoteFile{
+				{Path: "config.json", Size: 2}, {Path: "model.safetensors", Size: 8},
+			})
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("incomplete marker must force a download")
+	}
+	if _, err := os.Stat(filepath.Join(dir, incompleteMarker)); err == nil {
+		t.Fatal("incomplete marker must be removed after a successful download")
+	}
+}
+
+func TestDownloadFileWithResumeZeroSize(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "SUCCESS")
+	if err := downloadFileWithResume(context.Background(), "http://127.0.0.1:1/nope", p, 0, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(p)
+	if err != nil || info.Size() != 0 {
+		t.Fatalf("zero-size file: info=%v err=%v", info, err)
+	}
+}
