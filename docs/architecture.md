@@ -128,6 +128,26 @@ or when a protocol `CACHE_SCHEMA_VERSION` change requires upgrading the venv's
 A manifest that exists but is **incomplete is never accepted**, even if the
 lenient bundle readiness would otherwise pass.
 
+## Bundle venv installer (uv)
+
+Bundle venvs are created and installed with **uv** by default (per-model
+isolation is kept). uv is **not shipped** with flashcli: `uv.Ensure` resolves
+`FLASHCLI_UV_BIN` → `uv` on `PATH` → a previously provisioned copy, and otherwise
+provisions a pinned/current uv from the configured PyPI index (CN mirror) with
+sha256 verification into `~/.flashcli/tools/uv/<version>/`.
+
+- `uv venv --python <base> --seed` creates the venv; `uv pip install --python …`
+  installs `flashcli-bundle[infer]`, torch, and manifest deps.
+- `UV_CACHE_DIR` defaults to `~/.flashcli/cache/uv` (same filesystem as
+  `runtimes/`, so uv **hardlinks** shared wheels and the heavy torch/CUDA layer
+  is stored once); `UV_LINK_MODE=hardlink`.
+- `FLASHCLI_VENV_BACKEND=pip` is an explicit escape hatch (deprecated) for
+  environments where uv cannot run; the default `uv` fails clearly if uv is
+  unavailable. Native bundles do not need uv.
+- After a venv is created it is offline-usable (uv is only needed when
+  installing); `flashcli cache clean [--uv|--tools|--all]` removes the uv cache
+  and/or provisioned binaries without touching existing venvs.
+
 ## Local directories
 
 ```text

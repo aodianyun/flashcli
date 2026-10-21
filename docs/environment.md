@@ -67,8 +67,23 @@ ModelScope:
 | `FLASHCLI_BASE_PYTHON` | auto | Base interpreter for the bundle venv. |
 | `FLASHCLI_PY<abi>_BIN` | auto | Pin the interpreter for a `python_abi` (e.g. `FLASHCLI_PY312_BIN`, `FLASHCLI_PY310_BIN`). |
 | `FLASHCLI_FORCE_VENV` | `0` | Rebuild the bundle venv. |
-| `FLASHCLI_SKIP_VENV_SETUP` | `0` | Skip venv creation/pip (debug; use an existing venv). |
+| `FLASHCLI_SKIP_VENV_SETUP` | `0` | Skip venv creation/installs (debug; use an existing venv). |
 | `PIP_INDEX_URL` / `PIP_TRUSTED_HOST` | — | pip index used when installing into bundle venvs (torch/deps). |
+
+uv installer (Python bundle venvs; uv is **not** shipped, provisioned on demand):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FLASHCLI_VENV_BACKEND` | `uv` | `uv` (required), `pip` (deprecated escape hatch), or `auto` (uv if available, else pip). |
+| `FLASHCLI_UV_BIN` | — | Explicit uv binary (highest precedence). |
+| `FLASHCLI_UV_VERSION` | latest on the index | uv version to provision. |
+| `FLASHCLI_UV_AUTO_INSTALL` | `1` | Allow provisioning uv from the PyPI index. `0` disables. |
+| `UV_CACHE_DIR` | `$FLASHCLI_HOME/cache/uv` | uv cache (co-located with `runtimes/` so hardlinks share the heavy layer). |
+| `UV_LINK_MODE` | `hardlink` | uv link mode; keep hardlinks to avoid duplicating torch/CUDA. |
+| `UV_INDEX_URL` | `PIP_INDEX_URL` | PyPI index for uv (derived from `PIP_INDEX_URL` when unset). |
+
+Provisioned uv lives in `$FLASHCLI_HOME/tools/uv/<version>/uv`; remove it with
+`flashcli cache clean --tools` (or `--all` for cache + tools).
 
 Standalone Python provisioning (when the bundle `python_abi` is missing):
 

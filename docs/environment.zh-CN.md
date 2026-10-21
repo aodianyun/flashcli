@@ -65,8 +65,23 @@ ModelScope：
 | `FLASHCLI_BASE_PYTHON` | 自动 | bundle venv 的基础解释器。 |
 | `FLASHCLI_PY<abi>_BIN` | 自动 | 固定某 `python_abi` 的解释器（如 `FLASHCLI_PY312_BIN`、`FLASHCLI_PY310_BIN`）。 |
 | `FLASHCLI_FORCE_VENV` | `0` | 重建 bundle venv。 |
-| `FLASHCLI_SKIP_VENV_SETUP` | `0` | 跳过 venv 创建/pip（调试；用已有 venv）。 |
+| `FLASHCLI_SKIP_VENV_SETUP` | `0` | 跳过 venv 创建/安装（调试；用已有 venv）。 |
 | `PIP_INDEX_URL` / `PIP_TRUSTED_HOST` | — | 装入 bundle venv（torch/依赖）时使用的 pip 索引。 |
+
+uv 安装器（Python bundle venv；uv **不随包发布**，按需供给）：
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `FLASHCLI_VENV_BACKEND` | `uv` | `uv`（必需）、`pip`（已弃用的逃生口）或 `auto`（有 uv 用 uv，否则 pip）。 |
+| `FLASHCLI_UV_BIN` | — | 显式指定 uv 二进制（最高优先级）。 |
+| `FLASHCLI_UV_VERSION` | 索引上的最新版 | 要供给的 uv 版本。 |
+| `FLASHCLI_UV_AUTO_INSTALL` | `1` | 允许从 PyPI 索引供给 uv。`0` 关闭。 |
+| `UV_CACHE_DIR` | `$FLASHCLI_HOME/cache/uv` | uv 缓存（与 `runtimes/` 同盘，硬链接共享重层）。 |
+| `UV_LINK_MODE` | `hardlink` | uv 链接模式；保持硬链接以避免复制 torch/CUDA。 |
+| `UV_INDEX_URL` | `PIP_INDEX_URL` | uv 使用的 PyPI 索引（未设时取 `PIP_INDEX_URL`）。 |
+
+已供给的 uv 位于 `$FLASHCLI_HOME/tools/uv/<version>/uv`；用
+`flashcli cache clean --tools`（或 `--all` 同时清缓存）删除。
 
 Standalone Python 自动供给（当 bundle `python_abi` 缺失）：
 
