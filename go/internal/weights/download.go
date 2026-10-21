@@ -45,11 +45,11 @@ func Download(ctx context.Context, spec Spec, dest string, quiet, verifyRemote b
 	}
 	switch spec.Source {
 	case "huggingface", "modelscope":
-		return downloadRemote(ctx, spec, dest, quiet, verifyRemote, func() error {
+		return downloadRemote(ctx, spec, dest, quiet, verifyRemote, func(relist bool) error {
 			if spec.Source == "modelscope" {
-				return downloadModelScope(ctx, spec, dest, quiet)
+				return downloadModelScope(ctx, spec, dest, quiet, relist)
 			}
-			return downloadHuggingFace(ctx, spec, dest, quiet)
+			return downloadHuggingFace(ctx, spec, dest, quiet, relist)
 		})
 	case "bundled":
 		if bundleWeightsReady(dest, spec) {
@@ -72,10 +72,12 @@ func Download(ctx context.Context, spec Spec, dest string, quiet, verifyRemote b
 // downloadRemote enforces host completeness and bundle readiness separately.
 const incompleteMarker = ".flashcli_download.incomplete"
 
-func downloadRemote(ctx context.Context, spec Spec, dest string, quiet, verifyRemote bool, download func() error) error {
+func downloadRemote(ctx context.Context, spec Spec, dest string, quiet, verifyRemote bool, download func(relist bool) error) error {
 	man, hasManifest := readDownloadManifest(dest, spec.Repo)
 	marker := filepath.Join(dest, incompleteMarker)
-	if hasManifest {
+	// An explicit pull re-lists the remote even when the local manifest is
+	// complete, so upstream changes are picked up.
+	if hasManifest && !verifyRemote {
 		if len(manifestMissing(dest, manifestFiles(man))) == 0 {
 			_ = os.Remove(marker)
 			if !quiet {
@@ -84,7 +86,7 @@ func downloadRemote(ctx context.Context, spec Spec, dest string, quiet, verifyRe
 			return nil
 		}
 		// Manifest present but incomplete: the download did not complete.
-	} else if !verifyRemote && !fileExists(marker) && bundleWeightsReady(dest, spec) {
+	} else if !hasManifest && !verifyRemote && !fileExists(marker) && bundleWeightsReady(dest, spec) {
 		// Legacy cache (pre-manifest) on run/serve: accept locally, no network.
 		// An interrupted download leaves incompleteMarker, so it is never
 		// mistaken for a legacy ready cache.
@@ -99,7 +101,7 @@ func downloadRemote(ctx context.Context, spec Spec, dest string, quiet, verifyRe
 	if err := os.WriteFile(marker, []byte("incomplete\n"), 0o644); err != nil {
 		return err
 	}
-	if err := download(); err != nil {
+	if err := download(verifyRemote); err != nil {
 		return err
 	}
 	if !bundleWeightsReady(dest, spec) {

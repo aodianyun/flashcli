@@ -134,7 +134,7 @@ func msResolveURL(base, repo, rev, path string) string {
 	return base + "/api/v1/models/" + repo + "/repo?" + q.Encode()
 }
 
-func downloadModelScope(ctx context.Context, spec Spec, dest string, quiet bool) error {
+func downloadModelScope(ctx context.Context, spec Spec, dest string, quiet, relist bool) error {
 	if spec.Repo == "" {
 		return errors.New("ModelScope weights spec requires non-empty 'repo'")
 	}
@@ -150,7 +150,7 @@ func downloadModelScope(ctx context.Context, spec Spec, dest string, quiet bool)
 		var last error
 		revNotFound := false
 		for attempt := 0; attempt < maxRetries; attempt++ {
-			last = msDownloadOnce(ctx, base, spec, dest, headers, rev, quiet)
+			last = msDownloadOnce(ctx, base, spec, dest, headers, rev, quiet, relist)
 			if last == nil {
 				return nil
 			}
@@ -181,11 +181,14 @@ func downloadModelScope(ctx context.Context, spec Spec, dest string, quiet bool)
 		spec.Repo, dest, strings.Join(attempts, "\n"))
 }
 
-func msDownloadOnce(ctx context.Context, base string, spec Spec, dest string, headers http.Header, rev string, quiet bool) error {
+func msDownloadOnce(ctx context.Context, base string, spec Spec, dest string, headers http.Header, rev string, quiet bool, relist bool) error {
 	var files []remoteFile
-	if man, ok := readDownloadManifest(dest, spec.Repo); ok {
-		files = manifestFiles(man)
-	} else {
+	if !relist {
+		if man, ok := readDownloadManifest(dest, spec.Repo); ok {
+			files = manifestFiles(man)
+		}
+	}
+	if files == nil {
 		listed, err := msListFiles(ctx, base, spec.Repo, rev, headers)
 		if err != nil {
 			return err
@@ -196,10 +199,11 @@ func msDownloadOnce(ctx context.Context, base string, spec Spec, dest string, he
 	if len(spec.AllowPatterns) > 0 && len(selected) == 0 {
 		return fmt.Errorf("no files in %s matched allow_patterns %v", spec.Repo, spec.AllowPatterns)
 	}
+	// Expected set first: interrupted downloads stay resumable.
+	if err := writeDownloadManifest(dest, spec.Repo, rev, selected); err != nil {
+		return err
+	}
 	if len(manifestMissing(dest, selected)) == 0 {
-		if err := writeDownloadManifest(dest, spec.Repo, rev, selected); err != nil {
-			return err
-		}
 		if !quiet {
 			fmt.Fprintf(os.Stderr, "Weights already cached: %s\n", dest)
 		}
@@ -228,5 +232,5 @@ func msDownloadOnce(ctx context.Context, base string, spec Spec, dest string, he
 	if missing := manifestMissing(dest, selected); len(missing) > 0 {
 		return fmt.Errorf("ModelScope download completed but %d file(s) are missing or incomplete", len(missing))
 	}
-	return writeDownloadManifest(dest, spec.Repo, rev, selected)
+	return nil
 }

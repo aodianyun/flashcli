@@ -3,8 +3,11 @@ package weights
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -49,7 +52,7 @@ func TestDownloadRemoteManifestCompleteIsOffline(t *testing.T) {
 	called := false
 	err := downloadRemote(context.Background(),
 		Spec{Source: "huggingface", Repo: "repo"}, dir, true, false,
-		func() error { called = true; return errors.New("network") })
+		func(bool) error { called = true; return errors.New("network") })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +68,7 @@ func TestDownloadRemoteLegacyCacheRunsOffline(t *testing.T) {
 	called := false
 	err := downloadRemote(context.Background(),
 		Spec{Source: "huggingface", Repo: "repo"}, dir, true, false,
-		func() error { called = true; return errors.New("network") })
+		func(bool) error { called = true; return errors.New("network") })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +84,7 @@ func TestDownloadRemotePullVerifiesRemote(t *testing.T) {
 	called := false
 	err := downloadRemote(context.Background(),
 		Spec{Source: "huggingface", Repo: "repo"}, dir, true, true,
-		func() error {
+		func(bool) error {
 			called = true
 			// simulate a pull completing and recording the manifest
 			return writeDownloadManifest(dir, "repo", "rev", []remoteFile{
@@ -109,7 +112,7 @@ func TestDownloadRemotePartialManifestForcesDownload(t *testing.T) {
 	called := false
 	err := downloadRemote(context.Background(),
 		Spec{Source: "huggingface", Repo: "repo"}, dir, true, false,
-		func() error {
+		func(bool) error {
 			called = true
 			touch(t, dir, "tokenizer.json", 3) // "download" the missing file
 			return nil
@@ -133,7 +136,7 @@ func TestDownloadRemoteIncompleteMarkerForcesDownload(t *testing.T) {
 	called := false
 	err := downloadRemote(context.Background(),
 		Spec{Source: "huggingface", Repo: "repo"}, dir, true, false,
-		func() error {
+		func(bool) error {
 			called = true
 			return writeDownloadManifest(dir, "repo", "rev", []remoteFile{
 				{Path: "config.json", Size: 2}, {Path: "model.safetensors", Size: 8},
@@ -170,24 +173,32 @@ func TestDownloadRemoteFailedAttemptIsNotLegacyReady(t *testing.T) {
 	spec := Spec{Source: "huggingface", Repo: "repo"}
 
 	err := downloadRemote(context.Background(), spec, dir, true, true,
-		func() error { return errors.New("HTTP 429") })
+		func(bool) error {
+			// The real downloader writes the expected set before fetching files.
+			if werr := writeDownloadManifest(dir, "repo", "rev", []remoteFile{
+				{Path: "config.json", Size: 2}, {Path: "model.safetensors", Size: 8},
+				{Path: "processor_config.json", Size: 5},
+			}); werr != nil {
+				return werr
+			}
+			return errors.New("HTTP 429")
+		})
 	if err == nil {
 		t.Fatal("expected the first attempt to fail")
 	}
 	if _, statErr := os.Stat(filepath.Join(dir, incompleteMarker)); statErr != nil {
 		t.Fatal("failed attempt must leave the incomplete marker")
 	}
-	if _, statErr := os.Stat(filepath.Join(dir, downloadManifestName)); statErr == nil {
-		t.Fatal("failed attempt must not write a completeness manifest")
+	if _, statErr := os.Stat(filepath.Join(dir, downloadManifestName)); statErr != nil {
+		t.Fatal("failed attempt must keep the expected-set manifest")
 	}
 
 	called := false
 	err = downloadRemote(context.Background(), spec, dir, true, false,
-		func() error {
+		func(bool) error {
 			called = true
-			return writeDownloadManifest(dir, "repo", "rev", []remoteFile{
-				{Path: "config.json", Size: 2}, {Path: "model.safetensors", Size: 8},
-			})
+			touch(t, dir, "processor_config.json", 5)
+			return nil
 		})
 	if err != nil {
 		t.Fatal(err)
@@ -197,5 +208,62 @@ func TestDownloadRemoteFailedAttemptIsNotLegacyReady(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(dir, incompleteMarker)); statErr == nil {
 		t.Fatal("marker must be removed after the resumed download succeeds")
+	}
+}
+
+// An explicit pull must re-list even when the local manifest is complete.
+func TestDownloadRemotePullRelistsCompleteManifest(t *testing.T) {
+	dir := t.TempDir()
+	fakeCheckpoint(t, dir)
+	if err := writeDownloadManifest(dir, "repo", "rev", []remoteFile{
+		{Path: "config.json", Size: 2}, {Path: "model.safetensors", Size: 8},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	err := downloadRemote(context.Background(),
+		Spec{Source: "huggingface", Repo: "repo"}, dir, true, true,
+		func(relist bool) error {
+			called = true
+			if !relist {
+				t.Fatal("pull must request a fresh remote listing")
+			}
+			return writeDownloadManifest(dir, "repo", "rev", []remoteFile{
+				{Path: "config.json", Size: 2}, {Path: "model.safetensors", Size: 8},
+			})
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("pull must re-list even with a complete manifest")
+	}
+}
+
+// The expected set must be persisted before file transfer: a failed download
+// still leaves a resumable manifest.
+func TestHuggingFaceWritesManifestBeforeDownload(t *testing.T) {
+	t.Setenv("FLASHCLI_HF_DOWNLOAD_RETRIES", "1")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/api/models/repo/tree/"):
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[{"type":"file","path":"a.bin","size":4}]`))
+		case r.URL.Path == "/repo/resolve/main/a.bin":
+			http.Error(w, "boom", http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	dest := t.TempDir()
+	spec := Spec{Source: "huggingface", Repo: "repo", Revision: "main", Endpoint: srv.URL}
+	if err := downloadHuggingFace(context.Background(), spec, dest, true, true); err == nil {
+		t.Fatal("expected the file download to fail")
+	}
+	man, ok := readDownloadManifest(dest, "repo")
+	if !ok || len(man.Files) != 1 || man.Files[0].Path != "a.bin" || man.Files[0].Size != 4 {
+		t.Fatalf("manifest before download = %+v ok=%v", man, ok)
 	}
 }

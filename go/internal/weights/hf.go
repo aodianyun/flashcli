@@ -161,7 +161,7 @@ func hfResolveURL(base, repo, rev, path string) string {
 	return base + "/" + repo + "/resolve/" + rev + "/" + path
 }
 
-func downloadHuggingFace(ctx context.Context, spec Spec, dest string, quiet bool) error {
+func downloadHuggingFace(ctx context.Context, spec Spec, dest string, quiet, relist bool) error {
 	if spec.Repo == "" {
 		return errors.New("HuggingFace weights spec requires non-empty 'repo'")
 	}
@@ -185,7 +185,7 @@ func downloadHuggingFace(ctx context.Context, spec Spec, dest string, quiet bool
 		}
 		var last error
 		for attempt := 0; attempt < maxRetries; attempt++ {
-			last = hfDownloadOnce(ctx, base, spec, dest, headers, rev, quiet)
+			last = hfDownloadOnce(ctx, base, spec, dest, headers, rev, quiet, relist)
 			if last == nil {
 				return nil
 			}
@@ -207,12 +207,15 @@ func downloadHuggingFace(ctx context.Context, spec Spec, dest string, quiet bool
 		"  Tip: export HF_ENDPOINT=https://hf-mirror.com before flashcli", spec.Repo, dest, strings.Join(attempts, "\n"))
 }
 
-func hfDownloadOnce(ctx context.Context, base string, spec Spec, dest string, headers http.Header, rev string, quiet bool) error {
+func hfDownloadOnce(ctx context.Context, base string, spec Spec, dest string, headers http.Header, rev string, quiet bool, relist bool) error {
 	var files []remoteFile
-	if man, ok := readDownloadManifest(dest, spec.Repo); ok {
-		// Resume from the recorded expected set (no re-listing needed).
-		files = manifestFiles(man)
-	} else {
+	if !relist {
+		if man, ok := readDownloadManifest(dest, spec.Repo); ok {
+			// Resume from the recorded expected set (no re-listing needed).
+			files = manifestFiles(man)
+		}
+	}
+	if files == nil {
 		listed, err := listHFTree(ctx, base, spec.Repo, rev, headers)
 		if err != nil {
 			return err
@@ -223,10 +226,12 @@ func hfDownloadOnce(ctx context.Context, base string, spec Spec, dest string, he
 	if len(spec.AllowPatterns) > 0 && len(selected) == 0 {
 		return fmt.Errorf("no files in %s matched allow_patterns %v", spec.Repo, spec.AllowPatterns)
 	}
+	// The manifest is the expected file set: write it before downloading so an
+	// interrupted attempt is resumable and never looks like a legacy cache.
+	if err := writeDownloadManifest(dest, spec.Repo, rev, selected); err != nil {
+		return err
+	}
 	if len(manifestMissing(dest, selected)) == 0 {
-		if err := writeDownloadManifest(dest, spec.Repo, rev, selected); err != nil {
-			return err
-		}
 		if !quiet {
 			fmt.Fprintf(os.Stderr, "Weights already cached: %s\n", dest)
 		}
@@ -255,5 +260,5 @@ func hfDownloadOnce(ctx context.Context, base string, spec Spec, dest string, he
 	if missing := manifestMissing(dest, selected); len(missing) > 0 {
 		return fmt.Errorf("Hub download completed but %d file(s) are missing or incomplete", len(missing))
 	}
-	return writeDownloadManifest(dest, spec.Repo, rev, selected)
+	return nil
 }
