@@ -255,6 +255,12 @@ func cacheCmd() *cobra.Command {
 	clean := &cobra.Command{
 		Use:   "clean",
 		Short: "Remove the uv package cache and/or provisioned uv binaries",
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return fmt.Errorf("cache clean only removes uv caches; use `flashcli bundle clean %s` for bundle data", args[0])
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 			var targets []string

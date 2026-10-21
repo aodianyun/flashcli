@@ -151,3 +151,10 @@ func TestBundleCleanByRefPresetMarkerFallback(t *testing.T) {
 	}
 	mustStat(t, drop, false)
 }
+
+func TestCacheCleanRejectsBundleRef(t *testing.T) {
+	t.Setenv("FLASHCLI_HOME", t.TempDir())
+	if code := Main([]string{"cache", "clean", "flashcli-bundle/pi05_libero:1.0.0", "--all"}); code == 0 {
+		t.Fatal("cache clean must reject a bundle ref and point at bundle clean")
+	}
+}
