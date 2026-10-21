@@ -160,3 +160,42 @@ func TestDownloadFileWithResumeZeroSize(t *testing.T) {
 		t.Fatalf("zero-size file: info=%v err=%v", info, err)
 	}
 }
+
+// Reproduces the field failure: the first download fails before writing the
+// manifest, leaving a readiness-passing partial cache. The next run must not
+// take the legacy offline shortcut.
+func TestDownloadRemoteFailedAttemptIsNotLegacyReady(t *testing.T) {
+	dir := t.TempDir()
+	fakeCheckpoint(t, dir)
+	spec := Spec{Source: "huggingface", Repo: "repo"}
+
+	err := downloadRemote(context.Background(), spec, dir, true, true,
+		func() error { return errors.New("HTTP 429") })
+	if err == nil {
+		t.Fatal("expected the first attempt to fail")
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, incompleteMarker)); statErr != nil {
+		t.Fatal("failed attempt must leave the incomplete marker")
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, downloadManifestName)); statErr == nil {
+		t.Fatal("failed attempt must not write a completeness manifest")
+	}
+
+	called := false
+	err = downloadRemote(context.Background(), spec, dir, true, false,
+		func() error {
+			called = true
+			return writeDownloadManifest(dir, "repo", "rev", []remoteFile{
+				{Path: "config.json", Size: 2}, {Path: "model.safetensors", Size: 8},
+			})
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("run/serve must resume, not accept the partial cache as legacy")
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, incompleteMarker)); statErr == nil {
+		t.Fatal("marker must be removed after the resumed download succeeds")
+	}
+}
