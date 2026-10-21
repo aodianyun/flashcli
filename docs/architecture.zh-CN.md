@@ -100,23 +100,30 @@ sequenceDiagram
 
 两项独立检查，刻意分开：
 
-1. **主机 —— 下载完整性。** 下载成功后主机写入
-   `<weights_dir>/.flashcli_download.json`，记录远端文件集（`path`、`size`）。
-   只有当清单内每个文件都存在且 size 匹配时才算完整。该检查与模型无关，绝不含
-   bundle 专属文件名。
+1. **主机 —— 下载完整性。** 列出远端文件集（并应用 bundle 的 `allow_patterns`）后，
+   主机在**传输前**把预期集写入 `<weights_dir>/.flashcli_download.json`
+   （`path`、`size`）。只有清单内每个文件都存在且 size 匹配时才算完整。
+   下载失败时保留预期集，下一次只补缺失/大小不符的文件；下载进行中或中断时，
+   `<weights_dir>/.flashcli_download.incomplete` 存在。该检查与模型无关，绝不含
+   bundle 专属文件名。主权重与每个 `extra_weights` 目标各自有清单。
 2. **Bundle —— 就绪。** `flashcli-bundle.json` 声明 entry 需要什么
    （`allow_patterns`、`require_any_patterns`、`require_norm_stats`）；主机仅用这些
    规则判断“该 bundle 是否可用”。
 
 **网络策略 —— `run`/`serve` 本地优先：**
 
-- 有**完整的下载清单** → 纯本地校验（不联网）；
-- **无清单的旧缓存** → 按 bundle 声明在**本地**判断就绪（不联网）；
-- 仅当缓存确实**缺失/不完整**时，`run`/`serve` 才自动准备（下载需要联网）；下载成功后写入清单。
+- 有**完整的下载清单** → 本地校验 + bundle 就绪（不联网）；
+- **无清单且无 incomplete 标记的旧缓存** → 按 bundle 声明在**本地**判断就绪（不联网）；
+- 清单文件存在但无法解析时**绝不**当作旧缓存，主机会重新列远端；
+- 清单缺失（且未接受旧缓存）或不完整时，`run`/`serve` 自动准备（需要联网）并按预期集续传；
+  显式 `flashcli pull` 总是重新列远端并重写预期集，即使本地清单已完整。
 
-因此**一旦准备成功**（bundle 树 + 权重 + venv/依赖），此后每次 `run`/`serve` 都**离线可用**。只有产物缺失、显式 `flashcli pull`（强制远端校验）或协议 `CACHE_SCHEMA_VERSION` 变化需要升级 venv 内 `flashcli-bundle` 时才需要联网。
+因此**一旦准备成功**（bundle 树 + 权重 + venv/依赖），此后每次 `run`/`serve` 都**离线可用**。
+只有产物缺失、显式 `flashcli pull` 或协议 `CACHE_SCHEMA_VERSION` 变化需要升级 venv 内
+`flashcli-bundle` 时才需要联网。
 
-清单存在但**不完整时绝不接受**，即使宽松的 bundle 就绪判定会通过。
+清单存在但**不完整时绝不接受**，即使宽松的 bundle 就绪判定会通过；中断的下载可凭已记录的
+预期集续传。
 
 ## Bundle venv 安装器（uv）
 
@@ -132,12 +139,18 @@ bundle venv 默认用 **uv** 创建与安装（仍保持每模型隔离）。uv 
 
 ```text
 ~/.flashcli/
-├── install.env              # flashcli-bundle[infer] 来源提示（repo/ref）
+├── install.env              # flashcli-bundle[infer] 来源：本地 checkout（源码构建）或 repo/ref（发布安装）
+├── mirror.env               # install.sh --mirror 写入（pip/HF/GitHub 镜像）
+├── src/                     # --from-source 源码 checkout（构建输入；默认 ~/.flashcli/src）
 ├── python/                  # 可选：standalone Python，供 bundle venv 使用
+├── python-runtime.env       # provision standalone Python 后写入 FLASHCLI_PY<abi>_BIN=…
 ├── runtimes/<id>/           # bundle venv + .runtime.json marker
 ├── bundles/<name>/<version>/.flashcli_bundle.json   # 同步树（所有 @variant 共享）
 ├── cache/repo-index/        # FlashHub listing 缓存
-└── models/<name>/<version>/<weights_dir>/           # 各 variant 权重（默认 checkpoint/）+ .flashcli_download.json
+├── cache/uv/                # uv 包缓存（默认 UV_CACHE_DIR）
+├── tools/uv/<version>/      # 已供给的 uv 二进制
+└── models/<name>/<version>/<weights_dir>/           # 各 variant 权重（默认 checkpoint/）+
+                                                       #   .flashcli_download.json / .flashcli_download.incomplete
 ```
 
 ## Bundle 布局（sync 后）
@@ -165,7 +178,6 @@ bundle venv 默认用 **uv** 创建与安装（仍保持每模型隔离）。uv 
 | `flashcli-bundle/pi05_libero:1.0.4` | `run` | Pi0.5 LIBERO |
 | `flashcli-bundle/qwen_nvfp4:1.0.1@qwen3` | `run`, `serve` | Qwen3-8B |
 | `flashcli-bundle/qwen_nvfp4:1.0.1@qwen36` | `run`, `serve` | Qwen3.6-27B + MTP |
-| `flashcli-bundle/qwen3_vl_nvfp4:1.0.0` | `run`, `serve` | Qwen3-VL-8B |
 | `bundles/groot_n16` *（本地 dev）* | `run` | GROOT N1.6 |
 | `bundles/groot_n17` *（本地 dev）* | `run` | GROOT N1.7 |
 

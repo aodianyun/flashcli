@@ -276,7 +276,7 @@ bundle venv 的 Python 版本由 `python_abi` 决定，与主机 CLI Python 版�
 | `allow_patterns` | 要拉取的文件（Hub CLI `--include`）；Hub 常一次只返回一个文件时，应列出全部必需文件名 |
 | `require_any_patterns` | 可选；就绪检查为**任一**匹配（遗留；优先在 `allow_patterns` 中列出全部必需文件） |
 
-**主机 vs infer：** `flashcli pull` 与 `flashcli run` / `serve` 的主机预检会下载 `weights` + `extra_weights` 并执行 `post_pull`。bundle venv 推理阶段设置 `HF_HUB_OFFLINE=1` — 缺文件应重新 `flashcli pull`，而非在运行时访问 Hub。
+**主机 vs infer：** `flashcli pull` 与 `flashcli run` / `serve` 的主机预检会下载 `weights` + `extra_weights` 并执行 `post_pull`。主机在**传输前**把预期文件集（`path`+`size`）写入 `<weights_dir>/.flashcli_download.json`，中断后按预期集续传；`pull` 会重新列远端。bundle venv 推理阶段设置 `HF_HUB_OFFLINE=1` — 缺文件应重新 `flashcli pull`，而非在运行时访问 Hub。`allow_patterns`/`require_any_patterns` 是就绪规则（用于旧缓存与下载后检查），不是主机完整性契约。
 
 **Hugging Face 仓库优先用 `extra_weights`，少用 `post_pull`。** `post_pull` 保留给非 Hub 资源（如 Pi0.5 从固定 URL 拉 PaliGemma tokenizer）。
 

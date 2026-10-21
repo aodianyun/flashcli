@@ -20,7 +20,7 @@
 | [`groot_n16/`](groot_n16/) | `flashcli-bundle/groot_n16:1.0.0` | SM120 · 仅 cu130 | [README](groot_n16/README.zh-CN.md) · [BUILD](groot_n16/BUILD.zh-CN.md) |
 | [`groot_n17/`](groot_n17/) | `flashcli-bundle/groot_n17:1.0.0` | SM120 · 仅 cu130 | [README](groot_n17/README.zh-CN.md) · [BUILD](groot_n17/BUILD.zh-CN.md) |
 | [`qwen_nvfp4/`](qwen_nvfp4/) | `flashcli-bundle/qwen_nvfp4:1.0.1@qwen3`、`@qwen36` | SM120 · 仅 cu130 | [README](qwen_nvfp4/README.zh-CN.md) · [BUILD](qwen_nvfp4/BUILD.zh-CN.md) |
-| [`qwen3_vl_nvfp4/`](qwen3_vl_nvfp4/) | `flashcli-bundle/qwen3_vl_nvfp4:1.0.0` | SM120 · 仅 cu130 | [README](qwen3_vl_nvfp4/README.zh-CN.md) · [BUILD](qwen3_vl_nvfp4/BUILD.zh-CN.md) |
+| [`qwen3_vl_nvfp4/`](qwen3_vl_nvfp4/) | `bundles/qwen3_vl_nvfp4` *（仅源码，尚未发布）* | SM120 · 仅 cu130 | [README](qwen3_vl_nvfp4/README.zh-CN.md) · [BUILD](qwen3_vl_nvfp4/BUILD.zh-CN.md) |
 
 `pi05_libero_nexus` 是**仅原生（无 Python）bundle** 的参考：`@abi`（native-abi —— host `dlopen` model-runtime `.so`）与 `@exec`（native-exec —— 独立服务进程二进制）用同一份权重覆盖两种执行后端。见 [bundle_execution_abi.zh-CN.md](../docs/bundle_execution_abi.zh-CN.md)。
 

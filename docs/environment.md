@@ -10,13 +10,13 @@ preflight, weight downloads, the bundle venv, and serve. Anything not listed her
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FLASHCLI_HOME` | `~/.flashcli` | Data root (`runtimes/`, `models/`, `bundles/`, `cache/`, `install.env`). |
+| `FLASHCLI_HOME` | `~/.flashcli` | Data root (`runtimes/`, `models/`, `bundles/`, `src/`, `cache/`, `tools/`, `python/`, `install.env`, `mirror.env`). |
 | `FLASHCLI_CLONE_DIR` | `$FLASHCLI_HOME/src` | Source checkout for `install.sh --from-source` (build input, not runtime data). |
 | `FLASHCLI_SOURCE_DIR` | unset | Existing checkout for `--from-source`; overrides `FLASHCLI_CLONE_DIR`. |
 | `FLASHCLI_SOURCE_UPDATE` | auto | Update an existing checkout before building (`1`/`0`). Explicit `--source-dir` defaults to `0`. |
 | `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | Bundle venv + `.runtime.json` markers. |
 | `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | Synced bundle tree + `.flashcli_bundle.json` markers (`<dir>/<name>/<version>`, shared by all `@variant`). |
-| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | Weights cache (`<dir>/<name>/<version>/<weights_dir>/`, default `weights_dir` = `checkpoint`). |
+| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | Weights cache (`<dir>/<name>/<version>/<weights_dir>/`, default `weights_dir` = `checkpoint`) with the host's `.flashcli_download.json` expected set and `.flashcli_download.incomplete` marker. |
 | `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | FlashHub API base for bundle refs and python-standalone. Browse at [flashhub.top](https://flashhub.top). |
 
 `~/.flashcli` holds runtime data only. The host binary is installed to
@@ -70,7 +70,8 @@ ModelScope:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `FLASHCLI_BUNDLE_PIP_SPEC` | — | Pip spec for `flashcli-bundle[infer]` installed into bundle venvs (e.g. a local `…/flashcli-bundle[infer]`). Highest precedence. |
-| `FLASHCLI_INSTALL_REPO` / `FLASHCLI_INSTALL_REF` | from `~/.flashcli/install.env` | Git source for `flashcli-bundle[infer]` when no local checkout/spec is set. |
+| `FLASHCLI_INSTALL_REPO` / `FLASHCLI_INSTALL_REF` | from `~/.flashcli/install.env` | Release-install fallback for `flashcli-bundle[infer]`; source builds write `FLASHCLI_BUNDLE_PIP_SPEC` instead. |
+| `FLASHCLI_INSTALL_COMMIT` | from `~/.flashcli/install.env` | Source-build commit (diagnostics; not used for resolution). |
 | `FLASHCLI_BASE_PYTHON` | auto | Base interpreter for the bundle venv. |
 | `FLASHCLI_PY<abi>_BIN` | auto | Pin the interpreter for a `python_abi` (e.g. `FLASHCLI_PY312_BIN`, `FLASHCLI_PY310_BIN`). |
 | `FLASHCLI_FORCE_VENV` | `0` | Rebuild the bundle venv. |

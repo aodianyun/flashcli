@@ -9,13 +9,13 @@ serve。未列出的变量**无效**。布尔开关：`1`、`true`、`yes`、`on
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `FLASHCLI_HOME` | `~/.flashcli` | 数据根（`runtimes/`、`models/`、`bundles/`、`cache/`、`install.env`）。 |
+| `FLASHCLI_HOME` | `~/.flashcli` | 数据根（`runtimes/`、`models/`、`bundles/`、`src/`、`cache/`、`tools/`、`python/`、`install.env`、`mirror.env`）。 |
 | `FLASHCLI_CLONE_DIR` | `$FLASHCLI_HOME/src` | `install.sh --from-source` 的源码 checkout（构建输入，不是运行数据）。 |
 | `FLASHCLI_SOURCE_DIR` | 未设置 | `--from-source` 使用的已有 checkout；覆盖 `FLASHCLI_CLONE_DIR`。 |
 | `FLASHCLI_SOURCE_UPDATE` | auto | 构建前更新已有 checkout（`1`/`0`）；显式 `--source-dir` 默认 `0`。 |
 | `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | bundle venv 与 `.runtime.json` marker。 |
 | `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | 同步后的 bundle 树与 `.flashcli_bundle.json` marker（`<dir>/<name>/<version>`，所有 `@variant` 共享）。 |
-| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | 权重缓存（`<dir>/<name>/<version>/<weights_dir>/`，`weights_dir` 默认 `checkpoint`）。 |
+| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | 权重缓存（`<dir>/<name>/<version>/<weights_dir>/`，`weights_dir` 默认 `checkpoint`），含主机预期集 `.flashcli_download.json` 与 `.flashcli_download.incomplete` 标记。 |
 | `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | bundle ref 与 python-standalone 的 FlashHub API 基址；浏览 [flashhub.top](https://flashhub.top)。 |
 
 `~/.flashcli` 只存运行数据。host 二进制装到 `/usr/local/bin`（root）或
@@ -67,7 +67,8 @@ ModelScope：
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `FLASHCLI_BUNDLE_PIP_SPEC` | — | 装进 bundle venv 的 `flashcli-bundle[infer]` pip spec（如本地 `…/flashcli-bundle[infer]`）。优先级最高。 |
-| `FLASHCLI_INSTALL_REPO` / `FLASHCLI_INSTALL_REF` | 来自 `~/.flashcli/install.env` | 无本地 checkout/spec 时，`flashcli-bundle[infer]` 的 git 来源。 |
+| `FLASHCLI_INSTALL_REPO` / `FLASHCLI_INSTALL_REF` | 来自 `~/.flashcli/install.env` | 发布安装时 `flashcli-bundle[infer]` 的 git 回退来源；源码构建改写 `FLASHCLI_BUNDLE_PIP_SPEC`。 |
+| `FLASHCLI_INSTALL_COMMIT` | 来自 `~/.flashcli/install.env` | 源码构建 commit（诊断用，不参与解析）。 |
 | `FLASHCLI_BASE_PYTHON` | 自动 | bundle venv 的基础解释器。 |
 | `FLASHCLI_PY<abi>_BIN` | 自动 | 固定某 `python_abi` 的解释器（如 `FLASHCLI_PY312_BIN`、`FLASHCLI_PY310_BIN`）。 |
 | `FLASHCLI_FORCE_VENV` | `0` | 重建 bundle venv。 |

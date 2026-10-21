@@ -4,9 +4,11 @@
 
 **Qwen3-VL-8B** 多模态模型，FlashRT NVFP4 格式。支持图文 `run` 与 OpenAI 兼容 `serve`（SSE 流式、工具调用）。
 
+> **状态：** 目前只有源码，尚未发布到 FlashHub。请按 [BUILD.zh-CN.md](BUILD.zh-CN.md) 本地构建；发布前使用下面的本地 ref。
+
 | | |
 |---|---|
-| **Ref** | `flashcli-bundle/qwen3_vl_nvfp4:1.0.0` |
+| **Ref** | `bundles/qwen3_vl_nvfp4` *（本地源码；尚未发布）* |
 | **权重** | [cpadyun/Qwen3-VL-8B-FlashRT-NVFP4](https://huggingface.co/cpadyun/Qwen3-VL-8B-FlashRT-NVFP4)（FlashRT NVFP4 checkpoint） |
 | **Processor** | [Qwen/Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) |
 | **GPU** | NVIDIA **SM120** · CUDA **13.x** |
@@ -19,7 +21,7 @@
 ## 运行
 
 ```bash
-flashcli run flashcli-bundle/qwen3_vl_nvfp4:1.0.0 \
+flashcli run bundles/qwen3_vl_nvfp4 \
   --image /path/to/scene.jpg \
   --prompt "用一句话描述这张图。" \
   --max-tokens 128
@@ -28,7 +30,7 @@ flashcli run flashcli-bundle/qwen3_vl_nvfp4:1.0.0 \
 ## 服务
 
 ```bash
-flashcli serve flashcli-bundle/qwen3_vl_nvfp4:1.0.0 \
+flashcli serve bundles/qwen3_vl_nvfp4 \
   --host 0.0.0.0 --port 8000 \
   --max-pixels 500000
 ```
