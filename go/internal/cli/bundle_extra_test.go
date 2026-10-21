@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/aodianyun/flashcli/go/internal/paths"
+	"github.com/aodianyun/flashcli/go/internal/runtime"
 )
 
 func writeBundle(t *testing.T, root string) {
@@ -130,4 +131,23 @@ func TestBundleCleanFull(t *testing.T) {
 		t.Fatalf("exit = %d", code)
 	}
 	mustStat(t, repoIndex, false)
+}
+
+func TestBundleCleanByRefPresetMarkerFallback(t *testing.T) {
+	t.Setenv("FLASHCLI_HOME", t.TempDir())
+	drop := filepath.Join(paths.Runtimes(), "pi05-1")
+	if err := os.MkdirAll(drop, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(paths.Bundles(), "pi05_libero", "1.0.0")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, runtime.PresetMarkerName), []byte(`{"runtime_id":"pi05-1"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := Main([]string{"bundle", "clean", "flashcli-bundle/pi05_libero:1.0.0"}); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	mustStat(t, drop, false)
 }

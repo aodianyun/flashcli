@@ -88,7 +88,10 @@ func Ensure(ctx context.Context, runtimeID string, m *manifest.Manifest, opt Opt
 
 	if !opt.Force {
 		if existing, err := runtime.VenvPython(runtimeID); err == nil {
-			if blob, err := os.ReadFile(fpPath); err == nil && strings.TrimSpace(string(blob)) == fp {
+			// A matching fingerprint is not enough: a venv built by an older
+			// host (or with a mismatched FLASHCLI_BASE_PYTHON) must be rebuilt
+			// when its interpreter does not match the manifest python_abi.
+			if blob, err := os.ReadFile(fpPath); err == nil && strings.TrimSpace(string(blob)) == fp && pythonMatches(existing, abi) {
 				return existing, nil
 			}
 		}

@@ -96,7 +96,7 @@ func TestEnsureReusesMatchingVenv(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(python), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(python, []byte("#!/bin/sh\n"), 0o755); err != nil {
+	if err := os.WriteFile(python, []byte("#!/bin/sh\nif [ \"$1\" = \"-c\" ]; then echo 3.10; exit 0; fi\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	fp := Fingerprint(m, "cu124")
