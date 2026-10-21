@@ -122,23 +122,35 @@ func Ensure(ctx context.Context, runtimeID string, m *manifest.Manifest, opt Opt
 			progress.Note("venv: torch %s from %s", torchPkg, idx)
 		}
 	}
+	inst, err := SelectInstaller(ctx, opt)
+	if err != nil {
+		return "", err
+	}
+	if !opt.Quiet {
+		if inst.UV != "" {
+			progress.Note("venv: installer uv (%s)", inst.UV)
+		} else {
+			progress.Note("venv: installer pip (FLASHCLI_VENV_BACKEND=pip)")
+		}
+	}
 	if err := os.RemoveAll(venv); err != nil {
 		return "", err
 	}
 	if err := os.MkdirAll(filepath.Dir(venv), 0o755); err != nil {
 		return "", err
 	}
-	env := os.Environ()
-	if err := opt.Runner.Run(ctx, []string{basePython, "-m", "venv", venv}, env); err != nil {
+	if err := inst.CreateVenv(ctx, basePython, venv); err != nil {
 		return "", err
 	}
 	python, err := runtime.VenvPython(runtimeID)
 	if err != nil {
 		return "", fmt.Errorf("venv created but no interpreter under %s", venv)
 	}
-	_ = opt.Runner.Run(ctx, []string{python, "-m", "pip", "install", "-q", "--upgrade", "pip"}, env)
-	for _, argv := range InstallPlan(python, m, torchIndex, opt.Quiet) {
-		if err := opt.Runner.Run(ctx, argv, env); err != nil {
+	if inst.UV == "" {
+		_ = inst.Runner.Run(ctx, []string{python, "-m", "pip", "install", "-q", "--upgrade", "pip"}, inst.env())
+	}
+	for _, args := range installSpecs(m, torchIndex, opt.Quiet) {
+		if err := inst.Install(ctx, python, args); err != nil {
 			return "", err
 		}
 	}
@@ -151,36 +163,46 @@ func Ensure(ctx context.Context, runtimeID string, m *manifest.Manifest, opt Opt
 	return python, nil
 }
 
-// InstallPlan returns the pip install commands for the bundle venv. When quiet,
-// `pip -q` is used (progress hidden); otherwise pip shows its own progress.
-func InstallPlan(python string, m *manifest.Manifest, torchIndex string, quiet bool) [][]string {
-	pip := func(extra ...string) []string {
-		argv := []string{python, "-m", "pip", "install"}
+// installSpecs returns backend-neutral pip-style argument lists (no
+// interpreter prefix): each begins with -q when quiet, then index/package args.
+func installSpecs(m *manifest.Manifest, torchIndex string, quiet bool) [][]string {
+	base := func(extra ...string) []string {
+		args := []string{}
 		if quiet {
-			argv = append(argv, "-q")
+			args = append(args, "-q")
 		}
-		return append(argv, extra...)
+		return append(args, extra...)
 	}
 	var plan [][]string
 	spec, err := FlashcliBundleSpec()
 	if err != nil {
 		spec = "flashcli-bundle[infer]"
 	}
-	plan = append(plan, pip(append(mirror.PipExtraArgs(), spec)...))
+	plan = append(plan, base(append(mirror.PipExtraArgs(), spec)...))
 
 	torchPkg, _ := ParseTorchDependency(m.PythonDependencies()["torch"])
 	if torchPkg != "" {
-		argv := pip()
+		args := base()
 		if torchIndex != "" {
-			argv = append(argv, "--index-url", mirror.TorchIndexURL(torchIndex))
+			args = append(args, "--index-url", mirror.TorchIndexURL(torchIndex))
 		}
-		argv = append(argv, torchPkg)
-		plan = append(plan, argv)
+		args = append(args, torchPkg)
+		plan = append(plan, args)
 	}
 	if deps := pipDependencies(m); len(deps) > 0 {
-		plan = append(plan, pip(append(mirror.PipExtraArgs(), deps...)...))
+		plan = append(plan, base(append(mirror.PipExtraArgs(), deps...)...))
 	}
 	return plan
+}
+
+// InstallPlan returns the pip install commands for the bundle venv (pip
+// backend). uv uses installSpecs via Installer.Install.
+func InstallPlan(python string, m *manifest.Manifest, torchIndex string, quiet bool) [][]string {
+	var out [][]string
+	for _, args := range installSpecs(m, torchIndex, quiet) {
+		out = append(out, append([]string{python, "-m", "pip", "install"}, args...))
+	}
+	return out
 }
 
 func pipDependencies(m *manifest.Manifest) []string {

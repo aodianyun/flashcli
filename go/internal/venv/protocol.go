@@ -3,7 +3,6 @@ package venv
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -42,17 +41,14 @@ func EnsureProtocolCacheSchema(ctx context.Context, python string, opt Options) 
 	if !opt.Quiet {
 		progress.Note("venv: upgrading flashcli-bundle (cache schema %d -> %d) from %s", cur, RequiredCacheSchema, origin)
 	}
-	runner := opt.Runner
-	if runner == nil {
-		runner = ExecRunner{Stdio: !opt.Quiet}
+	inst, err := SelectInstaller(ctx, opt)
+	if err != nil {
+		return err
 	}
-	argv := []string{
-		python, "-m", "pip", "install",
-		"--upgrade", "--force-reinstall", "--no-deps", "--no-cache-dir",
-	}
-	argv = append(argv, mirror.PipExtraArgs()...)
-	argv = append(argv, spec)
-	if err := runner.Run(ctx, argv, os.Environ()); err != nil {
+	args := []string{"--upgrade", "--force-reinstall", "--no-deps", "--no-cache-dir"}
+	args = append(args, mirror.PipExtraArgs()...)
+	args = append(args, spec)
+	if err := inst.Install(ctx, python, args); err != nil {
 		return fmt.Errorf("upgrade flashcli-bundle: %w", err)
 	}
 	return nil
