@@ -136,8 +136,10 @@ isolation is kept). uv is **not shipped** with flashcli: `uv.Ensure` resolves
 provisions a pinned/current uv from the configured PyPI index (CN mirror) with
 sha256 verification into `~/.flashcli/tools/uv/<version>/`.
 
-- Provisioning prefers the configured **PyPI index** (wheel, sha256-verified)
-  and falls back to the **GitHub release** tarball (sha256-verified).
+- Provisioning prefers the configured **PyPI index** (latest stable wheel,
+  sha256-verified). If the index is unreachable it asks the **GitHub latest
+  release**, then a pinned default, and downloads the **GitHub release** tarball
+  (sha256-verified).
 - `uv venv --python <base> --seed` creates the venv; `uv pip install --python …`
   installs `flashcli-bundle[infer]`, torch, and manifest deps. Protocol upgrades
   and CUDA userland installs go through the same installer.
@@ -150,7 +152,7 @@ sha256 verification into `~/.flashcli/tools/uv/<version>/`.
 - After a venv is created it is offline-usable (uv is only needed when
   installing); `flashcli cache clean [--uv|--tools|--all]` removes the uv cache
   and/or provisioned binaries without touching existing venvs, and
-  `flashcli cache prune` prunes unused uv cache entries.
+  `flashcli cache prune` prunes unreachable uv cache objects (conservative; `cache clean` fully clears).
 
 ## Local directories
 

@@ -76,7 +76,7 @@ uv installer (Python bundle venvs; uv is **not** shipped, provisioned on demand)
 |----------|---------|-------------|
 | `FLASHCLI_VENV_BACKEND` | `uv` | `uv` (required), `pip` (deprecated escape hatch), or `auto` (uv if available, else pip). |
 | `FLASHCLI_UV_BIN` | — | Explicit uv binary (highest precedence). |
-| `FLASHCLI_UV_VERSION` | latest stable on the index | uv version to provision (the GitHub fallback uses a pinned default). |
+| `FLASHCLI_UV_VERSION` | latest stable on the index | uv version to provision (when the index is unreachable the host checks the GitHub latest release, then a pinned default). |
 | `FLASHCLI_UV_AUTO_INSTALL` | `1` | Allow provisioning uv from the PyPI index. `0` disables. |
 | `UV_CACHE_DIR` | `$FLASHCLI_HOME/cache/uv` | uv cache (co-located with `runtimes/` so hardlinks share the heavy layer). |
 | `UV_LINK_MODE` | `hardlink` | uv link mode; keep hardlinks to avoid duplicating torch/CUDA. |

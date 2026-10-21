@@ -12,6 +12,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -147,6 +148,11 @@ func Ensure(ctx context.Context, quiet, autoInstall bool) (string, error) {
 	ver := strings.TrimSpace(os.Getenv("FLASHCLI_UV_VERSION"))
 	if ver == "" {
 		ver = latestVersion(ctx, quiet)
+	}
+	if ver == "" {
+		if gh, gerr := githubLatestVersion(ctx); gerr == nil && gh != "" {
+			ver = gh
+		}
 	}
 	if ver == "" {
 		ver = DefaultVersion
@@ -589,4 +595,20 @@ func extractTarGzBinary(archivePath, destDir string) (string, error) {
 		return dest, nil
 	}
 	return "", fmt.Errorf("uv binary not found in GitHub archive")
+}
+
+// githubLatestVersion asks the GitHub releases API for the newest uv tag. Used
+// only as a fallback when the PyPI simple index cannot be queried.
+func githubLatestVersion(ctx context.Context) (string, error) {
+	blob, err := fetchBytes(ctx, "https://api.github.com/repos/astral-sh/uv/releases/latest")
+	if err != nil {
+		return "", err
+	}
+	var info struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.Unmarshal(blob, &info); err != nil {
+		return "", err
+	}
+	return strings.TrimPrefix(strings.TrimSpace(info.TagName), "v"), nil
 }

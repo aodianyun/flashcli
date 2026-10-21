@@ -74,7 +74,7 @@ uv 安装器（Python bundle venv；uv **不随包发布**，按需供给）：
 |------|--------|------|
 | `FLASHCLI_VENV_BACKEND` | `uv` | `uv`（必需）、`pip`（已弃用的逃生口）或 `auto`（有 uv 用 uv，否则 pip）。 |
 | `FLASHCLI_UV_BIN` | — | 显式指定 uv 二进制（最高优先级）。 |
-| `FLASHCLI_UV_VERSION` | 索引上的最新稳定版 | 要供给的 uv 版本（GitHub 回退使用内置默认版本）。 |
+| `FLASHCLI_UV_VERSION` | 索引上的最新稳定版 | 要供给的 uv 版本（索引不可达时先查 GitHub latest release，再退回内置默认版本）。 |
 | `FLASHCLI_UV_AUTO_INSTALL` | `1` | 允许从 PyPI 索引供给 uv。`0` 关闭。 |
 | `UV_CACHE_DIR` | `$FLASHCLI_HOME/cache/uv` | uv 缓存（与 `runtimes/` 同盘，硬链接共享重层）。 |
 | `UV_LINK_MODE` | `hardlink` | uv 链接模式；保持硬链接以避免复制 torch/CUDA。 |
