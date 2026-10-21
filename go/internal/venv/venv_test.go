@@ -151,3 +151,31 @@ func TestEnsureSkipSetup(t *testing.T) {
 		t.Fatal("expected error when venv python missing")
 	}
 }
+
+func TestResolveBasePythonChecksABI(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, ver string) string {
+		t.Helper()
+		p := filepath.Join(dir, name)
+		script := "#!/bin/sh\nif [ \"$1\" = \"-c\" ]; then echo '" + ver + "'; exit 0; fi\nexit 1\n"
+		if err := os.WriteFile(p, []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	write("python3", "3.12")
+	t.Setenv("PATH", dir)
+	t.Setenv("FLASHCLI_PYTHON_ROOT", filepath.Join(dir, "pyroot"))
+	t.Setenv("FLASHCLI_PYTHON_ENV", filepath.Join(dir, "noenv"))
+	t.Setenv("FLASHCLI_PY310_BIN", "")
+	t.Setenv("FLASHCLI_BASE_PYTHON", "")
+
+	if got, err := ResolveBasePython("310"); err == nil {
+		t.Fatalf("expected error for python3=3.12 with abi=310, got %q", got)
+	}
+
+	py310 := write("python3.10", "3.10")
+	if got, err := ResolveBasePython("310"); err != nil || got != py310 {
+		t.Fatalf("ResolveBasePython(310) = %q, %v; want %q", got, err, py310)
+	}
+}

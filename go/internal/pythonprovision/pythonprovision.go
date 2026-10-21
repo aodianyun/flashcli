@@ -112,7 +112,7 @@ func Resolve(abi string) (string, bool) {
 		if reportsMinor(v, abi) {
 			return v, true
 		}
-		return v, true
+		return "", false
 	}
 	provisioned := filepath.Join(Root(), mm(abi), "bin")
 	for _, name := range []string{"python" + mm(abi), "python3", "python"} {

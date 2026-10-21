@@ -146,6 +146,10 @@ func Ensure(ctx context.Context, runtimeID string, m *manifest.Manifest, opt Opt
 	if err != nil {
 		return "", fmt.Errorf("venv created but no interpreter under %s", venv)
 	}
+	if want := abi[0:1] + "." + abi[1:]; !pythonMatches(python, abi) {
+		return "", fmt.Errorf("%w: venv interpreter %s is not Python %s (python_abi=%s); set FLASHCLI_BASE_PYTHON/FLASHCLI_PY%s_BIN or remove %s",
+			errs.Environment, python, want, abi, abi, venv)
+	}
 	if inst.UV == "" {
 		_ = inst.Runner.Run(ctx, []string{python, "-m", "pip", "install", "-q", "--upgrade", "pip"}, inst.env())
 	}
@@ -291,21 +295,41 @@ func detectCudaTag() string {
 	return "124"
 }
 
+// pythonMatches reports whether pyBin is CPython <abi> (e.g. "310" -> 3.10).
+func pythonMatches(pyBin, abi string) bool {
+	out, err := exec.Command(pyBin, "-c", "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')").Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) == abi[0:1]+"."+abi[1:]
+}
+
 // ResolveBasePython resolves a host interpreter for the bundle python_abi.
+// Every candidate is version-checked: a generic python3 (e.g. 3.12) must never
+// silently build a venv for a bundle that declared python_abi=310.
 func ResolveBasePython(abi string) (string, error) {
 	pythonprovision.LoadEnvFile()
-	if p, ok := pythonprovision.Resolve(abi); ok {
+	want := abi[0:1] + "." + abi[1:]
+	if v := strings.TrimSpace(os.Getenv("FLASHCLI_PY" + abi + "_BIN")); v != "" {
+		if pythonMatches(v, abi) {
+			return v, nil
+		}
+		return "", fmt.Errorf("FLASHCLI_PY%s_BIN=%s is not Python %s (python_abi=%s)", abi, v, want, abi)
+	}
+	if p, ok := pythonprovision.Resolve(abi); ok && pythonMatches(p, abi) {
 		return p, nil
 	}
 	if v := strings.TrimSpace(os.Getenv("FLASHCLI_BASE_PYTHON")); v != "" {
-		return v, nil
+		if pythonMatches(v, abi) {
+			return v, nil
+		}
+		return "", fmt.Errorf("FLASHCLI_BASE_PYTHON=%s is not Python %s (python_abi=%s)", v, want, abi)
 	}
-	major, minor := string(abi[0]), abi[1:]
-	for _, name := range []string{"python" + major + "." + minor, "python" + minor, "python3"} {
-		if path, err := exec.LookPath(name); err == nil {
+	for _, name := range []string{"python" + want, "python" + abi[1:], "python3"} {
+		if path, err := exec.LookPath(name); err == nil && pythonMatches(path, abi) {
 			return path, nil
 		}
 	}
-	return "", fmt.Errorf("no Python 3.%s interpreter found for python_abi=%s "+
-		"(set FLASHCLI_PY%s_BIN or FLASHCLI_BASE_PYTHON)", minor, abi, abi)
+	return "", fmt.Errorf("no Python %s interpreter found for python_abi=%s "+
+		"(set FLASHCLI_PY%s_BIN or FLASHCLI_BASE_PYTHON)", want, abi, abi)
 }
