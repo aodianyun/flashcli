@@ -10,10 +10,16 @@ serve。未列出的变量**无效**。布尔开关：`1`、`true`、`yes`、`on
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `FLASHCLI_HOME` | `~/.flashcli` | 数据根（`runtimes/`、`models/`、`bundles/`、`cache/`、`install.env`）。 |
+| `FLASHCLI_CLONE_DIR` | `$FLASHCLI_HOME/src` | `install.sh --from-source` 的源码 checkout（构建输入，不是运行数据）。 |
+| `FLASHCLI_SOURCE_DIR` | 未设置 | `--from-source` 使用的已有 checkout；覆盖 `FLASHCLI_CLONE_DIR`。 |
+| `FLASHCLI_SOURCE_UPDATE` | auto | 构建前更新已有 checkout（`1`/`0`）；显式 `--source-dir` 默认 `0`。 |
 | `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | bundle venv 与 `.runtime.json` marker。 |
 | `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | 同步后的 bundle 树与 `.flashcli_bundle.json` marker（`<dir>/<name>/<version>`，所有 `@variant` 共享）。 |
 | `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | 权重缓存（`<dir>/<name>/<version>/<weights_dir>/`，`weights_dir` 默认 `checkpoint`）。 |
 | `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | bundle ref 与 python-standalone 的 FlashHub API 基址；浏览 [flashhub.top](https://flashhub.top)。 |
+
+`~/.flashcli` 只存运行数据。host 二进制装到 `/usr/local/bin`（root）或
+`~/.local/bin`（普通用户）；`--from-source` 的源码默认在 `~/.flashcli/src`。
 
 ## GPU / 原生预检
 

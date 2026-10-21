@@ -13,7 +13,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
 #   curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
 #   ./install.sh                       # release
-#   ./install.sh --from-source --branch dev   # update /opt/flashcli + rebuild
+#   ./install.sh --from-source --branch dev   # update ~/.flashcli/src + rebuild
 #   ./install.sh --source-dir DIR --update-source
 #   ./install.sh --version 1.2.3 --dir /usr/local/bin
 #
@@ -30,7 +30,8 @@ VERSION="${FLASHCLI_GO_VERSION:-}"
 SOURCE_DIR="${FLASHCLI_SOURCE_DIR:-}"
 SOURCE_UPDATE="${FLASHCLI_SOURCE_UPDATE:-}"
 SOURCE_EXPLICIT=0
-CLONE_DIR="${FLASHCLI_CLONE_DIR:-/opt/flashcli}"
+FLASHCLI_HOME="${FLASHCLI_HOME:-$HOME/.flashcli}"
+CLONE_DIR="${FLASHCLI_CLONE_DIR:-$FLASHCLI_HOME/src}"
 INSTALL_DIR="${FLASHCLI_GO_INSTALL_DIR:-}"
 MIRROR=0
 FROM_SOURCE=0
@@ -123,7 +124,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$SOURCE_DIR" ] && FROM_SOURCE=1
-# Default: update the installer-managed clone (/opt/flashcli) on every
+# Default: update the installer-managed clone ($FLASHCLI_HOME/src) on every
 # --from-source run; an explicit --source-dir is left alone unless
 # --update-source is passed (protects developer workspaces).
 if [ -z "$SOURCE_UPDATE" ]; then
@@ -297,6 +298,7 @@ install_source() {
   if [ -z "$SOURCE_DIR" ]; then
     SOURCE_DIR="$CLONE_DIR"
     if [ ! -f "$SOURCE_DIR/scripts/build_go.sh" ]; then
+      mkdir -p "$(dirname "$SOURCE_DIR")"
       info "cloning $REPO (ref $REF) -> $SOURCE_DIR"
       git clone --depth 1 --branch "$REF" "$REPO" "$SOURCE_DIR" 2>/dev/null || git clone "$REPO" "$SOURCE_DIR"
     else

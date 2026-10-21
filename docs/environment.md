@@ -11,10 +11,17 @@ preflight, weight downloads, the bundle venv, and serve. Anything not listed her
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `FLASHCLI_HOME` | `~/.flashcli` | Data root (`runtimes/`, `models/`, `bundles/`, `cache/`, `install.env`). |
+| `FLASHCLI_CLONE_DIR` | `$FLASHCLI_HOME/src` | Source checkout for `install.sh --from-source` (build input, not runtime data). |
+| `FLASHCLI_SOURCE_DIR` | unset | Existing checkout for `--from-source`; overrides `FLASHCLI_CLONE_DIR`. |
+| `FLASHCLI_SOURCE_UPDATE` | auto | Update an existing checkout before building (`1`/`0`). Explicit `--source-dir` defaults to `0`. |
 | `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | Bundle venv + `.runtime.json` markers. |
 | `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | Synced bundle tree + `.flashcli_bundle.json` markers (`<dir>/<name>/<version>`, shared by all `@variant`). |
 | `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | Weights cache (`<dir>/<name>/<version>/<weights_dir>/`, default `weights_dir` = `checkpoint`). |
 | `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | FlashHub API base for bundle refs and python-standalone. Browse at [flashhub.top](https://flashhub.top). |
+
+`~/.flashcli` holds runtime data only. The host binary is installed to
+`/usr/local/bin` (root) or `~/.local/bin` (user); a `--from-source` checkout
+lives under `~/.flashcli/src` unless overridden.
 
 ## GPU / native preflight
 
