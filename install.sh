@@ -13,7 +13,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
 #   curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
 #   ./install.sh                       # release
-#   ./install.sh --from-source --branch dev
+#   ./install.sh --from-source --branch dev   # update /opt/flashcli + rebuild
+#   ./install.sh --source-dir DIR --update-source
 #   ./install.sh --version 1.2.3 --dir /usr/local/bin
 #
 # Env: FLASHCLI_INSTALL_REPO, FLASHCLI_INSTALL_REF, FLASHCLI_GO_VERSION,
@@ -27,6 +28,8 @@ REPO="${FLASHCLI_INSTALL_REPO:-$REPO_GITHUB}"
 REF="${FLASHCLI_INSTALL_REF:-main}"
 VERSION="${FLASHCLI_GO_VERSION:-}"
 SOURCE_DIR="${FLASHCLI_SOURCE_DIR:-}"
+SOURCE_UPDATE="${FLASHCLI_SOURCE_UPDATE:-}"
+SOURCE_EXPLICIT=0
 CLONE_DIR="${FLASHCLI_CLONE_DIR:-/opt/flashcli}"
 INSTALL_DIR="${FLASHCLI_GO_INSTALL_DIR:-}"
 MIRROR=0
@@ -97,7 +100,7 @@ apply_mirror_endpoints() {
 
 usage() {
   if [ -f "$0" ]; then sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; else
-    echo "usage: install.sh [--mirror|--gitee] [--github] [--no-mirror] [--pip-mirror NAME] [--pip-probe] [--from-source] [--ref REF|--branch REF] [--version V] [--dir DIR] [--source-dir DIR]"
+    echo "usage: install.sh [--mirror|--gitee] [--github] [--no-mirror] [--pip-mirror NAME] [--pip-probe] [--from-source] [--ref REF|--branch REF] [--version V] [--dir DIR] [--source-dir DIR] [--update-source|--no-update-source]"
   fi
 }
 
@@ -112,12 +115,20 @@ while [ $# -gt 0 ]; do
     --version) VERSION="$2"; shift 2 ;;
     --dir) INSTALL_DIR="$2"; shift 2 ;;
     --from-source|--source) FROM_SOURCE=1; shift ;;
-    --source-dir) FROM_SOURCE=1; SOURCE_DIR="$2"; shift 2 ;;
+    --source-dir) FROM_SOURCE=1; SOURCE_DIR="$2"; SOURCE_EXPLICIT=1; shift 2 ;;
+    --update-source|--update) SOURCE_UPDATE=1; shift ;;
+    --no-update-source) SOURCE_UPDATE=0; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown option: $1" ;;
   esac
 done
 [ -n "$SOURCE_DIR" ] && FROM_SOURCE=1
+# Default: update the installer-managed clone (/opt/flashcli) on every
+# --from-source run; an explicit --source-dir is left alone unless
+# --update-source is passed (protects developer workspaces).
+if [ -z "$SOURCE_UPDATE" ]; then
+  if [ "$SOURCE_EXPLICIT" = 1 ]; then SOURCE_UPDATE=0; else SOURCE_UPDATE=1; fi
+fi
 
 if [ "$MIRROR" = 1 ]; then
   REPO="${FLASHCLI_INSTALL_REPO:-$REPO_GITEE}"
@@ -263,6 +274,24 @@ case "$arch" in x86_64|amd64) goarch=amd64 ;; aarch64|arm64) goarch=arm64 ;; *) 
 asset="flashcli-${os}-${goarch}"
 
 SOURCE_USED=""
+
+# Update an existing clean git checkout to the requested ref. Dirty trees are
+# left untouched so local work is never destroyed.
+update_source() {
+  [ -d "$SOURCE_DIR/.git" ] || return 0
+  if [ -n "$(git -C "$SOURCE_DIR" status --porcelain 2>/dev/null)" ]; then
+    warn "source tree has local changes; not updating: $SOURCE_DIR"
+    return 0
+  fi
+  info "updating $SOURCE_DIR (ref $REF)"
+  if ! git -C "$SOURCE_DIR" fetch --depth 1 "$REPO" "$REF" >/dev/null 2>&1; then
+    warn "could not fetch $REF from $REPO; building the existing checkout"
+    return 0
+  fi
+  git -C "$SOURCE_DIR" checkout -q "$REF" 2>/dev/null || git -C "$SOURCE_DIR" checkout -q -B "$REF" FETCH_HEAD
+  git -C "$SOURCE_DIR" reset --hard FETCH_HEAD >/dev/null 2>&1 || true
+}
+
 install_source() {
   ensure_git
   if [ -z "$SOURCE_DIR" ]; then
@@ -270,7 +299,11 @@ install_source() {
     if [ ! -f "$SOURCE_DIR/scripts/build_go.sh" ]; then
       info "cloning $REPO (ref $REF) -> $SOURCE_DIR"
       git clone --depth 1 --branch "$REF" "$REPO" "$SOURCE_DIR" 2>/dev/null || git clone "$REPO" "$SOURCE_DIR"
+    else
+      [ "$SOURCE_UPDATE" = 1 ] && update_source
     fi
+  elif [ "$SOURCE_UPDATE" = 1 ]; then
+    update_source
   fi
   [ -f "$SOURCE_DIR/scripts/build_go.sh" ] || die "not a flashcli source checkout: $SOURCE_DIR"
   ensure_go
@@ -331,6 +364,9 @@ mkdir -p "$home" 2>/dev/null || true
 {
   if [ -n "$SOURCE_USED" ] && [ -f "$SOURCE_USED/flashcli-bundle/pyproject.toml" ]; then
     echo "FLASHCLI_BUNDLE_PIP_SPEC=$SOURCE_USED/flashcli-bundle[infer]"
+    if [ -d "$SOURCE_USED/.git" ]; then
+      echo "FLASHCLI_INSTALL_COMMIT=$(git -C "$SOURCE_USED" rev-parse --short HEAD 2>/dev/null || true)"
+    fi
   else
     echo "FLASHCLI_INSTALL_REPO=$REPO"
     echo "FLASHCLI_INSTALL_REF=$REF"
