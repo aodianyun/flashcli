@@ -141,3 +141,18 @@ def test_format_torch_ecosystem_constraint_lines_pins_local_versions() -> None:
         "torch==2.6.0+cu128",
         "torchaudio==2.6.0+cu128",
     ]
+
+
+def test_constraints_path_does_not_escape_venv(tmp_path) -> None:
+    """venv/bin/python is a symlink to the base interpreter; resolving it would
+    place the torch constraints file outside the venv."""
+    import subprocess
+    import sys
+
+    from flashcli_bundle.infer.deps import torch_ecosystem_constraints_path
+
+    venv = tmp_path / "venv"
+    subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
+    py = venv / "bin" / "python"
+    path = torch_ecosystem_constraints_path(py)
+    assert path == venv / "torch-ecosystem.constraints.txt"

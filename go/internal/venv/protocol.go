@@ -23,7 +23,8 @@ import (
 // weights_dir (docs/bundle_publish_standard.md §4.4.1).
 // v3: resolve the variant weights_dir from the raw block (scalar weights_dir).
 // v4: script mode strips host-only flags (--checkpoint/--no-auto-install) from argv.
-const RequiredCacheSchema = 4
+// v5: do not resolve the venv python symlink when querying the torch stack.
+const RequiredCacheSchema = 5
 
 // EnsureProtocolCacheSchema probes flashcli_bundle.CACHE_SCHEMA_VERSION in the
 // venv and, when stale or unavailable, reinstalls only flashcli-bundle.
