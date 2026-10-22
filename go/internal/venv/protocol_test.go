@@ -55,6 +55,7 @@ func TestEnsureProtocolCacheSchemaSkipsCurrent(t *testing.T) {
 
 func TestEnsureProtocolCacheSchemaUpgradesStale(t *testing.T) {
 	t.Setenv("FLASHCLI_BUNDLE_PIP_SPEC", "flashcli-bundle[infer]")
+	t.Setenv("FLASHCLI_VENV_BACKEND", "pip")
 	r := &captureRunner{}
 	err := EnsureProtocolCacheSchema(context.Background(), stubPython(t, "0"), Options{Runner: r, Quiet: true})
 	if err != nil {
@@ -67,6 +68,42 @@ func TestEnsureProtocolCacheSchemaUpgradesStale(t *testing.T) {
 	for _, want := range []string{"-m pip install", "--force-reinstall", "--no-deps", "flashcli-bundle[infer]"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("upgrade argv missing %q: %s", want, joined)
+		}
+	}
+}
+
+// stubUV is an executable that reports a version for --version.
+func stubUV(t *testing.T, version string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "uv")
+	script := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo \"uv " + version + "\"; exit 0; fi\nexit 0\n"
+	if err := os.WriteFile(p, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestEnsureProtocolCacheSchemaUpgradesViaUV(t *testing.T) {
+	t.Setenv("FLASHCLI_BUNDLE_PIP_SPEC", "flashcli-bundle[infer]")
+	t.Setenv("FLASHCLI_VENV_BACKEND", "uv")
+	uvBin := stubUV(t, "0.9.3")
+	t.Setenv("FLASHCLI_UV_BIN", uvBin)
+	r := &captureRunner{}
+	py := stubPython(t, "0")
+	if err := EnsureProtocolCacheSchema(context.Background(), py, Options{Runner: r, Quiet: true}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.calls) != 1 {
+		t.Fatalf("stale schema must upgrade once: %v", r.calls)
+	}
+	got := r.calls[0]
+	if len(got) < 4 || got[0] != uvBin || got[1] != "pip" || got[2] != "install" || got[3] != "--python" {
+		t.Fatalf("unexpected uv argv: %v", got)
+	}
+	joined := strings.Join(got, " ")
+	for _, want := range []string{"--python " + py, "--force-reinstall", "--no-deps", "flashcli-bundle[infer]"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("uv argv missing %q: %s", want, joined)
 		}
 	}
 }

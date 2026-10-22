@@ -276,7 +276,7 @@ Use for **additional Hugging Face / ModelScope repos** that are not the main `we
 | `allow_patterns` | Files to fetch (Hub CLI `--include`); list explicit filenames when the Hub returns one file per invocation |
 | `require_any_patterns` | Optional; readiness check uses **any** match (legacy; prefer listing all required files in `allow_patterns`) |
 
-**Host vs infer:** `flashcli pull` and the host preflight inside `flashcli run` / `serve` download `weights` + `extra_weights` + run `post_pull`. The bundle venv sets `HF_HUB_OFFLINE=1` during inference — missing assets must be fixed by re-running `flashcli pull`, not by runtime Hub access.
+**Host vs infer:** `flashcli pull` and the host preflight inside `flashcli run` / `serve` download `weights` + `extra_weights` + run `post_pull`. The host writes the expected file set (`path`+`size`) to `<weights_dir>/.flashcli_download.json` **before** transferring and resumes interrupted downloads; `pull` re-lists the remote. The bundle venv sets `HF_HUB_OFFLINE=1` during inference — missing assets must be fixed by re-running `flashcli pull`, not by runtime Hub access. `allow_patterns`/`require_any_patterns` are readiness rules (used for legacy caches and after a download), not the host completeness contract.
 
 **Prefer `extra_weights` over `post_pull`** for Hugging Face repos. Reserve `post_pull` for non-Hub assets (e.g. Pi0.5 PaliGemma tokenizer from a fixed URL).
 
@@ -488,7 +488,7 @@ manifest `env` example (Qwen variant, excerpt):
 | manifest `env` | **not applied** | **applied** |
 | `post_pull` env | `post_pull` may still run to prepare files on disk; script entry should prefer `FLASHCLI_*` above | e.g. `FLASH_RT_PALIGEMMA_TOKENIZER` |
 | `run_options` / `serve_options` | `--help` documentation only; flags in `argv` | parsed by flashcli and passed to engine |
-| `--checkpoint` | stays in `argv`; also used for validation → `FLASHCLI_CHECKPOINT` | parsed by flashcli → `load()`, no `FLASHCLI_CHECKPOINT` |
+| `--checkpoint` | **consumed by flashcli** (not forwarded to the entry); provided as `FLASHCLI_CHECKPOINT` | parsed by flashcli → `load()`, no `FLASHCLI_CHECKPOINT` |
 | `--mtp-checkpoint` | **not** parsed by flashcli (passed in `argv`); use `FLASHCLI_EXTRA_WEIGHT_*` | sets `FLASHRT_QWEN36_MTP_CKPT_DIR` |
 
 #### 4.4.4 Do not rely on in entry code

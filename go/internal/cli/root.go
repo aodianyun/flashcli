@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -15,8 +17,10 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/manifest"
 	"github.com/aodianyun/flashcli/go/internal/mirror"
 	"github.com/aodianyun/flashcli/go/internal/native"
+	"github.com/aodianyun/flashcli/go/internal/paths"
 	"github.com/aodianyun/flashcli/go/internal/progress"
 	"github.com/aodianyun/flashcli/go/internal/pythonprovision"
+	"github.com/aodianyun/flashcli/go/internal/uv"
 	"github.com/aodianyun/flashcli/go/internal/venv"
 	"github.com/aodianyun/flashcli/go/internal/version"
 	"github.com/aodianyun/flashcli/go/internal/weights"
@@ -35,7 +39,7 @@ func New() *cobra.Command {
 		SilenceErrors: true,
 	}
 	root.SetVersionTemplate("flashcli {{.Version}}\n")
-	root.AddCommand(runCmd(), serveCmd(), pullCmd(), bundleCmd(), weightsCmd(), modelsCmd(), upgradeCmd(), doctorCmd(), versionCmd())
+	root.AddCommand(runCmd(), serveCmd(), pullCmd(), bundleCmd(), weightsCmd(), modelsCmd(), upgradeCmd(), doctorCmd(), cacheCmd(), versionCmd())
 	return root
 }
 
@@ -68,6 +72,7 @@ func doctorCmd() *cobra.Command {
 			for _, line := range mirror.StatusLines() {
 				fmt.Fprintln(out, line)
 			}
+			fmt.Fprintln(out, uvStatusLine())
 			if failed {
 				return ErrFailed
 			}
@@ -173,7 +178,7 @@ func weightsPullCmd() *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStderr(), "[!] %s\n", err)
 				return ErrFailed
 			}
-			checkpoint, err := weights.DownloadBundle(context.Background(), m, ver, variant, quiet)
+			checkpoint, err := weights.DownloadBundle(context.Background(), m, ver, variant, quiet, true)
 			if err != nil {
 				fmt.Fprintf(cmd.OutOrStderr(), "[!] %s\n", err)
 				return ErrFailed
@@ -230,3 +235,71 @@ type exitError struct {
 
 func (e *exitError) Error() string { return e.err.Error() }
 func (e *exitError) Unwrap() error { return e.err }
+
+// uvStatusLine reports whether the uv installer used by Python bundles is ready.
+func uvStatusLine() string {
+	bin, err := uv.Ensure(context.Background(), true, false)
+	if err != nil {
+		return "[i] uv        not found (auto-provisioned on the first Python bundle run; or set FLASHCLI_UV_BIN)"
+	}
+	v, _ := uv.Version(context.Background(), bin)
+	return fmt.Sprintf("[ok] uv        %s  %s", v, bin)
+}
+
+func cacheCmd() *cobra.Command {
+	root := &cobra.Command{
+		Use:   "cache",
+		Short: "Cache utilities",
+	}
+	var useUV, useTools, useAll bool
+	clean := &cobra.Command{
+		Use:   "clean",
+		Short: "Remove the uv package cache and/or provisioned uv binaries",
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return fmt.Errorf("cache clean only removes uv caches; use `flashcli bundle clean %s` for bundle data", args[0])
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := cmd.OutOrStdout()
+			var targets []string
+			if useAll || useUV {
+				targets = append(targets, uv.CacheDir())
+			}
+			if useAll || useTools {
+				targets = append(targets, filepath.Join(paths.Home(), "tools", "uv"))
+			}
+			if len(targets) == 0 {
+				return fmt.Errorf("nothing selected: use --uv, --tools, or --all")
+			}
+			for _, t := range targets {
+				if err := os.RemoveAll(t); err != nil {
+					return err
+				}
+				fmt.Fprintf(out, "[ok] removed %s\n", t)
+			}
+			return nil
+		},
+	}
+	clean.Flags().BoolVar(&useUV, "uv", false, "Remove the uv package cache (UV_CACHE_DIR)")
+	clean.Flags().BoolVar(&useTools, "tools", false, "Remove provisioned uv binaries (~/.flashcli/tools/uv)")
+	clean.Flags().BoolVar(&useAll, "all", false, "Remove both")
+	prune := &cobra.Command{
+		Use:   "prune",
+		Short: "Prune unused uv cache entries",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			bin, err := uv.Ensure(context.Background(), true, false)
+			if err != nil {
+				fmt.Fprintln(cmd.OutOrStdout(), "[i] uv not available; nothing to prune")
+				return nil
+			}
+			c := exec.CommandContext(context.Background(), bin, "cache", "prune")
+			c.Stdout = cmd.OutOrStdout()
+			c.Stderr = cmd.OutOrStderr()
+			return c.Run()
+		},
+	}
+	root.AddCommand(clean, prune)
+	return root
+}

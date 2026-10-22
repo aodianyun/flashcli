@@ -49,7 +49,9 @@ _TORCH_CONSTRAINTS_BASENAME = "torch-ecosystem.constraints.txt"
 
 
 def _venv_root_from_python(python: Path) -> Path:
-    parent = python.resolve().parent
+    # Do NOT resolve symlinks: venv/bin/python points at the base interpreter,
+    # and resolving it would escape the venv.
+    parent = Path(os.path.abspath(python)).parent
     if parent.name in ("bin", "Scripts"):
         return parent.parent
     return parent
@@ -102,7 +104,7 @@ def _pip_show_version(*, python: Path, name: str) -> str | None:
 
 def _query_installed_torch_ecosystem_versions(*, python: Path) -> dict[str, str]:
     """Versions pip actually installed in the bundle venv (not importlib metadata)."""
-    py = python.resolve()
+    py = Path(os.path.abspath(python))
     out: dict[str, str] = {}
     for name in sorted(torch_ecosystem_package_names()):
         if name == "pytorch" and "torch" in out:
@@ -121,7 +123,7 @@ def _refresh_torch_ecosystem_constraints(
     """Pin installed torch/torchaudio/... so later PyPI installs cannot replace CUDA builds."""
     if python is None:
         return None
-    py = python.resolve()
+    py = Path(os.path.abspath(python))
     installed = _query_installed_torch_ecosystem_versions(python=py)
     if not installed:
         return None
@@ -136,7 +138,7 @@ def _refresh_torch_ecosystem_constraints(
 def _constraints_for_pypi_install(*, python: Path | None) -> Path | None:
     if python is None:
         return None
-    path = torch_ecosystem_constraints_path(python.resolve())
+    path = torch_ecosystem_constraints_path(Path(os.path.abspath(python)))
     return path if path.is_file() else None
 
 

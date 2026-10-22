@@ -48,8 +48,11 @@ curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh 
 `install.sh` installs the `flashcli` binary: by default it downloads
 `flashcli-<os>-<arch>` + `sha256sums.txt` from the latest release (no Go needed),
 verifies sha256, and writes `~/.flashcli/install.env`. Pass `--from-source` to
-clone and build with Go instead. Missing system tools (curl/wget, sha256, git)
-are auto-installed via the OS package manager when running as root.
+clone or update the checkout under `~/.flashcli/src` (override with
+`--source-dir` / `FLASHCLI_CLONE_DIR`) and build with Go instead. Missing system
+tools (curl/wget, sha256, git) are auto-installed via the OS package manager
+when running as root. `~/.flashcli` is runtime data; a source checkout is a
+build input.
 
 **Auto (picks GitHub/Gitee by reachability)**
 
@@ -85,7 +88,7 @@ curl -N http://127.0.0.1:8000/v1/chat/completions \
   -d '{"model":"<variant>","messages":[{"role":"user","content":"Hello"}],"max_tokens":512,"stream":true}'
 ```
 
-First run syncs the FlashHub runtime, creates the bundle venv, installs the torch stack, and pulls weights. Model-specific flags, defaults, and examples are in each bundle [README](bundles/README.md).
+First run syncs the FlashHub runtime, creates the bundle venv, installs the torch stack, and pulls weights. The host records the expected weight file set before downloading, resumes interrupted downloads, and verifies it offline on later runs. Model-specific flags, defaults, and examples are in each bundle [README](bundles/README.md).
 
 **Local dev bundle** (rebuilt from FlashRT, not FlashHub):
 

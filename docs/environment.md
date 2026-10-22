@@ -10,11 +10,18 @@ preflight, weight downloads, the bundle venv, and serve. Anything not listed her
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FLASHCLI_HOME` | `~/.flashcli` | Data root (`runtimes/`, `models/`, `bundles/`, `cache/`, `install.env`). |
+| `FLASHCLI_HOME` | `~/.flashcli` | Data root (`runtimes/`, `models/`, `bundles/`, `src/`, `cache/`, `tools/`, `python/`, `install.env`, `mirror.env`). |
+| `FLASHCLI_CLONE_DIR` | `$FLASHCLI_HOME/src` | Source checkout for `install.sh --from-source` (build input, not runtime data). |
+| `FLASHCLI_SOURCE_DIR` | unset | Existing checkout for `--from-source`; overrides `FLASHCLI_CLONE_DIR`. |
+| `FLASHCLI_SOURCE_UPDATE` | auto | Update an existing checkout before building (`1`/`0`). Explicit `--source-dir` defaults to `0`. |
 | `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | Bundle venv + `.runtime.json` markers. |
 | `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | Synced bundle tree + `.flashcli_bundle.json` markers (`<dir>/<name>/<version>`, shared by all `@variant`). |
-| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | Weights cache (`<dir>/<name>/<version>/<weights_dir>/`, default `weights_dir` = `checkpoint`). |
+| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | Weights cache (`<dir>/<name>/<version>/<weights_dir>/`, default `weights_dir` = `checkpoint`) with the host's `.flashcli_download.json` expected set and `.flashcli_download.incomplete` marker. |
 | `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | FlashHub API base for bundle refs and python-standalone. Browse at [flashhub.top](https://flashhub.top). |
+
+`~/.flashcli` holds runtime data only. The host binary is installed to
+`/usr/local/bin` (root) or `~/.local/bin` (user); a `--from-source` checkout
+lives under `~/.flashcli/src` unless overridden.
 
 ## GPU / native preflight
 
@@ -63,12 +70,31 @@ ModelScope:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `FLASHCLI_BUNDLE_PIP_SPEC` | — | Pip spec for `flashcli-bundle[infer]` installed into bundle venvs (e.g. a local `…/flashcli-bundle[infer]`). Highest precedence. |
-| `FLASHCLI_INSTALL_REPO` / `FLASHCLI_INSTALL_REF` | from `~/.flashcli/install.env` | Git source for `flashcli-bundle[infer]` when no local checkout/spec is set. |
+| `FLASHCLI_INSTALL_REPO` / `FLASHCLI_INSTALL_REF` | from `~/.flashcli/install.env` | Release-install fallback for `flashcli-bundle[infer]`; source builds write `FLASHCLI_BUNDLE_PIP_SPEC` instead. |
+| `FLASHCLI_INSTALL_COMMIT` | from `~/.flashcli/install.env` | Source-build commit (diagnostics; not used for resolution). |
 | `FLASHCLI_BASE_PYTHON` | auto | Base interpreter for the bundle venv. |
 | `FLASHCLI_PY<abi>_BIN` | auto | Pin the interpreter for a `python_abi` (e.g. `FLASHCLI_PY312_BIN`, `FLASHCLI_PY310_BIN`). |
 | `FLASHCLI_FORCE_VENV` | `0` | Rebuild the bundle venv. |
-| `FLASHCLI_SKIP_VENV_SETUP` | `0` | Skip venv creation/pip (debug; use an existing venv). |
+| `FLASHCLI_SKIP_VENV_SETUP` | `0` | Skip venv creation/installs (debug; use an existing venv). |
 | `PIP_INDEX_URL` / `PIP_TRUSTED_HOST` | — | pip index used when installing into bundle venvs (torch/deps). |
+
+uv installer (Python bundle venvs; uv is **not** shipped, provisioned on demand):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FLASHCLI_VENV_BACKEND` | `uv` | `uv` (required), `pip` (deprecated escape hatch), or `auto` (uv if available, else pip). |
+| `FLASHCLI_UV_BIN` | — | Explicit uv binary (highest precedence). |
+| `FLASHCLI_UV_VERSION` | latest stable on the index | uv version to provision (when the index is unreachable the host checks the GitHub latest release, then a pinned default). |
+| `FLASHCLI_UV_AUTO_INSTALL` | `1` | Allow provisioning uv from the PyPI index. `0` disables. |
+| `UV_CACHE_DIR` | `$FLASHCLI_HOME/cache/uv` | uv cache (co-located with `runtimes/` so hardlinks share the heavy layer). |
+| `UV_LINK_MODE` | `hardlink` | uv link mode; keep hardlinks to avoid duplicating torch/CUDA. |
+| `UV_INDEX_URL` | `PIP_INDEX_URL` | PyPI index for uv (derived from `PIP_INDEX_URL` when unset). |
+
+Provisioning prefers the configured PyPI index (wheel) and falls back to the
+GitHub release tarball. Provisioned uv lives in
+`$FLASHCLI_HOME/tools/uv/<version>/uv`; remove it with
+`flashcli cache clean --tools` (or `--all` for cache + tools);
+`flashcli cache prune` prunes unused cache entries.
 
 Standalone Python provisioning (when the bundle `python_abi` is missing):
 

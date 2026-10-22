@@ -4,9 +4,11 @@
 
 **Qwen3-VL-8B** multimodal model in FlashRT NVFP4 layout. Image + text chat via `run` or OpenAI-compatible `serve` with SSE streaming and tool calls.
 
+> **Status:** source only — not yet published to FlashHub. Build it locally with [BUILD.md](BUILD.md); the local ref below is used until the release.
+
 | | |
 |---|---|
-| **Ref** | `flashcli-bundle/qwen3_vl_nvfp4:1.0.0` |
+| **Ref** | `bundles/qwen3_vl_nvfp4` *(local source; not published)* |
 | **Weights** | [cpadyun/Qwen3-VL-8B-FlashRT-NVFP4](https://huggingface.co/cpadyun/Qwen3-VL-8B-FlashRT-NVFP4) (FlashRT NVFP4 checkpoint) |
 | **Processor** | [Qwen/Qwen3-VL-8B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct) |
 | **GPU** | NVIDIA **SM120** · CUDA **13.x** |
@@ -19,7 +21,7 @@
 ## Run
 
 ```bash
-flashcli run flashcli-bundle/qwen3_vl_nvfp4:1.0.0 \
+flashcli run bundles/qwen3_vl_nvfp4 \
   --image /path/to/scene.jpg \
   --prompt "Describe this image in one sentence." \
   --max-tokens 128
@@ -28,7 +30,7 @@ flashcli run flashcli-bundle/qwen3_vl_nvfp4:1.0.0 \
 ## Serve
 
 ```bash
-flashcli serve flashcli-bundle/qwen3_vl_nvfp4:1.0.0 \
+flashcli serve bundles/qwen3_vl_nvfp4 \
   --host 0.0.0.0 --port 8000 \
   --max-pixels 500000
 ```

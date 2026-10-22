@@ -64,7 +64,7 @@ flashcli pull bundles/qwen_nvfp4@qwen36
 3. 下载 entry + 匹配的 `runtime/<env-key>/`
 4. `kind=python`：创建 bundle venv（`python_abi`、manifest 中的 torch）。native kind 跳过 venv。
 5. `kind=python`：在 bundle venv 内 **re-exec** infer — [architecture.zh-CN.md](architecture.zh-CN.md)。`native-exec`/`native-abi`：host 直接 spawn / `dlopen` bundle backend。
-6. **主机**（推理前）：若 cache 不完整则下载 `weights` + `extra_weights` + 执行 `post_pull` — 与 `flashcli pull` 同一代码路径
+6. **主机**（推理前）：确保 `weights` + `extra_weights` + `post_pull`。主机在**传输前**把远端预期文件集写入 `<weights_dir>/.flashcli_download.json`，中断后按预期集续传；完整清单可离线接受；`flashcli pull` 会重新列远端并重写清单。无清单且无 `.flashcli_download.incomplete` 的旧缓存回退到 bundle 声明的就绪规则。
 7. **bundle**：仅解析本地 checkpoint（`HF_HUB_OFFLINE=1`）；运行 `entry`（或原生 backend）
 
 `flashcli pull <ref>` 执行步骤 1–6，不进入推理。首次 `flashcli run` / `serve` 在 cache 为空时也会自动执行 1–6。

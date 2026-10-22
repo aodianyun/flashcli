@@ -64,7 +64,7 @@ Weights are **not** in the bundle; cached under `~/.flashcli/models/<name>/<vers
 3. Download entry tree + **only** matching `runtime/<env-key>/`
 4. `kind=python`: create bundle venv (`python_abi`, manifest torch). Native kinds skip the venv.
 5. `kind=python`: **re-exec** infer inside the bundle venv — [architecture.md](architecture.md). `native-exec`/`native-abi`: the host spawns / `dlopen`s the bundle backend directly.
-6. **Host** (before inference): download `weights` + `extra_weights` + `post_pull` if cache is incomplete — same code path as `flashcli pull`
+6. **Host** (before inference): ensure `weights` + `extra_weights` + `post_pull`. The host writes the expected remote file set to `<weights_dir>/.flashcli_download.json` **before** transferring, resumes interrupted downloads, and accepts a complete manifest offline; `flashcli pull` re-lists and rewrites it. Legacy caches (no manifest and no `.flashcli_download.incomplete`) fall back to the bundle's declared readiness.
 7. **Bundle**: resolve local checkpoint only (`HF_HUB_OFFLINE=1`); run `entry` (or the native backend)
 
 `flashcli pull <ref>` runs steps 1–6 without inference. First `flashcli run` / `serve` also runs 1–6 automatically when cache is cold.

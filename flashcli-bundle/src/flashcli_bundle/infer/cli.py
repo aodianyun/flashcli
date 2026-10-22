@@ -206,6 +206,36 @@ def _bundle_argv_after_ref(argv: list[str]) -> list[str]:
     return rest
 
 
+def _strip_option(argv: list[str], flag: str, *, takes_value: bool = True) -> list[str]:
+    """Remove host-only option(s) from a script entry's argv.
+
+    Script entries receive argv verbatim (engine mode parses these itself), so
+    host flags such as ``--checkpoint`` would otherwise trip argparse. The
+    value was already peeked and is passed via ``FLASHCLI_CHECKPOINT``.
+    """
+    out: list[str] = []
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == flag:
+            i += 1
+            if takes_value and i < len(argv) and not argv[i].startswith("--"):
+                i += 1
+            continue
+        if arg.startswith(flag + "="):
+            i += 1
+            continue
+        out.append(arg)
+        i += 1
+    return out
+
+
+def _strip_script_host_flags(argv: list[str]) -> list[str]:
+    argv = _strip_option(argv, "--checkpoint")
+    argv = _strip_option(argv, "--no-auto-install", takes_value=False)
+    return argv
+
+
 def _peek_checkpoint_from_argv(argv: list[str]) -> Path | None:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--checkpoint", type=Path)
@@ -257,14 +287,14 @@ def parse_run_argv(
         )
 
     if em == "script":
-        bundle_argv = _bundle_argv_after_ref(argv)
+        raw_argv = _bundle_argv_after_ref(argv)
         return RunInvocation(
             preset=preset_name,
             bundle=bundle_path,
             entry_mode="script",
-            bundle_argv=bundle_argv,
-            checkpoint=_peek_checkpoint_from_argv(bundle_argv),
-            mtp_checkpoint=_peek_mtp_checkpoint_from_argv(bundle_argv),
+            bundle_argv=_strip_script_host_flags(raw_argv),
+            checkpoint=_peek_checkpoint_from_argv(raw_argv),
+            mtp_checkpoint=_peek_mtp_checkpoint_from_argv(raw_argv),
             option_specs=specs,
         )
 
@@ -320,14 +350,14 @@ def parse_serve_argv(
         )
 
     if em == "script":
-        bundle_argv = _bundle_argv_after_ref(argv)
+        raw_argv = _bundle_argv_after_ref(argv)
         return ServeInvocation(
             preset=preset_name,
             bundle=bundle_path,
             entry_mode="script",
-            bundle_argv=bundle_argv,
-            checkpoint=_peek_checkpoint_from_argv(bundle_argv),
-            mtp_checkpoint=_peek_mtp_checkpoint_from_argv(bundle_argv),
+            bundle_argv=_strip_script_host_flags(raw_argv),
+            checkpoint=_peek_checkpoint_from_argv(raw_argv),
+            mtp_checkpoint=_peek_mtp_checkpoint_from_argv(raw_argv),
             option_specs=specs,
         )
 

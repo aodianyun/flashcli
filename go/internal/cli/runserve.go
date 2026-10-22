@@ -283,7 +283,7 @@ func resolveWeights(m *manifest.Manifest, abs, version, variant string, quiet bo
 	case envBool("FLASHCLI_SKIP_WEIGHTS"):
 		env = weights.EnvMap(m, variant)
 	default:
-		checkpoint, env, err = weights.PrepareBundle(context.Background(), m, version, variant, quiet)
+		checkpoint, env, err = weights.PrepareBundle(context.Background(), m, version, variant, quiet, false)
 		if err != nil {
 			return "", nil, nil, err
 		}

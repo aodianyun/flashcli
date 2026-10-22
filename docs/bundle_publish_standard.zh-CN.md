@@ -276,7 +276,7 @@ bundle venv 的 Python 版本由 `python_abi` 决定，与主机 CLI Python 版�
 | `allow_patterns` | 要拉取的文件（Hub CLI `--include`）；Hub 常一次只返回一个文件时，应列出全部必需文件名 |
 | `require_any_patterns` | 可选；就绪检查为**任一**匹配（遗留；优先在 `allow_patterns` 中列出全部必需文件） |
 
-**主机 vs infer：** `flashcli pull` 与 `flashcli run` / `serve` 的主机预检会下载 `weights` + `extra_weights` 并执行 `post_pull`。bundle venv 推理阶段设置 `HF_HUB_OFFLINE=1` — 缺文件应重新 `flashcli pull`，而非在运行时访问 Hub。
+**主机 vs infer：** `flashcli pull` 与 `flashcli run` / `serve` 的主机预检会下载 `weights` + `extra_weights` 并执行 `post_pull`。主机在**传输前**把预期文件集（`path`+`size`）写入 `<weights_dir>/.flashcli_download.json`，中断后按预期集续传；`pull` 会重新列远端。bundle venv 推理阶段设置 `HF_HUB_OFFLINE=1` — 缺文件应重新 `flashcli pull`，而非在运行时访问 Hub。`allow_patterns`/`require_any_patterns` 是就绪规则（用于旧缓存与下载后检查），不是主机完整性契约。
 
 **Hugging Face 仓库优先用 `extra_weights`，少用 `post_pull`。** `post_pull` 保留给非 Hub 资源（如 Pi0.5 从固定 URL 拉 PaliGemma tokenizer）。
 
@@ -488,7 +488,7 @@ manifest `env` 示例（Qwen variant，节选）：
 | manifest `env` | **不应用** | **应用** |
 | `post_pull` 写入的 env | 若 manifest 含 `post_pull` 仍会执行（准备磁盘文件）；script entry 一般 **不依赖** 其 env，优先用上表 `FLASHCLI_*` | 可读，如 `FLASH_RT_PALIGEMMA_TOKENIZER` |
 | `run_options` / `serve_options` | 仅 `--help` 文档；参数在 `argv` 中 | 由 flashcli 解析并传入 engine |
-| `--checkpoint` | 留在 `argv`；同时用于 flashcli 校验并写入 `FLASHCLI_CHECKPOINT` | flashcli 解析；传入 `load()`，不写 `FLASHCLI_CHECKPOINT` |
+| `--checkpoint` | **由 flashcli 消费**（不转发给 entry）；通过 `FLASHCLI_CHECKPOINT` 提供 | flashcli 解析；传入 `load()`，不写 `FLASHCLI_CHECKPOINT` |
 | `--mtp-checkpoint` | **不** 由 flashcli 解析（原样在 `argv`）；扩展权重用 `FLASHCLI_EXTRA_WEIGHT_*` | 写入 `FLASHRT_QWEN36_MTP_CKPT_DIR` |
 
 #### 4.4.4 请勿在 entry 中依赖

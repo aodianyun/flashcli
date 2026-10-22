@@ -16,6 +16,7 @@ import (
 	"github.com/ebitengine/purego"
 
 	"github.com/aodianyun/flashcli/go/internal/errs"
+	"github.com/aodianyun/flashcli/go/internal/venv"
 )
 
 var sonamesByFamily = map[string][]string{
@@ -175,6 +176,16 @@ func (ExecRunner) Run(ctx context.Context, argv []string) error {
 	return nil
 }
 
+// venvRunner adapts cuda.Runner to venv.Runner (which also passes an env).
+type venvRunner struct{ r Runner }
+
+func (v venvRunner) Run(ctx context.Context, argv []string, _ []string) error {
+	if v.r == nil {
+		return ExecRunner{}.Run(ctx, argv)
+	}
+	return v.r.Run(ctx, argv)
+}
+
 // Ensure makes the required CUDA libs loadable (installing into the venv if allowed).
 func Ensure(ctx context.Context, python, cudaTag string, quiet, install bool, runner Runner) error {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("FLASHCLI_SKIP_CUDA_USERLAND"))) {
@@ -214,11 +225,11 @@ func Ensure(ctx context.Context, python, cudaTag string, quiet, install bool, ru
 	if !install || len(packages) == 0 {
 		return errs.EnvWrapf("Missing CUDA userland libraries for native cu%s: %s (venv %s)", cudaTag, strings.Join(missing(), ", "), python)
 	}
-	argv := append([]string{python, "-m", "pip", "install"}, packages...)
+	args := append([]string{}, packages...)
 	if quiet {
-		argv = append(argv, "-q")
+		args = append(args, "-q")
 	}
-	if err := runner.Run(ctx, argv); err != nil {
+	if err := venv.InstallArgs(ctx, venvRunner{runner}, python, args, quiet); err != nil {
 		return errs.EnvWrapf("pip install failed for CUDA userland cu%s: %s", cudaTag, err)
 	}
 	PrependLDLibraryPath(NvidiaLibDirs(purelib))

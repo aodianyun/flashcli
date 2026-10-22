@@ -88,3 +88,40 @@ def test_groot_runtime_sm120_only() -> None:
     manifest = load_bundle_manifest(GROOT_ROOT)
     runtime = manifest.raw.get("runtime") or {}
     assert list(runtime.keys()) == ["sm120-cu130-linux-x86_64-py312"]
+
+
+def test_groot_script_strips_host_flags(monkeypatch) -> None:
+    """--checkpoint / --no-auto-install are host flags: consumed by flashcli,
+    not forwarded to the script (it provides FLASHCLI_CHECKPOINT instead)."""
+    manifest = load_bundle_manifest(GROOT_ROOT)
+    preset = Preset(
+        name="groot_n16",
+        raw={"description": "test", "bundle": {"local_root": str(GROOT_ROOT)}},
+    )
+    monkeypatch.setattr(
+        "flashcli_bundle.infer.cli.resolve_manifest_for_preset",
+        lambda _p, bundle_path=None: manifest,
+    )
+    inv = parse_run_argv(
+        [
+            "groot_n16",
+            "--checkpoint",
+            "/tmp/ckpt",
+            "--no-auto-install",
+            "--prompt",
+            "wave hello",
+        ],
+        preset=preset,
+        bundle_path=GROOT_ROOT,
+    )
+    assert inv.entry_mode == "script"
+    assert inv.checkpoint == Path("/tmp/ckpt")
+    assert inv.bundle_argv == ["--prompt", "wave hello"]
+
+    inv2 = parse_run_argv(
+        ["groot_n16", "--checkpoint=/tmp/ckpt2", "--prompt", "hi"],
+        preset=preset,
+        bundle_path=GROOT_ROOT,
+    )
+    assert inv2.checkpoint == Path("/tmp/ckpt2")
+    assert inv2.bundle_argv == ["--prompt", "hi"]

@@ -9,11 +9,17 @@ serve。未列出的变量**无效**。布尔开关：`1`、`true`、`yes`、`on
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `FLASHCLI_HOME` | `~/.flashcli` | 数据根（`runtimes/`、`models/`、`bundles/`、`cache/`、`install.env`）。 |
+| `FLASHCLI_HOME` | `~/.flashcli` | 数据根（`runtimes/`、`models/`、`bundles/`、`src/`、`cache/`、`tools/`、`python/`、`install.env`、`mirror.env`）。 |
+| `FLASHCLI_CLONE_DIR` | `$FLASHCLI_HOME/src` | `install.sh --from-source` 的源码 checkout（构建输入，不是运行数据）。 |
+| `FLASHCLI_SOURCE_DIR` | 未设置 | `--from-source` 使用的已有 checkout；覆盖 `FLASHCLI_CLONE_DIR`。 |
+| `FLASHCLI_SOURCE_UPDATE` | auto | 构建前更新已有 checkout（`1`/`0`）；显式 `--source-dir` 默认 `0`。 |
 | `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | bundle venv 与 `.runtime.json` marker。 |
 | `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | 同步后的 bundle 树与 `.flashcli_bundle.json` marker（`<dir>/<name>/<version>`，所有 `@variant` 共享）。 |
-| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | 权重缓存（`<dir>/<name>/<version>/<weights_dir>/`，`weights_dir` 默认 `checkpoint`）。 |
+| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | 权重缓存（`<dir>/<name>/<version>/<weights_dir>/`，`weights_dir` 默认 `checkpoint`），含主机预期集 `.flashcli_download.json` 与 `.flashcli_download.incomplete` 标记。 |
 | `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | bundle ref 与 python-standalone 的 FlashHub API 基址；浏览 [flashhub.top](https://flashhub.top)。 |
+
+`~/.flashcli` 只存运行数据。host 二进制装到 `/usr/local/bin`（root）或
+`~/.local/bin`（普通用户）；`--from-source` 的源码默认在 `~/.flashcli/src`。
 
 ## GPU / 原生预检
 
@@ -61,12 +67,30 @@ ModelScope：
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `FLASHCLI_BUNDLE_PIP_SPEC` | — | 装进 bundle venv 的 `flashcli-bundle[infer]` pip spec（如本地 `…/flashcli-bundle[infer]`）。优先级最高。 |
-| `FLASHCLI_INSTALL_REPO` / `FLASHCLI_INSTALL_REF` | 来自 `~/.flashcli/install.env` | 无本地 checkout/spec 时，`flashcli-bundle[infer]` 的 git 来源。 |
+| `FLASHCLI_INSTALL_REPO` / `FLASHCLI_INSTALL_REF` | 来自 `~/.flashcli/install.env` | 发布安装时 `flashcli-bundle[infer]` 的 git 回退来源；源码构建改写 `FLASHCLI_BUNDLE_PIP_SPEC`。 |
+| `FLASHCLI_INSTALL_COMMIT` | 来自 `~/.flashcli/install.env` | 源码构建 commit（诊断用，不参与解析）。 |
 | `FLASHCLI_BASE_PYTHON` | 自动 | bundle venv 的基础解释器。 |
 | `FLASHCLI_PY<abi>_BIN` | 自动 | 固定某 `python_abi` 的解释器（如 `FLASHCLI_PY312_BIN`、`FLASHCLI_PY310_BIN`）。 |
 | `FLASHCLI_FORCE_VENV` | `0` | 重建 bundle venv。 |
-| `FLASHCLI_SKIP_VENV_SETUP` | `0` | 跳过 venv 创建/pip（调试；用已有 venv）。 |
+| `FLASHCLI_SKIP_VENV_SETUP` | `0` | 跳过 venv 创建/安装（调试；用已有 venv）。 |
 | `PIP_INDEX_URL` / `PIP_TRUSTED_HOST` | — | 装入 bundle venv（torch/依赖）时使用的 pip 索引。 |
+
+uv 安装器（Python bundle venv；uv **不随包发布**，按需供给）：
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `FLASHCLI_VENV_BACKEND` | `uv` | `uv`（必需）、`pip`（已弃用的逃生口）或 `auto`（有 uv 用 uv，否则 pip）。 |
+| `FLASHCLI_UV_BIN` | — | 显式指定 uv 二进制（最高优先级）。 |
+| `FLASHCLI_UV_VERSION` | 索引上的最新稳定版 | 要供给的 uv 版本（索引不可达时先查 GitHub latest release，再退回内置默认版本）。 |
+| `FLASHCLI_UV_AUTO_INSTALL` | `1` | 允许从 PyPI 索引供给 uv。`0` 关闭。 |
+| `UV_CACHE_DIR` | `$FLASHCLI_HOME/cache/uv` | uv 缓存（与 `runtimes/` 同盘，硬链接共享重层）。 |
+| `UV_LINK_MODE` | `hardlink` | uv 链接模式；保持硬链接以避免复制 torch/CUDA。 |
+| `UV_INDEX_URL` | `PIP_INDEX_URL` | uv 使用的 PyPI 索引（未设时取 `PIP_INDEX_URL`）。 |
+
+供给优先使用配置的 PyPI 索引（wheel），失败回退 GitHub Release 的 tarball。
+已供给的 uv 位于 `$FLASHCLI_HOME/tools/uv/<version>/uv`；用
+`flashcli cache clean --tools`（或 `--all` 同时清缓存）删除；
+`flashcli cache prune` 清理未使用的缓存项。
 
 Standalone Python 自动供给（当 bundle `python_abi` 缺失）：
 

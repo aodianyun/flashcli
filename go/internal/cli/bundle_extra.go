@@ -220,27 +220,35 @@ func findRuntimeForRef(refArg string) (string, bool) {
 	}
 	root := paths.Runtimes()
 	entries, err := os.ReadDir(root)
-	if err != nil {
-		return "", false
+	if err == nil {
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			blob, err := os.ReadFile(filepath.Join(root, e.Name(), ".runtime.json"))
+			if err != nil {
+				continue
+			}
+			var data map[string]any
+			if json.Unmarshal(blob, &data) != nil {
+				continue
+			}
+			if preset, _ := data["preset"].(string); preset == p.Name {
+				return e.Name(), true
+			}
+			if localRoot, _ := data["local_root"].(string); localRoot != "" && p.Local &&
+				strings.HasSuffix(filepath.Clean(localRoot), filepath.Clean(p.Name)) {
+				return e.Name(), true
+			}
+		}
 	}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		blob, err := os.ReadFile(filepath.Join(root, e.Name(), ".runtime.json"))
-		if err != nil {
-			continue
-		}
-		var data map[string]any
-		if json.Unmarshal(blob, &data) != nil {
-			continue
-		}
-		if preset, _ := data["preset"].(string); preset == p.Name {
-			return e.Name(), true
-		}
-		if localRoot, _ := data["local_root"].(string); localRoot != "" && p.Local &&
-			strings.HasSuffix(filepath.Clean(localRoot), filepath.Clean(p.Name)) {
-			return e.Name(), true
+	// Fallback: the bundle sync marker records the runtime id even when the
+	// runtime marker is missing (older cache or an aborted run).
+	if marker := runtime.ReadPresetMarker(refCacheKey(p)); marker != nil {
+		if rid := strOf(marker["runtime_id"]); rid != "" {
+			if _, err := os.Stat(runtime.Dir(rid)); err == nil {
+				return rid, true
+			}
 		}
 	}
 	return "", false

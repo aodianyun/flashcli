@@ -97,16 +97,87 @@ sequenceDiagram
 
 **Resolution order**: local positional path (directory with `flashcli-bundle.json`) > synced bundle cache (preset marker under `bundles/<cache-key>/`); FlashHub refs are synced via `bundle sync`.
 
+## Weights cache: completeness vs readiness (offline guarantee)
+
+Two independent checks, deliberately separated:
+
+1. **Host — download completeness.** After listing the remote file set (and
+   applying the bundle's `allow_patterns`), the host writes the **expected set**
+   to `<weights_dir>/.flashcli_download.json` (`path`, `size`) **before**
+   transferring files. A cache is complete only when every recorded file exists
+   with its recorded size. The expected set is kept on failure, so the next
+   attempt resumes missing/incomplete files. While a download is in progress or
+   interrupted, `<weights_dir>/.flashcli_download.incomplete` is present.
+   This is model-agnostic: it never encodes bundle-specific filenames. The main
+   weights and every `extra_weights` destination have their own manifest.
+2. **Bundle — readiness.** `flashcli-bundle.json` declares what the entry needs
+   (`allow_patterns`, `require_any_patterns`, `require_norm_stats`); the host
+   evaluates those rules only to decide whether the bundle is usable.
+
+**Network policy — `run`/`serve` are local-first:**
+
+- a **complete download manifest** → local verification + bundle readiness
+  (no network);
+- a **legacy cache without a manifest and without the incomplete marker** →
+  evaluate the bundle's declared readiness **locally** (no network);
+- a manifest file that exists but cannot be parsed is **never** treated as a
+  legacy cache; the host re-lists;
+- when the manifest is missing (and no legacy cache is accepted) or incomplete,
+  `run`/`serve` auto-prepare (network) and resume the expected set; an explicit
+  `flashcli pull` always re-lists the remote and rewrites the expected set,
+  even when the local manifest is complete.
+
+Therefore **once preparation succeeds** (bundle tree + weights + venv/deps),
+every later `run`/`serve` runs **offline**. Network is only needed when artifacts
+are missing, on an explicit `flashcli pull`, or when a protocol
+`CACHE_SCHEMA_VERSION` change requires upgrading the venv's `flashcli-bundle`.
+
+A manifest that exists but is **incomplete is never accepted**, even if the
+lenient bundle readiness would otherwise pass; an interrupted download is
+resumed from the recorded expected set.
+
+## Bundle venv installer (uv)
+
+Bundle venvs are created and installed with **uv** by default (per-model
+isolation is kept). uv is **not shipped** with flashcli: `uv.Ensure` resolves
+`FLASHCLI_UV_BIN` → `uv` on `PATH` → a previously provisioned copy, and otherwise
+provisions a pinned/current uv from the configured PyPI index (CN mirror) with
+sha256 verification into `~/.flashcli/tools/uv/<version>/`.
+
+- Provisioning prefers the configured **PyPI index** (latest stable wheel,
+  sha256-verified). If the index is unreachable it asks the **GitHub latest
+  release**, then a pinned default, and downloads the **GitHub release** tarball
+  (sha256-verified).
+- `uv venv --python <base> --seed` creates the venv; `uv pip install --python …`
+  installs `flashcli-bundle[infer]`, torch, and manifest deps. Protocol upgrades
+  and CUDA userland installs go through the same installer.
+- `UV_CACHE_DIR` defaults to `~/.flashcli/cache/uv` (same filesystem as
+  `runtimes/`, so uv **hardlinks** shared wheels and the heavy torch/CUDA layer
+  is stored once); `UV_LINK_MODE=hardlink`.
+- `FLASHCLI_VENV_BACKEND=pip` is an explicit escape hatch (deprecated) for
+  environments where uv cannot run; the default `uv` fails clearly if uv is
+  unavailable. Native bundles do not need uv.
+- After a venv is created it is offline-usable (uv is only needed when
+  installing); `flashcli cache clean [--uv|--tools|--all]` removes the uv cache
+  and/or provisioned binaries without touching existing venvs, and
+  `flashcli cache prune` prunes unreachable uv cache objects (conservative; `cache clean` fully clears).
+
 ## Local directories
 
 ```text
 ~/.flashcli/
-├── install.env              # source hints for flashcli-bundle[infer] (repo/ref)
+├── install.env              # flashcli-bundle[infer] source: local checkout (source build) or repo/ref (release)
+├── mirror.env               # written by install.sh --mirror (pip/HF/GitHub mirrors)
+├── src/                     # --from-source checkout (build input; default ~/.flashcli/src)
 ├── python/                  # optional standalone Pythons for bundle venv base
+├── python-runtime.env       # FLASHCLI_PY<abi>_BIN=… written when standalone Python is provisioned
 ├── runtimes/<id>/           # bundle venv + .runtime.json marker
 ├── bundles/<name>/<version>/.flashcli_bundle.json   # synced tree (shared by all @variant)
 ├── cache/repo-index/        # FlashHub listing cache
-└── models/<name>/<version>/<weights_dir>/           # per-variant weights (default checkpoint/)
+├── cache/uv/                # uv package cache (default UV_CACHE_DIR)
+├── tools/uv/<version>/      # provisioned uv binaries
+└── models/<name>/<version>/<weights_dir>/           # per-variant weights (default checkpoint/) +
+                                                       #   .flashcli_download.json / .flashcli_download.incomplete
 ```
 
 ## Bundle layout (after sync)
@@ -134,7 +205,6 @@ See [module_layers.md](module_layers.md) for the authoritative host / infer / pr
 | `flashcli-bundle/pi05_libero:1.0.4` | `run` |
 | `flashcli-bundle/qwen_nvfp4:1.0.1@qwen3` | `run`, `serve` |
 | `flashcli-bundle/qwen_nvfp4:1.0.1@qwen36` | `run`, `serve` |
-| `flashcli-bundle/qwen3_vl_nvfp4:1.0.0` | `run`, `serve` |
 | `bundles/groot_n16` *(local dev)* | `run` |
 | `bundles/groot_n17` *(local dev)* | `run` |
 

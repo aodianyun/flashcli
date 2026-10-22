@@ -13,7 +13,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
 #   curl -fsSL https://gitee.com/aodiansoft/flashcli/raw/main/install.sh | sh -s -- --mirror
 #   ./install.sh                       # release
-#   ./install.sh --from-source --branch dev
+#   ./install.sh --from-source --branch dev   # update ~/.flashcli/src + rebuild
+#   ./install.sh --source-dir DIR --update-source
 #   ./install.sh --version 1.2.3 --dir /usr/local/bin
 #
 # Env: FLASHCLI_INSTALL_REPO, FLASHCLI_INSTALL_REF, FLASHCLI_GO_VERSION,
@@ -27,7 +28,10 @@ REPO="${FLASHCLI_INSTALL_REPO:-$REPO_GITHUB}"
 REF="${FLASHCLI_INSTALL_REF:-main}"
 VERSION="${FLASHCLI_GO_VERSION:-}"
 SOURCE_DIR="${FLASHCLI_SOURCE_DIR:-}"
-CLONE_DIR="${FLASHCLI_CLONE_DIR:-/opt/flashcli}"
+SOURCE_UPDATE="${FLASHCLI_SOURCE_UPDATE:-}"
+SOURCE_EXPLICIT=0
+FLASHCLI_HOME="${FLASHCLI_HOME:-$HOME/.flashcli}"
+CLONE_DIR="${FLASHCLI_CLONE_DIR:-$FLASHCLI_HOME/src}"
 INSTALL_DIR="${FLASHCLI_GO_INSTALL_DIR:-}"
 MIRROR=0
 FROM_SOURCE=0
@@ -82,19 +86,22 @@ apply_mirror_endpoints() {
   export PIP_TRUSTED_HOST="${PIP_TRUSTED_HOST:-$MIRROR_PIP_TRUSTED_HOST}"
   export HF_ENDPOINT="${HF_ENDPOINT:-$MIRROR_HF_ENDPOINT}"
   export FLASHCLI_PREFER_HF_MIRROR=1
+  export GOPROXY="${GOPROXY:-https://goproxy.cn,direct}"
+  export GOSUMDB="${GOSUMDB:-sum.golang.google.cn}"
   case "${FLASHCLI_GIT_PROXY:-}" in
     0|false|no|off) ;;
     *) export FLASHCLI_GIT_PROXY="${FLASHCLI_GIT_PROXY:-$DEFAULT_GIT_PROXY_PREFIX}" ;;
   esac
   info "mirror: PIP_INDEX_URL=${PIP_INDEX_URL}"
   info "mirror: HF_ENDPOINT=${HF_ENDPOINT}"
+  info "mirror: GOPROXY=${GOPROXY}"
   [ -n "${FLASHCLI_GIT_PROXY:-}" ] && info "mirror: FLASHCLI_GIT_PROXY=${FLASHCLI_GIT_PROXY}"
   return 0
 }
 
 usage() {
   if [ -f "$0" ]; then sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; else
-    echo "usage: install.sh [--mirror|--gitee] [--github] [--no-mirror] [--pip-mirror NAME] [--pip-probe] [--from-source] [--ref REF|--branch REF] [--version V] [--dir DIR] [--source-dir DIR]"
+    echo "usage: install.sh [--mirror|--gitee] [--github] [--no-mirror] [--pip-mirror NAME] [--pip-probe] [--from-source] [--ref REF|--branch REF] [--version V] [--dir DIR] [--source-dir DIR] [--update-source|--no-update-source]"
   fi
 }
 
@@ -109,12 +116,20 @@ while [ $# -gt 0 ]; do
     --version) VERSION="$2"; shift 2 ;;
     --dir) INSTALL_DIR="$2"; shift 2 ;;
     --from-source|--source) FROM_SOURCE=1; shift ;;
-    --source-dir) FROM_SOURCE=1; SOURCE_DIR="$2"; shift 2 ;;
+    --source-dir) FROM_SOURCE=1; SOURCE_DIR="$2"; SOURCE_EXPLICIT=1; shift 2 ;;
+    --update-source|--update) SOURCE_UPDATE=1; shift ;;
+    --no-update-source) SOURCE_UPDATE=0; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown option: $1" ;;
   esac
 done
 [ -n "$SOURCE_DIR" ] && FROM_SOURCE=1
+# Default: update the installer-managed clone ($FLASHCLI_HOME/src) on every
+# --from-source run; an explicit --source-dir is left alone unless
+# --update-source is passed (protects developer workspaces).
+if [ -z "$SOURCE_UPDATE" ]; then
+  if [ "$SOURCE_EXPLICIT" = 1 ]; then SOURCE_UPDATE=0; else SOURCE_UPDATE=1; fi
+fi
 
 if [ "$MIRROR" = 1 ]; then
   REPO="${FLASHCLI_INSTALL_REPO:-$REPO_GITEE}"
@@ -215,20 +230,43 @@ ensure_git() {
   install_os_packages git || true
   have_cmd git || { die "git is required for --from-source"; tool_hint git; }
 }
+# go_version_ok: Go >= 1.24 (go.mod requires it).
+go_version_ok() {
+  have_cmd go || return 1
+  v="$(go env GOVERSION 2>/dev/null | sed 's/^go//')"
+  [ -n "$v" ] || return 1
+  major="$(printf '%s' "$v" | cut -d. -f1)"
+  minor="$(printf '%s' "$v" | cut -d. -f2)"
+  [ "$major" -gt 1 ] 2>/dev/null && return 0
+  [ "$major" -eq 1 ] 2>/dev/null && [ "$minor" -ge 24 ] 2>/dev/null
+}
 ensure_go() {
-  have_cmd go && return 0
-  warn "Go not found — installing ..."
-  install_os_packages golang-go || install_os_packages golang || true
-  have_cmd go && return 0
+  go_version_ok && return 0
+  if have_cmd go; then
+    warn "Go $(go env GOVERSION 2>/dev/null) is older than 1.24 — provisioning Go 1.24"
+  else
+    warn "Go not found — installing ..."
+  fi
+  # Prefer the pinned release tarball: distro packages often ship < 1.24 and
+  # with an unreachable proxy.golang.org the auto toolchain download fails.
   gover="${FLASHCLI_GO_TOOLCHAIN_VERSION:-1.24.0}"
   dest="${FLASHCLI_GO_ROOT:-$HOME/.local}"; mkdir -p "$dest"
   if [ "$MIRROR" = 1 ]; then gbase="https://mirrors.aliyun.com/golang"; else gbase="https://go.dev/dl"; fi
-  tgz="$dest/go${gover}.linux-${goarch}.tar.gz"
-  info "downloading Go ${gover} -> $dest"
-  fetch "${gbase}/go${gover}.linux-${goarch}.tar.gz" "$tgz"
-  tar -C "$dest" -xzf "$tgz" && rm -f "$tgz"
-  export PATH="$dest/go/bin:$PATH"
-  have_cmd go || die "failed to provision Go; install Go >= 1.24 and re-run"; 
+  if ensure_download_tool; then
+    tgz="$dest/go${gover}.linux-${goarch}.tar.gz"
+    info "downloading Go ${gover} -> $dest"
+    if fetch "${gbase}/go${gover}.linux-${goarch}.tar.gz" "$tgz"; then
+      rm -rf "$dest/go"
+      tar -C "$dest" -xzf "$tgz" && rm -f "$tgz"
+      export PATH="$dest/go/bin:$PATH"
+    else
+      warn "failed to download Go ${gover} from ${gbase}; trying the OS package manager"
+    fi
+  fi
+  if ! go_version_ok; then
+    install_os_packages golang-go || install_os_packages golang || true
+  fi
+  go_version_ok || die "Go >= 1.24 is required; install Go 1.24 and re-run (or set FLASHCLI_GO_ROOT)"
 }
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -237,17 +275,41 @@ case "$arch" in x86_64|amd64) goarch=amd64 ;; aarch64|arm64) goarch=arm64 ;; *) 
 asset="flashcli-${os}-${goarch}"
 
 SOURCE_USED=""
+
+# Update an existing clean git checkout to the requested ref. Dirty trees are
+# left untouched so local work is never destroyed.
+update_source() {
+  [ -d "$SOURCE_DIR/.git" ] || return 0
+  if [ -n "$(git -C "$SOURCE_DIR" status --porcelain 2>/dev/null)" ]; then
+    warn "source tree has local changes; not updating: $SOURCE_DIR"
+    return 0
+  fi
+  info "updating $SOURCE_DIR (ref $REF)"
+  if ! git -C "$SOURCE_DIR" fetch --depth 1 "$REPO" "$REF" >/dev/null 2>&1; then
+    warn "could not fetch $REF from $REPO; building the existing checkout"
+    return 0
+  fi
+  git -C "$SOURCE_DIR" checkout -q "$REF" 2>/dev/null || git -C "$SOURCE_DIR" checkout -q -B "$REF" FETCH_HEAD
+  git -C "$SOURCE_DIR" reset --hard FETCH_HEAD >/dev/null 2>&1 || true
+}
+
 install_source() {
   ensure_git
   if [ -z "$SOURCE_DIR" ]; then
     SOURCE_DIR="$CLONE_DIR"
     if [ ! -f "$SOURCE_DIR/scripts/build_go.sh" ]; then
+      mkdir -p "$(dirname "$SOURCE_DIR")"
       info "cloning $REPO (ref $REF) -> $SOURCE_DIR"
       git clone --depth 1 --branch "$REF" "$REPO" "$SOURCE_DIR" 2>/dev/null || git clone "$REPO" "$SOURCE_DIR"
+    else
+      [ "$SOURCE_UPDATE" = 1 ] && update_source
     fi
+  elif [ "$SOURCE_UPDATE" = 1 ]; then
+    update_source
   fi
   [ -f "$SOURCE_DIR/scripts/build_go.sh" ] || die "not a flashcli source checkout: $SOURCE_DIR"
   ensure_go
+  export GOTOOLCHAIN=local
   info "building flashcli from $SOURCE_DIR"
   ( cd "$SOURCE_DIR" && bash scripts/build_go.sh >/dev/null )
   [ -f "$SOURCE_DIR/dist/go/$asset" ] || die "build did not produce $SOURCE_DIR/dist/go/$asset"
@@ -304,6 +366,9 @@ mkdir -p "$home" 2>/dev/null || true
 {
   if [ -n "$SOURCE_USED" ] && [ -f "$SOURCE_USED/flashcli-bundle/pyproject.toml" ]; then
     echo "FLASHCLI_BUNDLE_PIP_SPEC=$SOURCE_USED/flashcli-bundle[infer]"
+    if [ -d "$SOURCE_USED/.git" ]; then
+      echo "FLASHCLI_INSTALL_COMMIT=$(git -C "$SOURCE_USED" rev-parse --short HEAD 2>/dev/null || true)"
+    fi
   else
     echo "FLASHCLI_INSTALL_REPO=$REPO"
     echo "FLASHCLI_INSTALL_REF=$REF"

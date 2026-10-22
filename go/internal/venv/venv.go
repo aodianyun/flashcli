@@ -88,7 +88,10 @@ func Ensure(ctx context.Context, runtimeID string, m *manifest.Manifest, opt Opt
 
 	if !opt.Force {
 		if existing, err := runtime.VenvPython(runtimeID); err == nil {
-			if blob, err := os.ReadFile(fpPath); err == nil && strings.TrimSpace(string(blob)) == fp {
+			// A matching fingerprint is not enough: a venv built by an older
+			// host (or with a mismatched FLASHCLI_BASE_PYTHON) must be rebuilt
+			// when its interpreter does not match the manifest python_abi.
+			if blob, err := os.ReadFile(fpPath); err == nil && strings.TrimSpace(string(blob)) == fp && pythonMatches(existing, abi) {
 				return existing, nil
 			}
 		}
@@ -122,23 +125,39 @@ func Ensure(ctx context.Context, runtimeID string, m *manifest.Manifest, opt Opt
 			progress.Note("venv: torch %s from %s", torchPkg, idx)
 		}
 	}
+	inst, err := SelectInstaller(ctx, opt)
+	if err != nil {
+		return "", err
+	}
+	if !opt.Quiet {
+		if inst.UV != "" {
+			progress.Note("venv: installer uv (%s)", inst.UV)
+		} else {
+			progress.Note("venv: installer pip (FLASHCLI_VENV_BACKEND=pip)")
+		}
+	}
 	if err := os.RemoveAll(venv); err != nil {
 		return "", err
 	}
 	if err := os.MkdirAll(filepath.Dir(venv), 0o755); err != nil {
 		return "", err
 	}
-	env := os.Environ()
-	if err := opt.Runner.Run(ctx, []string{basePython, "-m", "venv", venv}, env); err != nil {
+	if err := inst.CreateVenv(ctx, basePython, venv); err != nil {
 		return "", err
 	}
 	python, err := runtime.VenvPython(runtimeID)
 	if err != nil {
 		return "", fmt.Errorf("venv created but no interpreter under %s", venv)
 	}
-	_ = opt.Runner.Run(ctx, []string{python, "-m", "pip", "install", "-q", "--upgrade", "pip"}, env)
-	for _, argv := range InstallPlan(python, m, torchIndex, opt.Quiet) {
-		if err := opt.Runner.Run(ctx, argv, env); err != nil {
+	if want := abi[0:1] + "." + abi[1:]; !pythonMatches(python, abi) {
+		return "", fmt.Errorf("%w: venv interpreter %s is not Python %s (python_abi=%s); set FLASHCLI_BASE_PYTHON/FLASHCLI_PY%s_BIN or remove %s",
+			errs.Environment, python, want, abi, abi, venv)
+	}
+	if inst.UV == "" {
+		_ = inst.Runner.Run(ctx, []string{python, "-m", "pip", "install", "-q", "--upgrade", "pip"}, inst.env())
+	}
+	for _, args := range installSpecs(m, torchIndex, opt.Quiet) {
+		if err := inst.Install(ctx, python, args); err != nil {
 			return "", err
 		}
 	}
@@ -151,36 +170,46 @@ func Ensure(ctx context.Context, runtimeID string, m *manifest.Manifest, opt Opt
 	return python, nil
 }
 
-// InstallPlan returns the pip install commands for the bundle venv. When quiet,
-// `pip -q` is used (progress hidden); otherwise pip shows its own progress.
-func InstallPlan(python string, m *manifest.Manifest, torchIndex string, quiet bool) [][]string {
-	pip := func(extra ...string) []string {
-		argv := []string{python, "-m", "pip", "install"}
+// installSpecs returns backend-neutral pip-style argument lists (no
+// interpreter prefix): each begins with -q when quiet, then index/package args.
+func installSpecs(m *manifest.Manifest, torchIndex string, quiet bool) [][]string {
+	base := func(extra ...string) []string {
+		args := []string{}
 		if quiet {
-			argv = append(argv, "-q")
+			args = append(args, "-q")
 		}
-		return append(argv, extra...)
+		return append(args, extra...)
 	}
 	var plan [][]string
 	spec, err := FlashcliBundleSpec()
 	if err != nil {
 		spec = "flashcli-bundle[infer]"
 	}
-	plan = append(plan, pip(append(mirror.PipExtraArgs(), spec)...))
+	plan = append(plan, base(append(mirror.PipExtraArgs(), spec)...))
 
 	torchPkg, _ := ParseTorchDependency(m.PythonDependencies()["torch"])
 	if torchPkg != "" {
-		argv := pip()
+		args := base()
 		if torchIndex != "" {
-			argv = append(argv, "--index-url", mirror.TorchIndexURL(torchIndex))
+			args = append(args, "--index-url", mirror.TorchIndexURL(torchIndex))
 		}
-		argv = append(argv, torchPkg)
-		plan = append(plan, argv)
+		args = append(args, torchPkg)
+		plan = append(plan, args)
 	}
 	if deps := pipDependencies(m); len(deps) > 0 {
-		plan = append(plan, pip(append(mirror.PipExtraArgs(), deps...)...))
+		plan = append(plan, base(append(mirror.PipExtraArgs(), deps...)...))
 	}
 	return plan
+}
+
+// InstallPlan returns the pip install commands for the bundle venv (pip
+// backend). uv uses installSpecs via Installer.Install.
+func InstallPlan(python string, m *manifest.Manifest, torchIndex string, quiet bool) [][]string {
+	var out [][]string
+	for _, args := range installSpecs(m, torchIndex, quiet) {
+		out = append(out, append([]string{python, "-m", "pip", "install"}, args...))
+	}
+	return out
 }
 
 func pipDependencies(m *manifest.Manifest) []string {
@@ -269,21 +298,41 @@ func detectCudaTag() string {
 	return "124"
 }
 
+// pythonMatches reports whether pyBin is CPython <abi> (e.g. "310" -> 3.10).
+func pythonMatches(pyBin, abi string) bool {
+	out, err := exec.Command(pyBin, "-c", "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')").Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) == abi[0:1]+"."+abi[1:]
+}
+
 // ResolveBasePython resolves a host interpreter for the bundle python_abi.
+// Every candidate is version-checked: a generic python3 (e.g. 3.12) must never
+// silently build a venv for a bundle that declared python_abi=310.
 func ResolveBasePython(abi string) (string, error) {
 	pythonprovision.LoadEnvFile()
-	if p, ok := pythonprovision.Resolve(abi); ok {
+	want := abi[0:1] + "." + abi[1:]
+	if v := strings.TrimSpace(os.Getenv("FLASHCLI_PY" + abi + "_BIN")); v != "" {
+		if pythonMatches(v, abi) {
+			return v, nil
+		}
+		return "", fmt.Errorf("FLASHCLI_PY%s_BIN=%s is not Python %s (python_abi=%s)", abi, v, want, abi)
+	}
+	if p, ok := pythonprovision.Resolve(abi); ok && pythonMatches(p, abi) {
 		return p, nil
 	}
 	if v := strings.TrimSpace(os.Getenv("FLASHCLI_BASE_PYTHON")); v != "" {
-		return v, nil
+		if pythonMatches(v, abi) {
+			return v, nil
+		}
+		return "", fmt.Errorf("FLASHCLI_BASE_PYTHON=%s is not Python %s (python_abi=%s)", v, want, abi)
 	}
-	major, minor := string(abi[0]), abi[1:]
-	for _, name := range []string{"python" + major + "." + minor, "python" + minor, "python3"} {
-		if path, err := exec.LookPath(name); err == nil {
+	for _, name := range []string{"python" + want, "python" + abi[1:], "python3"} {
+		if path, err := exec.LookPath(name); err == nil && pythonMatches(path, abi) {
 			return path, nil
 		}
 	}
-	return "", fmt.Errorf("no Python 3.%s interpreter found for python_abi=%s "+
-		"(set FLASHCLI_PY%s_BIN or FLASHCLI_BASE_PYTHON)", minor, abi, abi)
+	return "", fmt.Errorf("no Python %s interpreter found for python_abi=%s "+
+		"(set FLASHCLI_PY%s_BIN or FLASHCLI_BASE_PYTHON)", want, abi, abi)
 }

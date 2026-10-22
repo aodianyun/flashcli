@@ -3,7 +3,6 @@ package venv
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -23,7 +22,9 @@ import (
 // v2: variant-independent keys <name>/<version> with per-variant weights under
 // weights_dir (docs/bundle_publish_standard.md §4.4.1).
 // v3: resolve the variant weights_dir from the raw block (scalar weights_dir).
-const RequiredCacheSchema = 3
+// v4: script mode strips host-only flags (--checkpoint/--no-auto-install) from argv.
+// v5: do not resolve the venv python symlink when querying the torch stack.
+const RequiredCacheSchema = 5
 
 // EnsureProtocolCacheSchema probes flashcli_bundle.CACHE_SCHEMA_VERSION in the
 // venv and, when stale or unavailable, reinstalls only flashcli-bundle.
@@ -42,17 +43,14 @@ func EnsureProtocolCacheSchema(ctx context.Context, python string, opt Options) 
 	if !opt.Quiet {
 		progress.Note("venv: upgrading flashcli-bundle (cache schema %d -> %d) from %s", cur, RequiredCacheSchema, origin)
 	}
-	runner := opt.Runner
-	if runner == nil {
-		runner = ExecRunner{Stdio: !opt.Quiet}
+	inst, err := SelectInstaller(ctx, opt)
+	if err != nil {
+		return err
 	}
-	argv := []string{
-		python, "-m", "pip", "install",
-		"--upgrade", "--force-reinstall", "--no-deps", "--no-cache-dir",
-	}
-	argv = append(argv, mirror.PipExtraArgs()...)
-	argv = append(argv, spec)
-	if err := runner.Run(ctx, argv, os.Environ()); err != nil {
+	args := []string{"--upgrade", "--force-reinstall", "--no-deps", "--no-cache-dir"}
+	args = append(args, mirror.PipExtraArgs()...)
+	args = append(args, spec)
+	if err := inst.Install(ctx, python, args); err != nil {
 		return fmt.Errorf("upgrade flashcli-bundle: %w", err)
 	}
 	return nil
