@@ -124,23 +124,25 @@ from `dev`.** Validate host changes by building from `dev` locally — `bash ins
 `install.sh --branch dev` **without** `--from-source` still installs the latest
 *published* release, so it does **not** exercise dev host code.
 
+Host releases are **incremental**: keep every published release and tag; remove only
+unpublished test/draft releases.
+
 **Host (Go) release checklist:**
 
 1. Bump `[project].version` in `pyproject.toml` on `dev`; commit (`chore(release): bump version to X`).
 2. Sync `dev` → `main` (squash-and-record, above) so `main` carries the validated commit.
-3. Remove any previous/test release **and** its tag on GitHub and Gitee (keep only the latest).
-4. Tag `vX` on the `main` release commit; push the tag.
-5. `bash scripts/release_go.sh --upload` builds and publishes both GitHub and Gitee
+3. Tag `vX` on the `main` release commit; push the tag.
+4. `bash scripts/release_go.sh --upload` builds and publishes both GitHub and Gitee
    (target branch defaults to `main`; override with `FLASHCLI_RELEASE_TARGET`).
-6. Write the release notes per the standard below on **both** platforms.
-7. Verify the published assets in a clean environment:
+5. Write the release notes per the standard below on **both** platforms.
+6. Verify the published assets in a clean environment:
    `bash scripts/verify_release.sh --version X` (isolated prefix; add `--mirror` for Gitee).
 
 - **Bundles**: follow the maintainer checklist below and [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md).
 
 #### Release notes standard
 
-Concise; **Features** and **Fixes** only. Bold the key terms. Same text on GitHub and Gitee; keep only the latest release.
+Concise; **Features** and **Fixes** only. Bold the key terms. Same text on GitHub and Gitee; host releases are **incremental** (keep previous releases/tags).
 
 ```markdown
 # flashcli <version>
