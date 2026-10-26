@@ -22,6 +22,7 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 def test_go_native_exec_run(go_binary: Path, tmp_path: Path) -> None:
     env = dict(
         os.environ,
+        FLASHCLI_HOME=str(tmp_path / "home"),
         FLASHCLI_MODELS_DIR=str(tmp_path / "models"),
         FLASHCLI_SKIP_WEIGHTS="1",
         FLASHCLI_SKIP_PREFLIGHT="1",
@@ -42,6 +43,7 @@ def test_go_native_exec_serve_stdio_unsupported(go_binary: Path, tmp_path: Path)
         return
     env = dict(
         os.environ,
+        FLASHCLI_HOME=str(tmp_path / "home"),
         FLASHCLI_MODELS_DIR=str(tmp_path / "models"),
         FLASHCLI_SKIP_WEIGHTS="1",
         FLASHCLI_SKIP_PREFLIGHT="1",
@@ -63,6 +65,7 @@ def test_go_native_exec_serve_http(go_binary: Path, tmp_path: Path) -> None:
         return
     env = dict(
         os.environ,
+        FLASHCLI_HOME=str(tmp_path / "home"),
         FLASHCLI_MODELS_DIR=str(tmp_path / "models"),
         FLASHCLI_SKIP_WEIGHTS="1",
         FLASHCLI_SKIP_PREFLIGHT="1",

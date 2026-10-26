@@ -69,6 +69,7 @@ def test_go_run_reexecs_infer(go_binary: Path, tmp_path: Path) -> None:
 
     env = dict(
         os.environ,
+        FLASHCLI_HOME=str(tmp_path / "home"),
         FLASHCLI_RUNTIMES_DIR=str(runtimes),
         FLASHCLI_SKIP_VENV_SETUP="1",
         FLASHCLI_SKIP_PREFLIGHT="1",
@@ -95,6 +96,7 @@ def test_go_run_rejects_unsupported_capability(go_binary: Path, tmp_path: Path) 
     runtimes = tmp_path / "runtimes"
     env = dict(
         os.environ,
+        FLASHCLI_HOME=str(tmp_path / "home"),
         FLASHCLI_RUNTIMES_DIR=str(runtimes),
         FLASHCLI_SKIP_VENV_SETUP="1",
         FLASHCLI_SKIP_PREFLIGHT="1",
