@@ -45,7 +45,7 @@ export BUNDLE="$(pwd)/bundles/wan22/dist"
 
 ```bash
 flashcli bundle validate "$BUNDLE"
-flashcli models envs "$BUNDLE"
+flashcli models show "$BUNDLE"
 ```
 
 ## 4. 冒烟测试
@@ -89,7 +89,7 @@ bash scripts/release_bundle.sh --bundle wan22 --clean
 
 | 现象 | 处理 |
 |------|------|
-| `NativeEnvironmentNotSupportedError` | 为本机 env key 重编；`flashcli models envs "$BUNDLE"` |
+| `NativeEnvironmentNotSupportedError` | 为本机 env key 重编；`flashcli models show "$BUNDLE"` |
 | `no kernel image...` | GPU/CUDA 与 manifest `runtime` 不匹配 |
 | Wan 根目录无效 | `--wan-root` 须指向含 `wan/` 包的检出 |
 | 权重下载失败 | 检查 ModelScope 访问；或预置 checkpoint |

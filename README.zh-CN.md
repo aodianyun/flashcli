@@ -70,7 +70,8 @@ host 是静态 Go 二进制（无 Python host）。bundle venv 仍按需安装
 
 ```bash
 flashcli doctor
-flashcli models envs flashcli-bundle/<name>:<version>   # 本机 GPU 对应的 native 矩阵
+flashcli models show flashcli-bundle/<name>:<version>   # 缓存路径 + 本机 GPU 对应的 native 矩阵
+flashcli du                                            # 各缓存区域磁盘占用
 ```
 
 ### 运行与服务

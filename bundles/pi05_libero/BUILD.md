@@ -41,7 +41,7 @@ export BUNDLE="$(pwd)/bundles/pi05_libero/dist"
 
 ```bash
 flashcli bundle validate "$BUNDLE"
-flashcli models envs "$BUNDLE"
+flashcli models show "$BUNDLE"
 ```
 
 ## 4. Smoke test
@@ -68,7 +68,7 @@ Upload `dist/` to FlashHub as `flashcli-bundle/pi05_libero:1.0.4` (bump version 
 
 | Symptom | Fix |
 |---------|-----|
-| `NativeEnvironmentNotSupportedError` | Rebuild for this host's env key; run `flashcli models envs "$BUNDLE"` |
+| `NativeEnvironmentNotSupportedError` | Rebuild for this host's env key; run `flashcli models show "$BUNDLE"` |
 | `no kernel image...` | Wrong GPU/CUDA cell vs manifest `runtime` keys |
 | `'GemmRunner'... fp8_nt_dev` | Rebuild FlashRT or use `_pi05_compat.py` shim |
 | Weight download fails | `HF_ENDPOINT` or `--checkpoint` with pre-downloaded weights |

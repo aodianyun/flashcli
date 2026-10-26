@@ -84,7 +84,7 @@ bash build.sh --repo-root /path/to/FlashRT
 
 **GPU**: SM89 (Ada) and SM120 (Blackwell). **CUDA**: cu124 (SM89 only); cu130 (SM89 + SM120 — cu130 matrix pass also cross-builds `sm120-cu130`).
 
-Host keys: `sm89-cu124-linux-x86_64-py312`, `sm89-cu130-linux-x86_64-py312`, `sm120-cu130-linux-x86_64-py312`. Check: `flashcli models envs flashcli-bundle/pi05_libero:1.0.4`.
+Host keys: `sm89-cu124-linux-x86_64-py312`, `sm89-cu130-linux-x86_64-py312`, `sm120-cu130-linux-x86_64-py312`. Check: `flashcli models show flashcli-bundle/pi05_libero:1.0.4`.
 
 Upload `dist/` to FlashHub; users pin `flashcli-bundle/pi05_libero:<version>`.
 

@@ -76,7 +76,7 @@ Go 主机**不** import Python infer 包；它以子进程启动（或驱动原�
 
 | 包 | 职责 |
 |----|------|
-| `cli` | 面向用户的命令（`run`/`serve`/`pull`/`bundle`/`models`/`doctor`/`upgrade`） |
+| `cli` | 面向用户的命令（`run`/`serve`/`pull`/`bundle`/`models`/`cache`/`doctor`/`du`/`upgrade`/`version`） |
 | `ref`、`flashhub` | ref 解析、FlashHub index + 树同步 |
 | `weights` | HF/ModelScope 下载、缓存、`post_pull`、`extra_pull` |
 | `preflight`、`native`、`hostabi`、`cuda` | env-key 匹配、native cell 校验、宿主 ABI、CUDA userland |

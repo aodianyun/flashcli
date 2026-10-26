@@ -75,7 +75,7 @@ Command tree, FlashHub sync, weight download, preflight, venv, and backend dispa
 
 | Package | Role |
 |---------|------|
-| `cli` | User-facing commands (`run`/`serve`/`pull`/`bundle`/`models`/`doctor`/`upgrade`) |
+| `cli` | User-facing commands (`run`/`serve`/`pull`/`bundle`/`models`/`cache`/`doctor`/`du`/`upgrade`/`version`) |
 | `ref`, `flashhub` | Ref parsing, FlashHub index + tree sync |
 | `weights` | HF/ModelScope download, cache, `post_pull`, `extra_pull` |
 | `preflight`, `native`, `hostabi`, `cuda` | Env-key match, native cell validation, host ABI, CUDA userland |

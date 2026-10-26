@@ -45,7 +45,7 @@ export BUNDLE="$(pwd)/bundles/wan22/dist"
 
 ```bash
 flashcli bundle validate "$BUNDLE"
-flashcli models envs "$BUNDLE"
+flashcli models show "$BUNDLE"
 ```
 
 ## 4. Smoke test
@@ -89,7 +89,7 @@ bash scripts/release_bundle.sh --bundle wan22 --clean
 
 | Symptom | Fix |
 |---------|-----|
-| `NativeEnvironmentNotSupportedError` | Rebuild for this host’s env key; `flashcli models envs "$BUNDLE"` |
+| `NativeEnvironmentNotSupportedError` | Rebuild for this host’s env key; `flashcli models show "$BUNDLE"` |
 | `no kernel image...` | Wrong GPU/CUDA cell vs manifest `runtime` keys |
 | Invalid Wan root | Point `--wan-root` at a checkout that contains the `wan/` package |
 | Weight download fails | Check ModelScope access; or pre-place checkpoint and use local path tooling |

@@ -93,7 +93,7 @@ uv installer (Python bundle venvs; uv is **not** shipped, provisioned on demand)
 Provisioning prefers the configured PyPI index (wheel) and falls back to the
 GitHub release tarball. Provisioned uv lives in
 `$FLASHCLI_HOME/tools/uv/<version>/uv`; remove it with
-`flashcli cache clean --tools` (or `--all` for cache + tools);
+`flashcli cache clean --tools` (or `--all` for cache + tools + FlashHub repo-index; `--flashhub` for repo-index only);
 `flashcli cache prune` prunes unused cache entries.
 
 Standalone Python provisioning (when the bundle `python_abi` is missing):
