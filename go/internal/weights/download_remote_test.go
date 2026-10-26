@@ -350,3 +350,58 @@ func TestDownloadRemoteReadinessFailureClearsMarker(t *testing.T) {
 		t.Fatal("complete download with failed readiness must not leave the incomplete marker")
 	}
 }
+
+func TestIsCachedLegacyReady(t *testing.T) {
+	dir := t.TempDir()
+	fakeCheckpoint(t, dir)
+	if !IsCached(dir, Spec{Source: "huggingface", Repo: "repo"}) {
+		t.Fatal("legacy ready cache must be reported cached")
+	}
+}
+
+func TestIsCachedIncompleteMarker(t *testing.T) {
+	dir := t.TempDir()
+	fakeCheckpoint(t, dir)
+	if err := os.WriteFile(filepath.Join(dir, incompleteMarker), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if IsCached(dir, Spec{Source: "huggingface", Repo: "repo"}) {
+		t.Fatal("incomplete marker must not be reported cached")
+	}
+}
+
+func TestIsCachedPartialManifest(t *testing.T) {
+	dir := t.TempDir()
+	fakeCheckpoint(t, dir)
+	if err := writeDownloadManifest(dir, "repo", "rev", []remoteFile{
+		{Path: "config.json", Size: 2}, {Path: "model.safetensors", Size: 8}, {Path: "tokenizer.json", Size: 3},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if IsCached(dir, Spec{Source: "huggingface", Repo: "repo"}) {
+		t.Fatal("partial manifest must not be reported cached")
+	}
+}
+
+func TestIsCachedCompleteManifest(t *testing.T) {
+	dir := t.TempDir()
+	fakeCheckpoint(t, dir)
+	touch(t, dir, "tokenizer.json", 3)
+	if err := writeDownloadManifest(dir, "repo", "rev", []remoteFile{
+		{Path: "config.json", Size: 2}, {Path: "model.safetensors", Size: 8}, {Path: "tokenizer.json", Size: 3},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !IsCached(dir, Spec{Source: "huggingface", Repo: "repo"}) {
+		t.Fatal("complete manifest + readiness must be reported cached")
+	}
+}
+
+func TestIsCachedRequiresMainWeights(t *testing.T) {
+	dir := t.TempDir()
+	touch(t, dir, "config.json", 2)
+	touch(t, dir, "lora_adapter/adapter_model.safetensors", 8)
+	if IsCached(dir, Spec{Source: "huggingface", Repo: "repo"}) {
+		t.Fatal("adapter/action-head files alone are not a main checkpoint")
+	}
+}

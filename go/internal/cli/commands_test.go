@@ -23,8 +23,8 @@ func TestModelsEnvsLocal(t *testing.T) {
 	t.Setenv("FLASHCLI_HOME", home)
 	bundle := filepath.Join(home, "demo_exec")
 	writeExecBundle(t, bundle)
-	if code := Main([]string{"models", "envs", bundle}); code != 0 {
-		t.Fatalf("models envs exit = %d", code)
+	if code := Main([]string{"models", "show", bundle}); code != 0 {
+		t.Fatalf("models show exit = %d", code)
 	}
 }
 

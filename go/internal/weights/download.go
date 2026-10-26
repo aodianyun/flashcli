@@ -131,6 +131,32 @@ func bundleWeightsReady(dest string, spec Spec) bool {
 	return HasCachedWeightFiles(dest, spec.AllowPatterns, spec.RequireNormStats)
 }
 
+// IsCached reports whether dest is already usable for spec without touching the
+// network. It mirrors the local checks in downloadRemote: incomplete downloads,
+// partial/corrupt/foreign manifests, and failed bundle readiness are not cached;
+// a legacy cache (no manifest, no incomplete marker) is accepted when it
+// satisfies the bundle's readiness rules.
+func IsCached(dest string, spec Spec) bool {
+	if dest == "" || !isDir(dest) {
+		return false
+	}
+	if fileExists(filepath.Join(dest, incompleteMarker)) {
+		return false
+	}
+	if man, ok := readDownloadManifest(dest, spec.Repo); ok {
+		if len(manifestMissing(dest, manifestFiles(man))) != 0 {
+			return false
+		}
+		return bundleWeightsReady(dest, spec)
+	}
+	// A manifest that cannot be parsed or belongs to another repo must force a
+	// fresh listing; it is not a legacy cache.
+	if fileExists(downloadManifestPath(dest)) {
+		return false
+	}
+	return bundleWeightsReady(dest, spec)
+}
+
 func prepareDest(dest string, quiet bool, spec Spec) error {
 	if !isDir(dest) {
 		return os.MkdirAll(dest, 0o755)

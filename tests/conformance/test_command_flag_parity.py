@@ -1,13 +1,13 @@
-"""Flag-parity gate: the Go host must accept the historical Python-host flags.
+"""Flag-parity gate for the cleanup/command surface.
 
-Complements ``test_command_parity`` (command surface). Encodes the flags each
-command accepted in the Python host; documented Go differences are listed in
+Complements ``test_command_parity`` (command surface). Encodes the flags the
+Go host must accept; documented differences are listed in
 ``INTENTIONAL_DIFFERENCES``.
 
-Historical Python host flags:
+Required flags:
   pull            --no-auto-install --quiet/-q
   bundle sync     --force --quiet/-q
-  bundle clean    --all --full --flashhub-cache
+  bundle clean    --all --orphans --yes
   bundle validate --skip-abi-probe
   bundle install  --force --quiet/-q
   root            --version/-V
@@ -22,9 +22,10 @@ from pathlib import Path
 FLAG_CASES = {
     ("pull",): ["--no-auto-install", "--quiet", "-q"],
     ("bundle", "sync"): ["--force", "--quiet", "-q"],
-    ("bundle", "clean"): ["--all", "--full", "--flashhub-cache"],
+    ("bundle", "clean"): ["--all", "--orphans", "--yes"],
     ("bundle", "validate"): ["--skip-abi-probe"],
     ("bundle", "install"): ["--force", "--quiet", "-q"],
+    ("cache", "clean"): ["--uv", "--tools", "--flashhub", "--all", "--yes"],
 }
 
 # Python `doctor --install/--force` installed *host Python* deps; the Go host is

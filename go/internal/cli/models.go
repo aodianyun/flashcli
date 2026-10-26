@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
@@ -28,7 +29,7 @@ func modelsCmd() *cobra.Command {
 		Use:   "models",
 		Short: "Model/bundle cache utilities",
 	}
-	root.AddCommand(modelsEnvsCmd(), modelsListCmd(), modelsShowCmd())
+	root.AddCommand(modelsListCmd(), modelsShowCmd())
 	return root
 }
 
@@ -65,12 +66,24 @@ func weightsCachedFor(p ref.Parsed, refStr string) bool {
 	}
 	key := weights.TreeKey(p.Name, ver)
 	rel := "checkpoint"
-	if m, err := loadManifestForRef(refStr, p); err == nil {
+	m, err := loadManifestForRef(refStr, p)
+	if err == nil {
 		key = weights.CacheKeyFor(m, ver)
-		if _, r, _, err := weights.ManifestSpecs(m, p.Variant); err == nil && r != "" {
+		main, r, _, specErr := weights.ManifestSpecs(m, p.Variant)
+		if specErr != nil {
+			// Legacy local markers can predate variants and omit @variant;
+			// fall back to the model marker for that ambiguous case.
+			dir := filepath.Join(paths.Models(), filepath.FromSlash(key), filepath.FromSlash(rel))
+			return markerCheckpointCached(dir)
+		}
+		if r != "" {
 			rel = r
 		}
+		dir := filepath.Join(paths.Models(), filepath.FromSlash(key), filepath.FromSlash(rel))
+		return weights.IsCached(dir, main)
 	}
+	// Keep a marker-only fallback for offline/foreign caches whose manifest
+	// cannot be loaded here; readiness is unavailable in that case.
 	dir := filepath.Join(paths.Models(), filepath.FromSlash(key), filepath.FromSlash(rel))
 	if cp, ok := weights.ReadMarker(dir); ok {
 		if info, err := os.Stat(cp); err == nil && info.IsDir() {
@@ -83,7 +96,7 @@ func weightsCachedFor(p ref.Parsed, refStr string) bool {
 func modelsListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
-		Short: "List locally synced bundles",
+		Short: "List locally synced bundles with bundle/weights disk usage",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 			markers := bundleMarkers()
@@ -94,68 +107,51 @@ func modelsListCmd() *cobra.Command {
 			sort.Slice(markers, func(i, j int) bool {
 				return fmt.Sprint(markers[i]["cache_key"]) < fmt.Sprint(markers[j]["cache_key"])
 			})
+			w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "REF\tBUNDLE\tBUNDLE SIZE\tWEIGHTS\tWEIGHTS SIZE\tDIR")
 			for _, m := range markers {
 				cacheKey := fmt.Sprint(m["cache_key"])
 				refName := strOf(m["ref"])
 				if refName == "" {
 					refName = cacheKey
 				}
-				variant := ""
-				if v := strOf(m["variant"]); v != "" {
-					variant = ", variant=" + v
+				bundleState := "missing"
+				if bundleRootUsable(strOf(m["bundle_root"])) {
+					bundleState = "cached"
 				}
-				bundleState := "bundle:missing"
-				if br := strOf(m["bundle_root"]); br != "" {
-					bundleState = fmt.Sprintf("bundle:cached (%s)", strOf(m["env_key"]))
-				}
-				weightsState := "weights:missing"
+				weightsState := "missing"
 				if weightsCachedFromMarker(m) {
-					weightsState = "weights:cached"
+					weightsState = "cached"
 				}
-				fmt.Fprintf(out, "%s [%s%s, %s]\n", refName, bundleState, variant, weightsState)
+				bundleSize := dirSize(filepath.Join(paths.Bundles(), filepath.FromSlash(cacheKey)))
+				weightsSize := dirSize(filepath.Join(paths.Models(), filepath.FromSlash(cacheKey)))
+				dir := filepath.ToSlash(filepath.Join(cacheRootDisplay(), "{bundles,models}", filepath.FromSlash(cacheKey)))
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+					refName, bundleState, humanSize(bundleSize), weightsState, humanSize(weightsSize), dir)
 			}
-			return nil
+			return w.Flush()
 		},
 	}
 }
 
-func modelsEnvsCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "envs [ref]",
-		Short: "List bundle runtime environments and this machine's match",
-		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			out := cmd.OutOrStdout()
-			gpu := preflight.DetectGPU()
-			fmt.Fprintf(out, "FlashHub API: %s\n\n", flashhub.APIBase())
-			if gpu == nil {
-				fmt.Fprintln(out, "[!] No NVIDIA GPU detected; cannot match an environment.")
-			}
-
-			var refs []string
-			if len(args) == 1 {
-				refs = []string{args[0]}
-			} else {
-				for _, m := range bundleMarkers() {
-					if r := strOf(m["ref"]); r != "" {
-						refs = append(refs, r)
-					} else if ck := fmt.Sprint(m["cache_key"]); ck != "" {
-						refs = append(refs, ck)
-					}
-				}
-				if len(refs) == 0 {
-					fmt.Fprintln(out, "No cached presets. Pass a ref or run flashcli bundle sync <ref> first.")
-					return nil
-				}
-			}
-
-			for _, refStr := range refs {
-				modelsEnvsOne(out, refStr, gpu)
-				fmt.Fprintln(out, "")
-			}
-			return nil
-		},
+func cacheRootDisplay() string {
+	home := paths.Home()
+	if userHome, err := os.UserHomeDir(); err == nil && home == filepath.Join(userHome, ".flashcli") {
+		return "~/.flashcli"
 	}
+	return filepath.ToSlash(home)
+}
+
+func bundleRootUsable(root string) bool {
+	if strings.TrimSpace(root) == "" {
+		return false
+	}
+	info, err := os.Stat(root)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	_, err = manifest.Load(root)
+	return err == nil
 }
 
 func weightsCachedFromMarker(m map[string]any) bool {
@@ -163,24 +159,44 @@ func weightsCachedFromMarker(m map[string]any) bool {
 	if key == "" || key == "<nil>" {
 		return false
 	}
-	rel := "checkpoint"
-	if br := strOf(m["bundle_root"]); br != "" {
-		if man, err := manifest.Load(br); err == nil {
-			if _, r, _, err := weights.ManifestSpecs(man, strOf(m["variant"])); err == nil && r != "" {
-				rel = r
-			}
+	br := strOf(m["bundle_root"])
+	if !bundleRootUsable(br) {
+		return false
+	}
+	man, err := manifest.Load(br)
+	if err != nil {
+		return false
+	}
+	main, rel, _, err := weights.ManifestSpecs(man, strOf(m["variant"]))
+	if err != nil {
+		// Legacy local markers can predate variants and omit @variant; fall
+		// back to the model marker only for that ambiguous case.
+		if strOf(m["variant"]) != "" {
+			return false
 		}
+		dir := filepath.Join(paths.Models(), filepath.FromSlash(key), "checkpoint")
+		return markerCheckpointCached(dir)
+	}
+	if rel == "" {
+		rel = "checkpoint"
 	}
 	dir := filepath.Join(paths.Models(), filepath.FromSlash(key), filepath.FromSlash(rel))
-	if cp, ok := weights.ReadMarker(dir); ok {
-		if info, err := os.Stat(cp); err == nil && info.IsDir() {
-			return true
-		}
-	}
-	return false
+	return weights.IsCached(dir, main)
 }
 
-func modelsEnvsOne(out interface{ Write([]byte) (int, error) }, refStr string, gpu *preflight.GpuInfo) {
+func markerCheckpointCached(dir string) bool {
+	if _, err := os.Stat(filepath.Join(dir, ".flashcli_download.incomplete")); err == nil {
+		return false
+	}
+	cp, ok := weights.ReadMarker(dir)
+	if !ok {
+		return false
+	}
+	info, err := os.Stat(cp)
+	return err == nil && info.IsDir()
+}
+
+func modelsEnvsFromMarker(out interface{ Write([]byte) (int, error) }, refStr string, marker map[string]any, gpu *preflight.GpuInfo) {
 	p, err := ref.Parse(refStr)
 	if err != nil {
 		fmt.Fprintf(out, "%s: invalid ref — %s\n", refStr, err)
@@ -189,10 +205,18 @@ func modelsEnvsOne(out interface{ Write([]byte) (int, error) }, refStr string, g
 	fmt.Fprintf(out, "%s:\n", refStr)
 	fmt.Fprintf(out, "  repo: %s\n", repoURLFor(p))
 
-	m, _ := loadManifestForRef(refStr, p)
-	if m == nil {
+	br := strOf(marker["bundle_root"])
+	if br == "" {
 		return
 	}
+	m, err := manifest.Load(br)
+	if err != nil {
+		return
+	}
+	modelsEnvBlock(out, m, gpu)
+}
+
+func modelsEnvBlock(out interface{ Write([]byte) (int, error) }, m *manifest.Manifest, gpu *preflight.GpuInfo) {
 	if gpu == nil {
 		return
 	}
@@ -267,61 +291,206 @@ func loadManifestForRef(refStr string, p ref.Parsed) (*manifest.Manifest, error)
 
 func modelsShowCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "show <ref>",
-		Short: "Show a preset's ref, cached runtime and paths",
-		Args:  cobra.ExactArgs(1),
+		Use:   "show [ref]",
+		Short: "Show a cached preset, runtime env, and paths (or list cached refs)",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
-			p, err := ref.Parse(args[0])
-			if err != nil {
-				return failed(cmd, err)
+			gpu := preflight.DetectGPU()
+			if len(args) == 0 {
+				return showCachedEnvs(out, gpu)
 			}
-			fmt.Fprintf(out, "flashcli %s\n", version.Version)
-			fmt.Fprintf(out, "ref: %s\n", p.Name)
-			if p.Variant != "" {
-				fmt.Fprintf(out, "variant: %s\n", p.Variant)
-			}
-			key := refCacheKey(p)
-			if p.Local {
-				abs, _ := filepath.Abs(args[0])
-				fmt.Fprintf(out, "local_root: %s\n", abs)
-			} else {
-				repoURL := repoURLFor(p)
-				fmt.Fprintf(out, "FlashHub API: %s\n", flashhub.APIBase())
-				fmt.Fprintf(out, "repo: %s\n", repoURL)
-				fmt.Fprintf(out, "expected runtime_id: %s\n", runtime.IDFromRepo(repoURL, p.Name))
-			}
-
-			marker := runtime.ReadPresetMarker(key)
-			if len(marker) == 0 {
-				fmt.Fprintln(out, "cached preset marker: (none — run flashcli run/serve or bundle sync)")
-			} else {
-				fmt.Fprintln(out, "cached preset marker:")
-				for _, k := range []string{"ref", "repo_url", "runtime_id", "bundle_root", "env_key", "source", "local_root"} {
-					if v := strOf(marker[k]); v != "" {
-						fmt.Fprintf(out, "  %s: %s\n", k, v)
-					}
-				}
-				if rid := strOf(marker["runtime_id"]); rid != "" {
-					rm := runtime.ReadMarker(rid)
-					if sha := strOf(rm["manifest_sha256"]); sha != "" {
-						fmt.Fprintf(out, "  manifest_sha256: %s\n", sha)
-					}
-				}
-				if !p.Local {
-					expected := repoURLFor(p)
-					if cached := strOf(marker["repo_url"]); cached != "" && expected != "" && cached != expected {
-						fmt.Fprintf(out, "  [!] cached repo differs from ref — run: flashcli bundle sync %s --force\n", p.Name)
-					}
-				}
-			}
-
-			if weightsCachedFor(p, args[0]) {
-				fmt.Fprintln(out, "weights: cached")
-			} else {
-				fmt.Fprintln(out, "weights: missing")
-			}
-			return nil
+			return showOne(out, args[0], gpu)
 		},
+	}
+}
+
+func showCachedEnvs(out interface{ Write([]byte) (int, error) }, gpu *preflight.GpuInfo) error {
+	fmt.Fprintf(out, "FlashHub API: %s\n\n", flashhub.APIBase())
+	if gpu == nil {
+		fmt.Fprintln(out, "[!] No NVIDIA GPU detected; cannot match an environment.")
+	}
+	markers := bundleMarkers()
+	if len(markers) == 0 {
+		fmt.Fprintln(out, "No cached presets. Pass a ref or run flashcli bundle sync <ref> first.")
+		return nil
+	}
+	for _, marker := range markers {
+		refStr := strOf(marker["ref"])
+		if refStr == "" {
+			refStr = fmt.Sprint(marker["cache_key"])
+		}
+		modelsEnvsFromMarker(out, refStr, marker, gpu)
+		fmt.Fprintln(out, "")
+	}
+	return nil
+}
+
+func showOne(out interface{ Write([]byte) (int, error) }, refStr string, gpu *preflight.GpuInfo) error {
+	p, err := ref.Parse(refStr)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "flashcli %s\n", version.Version)
+	fmt.Fprintf(out, "ref: %s\n", refStr)
+	if p.Variant != "" {
+		fmt.Fprintf(out, "variant: %s\n", p.Variant)
+	}
+	key := refCacheKey(p)
+	expectedRID := ""
+	if p.Local {
+		abs, _ := filepath.Abs(refStr)
+		fmt.Fprintf(out, "local_root: %s\n", abs)
+		expectedRID = runtime.IDFromPath(abs, p.Name)
+	} else {
+		repoURL := repoURLFor(p)
+		fmt.Fprintf(out, "repo: %s\n", repoURL)
+		expectedRID = runtime.IDFromRepo(repoURL, p.Name)
+	}
+	if expectedRID != "" {
+		fmt.Fprintf(out, "runtime_id: %s\n", expectedRID)
+	}
+
+	m, _ := loadManifestForRef(refStr, p)
+	if gpu == nil {
+		fmt.Fprintln(out, "[!] No NVIDIA GPU detected; cannot match an environment.")
+	} else if m != nil {
+		fmt.Fprintln(out, "runtime env:")
+		modelsEnvBlock(out, m, gpu)
+	}
+
+	marker := runtime.ReadPresetMarker(key)
+	if len(marker) == 0 {
+		fmt.Fprintln(out, "cache: not prepared (run flashcli run/serve or bundle sync)")
+	} else {
+		fmt.Fprintln(out, "cache:")
+		br := strOf(marker["bundle_root"])
+		if p.Local {
+			if abs, _ := filepath.Abs(refStr); filepath.Clean(br) != filepath.Clean(abs) {
+				fmt.Fprintf(out, "  bundle_root: %s\n", br)
+			}
+		} else if br != "" {
+			fmt.Fprintf(out, "  bundle_root: %s\n", br)
+		}
+		if rid := strOf(marker["runtime_id"]); rid != "" && rid != expectedRID {
+			fmt.Fprintf(out, "  runtime_id: %s (expected %s)\n", rid, expectedRID)
+		}
+		if source := strOf(marker["source"]); source != "" {
+			fmt.Fprintf(out, "  source: %s\n", source)
+		}
+		if !p.Local {
+			expected := repoURLFor(p)
+			if cached := strOf(marker["repo_url"]); cached != "" && expected != "" && cached != expected {
+				fmt.Fprintf(out, "  [!] cached repo differs from ref — run: flashcli bundle sync %s --force\n", p.Name)
+			}
+		}
+	}
+
+	printWeightsInfo(out, m, p.Variant, weightsCachedFor(p, refStr))
+	return nil
+}
+
+func manifestVariantNames(m *manifest.Manifest) []string {
+	raw, _ := m.Raw["variants"].(map[string]any)
+	names := make([]string, 0, len(raw))
+	for name := range raw {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func printWeightsInfo(out interface{ Write([]byte) (int, error) }, m *manifest.Manifest, variant string, cached bool) {
+	if m == nil {
+		fmt.Fprintln(out, "weights:")
+		fmt.Fprintln(out, "  source: unknown (manifest unavailable)")
+		fmt.Fprintf(out, "  status: %s\n", statusWord(cached))
+		return
+	}
+	main, rel, extras, err := weights.ManifestSpecs(m, variant)
+	if err != nil {
+		if variant == "" {
+			if names := manifestVariantNames(m); len(names) > 0 {
+				fmt.Fprintln(out, "weights:")
+				fmt.Fprintf(out, "  variant required: %s\n", strings.Join(names, ", "))
+				for _, name := range names {
+					spec, specRel, specExtras, specErr := weights.ManifestSpecs(m, name)
+					if specErr != nil {
+						continue
+					}
+					fmt.Fprintf(out, "  @%s:\n", name)
+					printWeightsSpec(out, "    ", spec)
+					if specRel != "" {
+						fmt.Fprintf(out, "    checkpoint: %s\n", specRel)
+					}
+					printExtraWeights(out, "    ", specExtras)
+				}
+				return
+			}
+		}
+		fmt.Fprintln(out, "weights:")
+		fmt.Fprintf(out, "  source: unavailable (%v)\n", err)
+		fmt.Fprintf(out, "  status: %s\n", statusWord(cached))
+		return
+	}
+	if !main.HasSource() && len(extras) == 0 {
+		fmt.Fprintln(out, "weights: none declared in flashcli-bundle.json")
+		fmt.Fprintf(out, "status: %s\n", statusWord(cached))
+		return
+	}
+	fmt.Fprintln(out, "weights:")
+	printWeightsSpec(out, "  ", main)
+	if rel != "" {
+		fmt.Fprintf(out, "  checkpoint: %s\n", rel)
+	}
+	printExtraWeights(out, "  ", extras)
+	fmt.Fprintf(out, "  status: %s\n", statusWord(cached))
+}
+
+func statusWord(ok bool) string {
+	if ok {
+		return "cached"
+	}
+	return "missing"
+}
+
+func printWeightsSpec(out interface{ Write([]byte) (int, error) }, indent string, spec weights.Spec) {
+	fmt.Fprintf(out, "%ssource: %s\n", indent, spec.Source)
+	if spec.Repo != "" {
+		fmt.Fprintf(out, "%srepo: %s\n", indent, spec.Repo)
+	}
+	if spec.Revision != "" {
+		fmt.Fprintf(out, "%srevision: %s\n", indent, spec.Revision)
+	}
+	if spec.URL != "" {
+		fmt.Fprintf(out, "%surl: %s\n", indent, spec.URL)
+	}
+	if spec.RelativeDir != "" {
+		fmt.Fprintf(out, "%srelative_dir: %s\n", indent, spec.RelativeDir)
+	}
+	if len(spec.AllowPatterns) > 0 {
+		fmt.Fprintf(out, "%sallow_patterns: %s\n", indent, strings.Join(spec.AllowPatterns, ", "))
+	}
+	if len(spec.RequireAnyPatterns) > 0 {
+		fmt.Fprintf(out, "%srequire_any_patterns: %s\n", indent, strings.Join(spec.RequireAnyPatterns, ", "))
+	}
+	if spec.RequireNormStats {
+		fmt.Fprintf(out, "%srequire_norm_stats: true\n", indent)
+	}
+}
+
+func printExtraWeights(out interface{ Write([]byte) (int, error) }, indent string, extras map[string]weights.Spec) {
+	if len(extras) == 0 {
+		return
+	}
+	keys := make([]string, 0, len(extras))
+	for k := range extras {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	fmt.Fprintf(out, "%sextra_weights:\n", indent)
+	for _, k := range keys {
+		fmt.Fprintf(out, "%s  %s:\n", indent, k)
+		printWeightsSpec(out, indent+"    ", extras[k])
 	}
 }
