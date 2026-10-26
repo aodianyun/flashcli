@@ -74,7 +74,8 @@ The host is a static Go binary (no Python host). Bundle venvs still get
 
 ```bash
 flashcli doctor
-flashcli models envs flashcli-bundle/<name>:<version>   # native matrix vs this GPU
+flashcli models show flashcli-bundle/<name>:<version>   # cached paths + native matrix vs this GPU
+flashcli du                                            # disk usage by cache area
 ```
 
 ### Run and serve

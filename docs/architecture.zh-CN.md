@@ -133,7 +133,9 @@ bundle venv 默认用 **uv** 创建与安装（仍保持每模型隔离）。uv 
 - `uv venv --python <base> --seed` 建 venv；`uv pip install --python …` 安装 `flashcli-bundle[infer]`、torch 与 manifest 依赖。协议升级与 CUDA userland 安装也走同一安装器。
 - `UV_CACHE_DIR` 默认 `~/.flashcli/cache/uv`（与 `runtimes/` 同文件系统，uv 用**硬链接**共享 wheel，torch/CUDA 重层只存一份）；`UV_LINK_MODE=hardlink`。
 - `FLASHCLI_VENV_BACKEND=pip` 是显式逃生口（已弃用）；默认 `uv` 在不可用时明确报错。native bundle 不需要 uv。
-- venv 建好后即可离线使用（uv 只在安装时需要）；`flashcli cache clean [--uv|--tools|--all]` 可清理 uv 缓存/已供给二进制，不影响已建 venv；`flashcli cache prune` 清理 uv 中不可达的缓存对象（较保守；`cache clean` 才会全部清空）。
+- venv 建好后即可离线使用（uv 只在安装时需要）；`flashcli cache clean [--uv|--tools|--flashhub|--all]` 可清理 uv 缓存、已供给二进制和/或 FlashHub repo-index 缓存，不影响已建 venv；`--all` 三者全选；`flashcli cache prune` 清理 uv 中不可达的缓存对象（较保守；`cache clean` 才会全部清空）。`flashcli du` 按区域显示 bundles、models、runtimes、cache、tools、python 的 apparent 占用。
+- `flashcli bundle clean <ref>` 只删该 ref 的 runtime；加 `--all` 同时删其 bundle 树和权重。`flashcli bundle clean` 删除所有 runtime；`flashcli bundle clean --all` 重置全部 runtime、bundles 和 models。所有模式先打印受影响路径并询问 `Continue? [y/N]`；脚本用 `--yes` 跳过确认。
+- `flashcli bundle clean --orphans` 清理 preset marker 的 `bundle_root` 已失效的 bundle/model 缓存，以及没有有效 bundle root 的 runtime；有效缓存不动。删除本地 bundle 或测试缓存后使用。
 
 ## 本机目录
 

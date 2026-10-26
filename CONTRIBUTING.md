@@ -223,7 +223,7 @@ Docs are part of the product and this is a **public repository** — treat them 
 Include:
 
 - `flashcli doctor` output
-- `flashcli models envs <preset>` when native selection fails
+- `flashcli models show <preset>` when native selection fails
 - GPU model, driver / CUDA userland, Python version
 - For bundle build failures: relevant log excerpt from `scripts/run_bg.sh` or Docker matrix build
 

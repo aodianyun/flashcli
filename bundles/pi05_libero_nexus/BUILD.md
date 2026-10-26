@@ -73,7 +73,7 @@ Pack tree follows `release-matrix.env` `RELEASE_PACK_FILES` (manifest, engines, 
 
 ```bash
 flashcli bundle validate "$BUNDLE"
-flashcli models envs "$BUNDLE"
+flashcli models show "$BUNDLE"
 ```
 
 ## 4. Smoke test
@@ -126,7 +126,7 @@ bash scripts/release_bundle.sh --bundle pi05_libero_nexus --clean
 
 | Symptom | Fix |
 |---------|-----|
-| `NativeEnvironmentNotSupportedError` | Rebuild for this host's env key; `flashcli models envs "$BUNDLE"` |
+| `NativeEnvironmentNotSupportedError` | Rebuild for this host's env key; `flashcli models show "$BUNDLE"` |
 | `unrecognized native artifact filename` | Move C libs under `substrate/`, not runtime cell top-level |
 | `libcapsule_nexus_flashrt does not link libflashrt_exec` | Rebuild with `build.sh` (do not swap one lib alone) |
 | `no file matches {runtime_dir}/substrate/...` | Ensure the three `.so` are staged and the manifest `library`/`session_library`/`preload` globs each match exactly one file |

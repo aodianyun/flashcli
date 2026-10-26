@@ -47,6 +47,7 @@ def test_go_native_abi_open(go_binary: Path, tmp_path: Path) -> None:
 
     env = dict(
         os.environ,
+        FLASHCLI_HOME=str(tmp_path / "home"),
         FLASHCLI_SKIP_WEIGHTS="1",
         FLASHCLI_SKIP_PREFLIGHT="1",
         FLASHCLI_SKIP_VENV_SETUP="1",

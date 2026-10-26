@@ -45,7 +45,7 @@ from flashcli_bundle.preset import Preset
 
 - **OS**：Linux x86_64
 - **Docker + NVIDIA Container Toolkit**（矩阵发布默认走容器）
-- **Python 3.10+**（主机 CLI）；bundle venv 固定 **3.12**（`python_abi: "312"`）
+- **Go ≥ 1.24**（主机 CLI）；bundle venv 按 manifest 的 `python_abi` 固定
 
 ### 国内 / 受限网络（推荐）
 
@@ -183,7 +183,7 @@ flashcli run "$BUNDLE" \
 flashcli run "$BUNDLE" --help    # 查看 manifest run_options
 ```
 
-**做什么**：主机 CLI sync → 建 bundle venv（3.12）→ 装 torch + **flashcli-bundle** → re-exec → 执行你的 `run.py`。
+**做什么**：主机 CLI sync → 建 bundle venv（按 manifest 的 `python_abi`）→ 装 torch + **flashcli-bundle** → re-exec → 执行你的 `run.py`。
 
 Qwen serve 本地测：
 
@@ -305,7 +305,7 @@ bundles/pi05_libero/dist/
 | 现象 | 处理 |
 |------|------|
 | `protocol_version` 校验失败 | 升级主机 `pip install -e ./flashcli-bundle`；manifest 写 `"protocol_version": 1` |
-| run 仍用旧 bundle | 看输出里的 `runtime_id` 与 `repo`；`flashcli doctor` / `flashcli models envs <ref>` 对比 cached repo。然后 `flashcli bundle sync <ref> --force` |
+| run 仍用旧 bundle | 看输出里的 `runtime_id` 与 `repo`；`flashcli doctor` / `flashcli models show <ref>` 对比 cached repo。然后 `flashcli bundle sync <ref> --force` |
 | bundle venv 缺 `flashcli_bundle` | 删 `~/.flashcli/runtimes/<id>/` 重跑；或 `flashcli run` 触发 venv 重建 |
 | bundle venv 缺 `flashcli-bundle` | 设 `FLASHCLI_BUNDLE_PIP_SPEC=/path/to/flashcli-bundle[infer]` 或 `~/.flashcli/install.env` 的 `FLASHCLI_INSTALL_REPO/REF`；**勿**在 bundle venv 内 `pip install flashcli` |
 | HF 权重失败 | `export HF_ENDPOINT=https://hf-mirror.com` 后 `flashcli pull` |

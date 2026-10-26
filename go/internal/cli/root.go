@@ -39,7 +39,7 @@ func New() *cobra.Command {
 		SilenceErrors: true,
 	}
 	root.SetVersionTemplate("flashcli {{.Version}}\n")
-	root.AddCommand(runCmd(), serveCmd(), pullCmd(), bundleCmd(), weightsCmd(), modelsCmd(), upgradeCmd(), doctorCmd(), cacheCmd(), versionCmd())
+	root.AddCommand(runCmd(), serveCmd(), pullCmd(), bundleCmd(), weightsCmd(), modelsCmd(), upgradeCmd(), doctorCmd(), cacheCmd(), duCmd(), versionCmd())
 	return root
 }
 
@@ -251,18 +251,17 @@ func cacheCmd() *cobra.Command {
 		Use:   "cache",
 		Short: "Cache utilities",
 	}
-	var useUV, useTools, useAll bool
+	var useUV, useTools, useFlashhub, useAll, yes bool
 	clean := &cobra.Command{
 		Use:   "clean",
-		Short: "Remove the uv package cache and/or provisioned uv binaries",
+		Short: "Remove uv caches, uv binaries, and/or the FlashHub repo-index cache",
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
-				return fmt.Errorf("cache clean only removes uv caches; use `flashcli bundle clean %s` for bundle data", args[0])
+				return fmt.Errorf("cache clean only removes caches; use `flashcli bundle clean %s` for bundle data", args[0])
 			}
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out := cmd.OutOrStdout()
 			var targets []string
 			if useAll || useUV {
 				targets = append(targets, uv.CacheDir())
@@ -270,21 +269,24 @@ func cacheCmd() *cobra.Command {
 			if useAll || useTools {
 				targets = append(targets, filepath.Join(paths.Home(), "tools", "uv"))
 			}
+			if useAll || useFlashhub {
+				targets = append(targets, filepath.Join(paths.Cache(), "repo-index"))
+			}
 			if len(targets) == 0 {
-				return fmt.Errorf("nothing selected: use --uv, --tools, or --all")
+				return fmt.Errorf("nothing selected: use --uv, --tools, --flashhub, or --all")
 			}
-			for _, t := range targets {
-				if err := os.RemoveAll(t); err != nil {
-					return err
-				}
-				fmt.Fprintf(out, "[ok] removed %s\n", t)
+			selected, err := confirmCleanup(cmd, targets, yes)
+			if err != nil {
+				return err
 			}
-			return nil
+			return removePaths(cmd, selected)
 		},
 	}
 	clean.Flags().BoolVar(&useUV, "uv", false, "Remove the uv package cache (UV_CACHE_DIR)")
 	clean.Flags().BoolVar(&useTools, "tools", false, "Remove provisioned uv binaries (~/.flashcli/tools/uv)")
-	clean.Flags().BoolVar(&useAll, "all", false, "Remove both")
+	clean.Flags().BoolVar(&useFlashhub, "flashhub", false, "Remove the FlashHub repo-index cache")
+	clean.Flags().BoolVar(&useAll, "all", false, "Remove the uv cache, uv binaries, and FlashHub repo-index cache")
+	clean.Flags().BoolVarP(&yes, "yes", "y", false, "Skip the Y/N confirmation (for scripts)")
 	prune := &cobra.Command{
 		Use:   "prune",
 		Short: "Prune unused uv cache entries",

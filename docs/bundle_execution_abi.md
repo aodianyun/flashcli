@@ -2,7 +2,7 @@
 
 <p align="right"><strong>English</strong> · <a href="bundle_execution_abi.zh-CN.md">简体中文</a></p>
 
-Authoritative contract for **how flashcli invokes a bundle's inference entry**, independent of the implementation language. Today every bundle is Python (`python -m flashcli_bundle.infer`); this document adds a language-agnostic layer so a bundle may ship a native process or a native library instead — **without changing what end users type**.
+Authoritative contract for **how flashcli invokes a bundle's inference entry**, independent of the implementation language. Bundles may use the Python `entry` (`python -m flashcli_bundle.infer`) or a native `entry.kind`; this layer lets a bundle ship a native process or native library — **without changing what end users type**.
 
 Related: [bundle_publish_standard.md](bundle_publish_standard.md) (manifest fields), [architecture.md](architecture.md) (runtime flow), [module_layers.md](module_layers.md) (module placement).
 
@@ -14,7 +14,7 @@ Related: [bundle_publish_standard.md](bundle_publish_standard.md) (manifest fiel
 
 **Non-goals.**
 
-- The host stays the same for users: `flashcli run|serve|pull|doctor|venv <ref>` is unchanged. `kind` is a manifest detail, never a user argument.
+- The host stays the same for users: `flashcli run|serve|pull|doctor` is unchanged. `kind` is a manifest detail, never a user argument.
 - This document does **not** define model math. Native producers own their forward passes (FlashRT / FlashRT-Nexus); flashcli only orchestrates.
 - The Python backend's existing behavior (engine/script mode, `RunEngine`/`ServeEngine`) is unchanged and remains the compatibility baseline.
 

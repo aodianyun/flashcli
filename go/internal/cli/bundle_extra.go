@@ -65,143 +65,186 @@ func bundleInstallCmd() *cobra.Command {
 
 func bundleCleanCmd() *cobra.Command {
 	var all bool
-	var full bool
-	var flashhubCache bool
+	var orphans bool
+	var yes bool
 	cmd := &cobra.Command{
 		Use:   "clean [ref]",
-		Short: "Remove cached runtimes (default) or all local bundle data with --full",
+		Short: "Remove cached runtimes or all local bundle data with --all",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out := cmd.OutOrStdout()
 			var refArg string
 			if len(args) == 1 {
 				refArg = args[0]
 			}
-
-			if full {
-				var removed []string
-				if refArg != "" {
-					removed = cleanPresetCache(refArg, flashhubCache)
-				} else {
-					removed = cleanAllCached(flashhubCache)
+			if orphans {
+				if refArg != "" || all {
+					return failed(cmd, errors.New("--orphans cannot be combined with a ref or --all"))
 				}
-				if len(removed) == 0 {
-					fmt.Fprintln(out, "No cached bundle data to remove.")
-					return nil
+				paths := orphanCachePaths()
+				paths, err := confirmCleanup(cmd, paths, yes)
+				if err != nil {
+					return err
 				}
-				for _, p := range removed {
-					fmt.Fprintf(out, "Removed %s\n", p)
-				}
-				return nil
+				return removePaths(cmd, paths)
 			}
-
-			if all || refArg == "" {
-				if _, err := os.Stat(paths.Runtimes()); err == nil {
-					if err := os.RemoveAll(paths.Runtimes()); err != nil {
-						return failed(cmd, err)
-					}
-					fmt.Fprintf(out, "Removed %s\n", paths.Runtimes())
-				}
-				return nil
+			var paths []string
+			switch {
+			case all && refArg != "":
+				paths = refAllPaths(refArg)
+			case all:
+				paths = allDataPaths()
+			case refArg != "":
+				paths = refRuntimePaths(refArg)
+			default:
+				paths = runtimePaths()
 			}
-
-			if rid, ok := findRuntimeForRef(refArg); ok {
-				dir := runtime.Dir(rid)
-				if err := os.RemoveAll(dir); err != nil {
-					return failed(cmd, err)
-				}
-				fmt.Fprintf(out, "Removed runtime %s\n", rid)
-				return nil
+			paths, err := confirmCleanup(cmd, paths, yes)
+			if err != nil {
+				return err
 			}
-			fmt.Fprintf(out, "No cached runtime for preset %q\n", refArg)
-			return nil
+			return removePaths(cmd, paths)
 		},
 	}
-	cmd.Flags().BoolVar(&all, "all", false, "Remove all cached runtimes")
-	cmd.Flags().BoolVar(&full, "full", false, "Also remove weights and bundle data")
-	cmd.Flags().BoolVar(&flashhubCache, "flashhub-cache", false, "With --full: also remove FlashHub repo-index cache")
+	cmd.Flags().BoolVar(&all, "all", false, "With a ref: also remove its bundle and weights; without a ref: remove all cached bundle data")
+	cmd.Flags().BoolVar(&orphans, "orphans", false, "Remove stale bundle/model cache entries and runtimes with no valid bundle root")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip the Y/N confirmation (for scripts)")
 	return cmd
 }
 
-func rmtree(path string) (string, bool) {
-	if _, err := os.Stat(path); err != nil {
-		return "", false
-	}
-	if os.RemoveAll(path) != nil {
-		return "", false
-	}
-	return path, true
-}
-
-func cleanAllCached(flashhubCache bool) []string {
-	var removed []string
-	for _, root := range []string{paths.Runtimes(), paths.Models(), paths.Bundles()} {
-		if p, ok := rmtree(root); ok {
-			removed = append(removed, p)
+// orphanCachePaths returns stale bundle/model entries whose preset marker
+// bundle_root is gone, plus runtime dirs with no marker or no valid bundle root.
+func orphanCachePaths() []string {
+	seen := map[string]bool{}
+	out := make([]string, 0)
+	add := func(path string) {
+		if path != "" && !seen[path] {
+			seen[path] = true
+			out = append(out, path)
 		}
 	}
-	if flashhubCache {
-		if p, ok := rmtree(filepath.Join(paths.Cache(), "repo-index")); ok {
-			removed = append(removed, p)
+
+	for _, m := range bundleMarkers() {
+		if bundleRootUsable(strOf(m["bundle_root"])) {
+			continue
+		}
+		key := strOf(m["cache_key"])
+		if key == "" {
+			continue
+		}
+		add(filepath.Join(paths.Bundles(), filepath.FromSlash(key)))
+		add(filepath.Join(paths.Models(), filepath.FromSlash(key)))
+		if rid := strOf(m["runtime_id"]); rid != "" {
+			add(runtime.Dir(rid))
 		}
 	}
-	return removed
+
+	entries, _ := os.ReadDir(paths.Runtimes())
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		dir := runtime.Dir(e.Name())
+		if seen[dir] {
+			continue
+		}
+		marker := runtime.ReadMarker(e.Name())
+		if len(marker) == 0 {
+			add(dir)
+			continue
+		}
+		root := strOf(marker["bundle_root"])
+		if root == "" {
+			root = strOf(marker["local_root"])
+		}
+		if !bundleRootUsable(root) {
+			add(dir)
+		}
+	}
+	return existingPaths(out)
 }
 
-func cleanPresetCache(refArg string, flashhubCache bool) []string {
-	var removed []string
+func matchingMarkers(refArg string) []map[string]any {
 	p, err := ref.Parse(refArg)
 	if err != nil {
-		return removed
+		return nil
+	}
+	targetKey := refCacheKey(p)
+	var out []map[string]any
+	for _, m := range bundleMarkers() {
+		if strOf(m["ref"]) == refArg || strOf(m["cache_key"]) == refArg || strOf(m["cache_key"]) == targetKey {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+func refRuntimePaths(refArg string) []string {
+	var out []string
+	if matches := matchingMarkers(refArg); len(matches) > 0 {
+		for _, m := range matches {
+			if rid := strOf(m["runtime_id"]); rid != "" {
+				out = append(out, runtime.Dir(rid))
+			}
+		}
+		if len(out) == 0 {
+			if rid, ok := findRuntimeForRef(refArg); ok {
+				out = append(out, runtime.Dir(rid))
+			}
+		}
+		return existingPaths(out)
+	}
+	if rid, ok := findRuntimeForRef(refArg); ok {
+		return []string{runtime.Dir(rid)}
+	}
+	return nil
+}
+
+func refAllPaths(refArg string) []string {
+	if matches := matchingMarkers(refArg); len(matches) > 0 {
+		var out []string
+		foundRuntime := false
+		for _, m := range matches {
+			key := strOf(m["cache_key"])
+			if key == "" {
+				continue
+			}
+			out = append(out, filepath.Join(paths.Bundles(), filepath.FromSlash(key)), filepath.Join(paths.Models(), filepath.FromSlash(key)))
+			if rid := strOf(m["runtime_id"]); rid != "" {
+				out = append(out, runtime.Dir(rid))
+				foundRuntime = true
+			}
+		}
+		if !foundRuntime {
+			out = append(out, refRuntimePaths(refArg)...)
+		}
+		return existingPaths(out)
+	}
+	p, err := ref.Parse(refArg)
+	if err != nil {
+		return nil
 	}
 	key := refCacheKey(p)
-	marker := runtime.ReadPresetMarker(key)
+	out := []string{
+		filepath.Join(paths.Bundles(), filepath.FromSlash(key)),
+		filepath.Join(paths.Models(), filepath.FromSlash(key)),
+	}
+	out = append(out, refRuntimePaths(refArg)...)
+	return existingPaths(out)
+}
 
-	rel := "checkpoint"
-	if br := strOf(marker["bundle_root"]); br != "" {
-		if m, err := manifest.Load(br); err == nil {
-			if _, r, _, err := weights.ManifestSpecs(m, p.Variant); err == nil && r != "" {
-				rel = r
-			}
-			_, _, extras, _ := weights.ManifestSpecs(m, p.Variant)
-			for k, spec := range extras {
-				dest := weights.ExtraWeightDest("", br, k, spec)
-				if spec.RelativeDir != "" {
-					dest = filepath.Join(br, filepath.FromSlash(spec.RelativeDir))
-				} else if spec.CacheName == "" {
-					dest = filepath.Join(paths.Models(), k)
-				}
-				if d, ok := rmtree(dest); ok {
-					removed = append(removed, d)
-				}
-			}
+func runtimePaths() []string {
+	entries, _ := os.ReadDir(paths.Runtimes())
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() {
+			out = append(out, runtime.Dir(e.Name()))
 		}
 	}
-	if d, ok := rmtree(filepath.Join(paths.Models(), filepath.FromSlash(key), filepath.FromSlash(rel))); ok {
-		removed = append(removed, d)
-	}
-	if d, ok := rmtree(filepath.Join(paths.Bundles(), filepath.FromSlash(key))); ok {
-		removed = append(removed, d)
-	}
-	if rid := strOf(marker["runtime_id"]); rid != "" {
-		if d, ok := rmtree(runtime.Dir(rid)); ok {
-			removed = append(removed, d)
-		}
-	}
-	if flashhubCache {
-		if repoURL := strOf(marker["repo_url"]); repoURL != "" {
-			// Best-effort: drop the repo-index cache file (md5-keyed, same as client).
-			cacheDir := filepath.Join(paths.Cache(), "repo-index")
-			if entries, err := os.ReadDir(cacheDir); err == nil {
-				for _, e := range entries {
-					if d, ok := rmtree(filepath.Join(cacheDir, e.Name())); ok {
-						removed = append(removed, d)
-					}
-				}
-			}
-		}
-	}
-	return removed
+	return out
+}
+
+func allDataPaths() []string {
+	return []string{paths.Runtimes(), paths.Models(), paths.Bundles()}
 }
 
 func refCacheKey(p ref.Parsed) string {

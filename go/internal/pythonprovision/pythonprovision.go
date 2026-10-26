@@ -74,7 +74,9 @@ func LoadEnvFile() {
 		key := strings.TrimSpace(line[:eq])
 		val := strings.Trim(strings.TrimSpace(line[eq+1:]), `"'`)
 		if strings.HasPrefix(key, "FLASHCLI_PY") && strings.HasSuffix(key, "_BIN") && val != "" {
-			os.Setenv(key, val)
+			if _, exists := os.LookupEnv(key); !exists {
+				os.Setenv(key, val)
+			}
 		}
 	}
 }

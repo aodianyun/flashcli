@@ -41,7 +41,7 @@ export BUNDLE="$(pwd)/bundles/pi05_libero/dist"
 
 ```bash
 flashcli bundle validate "$BUNDLE"
-flashcli models envs "$BUNDLE"
+flashcli models show "$BUNDLE"
 ```
 
 ## 4. 冒烟测试
@@ -68,7 +68,7 @@ flashcli run "$BUNDLE" \
 
 | 现象 | 处理 |
 |------|------|
-| `NativeEnvironmentNotSupportedError` | 为本机 env key 重编；`flashcli models envs "$BUNDLE"` |
+| `NativeEnvironmentNotSupportedError` | 为本机 env key 重编；`flashcli models show "$BUNDLE"` |
 | `no kernel image...` | GPU/CUDA 与 manifest `runtime` 不匹配 |
 | `'GemmRunner'... fp8_nt_dev` | 重编 FlashRT 或使用 `_pi05_compat.py` |
 | 权重下载失败 | `HF_ENDPOINT` 或预下载后 `--checkpoint` |

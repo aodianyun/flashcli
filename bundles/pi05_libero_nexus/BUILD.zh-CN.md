@@ -73,7 +73,7 @@ export BUNDLE="$(pwd)/bundles/pi05_libero_nexus/dist"
 
 ```bash
 flashcli bundle validate "$BUNDLE"
-flashcli models envs "$BUNDLE"
+flashcli models show "$BUNDLE"
 ```
 
 ## 4. 冒烟测试
@@ -126,7 +126,7 @@ bash scripts/release_bundle.sh --bundle pi05_libero_nexus --clean
 
 | 现象 | 处理 |
 |------|------|
-| `NativeEnvironmentNotSupportedError` | 为本机 env key 重编；`flashcli models envs "$BUNDLE"` |
+| `NativeEnvironmentNotSupportedError` | 为本机 env key 重编；`flashcli models show "$BUNDLE"` |
 | `unrecognized native artifact filename` | C 库放到 `substrate/`，不要放在 runtime cell 顶层 |
 | `libcapsule_nexus_flashrt does not link libflashrt_exec` | 用 `build.sh` 整套重编（不要只替换其中一个库） |
 | `no file matches {runtime_dir}/substrate/...` | 确认三个 `.so` 已 stage，且 manifest 的 `library`/`session_library`/`preload` glob 各只匹配一个文件 |

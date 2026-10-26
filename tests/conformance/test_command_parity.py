@@ -19,7 +19,6 @@ PYTHON_COMMANDS = {
     "models",
     "models list",
     "models show",
-    "models envs",
     "bundle",
     "bundle sync",
     "bundle clean",
@@ -36,6 +35,7 @@ GO_ONLY_COMMANDS = {
     "cache",
     "cache clean",
     "cache prune",
+    "du",
 }
 
 _COBRA_BUILTINS = {"completion", "help"}

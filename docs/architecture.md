@@ -158,9 +158,19 @@ sha256 verification into `~/.flashcli/tools/uv/<version>/`.
   environments where uv cannot run; the default `uv` fails clearly if uv is
   unavailable. Native bundles do not need uv.
 - After a venv is created it is offline-usable (uv is only needed when
-  installing); `flashcli cache clean [--uv|--tools|--all]` removes the uv cache
-  and/or provisioned binaries without touching existing venvs, and
-  `flashcli cache prune` prunes unreachable uv cache objects (conservative; `cache clean` fully clears).
+  installing); `flashcli cache clean [--uv|--tools|--flashhub|--all]` removes the
+  uv cache, provisioned binaries, and/or the FlashHub repo-index cache without
+  touching existing venvs; `--all` selects all three. `flashcli cache prune`
+  prunes unreachable uv cache objects (conservative; `cache clean` fully clears).
+- `flashcli bundle clean <ref>` removes only that ref's runtime; add `--all` to
+  also remove its bundle tree and weights. `flashcli bundle clean` removes all
+  runtimes; `flashcli bundle clean --all` resets all runtimes, bundles, and
+  models. Every mode prints the affected paths and asks `Continue? [y/N]`;
+  `--yes` skips the prompt for scripts.
+- `flashcli bundle clean --orphans` removes stale bundle/model cache entries
+  whose preset marker `bundle_root` no longer exists, plus runtime dirs with no
+  valid bundle root. Valid caches are untouched; use it after deleting a local
+  bundle or a test cache.
 
 ## Local directories
 

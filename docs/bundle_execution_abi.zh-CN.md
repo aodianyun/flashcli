@@ -2,7 +2,7 @@
 
 <p align="right"><a href="bundle_execution_abi.md">English</a> · <strong>简体中文</strong></p>
 
-flashcli **如何调用某个 bundle 的推理入口**的权威契约，且与实现语言无关。当前所有 bundle 都是 Python（`python -m flashcli_bundle.infer`）；本文新增一层语言无关的抽象，使 bundle 可以改为交付原生进程或原生库 —— 且**不改变用户输入的命令**。
+flashcli **如何调用某个 bundle 的推理入口**的权威契约，且与实现语言无关。bundle 可以使用 Python `entry`（`python -m flashcli_bundle.infer`）或原生 `entry.kind`；本层让 bundle 可以交付原生进程或原生库 —— 且**不改变用户输入的命令**。
 
 相关文档：[bundle_publish_standard.md](bundle_publish_standard.md)（manifest 字段）、[architecture.md](architecture.md)（运行时流程）、[module_layers.md](module_layers.md)（模块分层）。
 
@@ -14,7 +14,7 @@ flashcli **如何调用某个 bundle 的推理入口**的权威契约，且与�
 
 **非目标。**
 
-- host 对用户保持不变：`flashcli run|serve|pull|doctor|venv <ref>` 不变。`kind` 是 manifest 细节，永远不是用户参数。
+- host 对用户保持不变：`flashcli run|serve|pull|doctor` 不变。`kind` 是 manifest 细节，永远不是用户参数。
 - 本文**不**定义模型计算。原生 producer 负责自己的前向（FlashRT / FlashRT-Nexus）；flashcli 只做编排。
 - Python backend 的既有行为（engine/script 模式、`RunEngine`/`ServeEngine`）不变，仍是兼容基线。
 

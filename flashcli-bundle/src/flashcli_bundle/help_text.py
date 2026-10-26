@@ -122,7 +122,7 @@ def format_run_help(
         lines.append("")
         lines.append(SCRIPT_MODE_NOTE)
     lines.append("")
-    lines.append("Use flashcli models envs to check runtime GPU/CUDA support.")
+    lines.append("Use flashcli models show to check runtime GPU/CUDA support.")
     return "\n".join(lines)
 
 
@@ -163,5 +163,5 @@ def format_serve_help(
         lines.append("")
         lines.append(SCRIPT_MODE_NOTE)
     lines.append("")
-    lines.append("Use flashcli models envs to check runtime GPU/CUDA support.")
+    lines.append("Use flashcli models show to check runtime GPU/CUDA support.")
     return "\n".join(lines)

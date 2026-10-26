@@ -229,7 +229,7 @@ variant 块常用字段：
 | `pip` | 其余 pip 包列表（字符串，可带版本约束）；**仅安装此处列出的 PyPI 包** |
 | `torchaudio` / `torchvision` | 可在 `pip` 中显式列出；若未列出但某个 `pip` 包的 wheel 声明依赖它们，flashcli 会在安装 `torch` 时**一并从 CUDA 索引推断安装**。之后该 PyPI 包会以 `--no-deps` 安装，避免 PyPI 覆盖 CUDA 版本 |
 
-bundle venv 的 Python 版本由 `python_abi` 决定，与主机 CLI Python 版本无关。
+bundle venv 的 Python 版本由 `python_abi` 决定，与主机环境无关。
 
 ### 3.5 `weights`（单 preset 或 variant 内）
 

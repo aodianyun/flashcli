@@ -229,7 +229,7 @@ Common variant fields:
 | `pip` | Additional pip packages (strings with optional version constraints) |
 | `torchaudio` / `torchvision` | May be listed explicitly in `pip`; if omitted but another `pip` wheel declares them, flashcli **infers and installs them with `torch`** from the CUDA index, then installs that PyPI package with `--no-deps` |
 
-The bundle venv Python version is fixed by `python_abi`, independent of the host CLI Python.
+The bundle venv Python version is fixed by `python_abi`, independent of the host environment.
 
 ### 3.5 `weights` (single preset or inside a variant)
 
