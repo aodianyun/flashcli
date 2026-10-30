@@ -115,3 +115,52 @@ func TestProbeRuntimeABI(t *testing.T) {
 		t.Fatalf("abi mismatch errors = %v", errs)
 	}
 }
+
+func TestValidateRuntimeMatrixSharedCell(t *testing.T) {
+	root := t.TempDir()
+	shared := filepath.Join(root, "runtime", "shared")
+	touch(t, filepath.Join(shared, "flash_rt_kernels-v1.2.0-sm120-cu130-linux-x86_64-py312.so"))
+	touch(t, filepath.Join(shared, "flash_rt_fa2-v1.2.0-sm120-cu130-linux-x86_64-py312.so"))
+	rm := map[string]string{
+		"env-a": "runtime/shared",
+		"env-b": "runtime/shared/",
+		"env-c": "",
+	}
+	if errs := ValidateRuntimeMatrix(root, rm); len(errs) != 0 {
+		t.Fatalf("shared runtime errors = %v", errs)
+	}
+}
+
+func TestValidateRuntimeMatrixSharedCellDeduplicatesErrors(t *testing.T) {
+	root := t.TempDir()
+	rm := map[string]string{
+		"env-a": "runtime/missing",
+		"env-b": "runtime/missing",
+	}
+	errs := ValidateRuntimeMatrix(root, rm)
+	if len(errs) != 1 || !strings.Contains(errs[0], "missing runtime/missing") {
+		t.Fatalf("shared missing cell errors = %v", errs)
+	}
+}
+
+func TestProbeRuntimeABIProbesSharedCellOnce(t *testing.T) {
+	root := t.TempDir()
+	shared := filepath.Join(root, "runtime", "shared")
+	touch(t, filepath.Join(shared, "flash_rt_kernels-dev-sm120-cu130-linux-x86_64-py312.so"))
+	py := script(t, "exit 0\n")
+	calls := 0
+	rm := map[string]string{
+		"env-a": "runtime/shared",
+		"env-b": "runtime/shared",
+	}
+	errs := ProbeRuntimeABI(root, rm, func(minor string) (string, bool) {
+		calls++
+		return py, true
+	})
+	if len(errs) != 0 {
+		t.Fatalf("probe errors = %v", errs)
+	}
+	if calls != 1 {
+		t.Fatalf("probe calls = %d, want 1 for shared runtime", calls)
+	}
+}

@@ -128,3 +128,16 @@ func TestDownloadFileMD5Mismatch(t *testing.T) {
 		t.Fatal("dest should not exist after mismatch")
 	}
 }
+
+func TestWantFileSharedRuntime(t *testing.T) {
+	shared := "runtime/shared"
+	if !WantFile("runtime/shared/lib.so", shared) {
+		t.Fatal("selected shared runtime must be synced")
+	}
+	if !WantFile("runtime/shared/substrate/lib.so", shared) {
+		t.Fatal("nested files under selected shared runtime must be synced")
+	}
+	if WantFile("runtime/other/lib.so", shared) {
+		t.Fatal("unselected runtime must not be synced")
+	}
+}

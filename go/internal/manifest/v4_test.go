@@ -162,3 +162,128 @@ func TestV4FallbackSpecificity(t *testing.T) {
 		t.Fatalf("resolved = %q", key)
 	}
 }
+
+func TestV4SharedRuntimeAndRuntimeLessEnvironment(t *testing.T) {
+	data := v4Fixture()
+	envs := data["environments"].(map[string]any)
+	envs["nvidia-shared"] = map[string]any{
+		"runtime": "runtime/shared",
+		"match": map[string]any{
+			"os": "linux", "arch": "x86_64", "python_abi": "312", "vendor": "nvidia",
+		},
+	}
+	envs["amd-shared"] = map[string]any{
+		"runtime": "runtime/shared",
+		"match": map[string]any{
+			"os": "linux", "arch": "x86_64", "python_abi": "312", "vendor": "amd",
+		},
+	}
+	envs["cpu-fallback"] = map[string]any{
+		"match": map[string]any{
+			"os": "linux", "arch": "x86_64", "python_abi": "312", "vendor": "cpu",
+		},
+	}
+	m, err := LoadData(data, "/tmp/demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt := m.RuntimeMap()
+	if rt["nvidia-shared"] != "runtime/shared" || rt["amd-shared"] != "runtime/shared" {
+		t.Fatalf("shared runtime map = %v", rt)
+	}
+	if rt["cpu-fallback"] != "" {
+		t.Fatalf("runtime-less environment must map to empty runtime: %v", rt)
+	}
+	key, err := m.ResolveEnvKey("sm120-cu130-linux-x86_64-py312")
+	if err != nil || key != "nvidia-shared" {
+		t.Fatalf("GPU fallback = %q, %v", key, err)
+	}
+	key, err = m.ResolveEnvKey("cpu-linux-x86_64-py312")
+	if err != nil || key != "cpu-fallback" {
+		t.Fatalf("CPU fallback = %q, %v", key, err)
+	}
+}
+
+func TestValidateEnvironmentFallbacks(t *testing.T) {
+	m := func(match map[string]any) map[string]any { return map[string]any{"match": match} }
+	cases := []struct {
+		name string
+		envs map[string]map[string]any
+		want string
+	}{
+		{
+			name: "missing required dimension",
+			envs: map[string]map[string]any{
+				"x": m(map[string]any{"os": "linux", "arch": "x86_64"}),
+			},
+			want: "requires python_abi",
+		},
+		{
+			name: "unsupported dimension",
+			envs: map[string]map[string]any{
+				"x": m(map[string]any{"os": "linux", "arch": "x86_64", "python_abi": "312", "gpu": "x"}),
+			},
+			want: "unsupported dimension",
+		},
+		{
+			name: "empty match",
+			envs: map[string]map[string]any{
+				"x": m(map[string]any{}),
+			},
+			want: "must not be empty",
+		},
+		{
+			name: "same specificity list overlap",
+			envs: map[string]map[string]any{
+				"a": m(map[string]any{"os": "linux", "arch": "x86_64", "python_abi": "312", "vendor": []any{"nvidia", "amd"}}),
+				"b": m(map[string]any{"os": "linux", "arch": "x86_64", "python_abi": "312", "vendor": "amd"}),
+			},
+			want: "ambiguous fallback",
+		},
+		{
+			name: "os aliases overlap",
+			envs: map[string]map[string]any{
+				"a": m(map[string]any{"os": "windows", "arch": "x86_64", "python_abi": "312"}),
+				"b": m(map[string]any{"os": "win32", "arch": "x86_64", "python_abi": "312"}),
+			},
+			want: "ambiguous fallback",
+		},
+		{
+			name: "arch aliases overlap",
+			envs: map[string]map[string]any{
+				"a": m(map[string]any{"os": "linux", "arch": "aarch64", "python_abi": "312"}),
+				"b": m(map[string]any{"os": "linux", "arch": "arm64", "python_abi": "312"}),
+			},
+			want: "ambiguous fallback",
+		},
+		{
+			name: "python abi prefix overlap",
+			envs: map[string]map[string]any{
+				"a": m(map[string]any{"os": "linux", "arch": "x86_64", "python_abi": "312"}),
+				"b": m(map[string]any{"os": "linux", "arch": "x86_64", "python_abi": "py312"}),
+			},
+			want: "ambiguous fallback",
+		},
+		{
+			name: "same specificity disjoint lists",
+			envs: map[string]map[string]any{
+				"a": m(map[string]any{"os": "linux", "arch": "x86_64", "python_abi": "312", "vendor": []any{"nvidia", "amd"}}),
+				"b": m(map[string]any{"os": "linux", "arch": "x86_64", "python_abi": "312", "vendor": []any{"npu", "cpu"}}),
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateEnvironmentFallbacks(tc.envs)
+			if tc.want == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want contains %q", err, tc.want)
+			}
+		})
+	}
+}
