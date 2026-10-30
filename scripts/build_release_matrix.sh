@@ -2,7 +2,7 @@
 # Generic release matrix builder — reads bundles/<name>/release-matrix.env
 #
 #   bash scripts/build_release_matrix.sh --bundle pi05_libero
-#   bash scripts/build_release_matrix.sh --bundle qwen_nvfp4 --cuda-tag 124 --skip-pack
+#   bash scripts/build_release_matrix.sh --bundle qwen3_8b_nvfp4 --cuda-tag 124 --skip-pack
 #   cd bundles/pi05_libero && bash ../../scripts/build_release_matrix.sh
 #
 set -euo pipefail
@@ -50,7 +50,7 @@ Usage:
   bash scripts/build_release_matrix.sh --bundle NAME [OPTIONS]
 
 Options:
-  --bundle NAME             Bundle id (e.g. pi05_libero, qwen_nvfp4)
+  --bundle NAME             Bundle id (e.g. pi05_libero, qwen3_8b_nvfp4)
   --repo-root DIR           FlashRT source (default: FLASHRT_REPO or auto-detect)
   --cuda-tag TAG            Build one CUDA line only (124 or 130)
   --python-minor NNN        Build one Python ABI only (310, 311, 312)

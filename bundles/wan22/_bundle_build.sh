@@ -159,24 +159,18 @@ run_cmake_build() {
 }
 
 # Stage minimal flash_rt/ (wan22 load path only) + wan/ package.
-# flash_rt/ comes from the SAME REPO_ROOT that built the .so (version-locked);
-# the commit is recorded in flash_rt/BUNDLE_VERSION.
+# flash_rt/ comes from the SAME REPO_ROOT that built the .so (version-locked).
 stage_wan22_python() {
   local py_dir="${BUNDLE_DIR}/flash_rt" wan_dir="${BUNDLE_DIR}/wan"
   rm -rf "${py_dir}"; mkdir -p "${py_dir}"
   local rel
-  for rel in __init__.py api.py \
+  for rel in __init__.py _extensions.py api.py \
              hardware/__init__.py \
              frontends/__init__.py frontends/torch/__init__.py frontends/torch/wan22_rtx.py; do
     mkdir -p "${py_dir}/$(dirname "${rel}")"
     [[ -f "${REPO_ROOT}/flash_rt/${rel}" ]] || die "FlashRT missing flash_rt/${rel}"
     cp -a "${REPO_ROOT}/flash_rt/${rel}" "${py_dir}/${rel}"
   done
-  local _commit _tag
-  _commit="$(git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
-  _tag="$(git -C "${REPO_ROOT}" describe --tags --always 2>/dev/null || echo dev)"
-  printf 'flashrt_commit=%s\nflashrt_tag=%s\nflashrt_abi=%s\nsource_repo=%s\n' \
-    "${_commit}" "${_tag}" "${FLASHRT_ABI:-dev}" "${REPO_ROOT}" > "${py_dir}/BUNDLE_VERSION"
 
   if [[ -n "${WAN_ROOT}" ]]; then
     rm -rf "${wan_dir}"

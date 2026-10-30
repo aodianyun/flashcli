@@ -66,13 +66,11 @@ func TestValidateRuntimeCellEmpty(t *testing.T) {
 	}
 }
 
-func TestValidateRuntimeCellMismatch(t *testing.T) {
+func TestValidateRuntimeCellAllowsSharedBuildTag(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "runtime", env)
 	touch(t, filepath.Join(dir, "flash_rt_kernels-v1.2.0-sm120-cu130-linux-x86_64-py312.so"))
-	errs := ValidateRuntimeCell(root, env, dir)
-	joined := strings.Join(errs, "\n")
-	if !strings.Contains(joined, "does not match runtime cell") {
+	if errs := ValidateRuntimeCell(root, env, dir); len(errs) != 0 {
 		t.Fatalf("errors = %v", errs)
 	}
 }

@@ -1,0 +1,14 @@
+# Assembled by build.sh (Linux + NVIDIA SM120 GPU)
+/flash_rt/
+/lib/
+/runtime/
+/dist/
+/.build/
+/flash_rt_*.so
+/libfmha_fp16_strided.so
+/checkpoint/qwen3/*
+!/checkpoint/qwen3/.gitkeep
+/checkpoint/qwen36/*
+!/checkpoint/qwen36/.gitkeep
+/mtp_fp8/*
+!/mtp_fp8/.gitkeep

@@ -82,3 +82,57 @@ func TestBundleValidateExec(t *testing.T) {
 		t.Fatalf("validate exit = %d", code)
 	}
 }
+
+func writeV4ExecBundle(t *testing.T, root string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(root, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "bin", "exec_echo"), []byte(execStub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data := map[string]any{
+		"format": "flashcli-model-bundle", "format_version": 4, "protocol_version": 1,
+		"name": "demo_v4_exec",
+		"defaults": map[string]any{
+			"entry": map[string]any{
+				"run": map[string]any{
+					"kind": "native-exec", "native": map[string]any{"command": []any{"bin/exec_echo"}, "transport": "stdio"},
+				},
+			},
+			"exec_protocol_version": 1,
+			"run_options":           []any{map[string]any{"name": "prompt", "type": "string", "default": "hi", "help": "h", "phase": "predict"}},
+		},
+		"environments": map[string]any{
+			"sm89-cu124-linux-x86_64-py310": map[string]any{
+				"runtime": "runtime/sm89-cu124-linux-x86_64-py310",
+			},
+		},
+	}
+	blob, _ := json.Marshal(data)
+	if err := os.WriteFile(filepath.Join(root, "flashcli-bundle.json"), blob, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(root, "runtime", "sm89-cu124-linux-x86_64-py310", "substrate")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "libdemo.so"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunV4NativeExecLocal(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FLASHCLI_HOME", home)
+	t.Setenv("FLASHCLI_MODELS_DIR", filepath.Join(home, "models"))
+	t.Setenv("FLASHCLI_SKIP_PREFLIGHT", "1")
+	t.Setenv("FLASHCLI_SKIP_WEIGHTS", "1")
+	t.Setenv("FLASHCLI_SKIP_VENV_SETUP", "1")
+	t.Setenv("FLASHCLI_RUNTIME_ENV_KEY", "sm89-cu124-linux-x86_64-py310")
+	bundle := filepath.Join(home, "v4_exec")
+	writeV4ExecBundle(t, bundle)
+	if code := Main([]string{"run", bundle, "--prompt", "v4"}); code != 0 {
+		t.Fatalf("v4 run exit = %d", code)
+	}
+}

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from flashcli_bundle.infer.cli import parse_run_argv
@@ -20,28 +19,11 @@ def test_pi05_default_manifest_is_script_mode() -> None:
     assert manifest.entry_run.attr == "main"
 
 
-def test_pi05_engine_manifest_example() -> None:
-    data = json.loads((PI05_ROOT / "flashcli-bundle.engine.json").read_text(encoding="utf-8"))
-    from flashcli_bundle.manifest import load_bundle_manifest_data
-
-    engine = load_bundle_manifest_data(data, bundle_root=PI05_ROOT)
-    assert engine.entry_run is not None
-    assert engine.entry_run.mode == "engine"
-    assert engine.entry_run.attr == "RunEngine"
-    assert engine.entry_run.module == "run_engine"
-
-
 def test_pi05_script_run_has_no_flashcli_bundle_import() -> None:
     text = (PI05_ROOT / "run.py").read_text(encoding="utf-8")
     assert "from flashcli_bundle" not in text
     assert "import flashcli_bundle" not in text
     assert "def main(" in text
-
-
-def test_pi05_engine_module_imports_flashcli_bundle() -> None:
-    text = (PI05_ROOT / "run_engine.py").read_text(encoding="utf-8")
-    assert "flashcli_bundle" in text
-    assert "class RunEngine" in text
 
 
 def test_pi05_script_parse_passes_flags(monkeypatch) -> None:

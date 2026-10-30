@@ -78,6 +78,7 @@ func msListFiles(ctx context.Context, base, repo, rev string, headers http.Heade
 		}
 		q.Set("PageNumber", strconv.Itoa(page))
 		q.Set("PageSize", "1000")
+		q.Set("Recursive", "true")
 		reqURL := base + "/api/v1/models/" + repo + "/repo/files?" + q.Encode()
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 		if err != nil {

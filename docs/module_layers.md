@@ -62,7 +62,7 @@ Canonical home for shared types, manifest/options, paths, FlashHub client, prese
 | `paths.py`, `marker.py`, `context.py`, `errors.py` | Paths, markers, activation context |
 | `flashhub.py`, `flashhub_errors.py` | FlashHub index/manifest download |
 | `openai_compat.py` | OpenAI-compat helpers (no starlette) |
-| `native*.py`, `layout.py`, `variants.py`, `checkpoint.py`, `weights_spec.py` | Bundle layout + checkpoint rules |
+| `native*.py`, `layout.py`, `checkpoint.py`, `weights_spec.py` | Bundle layout + checkpoint rules |
 | `runtime/detect.py`, `runtime/requirements_spec.py`, `runtime/mirror.py` | GPU/CUDA, pip specs, mirrors |
 | `util/download_progress.py` | HTTP download (lazy tqdm) |
 | `cache.py`, `post_pull.py`, `resolve.py`, `weights.py` (resolve), `activate_core.py` | Shared when both layers import; download/HF stays host |

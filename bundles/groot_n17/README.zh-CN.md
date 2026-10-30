@@ -6,13 +6,13 @@
 
 | | |
 |---|---|
-| **Ref** | `flashcli-bundle/groot_n17:1.0.0` |
+| **Ref** | `flashcli-bundle/groot_n17:1.0.1` |
 | **权重** | [nvidia/GR00T-N1.7-3B](https://huggingface.co/nvidia/GR00T-N1.7-3B) |
 | **GPU** | NVIDIA **SM120**（Blackwell）· CUDA **13.x** |
 | **Python** | **3.10**（bundle venv；Isaac-GR00T 官方要求） |
 | **能力** | `run` |
 
-**输入：** 任务 prompt + 一路或多路 RGB 图像（默认零状态；可选 `--state` npz）。  
+**输入：** 任务 prompt + 一路或多路 RGB 图像（默认零状态；可选 `--state` npz）。
 **输出：** 按 embodiment 模态反归一化后的动作字典（如 `eef_9d`、`joint_position`）。
 
 **常用 embodiment tag**（完整列表见 `flash_rt/models/groot_n17/embodiments.py`）：
@@ -31,7 +31,7 @@
 ## 运行
 
 ```bash
-flashcli run flashcli-bundle/groot_n17:1.0.0 \
+flashcli run flashcli-bundle/groot_n17:1.0.1 \
   --prompt "put the blue block in the green bowl" \
   --embodiment-tag oxe_droid_relative_eef_relative_joint \
   --num-views 2 \
@@ -41,12 +41,12 @@ flashcli run flashcli-bundle/groot_n17:1.0.0 \
 无图像冒烟（占位帧 + 零状态）：
 
 ```bash
-flashcli run flashcli-bundle/groot_n17:1.0.0 \
+flashcli run flashcli-bundle/groot_n17:1.0.1 \
   --embodiment-tag oxe_droid_relative_eef_relative_joint \
   --num-views 2
 ```
 
-完整参数：`flashcli run flashcli-bundle/groot_n17:1.0.0 --help`
+完整参数：`flashcli run flashcli-bundle/groot_n17:1.0.1 --help`
 
 ## 参数
 

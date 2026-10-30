@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -41,6 +42,23 @@ func (e EnvKey) Name() string {
 		return base + "-py" + e.PythonMinor
 	}
 	return base
+}
+
+// Vendor derives the accelerator family from the platform tail.
+func (e EnvKey) Vendor() string {
+	tail := strings.ToLower(e.PlatformTail)
+	switch {
+	case e.SM != "" || e.CudaTag != "" || strings.Contains(tail, "nvidia") || strings.Contains(tail, "rtx") || strings.Contains(tail, "sm"):
+		return "nvidia"
+	case strings.Contains(tail, "gfx") || strings.Contains(tail, "rocm") || strings.Contains(tail, "amd"):
+		return "amd"
+	case strings.Contains(tail, "npu") || strings.Contains(tail, "ascend"):
+		return "npu"
+	case strings.Contains(tail, "cpu"):
+		return "cpu"
+	default:
+		return ""
+	}
 }
 
 var pySuffixRe = regexp.MustCompile(`^py(3\d{2})$`)
@@ -144,6 +162,164 @@ func VariantDirName(gpu *GpuInfo, pythonABI string) string {
 		SM:           gpu.SM,
 		CudaTag:      gpu.CudaTag,
 	}.Name()
+}
+
+// HostEnvKey builds the host env key, including a CPU key when no GPU is
+// available.
+func HostEnvKey(gpu *GpuInfo, pythonABI string) string {
+	if gpu != nil {
+		return VariantDirName(gpu, pythonABI)
+	}
+	return EnvKey{
+		PlatformTail: "cpu",
+		OSName:       strings.ToLower(runtime.GOOS),
+		Arch:         normalizeArch(runtime.GOARCH),
+		PythonMinor:  pythonABI,
+	}.Name()
+}
+
+// ResolveEnvironment resolves a v4 environment by exact key, then by explicit
+// fallback match entries. Fallback entries with the same specificity that can
+// match the same host are rejected during manifest validation.
+func ResolveEnvironment(keys []string, matches map[string]map[string]any, host EnvKey, override string) (string, error) {
+	if override = strings.TrimSpace(override); override != "" {
+		for _, key := range keys {
+			if key == override {
+				return key, nil
+			}
+		}
+		return "", fmt.Errorf("FLASHCLI_RUNTIME_ENV_KEY %q is not declared in environments", override)
+	}
+	for _, key := range keys {
+		if key == host.Name() {
+			return key, nil
+		}
+	}
+
+	type candidate struct {
+		key         string
+		specificity int
+	}
+	var best candidate
+	found := false
+	var ties []string
+	for _, key := range keys {
+		match, ok := matches[key]
+		if !ok || len(match) == 0 {
+			continue
+		}
+		if !matchHost(match, host) {
+			continue
+		}
+		c := candidate{key: key, specificity: len(match)}
+		if !found || c.specificity > best.specificity {
+			best = c
+			found = true
+			ties = []string{key}
+		} else if c.specificity == best.specificity {
+			ties = append(ties, key)
+		}
+	}
+	if !found {
+		return "", fmt.Errorf("no environment matches host %q", host.Name())
+	}
+	if len(ties) > 1 {
+		sort.Strings(ties)
+		return "", fmt.Errorf("ambiguous fallback environments for host %q: %s", host.Name(), strings.Join(ties, ", "))
+	}
+	return best.key, nil
+}
+
+func matchHost(match map[string]any, host EnvKey) bool {
+	for key, raw := range match {
+		switch strings.ToLower(strings.TrimSpace(key)) {
+		case "os":
+			if !matchString(raw, host.OSName, "windows", "win32") {
+				return false
+			}
+		case "arch":
+			if !matchString(raw, host.Arch, "aarch64", "arm64") {
+				return false
+			}
+		case "python_abi":
+			if !matchPythonABI(raw, host.PythonMinor) {
+				return false
+			}
+		case "vendor":
+			if !matchString(raw, host.Vendor()) {
+				return false
+			}
+		case "sm":
+			if !matchString(raw, host.SM) {
+				return false
+			}
+		case "cuda":
+			if !matchString(raw, host.CudaTag) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func matchString(raw any, got string, aliases ...string) bool {
+	got = strings.ToLower(strings.TrimSpace(got))
+	switch v := raw.(type) {
+	case string:
+		want := strings.ToLower(strings.TrimSpace(v))
+		if got == want {
+			return true
+		}
+		for _, alias := range aliases {
+			if (got == "windows" || got == "win32") && (want == alias) {
+				return true
+			}
+			if (want == "windows" || want == "win32") && (got == alias) {
+				return true
+			}
+		}
+		return false
+	case []any:
+		for _, item := range v {
+			if matchString(item, got, aliases...) {
+				return true
+			}
+		}
+	case []string:
+		for _, item := range v {
+			if matchString(item, got, aliases...) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func matchPythonABI(raw any, got string) bool {
+	normalize := func(v string) string {
+		v = strings.ToLower(strings.TrimSpace(v))
+		return strings.TrimPrefix(v, "py")
+	}
+	got = normalize(got)
+	switch v := raw.(type) {
+	case string:
+		return normalize(v) == got
+	case []any:
+		for _, item := range v {
+			if s, ok := item.(string); ok && normalize(s) == got {
+				return true
+			}
+		}
+	case []string:
+		for _, item := range v {
+			if normalize(item) == got {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // ResolveRuntimeEnvKey picks the best manifest runtime key (exact then fuzzy).

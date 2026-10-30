@@ -110,8 +110,15 @@ def bundle_weights_rel(bundle: BundleManifest, variant: str | None = None) -> st
     if has_bundle_variants(bundle):
         key = resolve_bundle_variant(bundle, variant)
         return variant_weights_dir(bundle, key)
-    rel = str(bundle.raw.get("weights_dir", "checkpoint")).strip().strip("/")
-    return rel or "checkpoint"
+    raw_rel = str(bundle.raw.get("weights_dir", "")).strip().strip("/")
+    if raw_rel:
+        return raw_rel
+    try:
+        version = int(bundle.raw.get("format_version", 3))
+    except (TypeError, ValueError):
+        version = 3
+    # v4 default: main weights live at the weights-store root.
+    return "" if version >= 4 else "checkpoint"
 
 
 def variant_weights_spec(bundle: BundleManifest, variant: str) -> dict[str, Any]:

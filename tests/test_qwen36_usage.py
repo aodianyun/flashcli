@@ -8,7 +8,7 @@ from pathlib import Path
 
 def _qwen_util():
     path = (
-        Path(__file__).resolve().parents[1] / "bundles/qwen_nvfp4/_qwen_util.py"
+        Path(__file__).resolve().parents[1] / "bundles/qwen36_27b_nvfp4/_qwen_util.py"
     )
     spec = importlib.util.spec_from_file_location("bundle_qwen_util_test", path)
     assert spec is not None and spec.loader is not None

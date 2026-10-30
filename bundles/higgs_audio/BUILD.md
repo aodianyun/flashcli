@@ -1,52 +1,57 @@
-# Building the Higgs Audio v3 Bundle
+# higgs_audio — build & smoke test
 
-## Prerequisites
+<p align="right"><strong>English</strong> · <a href="BUILD.zh-CN.md">简体中文</a></p>
 
-- FlashRT source tree at `/app/FlashRT` (or pass `--repo-root`)
-- NVIDIA GPU SM120 (RTX 5090 / 5060 Ti / Blackwell)
-- CUDA 13.0, Python 3.10+, CMake ≥ 3.20
+Maintainer workflow: stage FlashRT py310 natives + minimal `flash_rt/`, pack, validate, and smoke `run`.
 
-## Local Build
+**Requires:** Linux · NVIDIA SM120 · CUDA 13.x · FlashRT source built for Python 3.10 · flashcli dev checkout.
 
 ```bash
-# Stage .so + flash_rt/ from a pre-built FlashRT tree:
-bash bundles/higgs_audio/build.sh --repo-root /app/FlashRT --pack-only
-
-# Validate:
-flashcli bundle validate bundles/higgs_audio/
-
-# Run:
-flashcli run bundles/higgs_audio/ --text "Hello world" --out test.wav
+cd /path/to/flashcli
+./install.sh --from-source
+pip install -e ./flashcli-bundle
+export FLASHRT_REPO=/path/to/FlashRT
+export BUNDLE="$(pwd)/bundles/higgs_audio"
 ```
 
-## Bundle Structure
-
-```
-higgs_audio/
-├── flashcli-bundle.json          # Manifest (engine mode, run_options, weights)
-├── run.py                         # RunEngine: load() + predict()
-├── build.sh / _bundle_build.sh    # Build & staging
-├── pack.sh                        # Pack wrapper
-├── README.md / README.zh-CN.md
-├── BUILD.md / BUILD.zh-CN.md
-├── .gitignore
-├── runtime/                       # Build artifact: .so with version tag
-│   └── sm120-cu130-linux-x86_64-py310/
-│       ├── flash_rt_kernels-d0db114-sm120-cu130-linux-x86_64-py310.so
-│       └── flash_rt_fa2-d0db114-sm120-cu130-linux-x86_64-py310.so
-└── flash_rt/                      # Build artifact: vendored Python tree
-    ├── BUNDLE_VERSION
-    └── ... (26 files)
-```
-
-## Version Consistency
-
-The `.so` files in `runtime/` and the Python files in `flash_rt/` are both
-staged from the same FlashRT commit (recorded in `flash_rt/BUNDLE_VERSION`).
-This ensures the compiled kernel symbols match the Python frontend code.
-
-## Pack for Distribution
+## 1. Build
 
 ```bash
-bash bundles/higgs_audio/pack.sh --output-dir bundles/higgs_audio/dist
+bash bundles/higgs_audio/build.sh --repo-root "$FLASHRT_REPO"
 ```
+
+Outputs: `runtime/sm120-cu130-linux-x86_64-py310/*.so`, `flash_rt/`. The build stages existing py310 artifacts; it does not compile FlashRT.
+
+## 2. Pack
+
+```bash
+bash bundles/higgs_audio/pack.sh --repo-root "$FLASHRT_REPO"
+export BUNDLE="$(pwd)/bundles/higgs_audio/dist"
+```
+
+## 3. Validate
+
+```bash
+flashcli bundle validate "$BUNDLE"
+flashcli models show "$BUNDLE"
+```
+
+## 4. Smoke test
+
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+flashcli pull "$BUNDLE"
+flashcli run "$BUNDLE" --text "Hello world" --out /tmp/higgs.wav
+```
+
+## 5. Publish
+
+Upload `dist/` to FlashHub as `flashcli-bundle/higgs_audio:1.0.1` (bump as needed).
+
+## Troubleshooting (build)
+
+| Symptom | Fix |
+|---------|-----|
+| Py310 native missing | build FlashRT with Python 3.10, then rerun `build.sh` |
+| `NativeEnvironmentNotSupportedError` | rebuild the SM120/cu130/py310 cell |
+| torchaudio load error | the bundle stubs unusable torchaudio; rebuild/pack with the current `env_guard.py` |

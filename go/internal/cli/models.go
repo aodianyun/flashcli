@@ -69,6 +69,10 @@ func weightsCachedFor(p ref.Parsed, refStr string) bool {
 	m, err := loadManifestForRef(refStr, p)
 	if err == nil {
 		key = weights.CacheKeyFor(m, ver)
+		weightsKey := weights.StoreKeyFor(m, ver)
+		if m.FormatVersion >= 4 {
+			rel = ""
+		}
 		main, r, _, specErr := weights.ManifestSpecs(m, p.Variant)
 		if specErr != nil {
 			// Legacy local markers can predate variants and omit @variant;
@@ -79,7 +83,7 @@ func weightsCachedFor(p ref.Parsed, refStr string) bool {
 		if r != "" {
 			rel = r
 		}
-		dir := filepath.Join(paths.Models(), filepath.FromSlash(key), filepath.FromSlash(rel))
+		dir := filepath.Join(paths.Models(), filepath.FromSlash(weightsKey), filepath.FromSlash(rel))
 		return weights.IsCached(dir, main)
 	}
 	// Keep a marker-only fallback for offline/foreign caches whose manifest
@@ -124,14 +128,30 @@ func modelsListCmd() *cobra.Command {
 					weightsState = "cached"
 				}
 				bundleSize := dirSize(filepath.Join(paths.Bundles(), filepath.FromSlash(cacheKey)))
-				weightsSize := dirSize(filepath.Join(paths.Models(), filepath.FromSlash(cacheKey)))
-				dir := filepath.ToSlash(filepath.Join(cacheRootDisplay(), "{bundles,models}", filepath.FromSlash(cacheKey)))
+				weightsKey := markerWeightsKey(m, cacheKey)
+				weightsSize := dirSize(filepath.Join(paths.Models(), filepath.FromSlash(weightsKey)))
+				dir := filepath.ToSlash(filepath.Join(cacheRootDisplay(), "models", filepath.FromSlash(weightsKey)))
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 					refName, bundleState, humanSize(bundleSize), weightsState, humanSize(weightsSize), dir)
 			}
 			return w.Flush()
 		},
 	}
+}
+
+func markerWeightsKey(marker map[string]any, fallback string) string {
+	if key := strOf(marker["weights_key"]); key != "" {
+		return key
+	}
+	br := strOf(marker["bundle_root"])
+	if !bundleRootUsable(br) {
+		return fallback
+	}
+	man, err := manifest.Load(br)
+	if err != nil || man.FormatVersion < 4 {
+		return fallback
+	}
+	return weights.StoreKeyFor(man, "")
 }
 
 func cacheRootDisplay() string {
@@ -167,6 +187,12 @@ func weightsCachedFromMarker(m map[string]any) bool {
 	if err != nil {
 		return false
 	}
+	weightsKey := key
+	if keyFromMarker := strOf(m["weights_key"]); keyFromMarker != "" {
+		weightsKey = keyFromMarker
+	} else if man.FormatVersion >= 4 {
+		weightsKey = weights.StoreKeyFor(man, "")
+	}
 	main, rel, _, err := weights.ManifestSpecs(man, strOf(m["variant"]))
 	if err != nil {
 		// Legacy local markers can predate variants and omit @variant; fall
@@ -174,13 +200,13 @@ func weightsCachedFromMarker(m map[string]any) bool {
 		if strOf(m["variant"]) != "" {
 			return false
 		}
-		dir := filepath.Join(paths.Models(), filepath.FromSlash(key), "checkpoint")
+		dir := filepath.Join(paths.Models(), filepath.FromSlash(weightsKey), "checkpoint")
 		return markerCheckpointCached(dir)
 	}
-	if rel == "" {
+	if rel == "" && man.FormatVersion < 4 {
 		rel = "checkpoint"
 	}
-	dir := filepath.Join(paths.Models(), filepath.FromSlash(key), filepath.FromSlash(rel))
+	dir := filepath.Join(paths.Models(), filepath.FromSlash(weightsKey), filepath.FromSlash(rel))
 	return weights.IsCached(dir, main)
 }
 
@@ -217,11 +243,8 @@ func modelsEnvsFromMarker(out interface{ Write([]byte) (int, error) }, refStr st
 }
 
 func modelsEnvBlock(out interface{ Write([]byte) (int, error) }, m *manifest.Manifest, gpu *preflight.GpuInfo) {
-	if gpu == nil {
-		return
-	}
 	abi := m.PythonABIOrEmpty()
-	hostKey := preflight.VariantDirName(gpu, abi)
+	hostKey := preflight.HostEnvKey(gpu, abi)
 	if abi == "" {
 		fmt.Fprintf(out, "  this machine: %s (native, no python_abi)\n", hostKey)
 	} else {
@@ -232,12 +255,8 @@ func modelsEnvBlock(out interface{ Write([]byte) (int, error) }, m *manifest.Man
 			fmt.Fprintf(out, "  python 3.%s: NOT FOUND (will auto-install on run, or set FLASHCLI_PY%s_BIN)\n", abi[1:], abi)
 		}
 	}
-	keys := make([]string, 0, len(m.RuntimeMap()))
-	for k := range m.RuntimeMap() {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	match := preflight.ResolveRuntimeEnvKey(m.RuntimeMap(), hostKey)
+	keys := m.EnvironmentKeys()
+	match, _ := m.ResolveEnvKey(hostKey)
 	fmt.Fprintf(out, "  supported (%d):\n", len(keys))
 	for _, k := range keys {
 		mark := ""
@@ -308,7 +327,7 @@ func modelsShowCmd() *cobra.Command {
 func showCachedEnvs(out interface{ Write([]byte) (int, error) }, gpu *preflight.GpuInfo) error {
 	fmt.Fprintf(out, "FlashHub API: %s\n\n", flashhub.APIBase())
 	if gpu == nil {
-		fmt.Fprintln(out, "[!] No NVIDIA GPU detected; cannot match an environment.")
+		fmt.Fprintln(out, "[!] No NVIDIA GPU detected; only CPU fallback environments can match.")
 	}
 	markers := bundleMarkers()
 	if len(markers) == 0 {
@@ -358,6 +377,9 @@ func showOne(out interface{ Write([]byte) (int, error) }, refStr string, gpu *pr
 		fmt.Fprintln(out, "runtime env:")
 		modelsEnvBlock(out, m, gpu)
 	}
+	if m != nil {
+		printBuildInfo(out, m)
+	}
 
 	marker := runtime.ReadPresetMarker(key)
 	if len(marker) == 0 {
@@ -388,6 +410,32 @@ func showOne(out interface{ Write([]byte) (int, error) }, refStr string, gpu *pr
 
 	printWeightsInfo(out, m, p.Variant, weightsCachedFor(p, refStr))
 	return nil
+}
+
+func printBuildInfo(out interface{ Write([]byte) (int, error) }, m *manifest.Manifest) {
+	build, _ := m.Raw["build"].(map[string]any)
+	if len(build) == 0 {
+		return
+	}
+	fmt.Fprintln(out, "build:")
+	if sources, ok := build["sources"].([]any); ok && len(sources) > 0 {
+		for _, item := range sources {
+			source, _ := item.(map[string]any)
+			name := strOf(source["name"])
+			repo := strOf(source["source"])
+			commit := strOf(source["commit"])
+			if name == "" && repo == "" && commit == "" {
+				continue
+			}
+			fmt.Fprintf(out, "  %s: %s @ %s\n", name, repo, commit)
+		}
+		return
+	}
+	for _, key := range []string{"source", "commit", "flashrt_tag", "git_commit", "git_ref", "build_id", "native_artifact_tag"} {
+		if value := strOf(build[key]); value != "" {
+			fmt.Fprintf(out, "  %s: %s\n", key, value)
+		}
+	}
 }
 
 func manifestVariantNames(m *manifest.Manifest) []string {

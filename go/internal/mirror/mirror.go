@@ -124,7 +124,10 @@ func PipExtraArgs() []string {
 // TorchIndexURL resolves the PyTorch wheel index (Aliyun mirror when enabled).
 func TorchIndexURL(index string) string {
 	Apply()
-	name := index
+	name := strings.ToLower(strings.TrimSpace(index))
+	if name == "cpu" {
+		return "https://download.pytorch.org/whl/cpu"
+	}
 	if !strings.HasPrefix(name, "cu") {
 		name = "cu" + name
 	}

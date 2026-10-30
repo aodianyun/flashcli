@@ -42,3 +42,60 @@ func TestCacheKeyForIsVariantIndependent(t *testing.T) {
 		t.Fatalf("cache key must not contain @variant: %q", got)
 	}
 }
+
+func TestManifestSpecsV4DefaultWeightsRoot(t *testing.T) {
+	m := &manifest.Manifest{FormatVersion: 4, Raw: map[string]any{}}
+	_, rel, _, err := ManifestSpecs(m, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rel != "" {
+		t.Fatalf("v4 default rel = %q, want empty (store root)", rel)
+	}
+}
+
+func TestManifestSpecsV4ExplicitWeightsDir(t *testing.T) {
+	m := &manifest.Manifest{FormatVersion: 4, Raw: map[string]any{"weights_dir": "checkpoint"}}
+	_, rel, _, err := ManifestSpecs(m, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rel != "checkpoint" {
+		t.Fatalf("v4 explicit rel = %q", rel)
+	}
+}
+
+func TestManifestSpecsV4ExtraWeightsDir(t *testing.T) {
+	m := &manifest.Manifest{
+		FormatVersion: 4,
+		Raw: map[string]any{
+			"weights": map[string]any{"source": "huggingface", "repo": "org/demo", "revision": "main"},
+			"extra_weights": map[string]any{
+				"tokenizer": map[string]any{"source": "huggingface", "repo": "org/tok", "revision": "main"},
+			},
+		},
+	}
+	_, _, extra, err := ManifestSpecs(m, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := extra["tokenizer"].WeightsDir; got != "extra/tokenizer" {
+		t.Fatalf("extra weights_dir=%q", got)
+	}
+	if got := ExtraWeightDest("/store", "", "tokenizer", extra["tokenizer"]); got != "/store/extra/tokenizer" {
+		t.Fatalf("dest=%q", got)
+	}
+}
+
+func TestStoreKeyForV4Readable(t *testing.T) {
+	m := &manifest.Manifest{FormatVersion: 4, Name: "demo", Raw: map[string]any{
+		"weights": map[string]any{"source": "huggingface", "repo": "org/model", "revision": "main"},
+	}}
+	got := StoreKeyFor(m, "1.0.0")
+	if !strings.HasPrefix(got, "store/huggingface/org__model@main-") {
+		t.Fatalf("store key=%q", got)
+	}
+	if got != StoreKeyFor(m, "1.0.1") {
+		t.Fatal("weight store key must be version-independent")
+	}
+}

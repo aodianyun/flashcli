@@ -176,8 +176,10 @@ def infer_env_key_from_native_stem(stem: str) -> str | None:
 
 
 def resolve_env_key_for_native_dir(native_dir: Path, env_key: str | None = None) -> str | None:
-    if env_key:
-        return env_key
+    # None means "infer from the directory name"; "" explicitly disables env
+    # binding for shared runtime directories.
+    if env_key is not None:
+        return env_key or None
     name = native_dir.name.strip()
     if not name or name in ("lib", "runtime", ".", ".."):
         return None

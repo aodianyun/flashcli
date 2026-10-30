@@ -11,8 +11,8 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 ## Core principles
 
 1. **Inference lives in the bundle** — the bundle owns **all model-specific logic**: the forward pass, preprocessing/postprocessing, modality shapes and dtypes, input/output semantics, and option→port mapping/defaults. flashcli is a **generic, model-agnostic driver**: it resolves the ref, prepares the environment, and invokes the bundle-provided interface — `entry` for `kind=python`, or the declared model-runtime ABI + manifest `native` block for `native-exec`/`native-abi`. **No model-specific constants, shapes, or preprocessing may live in the host** (`go/`).
-2. **Preset ref** — users pass `namespace/bundle:version[@variant]`; `FLASHCLI_FLASHHUB_API` sets the API base.
-3. **Manifest-first + split download** — fetch manifest → preflight against `runtime` keys → download only this host’s `runtime/<env-key>/`.
+2. **Preset ref** — users pass `namespace/bundle:version`; `FLASHCLI_FLASHHUB_API` sets the API base.
+3. **Manifest-first + split download** — fetch manifest → preflight against `runtime` keys → download only this host’s `runtime/<runtime-dir>/`.
 4. **Fixed Python ABI** — one venv per bundle (`python_abi`); CLI **re-execs** into that venv after prepare.
 5. **Single Go host** — the host is a static Go binary; bundle venvs pip-install **`flashcli-bundle[infer]`** (never a host `flashcli` package).
 6. **One command** — `flashcli run <ref>` chains sync → deps → weights (host download if missing) → `post_pull` → offline inference in bundle venv.
@@ -67,7 +67,7 @@ During `activate_bundle()`, `PYTHONPATH` prepends the **bundle root** so `entry`
 
 flashcli does **not** pip-depend on `flash-rt`. `import flash_rt` is only valid after `activate_bundle()`.
 
-## Data flow (`flashcli run flashcli-bundle/pi05_libero:1.0.4`)
+## Data flow (`flashcli run flashcli-bundle/pi05_libero:1.0.5`)
 
 ```mermaid
 sequenceDiagram
@@ -79,10 +79,10 @@ sequenceDiagram
   participant Venv as venv
   participant Infer as flashcli_bundle.infer
 
-  U->>CLI: flashcli run flashcli-bundle/pi05_libero:1.0.4
+  U->>CLI: flashcli run flashcli-bundle/pi05_libero:1.0.5
   CLI->>FH: fetch repo index (if not synced)
   FH-->>CLI: files[] + download_url
-  CLI->>FH: sync entry tree + runtime/<env-key>/
+  CLI->>FH: sync entry tree + runtime/<runtime-dir>/
   CLI->>Pre: env key + native cell + host ABI + CUDA userland
   CLI->>W: ensure weights (+ post_pull/extra_pull)
   CLI->>Venv: create bundle venv + torch deps
@@ -118,14 +118,12 @@ Two independent checks, deliberately separated:
 
 - a **complete download manifest** → local verification + bundle readiness
   (no network);
-- a **legacy cache without a manifest and without the incomplete marker** →
-  evaluate the bundle's declared readiness **locally** (no network);
-- a manifest file that exists but cannot be parsed is **never** treated as a
-  legacy cache; the host re-lists;
-- when the manifest is missing (and no legacy cache is accepted) or incomplete,
-  `run`/`serve` auto-prepare (network) and resume the expected set; an explicit
-  `flashcli pull` always re-lists the remote and rewrites the expected set,
-  even when the local manifest is complete.
+- a manifest file that exists but cannot be parsed is **never** treated as
+  complete; the host re-lists;
+- when the manifest is missing or incomplete, `run`/`serve` auto-prepare
+  (network) and resume the expected set; an explicit `flashcli pull` always
+  re-lists the remote and rewrites the expected set, even when the local
+  manifest is complete.
 
 Therefore **once preparation succeeds** (bundle tree + weights + venv/deps),
 every later `run`/`serve` runs **offline**. Network is only needed when artifacts
@@ -182,11 +180,11 @@ sha256 verification into `~/.flashcli/tools/uv/<version>/`.
 ├── python/                  # optional standalone Pythons for bundle venv base
 ├── python-runtime.env       # FLASHCLI_PY<abi>_BIN=… written when standalone Python is provisioned
 ├── runtimes/<id>/           # bundle venv + .runtime.json marker
-├── bundles/<name>/<version>/.flashcli_bundle.json   # synced tree (shared by all @variant)
+├── bundles/<name>/<version>/.flashcli_bundle.json   # synced tree (shared by all environments)
 ├── cache/repo-index/        # FlashHub listing cache
 ├── cache/uv/                # uv package cache (default UV_CACHE_DIR)
 ├── tools/uv/<version>/      # provisioned uv binaries
-└── models/<name>/<version>/<weights_dir>/           # per-variant weights (default checkpoint/) +
+└── models/store/<source>/<repo>@<revision>-<hash>/     # v4 shared weights store +
                                                        #   .flashcli_download.json / .flashcli_download.incomplete
 ```
 
@@ -197,10 +195,10 @@ sha256 verification into `~/.flashcli/tools/uv/<version>/`.
 ├── flashcli-bundle.json
 ├── run.py
 ├── flash_rt/
-└── runtime/<env-key>/       # native *.so for this host (loaded in place)
+└── runtime/<runtime-dir>/       # native *.so for the selected runtime directory (loaded in place)
 ```
 
-> Native-only bundles omit `run.py` / `flash_rt/` and keep their C libraries under `runtime/<env-key>/substrate/`.
+> Native-only bundles omit `run.py` / `flash_rt/` and keep their C libraries under `runtime/<runtime-dir>/substrate/`.
 
 See [model_bundle_standard.md](model_bundle_standard.md).
 
@@ -212,11 +210,15 @@ See [module_layers.md](module_layers.md) for the authoritative host / infer / pr
 
 | Ref | capabilities |
 |-----|--------------|
-| `flashcli-bundle/pi05_libero:1.0.4` | `run` |
-| `flashcli-bundle/qwen_nvfp4:1.0.1@qwen3` | `run`, `serve` |
-| `flashcli-bundle/qwen_nvfp4:1.0.1@qwen36` | `run`, `serve` |
-| `bundles/groot_n16` *(local dev)* | `run` |
-| `bundles/groot_n17` *(local dev)* | `run` |
+| `flashcli-bundle/pi05_libero:1.0.5` | `run` |
+| `flashcli-bundle/groot_n16:1.0.1` | `run` |
+| `flashcli-bundle/groot_n17:1.0.1` | `run` |
+| `flashcli-bundle/qwen3_8b_nvfp4:1.0.0` | `run`, `serve` |
+| `flashcli-bundle/qwen36_27b_nvfp4:1.0.0` | `run`, `serve` |
+| `flashcli-bundle/qwen3_vl_8b_nvfp4:1.0.0` | `run`, `serve` |
+| `flashcli-bundle/wan22:1.0.1` | `run` |
+| `flashcli-bundle/higgs_audio:1.0.1` | `run` |
+| `flashcli-bundle/pi05_libero_nexus:1.0.3` | `run`, `serve` |
 
 See [model_bundle_standard.md](model_bundle_standard.md).
 

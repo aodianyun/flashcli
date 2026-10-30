@@ -6,13 +6,13 @@
 
 | | |
 |---|---|
-| **Ref** | `flashcli-bundle/groot_n17:1.0.0` |
+| **Ref** | `flashcli-bundle/groot_n17:1.0.1` |
 | **Weights** | [nvidia/GR00T-N1.7-3B](https://huggingface.co/nvidia/GR00T-N1.7-3B) |
 | **GPU** | NVIDIA **SM120** (Blackwell) · CUDA **13.x** |
 | **Python** | **3.10** (bundle venv; Isaac-GR00T official) |
 | **Capabilities** | `run` |
 
-**Inputs:** task prompt + one or more RGB images (optional zero-state; optional `--state` npz).  
+**Inputs:** task prompt + one or more RGB images (optional zero-state; optional `--state` npz).
 **Output:** denormalized action dict per embodiment modality (e.g. `eef_9d`, `joint_position`).
 
 **Common embodiment tags** (see `flash_rt/models/groot_n17/embodiments.py` for the full list):
@@ -31,7 +31,7 @@ Weights are pulled automatically on first run (checkpoint is self-contained; no 
 ## Run
 
 ```bash
-flashcli run flashcli-bundle/groot_n17:1.0.0 \
+flashcli run flashcli-bundle/groot_n17:1.0.1 \
   --prompt "put the blue block in the green bowl" \
   --embodiment-tag oxe_droid_relative_eef_relative_joint \
   --num-views 2 \
@@ -41,12 +41,12 @@ flashcli run flashcli-bundle/groot_n17:1.0.0 \
 Smoke test without images (placeholder frames + zero state):
 
 ```bash
-flashcli run flashcli-bundle/groot_n17:1.0.0 \
+flashcli run flashcli-bundle/groot_n17:1.0.1 \
   --embodiment-tag oxe_droid_relative_eef_relative_joint \
   --num-views 2
 ```
 
-Full flags: `flashcli run flashcli-bundle/groot_n17:1.0.0 --help`
+Full flags: `flashcli run flashcli-bundle/groot_n17:1.0.1 --help`
 
 ## Parameters
 

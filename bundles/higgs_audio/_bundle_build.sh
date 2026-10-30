@@ -74,14 +74,6 @@ stage_flash_rt() {
 
   _cp() { local rel="$1"; mkdir -p "${dst}/$(dirname "${rel}")"; cp -a "${SRC}/${rel}" "${dst}/${rel}"; }
 
-  # BUNDLE_VERSION
-  cat > "${dst}/BUNDLE_VERSION" <<EOF
-flashrt_commit=${git_commit}
-flashrt_tag=${git_commit}
-flashrt_abi=${flashrt_abi}
-source_repo=${REPO_ROOT}
-EOF
-
   # Minimal __init__ (no api.py import — Higgs uses frontend directly)
   echo '"""Higgs Audio v3 bundle — minimal flash_rt init."""' > "${dst}/__init__.py"
 

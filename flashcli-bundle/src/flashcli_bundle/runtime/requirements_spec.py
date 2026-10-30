@@ -203,15 +203,16 @@ def _spec_from_python_dependencies(
         groups = {str(k): list(v) for k, v in optional.items()}
     else:
         groups = {}
-    if pip or torch_spec:
-        return RuntimeRequirementsSpec(
-            pip_packages=pip,
-            torch_package=torch_spec,
-            torch_index=torch_index,
-            optional_groups=groups,
-            source=source,
-        )
-    return None
+    # An explicit (possibly empty) python_dependencies block is authoritative.
+    # In particular a runtime-less CPU bundle may intentionally declare no pip
+    # packages and torch: false; do not fall back to host defaults.
+    return RuntimeRequirementsSpec(
+        pip_packages=pip,
+        torch_package=torch_spec,
+        torch_index=torch_index,
+        optional_groups=groups,
+        source=source,
+    )
 
 
 def load_from_bundle_root(bundle_root: Path) -> RuntimeRequirementsSpec:
@@ -228,6 +229,18 @@ def load_from_bundle_root(bundle_root: Path) -> RuntimeRequirementsSpec:
         pip_from_txt = _parse_requirements_txt(req_path.read_text(encoding="utf-8"))
 
     py = data.get("python_dependencies")
+    if not isinstance(py, dict):
+        # v4 keeps shared dependencies under defaults; an explicitly selected
+        # environment may replace them.
+        defaults = data.get("defaults")
+        if isinstance(defaults, dict):
+            py = defaults.get("python_dependencies")
+        env_key = os.environ.get("FLASHCLI_RUNTIME_ENV_KEY", "").strip()
+        environments = data.get("environments")
+        if env_key and isinstance(environments, dict):
+            block = environments.get(env_key)
+            if isinstance(block, dict) and isinstance(block.get("python_dependencies"), dict):
+                py = block["python_dependencies"]
     if isinstance(py, dict):
         spec = _spec_from_python_dependencies(
             py,

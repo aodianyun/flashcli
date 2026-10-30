@@ -9,7 +9,7 @@
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
 flashcli doctor
-flashcli run flashcli-bundle/<name>:<version>[@variant]
+flashcli run flashcli-bundle/<name>:<version>
 ```
 
 ---
@@ -18,7 +18,7 @@ flashcli run flashcli-bundle/<name>:<version>[@variant]
 
 所有支持的模型与硬件都在 **[FlashHub](https://flashhub.top)** 上——去那里浏览，并使用各 bundle 页面给出的 ref。GPU/CUDA/Python 要求、能力，以及 `run` / `serve` 的命令与选项，都记录在该 bundle 页面及其 `README.md`（索引：[bundles/](bundles/README.zh-CN.md)）。
 
-Ref 语法：`flashcli-bundle/<name>:<version>[@variant]`（FlashHub）或 `bundles/<name>[@variant]`（本地开发；目录须含 `flashcli-bundle.json`）。多 variant bundle 需要 `@variant`。详见 [model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md)。完整命令列表见 `flashcli --help`。
+Ref 语法：`flashcli-bundle/<name>:<version>`（FlashHub）或 `bundles/<name>`（本地开发；目录须含 `flashcli-bundle.json`）。详见 [model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md)。完整命令列表见 `flashcli --help`。
 
 ---
 
@@ -26,7 +26,7 @@ Ref 语法：`flashcli-bundle/<name>:<version>[@variant]`（FlashHub）或 `bund
 
 | 月份 | 亮点 |
 |------|------|
-| **2026-10** | **Go-only host** —— 单个静态二进制（Python host 已移除）；**native-exec** / **native-abi** 后端让 bundle **无需 Python** 即可运行；同步的 bundle 树与权重缓存**在 `@variant` 间共享** |
+| **2026-10** | **Go-only host** —— 单个静态二进制（Python host 已移除）；**native-exec** / **native-abi** 后端让 bundle **无需 Python** 即可运行；同步的 bundle 树与权重缓存**在 environments 间共享** |
 | **2026-06** | **Qwen3.6 对话服务**达到生产可用 —— 回复更快（遇结束符即停）、真流式输出、更长单次生成，HTTP 与推理安装更省心 |
 | **2026-05** | **Blackwell（SM120）Qwen NVFP4** 上架 FlashHub —— 一条命令 `run` / OpenAI 兼容 `serve`；可复现的多环境发布包 |
 
@@ -77,12 +77,12 @@ flashcli du                                            # 各缓存区域磁盘�
 ### 运行与服务
 
 ```bash
-flashcli run   flashcli-bundle/<name>:<version>[@variant] [OPTIONS]        # 推理
-flashcli serve flashcli-bundle/<name>:<version>[@variant] --port 8000      # OpenAI 兼容 HTTP
+flashcli run   flashcli-bundle/<name>:<version> [OPTIONS]        # 推理
+flashcli serve flashcli-bundle/<name>:<version> --port 8000      # OpenAI 兼容 HTTP
 
 curl -N http://127.0.0.1:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model":"<variant>","messages":[{"role":"user","content":"Hello"}],"max_tokens":512,"stream":true}'
+  -d '{"model":"<model-id>","messages":[{"role":"user","content":"Hello"}],"max_tokens":512,"stream":true}'
 ```
 
 首次运行会同步 FlashHub runtime、创建 bundle venv、安装 torch 栈并拉取权重。各模型的专属参数、默认值与示例见各 bundle [README](bundles/README.zh-CN.md)。
@@ -90,8 +90,8 @@ curl -N http://127.0.0.1:8000/v1/chat/completions \
 **本地开发 bundle**（从 FlashRT 重建，非 FlashHub）：
 
 ```bash
-bash bundles/qwen_nvfp4/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
-flashcli serve bundles/qwen_nvfp4@qwen36 --port 8000 --K 6
+bash bundles/pi05_libero/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
+flashcli run bundles/pi05_libero --prompt "pick up the red block"
 ```
 
 ---

@@ -94,7 +94,9 @@ payload = {
         "external_dependencies",
         "scripts/deployment",
         "tests",
+        "files outside the inference import closure",
     ],
+    "pruned_to": "inference import closure",
     "install": "none — import via bundle PYTHONPATH",
 }
 with open(path, "w", encoding="utf-8") as fh:
@@ -132,6 +134,7 @@ main() {
 
   write_vendor_meta "${src_root}"
   prune_vendor_tree "${DEST}"
+  python3 "${BUNDLE_DIR}/_scan_gr00t_inference_imports.py" --prune >/dev/null
 
   [[ -f "${DEST}/policy/gr00t_policy.py" ]] || die "Vendored tree missing policy/gr00t_policy.py"
   [[ -d "${DEST}/model/gr00t_n1d7" ]] || die "Vendored tree missing model/gr00t_n1d7/"

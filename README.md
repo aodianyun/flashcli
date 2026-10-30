@@ -9,7 +9,7 @@ One install, one preset name — flashcli resolves the right native runtime for 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
 flashcli doctor
-flashcli run flashcli-bundle/<name>:<version>[@variant]
+flashcli run flashcli-bundle/<name>:<version>
 ```
 
 ---
@@ -18,7 +18,7 @@ flashcli run flashcli-bundle/<name>:<version>[@variant]
 
 All supported models and hardware live on **[FlashHub](https://flashhub.top)** — browse there and use the ref shown on each bundle page. GPU/CUDA/Python requirements, capabilities, and the `run` / `serve` commands and options are documented on the bundle page and its `README.md` (index: [bundles/](bundles/README.md)).
 
-Ref syntax: `flashcli-bundle/<name>:<version>[@variant]` (FlashHub) or `bundles/<name>[@variant]` (local dev; the directory must contain `flashcli-bundle.json`). Multi-variant bundles require `@variant`. Details: [model_bundle_standard.md](docs/model_bundle_standard.md). Run `flashcli --help` for the full command list.
+Ref syntax: `flashcli-bundle/<name>:<version>` (FlashHub) or `bundles/<name>` (local dev; the directory must contain `flashcli-bundle.json`). Details: [model_bundle_standard.md](docs/model_bundle_standard.md). Run `flashcli --help` for the full command list.
 
 ---
 
@@ -26,7 +26,7 @@ Ref syntax: `flashcli-bundle/<name>:<version>[@variant]` (FlashHub) or `bundles/
 
 | Month | What's new |
 |-------|------------|
-| **2026-10** | **Go-only host** — one static binary (the Python host is gone); **native-exec** / **native-abi** backends run bundles **without Python**; the synced bundle tree and weights cache are **shared across `@variant`** |
+| **2026-10** | **Go-only host** — one static binary (the Python host is gone); **native-exec** / **native-abi** backends run bundles **without Python**; the synced bundle tree and weights cache are **shared across environments** |
 | **2026-06** | Production-grade **Qwen3.6 chat serving** — faster real-world replies (early stop on end-of-text), true streaming, longer outputs, and a lighter install path for HTTP + inference |
 | **2026-05** | **Qwen NVFP4 on Blackwell (SM120)** on FlashHub — one-command `run` and OpenAI-compatible `serve`; reproducible multi-env release bundles |
 
@@ -81,12 +81,12 @@ flashcli du                                            # disk usage by cache are
 ### Run and serve
 
 ```bash
-flashcli run   flashcli-bundle/<name>:<version>[@variant] [OPTIONS]        # inference
-flashcli serve flashcli-bundle/<name>:<version>[@variant] --port 8000      # OpenAI-compatible HTTP
+flashcli run   flashcli-bundle/<name>:<version> [OPTIONS]        # inference
+flashcli serve flashcli-bundle/<name>:<version> --port 8000      # OpenAI-compatible HTTP
 
 curl -N http://127.0.0.1:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model":"<variant>","messages":[{"role":"user","content":"Hello"}],"max_tokens":512,"stream":true}'
+  -d '{"model":"<model-id>","messages":[{"role":"user","content":"Hello"}],"max_tokens":512,"stream":true}'
 ```
 
 First run syncs the FlashHub runtime, creates the bundle venv, installs the torch stack, and pulls weights. The host records the expected weight file set before downloading, resumes interrupted downloads, and verifies it offline on later runs. Model-specific flags, defaults, and examples are in each bundle [README](bundles/README.md).
@@ -94,8 +94,8 @@ First run syncs the FlashHub runtime, creates the bundle venv, installs the torc
 **Local dev bundle** (rebuilt from FlashRT, not FlashHub):
 
 ```bash
-bash bundles/qwen_nvfp4/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
-flashcli serve bundles/qwen_nvfp4@qwen36 --port 8000 --K 6
+bash bundles/pi05_libero/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
+flashcli run bundles/pi05_libero --prompt "pick up the red block"
 ```
 
 ---

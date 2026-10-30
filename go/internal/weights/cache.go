@@ -41,6 +41,12 @@ func CheckpointDir(bundle, version, variant string) string {
 
 // ExtraWeightDest mirrors Python extra_weight_dest (checkpoint_subdir > relative_dir > cache_name/key).
 func ExtraWeightDest(checkpointDir, bundleRoot, key string, spec Spec) string {
+	if spec.WeightsDir != "" {
+		if checkpointDir == "" {
+			return ""
+		}
+		return filepath.Join(checkpointDir, filepath.FromSlash(spec.WeightsDir))
+	}
 	if spec.CheckpointSubdir != "" {
 		if checkpointDir == "" {
 			return ""

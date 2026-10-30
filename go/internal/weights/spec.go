@@ -12,6 +12,7 @@ type Spec struct {
 	RequireNormStats   bool
 	CheckpointSubdir   string
 	CacheName          string
+	WeightsDir         string
 	Endpoint           string
 	RelativeDir        string
 	URL                string
@@ -28,6 +29,7 @@ func SpecFromMap(m map[string]any) Spec {
 	s.RequireAnyPatterns = strSlice(m["require_any_patterns"])
 	s.CheckpointSubdir = strings.Trim(strings.TrimSpace(str(m["checkpoint_subdir"])), "/")
 	s.CacheName = strings.TrimSpace(str(m["cache_name"]))
+	s.WeightsDir = strings.Trim(strings.TrimSpace(str(m["weights_dir"])), "/")
 	s.Endpoint = strings.TrimRight(strings.TrimSpace(str(m["endpoint"])), "/")
 	s.RelativeDir = strings.TrimSpace(str(m["relative_dir"]))
 	s.URL = strings.TrimSpace(str(m["url"]))

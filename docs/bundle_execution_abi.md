@@ -69,14 +69,14 @@ Rules:
 
 Capabilities are still inferred: a `run` block enables `flashcli run`, a `serve` block enables `flashcli serve`.
 
-**Variants may override `entry`.** A `variants.<name>.entry` block deep-merges over the top-level `entry` (objects merge; scalars/lists replace), per capability. This lets one bundle expose the same model through different backends, selected by the standard `@variant` ref suffix — e.g. `@abi` (native-abi) and `@exec` (native-exec) for the same weights. The effective entry is resolved after the variant is chosen; version-axis validation considers every variant's effective entries.
+**v4 entry location.** In v4, the default entry lives under `defaults.entry`; `environments.<env>.entry` may override it per platform. v4 has no variants/backends/entries: split different backends into different bundles.
 
 ### 3.1 Native bundle authoring checklist
 
 A **native-only** bundle (no Python entry) publishes:
 
-- `flashcli-bundle.json`: `format_version: 3`, `protocol_version: 1`; `entry.kind = native-abi|native-exec`; the matching native version axis (`runtime_abi_version` and/or `exec_protocol_version` = `1`); a `runtime` map with py-less keys (`sm{SM}-cu{CUDA}-{os}-{arch}`); `weights`; and `run_options`/`serve_options`. **Omit** `python_abi`, `python_dependencies`, and `flash_rt/`.
-- `runtime/<env-key>/substrate/`: the model-runtime `.so`(s). `native-abi` ships the producer `.so` exporting `frt_model_runtime_open_v1` (plus any `preload` libs); `native-exec` ships an executable (any language) referenced by `native.command`.
+- `flashcli-bundle.json`: `format_version: 4`, `protocol_version: 1`; `defaults.entry.kind = native-abi|native-exec`; the matching native version axis (`runtime_abi_version` and/or `exec_protocol_version` = `1`); `defaults.weights`; `defaults.run_options`/`serve_options`; and `environments.<env>.runtime` pointing at a py-less cell (`runtime/sm{SM}-cu{CUDA}-{os}-{arch}/substrate`). **Omit** `python_abi`, `python_dependencies`, and `flash_rt/`.
+- `runtime/<runtime-dir>/substrate/`: the model-runtime `.so`(s). `native-abi` ships the producer `.so` exporting `frt_model_runtime_open_v1` (plus any `preload` libs); `native-exec` ships an executable (any language) referenced by `native.command`.
 - The **bundle owns every model-specific detail** (preprocessing, modality shapes/dtypes, defaults, option→port mapping). The host is generic and must not hardcode any of it (§4).
 
 `native-abi` may instead declare `native.session_library` + `loader_symbol` to drive via the Nexus embedded session (§7.6). `native-exec` reads nothing but its `native.command`; the process speaks NDJSON `stdio` or `http` (§6).
@@ -85,12 +85,12 @@ A **native-only** bundle (no Python entry) publishes:
 
 ## 4. Common lifecycle (all kinds)
 
-At invocation time the host has already: resolved the ref, synced the bundle tree, selected the matching `runtime/<env-key>/`, created the bundle venv (Python is still required to build the infer venv for the Python kind and as the general runtime), downloaded/validated weights, and applied manifest `env`. The kind only changes **how the entry is started and driven**.
+At invocation time the host has already: resolved the ref, synced the bundle tree, selected the matching `runtime/<runtime-dir>/`, created the bundle venv (Python is still required to build the infer venv for the Python kind and as the general runtime), downloaded/validated weights, and applied manifest `env`. The kind only changes **how the entry is started and driven**.
 
 Shared guarantees:
 
 - **Model-agnostic host.** Every model-specific detail — preprocessing/postprocessing, modality shapes/dtypes, defaults, and option→port mapping — is declared by the bundle: `run_options`/`serve_options`, the manifest `native` block, and the runtime's own port descriptors. The host builds ABI payloads for the declared ports only; it must **not** hardcode a model's constants, shapes, or preprocessing.
-- **Weight paths** follow §4.4.1 of [bundle_publish_standard.md](bundle_publish_standard.md). Native script-like starts (i.e. `native-exec`) receive the same `FLASHCLI_CHECKPOINT` / `FLASHCLI_BUNDLE_ROOT` / `FLASHCLI_PRESET` / `FLASHCLI_VARIANT` / `FLASHCLI_EXTRA_WEIGHT_<KEY>` variables. `native-abi` receives the checkpoint path through `open_symbol`'s `config_json`.
+- **Weight paths** follow §4.4.1 of [bundle_publish_standard.md](bundle_publish_standard.md). Native script-like starts (i.e. `native-exec`) receive the same `FLASHCLI_CHECKPOINT` / `FLASHCLI_BUNDLE_ROOT` / `FLASHCLI_PRESET` / `FLASHCLI_EXTRA_WEIGHT_<KEY>` variables. `native-abi` receives the checkpoint path through `open_symbol`'s `config_json`.
 - **`run_options` / `serve_options`** remain the single source of defaults and `--help`, regardless of kind. The host maps them to the native call (payload fields or CLI args).
 - **Weights stay offline at inference**: `HF_HUB_OFFLINE=1` semantics apply to Python and to any hub access; missing assets are fixed by `flashcli pull`, not at inference time.
 - **Exit/readiness**: the host surfaces a non-zero exit or failed readiness as a CLI error; it never reports success on a crashed backend.
@@ -132,7 +132,7 @@ The host starts an external process and communicates over a framed channel. This
 | `shutdown_timeout_sec` | no | Grace after SIGTERM before SIGKILL (default 10). |
 | `env` | no | Literal extra env vars; placeholders are **not** expanded here. |
 
-**Placeholders** are allowed inside `command` args: `{checkpoint}`, `{bundle_root}`, `{models_dir}`, `{variant}`, `{preset}`, `{extra:<key>}`.
+**Placeholders** are allowed inside `command` args: `{checkpoint}`, `{bundle_root}`, `{models_dir}`, `{preset}`, `{extra:<key>}`.
 
 ### 6.2 stdio transport
 
@@ -181,7 +181,7 @@ The host `dlopen`s a model-runtime shared library and drives it **in-process**. 
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `library` | yes | Model-runtime `.so`; a single glob match. Placeholders allowed; `{runtime_dir}` = the selected `runtime/<env-key>/`. |
+| `library` | yes | Model-runtime `.so`; a single glob match. Placeholders allowed; `{runtime_dir}` = the selected `runtime/<runtime-dir>/`. |
 | `open_symbol` | no | Factory symbol; default `frt_model_runtime_open_v1`. |
 | `preload` | no | Ordered list of shared libraries loaded `RTLD_GLOBAL` **before** `library`. Each entry is one glob match. |
 | `config` | no | Object serialized to JSON and passed as `config_json` to `open_symbol`. Placeholders allowed, notably `{option:<name>}` from `run_options`/`serve_options`. |

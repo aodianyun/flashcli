@@ -35,7 +35,7 @@ Native-only bundles have no Python entry at all (see §5).
 | Bundle | GPU | CUDA userland | Notes |
 |--------|-----|---------------|-------|
 | `pi05_libero` | SM89 (Ada), SM120 (Blackwell) | cu124 (SM89) · cu130 | SM120 uses the `sm120-cu130` cell |
-| `qwen_nvfp4` | SM120 (Blackwell) | **cu130 only** | NVFP4 needs nvcc ≥ 12.8 |
+| `higgs_audio` | SM120 (Blackwell) | **cu130 only** | Python 3.10 |
 
 **Software:** Linux x86_64 · Docker + NVIDIA Container Toolkit (matrix releases run in containers) · Go ≥ 1.24 (host) · bundle venvs pin their own `python_abi`.
 
@@ -90,7 +90,7 @@ pi05_libero/
 ├── _pi05_compat.py           # bundle-private helper
 ├── flash_rt/                 # FlashRT Python tree (staged)
 ├── lib/                      # local build: host *.so
-├── runtime/<env-key>/        # pack output: *.so (+ substrate/ for native)
+├── runtime/<runtime-dir>/        # pack output: *.so (+ substrate/ for native)
 ├── release-matrix.env        # SM / CUDA / py ABI / pack files
 ├── _bundle_build.sh          # cmake + build logic
 ├── build.sh                  # local single-env build
@@ -98,28 +98,41 @@ pi05_libero/
 └── dist/                     # publish tree
 ```
 
-Native-only bundles (`entry.kind = native-abi|native-exec`) omit `run.py` / `flash_rt/` and place their C libraries under `runtime/<env-key>/substrate/`.
+Native-only bundles (`defaults.entry.kind = native-abi|native-exec`) omit `run.py` / `flash_rt/` and place their C libraries under `runtime/<runtime-dir>/substrate/`.
 
-### 4.1 Manifest essentials (format_version 3)
+### 4.1 Manifest essentials (format_version 4)
 
 ```json
 {
   "format": "flashcli-model-bundle",
-  "format_version": 3,
+  "format_version": 4,
   "protocol_version": 1,
   "name": "pi05_libero",
-  "python_abi": "312",
-  "entry": { "run": { "module": "run", "attr": "RunEngine" } },
-  "run_options": [ "…" ],
-  "python_dependencies": { "torch": { "package": "torch", "index": "auto" } },
-  "runtime": { "sm89-cu124-linux-x86_64-py312": "runtime/sm89-cu124-linux-x86_64-py312" }
+  "description": "Pi0.5 LIBERO VLA",
+  "defaults": {
+    "entry": { "run": { "module": "run", "attr": "RunEngine" } },
+    "python_abi": "312",
+    "run_options": [ "…" ],
+    "python_dependencies": { "torch": { "package": "torch", "index": "auto" } },
+    "weights": { "source": "huggingface", "repo": "org/model", "revision": "0123456789abcdef0123456789abcdef01234567" }
+  },
+  "environments": {
+    "sm89-cu124-linux-x86_64-py312": {
+      "runtime": "runtime/sm89-cu124-linux-x86_64-py312"
+    }
+  }
 }
 ```
 
+- `defaults` and `environments` are required.
+- `runtime` is required for native environments; Python/CPU environments may omit it.
+- Multiple environments may point to the same runtime directory. Fallback entries use `match` (no `priority`); equal-specificity overlapping fallbacks fail `bundle validate`.
 - `protocol_version` must equal the installed `flashcli-bundle` `PROTOCOL_VERSION` (currently **1**).
+- One bundle = one model + one implementation. Do not use `variants`, `backends`, or `entries`; split bundles instead.
 - `run_options` / `serve_options` are the single source of CLI flags + defaults; read them via `run_option_defaults()` — never hardcode.
-- With `variants`, each variant declares its own complete `run_options` / `serve_options`; no top-level duplicates.
 - Native kinds add `runtime_abi_version` / `exec_protocol_version` and a `native` block (see [bundle_execution_abi.md](bundle_execution_abi.md)).
+- Published `dist/flashcli-bundle.json` also carries generated `build.sources[]`; `flashcli models show <ref>` prints them.
+- Pin every `weights` / `extra_weights` revision to a full commit SHA; never publish `main`/`master`/branch/tag.
 
 Full field reference: [bundle_publish_standard.md](bundle_publish_standard.md).
 
@@ -138,7 +151,7 @@ bash bundles/pi05_libero/build.sh --repo-root "$FLASHRT_REPO" -j "$(nproc)"
 ```
 
 Python bundles build FlashRT pybind extensions into `lib/` + stage `flash_rt/`.
-Native bundles build the Python-free C libraries (e.g. FA2 raw → `flashrt_exec`/producer → Nexus) and stage them under `runtime/<env-key>/substrate/`.
+Native bundles build the Python-free C libraries (e.g. FA2 raw → `flashrt_exec`/producer → Nexus) and stage them under `runtime/<runtime-dir>/substrate/`.
 
 **B — validate manifest + layout**
 
@@ -158,35 +171,41 @@ flashcli run "$BUNDLE" --help
 
 `kind=python` syncs → creates the bundle venv → installs torch + `flashcli-bundle[infer]` → re-execs the entry. `native-exec`/`native-abi` skip the venv and drive the native backend directly.
 
-Qwen serve locally:
+V4 serve locally:
 
 ```bash
-export BUNDLE="$(pwd)/bundles/qwen_nvfp4"
-flashcli serve "$BUNDLE@qwen3" --host 127.0.0.1 --port 8000
+export BUNDLE="$(pwd)/bundles/qwen3_vl_8b_nvfp4"
+flashcli serve "$BUNDLE" --host 127.0.0.1 --port 8000
 ```
 
 ---
 
 ## 6. Release pipeline
 
-One command from the repo root:
+One command from the repo root builds and packs the **current host environment only**:
 
 ```bash
 bash scripts/release_bundle.sh --bundle pi05_libero --clean
 ```
 
-Equivalent to `cd bundles/<name> && bash release.sh --clean`.
+Equivalent to `cd bundles/<name> && bash release.sh --clean`. It runs the bundle's `build.sh`, then packs only the staged `runtime/<runtime-dir>/` cell. Pass `--matrix` for the full Docker/multi-CUDA matrix release.
 
 | Stage | Action | Output |
 |-------|--------|--------|
 | 1. Read `release-matrix.env` | SM, CUDA tags, Python ABI, Docker images, pack files | matrix dims |
 | 2. Ensure FlashRT | clone/update `../FlashRT` (`FLASHRT_REPO` overrides) | source |
-| 3. Docker matrix build | run `_bundle_build.sh` per CUDA line in its nvcr container | per-env native libs |
-| 4. Write `runtime/` | `runtime/<env-key>/…` per env | native artifacts |
-| 5. `pack.sh` | copy entry tree + native libs, refresh manifest `runtime` map | `dist/` |
+| 3. Current-env build | `build.sh` (or `_bundle_build.sh` via `--matrix`) | current native libs |
+| 4. Write `runtime/` | `runtime/<runtime-dir>/…` for the current env | native artifacts |
+| 5. `pack.sh` | copy entry tree + current runtime cell, refresh manifest | `dist/` |
 | 6. Validate | ABI / layout / manifest options / protocol | exit on failure |
 
-`--clean` removes `lib/`, `dist/`, `.build*` to avoid stale caches.
+Full matrix (opt-in):
+
+```bash
+bash scripts/release_bundle.sh --bundle pi05_libero --matrix --clean
+```
+
+`--clean` removes `lib/`, `dist/`, `.build*` to avoid stale caches. `pack.sh` also accepts `--all-envs` / `--verify-matrix` for a full matrix pack.
 
 Background run + logs:
 
@@ -195,40 +214,39 @@ bash scripts/run_bg.sh --name release-pi05 -- bash scripts/release_bundle.sh --b
 bash scripts/run_bg.sh --name release-pi05 --tail
 ```
 
-**Do not** ship `build.sh`, `.build*/`, or dev READMEs in `dist/` (controlled by `RELEASE_PACK_FILES`).
+**Keep `dist/` minimal.** Do not ship `build.sh`, `.build*/`, tests, refs, caches, or unused FlashRT models/frontends. Build scripts must stage a minimal `flash_rt/`; `pack` copies only `RELEASE_PACK_FILES` + the selected runtime cell.
 
 ---
 
 ## 7. Pre-publish checklist
 
 - [ ] `flashcli bundle validate bundles/<name>` passes
-- [ ] `dist/runtime/` contains every env key declared in the manifest
-- [ ] `protocol_version` matches the installed `flashcli-bundle`
+- [ ] `format_version: 4`, `protocol_version: 1`
+- [ ] `dist/runtime/` contains every environment declared in `environments`
+- [ ] `dist/flashcli-bundle.json` carries `build.sources[]`
+- [ ] Every `weights` / `extra_weights` revision is a full immutable commit SHA
 - [ ] Smoke `flashcli run` / `serve` on the target GPU
-- [ ] `dist/` has no dev artifacts
+- [ ] `dist/` is minimal: no dev artifacts, tests, refs, caches, unused model/frontend modules, or weights
 
 ---
 
 ## 8. Upload to FlashHub
 
 1. Upload the whole **`dist/`** tree to FlashHub.
-2. Note the pinned ref, e.g. `flashcli-bundle/pi05_libero:1.0.4`.
-3. Update the refs in the bundle `README.md` / `BUILD.md`:
-   - single preset: `flashcli-bundle/pi05_libero:1.0.4`
-   - multi-variant: `flashcli-bundle/qwen_nvfp4:1.0.1@qwen3` / `@qwen36` (**`@variant` required**).
+2. Note the pinned ref, e.g. `flashcli-bundle/pi05_libero:1.0.5`.
+3. Update the ref in the bundle `README.md` / `BUILD.md`, e.g. `flashcli-bundle/pi05_libero:1.0.5`.
 4. Users sync it with `flashcli run <ref>` or `flashcli bundle sync <ref>`.
 
 ---
 
 ## 9. Matrix summary
 
-| | pi05_libero | qwen_nvfp4 |
+| | pi05_libero | higgs_audio |
 |---|---|---|
 | SM | 89 | 120 |
 | CUDA | 124 + 130 | **130 only** |
-| python_abi | 312 | 312 |
-| entry | run | run + serve |
-| variants | — | qwen3 / qwen36 |
+| python_abi | 312 | 310 |
+| entry | run | run |
 | Docker cu124 | 24.05-py3 | — |
 | Docker cu130 | 25.10-py3 | 25.10-py3 |
 
@@ -238,11 +256,52 @@ Details: [runtime-matrix.md](runtime-matrix.md).
 
 ## 10. Adding a new bundle
 
-1. Copy `bundles/pi05_libero/` or `bundles/qwen_nvfp4/`.
+1. Copy `bundles/pi05_libero/` or `bundles/higgs_audio/`.
 2. Write `flashcli-bundle.json` (`protocol_version: 1`) and the entry (`run.py` / `serve.py`, or a native block).
 3. Write `release-matrix.env` and `_bundle_build.sh`.
 4. `build.sh` + `flashcli bundle validate` + smoke `run` / `serve`.
 5. `release_bundle.sh --clean` → upload `dist/` → update pinned refs in docs.
+
+
+### 10.1 Bundle README / BUILD standard
+
+Every bundle directory MUST contain the English + Chinese pair:
+
+- `README.md` / `README.zh-CN.md` — user-facing FlashHub documentation.
+- `BUILD.md` / `BUILD.zh-CN.md` — maintainer build/release documentation.
+
+`README` structure (use `bundles/pi05_libero/README.zh-CN.md` as the reference):
+
+1. `# <Model display name>`.
+2. Language switch (`English · 简体中文`).
+3. Short model overview and capabilities.
+4. Metadata table: `Ref`, `Weights`, `GPU`, `CUDA`, `Python`, `Capabilities`.
+5. Inputs / outputs and a short weights-download note.
+6. `## Run` with real commands and the pinned ref.
+7. `## Serve` when `entry.serve` exists.
+8. `## Parameters` generated from manifest `run_options` / `serve_options`.
+9. Link to `BUILD.md`.
+
+`BUILD` structure:
+
+1. `# <bundle> — build & smoke test`.
+2. Language switch.
+3. Maintainer workflow summary and `Requires`.
+4. Host / FlashRT setup.
+5. `## 1. Build` with the exact `build.sh` command and outputs.
+6. `## 2. Pack` (`pack.sh` / `pack_bundle.sh` output tree).
+7. `## 3. Validate`.
+8. `## 4. Smoke test` with real `run` / `serve` commands.
+9. `## 5. Publish` with the pinned FlashHub ref.
+10. Troubleshooting table.
+
+Rules:
+
+- Documentation describes the **v4 manifest** only (`defaults` / `environments`).
+- Use exact refs and exact default values from `flashcli-bundle.json`.
+- Do not include `@variant`, v3 `runtime` maps, or stale local paths.
+- Do not copy build implementation into `README`; keep it in `BUILD`.
+- Keep English and Chinese mirrors structurally identical.
 
 ---
 

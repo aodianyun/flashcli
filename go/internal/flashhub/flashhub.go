@@ -315,9 +315,10 @@ func fileMD5(path string) (string, error) {
 // ErrNotFound is returned when a repo/file is absent.
 var ErrNotFound = errors.New("flashhub: not found")
 
-// SyncBundle downloads the bundle entry tree plus only the matching
-// runtime/<envKey>/ cell into bundleDir, and returns the parsed manifest.
-func (c *Client) SyncBundle(ctx context.Context, repoURL, bundleDir, envKey string, quiet bool) (map[string]any, error) {
+// SyncBundle downloads the bundle entry tree plus only the selected runtime
+// directory into bundleDir, and returns the parsed manifest. runtimeRel may be
+// empty for pure-Python bundles.
+func (c *Client) SyncBundle(ctx context.Context, repoURL, bundleDir, runtimeRel string, quiet bool) (map[string]any, error) {
 	// Always fetch a fresh index: a cached one may list artifacts from an
 	// earlier upload (stale download URLs → 404).
 	ix, err := c.FetchIndex(ctx, repoURL, false)
@@ -344,7 +345,7 @@ func (c *Client) SyncBundle(ctx context.Context, repoURL, bundleDir, envKey stri
 	var wanted []File
 	var totalBytes int64
 	for _, f := range ix.Files {
-		if !WantFile(f.Path, envKey) {
+		if !WantFile(f.Path, runtimeRel) {
 			continue
 		}
 		wanted = append(wanted, f)
@@ -365,13 +366,17 @@ func (c *Client) SyncBundle(ctx context.Context, repoURL, bundleDir, envKey stri
 }
 
 // WantFile reports whether a repo-relative path should be synced: everything
-// outside runtime/, plus only the matching runtime/<envKey>/ cell.
-func WantFile(path, envKey string) bool {
+// outside runtime/, plus only the selected runtime directory (if any).
+func WantFile(path, runtimeRel string) bool {
 	p := strings.Trim(path, "/")
 	if !strings.HasPrefix(p, "runtime/") {
 		return true
 	}
-	return strings.HasPrefix(p, "runtime/"+envKey+"/")
+	runtimeRel = strings.Trim(strings.TrimSpace(runtimeRel), "/")
+	if runtimeRel == "" {
+		return false
+	}
+	return p == runtimeRel || strings.HasPrefix(p, runtimeRel+"/")
 }
 
 // MarkerName is the bundle sync marker filename.

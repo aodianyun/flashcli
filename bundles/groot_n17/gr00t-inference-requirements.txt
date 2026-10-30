@@ -3,6 +3,6 @@
 # Sync into flashcli-bundle.json python_dependencies.pip (extras only).
 
 albumentations==1.4.18
-huggingface-hub
+huggingface-hub[cli]
 tqdm
 tyro==0.9.17

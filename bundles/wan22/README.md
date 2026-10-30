@@ -6,13 +6,13 @@
 
 | | |
 |---|---|
-| **Ref** | `flashcli-bundle/wan22:1.0.0` |
+| **Ref** | `flashcli-bundle/wan22:1.0.1` |
 | **Weights** | [Wan-AI/Wan2.2-TI2V-5B](https://www.modelscope.cn/models/Wan-AI/Wan2.2-TI2V-5B) (ModelScope, ~34 GB) |
 | **GPU** | NVIDIA **SM120** (Blackwell; e.g. RTX 5060 Ti / 5090) · CUDA **13.x** |
 | **Python** | **3.10** (bundle venv) |
 | **Capabilities** | `run` |
 
-**Inputs:** text prompt (`t2v`); or prompt + start image (`i2v`).  
+**Inputs:** text prompt (`t2v`); or prompt + start image (`i2v`).
 **Output:** MP4 video (`--out`).
 
 Defaults target **16 GB** (5060 Ti: 832×480, 81 frames, `--offload-model true`). Scale resolution/frames on larger VRAM. Weights are pulled on first `pull` / `run` (not in the bundle zip). No `flash_attn` wheel is required.
@@ -22,14 +22,14 @@ Defaults target **16 GB** (5060 Ti: 832×480, 81 frames, `--offload-model true`)
 Text-to-video (5060 Ti baseline):
 
 ```bash
-flashcli run flashcli-bundle/wan22:1.0.0 \
+flashcli run flashcli-bundle/wan22:1.0.1 \
   --prompt "A cinematic shot of a blue sphere rolling across a wooden table"
 ```
 
 Smoke test (few frames / steps):
 
 ```bash
-PYTHONUNBUFFERED=1 flashcli run flashcli-bundle/wan22:1.0.0 \
+PYTHONUNBUFFERED=1 flashcli run flashcli-bundle/wan22:1.0.1 \
   --frames 5 --steps 2 --out smoke.mp4
 ```
 
@@ -38,13 +38,13 @@ Keep `--offload-model true` (FlashRT API default; published peak ~**24.4 GiB**).
 
 ```bash
 # Quality baseline (~179 s, TeaCache off)
-flashcli run flashcli-bundle/wan22:1.0.0 \
+flashcli run flashcli-bundle/wan22:1.0.1 \
   --width 1280 --height 704 --frames 121 --steps 20 \
   --shift 5.0 --guide-scale 5.0 \
   --offload-model true
 
 # TeaCache 0.3 (~114 s / ~1.56×; may change composition on some prompts)
-flashcli run flashcli-bundle/wan22:1.0.0 \
+flashcli run flashcli-bundle/wan22:1.0.1 \
   --width 1280 --height 704 --frames 121 --steps 20 \
   --shift 5.0 --guide-scale 5.0 \
   --offload-model true \
@@ -54,13 +54,13 @@ flashcli run flashcli-bundle/wan22:1.0.0 \
 Image-to-video:
 
 ```bash
-flashcli run flashcli-bundle/wan22:1.0.0 \
+flashcli run flashcli-bundle/wan22:1.0.1 \
   --mode i2v \
   --image /path/start.png \
   --frames 81
 ```
 
-Full flags: `flashcli run flashcli-bundle/wan22:1.0.0 --help`
+Full flags: `flashcli run flashcli-bundle/wan22:1.0.1 --help`
 
 ## Parameters
 

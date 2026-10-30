@@ -63,6 +63,10 @@ Confirm tokenizer:
 ls "$(flashcli models show "$BUNDLE" 2>/dev/null | sed -n 's/.*checkpoint: //p')/tokenizer/"
 ```
 
+## 5. Publish
+
+Upload `dist/` to FlashHub as `flashcli-bundle/groot_n16:1.0.1` (bump as needed).
+
 ## Troubleshooting (build)
 
 | Symptom | Fix |

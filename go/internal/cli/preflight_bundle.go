@@ -25,28 +25,24 @@ func preflightBundle(m *manifest.Manifest, root, venvPython string, quiet, autoI
 		return resolveEnvKey(m), nil
 	}
 	abi := m.PythonABIOrEmpty()
-	gpu := preflight.DetectGPU()
-	hostKey := ""
-	if gpu != nil {
-		hostKey = preflight.VariantDirName(gpu, abi)
-	}
-	envKey := preflight.ResolveRuntimeEnvKey(m.RuntimeMap(), hostKey)
-	if envKey == "" {
-		if gpu == nil {
-			return "", errs.Envf("No NVIDIA GPU detected (nvidia-smi unavailable). Model bundles require a CUDA GPU for inference.")
-		}
-		return "", errs.Envf("Bundle %q does not support this machine's runtime environment %q. Supported: %s", m.Name, hostKey, strings.Join(sortedKeys(m.RuntimeMap()), ", "))
+	hostKey := preflight.HostEnvKey(preflight.DetectGPU(), abi)
+	envKey, err := m.ResolveEnvKey(hostKey)
+	if err != nil || envKey == "" {
+		return "", errs.Envf("Bundle %q does not support this machine's runtime environment %q. Supported: %s", m.Name, hostKey, strings.Join(m.EnvironmentKeys(), ", "))
 	}
 	rel := m.RuntimeMap()[envKey]
-	dir := filepath.Join(root, filepath.FromSlash(rel))
-	if len(native.DiscoverModuleBases(dir, envKey)) == 0 && !hasSubstrateSO(dir) {
-		return "", errs.Envf("Bundle %s missing native .so under %s for %q. Run pack/release or build into runtime/%s/.", root, rel, envKey, envKey)
+	if rel == "" {
+		return envKey, nil
 	}
-	if err := hostabi.Ensure(native.NativeSOPaths(dir, envKey), quiet); err != nil {
+	dir := filepath.Join(root, filepath.FromSlash(rel))
+	if len(native.DiscoverModuleBases(dir, "")) == 0 && !hasSubstrateSO(dir) {
+		return "", errs.Envf("Bundle %s missing native .so under %s for environment %q. Run pack/release or build into runtime/%s/.", root, rel, envKey, rel)
+	}
+	if err := hostabi.Ensure(native.NativeSOPaths(dir, ""), quiet); err != nil {
 		return "", err
 	}
 	if venvPython != "" {
-		if parsed, perr := preflight.ParseEnvKey(envKey); perr == nil {
+		if parsed, perr := preflight.ParseEnvKey(envKey); perr == nil && parsed.CudaTag != "" {
 			if err := cuda.Ensure(context.Background(), venvPython, parsed.CudaTag, quiet, autoInstall, nil); err != nil {
 				return "", err
 			}
@@ -72,6 +68,11 @@ func sortedKeys(m map[string]string) []string {
 // ensureBundleRuntime runs preflight, builds the bundle venv, then runs the
 // CUDA userland check. Used by pull / bundle sync (mirrors prepare_bundle_runtime).
 func ensureBundleRuntime(m *manifest.Manifest, bundleRoot, version, variant string, quiet, noAutoInstall bool) (string, string, error) {
+	var err error
+	m, err = applyEnv(m)
+	if err != nil {
+		return "", "", err
+	}
 	runtimeID := runtime.IDFromPath(bundleRoot, m.Name)
 	if version != "local" {
 		if marker := runtime.ReadPresetMarker(weights.CacheKeyFor(m, version)); marker != nil {

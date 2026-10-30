@@ -55,7 +55,7 @@ Examples:
     bash scripts/release_bundle.sh --bundle pi05_libero --clean
 
   bash scripts/run_bg.sh --name release-qwen -- \
-    bash scripts/release_bundle.sh --bundle qwen_nvfp4 --clean
+    bash scripts/release_bundle.sh --bundle qwen3_8b_nvfp4 --clean
 
   bash scripts/run_bg.sh --name release-pi05 --tail
 EOF

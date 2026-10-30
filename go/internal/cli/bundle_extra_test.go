@@ -8,8 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aodianyun/flashcli/go/internal/manifest"
 	"github.com/aodianyun/flashcli/go/internal/paths"
 	"github.com/aodianyun/flashcli/go/internal/runtime"
+	"github.com/aodianyun/flashcli/go/internal/weights"
 )
 
 func writeBundle(t *testing.T, root string) {
@@ -331,4 +333,63 @@ func TestBundleCleanAmbiguousLocalRefAll(t *testing.T) {
 			t.Fatalf("expected %s removed", p)
 		}
 	}
+}
+
+func TestBundleCleanV4UsesStoreKey(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FLASHCLI_HOME", home)
+	bundleDir := filepath.Join(paths.Bundles(), "demo", "1.0.0")
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeV4ExecBundle(t, bundleDir)
+	writePresetMarker(t, "demo/1.0.0", bundleDir, "flashcli-bundle/demo:1.0.0")
+	man, err := manifest.Load(bundleDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	storeDir := filepath.Join(paths.Models(), filepath.FromSlash(weights.StoreKeyFor(man, "")))
+	if err := os.MkdirAll(storeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(storeDir, "model.safetensors"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := Main([]string{"bundle", "clean", "flashcli-bundle/demo:1.0.0", "--all", "--yes"}); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	mustStat(t, bundleDir, false)
+	mustStat(t, storeDir, false)
+}
+
+func TestBundleCleanV4SharedWeightsKept(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FLASHCLI_HOME", home)
+	a := filepath.Join(paths.Bundles(), "a", "1.0.0")
+	b := filepath.Join(paths.Bundles(), "b", "1.0.0")
+	for _, root := range []string{a, b} {
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeV4ExecBundle(t, root)
+	}
+	writePresetMarker(t, "a/1.0.0", a, "flashcli-bundle/a:1.0.0")
+	writePresetMarker(t, "b/1.0.0", b, "flashcli-bundle/b:1.0.0")
+	man, err := manifest.Load(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	storeDir := filepath.Join(paths.Models(), filepath.FromSlash(weights.StoreKeyFor(man, "")))
+	if err := os.MkdirAll(storeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if code := Main([]string{"bundle", "clean", "flashcli-bundle/a:1.0.0", "--all", "--yes"}); code != 0 {
+		t.Fatalf("first clean exit = %d", code)
+	}
+	mustStat(t, a, false)
+	mustStat(t, storeDir, true)
+	if code := Main([]string{"bundle", "clean", "flashcli-bundle/b:1.0.0", "--all", "--yes"}); code != 0 {
+		t.Fatalf("second clean exit = %d", code)
+	}
+	mustStat(t, storeDir, false)
 }

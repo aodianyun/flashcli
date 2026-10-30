@@ -6,13 +6,13 @@
 
 | | |
 |---|---|
-| **Ref** | `flashcli-bundle/groot_n16:1.0.0` |
+| **Ref** | `flashcli-bundle/groot_n16:1.0.1` |
 | **权重** | [nvidia/GR00T-N1.6-3B](https://huggingface.co/nvidia/GR00T-N1.6-3B) |
 | **GPU** | NVIDIA **SM120**（Blackwell）· CUDA **13.x** |
 | **Python** | **3.12**（bundle venv） |
 | **能力** | `run` |
 
-**输入：** 任务 prompt + 一路或多路 RGB 图像。  
+**输入：** 任务 prompt + 一路或多路 RGB 图像。
 **输出：** 动作序列（随 embodiment 为关节或末端位姿等）。
 
 **已训练的 embodiment tag：**
@@ -30,7 +30,7 @@
 ## 运行
 
 ```bash
-flashcli run flashcli-bundle/groot_n16:1.0.0 \
+flashcli run flashcli-bundle/groot_n16:1.0.1 \
   --prompt "pick up the cup on the table" \
   --embodiment-tag gr1 \
   --num-views 1 \
@@ -40,7 +40,7 @@ flashcli run flashcli-bundle/groot_n16:1.0.0 \
 无图像冒烟（占位帧）：
 
 ```bash
-flashcli run flashcli-bundle/groot_n16:1.0.0 \
+flashcli run flashcli-bundle/groot_n16:1.0.1 \
   --embodiment-tag gr1 \
   --num-views 1
 ```
@@ -48,14 +48,14 @@ flashcli run flashcli-bundle/groot_n16:1.0.0 \
 三路相机：
 
 ```bash
-flashcli run flashcli-bundle/groot_n16:1.0.0 \
+flashcli run flashcli-bundle/groot_n16:1.0.1 \
   --prompt "open the drawer" \
   --embodiment-tag robocasa_panda_omron \
   --num-views 3 \
   --image /path/v0.jpg,/path/v1.jpg,/path/v2.jpg
 ```
 
-完整参数：`flashcli run flashcli-bundle/groot_n16:1.0.0 --help`
+完整参数：`flashcli run flashcli-bundle/groot_n16:1.0.1 --help`
 
 ## 参数
 

@@ -137,9 +137,11 @@ func TestDownloadModelScope(t *testing.T) {
 		"config.json":       "{}",
 		"model.safetensors": "msdata",
 	}
+	recursive := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v1/models/o/r/repo/files":
+			recursive = r.URL.Query().Get("Recursive") == "true"
 			if r.URL.Query().Get("PageNumber") != "1" {
 				_ = json.NewEncoder(w).Encode(map[string]any{"Code": 200, "Data": map[string]any{"Files": []any{}}})
 				return
@@ -169,6 +171,9 @@ func TestDownloadModelScope(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(filepath.Join(dest, "model.safetensors")); string(b) != "msdata" {
 		t.Fatalf("ms content = %q", b)
+	}
+	if !recursive {
+		t.Fatal("ModelScope listing must request Recursive=true")
 	}
 }
 
