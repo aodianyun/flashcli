@@ -8,7 +8,7 @@ from pathlib import Path
 
 from flashcli_bundle.context import set_active_bundle
 from flashcli_bundle.manifest import BundleManifest
-from flashcli_bundle.manifest_ext import bundle_torch_index, check_bundle_python_abi
+from flashcli_bundle.manifest_ext import bundle_torch_index, check_bundle_python_abi, bundle_runtime_map
 from flashcli_bundle.native import (
     ensure_bundle_importable,
     probe_native_python_abi,
@@ -40,7 +40,9 @@ def activate_bundle_core(
     bundle_root = bundle.bundle_root.resolve()
     runtime_id = runtime_id or os.environ.get("FLASHCLI_RUNTIME_ID", "")
 
-    gpu = detect_gpu_or_raise()
+    env_key = os.environ.get("FLASHCLI_RUNTIME_ENV_KEY", "").strip()
+    runtime_rel = bundle_runtime_map(bundle).get(env_key, "") if env_key else ""
+    gpu = detect_gpu_or_raise() if runtime_rel else detect_gpu()
 
     pip_python: Path | None = None
     if runtime_id:
@@ -50,16 +52,18 @@ def activate_bundle_core(
             pip_python = None
 
     # Before dlopen of native .so: ensure libcublas/libcudart for the artifact CUDA tag.
-    if pip_python is not None:
+    if runtime_rel and pip_python is not None and gpu is not None:
         from flashcli_bundle.cuda_userland import ensure_cuda_userland_for_bundle
 
         ensure_cuda_userland_for_bundle(
             bundle, python=pip_python, gpu=gpu, quiet=quiet
         )
 
-    verify_native_modules(bundle, gpu=gpu)
+    if runtime_rel:
+        verify_native_modules(bundle, gpu=gpu)
     check_bundle_python_abi(bundle)
-    probe_native_python_abi(bundle, gpu=gpu)
+    if runtime_rel:
+        probe_native_python_abi(bundle, gpu=gpu)
 
     if install_python:
         torch_index = bundle_torch_index(bundle, gpu=gpu)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -75,7 +76,7 @@ def bundle_torch_index(
     gpu = gpu or detect_gpu()
     if gpu is not None:
         return gpu.recommended_torch_index
-    return "cu124"
+    return "cpu"
 
 
 def resolve_bundle_env_key(
@@ -86,10 +87,14 @@ def resolve_bundle_env_key(
     from flashcli_bundle.runtime_env import resolve_runtime_env_key, variant_dir_name
     from flashcli_bundle.runtime.detect import detect_gpu_or_raise
 
+    runtime_map = bundle_runtime_map(bundle)
+    override = os.environ.get("FLASHCLI_RUNTIME_ENV_KEY", "").strip()
+    if override and override in runtime_map:
+        return override
     gpu = gpu or detect_gpu_or_raise()
     python_abi = bundle_python_abi(bundle)
     host_key = variant_dir_name(gpu, python_minor=python_abi)
-    env_key = resolve_runtime_env_key(bundle_runtime_map(bundle), host_key)
+    env_key = resolve_runtime_env_key(runtime_map, host_key)
     if env_key is None:
         matrix = bundle_runtime_matrix(bundle)
         raise RuntimeError(
@@ -139,8 +144,12 @@ def validate_bundle_layout(
 
     try:
         abi = bundle_python_abi(bundle)
-        matrix = bundle_runtime_matrix(bundle)
-        for cell in matrix:
+        matrix = bundle_runtime_map(bundle)
+        for cell, rel in matrix.items():
+            if not str(rel).strip():
+                continue
+            if isinstance((bundle.raw.get("environments") or {}).get(cell), dict) and (bundle.raw.get("environments") or {}).get(cell, {}).get("match"):
+                continue
             if not cell.endswith(f"-py{abi}"):
                 errors.append(
                     f"runtime key {cell!r} does not match python_abi={abi!r}"
@@ -194,7 +203,8 @@ def validate_bundle_layout(
     errors.extend(validate_bundle_protocol_version(bundle))
     errors.extend(validate_bundle_execution(bundle))
 
-    if not (bundle.bundle_root / "flash_rt").is_dir():
+    runtime_map = bundle_runtime_map(bundle)
+    if any(str(rel).strip() for rel in runtime_map.values()) and not (bundle.bundle_root / "flash_rt").is_dir():
         errors.append("missing flash_rt/ Python tree")
 
     if bundle.name == "groot_n17":

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +30,27 @@ from flashcli_bundle.variants import (
 )
 
 _SKIP_WEIGHT_NAMES = frozenset({".flashcli_model.json", ".gitkeep"})
+_STORE_SAFE_RE = re.compile(r"[^A-Za-z0-9._+-]+")
+
+
+def weights_store_key(bundle: BundleManifest) -> str:
+    """v4 readable weights-store key; v3 keeps preset cache key."""
+    try:
+        version = int(bundle.raw.get("format_version", 3))
+    except (TypeError, ValueError):
+        version = 3
+    if version < 4:
+        return ""
+    spec = weights_spec(bundle)
+    source = str(spec.get("source", "huggingface")).strip().lower() or "huggingface"
+    repo = str(spec.get("repo", "")).strip().lstrip("/").rstrip("/") or bundle.name
+    revision = str(spec.get("revision", "")).strip() or "main"
+    readable_repo = _STORE_SAFE_RE.sub("_", repo.replace("/", "__"))
+    readable_rev = _STORE_SAFE_RE.sub("_", revision)
+    digest = hashlib.sha256(
+        "\x00".join([source, repo, revision]).encode()
+    ).hexdigest()[:8]
+    return f"store/{source}/{readable_repo}@{readable_rev}-{digest}"
 
 _HOST_PULL_MSG = (
     "Weight download is only supported on the host flashcli CLI. "
@@ -171,6 +194,14 @@ def extra_weight_dest(
     checkpoint_dir: Path | None = None,
 ) -> Path:
     """Resolved on-disk directory for one ``extra_weights`` entry."""
+    weights_dir = str(spec.get("weights_dir", "")).strip().strip("/")
+    if weights_dir:
+        if checkpoint_dir is None:
+            raise ValueError(
+                f"extra_weights.{key!r} uses weights_dir but checkpoint_dir "
+                "is unknown"
+            )
+        return checkpoint_dir.expanduser().resolve() / weights_dir
     sub = str(spec.get("checkpoint_subdir", "")).strip().strip("/")
     if sub:
         if checkpoint_dir is None:
@@ -241,7 +272,10 @@ def resolve_checkpoint(
     # Cache base is variant-independent (``models/<name>/<version>``); the
     # checkpoint lives under the variant's ``weights_dir`` (see
     # docs/bundle_publish_standard.md §4.4.1).
-    base = config.MODELS_DIR / preset_cache_key(preset)
+    if bundle is not None and weights_store_key(bundle):
+        base = config.MODELS_DIR / weights_store_key(bundle)
+    else:
+        base = config.MODELS_DIR / preset_cache_key(preset)
     rel = bundle_weights_rel(bundle, variant) if bundle is not None else "checkpoint"
     return _checkpoint_at(base / rel, spec)
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ from flashcli_bundle.manifest_ext import bundle_active_native_dir, resolve_bundl
 from flashcli_bundle.native_naming import (
     NativeEnvironmentNotSupportedError,
     discover_native_module_bases,
+    list_native_artifacts,
     logical_native_module_name,
     select_native_module_ranked,
 )
@@ -120,7 +122,8 @@ def _resolve_host_native_paths(
     """Pick native modules for this host from ``runtime/<env-key>/``."""
     env_key = resolve_bundle_env_key(bundle, gpu=gpu)
     native_dir = bundle_active_native_dir(bundle, gpu=gpu, env_key=env_key)
-    present = discover_native_module_bases(native_dir, env_key=env_key)
+    shared = native_dir.name.strip() != env_key
+    present = discover_native_module_bases(native_dir, env_key="" if shared else env_key)
     if not native_dir.is_dir() or not present:
         raise NativeEnvironmentNotSupportedError(
             module_base="native",
@@ -133,13 +136,19 @@ def _resolve_host_native_paths(
     python_minor = bundle_python_abi(bundle)
     paths: dict[str, Path] = {}
     for module_base in present:
-        selected = _select_loadable_module(
-            native_dir,
-            module_base,
-            gpu,
-            python_minor=python_minor,
-            env_key=env_key,
-        )
+        if shared:
+            arts = list_native_artifacts(native_dir, env_key="").get(module_base, [])
+            selected = arts[0][1] if arts else None
+            if selected is not None:
+                _probe_so_file(selected, env_key=None, python_minor=python_minor)
+        else:
+            selected = _select_loadable_module(
+                native_dir,
+                module_base,
+                gpu,
+                python_minor=python_minor,
+                env_key=env_key,
+            )
         if selected is not None:
             paths[module_base] = selected
 
@@ -262,9 +271,11 @@ def _probe_so_file(
 def probe_native_python_abi(bundle: BundleManifest, *, gpu: GpuInfo | None = None) -> None:
     gpu = gpu or detect_gpu_or_raise()
     env_key = resolve_bundle_env_key(bundle, gpu=gpu)
+    native_dir = bundle_active_native_dir(bundle, gpu=gpu, env_key=env_key)
+    shared = native_dir.name.strip() != env_key
     paths = _resolve_host_native_paths(bundle, gpu)
     for path in paths.values():
-        _probe_so_file(path, env_key=env_key)
+        _probe_so_file(path, env_key=None if shared else env_key)
         return
 
 
@@ -272,4 +283,9 @@ def ensure_bundle_importable(bundle: BundleManifest, *, gpu: GpuInfo | None = No
     py_str = str(bundle_python_root(bundle).resolve())
     if py_str not in sys.path:
         sys.path.insert(0, py_str)
+    env_key = os.environ.get("FLASHCLI_RUNTIME_ENV_KEY", "").strip()
+    runtime_map = bundle.raw.get("runtime") if isinstance(bundle.raw.get("runtime"), dict) else {}
+    if env_key and not str(runtime_map.get(env_key, "")).strip():
+        # Pure-Python/CPU environment: no native modules to register.
+        return
     register_native_modules(bundle, gpu=gpu)

@@ -1,14 +1,17 @@
-"""Parse flashcli-model-bundle manifests (format_version 3)."""
+"""Parse flashcli-model-bundle manifests (format_version 3 and 4)."""
 
 from __future__ import annotations
 
+import copy
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
 BUNDLE_FORMAT = "flashcli-model-bundle"
 BUNDLE_FORMAT_VERSION = 3
+SUPPORTED_FORMAT_VERSIONS = frozenset({3, 4})
 
 EntryMode = Literal["engine", "script"]
 _VALID_ENTRY_MODES = frozenset({"engine", "script"})
@@ -254,16 +257,18 @@ def check_bundle_protocol_version(bundle: BundleManifest) -> None:
 
 
 def require_v3(bundle: BundleManifest) -> None:
+    """Validate a v3 or v4 manifest (historical name kept for callers)."""
     if bundle.raw.get("format") != BUNDLE_FORMAT:
         raise ValueError(
             f"Unsupported bundle format: {bundle.raw.get('format')!r} "
             f"(expected {BUNDLE_FORMAT!r})"
         )
     ver = bundle_format_version(bundle)
-    if ver != BUNDLE_FORMAT_VERSION:
+    if ver not in SUPPORTED_FORMAT_VERSIONS:
         raise ValueError(
-            f"Unsupported format_version {ver} (expected {BUNDLE_FORMAT_VERSION}). "
-            "Upgrade the bundle release or use a matching flashcli version."
+            f"Unsupported format_version {ver} (expected one of "
+            f"{sorted(SUPPORTED_FORMAT_VERSIONS)}). Upgrade the bundle release "
+            "or use a matching flashcli version."
         )
     check_bundle_protocol_version(bundle)
     check_bundle_execution_versions(bundle)
@@ -289,7 +294,7 @@ def _runtime_map_from_raw(raw: dict[str, Any]) -> dict[str, str]:
     out = {
         str(k).strip(): str(v).strip()
         for k, v in block.items()
-        if str(k).strip() and str(v).strip()
+        if str(k).strip()
     }
     if not out:
         raise ValueError("runtime map is empty")
@@ -337,7 +342,72 @@ def load_bundle_manifest(bundle_root: Path) -> BundleManifest:
     return load_bundle_manifest_data(data, bundle_root=root)
 
 
+def _merge_v4(base: Any, overlay: Any) -> Any:
+    if not isinstance(base, dict) or not isinstance(overlay, dict):
+        return copy.deepcopy(overlay)
+    out = copy.deepcopy(base)
+    for key, value in overlay.items():
+        if key in out:
+            out[key] = _merge_v4(out[key], value)
+        else:
+            out[key] = copy.deepcopy(value)
+    return out
+
+
+def _effective_v4_raw(data: dict[str, Any]) -> dict[str, Any]:
+    if "variants" in data:
+        raise ValueError("format_version 4 does not support variants")
+    defaults = data.get("defaults")
+    environments = data.get("environments")
+    if not isinstance(defaults, dict) or not defaults:
+        raise ValueError("format_version 4 requires a non-empty defaults object")
+    if not isinstance(environments, dict) or not environments:
+        raise ValueError("format_version 4 requires a non-empty environments object")
+
+    env_key = os.environ.get("FLASHCLI_RUNTIME_ENV_KEY", "").strip()
+    if not env_key:
+        if len(environments) == 1:
+            env_key = str(next(iter(environments)))
+        else:
+            raise ValueError(
+                "format_version 4 has multiple environments; set "
+                "FLASHCLI_RUNTIME_ENV_KEY to select one"
+            )
+    overlay_raw = environments.get(env_key)
+    if not isinstance(overlay_raw, dict):
+        raise ValueError(f"unknown environment {env_key!r}")
+
+    runtime_map: dict[str, str] = {}
+    for key, block in environments.items():
+        if not isinstance(block, dict):
+            raise ValueError(f"environments.{key} must be an object")
+        runtime = str(block.get("runtime", "") or "").strip()
+        runtime_map[str(key)] = runtime
+
+    raw = copy.deepcopy(defaults)
+    for key, value in data.items():
+        if key in ("defaults", "environments"):
+            continue
+        raw[key] = copy.deepcopy(value)
+    overlay = copy.deepcopy(overlay_raw)
+    overlay.pop("runtime", None)
+    raw = _merge_v4(raw, overlay)
+    raw["runtime"] = runtime_map
+    extras = raw.get("extra_weights")
+    if isinstance(extras, dict):
+        for key, spec in extras.items():
+            if isinstance(spec, dict) and not str(spec.get("weights_dir", "")).strip():
+                spec["weights_dir"] = f"extra/{key}"
+    return raw
+
+
 def load_bundle_manifest_data(data: dict[str, Any], *, bundle_root: Path) -> BundleManifest:
+    try:
+        version = int(data.get("format_version", 0))
+    except (TypeError, ValueError):
+        version = 0
+    if version == 4:
+        data = _effective_v4_raw(data)
     entry = data.get("entry") or {}
     entry_kind = "python"
     entry_native: dict[str, Any] = {}

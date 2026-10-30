@@ -155,48 +155,38 @@ def _validate_runtime_cell(
     if not native_dir.is_dir():
         return [f"missing {rel}/ for runtime {env_key!r}"]
 
-    arts = list_native_artifacts(native_dir, env_key=env_key)
+    # A runtime directory is stateless. When the environment key and directory
+    # name differ, the directory is shared by multiple environments and the
+    # filename tag is informational only.
+    shared = native_dir.name.strip() != env_key
+    lookup_key = "" if shared else env_key
+    arts = list_native_artifacts(native_dir, env_key=lookup_key)
     matched_modules: set[str] = set()
 
     for path in sorted(native_dir.glob("*.so")):
-        parsed = parse_native_tag_from_filename(path.name, env_key=env_key)
+        parsed = parse_native_tag_from_filename(path.name, env_key=lookup_key)
         if parsed is None:
-            inferred = parse_native_tag_from_filename(path.name)
-            if inferred is not None and inferred.catalog_key() != env_key:
-                errors.append(
-                    f"{rel}/{path.name}: filename tag {inferred.catalog_key()!r} "
-                    f"does not match runtime cell {env_key!r}"
-                )
-            else:
-                errors.append(
-                    f"{rel}/{path.name}: unrecognized native artifact filename "
-                    f"(expected *-*-{env_key}.so)"
-                )
-            continue
-        if parsed.catalog_key() != env_key:
             errors.append(
-                f"{rel}/{path.name}: filename tag {parsed.catalog_key()!r} "
-                f"does not match runtime cell {env_key!r}"
+                f"{rel}/{path.name}: unrecognized native artifact filename "
+                "(expected a module_base prefix and build tag)"
             )
             continue
         matched_modules.add(parsed.module_base)
 
     if not matched_modules:
-        errors.append(
-            f"{rel}/ has no recognized native .so artifacts "
-            f"(expected tagged files such as *-*-{env_key}.so)"
-        )
+        if (native_dir / "substrate").is_dir() and any((native_dir / "substrate").glob("*.so")):
+            return errors
+        errors.append(f"{rel}/ has no recognized native .so artifacts")
         return errors
 
     required = tuple(sorted(matched_modules))
     refs: list[tuple[str, ParsedNativeTag]] = []
     for mod in required:
-        found = _find_artifact(arts, mod, env_key)
-        if found is None:
-            errors.append(f"missing {rel}/{mod}-*-{env_key}.so")
+        found = arts.get(mod, [])
+        if not found:
+            errors.append(f"missing {rel}/{mod}-*.so")
             continue
-        parsed, _path = found
-        refs.append((mod, parsed))
+        refs.append((mod, found[0][0]))
 
     if len(refs) >= 2:
         _mod0, ref = refs[0]
@@ -206,19 +196,13 @@ def _validate_runtime_cell(
                     f"{env_key}: inconsistent python_abi — {refs[0][0]} -py{ref.python_minor} "
                     f"vs {mod} -py{tag.python_minor}"
                 )
-            if tag.env_key != ref.env_key:
-                errors.append(
-                    f"{env_key}: inconsistent env key between {refs[0][0]} and {mod} "
-                    f"({ref.env_key!r} vs {tag.env_key!r})"
-                )
             if tag.flashrt_abi != ref.flashrt_abi:
                 errors.append(
                     f"{env_key}: inconsistent FlashRT ABI segment "
-                    f"({refs[0][0]} {tag.flashrt_abi!r} vs {mod} {ref.flashrt_abi!r})"
+                    f"({refs[0][0]} {tag.flashrt_abi!r} vs {mod} {tag.flashrt_abi!r})"
                 )
 
     return errors
-
 
 def validate_native_runtime_matrix(bundle: BundleManifest) -> list[str]:
     """Check each manifest ``runtime/<env-key>/`` directory for required ``.so`` files."""
@@ -229,6 +213,8 @@ def validate_native_runtime_matrix(bundle: BundleManifest) -> list[str]:
 
     errors: list[str] = []
     for env_key, rel_path in runtime_map.items():
+        if not str(rel_path).strip():
+            continue
         native_dir = (bundle.bundle_root / rel_path.strip().lstrip("/")).resolve()
         errors.extend(_validate_runtime_cell(bundle, env_key, native_dir))
     return errors
@@ -247,11 +233,15 @@ def validate_native_runtime_abi(
         return errors
 
     for env_key, rel_path in runtime_map.items():
+        if not str(rel_path).strip():
+            continue
         native_dir = (bundle.bundle_root / rel_path.strip().lstrip("/")).resolve()
         if not native_dir.is_dir():
             continue
-        required = _required_module_bases(bundle, native_dir, env_key=env_key)
-        arts = list_native_artifacts(native_dir, env_key=env_key)
+        shared = native_dir.name.strip() != env_key
+        lookup_key = "" if shared else env_key
+        required = _required_module_bases(bundle, native_dir, env_key=lookup_key)
+        arts = list_native_artifacts(native_dir, env_key=lookup_key)
         for mod in required:
             for parsed, path in arts.get(mod, []):
                 err = probe_native_so_abi(
@@ -286,6 +276,8 @@ def validate_native_runtime(
             rel = bundle_runtime_map(bundle)[env_key]
         except (ValueError, KeyError):
             return validate_native_runtime_matrix(bundle)
+        if not str(rel).strip():
+            return []
         native_dir = (bundle.bundle_root / rel.strip().lstrip("/")).resolve()
         errors = _validate_runtime_cell(bundle, env_key, native_dir)
         cells = [(env_key, native_dir)]
