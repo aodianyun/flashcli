@@ -273,14 +273,14 @@ func matchString(raw any, got string, aliases ...string) bool {
 			return true
 		}
 		for _, alias := range aliases {
-			if (got == "windows" || got == "win32") && (want == alias) {
-				return true
+			if got == alias {
+				got = aliases[0]
 			}
-			if (want == "windows" || want == "win32") && (got == alias) {
-				return true
+			if want == alias {
+				want = aliases[0]
 			}
 		}
-		return false
+		return got == want
 	case []any:
 		for _, item := range v {
 			if matchString(item, got, aliases...) {
