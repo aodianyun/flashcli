@@ -1,24 +1,8 @@
-# Assembled by build.sh (Linux + NVIDIA SM120 GPU + FlashRT-Nexus)
-/flash_rt/
+# Assembled by build.sh
 /runtime/
 /dist/
 /.build/
-
-# Python caches
+/lib/
+/native_exec/pi05_exec_server
 __pycache__/
-*.py[cod]
-*$py.class
-*.egg-info/
-
-# Local build scratch (developers may stage checkpoints here for testing)
-checkpoint/
-capsules/
-*.wav
-*.mp4
-
-# Editor
-.vscode/
-.idea/
-
-# Go build artifact (server)
-/native_exec/native_exec
+*.pyc

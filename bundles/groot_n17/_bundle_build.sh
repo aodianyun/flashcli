@@ -89,6 +89,9 @@ stage_vendor_gr00t() {
   [[ -f "${vendor_script}" ]] || die "Missing ${vendor_script}"
   bash "${vendor_script}"
   local py_bin="${PYTHON_BIN:-python3}"
+  if ! "${py_bin}" "${BUNDLE_DIR}/_scan_gr00t_inference_imports.py" --prune; then
+    die "gr00t inference closure prune failed"
+  fi
   if ! "${py_bin}" "${BUNDLE_DIR}/_verify_gr00t_vendor.py" --python "${py_bin}"; then
     die "Vendored gr00t import probe failed (see above)"
   fi
@@ -279,7 +282,7 @@ stage_groot_n17_flash_rt_minimal() {
     cp -a "${src}/${rel}" "${dst}/${rel}"
   }
 
-  for rel in __init__.py api.py models/__init__.py; do
+  for rel in __init__.py _extensions.py api.py models/__init__.py; do
     _cp_file "${rel}"
   done
 

@@ -63,6 +63,10 @@ flashcli run "$BUNDLE" --embodiment-tag gr1 --num-views 1 --benchmark 5
 ls "$(flashcli models show "$BUNDLE" 2>/dev/null | sed -n 's/.*checkpoint: //p')/tokenizer/"
 ```
 
+## 5. 发布
+
+将 `dist/` 上传 FlashHub，ref 为 `flashcli-bundle/groot_n16:1.0.1`（按实际版本号调整）。
+
 ## 故障排查（构建）
 
 | 现象 | 处理 |

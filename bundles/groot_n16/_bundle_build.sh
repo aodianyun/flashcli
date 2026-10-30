@@ -30,6 +30,7 @@ GPU_ARCH=""
 BUILD_DIR=""
 JOBS="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 SKIP_BUILD=0
+STAGE_FLASH_RT_ONLY=0
 FA2_NATIVE_ONLY=0
 FLASHRT_TAG=""
 BUILD_ID=""
@@ -62,6 +63,7 @@ Options:
   --build-dir DIR         CMake build dir (default: <repo>/build)
   -j, --jobs N            Parallel cmake jobs
   --pack-only             Skip cmake; stage existing .so under flash_rt/ or build/
+  --stage-flash-rt-only   Stage the minimal flash_rt/ Python tree only (no native build/pack)
   --embed-checkpoint DIR  Copy weights into bundle checkpoint/
   --flashrt-tag TAG       manifest flashrt_tag
   --build-id ID           manifest build_id
@@ -256,28 +258,30 @@ stage_groot_flash_rt_minimal() {
     cp -a "${src}/${rel}" "${dst}/${rel}"
   }
 
-  for rel in __init__.py api.py models/__init__.py; do
-    _cp_file "${rel}"
-  done
-
-  mkdir -p "${dst}/models/groot"
-  sync_tree "${src}/models/groot" "${dst}/models/groot" 'pipeline_thor*'
-
   for rel in \
+    __init__.py \
+    _extensions.py \
+    api.py \
+    models/__init__.py \
+    models/groot/__init__.py \
+    models/groot/embodiments.py \
+    models/groot/pipeline_rtx.py \
+    models/groot/pipeline_rtx_fp16.py \
     frontends/__init__.py \
     frontends/torch/__init__.py \
     frontends/torch/groot_rtx.py \
-    frontends/torch/groot_rtx_fp16.py; do
+    frontends/torch/groot_rtx_fp16.py \
+    hardware/__init__.py \
+    hardware/rtx/attn_backend.py \
+    hardware/rtx/attn_backend_groot.py \
+    core/__init__.py \
+    core/cuda_buffer.py \
+    core/cuda_graph.py \
+    core/quant/__init__.py \
+    core/quant/calibrator.py; do
     _cp_file "${rel}"
   done
 
-  _cp_file hardware/__init__.py
-  [[ -f "${src}/hardware/backend.py" ]] && _cp_file hardware/backend.py
-
-  mkdir -p "${dst}/hardware/rtx"
-  for rel in attn_backend.py attn_backend_groot.py; do
-    cp -a "${src}/hardware/rtx/${rel}" "${dst}/hardware/rtx/${rel}"
-  done
   cat > "${dst}/hardware/rtx/__init__.py" <<'PY'
 """RTX attention backends (groot_n16 bundle subset)."""
 from .attn_backend import AttnBackend, RtxFlashAttnBackend, TorchFlashAttnBackend
@@ -291,17 +295,6 @@ __all__ = [
     "TorchFlashAttnBackendGroot",
 ]
 PY
-
-  mkdir -p "${dst}/core"
-  sync_tree "${src}/core" "${dst}/core" '*.so' 'rl'
-
-  mkdir -p "${dst}/executors"
-  for rel in __init__.py torch_weights.py weight_loader.py; do
-    [[ -f "${src}/executors/${rel}" ]] && cp -a "${src}/executors/${rel}" "${dst}/executors/${rel}"
-  done
-
-  mkdir -p "${dst}/utils"
-  sync_tree "${src}/utils" "${dst}/utils"
 
   log "Staged minimal flash_rt/ for groot_n16 ($(find "${dst}" -type f | wc -l) files)"
 }
@@ -532,6 +525,7 @@ while [[ $# -gt 0 ]]; do
     --build-dir) BUILD_DIR="$2"; shift 2 ;;
     -j|--jobs) JOBS="$2"; shift 2 ;;
     --pack-only|--skip-build) SKIP_BUILD=1; shift ;;
+    --stage-flash-rt-only) STAGE_FLASH_RT_ONLY=1; shift ;;
     --embed-checkpoint) EMBED_CHECKPOINT="$2"; shift 2 ;;
     --flashrt-tag) FLASHRT_TAG="$2"; shift 2 ;;
     --build-id) BUILD_ID="$2"; shift 2 ;;
@@ -562,6 +556,11 @@ if [[ "${FINALIZE_MATRIX_MANIFEST}" -eq 1 ]]; then
 fi
 
 resolve_repo_root
+if [[ "${STAGE_FLASH_RT_ONLY}" -eq 1 ]]; then
+  stage_groot_flash_rt_minimal "${BUNDLE_DIR}/flash_rt"
+  log "Minimal flash_rt/ staged; native runtime untouched"
+  exit 0
+fi
 ensure_runtime_requirements_file
 detect_platform
 

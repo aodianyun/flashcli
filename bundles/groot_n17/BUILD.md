@@ -90,6 +90,10 @@ rm -rf ~/.flashcli/runtimes/groot_n17-local-*/venv
 flashcli run "$BUNDLE" ...
 ```
 
+## 5. Publish
+
+Upload `dist/` to FlashHub as `flashcli-bundle/groot_n17:1.0.1` (bump as needed).
+
 ## Troubleshooting (build)
 
 | Symptom | Fix |

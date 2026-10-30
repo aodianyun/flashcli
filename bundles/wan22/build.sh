@@ -91,7 +91,7 @@ log "flashrt abi: ${FLASHRT_ABI}"
 PY_DST="${BUNDLE_DIR}/flash_rt"
 log "staging minimal flash_rt/ (wan22 load path only) -> ${PY_DST}"
 rm -rf "${PY_DST}"; mkdir -p "${PY_DST}"
-for rel in __init__.py api.py \
+for rel in __init__.py _extensions.py api.py \
            hardware/__init__.py \
            frontends/__init__.py frontends/torch/__init__.py frontends/torch/wan22_rtx.py; do
   mkdir -p "${PY_DST}/$(dirname "${rel}")"

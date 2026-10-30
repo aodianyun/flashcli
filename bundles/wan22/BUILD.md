@@ -20,7 +20,7 @@ This bundle uses **Python 3.10** (`python_abi: "310"`). Native `.so` files must 
 
 ## 1. Build
 
-`build.sh` stages a minimal `flash_rt/` (version-locked to the `.so`), vendors the Wan `wan/` package (t2v subset), and copies tagged kernels under `runtime/<env-key>/`.
+`build.sh` stages a minimal `flash_rt/` (version-locked to the `.so`), vendors the Wan `wan/` package (t2v subset), and copies tagged kernels under `runtime/<runtime-dir>/`.
 
 ```bash
 bash bundles/wan22/build.sh \
@@ -39,7 +39,7 @@ bash bundles/wan22/pack.sh
 export BUNDLE="$(pwd)/bundles/wan22/dist"
 ```
 
-`pack.sh` → `scripts/pack_bundle.sh`. Upload tree includes `flashcli-bundle.json`, `run.py`, `flash_rt/`, `wan/`, and `runtime/<env-key>/` (`RELEASE_PACK_FILES` in `release-matrix.env`).
+`pack.sh` → `scripts/pack_bundle.sh`. Upload tree includes `flashcli-bundle.json`, `run.py`, `flash_rt/`, `wan/`, and `runtime/<runtime-dir>/` (`RELEASE_PACK_FILES` in `release-matrix.env`).
 
 ## 3. Validate
 
@@ -69,7 +69,7 @@ flashcli run "$BUNDLE" \
 
 ## 5. Publish
 
-Upload `dist/` to FlashHub as `flashcli-bundle/wan22:1.0.0` (bump version as needed).
+Upload `dist/` to FlashHub as `flashcli-bundle/wan22:1.0.1` (bump version as needed).
 
 Multi-env matrix (Docker):
 

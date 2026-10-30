@@ -6,13 +6,13 @@
 
 | | |
 |---|---|
-| **Ref** | `flashcli-bundle/groot_n16:1.0.0` |
+| **Ref** | `flashcli-bundle/groot_n16:1.0.1` |
 | **Weights** | [nvidia/GR00T-N1.6-3B](https://huggingface.co/nvidia/GR00T-N1.6-3B) |
 | **GPU** | NVIDIA **SM120** (Blackwell) · CUDA **13.x** |
 | **Python** | **3.12** (bundle venv) |
 | **Capabilities** | `run` |
 
-**Inputs:** task prompt + one or more RGB images.  
+**Inputs:** task prompt + one or more RGB images.
 **Output:** action sequence (joint / end-effector commands per embodiment).
 
 **Embodiment tags** trained in the base checkpoint:
@@ -30,7 +30,7 @@ Weights and a Qwen3 tokenizer are pulled automatically on first run (not include
 ## Run
 
 ```bash
-flashcli run flashcli-bundle/groot_n16:1.0.0 \
+flashcli run flashcli-bundle/groot_n16:1.0.1 \
   --prompt "pick up the cup on the table" \
   --embodiment-tag gr1 \
   --num-views 1 \
@@ -40,7 +40,7 @@ flashcli run flashcli-bundle/groot_n16:1.0.0 \
 Smoke test without images (placeholder frames):
 
 ```bash
-flashcli run flashcli-bundle/groot_n16:1.0.0 \
+flashcli run flashcli-bundle/groot_n16:1.0.1 \
   --embodiment-tag gr1 \
   --num-views 1
 ```
@@ -48,14 +48,14 @@ flashcli run flashcli-bundle/groot_n16:1.0.0 \
 Three-camera embodiment:
 
 ```bash
-flashcli run flashcli-bundle/groot_n16:1.0.0 \
+flashcli run flashcli-bundle/groot_n16:1.0.1 \
   --prompt "open the drawer" \
   --embodiment-tag robocasa_panda_omron \
   --num-views 3 \
   --image /path/v0.jpg,/path/v1.jpg,/path/v2.jpg
 ```
 
-Full flags: `flashcli run flashcli-bundle/groot_n16:1.0.0 --help`
+Full flags: `flashcli run flashcli-bundle/groot_n16:1.0.1 --help`
 
 ## Parameters
 

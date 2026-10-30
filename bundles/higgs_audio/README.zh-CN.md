@@ -6,13 +6,13 @@
 
 | | |
 |---|---|
-| **Ref** | `flashcli-bundle/higgs_audio:1.0.0` |
+| **Ref** | `flashcli-bundle/higgs_audio:1.0.1` |
 | **权重** | [bosonai/higgs-audio-v3-tts-4b](https://modelscope.cn/models/bosonai/higgs-audio-v3-tts-4b)（ModelScope） |
 | **GPU** | NVIDIA **SM120**（Blackwell；如 RTX 5060 Ti / 5090）· CUDA **13.x** |
 | **Python** | **3.10**（bundle venv） |
 | **能力** | `run` |
 
-**输入：** 待合成文本（`--text`）。  
+**输入：** 待合成文本（`--text`）。
 **输出：** 24 kHz 单声道 PCM WAV（`--out`）。
 
 权重在首次 `pull` / `run` 时拉取（不在 bundle zip 内）。FP8 峰值约 **6.6 GB**，BF16 约 **9.6 GB**。
@@ -20,8 +20,8 @@
 ## 运行
 
 ```bash
-flashcli pull flashcli-bundle/higgs_audio:1.0.0
-flashcli run flashcli-bundle/higgs_audio:1.0.0 \
+flashcli pull flashcli-bundle/higgs_audio:1.0.1
+flashcli run flashcli-bundle/higgs_audio:1.0.1 \
   --text "你好世界，欢迎使用 Higgs Audio。" \
   --out hello.wav
 ```
@@ -29,13 +29,13 @@ flashcli run flashcli-bundle/higgs_audio:1.0.0 \
 强制 BF16（或 FP8 内核不可用时）：
 
 ```bash
-flashcli run flashcli-bundle/higgs_audio:1.0.0 \
+flashcli run flashcli-bundle/higgs_audio:1.0.1 \
   --fp8 false \
   --text "The quick brown fox jumps over the lazy dog." \
   --out hello.wav
 ```
 
-完整参数：`flashcli run flashcli-bundle/higgs_audio:1.0.0 --help`
+完整参数：`flashcli run flashcli-bundle/higgs_audio:1.0.1 --help`
 
 ## 参数
 

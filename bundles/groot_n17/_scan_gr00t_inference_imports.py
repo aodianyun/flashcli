@@ -307,7 +307,10 @@ def _check_manifest(specs: list[str]) -> int:
         print(f"Missing {MANIFEST_PATH}", file=sys.stderr)
         return 1
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    pip = manifest.get("python_dependencies", {}).get("pip", [])
+    deps = manifest.get("python_dependencies")
+    if not isinstance(deps, dict):
+        deps = manifest.get("defaults", {}).get("python_dependencies", {})
+    pip = deps.get("pip", []) if isinstance(deps, dict) else []
     joined = " ".join(str(p) for p in pip)
     missing: list[str] = []
     for spec in specs:
@@ -323,11 +326,58 @@ def _check_manifest(specs: list[str]) -> int:
     return 0
 
 
+def _closure_paths(entries: tuple[str, ...]) -> set[Path]:
+    internal_seen: set[str] = set()
+    queue: deque[str] = deque(entries)
+    while queue:
+        mod = queue.popleft()
+        if mod in internal_seen:
+            continue
+        internal_seen.add(mod)
+        path = _gr00t_py_path(mod)
+        if path is None:
+            continue
+        current = _module_name_for_path(path)
+        internal, _external = _imports_in_file(path, current_module=current)
+        for child in sorted(internal):
+            if child not in internal_seen:
+                queue.append(child)
+    return {
+        path
+        for mod in internal_seen
+        if (path := _gr00t_py_path(mod)) is not None
+    }
+
+
+def prune_to_closure() -> None:
+    """Drop vendored files outside the inference import closure."""
+    keep = _closure_paths(ENTRY_MODULES + ("gr00t.eval.open_loop_eval",))
+    keep.add(VENDOR_ROOT / "__init__.py")
+    for path in list(keep):
+        for parent in path.parents:
+            if parent == VENDOR_ROOT or VENDOR_ROOT not in parent.parents:
+                break
+            keep.add(parent / "__init__.py")
+    keep |= {VENDOR_ROOT / "VENDOR.json", VENDOR_ROOT / "THIRD_PARTY_LICENSE"}
+    removed = 0
+    for path in sorted(VENDOR_ROOT.rglob("*")):
+        if not path.is_file() or path in keep:
+            continue
+        path.unlink()
+        removed += 1
+    for path in sorted(VENDOR_ROOT.rglob("*"), reverse=True):
+        if path.is_dir() and not any(path.iterdir()):
+            path.rmdir()
+    print(f"Pruned {removed} non-inference file(s) from {VENDOR_ROOT}")
+
+
 def main() -> int:
     if not VENDOR_ROOT.is_dir():
         print(f"Missing {VENDOR_ROOT}; run vendor_gr00t.sh first", file=sys.stderr)
         return 1
 
+    if "--prune" in sys.argv:
+        prune_to_closure()
     pip_names, external_roots = collect_closure()
     pyproject = _isaac_pyproject_path()
     pins = _pins_from_pyproject(pyproject) if pyproject else {}

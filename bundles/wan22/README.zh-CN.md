@@ -6,13 +6,13 @@
 
 | | |
 |---|---|
-| **Ref** | `flashcli-bundle/wan22:1.0.0` |
+| **Ref** | `flashcli-bundle/wan22:1.0.1` |
 | **权重** | [Wan-AI/Wan2.2-TI2V-5B](https://www.modelscope.cn/models/Wan-AI/Wan2.2-TI2V-5B)（ModelScope，约 34 GB） |
 | **GPU** | NVIDIA **SM120**（Blackwell；如 RTX 5060 Ti / 5090）· CUDA **13.x** |
 | **Python** | **3.10**（bundle venv） |
 | **能力** | `run` |
 
-**输入：** 文本 prompt（`t2v`）；或 prompt + 起始图像（`i2v`）。  
+**输入：** 文本 prompt（`t2v`）；或 prompt + 起始图像（`i2v`）。
 **输出：** MP4 视频（`--out`）。
 
 默认面向 **16 GB** 显存（5060 Ti：832×480、81 帧、`--offload-model true`）。更大显存可上调分辨率/帧数。权重在首次 `pull` / `run` 时拉取（不在 bundle zip 内）。无需安装 `flash_attn` wheel。
@@ -22,14 +22,14 @@
 文本生成视频（5060 Ti 基线）：
 
 ```bash
-flashcli run flashcli-bundle/wan22:1.0.0 \
+flashcli run flashcli-bundle/wan22:1.0.1 \
   --prompt "A cinematic shot of a blue sphere rolling across a wooden table"
 ```
 
 冒烟测试（少帧 / 少步）：
 
 ```bash
-PYTHONUNBUFFERED=1 flashcli run flashcli-bundle/wan22:1.0.0 \
+PYTHONUNBUFFERED=1 flashcli run flashcli-bundle/wan22:1.0.1 \
   --frames 5 --steps 2 --out smoke.mp4
 ```
 
@@ -38,13 +38,13 @@ RTX 5090（32 GB）—— FlashRT 官方 720p 基线（`1280×704`、121 帧、`
 
 ```bash
 # 画质基线（约 179 s，无 TeaCache）
-flashcli run flashcli-bundle/wan22:1.0.0 \
+flashcli run flashcli-bundle/wan22:1.0.1 \
   --width 1280 --height 704 --frames 121 --steps 20 \
   --shift 5.0 --guide-scale 5.0 \
   --offload-model true
 
 # TeaCache 0.3（约 114 s / ~1.56×；部分 prompt 可能有构图漂移）
-flashcli run flashcli-bundle/wan22:1.0.0 \
+flashcli run flashcli-bundle/wan22:1.0.1 \
   --width 1280 --height 704 --frames 121 --steps 20 \
   --shift 5.0 --guide-scale 5.0 \
   --offload-model true \
@@ -54,13 +54,13 @@ flashcli run flashcli-bundle/wan22:1.0.0 \
 图像生成视频：
 
 ```bash
-flashcli run flashcli-bundle/wan22:1.0.0 \
+flashcli run flashcli-bundle/wan22:1.0.1 \
   --mode i2v \
   --image /path/start.png \
   --frames 81
 ```
 
-完整参数：`flashcli run flashcli-bundle/wan22:1.0.0 --help`
+完整参数：`flashcli run flashcli-bundle/wan22:1.0.1 --help`
 
 ## 参数
 

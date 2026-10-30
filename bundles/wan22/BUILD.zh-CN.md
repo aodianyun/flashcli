@@ -20,7 +20,7 @@ export WAN_ROOT=/path/to/Wan2.2
 
 ## 1. 构建
 
-`build.sh` 暂存最小化 `flash_rt/`（与 `.so` 版本锁定）、vendor Wan 的 `wan/` 包（t2v 子集），并将带标签的 kernels 放入 `runtime/<env-key>/`。
+`build.sh` 暂存最小化 `flash_rt/`（与 `.so` 版本锁定）、vendor Wan 的 `wan/` 包（t2v 子集），并将带标签的 kernels 放入 `runtime/<runtime-dir>/`。
 
 ```bash
 bash bundles/wan22/build.sh \
@@ -39,7 +39,7 @@ bash bundles/wan22/pack.sh
 export BUNDLE="$(pwd)/bundles/wan22/dist"
 ```
 
-`pack.sh` → `scripts/pack_bundle.sh`。上传树含 `flashcli-bundle.json`、`run.py`、`flash_rt/`、`wan/`、`runtime/<env-key>/`（见 `release-matrix.env` 的 `RELEASE_PACK_FILES`）。
+`pack.sh` → `scripts/pack_bundle.sh`。上传树含 `flashcli-bundle.json`、`run.py`、`flash_rt/`、`wan/`、`runtime/<runtime-dir>/`（见 `release-matrix.env` 的 `RELEASE_PACK_FILES`）。
 
 ## 3. 校验
 
@@ -69,7 +69,7 @@ flashcli run "$BUNDLE" \
 
 ## 5. 发布
 
-将 `dist/` 上传 FlashHub，ref 如 `flashcli-bundle/wan22:1.0.0`（按实际版本号调整）。
+将 `dist/` 上传 FlashHub，ref 如 `flashcli-bundle/wan22:1.0.1`（按实际版本号调整）。
 
 多环境矩阵（Docker）：
 

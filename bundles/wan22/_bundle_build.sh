@@ -165,7 +165,7 @@ stage_wan22_python() {
   local py_dir="${BUNDLE_DIR}/flash_rt" wan_dir="${BUNDLE_DIR}/wan"
   rm -rf "${py_dir}"; mkdir -p "${py_dir}"
   local rel
-  for rel in __init__.py api.py \
+  for rel in __init__.py _extensions.py api.py \
              hardware/__init__.py \
              frontends/__init__.py frontends/torch/__init__.py frontends/torch/wan22_rtx.py; do
     mkdir -p "${py_dir}/$(dirname "${rel}")"

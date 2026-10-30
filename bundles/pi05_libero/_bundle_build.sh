@@ -32,6 +32,7 @@ GPU_ARCH=""
 BUILD_DIR=""
 JOBS="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 SKIP_BUILD=0
+STAGE_FLASH_RT_ONLY=0
 # Release default: multi-arch FA2 (sm_80 + sm_120 + PTX) so SM89-labeled artifacts
 # also run on SM120 (Blackwell). Use --fa2-native-only for faster local SM89-only dev.
 FA2_NATIVE_ONLY=0
@@ -69,6 +70,7 @@ Options:
   --build-dir DIR         CMake build dir (default: <repo>/build)
   -j, --jobs N            Parallel cmake jobs
   --pack-only             Skip cmake; stage existing .so under flash_rt/ or build/
+  --stage-flash-rt-only   Stage the minimal flash_rt/ Python tree only (no native build/pack)
   --embed-checkpoint DIR  Copy weights into bundle checkpoint/
   --flashrt-tag TAG       manifest flashrt_tag
   --build-id ID           manifest build_id
@@ -254,7 +256,7 @@ run_cmake_build() {
   shopt -u nullglob
 }
 
-# Official pi05_libero bundle: minimal flash_rt tree (matches end-user zip contents).
+# Official pi05_libero bundle: minimal flash_rt tree (entry + declared options only).
 stage_pi05_flash_rt_minimal() {
   local dst="$1"
   local src="${REPO_ROOT}/flash_rt"
@@ -267,27 +269,46 @@ stage_pi05_flash_rt_minimal() {
     cp -a "${src}/${rel}" "${dst}/${rel}"
   }
 
-  for rel in __init__.py api.py models/__init__.py; do
-    _cp_file "${rel}"
-  done
-
-  mkdir -p "${dst}/models/pi05"
-  sync_tree "${src}/models/pi05" "${dst}/models/pi05" 'pipeline_thor*'
-
   for rel in \
+    __init__.py \
+    _extensions.py \
+    api.py \
+    models/__init__.py \
+    models/pi05/__init__.py \
+    models/pi05/_lifecycle.py \
+    models/pi05/pipeline_rtx.py \
+    models/pi05/pipeline_rtx_batched.py \
+    models/pi05/pipeline_rtx_cfg.py \
+    models/pi05/pipeline_rtx_cfg_batched.py \
     frontends/__init__.py \
+    frontends/_fp8_layout.py \
     frontends/torch/__init__.py \
-    frontends/torch/pi05_rtx.py; do
+    frontends/torch/pi05_rtx.py \
+    hardware/__init__.py \
+    hardware/rtx/attn_backend.py \
+    hardware/rtx/attn_backend_batched_pi05.py \
+    core/__init__.py \
+    core/calibration.py \
+    core/cuda_buffer.py \
+    core/cuda_graph.py \
+    core/precision_spec.py \
+    core/thor_frontend_utils.py \
+    core/utils/__init__.py \
+    core/utils/actions.py \
+    core/utils/hardware.py \
+    core/utils/norm_stats.py \
+    core/utils/pi05_prompt.py \
+    executors/__init__.py \
+    executors/torch_weights.py \
+    executors/weight_loader.py \
+    subgraphs/__init__.py \
+    subgraphs/capture.py \
+    subgraphs/stage_plan.py \
+    utils/__init__.py \
+    utils/paligemma_tokenizer.py; do
     _cp_file "${rel}"
   done
 
-  _cp_file hardware/__init__.py
-  [[ -f "${src}/hardware/backend.py" ]] && _cp_file hardware/backend.py
-
-  mkdir -p "${dst}/hardware/rtx"
-  for rel in attn_backend.py attn_backend_batched_pi05.py; do
-    cp -a "${src}/hardware/rtx/${rel}" "${dst}/hardware/rtx/${rel}"
-  done
   cat > "${dst}/hardware/rtx/__init__.py" <<'PY'
 """RTX attention backends (pi05_libero bundle subset)."""
 from .attn_backend import AttnBackend, RtxFlashAttnBackend, TorchFlashAttnBackend
@@ -301,17 +322,6 @@ __all__ = [
     "RtxFlashAttnBatchedBackendPi05",
 ]
 PY
-
-  mkdir -p "${dst}/core"
-  sync_tree "${src}/core" "${dst}/core" '*.so' 'rl'
-
-  mkdir -p "${dst}/executors"
-  for rel in __init__.py torch_weights.py weight_loader.py; do
-    [[ -f "${src}/executors/${rel}" ]] && cp -a "${src}/executors/${rel}" "${dst}/executors/${rel}"
-  done
-
-  mkdir -p "${dst}/utils"
-  sync_tree "${src}/utils" "${dst}/utils"
 
   log "Staged minimal flash_rt/ for pi05_libero ($(find "${dst}" -type f | wc -l) files)"
 }
@@ -512,6 +522,7 @@ while [[ $# -gt 0 ]]; do
     --build-dir) BUILD_DIR="$2"; shift 2 ;;
     -j|--jobs) JOBS="$2"; shift 2 ;;
     --pack-only|--skip-build) SKIP_BUILD=1; shift ;;
+    --stage-flash-rt-only) STAGE_FLASH_RT_ONLY=1; shift ;;
     --embed-checkpoint) EMBED_CHECKPOINT="$2"; shift 2 ;;
     --flashrt-tag) FLASHRT_TAG="$2"; shift 2 ;;
     --build-id) BUILD_ID="$2"; shift 2 ;;
@@ -542,6 +553,11 @@ if [[ "${FINALIZE_MATRIX_MANIFEST}" -eq 1 ]]; then
 fi
 
 resolve_repo_root
+if [[ "${STAGE_FLASH_RT_ONLY}" -eq 1 ]]; then
+  stage_pi05_flash_rt_minimal "${BUNDLE_DIR}/flash_rt"
+  log "Minimal flash_rt/ staged; native runtime untouched"
+  exit 0
+fi
 ensure_runtime_requirements_file
 detect_platform
 
