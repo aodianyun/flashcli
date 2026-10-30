@@ -13,13 +13,14 @@ import (
 )
 
 func TestWantFile(t *testing.T) {
-	env := "sm120-cu130-linux-x86_64-py310"
+	env := "runtime/sm120-cu130-linux-x86_64-py310"
 	cases := map[string]bool{
 		"flashcli-bundle.json": true,
 		"run.py":               true,
 		"flash_rt/api.py":      true,
 		"runtime/sm120-cu130-linux-x86_64-py310/lib.so": true,
 		"runtime/sm89-cu124-linux-x86_64-py310/lib.so":  false,
+		"runtime/shared-cell/lib.so":                    false,
 	}
 	for path, want := range cases {
 		if got := WantFile(path, env); got != want {

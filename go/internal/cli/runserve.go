@@ -113,6 +113,10 @@ func runPrelude(capability string, args []string, hf hostFlags) error {
 	if err != nil {
 		return err
 	}
+	m, err = applyEnv(m)
+	if err != nil {
+		return err
+	}
 	if _, err := manifest.ResolveVariant(m, variant); err != nil {
 		return err
 	}
@@ -194,6 +198,9 @@ func runPythonBackend(m *manifest.Manifest, root, version, variant, capability s
 	argv := inferexec.BuildArgv(python, capability, args)
 	env := inferexec.BuildEnv(os.Environ(), runtimeID, root, filepath.Dir(filepath.Dir(python)))
 	env = append(env, extraEnv...)
+	if envKey := resolveEnvKey(m); envKey != "" {
+		env = append(env, "FLASHCLI_RUNTIME_ENV_KEY="+envKey)
+	}
 	if spec := m.EntryFor(capability, variant); spec != nil && spec.Mode != "script" && hf.MTPCheckpoint != "" {
 		env = append(env, "FLASHRT_QWEN36_MTP_CKPT_DIR="+hf.MTPCheckpoint)
 	}
@@ -204,16 +211,7 @@ func runNativeABI(m *manifest.Manifest, entry *manifest.EntrySpec, root, version
 	if capability == "serve" {
 		return fmt.Errorf("native-abi serve is not implemented yet")
 	}
-	key := ""
-	if gpu := preflight.DetectGPU(); gpu != nil {
-		key = preflight.ResolveRuntimeEnvKey(m.RuntimeMap(), preflight.VariantDirName(gpu, m.PythonABIOrEmpty()))
-	}
-	if key == "" {
-		key = strings.TrimSpace(os.Getenv("FLASHCLI_RUNTIME_ENV_KEY"))
-	}
-	if key == "" {
-		key = m.SoleRuntimeKey()
-	}
+	key := resolveEnvKey(m)
 	if key == "" {
 		return errors.New("bundle has no matching runtime env key; set FLASHCLI_RUNTIME_ENV_KEY")
 	}

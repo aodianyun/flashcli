@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -72,7 +71,7 @@ func ensureBundleRef(refStr string, quiet, force bool) (string, string, string, 
 	if envKey == "" {
 		return "", "", "", fmt.Errorf("bundle %q has no runtime environment for this machine", m.Name)
 	}
-	if _, err := client.SyncBundle(ctx, repoURL, bundleDir, envKey, quiet); err != nil {
+	if _, err := client.SyncBundle(ctx, repoURL, bundleDir, m.RuntimeMap()[envKey], quiet); err != nil {
 		return "", "", "", err
 	}
 	runtimeID := runtime.IDFromRepo(repoURL, p.Name)
@@ -97,6 +96,7 @@ func ensureBundleRef(refStr string, quiet, force bool) (string, string, string, 
 		"bundle_root": bundleDir,
 		"ref":         refStr,
 		"runtime_id":  runtimeID,
+		"weights_key": weights.StoreKeyFor(m, p.Version),
 		"variant":     variant,
 	}); err != nil {
 		return "", "", "", err
@@ -136,15 +136,24 @@ func writeLocalMarkers(m *manifest.Manifest, root, variant string) (string, erro
 }
 
 func resolveEnvKey(m *manifest.Manifest) string {
-	if gpu := preflight.DetectGPU(); gpu != nil {
-		if k := preflight.ResolveRuntimeEnvKey(m.RuntimeMap(), preflight.VariantDirName(gpu, m.PythonABIOrEmpty())); k != "" {
-			return k
-		}
+	hostKey := preflight.HostEnvKey(preflight.DetectGPU(), m.PythonABIOrEmpty())
+	key, err := m.ResolveEnvKey(hostKey)
+	if err != nil {
+		return ""
 	}
-	if k := strings.TrimSpace(os.Getenv("FLASHCLI_RUNTIME_ENV_KEY")); k != "" {
-		return k
+	return key
+}
+
+// applyEnv applies a v4 environment overlay for the current host.
+func applyEnv(m *manifest.Manifest) (*manifest.Manifest, error) {
+	if m.FormatVersion < 4 {
+		return m, nil
 	}
-	return m.SoleRuntimeKey()
+	key := resolveEnvKey(m)
+	if key == "" {
+		return nil, fmt.Errorf("bundle %q has no runtime environment for this host", m.Name)
+	}
+	return m.ApplyEnv(key)
 }
 
 func pullCmd() *cobra.Command {
@@ -161,6 +170,10 @@ func pullCmd() *cobra.Command {
 				return ErrFailed
 			}
 			m, err := manifest.Load(bundleRoot)
+			if err != nil {
+				return failed(cmd, err)
+			}
+			m, err = applyEnv(m)
 			if err != nil {
 				return failed(cmd, err)
 			}

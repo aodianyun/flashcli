@@ -62,13 +62,15 @@ func (m *Manifest) NeedsPythonVenv() bool {
 
 // Manifest is a parsed bundle manifest.
 type Manifest struct {
-	Root         string
-	Name         string
-	Description  string
-	Capabilities []string
-	EntryRun     *EntrySpec
-	EntryServe   *EntrySpec
-	Raw          map[string]any
+	Root          string
+	Name          string
+	Description   string
+	FormatVersion int
+	Capabilities  []string
+	EntryRun      *EntrySpec
+	EntryServe    *EntrySpec
+	Environments  map[string]map[string]any
+	Raw           map[string]any
 }
 
 // Supports reports whether a capability is declared.
@@ -154,6 +156,9 @@ func Load(root string) (*Manifest, error) {
 // LoadData parses already-decoded manifest data. root is used for messages and
 // relative-path resolution only.
 func LoadData(data map[string]any, root string) (*Manifest, error) {
+	if v, err := intFromAny(data["format_version"]); err == nil && v == FormatVersionV4 {
+		return loadV4(data, root)
+	}
 	entryKind := "python"
 	var entryNative map[string]any
 	if entry, ok := data["entry"].(map[string]any); ok {
@@ -176,12 +181,13 @@ func LoadData(data map[string]any, root string) (*Manifest, error) {
 	}
 
 	m := &Manifest{
-		Root:        root,
-		Name:        name,
-		Description: str(data["description"]),
-		EntryRun:    entryRun,
-		EntryServe:  entryServe,
-		Raw:         data,
+		Root:          root,
+		Name:          name,
+		Description:   str(data["description"]),
+		FormatVersion: FormatVersion,
+		EntryRun:      entryRun,
+		EntryServe:    entryServe,
+		Raw:           data,
 	}
 	if entryRun != nil {
 		m.Capabilities = append(m.Capabilities, "run")

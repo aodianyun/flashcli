@@ -131,8 +131,14 @@ func orphanCachePaths() []string {
 		if key == "" {
 			continue
 		}
+		weightsKey := key
+		if markerKey := strOf(m["weights_key"]); markerKey != "" {
+			weightsKey = markerKey
+		}
 		add(filepath.Join(paths.Bundles(), filepath.FromSlash(key)))
-		add(filepath.Join(paths.Models(), filepath.FromSlash(key)))
+		if !storeKeyUsedByOtherMarkers(weightsKey, key) {
+			add(filepath.Join(paths.Models(), filepath.FromSlash(weightsKey)))
+		}
 		if rid := strOf(m["runtime_id"]); rid != "" {
 			add(runtime.Dir(rid))
 		}
@@ -161,6 +167,26 @@ func orphanCachePaths() []string {
 		}
 	}
 	return existingPaths(out)
+}
+
+func storeKeyUsedByOtherMarkers(weightsKey, currentBundleKey string) bool {
+	for _, marker := range bundleMarkers() {
+		if strOf(marker["cache_key"]) == currentBundleKey {
+			continue
+		}
+		br := strOf(marker["bundle_root"])
+		if br == "" {
+			continue
+		}
+		man, err := manifest.Load(br)
+		if err != nil || man.FormatVersion < 4 {
+			continue
+		}
+		if weights.StoreKeyFor(man, "") == weightsKey {
+			return true
+		}
+	}
+	return false
 }
 
 func matchingMarkers(refArg string) []map[string]any {
@@ -208,7 +234,19 @@ func refAllPaths(refArg string) []string {
 			if key == "" {
 				continue
 			}
-			out = append(out, filepath.Join(paths.Bundles(), filepath.FromSlash(key)), filepath.Join(paths.Models(), filepath.FromSlash(key)))
+			weightsKey := key
+			if markerKey := strOf(m["weights_key"]); markerKey != "" {
+				weightsKey = markerKey
+			} else if br := strOf(m["bundle_root"]); br != "" {
+				if man, loadErr := manifest.Load(br); loadErr == nil && man.FormatVersion >= 4 {
+					weightsKey = weights.StoreKeyFor(man, "")
+				}
+			}
+			sharedWeights := storeKeyUsedByOtherMarkers(weightsKey, key)
+			out = append(out, filepath.Join(paths.Bundles(), filepath.FromSlash(key)))
+			if !sharedWeights {
+				out = append(out, filepath.Join(paths.Models(), filepath.FromSlash(weightsKey)))
+			}
 			if rid := strOf(m["runtime_id"]); rid != "" {
 				out = append(out, runtime.Dir(rid))
 				foundRuntime = true

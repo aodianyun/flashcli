@@ -37,6 +37,9 @@ func mapString(v any, fallback string) string {
 func ResolveVariant(m *Manifest, variant string) (string, error) {
 	blocks := variantBlocksRaw(m)
 	key := strings.TrimSpace(variant)
+	if m.FormatVersion >= FormatVersionV4 && key != "" {
+		return "", fmt.Errorf("Bundle %q format_version 4 does not support @variant; use separate bundles or environments", m.Name)
+	}
 	if len(blocks) == 0 {
 		return key, nil
 	}
@@ -83,6 +86,12 @@ func validateRuntimeSuffix(m *Manifest) []string {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
+		if strings.TrimSpace(m.RuntimeMap()[k]) == "" {
+			continue
+		}
+		if _, fallback := m.Environments[k]["match"]; fallback {
+			continue
+		}
 		if !strings.HasSuffix(k, "-py"+abi) {
 			errors = append(errors, fmt.Sprintf("runtime key %q does not match python_abi=%q", k, abi))
 		}
@@ -280,8 +289,17 @@ func validateOptions(m *Manifest) []string {
 func validateBundleSpecifics(m *Manifest) []string {
 	var errors []string
 	if hasPythonEntry(m) {
-		if info, err := os.Stat(filepath.Join(m.Root, "flash_rt")); err != nil || !info.IsDir() {
-			errors = append(errors, "missing flash_rt/ Python tree")
+		hasRuntime := false
+		for _, rel := range m.RuntimeMap() {
+			if strings.TrimSpace(rel) != "" {
+				hasRuntime = true
+				break
+			}
+		}
+		if hasRuntime {
+			if info, err := os.Stat(filepath.Join(m.Root, "flash_rt")); err != nil || !info.IsDir() {
+				errors = append(errors, "missing flash_rt/ Python tree")
+			}
 		}
 	}
 	if m.Name == "groot_n17" {

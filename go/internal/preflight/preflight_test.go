@@ -1,6 +1,10 @@
 package preflight
 
-import "testing"
+import (
+	"runtime"
+	"strings"
+	"testing"
+)
 
 func TestParseEnvKey(t *testing.T) {
 	k, err := ParseEnvKey("sm89-cu124-linux-x86_64-py312")
@@ -74,5 +78,36 @@ func TestResolveRuntimeEnvKeyOverride(t *testing.T) {
 func TestTorchIndexForTag(t *testing.T) {
 	if TorchIndexForTag("130") != "cu128" || TorchIndexForTag("128") != "cu128" || TorchIndexForTag("124") != "cu124" {
 		t.Fatal("torch index mapping wrong")
+	}
+}
+
+func TestHostEnvKeyCPU(t *testing.T) {
+	if got := HostEnvKey(nil, "312"); got != "cpu-"+strings.ToLower(runtime.GOOS)+"-"+normalizeArch(runtime.GOARCH)+"-py312" {
+		t.Fatalf("CPU host key = %q", got)
+	}
+}
+
+func TestResolveEnvironmentFallback(t *testing.T) {
+	keys := []string{"nvidia-linux", "linux", "cpu-linux"}
+	matches := map[string]map[string]any{
+		"nvidia-linux": {"os": "linux", "arch": "x86_64", "python_abi": "312", "vendor": "nvidia"},
+		"linux":        {"os": "linux", "arch": "x86_64", "python_abi": "312"},
+		"cpu-linux":    {"os": "linux", "arch": "x86_64", "python_abi": "312", "vendor": "cpu"},
+	}
+	host, _ := ParseEnvKey("sm120-cu130-linux-x86_64-py312")
+	got, err := ResolveEnvironment(keys, matches, host, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "nvidia-linux" {
+		t.Fatalf("resolved = %q", got)
+	}
+	cpu, _ := ParseEnvKey("cpu-linux-x86_64-py312")
+	got, err = ResolveEnvironment(keys, matches, cpu, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "cpu-linux" {
+		t.Fatalf("CPU resolved = %q", got)
 	}
 }

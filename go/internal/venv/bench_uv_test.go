@@ -36,7 +36,7 @@ func TestUVBundleBench(t *testing.T) {
 		{"qwen_nvfp4", "/root/.flashcli/bundles/qwen_nvfp4/1.0.1/flashcli-bundle.json"},
 		{"pi05_libero", "/root/.flashcli/bundles/pi05_libero/1.0.4/flashcli-bundle.json"},
 		{"groot_n16", "/app/flashcli/bundles/groot_n16/flashcli-bundle.json"},
-		{"qwen3_vl_nvfp4", "/app/flashcli/bundles/qwen3_vl_nvfp4/flashcli-bundle.json"},
+		{"qwen3_vl_8b_nvfp4", "/app/flashcli/bundles/qwen3_vl_8b_nvfp4/flashcli-bundle.json"},
 		{"openvla_oft", "/root/.flashcli/bundles/openvla_oft/1.0.0/flashcli-bundle.json"},
 		{"groot_n17", "/app/flashcli/bundles/groot_n17/flashcli-bundle.json"},
 	}

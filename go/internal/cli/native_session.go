@@ -23,7 +23,6 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/nativeexec"
 	"github.com/aodianyun/flashcli/go/internal/paths"
 	"github.com/aodianyun/flashcli/go/internal/postpull"
-	"github.com/aodianyun/flashcli/go/internal/preflight"
 	"github.com/aodianyun/flashcli/go/internal/progress"
 )
 
@@ -372,16 +371,7 @@ func parseFloats(raw string) []float32 {
 
 // resolveRuntimeRel picks the runtime env key + manifest runtime path.
 func resolveRuntimeRel(m *manifest.Manifest) (string, string, error) {
-	key := ""
-	if gpu := preflight.DetectGPU(); gpu != nil {
-		key = preflight.ResolveRuntimeEnvKey(m.RuntimeMap(), preflight.VariantDirName(gpu, m.PythonABIOrEmpty()))
-	}
-	if key == "" {
-		key = strings.TrimSpace(os.Getenv("FLASHCLI_RUNTIME_ENV_KEY"))
-	}
-	if key == "" {
-		key = m.SoleRuntimeKey()
-	}
+	key := resolveEnvKey(m)
 	if key == "" {
 		return "", "", fmt.Errorf("bundle has no matching runtime env key; set FLASHCLI_RUNTIME_ENV_KEY")
 	}

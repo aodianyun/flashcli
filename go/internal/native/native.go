@@ -165,50 +165,49 @@ func NativeSOPaths(dir, envKey string) []string {
 	return out
 }
 
-// ValidateRuntimeMatrix checks every manifest runtime cell for recognized .so.
+// ValidateRuntimeMatrix checks every non-empty manifest runtime cell for
+// recognized native .so files. Multiple environments may share one cell.
 func ValidateRuntimeMatrix(root string, runtimeMap map[string]string) []string {
 	var errors []string
-	for envKey, rel := range runtimeMap {
-		dir := filepath.Join(root, filepath.FromSlash(strings.Trim(rel, "/")))
-		errors = append(errors, ValidateRuntimeCell(root, envKey, dir)...)
+	seen := map[string]bool{}
+	for _, rel := range runtimeMap {
+		rel = strings.Trim(rel, "/")
+		if rel == "" || seen[rel] {
+			continue
+		}
+		seen[rel] = true
+		dir := filepath.Join(root, filepath.FromSlash(rel))
+		errors = append(errors, ValidateRuntimeCell(root, rel, dir)...)
 	}
 	sort.Strings(errors)
 	return errors
 }
 
-// ValidateRuntimeCell checks one runtime/<env-key>/ directory.
-func ValidateRuntimeCell(root, envKey, nativeDir string) []string {
+// ValidateRuntimeCell checks one runtime cell directory. The directory name is
+// informational; native artifacts are identified by module_base prefix and
+// parsed build tag, not by the selected environment key.
+func ValidateRuntimeCell(root, cellLabel, nativeDir string) []string {
 	rel, _ := filepath.Rel(root, nativeDir)
 	rel = filepath.ToSlash(rel)
 	var errors []string
 	if info, err := os.Stat(nativeDir); err != nil || !info.IsDir() {
-		return []string{"missing " + rel + "/ for runtime " + quote(envKey)}
+		return []string{"missing " + rel + "/ for runtime " + quote(cellLabel)}
 	}
 
 	matched := map[string]bool{}
 	for _, name := range soFiles(nativeDir) {
-		parsed, ok := ParseFilename(name, envKey)
+		parsed, ok := ParseFilename(name, "")
 		if !ok {
-			if inferred, ok2 := ParseFilename(name, ""); ok2 && inferred.CatalogKey() != envKey {
-				errors = append(errors, rel+"/"+name+": filename tag "+quote(inferred.CatalogKey())+" does not match runtime cell "+quote(envKey))
-			} else {
-				errors = append(errors, rel+"/"+name+": unrecognized native artifact filename (expected *-*-"+envKey+".so)")
-			}
-			continue
-		}
-		if parsed.CatalogKey() != envKey {
-			errors = append(errors, rel+"/"+name+": filename tag "+quote(parsed.CatalogKey())+" does not match runtime cell "+quote(envKey))
+			errors = append(errors, rel+"/"+name+": unrecognized native artifact filename")
 			continue
 		}
 		matched[parsed.ModuleBase] = true
 	}
 	if len(matched) == 0 {
-		// Native-only cell: C libraries live under substrate/ (no top-level
-		// pybind/extension artifacts).
 		if matches, _ := filepath.Glob(filepath.Join(nativeDir, "substrate", "*.so")); len(matches) > 0 {
 			return errors
 		}
-		return append(errors, rel+"/ has no recognized native .so artifacts (expected tagged files such as *-*-"+envKey+".so)")
+		return append(errors, rel+"/ has no recognized native .so artifacts")
 	}
 
 	modules := make([]string, 0, len(matched))
@@ -221,28 +220,25 @@ func ValidateRuntimeCell(root, envKey, nativeDir string) []string {
 	for _, mod := range modules {
 		found := false
 		for _, name := range soFiles(nativeDir) {
-			parsed, ok := ParseFilename(name, envKey)
-			if ok && parsed.ModuleBase == mod && parsed.CatalogKey() == envKey {
+			parsed, ok := ParseFilename(name, "")
+			if ok && parsed.ModuleBase == mod {
 				refs = append(refs, parsed)
 				found = true
 				break
 			}
 		}
 		if !found {
-			errors = append(errors, "missing "+rel+"/"+mod+"-*-"+envKey+".so")
+			errors = append(errors, "missing "+rel+"/"+mod+"-*.so")
 		}
 	}
 	if len(refs) >= 2 {
 		ref := refs[0]
 		for _, tag := range refs[1:] {
 			if tag.PythonMinor != ref.PythonMinor {
-				errors = append(errors, envKey+": inconsistent python_abi — "+ref.ModuleBase+" -py"+ref.PythonMinor+" vs "+tag.ModuleBase+" -py"+tag.PythonMinor)
-			}
-			if tag.EnvKey != ref.EnvKey {
-				errors = append(errors, envKey+": inconsistent env key between "+ref.ModuleBase+" and "+tag.ModuleBase)
+				errors = append(errors, cellLabel+": inconsistent python_abi — "+ref.ModuleBase+" -py"+ref.PythonMinor+" vs "+tag.ModuleBase+" -py"+tag.PythonMinor)
 			}
 			if tag.FlashrtABI != ref.FlashrtABI {
-				errors = append(errors, envKey+": inconsistent FlashRT ABI segment ("+ref.ModuleBase+" "+quote(tag.FlashrtABI)+" vs "+tag.ModuleBase+" "+quote(tag.FlashrtABI)+")")
+				errors = append(errors, cellLabel+": inconsistent FlashRT ABI segment ("+ref.ModuleBase+" "+quote(ref.FlashrtABI)+" vs "+tag.ModuleBase+" "+quote(tag.FlashrtABI)+")")
 			}
 		}
 	}
@@ -270,13 +266,19 @@ except ImportError as exc:
 // pythonFor returns an interpreter path for a 3-digit minor (e.g. "310").
 func ProbeRuntimeABI(root string, runtimeMap map[string]string, pythonFor func(minor string) (string, bool)) []string {
 	var errors []string
-	for envKey, rel := range runtimeMap {
-		dir := filepath.Join(root, filepath.FromSlash(strings.Trim(rel, "/")))
+	seen := map[string]bool{}
+	for _, rel := range runtimeMap {
+		rel = strings.Trim(rel, "/")
+		if rel == "" || seen[rel] {
+			continue
+		}
+		seen[rel] = true
+		dir := filepath.Join(root, filepath.FromSlash(rel))
 		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 			continue
 		}
 		for _, name := range soFiles(dir) {
-			parsed, ok := ParseFilename(name, envKey)
+			parsed, ok := ParseFilename(name, "")
 			if !ok || parsed.PythonMinor == "" {
 				continue
 			}

@@ -2,8 +2,11 @@ package weights
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -30,6 +33,37 @@ func CacheKeyFor(m *manifest.Manifest, version string) string {
 	return TreeKey(runtime.IDFromPath(root, m.Name), "local")
 }
 
+var storeSafeRe = regexp.MustCompile(`[^A-Za-z0-9._+-]+`)
+
+// StoreKeyFor returns the weights-store key for a bundle. v3 keeps the
+// historical <name>/<version> layout; v4 derives a readable identity from
+// source/repo/revision.
+func StoreKeyFor(m *manifest.Manifest, version string) string {
+	if m.FormatVersion < 4 {
+		return CacheKeyFor(m, version)
+	}
+	spec := SpecFromMap(asStringMap(m.Raw["weights"]))
+	source := strings.ToLower(strings.TrimSpace(spec.Source))
+	if source == "" {
+		source = "huggingface"
+	}
+	repo := strings.TrimSpace(spec.Repo)
+	if repo == "" {
+		repo = m.Name
+	}
+	rev := strings.TrimSpace(spec.Revision)
+	if rev == "" {
+		rev = "main"
+	}
+	readableRepo := strings.ReplaceAll(strings.Trim(repo, "/"), "/", "__")
+	readableRepo = storeSafeRe.ReplaceAllString(readableRepo, "_")
+	readableRev := storeSafeRe.ReplaceAllString(rev, "_")
+	sum := sha256.Sum256([]byte(source + "\x00" + repo + "\x00" + rev))
+	digest := hex.EncodeToString(sum[:])[:8]
+	return "store/" + source + "/" + readableRepo + "@" + readableRev + "-" + digest
+}
+
+// HasSource reports whether a spec declares any downloadable source.
 // HasSource reports whether a spec declares any downloadable source.
 func (s Spec) HasSource() bool {
 	return s.Repo != "" || s.URL != "" || s.RelativeDir != ""
@@ -72,12 +106,19 @@ func ManifestSpecs(m *manifest.Manifest, variant string) (Spec, string, map[stri
 	rel := "checkpoint"
 	if r := strings.TrimSpace(str(m.Raw["weights_dir"])); r != "" {
 		rel = strings.Trim(r, "/")
+	} else if m.FormatVersion >= 4 {
+		// v4 default: main weights live at the weights-store root.
+		rel = ""
 	}
 	main := SpecFromMap(asStringMap(m.Raw["weights"]))
 	extra := map[string]Spec{}
 	for k, v := range asStringMap(m.Raw["extra_weights"]) {
 		if sub, ok := v.(map[string]any); ok {
-			extra[k] = SpecFromMap(sub)
+			spec := SpecFromMap(sub)
+			if m.FormatVersion >= 4 && spec.WeightsDir == "" {
+				spec.WeightsDir = "extra/" + k
+			}
+			extra[k] = spec
 		}
 	}
 	return main, rel, extra, nil
@@ -90,7 +131,7 @@ func DownloadBundle(ctx context.Context, m *manifest.Manifest, version, variant 
 	if err != nil {
 		return "", err
 	}
-	cacheDir := filepath.Join(paths.Models(), filepath.FromSlash(CacheKeyFor(m, version)))
+	cacheDir := filepath.Join(paths.Models(), filepath.FromSlash(StoreKeyFor(m, version)))
 	checkpoint := filepath.Join(cacheDir, filepath.FromSlash(rel))
 
 	if main.HasSource() {
