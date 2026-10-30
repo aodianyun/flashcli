@@ -110,3 +110,20 @@ def test_v4_runtime_less_environment(go_binary: Path, tmp_path: Path) -> None:
     bundle = _copy_bundle(tmp_path)
     out = _run(go_binary, bundle, tmp_path, key="runtime-less")
     assert "V4_RUNTIME_MATRIX_OK runtime-less" in out
+
+
+def test_v4_runtime_less_only_bundle(go_binary: Path, tmp_path: Path) -> None:
+    bundle = tmp_path / "v4_runtime_less_only"
+    shutil.copytree(FIXTURE, bundle)
+    shutil.rmtree(bundle / "flash_rt", ignore_errors=True)
+    data = json.loads((bundle / "flashcli-bundle.json").read_text(encoding="utf-8"))
+    data["environments"] = {
+        "runtime-less": {
+            "match": {"os": "linux", "arch": "x86_64", "python_abi": "312"}
+        }
+    }
+    (bundle / "flashcli-bundle.json").write_text(
+        json.dumps(data, indent=2) + "\n", encoding="utf-8"
+    )
+    out = _run(go_binary, bundle, tmp_path, key=None)
+    assert "V4_RUNTIME_MATRIX_OK runtime-less" in out
