@@ -393,6 +393,9 @@ def _effective_v4_raw(data: dict[str, Any]) -> dict[str, Any]:
     overlay.pop("runtime", None)
     raw = _merge_v4(raw, overlay)
     raw["runtime"] = runtime_map
+    # Keep the original environment blocks available to layout validation so
+    # fallback environments are not mistaken for exact runtime keys.
+    raw["environments"] = copy.deepcopy(environments)
     extras = raw.get("extra_weights")
     if isinstance(extras, dict):
         for key, spec in extras.items():

@@ -1,0 +1,63 @@
+{
+  "format": "flashcli-model-bundle",
+  "format_version": 4,
+  "protocol_version": 1,
+  "name": "v4_runtime_matrix",
+  "description": "Conformance bundle for v4 optional runtimes, shared runtime cells, and fallback match resolution.",
+  "defaults": {
+    "python_abi": "312",
+    "entry": {
+      "run": {
+        "kind": "python",
+        "module": "run",
+        "attr": "RunEngine"
+      }
+    },
+    "python_dependencies": {
+      "torch": false,
+      "pip": []
+    },
+    "weights": {
+      "source": "huggingface",
+      "repo": "example/v4_runtime_matrix",
+      "revision": "0123456789abcdef0123456789abcdef01234567"
+    },
+    "run_options": [
+      {
+        "name": "prompt",
+        "type": "string",
+        "default": "matrix",
+        "help": "Conformance prompt.",
+        "phase": "predict"
+      }
+    ]
+  },
+  "environments": {
+    "shared-nvidia": {
+      "runtime": "runtime/shared",
+      "match": {
+        "os": "linux",
+        "arch": "x86_64",
+        "python_abi": "312",
+        "vendor": "nvidia"
+      }
+    },
+    "shared-cpu": {
+      "runtime": "runtime/shared",
+      "match": {
+        "os": "linux",
+        "arch": "x86_64",
+        "python_abi": "312",
+        "vendor": "cpu"
+      }
+    },
+    "runtime-less": {
+      "match": {
+        "os": "linux",
+        "arch": "x86_64",
+        "python_abi": "312",
+        "vendor": "amd"
+      }
+    }
+  }
+}

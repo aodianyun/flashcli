@@ -110,3 +110,85 @@ def test_go_run_rejects_unsupported_capability(go_binary: Path, tmp_path: Path) 
     )
     assert proc.returncode == 1
     assert "does not support serve" in proc.stderr
+
+
+def _make_v4_runtime_less_bundle(tmp_path: Path) -> Path:
+    bundle = tmp_path / "bundle-v4"
+    bundle.mkdir()
+    (bundle / "run.py").write_text(
+        "class RunEngine:  # pragma: no cover\n    pass\n", encoding="utf-8"
+    )
+    (bundle / "flashcli-bundle.json").write_text(
+        json.dumps(
+            {
+                "format": "flashcli-model-bundle",
+                "format_version": 4,
+                "protocol_version": 1,
+                "name": "reexec_v4_runtime_less",
+                "defaults": {
+                    "python_abi": "310",
+                    "entry": {
+                        "run": {
+                            "kind": "python",
+                            "module": "run",
+                            "attr": "RunEngine",
+                        }
+                    },
+                    "python_dependencies": {
+                        "torch": {"package": "torch", "index": "auto"},
+                        "pip": [],
+                    },
+                    "run_options": [
+                        {
+                            "name": "prompt",
+                            "type": "string",
+                            "default": "hi",
+                            "help": "test prompt",
+                            "phase": "predict",
+                        }
+                    ],
+                },
+                "environments": {
+                    "cpu-fallback": {
+                        "match": {
+                            "os": "linux",
+                            "arch": "x86_64",
+                            "python_abi": "310",
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    return bundle
+
+
+def test_go_run_v4_runtime_less_fallback_reexecs(
+    go_binary: Path, tmp_path: Path
+) -> None:
+    bundle = _make_v4_runtime_less_bundle(tmp_path)
+    runtimes = tmp_path / "runtimes"
+    runtime_id = _runtime_id(str(bundle.resolve()), "reexec_v4_runtime_less")
+    _fake_venv(runtimes, runtime_id)
+
+    env = dict(
+        os.environ,
+        FLASHCLI_HOME=str(tmp_path / "home"),
+        FLASHCLI_RUNTIMES_DIR=str(runtimes),
+        FLASHCLI_SKIP_VENV_SETUP="1",
+        FLASHCLI_SKIP_PREFLIGHT="1",
+        FLASHCLI_SKIP_WEIGHTS="1",
+    )
+    proc = subprocess.run(
+        [str(go_binary), "run", str(bundle), "--prompt", "hi"],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "ARG:-m" in proc.stdout
+    assert "ARG:flashcli_bundle.infer" in proc.stdout
+    assert "ARG:run" in proc.stdout
+    assert "ARG:--prompt" in proc.stdout and "ARG:hi" in proc.stdout
+    assert f"ARG:{bundle}" in proc.stdout

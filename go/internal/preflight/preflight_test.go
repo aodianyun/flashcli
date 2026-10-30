@@ -111,3 +111,115 @@ func TestResolveEnvironmentFallback(t *testing.T) {
 		t.Fatalf("CPU resolved = %q", got)
 	}
 }
+
+func TestResolveEnvironmentTable(t *testing.T) {
+	host := EnvKey{
+		PlatformTail: "sm120-cu130", OSName: "linux", Arch: "x86_64",
+		PythonMinor: "312", SM: "120", CudaTag: "130",
+	}
+	cases := []struct {
+		name     string
+		keys     []string
+		matches  map[string]map[string]any
+		host     EnvKey
+		override string
+		want     string
+		wantErr  string
+	}{
+		{
+			name: "exact key beats more specific fallback",
+			keys: []string{"sm120-cu130-linux-x86_64-py312", "nvidia-extra"},
+			matches: map[string]map[string]any{
+				"nvidia-extra": {
+					"os": "linux", "arch": "x86_64", "python_abi": "312",
+					"vendor": "nvidia", "sm": "120", "cuda": "130",
+				},
+			},
+			host: host,
+			want: "sm120-cu130-linux-x86_64-py312",
+		},
+		{
+			name: "lists and aliases match",
+			keys: []string{"windows-arm"},
+			matches: map[string]map[string]any{
+				"windows-arm": {
+					"os": []any{"windows", "win32"}, "arch": []any{"arm64"},
+					"python_abi": "312", "vendor": []any{"nvidia", "amd"},
+				},
+			},
+			host: EnvKey{PlatformTail: "sm120-cu130", OSName: "win32", Arch: "aarch64", PythonMinor: "312"},
+			want: "windows-arm",
+		},
+		{
+			name: "sm and cuda dimensions",
+			keys: []string{"nvidia-sm120-cu130"},
+			matches: map[string]map[string]any{
+				"nvidia-sm120-cu130": {
+					"os": "linux", "arch": "x86_64", "python_abi": "312",
+					"vendor": "nvidia", "sm": "120", "cuda": []any{"130"},
+				},
+			},
+			host: host,
+			want: "nvidia-sm120-cu130",
+		},
+		{
+			name: "py prefix normalization",
+			keys: []string{"cpu"},
+			matches: map[string]map[string]any{
+				"cpu": {"os": "linux", "arch": "x86_64", "python_abi": "py312", "vendor": "cpu"},
+			},
+			host: EnvKey{PlatformTail: "cpu", OSName: "linux", Arch: "x86_64", PythonMinor: "312"},
+			want: "cpu",
+		},
+		{
+			name:     "invalid override",
+			keys:     []string{"cpu"},
+			override: "nope",
+			host:     host,
+			wantErr:  "not declared",
+		},
+		{
+			name:     "override exact key",
+			keys:     []string{"cpu", "nvidia"},
+			override: "cpu",
+			host:     host,
+			want:     "cpu",
+		},
+		{
+			name: "no match",
+			keys: []string{"windows"},
+			matches: map[string]map[string]any{
+				"windows": {"os": "windows", "arch": "x86_64", "python_abi": "312"},
+			},
+			host:    host,
+			wantErr: "no environment matches",
+		},
+		{
+			name: "same specificity tie",
+			keys: []string{"a", "b"},
+			matches: map[string]map[string]any{
+				"a": {"os": "linux", "arch": "x86_64", "python_abi": "312", "vendor": "nvidia"},
+				"b": {"os": "linux", "arch": "x86_64", "python_abi": "312", "vendor": []any{"nvidia"}},
+			},
+			host:    host,
+			wantErr: "ambiguous fallback",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ResolveEnvironment(tc.keys, tc.matches, tc.host, tc.override)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("error = %v, want contains %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

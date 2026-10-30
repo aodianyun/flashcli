@@ -244,7 +244,9 @@ def resolve_artifact_cuda_tag(
         tag = parse_variant_key(env_key).cuda_tag
         if tag:
             return tag
-    except RuntimeError:
+    except (RuntimeError, ValueError):
+        # v4 fallback/shared-runtime environment keys are not catalog keys;
+        # fall back to the detected GPU CUDA tag.
         pass
     return gpu.cuda_tag or "124"
 
