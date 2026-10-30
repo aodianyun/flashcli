@@ -86,8 +86,7 @@ log "flashrt abi: ${FLASHRT_ABI}"
 
 # ── 1. flash_rt/ Python tree (minimal: only the wan22 load path) ────────────
 # Staged from the SAME FlashRT checkout that built the .so (REPO_ROOT), so the
-# Python API and the compiled runtime are version-locked by construction. The
-# FlashRT commit is recorded in flash_rt/BUNDLE_VERSION for auditing.
+# Python API and the compiled runtime are version-locked by construction.
 PY_DST="${BUNDLE_DIR}/flash_rt"
 log "staging minimal flash_rt/ (wan22 load path only) -> ${PY_DST}"
 rm -rf "${PY_DST}"; mkdir -p "${PY_DST}"
@@ -98,11 +97,7 @@ for rel in __init__.py _extensions.py api.py \
   [[ -f "${REPO_ROOT}/flash_rt/${rel}" ]] || die "FlashRT missing flash_rt/${rel}"
   cp -a "${REPO_ROOT}/flash_rt/${rel}" "${PY_DST}/${rel}"
 done
-_commit="$(git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
-_tag="$(git -C "${REPO_ROOT}" describe --tags --always 2>/dev/null || echo dev)"
-printf 'flashrt_commit=%s\nflashrt_tag=%s\nflashrt_abi=%s\nsource_repo=%s\n' \
-  "${_commit}" "${_tag}" "${FLASHRT_ABI}" "${REPO_ROOT}" > "${PY_DST}/BUNDLE_VERSION"
-log "flash_rt/ staged ($(find "${PY_DST}" -name '*.py' | wc -l) .py files; commit ${_commit})"
+log "flash_rt/ staged ($(find "${PY_DST}" -name '*.py' | wc -l) .py files)"
 
 # ── 2. wan/ official package ────────────────────────────────────────────────
 WAN_DST="${BUNDLE_DIR}/wan"

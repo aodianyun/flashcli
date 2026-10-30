@@ -346,7 +346,7 @@ Published manifests record the immutable source repositories used to build the b
 - Do **not** publish generated details such as `runtime_version`, `build_id`, `target`, `features`, `native_artifact_tag`, or tags. They remain in the maintainer-only `.build/manifest-overlay.json`.
 - `pack` writes this minimal object from the overlay. If an older overlay has no `sources`, pack synthesizes `flashrt` from the overlay/`git remote get-url origin` + `git rev-parse HEAD`.
 - Read `dist/flashcli-bundle.json`, or run `flashcli models show <ref>`.
-- `flash_rt/BUNDLE_VERSION` / `substrate/VERSION` remain bundle-specific diagnostics, not a substitute for `build`.
+- `substrate/VERSION` remains a bundle-specific diagnostic, not a substitute for `build`.
 
 ### 3.11 Full example
 

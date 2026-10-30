@@ -346,7 +346,7 @@ host 提供的 `--checkpoint`、`--host`、`--port` 不在这里声明。environ
 - **不要**把 `runtime_version`、`build_id`、`target`、`features`、`native_artifact_tag`、tag 等生成细节写进发布 manifest；这些只保留在维护者侧的 `.build/manifest-overlay.json`。
 - `pack` 从 overlay 生成这个最小对象；旧 overlay 没有 `sources` 时，用 overlay/`git remote get-url origin` + `git rev-parse HEAD` 合成 `flashrt`。
 - 可读 `dist/flashcli-bundle.json` 或运行 `flashcli models show <ref>`。
-- `flash_rt/BUNDLE_VERSION` / `substrate/VERSION` 仍是 bundle 自有诊断，不能替代 `build`。
+- `substrate/VERSION` 仍是 bundle 自有诊断，不能替代 `build`。
 
 ### 3.11 完整示例
 

@@ -30,7 +30,7 @@ bash bundles/wan22/build.sh \
 
 Options: `--env-key`, `--flashrt-abi`, `--python-minor`. SM/CUDA are auto-detected from `nvidia-smi` / `nvcc`. When gcc-11 is present it is forced as the nvcc host compiler (glibc 2.35–compatible `.so`).
 
-Outputs: `flash_rt/`, `wan/`, `runtime/sm120-cu130-linux-x86_64-py310/*.so`, `flash_rt/BUNDLE_VERSION`
+Outputs: `flash_rt/`, `wan/`, `runtime/sm120-cu130-linux-x86_64-py310/*.so`
 
 ## 2. Pack
 
@@ -82,7 +82,7 @@ bash scripts/release_bundle.sh --bundle wan22 --clean
 ## Notes
 
 - **No FlashRT / Wan source edits**: copies are unmodified. Missing `flash_attn` is handled by a runtime rebinding of vendored Wan attention to its SDPA fallback (`run.py`).
-- **Version lock**: `flash_rt/` and the `.so` are staged from one FlashRT commit per build (`flash_rt/BUNDLE_VERSION`).
+- **Version lock**: `flash_rt/` and the `.so` are staged from one FlashRT commit per build; published provenance is in `build.sources`.
 - **Weights**: not in the zip; fetched by `pull` from ModelScope.
 
 ## Troubleshooting (build)

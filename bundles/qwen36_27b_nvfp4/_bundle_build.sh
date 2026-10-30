@@ -336,33 +336,6 @@ PY
   esac
 }
 
-# Lock flash_rt/ Python to the FlashRT commit that built the .so (wan22 / nexus style).
-write_bundle_version() {
-  local py_dir="$1"
-  local git_commit git_short flashrt_tag flashrt_abi env_key
-  git_commit="$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)"
-  git_short="$(git -C "${REPO_ROOT}" rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
-  flashrt_tag="${FLASHRT_TAG:-$(git -C "${REPO_ROOT}" describe --tags --always 2>/dev/null || echo dev)}"
-  flashrt_abi="$(sanitize_flashrt_abi "${flashrt_tag}" "${git_commit}")"
-  env_key="$(runtime_env_key "${SM}" "${CUDA_TAG}" "${OS_NAME}" "${CPU_ARCH}" "${PYTHON_MINOR}")"
-  mkdir -p "${py_dir}"
-  cat > "${py_dir}/BUNDLE_VERSION" <<EOF
-flashrt_commit=${git_commit}
-flashrt_commit_short=${git_short}
-flashrt_tag=${flashrt_tag}
-flashrt_abi=${flashrt_abi}
-source_repo=${REPO_ROOT}
-env_key=${env_key}
-sm=${SM}
-cuda_tag=${CUDA_TAG}
-os=${OS_NAME}
-arch=${CPU_ARCH}
-python_abi=${PYTHON_MINOR}
-variant=${VARIANT}
-built_at=$(date -u +%FT%TZ)
-EOF
-  log "Wrote ${py_dir}/BUNDLE_VERSION (commit ${git_short} abi ${flashrt_abi})"
-}
 
 stage_qwen_serve_modules() {
   local py_dir="$1"
@@ -534,9 +507,6 @@ stage_bundle_runtime() {
     stage_qwen_serve_modules "${py_dir}"
     find "${py_dir}" -name '*.so' -type f -delete 2>/dev/null || true
   fi
-  # Always refresh version lock so flash_rt/ matches the .so FlashRT commit.
-  write_bundle_version "${py_dir}"
-
   build_id="${BUILD_ID:-$(date -u +%Y%m%d)-sm${SM}}"
   torch_idx="$(recommended_torch_index)"
   min_drv="${MIN_DRIVER:-$(default_min_driver)}"
@@ -675,7 +645,7 @@ fi
 maybe_write_tarball
 
 log "Bundle ready: ${BUNDLE_DIR}"
-log "  flash_rt/BUNDLE_VERSION + runtime/${SM:+sm}${SM}-… staged"
+log "  flash_rt/ + runtime/${SM:+sm}${SM}-… staged"
 log "  Next: bash bundles/qwen36_27b_nvfp4/pack.sh   # writes runnable dist/"
 log "  flashcli bundle validate ${BUNDLE_DIR}/dist"
 log "  flashcli run ${BUNDLE_DIR}/dist --prompt 'Hello'"

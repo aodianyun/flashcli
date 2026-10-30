@@ -30,7 +30,7 @@ bash bundles/wan22/build.sh \
 
 可选参数：`--env-key`、`--flashrt-abi`、`--python-minor`。SM/CUDA 由 `nvidia-smi` / `nvcc` 自动探测。主机存在 gcc-11 时强制作为 nvcc 宿主编译器（产出兼容 glibc 2.35 的 `.so`）。
 
-产出：`flash_rt/`、`wan/`、`runtime/sm120-cu130-linux-x86_64-py310/*.so`、`flash_rt/BUNDLE_VERSION`
+产出：`flash_rt/`、`wan/`、`runtime/sm120-cu130-linux-x86_64-py310/*.so`
 
 ## 2. 打包
 
@@ -82,7 +82,7 @@ bash scripts/release_bundle.sh --bundle wan22 --clean
 ## 说明
 
 - **不修改 FlashRT / Wan 源码**：原样拷贝。缺少 `flash_attn` 时，由 `run.py` 在运行时将 vendored Wan 注意力重绑定到 SDPA 回退。
-- **版本锁定**：同一次构建从同一 FlashRT commit 暂存 `flash_rt/` 与 `.so`（`flash_rt/BUNDLE_VERSION`）。
+- **版本锁定**：同一次构建从同一 FlashRT commit 暂存 `flash_rt/` 与 `.so`；发布溯源见 `build.sources`。
 - **权重**：不在 zip 内；由 `pull` 从 ModelScope 拉取。
 
 ## 故障排查（构建）
