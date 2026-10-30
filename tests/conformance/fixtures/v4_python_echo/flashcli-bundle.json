@@ -1,0 +1,36 @@
+{
+  "format": "flashcli-model-bundle",
+  "format_version": 4,
+  "protocol_version": 1,
+  "name": "v4_python_echo",
+  "description": "Conformance fixture: v4 defaults + environments Python entry.",
+
+  "defaults": {
+    "entry": {
+      "run": {
+        "kind": "python",
+        "module": "run",
+        "attr": "RunEngine"
+      }
+    },
+    "python_abi": "310",
+    "python_dependencies": {
+      "pip": []
+    },
+    "run_options": [
+      {
+        "name": "prompt",
+        "type": "string",
+        "default": "hello",
+        "help": "Text to echo.",
+        "phase": "predict"
+      }
+    ]
+  },
+
+  "environments": {
+    "sm89-cu124-linux-x86_64-py310": {
+      "runtime": "runtime/sm89-cu124-linux-x86_64-py310"
+    }
+  }
+}

@@ -79,7 +79,7 @@ def test_chat_request_to_openai_body_hoists_for_flashrt():
     import importlib.util
     from pathlib import Path
 
-    path = Path(__file__).resolve().parents[1] / "bundles/qwen_nvfp4/_qwen_util.py"
+    path = Path(__file__).resolve().parents[1] / "bundles/qwen36_27b_nvfp4/_qwen_util.py"
     spec = importlib.util.spec_from_file_location("bundle_qwen_util_think_test", path)
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
@@ -98,7 +98,7 @@ def test_chat_request_to_openai_body_defaults_true_without_extras():
     import importlib.util
     from pathlib import Path
 
-    path = Path(__file__).resolve().parents[1] / "bundles/qwen_nvfp4/_qwen_util.py"
+    path = Path(__file__).resolve().parents[1] / "bundles/qwen36_27b_nvfp4/_qwen_util.py"
     spec = importlib.util.spec_from_file_location("bundle_qwen_util_think_default", path)
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)

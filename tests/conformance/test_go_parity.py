@@ -71,7 +71,7 @@ _NEGATIVE_CASES = {
 }
 
 
-@pytest.mark.parametrize("fixture", ["python_echo", "exec_echo", "abi_echo"])
+@pytest.mark.parametrize("fixture", ["python_echo", "v4_python_echo", "exec_echo", "abi_echo"])
 def test_fixtures_agree(go_binary: Path, fixture: str) -> None:
     root = FIXTURES / fixture
     data = json.loads((root / "flashcli-bundle.json").read_text(encoding="utf-8"))
