@@ -64,7 +64,7 @@ Go 主机**不** import Python infer 包；它以子进程启动（或驱动原�
 | `paths.py`、`marker.py`、`context.py`、`errors.py` | 路径、marker、激活上下文 |
 | `flashhub.py`、`flashhub_errors.py` | FlashHub index/manifest 下载 |
 | `openai_compat.py` | OpenAI 兼容 helper（不含 starlette） |
-| `native*.py`、`layout.py`、`variants.py`、`checkpoint.py`、`weights_spec.py` | bundle 布局 + checkpoint 规则 |
+| `native*.py`、`layout.py`、`checkpoint.py`、`weights_spec.py` | bundle 布局 + checkpoint 规则 |
 | `runtime/detect.py`、`runtime/requirements_spec.py`、`runtime/mirror.py` | GPU/CUDA、pip spec、镜像 |
 | `cache.py`、`post_pull.py`、`resolve.py`、`weights.py`（解析）、`activate_core.py` | 两层共用；下载/HF 逻辑留在 host |
 

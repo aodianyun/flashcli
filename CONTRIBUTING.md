@@ -184,14 +184,14 @@ Rules: short bullets, no raw commit dump, no extra sections; English (an optiona
 
 ## Adding a new bundle / preset ref
 
-1. Copy structure from `bundles/pi05_libero/`, `bundles/qwen_nvfp4/`, `bundles/groot_n16/` (script entry + `extra_weights`), or `bundles/groot_n17/` (script entry, N1.7 `set_prompt` + `infer`, no `extra_weights`).
-2. Add `flashcli-bundle.json` (format_version 3, **protocol_version 1**), `entry` modules, `release-matrix.env`, `_bundle_build.sh`.
+1. Copy structure from `bundles/pi05_libero/`, `bundles/groot_n16/`, `bundles/groot_n17/`, or `bundles/higgs_audio/`.
+2. Add a v4 `flashcli-bundle.json` (`format_version: 4`, **protocol_version 1**) with `defaults` + `environments`, entry modules, `release-matrix.env`, `_bundle_build.sh`.
 3. Declare bundle CLI flags in manifest **`run_options`** / **`serve_options`**. Entry modules import protocol/helpers from **`flashcli_bundle`** (installed via git `flashcli-bundle` subdirectory or `pip install -e ./flashcli-bundle`), not from the full `flashcli` CLI package.
 4. Follow [docs/bundle_publish_standard.md](docs/bundle_publish_standard.md) (manifest / entry spec).
 5. Build on **Linux + NVIDIA GPU** (see release checklist below).
 6. `flashcli bundle validate bundles/<name>`
 7. Smoke-test `flashcli run <ref> --help`, `flashcli run` / `flashcli serve` as applicable.
-8. Upload to [FlashHub](https://flashhub.top); document ref (e.g. `flashcli-bundle/my_model:1.0.0` or `@variant` for multi-model repos).
+8. Upload to [FlashHub](https://flashhub.top); document the ref (e.g. `flashcli-bundle/my_model:1.0.0`).
 9. Update bundle README / BUILD (and README supported-examples table if applicable).
 
 ## Release bundle checklist (maintainers)
@@ -202,9 +202,9 @@ After uploading `dist/` to FlashHub:
 
 - [ ] `bash scripts/release_bundle.sh --bundle <name> --clean` → upload `dist/` to FlashHub
 - [ ] `flashcli bundle validate bundles/<name>` and smoke `run` / `serve` on target GPU
-- [ ] Document ref strings in README / BUILD (Qwen: same repo, different `@variant`)
+- [ ] Document the v4 ref string in README / BUILD
 
-Matrix constraints: pi05 **SM89 + SM120** (cu124 on SM89; cu130 on both); qwen / qwen3_vl / groot_n16 **cu130 / SM120 / py312**; **groot_n17** **cu130 / SM120 / py310** (Isaac-GR00T) — see runtime-matrix doc.
+Matrix constraints: v4 bundles declare supported environments in `flashcli-bundle.json`; see the bundle BUILD docs and runtime-matrix reference.
 
 ## Documentation
 

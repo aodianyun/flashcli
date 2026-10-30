@@ -13,22 +13,20 @@ Published Model Bundles live on **[FlashHub](https://flashhub.top)**. Pick a rep
 ## Preset ref (FlashHub)
 
 ```text
-namespace/bundle:version[@variant]
+namespace/bundle:version
 ```
 
 Examples:
 
 ```bash
-flashcli run flashcli-bundle/pi05_libero:1.0.4
-flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen3
-flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
+flashcli run flashcli-bundle/pi05_libero:1.0.5
+flashcli run flashcli-bundle/qwen3_8b_nvfp4:1.0.0
 ```
 
 | Part | Meaning |
 |------|---------|
 | `namespace/bundle:version` | FlashHub repo slug + pinned version |
-| `@variant` | Optional; selects `variants.*` in manifest (e.g. Qwen3 vs Qwen3.6) |
-| Full URL | `https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.4` also accepted |
+| Full URL | `https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.5` also accepted |
 
 **API base** (env): `FLASHCLI_FLASHHUB_API` (default `https://flashhub-api.aodianyun.com/api/v1/repos`).  
 Browse published bundles on **[flashhub.top](https://flashhub.top)** — the public site; the API is not yet served on that domain.  
@@ -37,11 +35,14 @@ Resolved repo URL: `{FLASHCLI_FLASHHUB_API}/{namespace}/{bundle}:{version}`.
 **Local dev** (positional; directory must contain `flashcli-bundle.json`):
 
 ```bash
-flashcli run bundles/qwen_nvfp4@qwen36
-flashcli pull bundles/qwen_nvfp4@qwen36
+flashcli run bundles/pi05_libero
+flashcli pull bundles/pi05_libero
 ```
 
-Multi-variant bundles **require** `@variant` in the ref.
+## Environment selection
+
+The host first matches an exact `environments.<env>` key. If none matches, it evaluates fallback entries by their `match` dimensions (`os`, `arch`, `python_abi`, optional `vendor`, `sm`, `cuda`); more matching dimensions win. A second environment may share the same runtime directory. A runtime-less environment is pure Python/CPU fallback.
+
 
 ## After sync
 
@@ -50,28 +51,27 @@ Multi-variant bundles **require** `@variant` in the ref.
 ├── flashcli-bundle.json
 ├── run.py / serve.py
 ├── flash_rt/
-└── runtime/<env-key>/      # FlashHub sync; load .so from here at runtime
+└── runtime/<runtime-dir>/      # FlashHub sync; load .so from here at runtime
 ```
 
-> Native-only bundles (`entry.kind = native-abi|native-exec`) omit `run.py`/`serve.py` and `flash_rt/`; C libraries live under `runtime/<env-key>/substrate/`.
+> Native-only bundles (`defaults.entry.kind = native-abi|native-exec`) omit `run.py`/`serve.py` and `flash_rt/`; C libraries live under `runtime/<runtime-dir>/substrate/`.
 
-Weights are **not** in the bundle; cached under `~/.flashcli/models/<name>/<version>/<weights_dir>/` (shared tree per `<name>/<version>`; each `@variant` uses its `weights_dir`, default `checkpoint/`).
+Weights are **not** in the bundle. v4 uses a readable shared store keyed by `source + repo + revision` (normally `~/.flashcli/models/store/...`); extra weights default to `<store>/extra/<key>/`.
 
 ## End-user runtime flow
 
 1. Parse REF → local directory uses `local_root`; otherwise `bundle.repo` URL (or synced marker)
 2. FlashHub manifest → **preflight** env key on this host
-3. Download entry tree + **only** matching `runtime/<env-key>/`
+3. Download entry tree + **only** matching `runtime/<runtime-dir>/`
 4. `kind=python`: create bundle venv (`python_abi`, manifest torch). Native kinds skip the venv.
 5. `kind=python`: **re-exec** infer inside the bundle venv — [architecture.md](architecture.md). `native-exec`/`native-abi`: the host spawns / `dlopen`s the bundle backend directly.
-6. **Host** (before inference): ensure `weights` + `extra_weights` + `post_pull`. The host writes the expected remote file set to `<weights_dir>/.flashcli_download.json` **before** transferring, resumes interrupted downloads, and accepts a complete manifest offline; `flashcli pull` re-lists and rewrites it. Legacy caches (no manifest and no `.flashcli_download.incomplete`) fall back to the bundle's declared readiness.
-7. **Bundle**: resolve local checkpoint only (`HF_HUB_OFFLINE=1`); run `entry` (or the native backend)
+6. **Host** (before inference): ensure `weights` + `extra_weights` + `post_pull`. The host writes the expected remote file set to `<weights_dir>/.flashcli_download.json` **before** transferring, resumes interrupted downloads, and accepts a complete manifest offline; `flashcli pull` re-lists and rewrites it. 7. **Bundle**: resolve local checkpoint only (`HF_HUB_OFFLINE=1`); run `entry` (or the native backend)
 
 `flashcli pull <ref>` runs steps 1–6 without inference. First `flashcli run` / `serve` also runs 1–6 automatically when cache is cold.
 
 `flashcli bundle sync <ref>` pre-fetches the FlashHub tree only (no weights).
 
-**Env key and weights source** (`flashcli models show <ref>`): `sm{SM}-cu{CUDA}-linux-x86_64-py{PY}`; weights `source`/`repo`/`revision` come from `flashcli-bundle.json`.
+**Environment and weights source** (`flashcli models show <ref>`): the host selects an exact environment or matching fallback from `flashcli-bundle.json`; weights `source`/`repo`/`revision` come from the same manifest. Multiple environments may share one runtime directory.
 
 ## Execution backends (`entry.kind`)
 

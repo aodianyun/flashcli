@@ -31,9 +31,9 @@ bash scripts/verify_release.sh [--version X]  # isolated install + smoke (never 
 pytest tests/            # protocol/infer + conformance; tests/bench excluded via pyproject addopts
 pytest tests/bench/      # bench helper tests (scripts/bench_*.py)
 cd go && go build ./... && go test ./...   # gofmt is the formatter; run `gofmt -w .`
-bash scripts/verify_cache.sh   # cache-key parity / cache-hit smoke (remote+local, @variant, GPU-free)
+bash scripts/verify_cache.sh   # cache-key parity / cache-hit smoke (remote+local, GPU-free)
 ```
-Cache-key derivation is covered by `go/internal/weights/bundle_test.go` (remote repo-name / local id / variant-independent) and `go/internal/runtime/runtime_test.go` (symlink canonicalization) — keep these in sync with the `flashcli-bundle` protocol. `verify_cache.sh` is the integration counterpart (needs pulled bundles; missing prereqs SKIP).
+Cache-key derivation is covered by `go/internal/weights/bundle_test.go` (remote repo-name / local id / source+revision) and `go/internal/runtime/runtime_test.go` (symlink canonicalization) — keep these in sync with the `flashcli-bundle` protocol. `verify_cache.sh` is the integration counterpart (needs pulled bundles; missing prereqs SKIP).
 Python tests only cover `flashcli_bundle` (protocol/infer) + conformance now; install editable first. There is **no** Python lint/typecheck/formatter/CI config — do not invent commands.
 
 `tests/conformance/` is the language-agnostic execution-ABI gate (`docs/bundle_execution_abi.md`): fixtures for `python` / `native-exec` / `native-abi`. It runs Go via `FLASHCLI_GO_BIN` or a fresh `go build`; skips when Go is unavailable.
@@ -55,15 +55,16 @@ Python tests only cover `flashcli_bundle` (protocol/infer) + conformance now; in
 Details: `docs/module_layers.md`, `docs/architecture.md`, `docs/bundle_execution_abi.md`.
 
 ## Working with bundles
-- Ref syntax: FlashHub `flashcli-bundle/<name>:<version>[@variant]` or local `bundles/<name>[@variant]` (dir must contain `flashcli-bundle.json`). Multi-variant bundles (e.g. `qwen_nvfp4`) require `@variant`.
+- Ref syntax: FlashHub `flashcli-bundle/<name>:<version>` or local `bundles/<name>` (dir must contain `flashcli-bundle.json`). v4 bundles are one model / one implementation; split models into separate bundles.
 - Local dev build (needs a FlashRT clone), then run:
   ```bash
-  bash bundles/qwen_nvfp4/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
-  flashcli serve bundles/qwen_nvfp4@qwen36 --port 8000 --K 6
+  bash bundles/qwen3_8b_nvfp4/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
+  flashcli serve bundles/qwen3_8b_nvfp4 --port 8000
+  # Qwen3.6-27B is a separate bundle: bundles/qwen36_27b_nvfp4
   ```
-- Release: `bash scripts/release_bundle.sh --bundle <name> --clean` (Docker cu124/cu130 matrix) or `cd bundles/<name> && bash release.sh --clean`; validate with `flashcli bundle validate bundles/<name>`.
+- Release: `bash scripts/release_bundle.sh --bundle <name> --clean` (current host env) or `cd bundles/<name> && bash release.sh --clean`; full Docker/multi-CUDA matrix is opt-in with `--matrix`. Validate with `flashcli bundle validate bundles/<name>`.
 - Long builds/serves: `bash scripts/run_bg.sh --name JOB -- <cmd>`, then `--status` / `--tail` / `--wait` / `--stop` (logs under `logs/`).
-- Weights are never stored in the bundle; the tree is shared at `~/.flashcli/bundles/<name>/<version>/` and weights cache under `~/.flashcli/models/<name>/<version>/<weights_dir>/` (per-variant `weights_dir`, default `checkpoint/`).
+- Weights are never stored in the bundle; the tree is shared at `~/.flashcli/bundles/<name>/<version>/` and v4 weights live in the shared store `~/.flashcli/models/store/<source>/<repo>@<revision>-<hash>/` (extra weights under `extra/<key>/`).
 
 ## Conventions
 - Code, shell, and JSON/YAML comments in **English**; user docs English with a **`*.zh-CN.md` mirror kept in sync in the same change**.

@@ -11,8 +11,8 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 ## 核心原则
 
 1. **推理在 bundle 内** — bundle 拥有**全部模型专属逻辑**：前向、预处理/后处理、模态形状与 dtype、输入/输出语义、option→端口映射与默认值。flashcli 只是**通用、与模型无关的驱动器**：解析 ref、准备环境、调用 bundle 提供的接口——`kind=python` 用 `entry`，`native-exec`/`native-abi` 用声明的 model-runtime ABI + manifest `native` 块。**host（`go/`）中不得出现任何模型专属常量、形状或预处理。**
-2. **Preset ref** — 用户使用 `namespace/bundle:version[@variant]`；`FLASHCLI_FLASHHUB_API` 配置 API 基址。
-3. **manifest-first + 分包下载** — 先拉 manifest → preflight 匹配 `runtime` env key → 只下载本 env 的 `runtime/<env-key>/`。
+2. **Preset ref** — 用户使用 `namespace/bundle:version`；`FLASHCLI_FLASHHUB_API` 配置 API 基址。
+3. **manifest-first + 分包下载** — 先拉 manifest → preflight 匹配 `runtime` env key → 只下载本 env 的 `runtime/<runtime-dir>/`。
 4. **固定 Python ABI** — 每个 bundle 一个 venv（`python_abi`）；CLI 准备完成后 **re-exec** 进 bundle venv。
 5. **单一 Go 主机** — 主机为 `go/` 静态二进制；bundle venv 仅 pip **`flashcli-bundle[infer]`**（protocol + infer）。
 6. **一条命令** — `flashcli run <preset>` 串联：sync → 依赖 → 权重（主机缺失则下载）→ `post_pull` → bundle venv 内离线推理。
@@ -66,7 +66,7 @@ bundle venv **不** prepend 主机 `PYTHONPATH`。实现：Go `internal/{inferex
 
 flashcli **不** pip 依赖 `flash-rt`。`import flash_rt` 仅在 `activate_bundle()` 之后可用。
 
-## 数据流（`flashcli run flashcli-bundle/pi05_libero:1.0.4`）
+## 数据流（`flashcli run flashcli-bundle/pi05_libero:1.0.5`）
 
 ```mermaid
 sequenceDiagram
@@ -78,10 +78,10 @@ sequenceDiagram
   participant Venv as venv
   participant Infer as flashcli_bundle.infer
 
-  U->>CLI: flashcli run flashcli-bundle/pi05_libero:1.0.4
+  U->>CLI: flashcli run flashcli-bundle/pi05_libero:1.0.5
   CLI->>FH: 拉取 repo index（若未 sync）
   FH-->>CLI: files[] + download_url
-  CLI->>FH: 同步 entry 树 + runtime/<env-key>/
+  CLI->>FH: 同步 entry 树 + runtime/<runtime-dir>/
   CLI->>Pre: env key + native cell + host ABI + CUDA userland
   CLI->>W: ensure 权重（+ post_pull/extra_pull）
   CLI->>Venv: 创建 bundle venv + torch 依赖
@@ -113,9 +113,8 @@ sequenceDiagram
 **网络策略 —— `run`/`serve` 本地优先：**
 
 - 有**完整的下载清单** → 本地校验 + bundle 就绪（不联网）；
-- **无清单且无 incomplete 标记的旧缓存** → 按 bundle 声明在**本地**判断就绪（不联网）；
-- 清单文件存在但无法解析时**绝不**当作旧缓存，主机会重新列远端；
-- 清单缺失（且未接受旧缓存）或不完整时，`run`/`serve` 自动准备（需要联网）并按预期集续传；
+- 清单文件存在但无法解析时**绝不**当作完整清单，主机会重新列远端；
+- 清单缺失或不完整时，`run`/`serve` 自动准备（需要联网）并按预期集续传；
   显式 `flashcli pull` 总是重新列远端并重写预期集，即使本地清单已完整。
 
 因此**一旦准备成功**（bundle 树 + 权重 + venv/依赖），此后每次 `run`/`serve` 都**离线可用**。
@@ -147,11 +146,11 @@ bundle venv 默认用 **uv** 创建与安装（仍保持每模型隔离）。uv 
 ├── python/                  # 可选：standalone Python，供 bundle venv 使用
 ├── python-runtime.env       # provision standalone Python 后写入 FLASHCLI_PY<abi>_BIN=…
 ├── runtimes/<id>/           # bundle venv + .runtime.json marker
-├── bundles/<name>/<version>/.flashcli_bundle.json   # 同步树（所有 @variant 共享）
+├── bundles/<name>/<version>/.flashcli_bundle.json   # 同步树（所有 environments 共享）
 ├── cache/repo-index/        # FlashHub listing 缓存
 ├── cache/uv/                # uv 包缓存（默认 UV_CACHE_DIR）
 ├── tools/uv/<version>/      # 已供给的 uv 二进制
-└── models/<name>/<version>/<weights_dir>/           # 各 variant 权重（默认 checkpoint/）+
+└── models/store/<source>/<repo>@<revision>-<hash>/     # v4 共享权重 store +
                                                        #   .flashcli_download.json / .flashcli_download.incomplete
 ```
 
@@ -162,10 +161,10 @@ bundle venv 默认用 **uv** 创建与安装（仍保持每模型隔离）。uv 
 ├── flashcli-bundle.json
 ├── run.py
 ├── flash_rt/
-└── runtime/<env-key>/       # 本机 native *.so（就地加载，不拷贝到 lib/）
+└── runtime/<runtime-dir>/       # 选中 runtime 目录的 native *.so（就地加载，不拷贝到 lib/）
 ```
 
-> 仅原生 bundle 省略 `run.py` / `flash_rt/`，C 库放在 `runtime/<env-key>/substrate/`。
+> 仅原生 bundle 省略 `run.py` / `flash_rt/`，C 库放在 `runtime/<runtime-dir>/substrate/`。
 
 详见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
 
@@ -177,11 +176,15 @@ bundle venv 默认用 **uv** 创建与安装（仍保持每模型隔离）。uv 
 
 | Ref | 能力 | 说明 |
 |-----|------|------|
-| `flashcli-bundle/pi05_libero:1.0.4` | `run` | Pi0.5 LIBERO |
-| `flashcli-bundle/qwen_nvfp4:1.0.1@qwen3` | `run`, `serve` | Qwen3-8B |
-| `flashcli-bundle/qwen_nvfp4:1.0.1@qwen36` | `run`, `serve` | Qwen3.6-27B + MTP |
-| `bundles/groot_n16` *（本地 dev）* | `run` | GROOT N1.6 |
-| `bundles/groot_n17` *（本地 dev）* | `run` | GROOT N1.7 |
+| `flashcli-bundle/pi05_libero:1.0.5` | `run` | Pi0.5 LIBERO |
+| `flashcli-bundle/groot_n16:1.0.1` | `run` | GROOT N1.6 |
+| `flashcli-bundle/groot_n17:1.0.1` | `run` | GROOT N1.7 |
+| `flashcli-bundle/qwen3_8b_nvfp4:1.0.0` | `run`, `serve` | Qwen3-8B |
+| `flashcli-bundle/qwen36_27b_nvfp4:1.0.0` | `run`, `serve` | Qwen3.6-27B |
+| `flashcli-bundle/qwen3_vl_8b_nvfp4:1.0.0` | `run`, `serve` | Qwen3-VL 8B |
+| `flashcli-bundle/wan22:1.0.1` | `run` | Wan2.2 TI2V-5B |
+| `flashcli-bundle/higgs_audio:1.0.1` | `run` | Higgs Audio |
+| `flashcli-bundle/pi05_libero_nexus:1.0.3` | `run`, `serve` | Pi0.5 LIBERO Nexus |
 
 见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
 

@@ -14,8 +14,8 @@ serve。未列出的变量**无效**。布尔开关：`1`、`true`、`yes`、`on
 | `FLASHCLI_SOURCE_DIR` | 未设置 | `--from-source` 使用的已有 checkout；覆盖 `FLASHCLI_CLONE_DIR`。 |
 | `FLASHCLI_SOURCE_UPDATE` | auto | 构建前更新已有 checkout（`1`/`0`）；显式 `--source-dir` 默认 `0`。 |
 | `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | bundle venv 与 `.runtime.json` marker。 |
-| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | 同步后的 bundle 树与 `.flashcli_bundle.json` marker（`<dir>/<name>/<version>`，所有 `@variant` 共享）。 |
-| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | 权重缓存（`<dir>/<name>/<version>/<weights_dir>/`，`weights_dir` 默认 `checkpoint`），含主机预期集 `.flashcli_download.json` 与 `.flashcli_download.incomplete` 标记。 |
+| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | 同步后的 bundle 树与 `.flashcli_bundle.json` marker（`<dir>/<name>/<version>`，所有 environments 共享）。 |
+| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | v4 权重 store（`<dir>/store/<source>/<repo>@<revision>-<hash>/`；extra weights 默认 `extra/<key>/`），含主机预期集 `.flashcli_download.json` 与 `.flashcli_download.incomplete` 标记。 |
 | `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | bundle ref 与 python-standalone 的 FlashHub API 基址；浏览 [flashhub.top](https://flashhub.top)。 |
 
 `~/.flashcli` 只存运行数据。host 二进制装到 `/usr/local/bin`（root）或
@@ -26,7 +26,7 @@ serve。未列出的变量**无效**。布尔开关：`1`、`true`、`yes`、`on
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `FLASHCLI_CUDA_TAG` | 自动 | 覆盖检测到的 CUDA tag（`124`/`128`/`130`），用于 env key 匹配与 torch index。 |
-| `FLASHCLI_RUNTIME_ENV_KEY` | 自动 | 强制 `runtime/<env-key>/`（如 `sm120-cu130-linux-x86_64-py312`）。 |
+| `FLASHCLI_RUNTIME_ENV_KEY` | 自动 | 强制选中 runtime 目录（如 `sm120-cu130-linux-x86_64-py312`）。 |
 | `FLASHCLI_TORCH_INDEX` | 自动 | 覆盖 torch wheel index 名（`cu124`/`cu128`）。 |
 | `FLASHCLI_SKIP_CUDA_USERLAND` | `0` | 跳过 `libcublas`/`libcudart` 探测/安装。 |
 | `FLASHCLI_SKIP_NATIVE_HOST_ABI` | `0` | 跳过针对所选 `.so` 的 glibc/libstdc++（`GLIBC_`/`GLIBCXX_`）门禁。 |
@@ -148,14 +148,13 @@ Standalone Python 自动供给（当 bundle `python_abi` 缺失）：
 | `FLASHCLI_CHECKPOINT` | 是 | 主权重目录（绝对路径，已校验）。 |
 | `FLASHCLI_BUNDLE_ROOT` | 是 | bundle 根（绝对路径）。 |
 | `FLASHCLI_PRESET` | 是 | preset ref 字符串。 |
-| `FLASHCLI_VARIANT` | 否 | ref 含 `@variant` 时设置。 |
 | `FLASHCLI_EXTRA_WEIGHT_<KEY>` | 否 | 每个 manifest `extra_weights` key 一个（大写；非字母数字→`_`）。 |
 
 ### Engine 模式（默认）
 
 | 来源 | 说明 |
 |------|------|
-| manifest **`env`** / variant **`env`** | entry 运行前应用；展开 `{bundle_root}`、`{models_dir}`。 |
+| manifest **`env`** | entry 运行前应用；展开 `{bundle_root}`、`{models_dir}`。 |
 | **`post_pull`** | 如 `FLASH_RT_PALIGEMMA_TOKENIZER`。 |
 | **`--mtp-checkpoint`** | 设置 `FLASHRT_QWEN36_MTP_CKPT_DIR`。 |
 

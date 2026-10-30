@@ -15,8 +15,8 @@ preflight, weight downloads, the bundle venv, and serve. Anything not listed her
 | `FLASHCLI_SOURCE_DIR` | unset | Existing checkout for `--from-source`; overrides `FLASHCLI_CLONE_DIR`. |
 | `FLASHCLI_SOURCE_UPDATE` | auto | Update an existing checkout before building (`1`/`0`). Explicit `--source-dir` defaults to `0`. |
 | `FLASHCLI_RUNTIMES_DIR` | `$FLASHCLI_HOME/runtimes` | Bundle venv + `.runtime.json` markers. |
-| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | Synced bundle tree + `.flashcli_bundle.json` markers (`<dir>/<name>/<version>`, shared by all `@variant`). |
-| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | Weights cache (`<dir>/<name>/<version>/<weights_dir>/`, default `weights_dir` = `checkpoint`) with the host's `.flashcli_download.json` expected set and `.flashcli_download.incomplete` marker. |
+| `FLASHCLI_BUNDLES_DIR` | `$FLASHCLI_HOME/bundles` | Synced bundle tree + `.flashcli_bundle.json` markers (`<dir>/<name>/<version>`, shared by all environments). |
+| `FLASHCLI_MODELS_DIR` | `$FLASHCLI_HOME/models` | v4 weights store (`<dir>/store/<source>/<repo>@<revision>-<hash>/`; extra weights default `extra/<key>/`) with the host's `.flashcli_download.json` expected set and `.flashcli_download.incomplete` marker. |
 | `FLASHCLI_FLASHHUB_API` | `https://flashhub-api.aodianyun.com/api/v1/repos` | FlashHub API base for bundle refs and python-standalone. Browse at [flashhub.top](https://flashhub.top). |
 
 `~/.flashcli` holds runtime data only. The host binary is installed to
@@ -28,7 +28,7 @@ lives under `~/.flashcli/src` unless overridden.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `FLASHCLI_CUDA_TAG` | auto | Override detected CUDA tag (`124`/`128`/`130`) for env-key matching and torch index. |
-| `FLASHCLI_RUNTIME_ENV_KEY` | auto | Force the `runtime/<env-key>/` cell (e.g. `sm120-cu130-linux-x86_64-py312`). |
+| `FLASHCLI_RUNTIME_ENV_KEY` | auto | Force the selected runtime directory (e.g. `sm120-cu130-linux-x86_64-py312`). |
 | `FLASHCLI_TORCH_INDEX` | auto | Override torch wheel index name (`cu124`/`cu128`). |
 | `FLASHCLI_SKIP_CUDA_USERLAND` | `0` | Skip `libcublas`/`libcudart` probing/install (host CUDA userland). |
 | `FLASHCLI_SKIP_NATIVE_HOST_ABI` | `0` | Skip host glibc/libstdc++ (`GLIBC_`/`GLIBCXX_`) gate against the selected `.so`. |
@@ -155,14 +155,13 @@ rely only on the names below; other `FLASHCLI_*` values are internal.
 | `FLASHCLI_CHECKPOINT` | yes | Main weights directory (absolute, validated). |
 | `FLASHCLI_BUNDLE_ROOT` | yes | Bundle root (absolute). |
 | `FLASHCLI_PRESET` | yes | Preset ref string. |
-| `FLASHCLI_VARIANT` | no | Set when the ref includes `@variant`. |
 | `FLASHCLI_EXTRA_WEIGHT_<KEY>` | no | One per manifest `extra_weights` key (uppercased; non-alphanumeric → `_`). |
 
 ### Engine mode (default)
 
 | Source | Description |
 |--------|-------------|
-| manifest **`env`** / variant **`env`** | Applied before the entry; `{bundle_root}`, `{models_dir}` placeholders are expanded. |
+| manifest **`env`** | Applied before the entry; `{bundle_root}`, `{models_dir}` placeholders are expanded. |
 | **`post_pull`** | e.g. `FLASH_RT_PALIGEMMA_TOKENIZER`. |
 | **`--mtp-checkpoint`** | Sets `FLASHRT_QWEN36_MTP_CKPT_DIR`. |
 

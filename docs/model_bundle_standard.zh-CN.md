@@ -13,22 +13,20 @@
 ## Preset ref（FlashHub）
 
 ```text
-namespace/bundle:version[@variant]
+namespace/bundle:version
 ```
 
 示例：
 
 ```bash
-flashcli run flashcli-bundle/pi05_libero:1.0.4
-flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen3
-flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
+flashcli run flashcli-bundle/pi05_libero:1.0.5
+flashcli run flashcli-bundle/qwen3_8b_nvfp4:1.0.0
 ```
 
 | 部分 | 含义 |
 |------|------|
 | `namespace/bundle:version` | FlashHub repo 名 + 固定版本 |
-| `@variant` | 可选；选择 manifest `variants.*`（如 Qwen3 / Qwen3.6） |
-| 完整 URL | `https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.4` 也可 |
+| 完整 URL | `https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.5` 也可 |
 
 **API 基址**（环境变量）：`FLASHCLI_FLASHHUB_API`（默认 `https://flashhub-api.aodianyun.com/api/v1/repos`）。  
 在 **[flashhub.top](https://flashhub.top)** 浏览已发布 bundle（对外站点）；API 尚未迁移至该域名。  
@@ -37,11 +35,14 @@ flashcli run flashcli-bundle/qwen_nvfp4:1.0.1@qwen36
 **本地开发**（positional，路径下须有 `flashcli-bundle.json`）：
 
 ```bash
-flashcli run bundles/qwen_nvfp4@qwen36
-flashcli pull bundles/qwen_nvfp4@qwen36
+flashcli run bundles/pi05_libero
+flashcli pull bundles/pi05_libero
 ```
 
-多 variant bundle 的 ref **必须**带 `@variant`。
+## 环境选择
+
+host 先匹配精确 `environments.<env>` key；没有精确匹配时，再按 fallback 的 `match` 维度（`os`、`arch`、`python_abi`，可选 `vendor`、`sm`、`cuda`）选择，匹配维度越多越优先。多个 environment 可共享同一 runtime 目录；没有 runtime 的 environment 是纯 Python/CPU fallback。
+
 
 ## sync 后目录
 
@@ -50,28 +51,27 @@ flashcli pull bundles/qwen_nvfp4@qwen36
 ├── flashcli-bundle.json
 ├── run.py / serve.py
 ├── flash_rt/
-└── runtime/<env-key>/
+└── runtime/<runtime-dir>/
 ```
 
-> 仅原生 bundle（`entry.kind = native-abi|native-exec`）省略 `run.py`/`serve.py` 与 `flash_rt/`；C 库放在 `runtime/<env-key>/substrate/`。
+> 仅原生 bundle（`defaults.entry.kind = native-abi|native-exec`）省略 `run.py`/`serve.py` 与 `flash_rt/`；C 库放在 `runtime/<runtime-dir>/substrate/`。
 
-权重不在 bundle 内，缓存在 `~/.flashcli/models/<name>/<version>/<weights_dir>/`（bundle 树按 `<name>/<version>` 共享；各 `@variant` 用自己的 `weights_dir`，默认 `checkpoint/`）。
+权重不在 bundle 内。v4 使用按 `source + repo + revision` 派生的共享 store（通常在 `~/.flashcli/models/store/...`）；extra weights 默认 `<store>/extra/<key>/`。
 
 ## 终端用户运行时流程
 
 1. 解析 REF → 若为本地目录则用 `local_root`；否则 `bundle.repo`（或已 sync 的 marker）
 2. FlashHub manifest → 本机 **preflight** env key
-3. 下载 entry + 匹配的 `runtime/<env-key>/`
+3. 下载 entry + 匹配的 `runtime/<runtime-dir>/`
 4. `kind=python`：创建 bundle venv（`python_abi`、manifest 中的 torch）。native kind 跳过 venv。
 5. `kind=python`：在 bundle venv 内 **re-exec** infer — [architecture.zh-CN.md](architecture.zh-CN.md)。`native-exec`/`native-abi`：host 直接 spawn / `dlopen` bundle backend。
-6. **主机**（推理前）：确保 `weights` + `extra_weights` + `post_pull`。主机在**传输前**把远端预期文件集写入 `<weights_dir>/.flashcli_download.json`，中断后按预期集续传；完整清单可离线接受；`flashcli pull` 会重新列远端并重写清单。无清单且无 `.flashcli_download.incomplete` 的旧缓存回退到 bundle 声明的就绪规则。
-7. **bundle**：仅解析本地 checkpoint（`HF_HUB_OFFLINE=1`）；运行 `entry`（或原生 backend）
+6. **主机**（推理前）：确保 `weights` + `extra_weights` + `post_pull`。主机在**传输前**把远端预期文件集写入 `<weights_dir>/.flashcli_download.json`，中断后按预期集续传；完整清单可离线接受；`flashcli pull` 会重新列远端并重写清单。7. **bundle**：仅解析本地 checkpoint（`HF_HUB_OFFLINE=1`）；运行 `entry`（或原生 backend）
 
 `flashcli pull <ref>` 执行步骤 1–6，不进入推理。首次 `flashcli run` / `serve` 在 cache 为空时也会自动执行 1–6。
 
 `flashcli bundle sync <ref>` 仅预拉 FlashHub 目录树（不含权重）。
 
-**环境键与权重来源**（`flashcli models show <ref>`）：`sm{SM}-cu{CUDA}-linux-x86_64-py{PY}`；weights 的 `source`/`repo`/`revision` 来自 `flashcli-bundle.json`。
+**环境与权重来源**（`flashcli models show <ref>`）：host 从 `flashcli-bundle.json` 中精确 environment 或 fallback 选择；weights 的 `source`/`repo`/`revision` 来自同一 manifest。多个 environment 可共享一个 runtime 目录。
 
 ## 执行 backend（`entry.kind`）
 
