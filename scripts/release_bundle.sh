@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Unified one-command bundle release: Docker (cu124 + cu130) → lib/ matrix → zip.
+# Unified bundle release. Default: build and pack the current host environment only.
+# Use --matrix for the legacy Docker/multi-CUDA full-matrix release.
 #
 # Each bundle provides release-matrix.env + pack.sh; this script orchestrates FlashRT
-# clone, per-CUDA Docker builds, manifest finalize, matrix/ABI verify, and zip.
+# clone, the bundle build, manifest finalize/pack, and validation.
 #
 # Usage:
 #   bash scripts/release_bundle.sh --bundle pi05_libero --clean
-#   bash scripts/release_bundle.sh --bundle qwen_nvfp4 --clean
-#   cd bundles/qwen_nvfp4 && bash release.sh --clean
+#   bash scripts/release_bundle.sh --bundle qwen3_8b_nvfp4 --clean
+#   bash scripts/release_bundle.sh --bundle pi05_libero --matrix --clean
+#   cd bundles/qwen3_8b_nvfp4 && bash release.sh --clean
 #
 set -euo pipefail
 
@@ -41,11 +43,15 @@ USER_FLASHRT_REF=0
 
 GIT_REF="${GIT_REF:-main}"
 JOBS="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+MATRIX=0
 USE_DOCKER=1
 CLEAN=0
 DRY_RUN=0
 SKIP_VALIDATE=0
 ONLY_CUDA=""
+CURRENT_ENV_KEY="${FLASHCLI_RUNTIME_ENV_KEY:-}"
+CURRENT_BUILD_EXTRA="${RELEASE_CURRENT_BUILD_ARGS:-}"
+FLASHCLI_BIN="${FLASHCLI_BIN:-flashcli}"
 
 log() { printf '[release] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
@@ -102,11 +108,10 @@ install_interrupt_traps() {
 
 usage() {
   cat <<EOF
-Build and pack a flashcli model bundle release zip (multi-env lib/).
+Build and pack a flashcli model bundle release zip.
 
-Bundles declare matrix in bundles/<name>/release-matrix.env:
-  pi05_libero   sm89 × cu124/cu130 + sm120 × cu130 × py312
-  qwen_nvfp4    sm120 × cu130 × py312
+Default: current host environment only (build.sh → runtime/<env-key>/ → dist).
+--matrix restores the legacy full matrix from release-matrix.env (Docker by default).
 
 FlashRT (default — auto clone/update):
   url: ${_BUILTIN_FLASHRT_GIT_URL}
@@ -117,15 +122,17 @@ Usage:
   bash scripts/release_bundle.sh --bundle NAME [OPTIONS]
 
 Options:
-  --bundle NAME           Bundle id (e.g. pi05_libero, qwen_nvfp4)
+  --bundle NAME           Bundle id (e.g. pi05_libero, qwen3_8b_nvfp4)
   --repo-root DIR         Use local FlashRT (skip clone)
   --flashrt-repo URL      Git remote when cloning
   --flashrt-ref REF       FlashRT branch/tag/commit (default: ${_BUILTIN_FLASHRT_REF})
   --git-ref REF           Passed to manifest finalize (default: main)
   --image-cu124 IMAGE     Docker image for cu124 line
   --image-cu130 IMAGE     Docker image for cu130 line
-  --cuda-tag TAG          Build one CUDA line only (124 or 130)
-  --native                Build on host (no Docker)
+  --matrix                Full release matrix (opt-in; legacy Docker/multi-CUDA flow)
+  --cuda-tag TAG          With --matrix: build one CUDA line only (124 or 130)
+  --native                With --matrix: build on host (no Docker)
+  --env-key KEY           Current-env runtime cell to pack (default: only staged cell)
   --clean                 Remove bundle lib/, dist/, .build-matrix/, .native-cache/
   --skip-validate         Skip flashcli bundle validate
   -j, --jobs N            Parallel cmake jobs per cell
@@ -144,7 +151,9 @@ while [[ $# -gt 0 ]]; do
     --image-cu124) IMAGE_CU124="$2"; shift 2 ;;
     --image-cu130) IMAGE_CU130="$2"; shift 2 ;;
     --cuda-tag) ONLY_CUDA="$2"; shift 2 ;;
+    --matrix) MATRIX=1; shift ;;
     --native) USE_DOCKER=0; shift ;;
+    --env-key) CURRENT_ENV_KEY="$2"; shift 2 ;;
     --clean) CLEAN=1; shift ;;
     --skip-validate) SKIP_VALIDATE=1; shift ;;
     -j|--jobs) JOBS="$2"; shift 2 ;;
@@ -170,6 +179,9 @@ fi
 BUNDLE_DIR="$(resolve_bundle_dir "${FLASHCLI_ROOT}" "${BUNDLE_ARG}")" \
   || die "Cannot resolve bundle directory"
 load_release_matrix_config "${BUNDLE_DIR}" || die "Invalid release-matrix.env"
+
+CURRENT_ENV_KEY="${CURRENT_ENV_KEY:-${RELEASE_CURRENT_ENV_KEY:-}}"
+CURRENT_BUILD_EXTRA="${CURRENT_BUILD_EXTRA:-${RELEASE_CURRENT_BUILD_ARGS:-}}"
 
 # Allow CLI image overrides after config load
 IMAGE_CU124="${IMAGE_CU124:-${RELEASE_DOCKER_IMAGE_CU124:-nvcr.io/nvidia/pytorch:24.05-py3}}"
@@ -336,17 +348,44 @@ finalize_and_pack() {
     --repo-root "${REPO_ROOT}"
 }
 
+run_current_build() {
+  local build_script="${BUNDLE_DIR}/build.sh"
+  [[ -f "${build_script}" ]] || die "Missing ${build_script} for current-env release"
+  log "Current env ${RELEASE_BUNDLE_NAME}${CURRENT_ENV_KEY:+ (${CURRENT_ENV_KEY})}"
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    log "DRY: ${build_script} --repo-root ${REPO_ROOT} -j ${JOBS} ${CURRENT_BUILD_EXTRA}"
+    return 0
+  fi
+  export FLASHRT_REPO="${REPO_ROOT}"
+  if [[ -n "${CURRENT_ENV_KEY}" ]]; then
+    export FLASHCLI_RUNTIME_ENV_KEY="${CURRENT_ENV_KEY}"
+  fi
+  # shellcheck disable=SC2086
+  bash "${build_script}" --repo-root "${REPO_ROOT}" -j "${JOBS}" ${CURRENT_BUILD_EXTRA}
+}
+
+pack_current() {
+  log "Packing ${RELEASE_BUNDLE_NAME} current environment"
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    log "DRY: pack_bundle.sh --bundle-dir ${BUNDLE_DIR}${CURRENT_ENV_KEY:+ --env-key ${CURRENT_ENV_KEY}}"
+    return 0
+  fi
+  local args=(--bundle-dir "${BUNDLE_DIR}" --repo-root "${REPO_ROOT}")
+  [[ -n "${CURRENT_ENV_KEY}" ]] && args+=(--env-key "${CURRENT_ENV_KEY}")
+  bash "${PACK_SCRIPT}" "${args[@]}"
+}
+
 maybe_validate() {
   [[ "${SKIP_VALIDATE}" -eq 1 ]] && return 0
   if [[ "${DRY_RUN}" -eq 1 ]]; then
-    log "DRY: flashcli bundle validate ${BUNDLE_DIR}"
+    log "DRY: ${FLASHCLI_BIN} bundle validate ${BUNDLE_DIR}"
     return 0
   fi
-  if command -v flashcli >/dev/null 2>&1; then
-    flashcli bundle validate "${BUNDLE_DIR}"
-    log "flashcli bundle validate OK"
+  if command -v "${FLASHCLI_BIN}" >/dev/null 2>&1; then
+    "${FLASHCLI_BIN}" bundle validate "${BUNDLE_DIR}"
+    log "bundle validate OK (${FLASHCLI_BIN})"
   else
-    log "flashcli not on PATH — pack.sh matrix/ABI checks already ran"
+    log "${FLASHCLI_BIN} not on PATH — pack checks already ran"
   fi
 }
 
@@ -357,6 +396,19 @@ if [[ "${CLEAN}" -eq 1 ]]; then
     "${BUNDLE_DIR}/dist" \
     "${FLASHCLI_ROOT}/.build-matrix" \
     "${FLASHCLI_ROOT}/.native-cache"
+fi
+
+if [[ "${MATRIX}" -eq 0 ]]; then
+  if [[ "${DRY_RUN}" -eq 0 ]]; then
+    install_interrupt_traps
+  fi
+  run_current_build
+  pack_current
+  maybe_validate
+  if [[ "${DRY_RUN}" -eq 0 ]]; then
+    log "Release ready: ${BUNDLE_DIR}/dist/runtime/${CURRENT_ENV_KEY:-<env-key>}/"
+  fi
+  exit 0
 fi
 
 BUILD_CUDA_TAGS="${CUDA_TAGS}"

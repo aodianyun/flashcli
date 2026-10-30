@@ -31,6 +31,7 @@
 # MUST:
 #   - Add/update only this cell's tagged .so under lib/
 #   - Leave other lib/*.so cells untouched (--merge-native semantics)
+#   - Stage a minimal flash_rt/ tree (only modules reachable from the entry)
 #   - NOT modify flashcli-bundle.json (author manifest; write overlay only on finalize)
 #   - NOT write dist/ or delete lib/ siblings
 #
@@ -42,11 +43,12 @@
 #
 # pack contract (scripts/pack_bundle.sh)
 # --------------------------------------
-# Called with: --bundle-dir DIR --repo-root DIR
-# MUST: verify matrix + ABI, write dist/<zip> from RELEASE_PACK_FILES only
+# Called with: --bundle-dir DIR --repo-root DIR [--env-key KEY]
+# Default: pack the single staged current-env runtime cell only; matrix verify
+#          is opt-in with --verify-matrix / --all-envs.
+# MUST: write dist/ from RELEASE_PACK_FILES + current runtime cell only
 # MUST NOT: modify bundles/<name>/flashcli-bundle.json (author manifest); merge
 #           overlay + runtime map into dist/flashcli-bundle.json only
-# Zip name: {ZIP_PREFIX}-{flashrt_abi}-sm{SM}-multi-{os}-{arch}-{YYYYMMDD-HHMMSS}
 
 bundle_hook_runner() {
   printf '%s/lib/bundle_hook_runner.sh\n' "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

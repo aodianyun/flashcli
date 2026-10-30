@@ -4,6 +4,13 @@
 sanitize_flashrt_abi() {
   local tag="${1:-dev}" commit="${2:-}"
   local out
+  # Native artifact tags must stay unambiguous: a version tag containing '-'
+  # (e.g. v0.2.0-39-g66b18eb7) collides with the env-key separator. Prefer the
+  # immutable short commit whenever it is available.
+  if [[ -n "${commit}" && "${commit}" != "unknown" ]]; then
+    printf '%s\n' "${commit:0:8}"
+    return 0
+  fi
   out="$(printf '%s' "${tag}" | sed 's/[^a-zA-Z0-9._-]/-/g; s/^-*//; s/-*$//')"
   if [[ -z "${out}" || ${#out} -gt 40 ]]; then
     out="${commit:0:12}"
