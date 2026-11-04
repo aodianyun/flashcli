@@ -287,3 +287,89 @@ func TestValidateEnvironmentFallbacks(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateSystemRequirements(t *testing.T) {
+	cases := []struct {
+		name string
+		val  any
+		want string
+	}{
+		{
+			name: "valid compiler and headers",
+			val: map[string]any{
+				"requires": []any{"c-compiler", "python-headers"},
+			},
+		},
+		{
+			name: "valid compiler only",
+			val: map[string]any{
+				"requires": []any{"c-compiler"},
+			},
+		},
+		{
+			name: "unknown token",
+			val: map[string]any{
+				"requires": []any{"c-compiler", "cuda-nvcc"},
+			},
+			want: "unsupported system capability",
+		},
+		{
+			name: "duplicate token",
+			val: map[string]any{
+				"requires": []any{"c-compiler", "c-compiler"},
+			},
+			want: "duplicate system capability",
+		},
+		{
+			name: "missing requires",
+			val:  map[string]any{},
+			want: "system.requires is required",
+		},
+		{
+			name: "not an array",
+			val:  map[string]any{"requires": "c-compiler"},
+			want: "must be an array",
+		},
+		{
+			name: "non-string item",
+			val:  map[string]any{"requires": []any{"c-compiler", 1}},
+			want: "only strings",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			data := v4Fixture()
+			data["defaults"].(map[string]any)["system"] = tc.val
+			m, err := LoadData(data, "/tmp/demo")
+			if err != nil {
+				t.Fatal(err)
+			}
+			errs := validateSystemRequirements(m)
+			if tc.want == "" {
+				if len(errs) != 0 {
+					t.Fatalf("errors = %v", errs)
+				}
+				return
+			}
+			if len(errs) == 0 || !strings.Contains(strings.Join(errs, " "), tc.want) {
+				t.Fatalf("errors = %v, want %q", errs, tc.want)
+			}
+		})
+	}
+}
+
+func TestSystemRequiresPythonABIForHeaders(t *testing.T) {
+	data := v4Fixture()
+	delete(data["defaults"].(map[string]any), "python_abi")
+	data["defaults"].(map[string]any)["system"] = map[string]any{
+		"requires": []any{"python-headers"},
+	}
+	m, err := LoadData(data, "/tmp/demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := validateSystemRequirements(m)
+	if len(errs) == 0 || !strings.Contains(strings.Join(errs, " "), "requires python_abi") {
+		t.Fatalf("errors = %v", errs)
+	}
+}
