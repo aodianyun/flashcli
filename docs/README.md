@@ -22,5 +22,6 @@
 | [module_layers.md](module_layers.md) | contributors | Host / infer / protocol package boundaries |
 | [bundle_builder_guide.md](bundle_builder_guide.md) | maintainers | Build, matrix release, FlashHub upload |
 | [runtime-matrix.md](runtime-matrix.md) | maintainers | SM × CUDA × Python release matrix |
+| [application_install_plan.md](application_install_plan.md) | maintainers / integrators | FlashHub application catalog + `flashcli app` install protocol (planned) |
 
 Per-bundle commands and build docs: [`bundles/`](../bundles/README.md).
