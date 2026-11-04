@@ -11,13 +11,7 @@ One command installs an application, starts its local model service, configures 
 application to use that service, and enables autostart:
 
 ```bash
-flashcli install deepseek-harness
-```
-
-Equivalent explicit form:
-
-```bash
-flashcli app install <app-key>
+flashcli app install deepseek-harness
 ```
 
 FlashHub owns the application catalog and version metadata. flashcli fetches the
@@ -67,7 +61,7 @@ aodianyun/deepseek-harness:1.0.0
 
 ```text
 User
-  │ flashcli install <key>
+  │ flashcli app install <key>
   ▼
 flashcli
   │ 1. resolve app key
@@ -204,6 +198,54 @@ The app manifest is data only. FlashHub MUST NOT return arbitrary shell commands
 }
 ```
 
+### 7.1 Field reference
+
+| Field | Required | Description |
+|---|---|---|
+| `format` | yes | Must be `flashcli-application` |
+| `app_format_version` | yes | Application manifest schema version; first phase is `1` |
+| `protocol_version` | yes | FlashHub/application protocol version; first phase is `1` |
+| `name` | yes | Application name; canonical key is returned by FlashHub |
+| `version` | yes | Immutable application version |
+| `display_name` | recommended | Human-readable application name |
+| `supported.os` | yes | Supported operating systems |
+| `supported.arch` | yes | Supported CPU architectures |
+| `install.kind` | yes | Allowlisted installer kind (`github-release`, `archive`, `npm`, `pipx`, `homebrew`, `winget`, `docker`) |
+| `install.repo` | conditional | Source repository for artifact-based installers |
+| `install.version` | conditional | Upstream artifact version/tag |
+| `install.asset` | conditional | Artifact filename template; supports `{os}` and `{arch}` |
+| `install.sha256` | yes for downloads | Artifact checksum; host must verify before install |
+| `install.install_dir` | recommended | User-local install destination |
+| `model.bundle` | yes | Pinned Model Bundle ref used by the app |
+| `model.serve.host` | yes | Model service bind host; default should be `127.0.0.1` |
+| `model.serve.port` | yes | Requested service port; host resolves conflicts |
+| `model.serve.options` | optional | Options forwarded to the model bundle `serve` entry |
+| `model.health.url` | yes | Readiness URL; supports `{host}` and `{port}` |
+| `model.health.timeout_sec` | optional | Maximum readiness wait |
+| `config[].kind` | yes | Allowlisted adapter (`json`, `yaml`, `toml`, `env`, `ini`, `command-args`) |
+| `config[].path` | yes | User configuration file or environment file |
+| `config[].merge` | conditional | Declarative key/value patch; placeholders are expanded by host |
+| `config[].backup` | recommended | Back up the previous file before writing; default `true` |
+| `service.kind` | yes | `auto` (or a supported service backend) |
+| `service.name` | yes | Stable local service name |
+| `service.autostart` | yes | Enable the service at login/boot according to host policy |
+| `service.restart` | optional | Restart policy (`on-failure`, `always`, `no`) |
+| `service.command` | yes | Restricted template that invokes `flashcli serve`; never arbitrary shell |
+| `system.requires` | optional | Host capabilities required by the app, e.g. `c-compiler`, `python-headers` |
+
+Template placeholders:
+
+```text
+{os}          supported OS name
+{arch}        supported CPU architecture
+{bundle}      model.bundle
+{host}        resolved model service host
+{port}        resolved model service port
+{model_name}  resolved model name
+{base_url}    http://{host}:{port}/v1
+{api_key}     generated/local API key
+```
+
 Allowed installers first phase:
 
 ```text
@@ -229,8 +271,11 @@ command-args
 
 ## 8. flashcli commands
 
+Only the `flashcli app` command group is supported. There is deliberately no
+`flashcli install` alias, because it conflicts conceptually with host installation.
+
 ```bash
-flashcli install <app-key>                    # compatibility alias
+flashcli app show <app-key>
 flashcli app install <app-key> [options]
 flashcli app start <app-key>
 flashcli app stop <app-key>
@@ -336,13 +381,11 @@ reason, and rollback result.
 4. Model service creation + systemd user service.
 5. JSON/YAML/TOML/env config adapters.
 6. Health check, rollback, uninstall.
-7. `flashcli install <app-key>` alias.
-8. macOS/Windows service backends.
+7. macOS/Windows service backends.
 
 ## 15. Open decisions
 
 - Whether anonymous app metadata is public.
-- Whether `flashcli install` is a permanent alias or only documented shorthand.
 - Port allocation policy (fixed vs first-free, persisted).
 - Whether one model service can be shared by multiple applications.
 - Whether app manifests require signatures in addition to sha256.

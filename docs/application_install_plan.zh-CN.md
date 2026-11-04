@@ -9,13 +9,7 @@
 一条命令完成应用安装、本地模型服务启动、应用配置修改和自启动：
 
 ```bash
-flashcli install deepseek-harness
-```
-
-显式形式：
-
-```bash
-flashcli app install <app-key>
+flashcli app install deepseek-harness
 ```
 
 FlashHub 负责应用上架、版本和元数据；flashcli 按 key 获取应用并执行受控的声明式安装流程。
@@ -62,7 +56,7 @@ aodianyun/deepseek-harness:1.0.0
 
 ```text
 用户
-  │ flashcli install <key>
+  │ flashcli app install <key>
   ▼
 flashcli
   │ 1. 解析 app key
@@ -203,6 +197,54 @@ manifest 只能是声明式数据，不能返回任意 shell。
 }
 ```
 
+### 7.1 字段逐项说明
+
+| 字段 | 必填 | 说明 |
+|---|---|---|
+| `format` | 是 | 固定为 `flashcli-application` |
+| `app_format_version` | 是 | Application manifest schema 版本；第一期 `1` |
+| `protocol_version` | 是 | FlashHub/application 协议版本；第一期 `1` |
+| `name` | 是 | 应用名；canonical key 由 FlashHub 返回 |
+| `version` | 是 | 不可变应用版本 |
+| `display_name` | 建议 | 人类可读名称 |
+| `supported.os` | 是 | 支持的 OS |
+| `supported.arch` | 是 | 支持的 CPU 架构 |
+| `install.kind` | 是 | 白名单安装器：`github-release` / `archive` / `npm` / `pipx` / `homebrew` / `winget` / `docker` |
+| `install.repo` | 条件 | artifact 安装器的源码仓库 |
+| `install.version` | 条件 | 上游 artifact 版本/tag |
+| `install.asset` | 条件 | artifact 文件名模板，支持 `{os}` / `{arch}` |
+| `install.sha256` | 下载安装必填 | artifact 校验值；安装前必须验证 |
+| `install.install_dir` | 建议 | 用户本地安装目录 |
+| `model.bundle` | 是 | 应用使用的固定 Model Bundle ref |
+| `model.serve.host` | 是 | 模型服务监听地址，默认应为 `127.0.0.1` |
+| `model.serve.port` | 是 | 请求端口；host 负责冲突处理 |
+| `model.serve.options` | 否 | 传给 bundle `serve` entry 的选项 |
+| `model.health.url` | 是 | readiness URL；支持 `{host}` / `{port}` |
+| `model.health.timeout_sec` | 否 | 最长等待时间 |
+| `config[].kind` | 是 | 白名单 adapter：`json` / `yaml` / `toml` / `env` / `ini` / `command-args` |
+| `config[].path` | 是 | 用户配置文件或环境文件 |
+| `config[].merge` | 条件 | 声明式 key/value patch；host 展开占位符 |
+| `config[].backup` | 建议 | 修改前备份；默认 `true` |
+| `service.kind` | 是 | `auto` 或支持的 service backend |
+| `service.name` | 是 | 稳定的本地服务名 |
+| `service.autostart` | 是 | 是否按 host 策略注册登录/开机自启动 |
+| `service.restart` | 否 | 重启策略：`on-failure` / `always` / `no` |
+| `service.command` | 是 | 受限模板，只允许生成 `flashcli serve` 命令，不能是任意 shell |
+| `system.requires` | 否 | 应用需要的宿主能力，如 `c-compiler`、`python-headers` |
+
+模板占位符：
+
+```text
+{os}          支持的 OS
+{arch}        支持的 CPU 架构
+{bundle}      model.bundle
+{host}        model service host
+{port}        model service port
+{model_name}  model name
+{base_url}    http://{host}:{port}/v1
+{api_key}     生成/本地 API key
+```
+
 第一期安装器白名单：
 
 ```text
@@ -228,8 +270,10 @@ command-args
 
 ## 8. flashcli 命令
 
+仅支持 `flashcli app` 命令组。刻意不提供 `flashcli install` 别名，避免和 host 安装语义混淆。
+
 ```bash
-flashcli install <app-key>                    # 兼容别名
+flashcli app show <app-key>
 flashcli app install <app-key> [options]
 flashcli app start <app-key>
 flashcli app stop <app-key>
@@ -337,13 +381,11 @@ ROLLBACK_FAILED
 4. 模型服务 + systemd user service
 5. JSON/YAML/TOML/env 配置 adapter
 6. 健康检查、回滚、卸载
-7. `flashcli install <app-key>` 别名
-8. macOS/Windows service backend
+7. macOS/Windows service backend
 
 ## 15. 待确认
 
 - 匿名是否可以访问公开 app metadata
-- `flashcli install` 是永久别名还是文档简写
 - 端口固定分配还是自动选择并持久化
 - 一个模型服务是否允许多个应用共享
 - app manifest 是否还需要签名
