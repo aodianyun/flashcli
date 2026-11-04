@@ -30,7 +30,13 @@
         "help": "Conformance prompt.",
         "phase": "predict"
       }
-    ]
+    ],
+    "system": {
+      "requires": [
+        "c-compiler",
+        "python-headers"
+      ]
+    }
   },
   "environments": {
     "shared-nvidia": {
