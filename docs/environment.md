@@ -33,6 +33,7 @@ lives under `~/.flashcli/src` unless overridden.
 | `FLASHCLI_SKIP_CUDA_USERLAND` | `0` | Skip `libcublas`/`libcudart` probing/install (host CUDA userland). |
 | `FLASHCLI_SKIP_NATIVE_HOST_ABI` | `0` | Skip host glibc/libstdc++ (`GLIBC_`/`GLIBCXX_`) gate against the selected `.so`. |
 | `FLASHCLI_SKIP_PREFLIGHT` | `0` | Skip env-key + native cell + host ABI + CUDA preflight (debug only). |
+| `FLASHCLI_AUTO_INSTALL_SYSTEM` | `auto` | Install declared bundle system capabilities (`c-compiler`, `cxx-compiler`, `python-headers`) only as root; `never` disables. |
 
 `run`/`serve`/`pull`/`bundle sync` match the host GPU against manifest `runtime` keys, verify the
 selected cell has tagged `.so`, check host glibc/libstdc++, and ensure CUDA userland

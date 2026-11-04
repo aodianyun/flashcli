@@ -138,6 +138,7 @@ Script contracts:
 | `defaults` | yes | Model-wide configuration shared by all environments |
 | `environments` | yes | Non-empty env-key → platform overrides; every entry requires `runtime` |
 | `build` | generated | FlashRT/build provenance; written into `dist/` by pack |
+| `system` | optional | System capabilities required at runtime (see §3.4.1) |
 | `runtime_abi_version` | conditional | Required for `native-abi`; must be **1** |
 | `exec_protocol_version` | conditional | Required for `native-exec`; must be **1** |
 | `variants` / `backends` / `entries` | forbidden | v4 has one model and one implementation; split bundles instead |
@@ -195,6 +196,36 @@ A capability has exactly one implementation. Native backends use the sibling `na
 | `pip` | Additional pip packages |
 
 An environment replaces this block completely when it defines `python_dependencies`.
+
+### 3.4.1 `defaults.system` (optional)
+
+Declares host capabilities required before the bundle entry starts. Only v4 bundles
+may declare this field. It uses fixed capability tokens; package names are resolved by
+the host for the current OS.
+
+```json
+"system": {
+  "requires": ["c-compiler", "python-headers"]
+}
+```
+
+| Capability | Use |
+|---|---|
+| `c-compiler` | Native C compilation, including Triton's runtime C launcher |
+| `cxx-compiler` | C++ extensions |
+| `python-headers` | `Python.h` for the bundle `python_abi` |
+
+Rules:
+
+- `requires` is a non-empty array of unique tokens.
+- `python-headers` requires a valid `defaults.python_abi`.
+- Unknown tokens are invalid.
+- `system.optional` is not supported.
+- Bundles must not supply arbitrary package names or install commands.
+- `flashcli models show <ref>` displays requirement status; it never installs.
+- `run` / `serve` check these capabilities in the bundle context. Missing capabilities
+  fail with the distro package mapping, or are installed automatically when the host is
+  root and `FLASHCLI_AUTO_INSTALL_SYSTEM` permits it.
 
 ### 3.5 `defaults.env`
 
