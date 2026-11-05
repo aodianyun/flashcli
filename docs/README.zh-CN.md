@@ -22,6 +22,5 @@
 | [module_layers.zh-CN.md](module_layers.zh-CN.md) | 贡献者 | host / infer / protocol 包边界 |
 | [bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md) | 维护者 | 构建、矩阵发布、FlashHub 上传 |
 | [runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md) | 维护者 | SM × CUDA × Python 发布矩阵 |
-| [application_install_plan.zh-CN.md](application_install_plan.zh-CN.md) | 维护者 / 集成方 | FlashHub 应用上架 + `flashcli app` 安装协议（计划） |
 
 各 bundle 命令与构建文档：[`bundles/`](../bundles/README.zh-CN.md)。
