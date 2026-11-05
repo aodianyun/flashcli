@@ -17,6 +17,7 @@
 | [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) | 外部作者 | **权威**：manifest、entry、`.so`、FlashHub 布局 |
 | [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) | 外部作者 | `entry.kind` 后端、原生进程/`.so` 契约、conformance |
 | [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | 集成方 | preset ref 语法 + 运行时流程 |
+| [flashserver.zh-CN.md](flashserver.zh-CN.md) | 用户 / 集成方 | 常驻调度器、安装、WSL2、资源准入 |
 | [environment.zh-CN.md](environment.zh-CN.md) | 用户 | 环境变量、镜像、缓存路径 |
 | [architecture.zh-CN.md](architecture.zh-CN.md) | 贡献者 | 运行时流程、核心原则、host 与 bundle |
 | [module_layers.zh-CN.md](module_layers.zh-CN.md) | 贡献者 | host / infer / protocol 包边界 |

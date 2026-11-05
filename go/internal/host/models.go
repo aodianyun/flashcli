@@ -1,0 +1,214 @@
+// Package host contains model-agnostic host services shared by the CLI and
+// flashserver. It intentionally does not import the CLI presentation layer.
+package host
+
+import (
+	"encoding/json"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/aodianyun/flashcli/go/internal/flashhub"
+	"github.com/aodianyun/flashcli/go/internal/manifest"
+	"github.com/aodianyun/flashcli/go/internal/paths"
+	"github.com/aodianyun/flashcli/go/internal/weights"
+)
+
+// Model is a locally cached bundle/model view for the HTTP API.
+type Model struct {
+	Ref           string `json:"ref"`
+	CacheKey      string `json:"cache_key"`
+	Variant       string `json:"variant,omitempty"`
+	BundleCached  bool   `json:"bundle_cached"`
+	WeightsCached bool   `json:"weights_cached"`
+	BundleBytes   int64  `json:"bundle_bytes"`
+	WeightsBytes  int64  `json:"weights_bytes"`
+	Directory     string `json:"directory"`
+	WeightsSource string `json:"weights_source,omitempty"`
+	WeightsRepo   string `json:"weights_repo,omitempty"`
+	WeightsRev    string `json:"weights_revision,omitempty"`
+}
+
+// Area is one cache area for /v1/storage.
+type Area struct {
+	Name  string `json:"name"`
+	Path  string `json:"path"`
+	Bytes int64  `json:"bytes"`
+}
+
+// ListModels returns locally cached bundle/model entries. It is intentionally
+// local-only; FlashHub catalog expansion can be added on top later.
+func ListModels() ([]Model, error) {
+	markers, err := readMarkers()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Model, 0, len(markers))
+	for _, marker := range markers {
+		key := stringValue(marker["cache_key"])
+		if key == "" {
+			continue
+		}
+		ref := stringValue(marker["ref"])
+		if ref == "" {
+			ref = key
+		}
+		variant := stringValue(marker["variant"])
+		bundleRoot := stringValue(marker["bundle_root"])
+		bundleOK := bundleRootUsable(bundleRoot)
+		weightsKey := markerWeightsKey(marker, key, bundleRoot)
+		weightsOK, source, repo, rev := weightsInfo(weightsKey, bundleRoot, variant)
+		out = append(out, Model{
+			Ref:           ref,
+			CacheKey:      key,
+			Variant:       variant,
+			BundleCached:  bundleOK,
+			WeightsCached: weightsOK,
+			BundleBytes:   dirSize(filepath.Join(paths.Bundles(), filepath.FromSlash(key))),
+			WeightsBytes:  dirSize(filepath.Join(paths.Models(), filepath.FromSlash(weightsKey))),
+			Directory:     filepath.ToSlash(filepath.Join(paths.Home(), "{bundles,models}", weightsKey)),
+			WeightsSource: source,
+			WeightsRepo:   repo,
+			WeightsRev:    rev,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CacheKey < out[j].CacheKey })
+	return out, nil
+}
+
+// Storage returns apparent sizes for the local cache areas.
+func Storage() []Area {
+	items := []struct {
+		name string
+		path string
+	}{
+		{"bundles", paths.Bundles()},
+		{"models", paths.Models()},
+		{"runtimes", paths.Runtimes()},
+		{"cache", filepath.Join(paths.Home(), "cache")},
+		{"tools", filepath.Join(paths.Home(), "tools")},
+		{"python", filepath.Join(paths.Home(), "python")},
+	}
+	out := make([]Area, 0, len(items))
+	for _, item := range items {
+		out = append(out, Area{Name: item.name, Path: filepath.ToSlash(item.path), Bytes: dirSize(item.path)})
+	}
+	return out
+}
+
+func readMarkers() ([]map[string]any, error) {
+	root := paths.Bundles()
+	var out []map[string]any
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if d.IsDir() || d.Name() != flashhub.MarkerName {
+			return nil
+		}
+		blob, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		var marker map[string]any
+		if json.Unmarshal(blob, &marker) != nil {
+			return nil
+		}
+		rel, err := filepath.Rel(root, filepath.Dir(path))
+		if err == nil {
+			marker["cache_key"] = filepath.ToSlash(rel)
+		}
+		out = append(out, marker)
+		return nil
+	})
+	return out, err
+}
+
+func bundleRootUsable(root string) bool {
+	if strings.TrimSpace(root) == "" {
+		return false
+	}
+	info, err := os.Stat(root)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	_, err = manifest.Load(root)
+	return err == nil
+}
+
+func markerWeightsKey(marker map[string]any, fallback, bundleRoot string) string {
+	if key := stringValue(marker["weights_key"]); key != "" {
+		return key
+	}
+	if !bundleRootUsable(bundleRoot) {
+		return fallback
+	}
+	m, err := manifest.Load(bundleRoot)
+	if err != nil || m.FormatVersion < 4 {
+		return fallback
+	}
+	return weights.StoreKeyFor(m, "")
+}
+
+func weightsInfo(weightsKey, bundleRoot, variant string) (bool, string, string, string) {
+	if !bundleRootUsable(bundleRoot) {
+		return false, "", "", ""
+	}
+	m, err := manifest.Load(bundleRoot)
+	if err != nil {
+		return false, "", "", ""
+	}
+	spec, rel, _, err := weights.ManifestSpecs(m, variant)
+	if err != nil {
+		if variant == "" {
+			return markerCached(filepath.Join(paths.Models(), filepath.FromSlash(weightsKey), "checkpoint")), "", "", ""
+		}
+		return false, "", "", ""
+	}
+	if rel == "" && m.FormatVersion < 4 {
+		rel = "checkpoint"
+	}
+	dir := filepath.Join(paths.Models(), filepath.FromSlash(weightsKey), filepath.FromSlash(rel))
+	if weights.IsCached(dir, spec) {
+		return true, spec.Source, spec.Repo, spec.Revision
+	}
+	return false, spec.Source, spec.Repo, spec.Revision
+}
+
+func markerCached(dir string) bool {
+	if _, err := os.Stat(filepath.Join(dir, ".flashcli_download.incomplete")); err == nil {
+		return false
+	}
+	cp, ok := weights.ReadMarker(dir)
+	if !ok {
+		return false
+	}
+	info, err := os.Stat(cp)
+	return err == nil && info.IsDir()
+}
+
+func dirSize(root string) int64 {
+	var total int64
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if info, err := d.Info(); err == nil {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
+}
+
+func stringValue(v any) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}

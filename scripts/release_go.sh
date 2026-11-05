@@ -15,7 +15,9 @@
 # Repo overrides: GITEE_REPO (default aodiansoft/flashcli), GH_REPO (default aodianyun/flashcli).
 #
 # Artifacts (dist/go/):
-#   flashcli-<os>-<arch>   (raw binaries; consumed by install.sh)
+#   flashcli-<os>-<arch>          (raw binary; consumed by install.sh)
+#   flashserver-<os>-<arch>       (resident scheduler)
+#   flashserver-setup-<os>-<arch> (installer; Windows asset is .exe)
 #   sha256sums.txt
 set -euo pipefail
 
@@ -71,10 +73,10 @@ ensure_tag() {
 publish_github() {
   if command -v gh >/dev/null 2>&1; then
     echo "GitHub: gh release ${TAG} ..."
-    gh release create "$TAG" "$OUT"/flashcli-* "$OUT"/sha256sums.txt \
+    gh release create "$TAG" "$OUT"/flashcli-* "$OUT"/flashserver-* "$OUT"/sha256sums.txt \
       --title "flashcli ${VERSION}" \
       --notes "flashcli-go ${VERSION} (static binaries + sha256sums)" \
-      || gh release upload "$TAG" "$OUT"/flashcli-* "$OUT"/sha256sums.txt --clobber
+      || gh release upload "$TAG" "$OUT"/flashcli-* "$OUT"/flashserver-* "$OUT"/sha256sums.txt --clobber
     echo "[ok] GitHub ${TAG}"
     return 0
   fi
@@ -96,7 +98,7 @@ publish_github() {
       return 1
     fi
   fi
-  for f in "$OUT"/flashcli-linux-amd64 "$OUT"/flashcli-linux-arm64 "$OUT"/sha256sums.txt; do
+  for f in "$OUT"/flashcli-* "$OUT"/flashserver-* "$OUT"/sha256sums.txt; do
     [ -f "$f" ] || continue
     curl -sS -X POST -H "Authorization: token ${tok}" -H "Content-Type: application/octet-stream" \
       --data-binary "@${f}" "https://uploads.github.com/repos/${GH_REPO}/releases/${rid}/assets?name=$(basename "$f")" >/dev/null \
@@ -150,7 +152,7 @@ publish_gitee() {
     fi
   fi
 
-  for f in "$OUT"/flashcli-linux-amd64 "$OUT"/flashcli-linux-arm64 "$OUT"/sha256sums.txt; do
+  for f in "$OUT"/flashcli-* "$OUT"/flashserver-* "$OUT"/sha256sums.txt; do
     [ -f "$f" ] || continue
     resp="$(curl -sS -w $'\n%{http_code}' -X POST "${api}/releases/${rid}/attach_files" \
       -F "access_token=${GITEE_TOKEN}" -F "file=@${f}")"

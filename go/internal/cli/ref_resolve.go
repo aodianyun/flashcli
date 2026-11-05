@@ -3,157 +3,33 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
-	"github.com/aodianyun/flashcli/go/internal/flashhub"
+	"github.com/aodianyun/flashcli/go/internal/host"
 	"github.com/aodianyun/flashcli/go/internal/manifest"
-	"github.com/aodianyun/flashcli/go/internal/paths"
-	"github.com/aodianyun/flashcli/go/internal/preflight"
 	"github.com/aodianyun/flashcli/go/internal/ref"
-	"github.com/aodianyun/flashcli/go/internal/runtime"
-	"github.com/aodianyun/flashcli/go/internal/version"
 	"github.com/aodianyun/flashcli/go/internal/weights"
 )
 
-// ensureBundleRef resolves a local path or FlashHub ref to a local bundle root,
-// syncing the tree from FlashHub on first use. Returns (root, version, variant).
+// ensureBundleRef delegates to the shared host service.
 func ensureBundleRef(refStr string, quiet, force bool) (string, string, string, error) {
-	body, variant, err := ref.SplitVariant(refStr)
-	if err != nil {
-		return "", "", "", err
-	}
-	if !ref.IsFlashHub(refStr) {
-		abs, err := filepath.Abs(body)
-		if err != nil {
-			return "", "", "", err
-		}
-		return abs, "local", variant, nil
-	}
-
-	p, err := ref.Parse(refStr)
-	if err != nil {
-		return "", "", "", err
-	}
-	repoURL, err := flashhub.RepoURL(flashhub.APIBase(), p.Namespace, p.Name, p.Version)
-	if err != nil {
-		return "", "", "", err
-	}
-	cacheKey := weights.TreeKey(p.Name, p.Version)
-	bundleDir := filepath.Join(paths.Bundles(), filepath.FromSlash(cacheKey))
-	manifestPath := filepath.Join(bundleDir, flashhub.ManifestPath)
-	doneMarker := filepath.Join(bundleDir, flashhub.MarkerName)
-
-	// Only treat the tree as synced when the completion marker exists (written
-	// after a full sync). A lone manifest (interrupted sync) must re-sync.
-	if _, err := os.Stat(doneMarker); err == nil && !force {
-		return bundleDir, p.Version, variant, nil
-	}
-
-	client := flashhub.NewClient()
-	client.UserAgent = "flashcli/" + version.Version
-	ctx := context.Background()
-
-	manifestMap, err := client.DownloadManifest(ctx, repoURL, manifestPath, false, quiet)
-	if err != nil {
-		return "", "", "", err
-	}
-	m, err := manifest.LoadData(manifestMap, bundleDir)
-	if err != nil {
-		return "", "", "", err
-	}
-	if _, err := manifest.ResolveVariant(m, variant); err != nil {
-		return "", "", "", err
-	}
-	envKey := resolveEnvKey(m)
-	if envKey == "" {
-		return "", "", "", fmt.Errorf("bundle %q has no runtime environment for this machine", m.Name)
-	}
-	if _, err := client.SyncBundle(ctx, repoURL, bundleDir, m.RuntimeMap()[envKey], quiet); err != nil {
-		return "", "", "", err
-	}
-	runtimeID := runtime.IDFromRepo(repoURL, p.Name)
-	abi := m.PythonABIOrEmpty()
-	if err := runtime.WriteMarker(runtimeID, map[string]any{
-		"runtime_id":  runtimeID,
-		"source":      "repo",
-		"repo_url":    repoURL,
-		"env_key":     envKey,
-		"python_abi":  abi,
-		"bundle_root": bundleDir,
-		"preset":      m.Name,
-		"variant":     variant,
-	}); err != nil {
-		return "", "", "", err
-	}
-	if err := flashhub.WriteMarker(bundleDir, map[string]any{
-		"source":      "flashhub",
-		"repo_url":    repoURL,
-		"cache_key":   cacheKey,
-		"env_key":     envKey,
-		"bundle_root": bundleDir,
-		"ref":         refStr,
-		"runtime_id":  runtimeID,
-		"weights_key": weights.StoreKeyFor(m, p.Version),
-		"variant":     variant,
-	}); err != nil {
-		return "", "", "", err
-	}
-	if !quiet {
-		fmt.Fprintf(os.Stderr, "Synced %s -> %s (env %s)\n", refStr, bundleDir, envKey)
-	}
-	return bundleDir, p.Version, variant, nil
+	return host.EnsureBundle(refStr, quiet, force)
 }
 
-// writeLocalMarkers records runtime + preset markers for a local bundle.
+// writeLocalMarkers delegates to the shared host service.
 func writeLocalMarkers(m *manifest.Manifest, root, variant string) (string, error) {
-	runtimeID := runtime.IDFromPath(root, m.Name)
-	envKey := resolveEnvKey(m)
-	if err := runtime.WriteMarker(runtimeID, map[string]any{
-		"runtime_id":  runtimeID,
-		"source":      "local",
-		"local_root":  root,
-		"bundle_root": root,
-		"env_key":     envKey,
-		"preset":      m.Name,
-	}); err != nil {
-		return "", err
-	}
-	key := weights.CacheKeyFor(m, "local")
-	if err := runtime.WritePresetMarker(key, map[string]any{
-		"source":      "local",
-		"local_root":  root,
-		"runtime_id":  runtimeID,
-		"bundle_root": root,
-		"env_key":     envKey,
-		"ref":         m.Name,
-	}); err != nil {
-		return "", err
-	}
-	return runtimeID, nil
+	return host.WriteLocalMarkers(m, root, variant)
 }
 
+// resolveEnvKey delegates to the shared host service.
 func resolveEnvKey(m *manifest.Manifest) string {
-	hostKey := preflight.HostEnvKey(preflight.DetectGPU(), m.PythonABIOrEmpty())
-	key, err := m.ResolveEnvKey(hostKey)
-	if err != nil {
-		return ""
-	}
-	return key
+	return host.ResolveEnvKey(m)
 }
 
 // applyEnv applies a v4 environment overlay for the current host.
 func applyEnv(m *manifest.Manifest) (*manifest.Manifest, error) {
-	if m.FormatVersion < 4 {
-		return m, nil
-	}
-	key := resolveEnvKey(m)
-	if key == "" {
-		return nil, fmt.Errorf("bundle %q has no runtime environment for this host", m.Name)
-	}
-	return m.ApplyEnv(key)
+	return host.ApplyEnv(m)
 }
 
 func pullCmd() *cobra.Command {
