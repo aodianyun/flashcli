@@ -18,6 +18,14 @@ _SAFE = re.compile(r"[^A-Za-z0-9._+\-]+")
 _RUNTIME_ENV = "sm120-cu130-linux-x86_64-py312"
 
 
+def _add_elf_inspector(bin_dir: Path) -> None:
+    for name in ("readelf", "objdump"):
+        tool = shutil.which(name)
+        if tool:
+            os.symlink(tool, bin_dir / name)
+            return
+
+
 def _runtime_id(path: Path, name: str) -> str:
     safe = _SAFE.sub("-", name.strip()).strip("-") or "bundle"
     digest = hashlib.sha256(str(path).encode()).hexdigest()[:12]
@@ -96,9 +104,24 @@ def _run(go_binary: Path, bundle: Path, tmp_path: Path, *, key: str | None) -> s
     return proc.stdout
 
 
-def _invoke(go_binary: Path, bundle: Path, tmp_path: Path, *, key: str | None) -> subprocess.CompletedProcess[str]:
+def _invoke(
+    go_binary: Path,
+    bundle: Path,
+    tmp_path: Path,
+    *,
+    key: str | None,
+    extra_env: dict[str, str] | None = None,
+    fake_python: str | None = None,
+    fake_bin: Path | None = None,
+) -> subprocess.CompletedProcess[str]:
     runtimes = tmp_path / "runtimes"
-    _make_real_venv(bundle, runtimes)
+    if fake_python is not None:
+        python = runtimes / _runtime_id(bundle, "v4_runtime_matrix") / "venv" / "bin" / "python"
+        python.parent.mkdir(parents=True)
+        python.write_text(fake_python, encoding="utf-8")
+        python.chmod(0o755)
+    else:
+        _make_real_venv(bundle, runtimes)
     env = dict(
         os.environ,
         FLASHCLI_HOME=str(tmp_path / "home"),
@@ -107,8 +130,12 @@ def _invoke(go_binary: Path, bundle: Path, tmp_path: Path, *, key: str | None) -
         FLASHCLI_SKIP_WEIGHTS="1",
         FLASHCLI_SKIP_CUDA_USERLAND="1",
     )
+    if fake_bin is not None:
+        env["PATH"] = str(fake_bin)
     if key:
         env["FLASHCLI_RUNTIME_ENV_KEY"] = key
+    if extra_env:
+        env.update(extra_env)
     checkpoint = tmp_path / "checkpoint"
     checkpoint.mkdir(exist_ok=True)
     return subprocess.run(
@@ -230,3 +257,99 @@ def test_v4_fallback_ambiguous_is_rejected(go_binary: Path, tmp_path: Path) -> N
     proc = _invoke(go_binary, bundle, tmp_path, key=None)
     assert proc.returncode != 0
     assert "ambiguous fallback" in proc.stderr or "ambiguous fallback" in proc.stdout
+
+
+def test_v4_missing_c_compiler_never_fails_before_entry(
+    go_binary: Path, tmp_path: Path
+) -> None:
+    bundle = _copy_bundle(tmp_path)
+    empty = tmp_path / "empty-bin"
+    empty.mkdir()
+    _add_elf_inspector(empty)
+    proc = _invoke(
+        go_binary,
+        bundle,
+        tmp_path,
+        key=None,
+        fake_bin=empty,
+        extra_env={"FLASHCLI_AUTO_INSTALL_SYSTEM": "never"},
+    )
+    assert proc.returncode != 0
+    assert "c-compiler" in proc.stderr
+    assert "install:" in proc.stderr
+
+
+def test_v4_missing_c_compiler_auto_install_fake_apt(
+    go_binary: Path, tmp_path: Path
+) -> None:
+    if os.geteuid() != 0:
+        pytest.skip("root is required to exercise automatic system package installation")
+    bundle = _copy_bundle(tmp_path)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    _add_elf_inspector(fake_bin)
+    nvidia_smi = shutil.which("nvidia-smi")
+    if nvidia_smi:
+        os.symlink(nvidia_smi, fake_bin / "nvidia-smi")
+    cc_source = fake_bin / "cc-source"
+    cc_source.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    cc_source.chmod(0o755)
+    apt = fake_bin / "apt-get"
+    apt.write_text(
+        "#!/bin/sh\n"
+        "if [ \"$1\" = update ]; then exit 0; fi\n"
+        f"/bin/cp \"{cc_source}\" \"{fake_bin}/cc\"\n",
+        encoding="utf-8",
+    )
+    apt.chmod(0o755)
+    proc = _invoke(
+        go_binary,
+        bundle,
+        tmp_path,
+        key=None,
+        fake_bin=fake_bin,
+        extra_env={"FLASHCLI_AUTO_INSTALL_SYSTEM": "auto"},
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "V4_RUNTIME_MATRIX_OK" in proc.stdout
+
+
+def test_v4_missing_python_headers_fails(
+    go_binary: Path, tmp_path: Path
+) -> None:
+    bundle = _copy_bundle(tmp_path)
+    fake = "#!/bin/sh\necho '{\"include\":\"/nonexistent\",\"platinclude\":\"\"}'\n"
+    proc = _invoke(
+        go_binary,
+        bundle,
+        tmp_path,
+        key=None,
+        fake_python=fake,
+        extra_env={"FLASHCLI_AUTO_INSTALL_SYSTEM": "never"},
+    )
+    assert proc.returncode != 0
+    assert "python-headers" in proc.stderr
+    assert "install:" in proc.stderr
+
+
+def test_v4_auto_install_failure_reports_reason(go_binary: Path, tmp_path: Path) -> None:
+    if os.geteuid() != 0:
+        pytest.skip("root is required to exercise automatic system package installation")
+    bundle = _copy_bundle(tmp_path)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    _add_elf_inspector(fake_bin)
+    apt = fake_bin / "apt-get"
+    apt.write_text("#!/bin/sh\nexit 42\n", encoding="utf-8")
+    apt.chmod(0o755)
+    proc = _invoke(
+        go_binary,
+        bundle,
+        tmp_path,
+        key=None,
+        fake_bin=fake_bin,
+        extra_env={"FLASHCLI_AUTO_INSTALL_SYSTEM": "auto"},
+    )
+    assert proc.returncode != 0
+    assert "system capability installation failed" in proc.stderr
+    assert "apt-get" in proc.stderr

@@ -196,6 +196,34 @@ flashcli run flashcli-bundle/qwen3_8b_nvfp4:1.0.0
 
 environment 定义 `python_dependencies` 时整体替换 defaults。
 
+### 3.4.1 `defaults.system`（可选）
+
+声明 bundle entry 启动前需要的宿主能力。仅 v4 bundle 可以使用；host 会根据当前
+操作系统把固定 capability token 映射到系统包。
+
+```json
+"system": {
+  "requires": ["c-compiler", "python-headers"]
+}
+```
+
+| 能力 | 用途 |
+|---|---|
+| `c-compiler` | C 编译，包括 Triton 运行时 C launcher |
+| `cxx-compiler` | C++ extension |
+| `python-headers` | bundle `python_abi` 对应的 `Python.h` |
+
+规则：
+
+- `requires` 是非空、无重复的字符串数组。
+- `python-headers` 要求存在合法 `defaults.python_abi`。
+- 未知 token 直接 validation 失败。
+- 不支持 `system.optional`。
+- bundle 不得提供任意包名或安装命令。
+- `flashcli models show <ref>` 只显示状态，不安装。
+- `run` / `serve` 在 bundle 上下文检查；缺失时给出系统包映射，或在 root 且
+  `FLASHCLI_AUTO_INSTALL_SYSTEM` 允许时自动安装。
+
 ### 3.5 `defaults.env`
 
 engine 模式进入 entry 前注入的环境变量；值可用 `{models_dir}`、`{bundle_root}`。environment 的 `env` 按 map 合并覆盖 defaults。script 模式不应用 `defaults.env`，只接收 §4.5 的 `FLASHCLI_*`。

@@ -205,3 +205,15 @@ func orUnknown(v string) string {
 	}
 	return v
 }
+
+// InspectorAvailable reports whether readelf or objdump is available for
+// parsing ELF version requirements.
+func InspectorAvailable() bool {
+	if _, err := exec.LookPath("readelf"); err == nil {
+		return true
+	}
+	if _, err := exec.LookPath("objdump"); err == nil {
+		return true
+	}
+	return false
+}

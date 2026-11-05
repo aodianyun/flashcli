@@ -432,6 +432,8 @@ func Validate(m *Manifest) []string {
 	}
 	errors = append(errors, validatePythonDependencies(m)...)
 	errors = append(errors, validateRuntimeSuffix(m)...)
+	errors = append(errors, validateSystemRequirements(m)...)
+	errors = append(errors, validateSystemRequirements(m)...)
 	errors = append(errors, native.ValidateRuntimeMatrix(m.Root, m.RuntimeMap())...)
 	errors = append(errors, validateWeights(m)...)
 	errors = append(errors, validateOptions(m)...)

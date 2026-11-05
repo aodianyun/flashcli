@@ -35,6 +35,9 @@ func preflightBundle(m *manifest.Manifest, root, venvPython string, quiet, autoI
 		return envKey, nil
 	}
 	dir := filepath.Join(root, filepath.FromSlash(rel))
+	if err := ensureELFInspector(quiet, autoInstall); err != nil {
+		return "", err
+	}
 	if len(native.DiscoverModuleBases(dir, "")) == 0 && !hasSubstrateSO(dir) {
 		return "", errs.Envf("Bundle %s missing native .so under %s for environment %q. Run pack/release or build into runtime/%s/.", root, rel, envKey, rel)
 	}

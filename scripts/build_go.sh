@@ -14,26 +14,11 @@ OUT="${1:-$ROOT/dist/go}"
 GO_PKG="github.com/aodianyun/flashcli/go/internal/version.Version"
 
 read_version() {
-  python3 - "$ROOT/pyproject.toml" <<'PY'
-import sys
-path = sys.argv[1]
-try:
-    import tomllib
-    with open(path, "rb") as fh:
-        print(tomllib.load(fh)["project"]["version"])
-except Exception:
-    try:
-        import tomli as tomllib
-        with open(path, "rb") as fh:
-            print(tomllib.load(fh)["project"]["version"])
-    except Exception:
-        import re
-        text = open(path, encoding="utf-8").read()
-        m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
-        if not m:
-            raise SystemExit("cannot determine version from pyproject.toml")
-        print(m.group(1))
-PY
+  # Do not depend on Python here: source installs run on minimal Ubuntu images
+  # where python3 may not be installed. pyproject.toml keeps one [project]
+  # version line, so a shell/awk parse is sufficient.
+  sed -n 's/^[[:space:]]*version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
+    "$ROOT/pyproject.toml" | head -1
 }
 
 VERSION="$(read_version)"

@@ -31,10 +31,14 @@ serve。未列出的变量**无效**。布尔开关：`1`、`true`、`yes`、`on
 | `FLASHCLI_SKIP_CUDA_USERLAND` | `0` | 跳过 `libcublas`/`libcudart` 探测/安装。 |
 | `FLASHCLI_SKIP_NATIVE_HOST_ABI` | `0` | 跳过针对所选 `.so` 的 glibc/libstdc++（`GLIBC_`/`GLIBCXX_`）门禁。 |
 | `FLASHCLI_SKIP_PREFLIGHT` | `0` | 跳过 env key + native cell + host ABI + CUDA 预检（仅调试）。 |
+| `FLASHCLI_AUTO_INSTALL_SYSTEM` | `auto` | 仅 root 下安装 bundle 声明的系统能力（`c-compiler`、`cxx-compiler`、`python-headers`）；`never` 禁用。 |
 
 `run`/`serve`/`pull`/`bundle sync` 会把本机 GPU 与 manifest `runtime` 匹配、校验所选 cell 的
 `.so`、检查 host glibc/libstdc++，并确保 CUDA userland（`libcublas`/`libcudart`）——宿主已提供则
 直接用宿主 loader，否则把匹配的 `nvidia-*` wheel 装进 bundle venv。
+
+native bundle 的 host ABI 检查使用 `readelf` 或 `objdump`。两者都不存在时，host 会在
+root 且系统自动安装开启时安装 `binutils`，否则明确报错并给出安装提示，不会静默跳过 ABI 检查。
 
 ## 权重下载
 

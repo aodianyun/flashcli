@@ -167,6 +167,12 @@ func runPythonBackend(m *manifest.Manifest, root, version, variant, capability s
 	if err != nil {
 		return err
 	}
+	// Check compiler capabilities before venv creation: dependency wheels may
+	// need a compiler during installation. Headers are checked after the venv
+	// exists, using the exact interpreter that will run the entry.
+	if err := ensureSystemRequirements(m, "", quiet); err != nil {
+		return err
+	}
 	python, err := venv.Ensure(context.Background(), runtimeID, m, venv.Options{
 		SkipSetup:     envBool("FLASHCLI_SKIP_VENV_SETUP"),
 		Force:         envBool("FLASHCLI_FORCE_VENV"),
@@ -183,6 +189,9 @@ func runPythonBackend(m *manifest.Manifest, root, version, variant, capability s
 		}); err != nil {
 			return err
 		}
+	}
+	if err := ensureSystemRequirements(m, python, quiet); err != nil {
+		return err
 	}
 	if !envBool("FLASHCLI_SKIP_PREFLIGHT") {
 		if envKey := resolveEnvKey(m); envKey != "" {

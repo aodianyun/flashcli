@@ -19,6 +19,7 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/preflight"
 	"github.com/aodianyun/flashcli/go/internal/ref"
 	"github.com/aodianyun/flashcli/go/internal/runtime"
+	"github.com/aodianyun/flashcli/go/internal/system"
 	"github.com/aodianyun/flashcli/go/internal/venv"
 	"github.com/aodianyun/flashcli/go/internal/version"
 	"github.com/aodianyun/flashcli/go/internal/weights"
@@ -267,6 +268,38 @@ func modelsEnvBlock(out interface{ Write([]byte) (int, error) }, m *manifest.Man
 	}
 }
 
+func printSystemInfo(out interface{ Write([]byte) (int, error) }, m *manifest.Manifest, runtimeID string) {
+	reqs := m.SystemRequires()
+	if len(reqs) == 0 {
+		return
+	}
+	python := ""
+	if runtimeID != "" {
+		if py, err := runtime.VenvPython(runtimeID); err == nil {
+			python = py
+		}
+	}
+	statuses, err := system.Check(context.Background(), reqs, python)
+	if err != nil {
+		fmt.Fprintf(out, "system:\n  [!] %s\n", err)
+		return
+	}
+	fmt.Fprintln(out, "system:")
+	for _, st := range statuses {
+		state := "present"
+		if !st.Checked {
+			state = st.Detail
+		} else if !st.Present {
+			hint := system.PackageHint(st.Capability, m.PythonABIOrEmpty())
+			state = "missing"
+			if hint != "" {
+				state += " (install: " + hint + ")"
+			}
+		}
+		fmt.Fprintf(out, "  %-18s %s\n", st.Capability, state)
+	}
+}
+
 func repoURLFor(p ref.Parsed) string {
 	if p.Local {
 		return "(local)"
@@ -379,6 +412,7 @@ func showOne(out interface{ Write([]byte) (int, error) }, refStr string, gpu *pr
 	}
 	if m != nil {
 		printBuildInfo(out, m)
+		printSystemInfo(out, m, expectedRID)
 	}
 
 	marker := runtime.ReadPresetMarker(key)

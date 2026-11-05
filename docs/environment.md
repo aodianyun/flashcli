@@ -33,11 +33,16 @@ lives under `~/.flashcli/src` unless overridden.
 | `FLASHCLI_SKIP_CUDA_USERLAND` | `0` | Skip `libcublas`/`libcudart` probing/install (host CUDA userland). |
 | `FLASHCLI_SKIP_NATIVE_HOST_ABI` | `0` | Skip host glibc/libstdc++ (`GLIBC_`/`GLIBCXX_`) gate against the selected `.so`. |
 | `FLASHCLI_SKIP_PREFLIGHT` | `0` | Skip env-key + native cell + host ABI + CUDA preflight (debug only). |
+| `FLASHCLI_AUTO_INSTALL_SYSTEM` | `auto` | Install declared bundle system capabilities (`c-compiler`, `cxx-compiler`, `python-headers`) only as root; `never` disables. |
 
 `run`/`serve`/`pull`/`bundle sync` match the host GPU against manifest `runtime` keys, verify the
 selected cell has tagged `.so`, check host glibc/libstdc++, and ensure CUDA userland
 (`libcublas`/`libcudart`) — using the host loader when already present, else `pip install` the
 matching `nvidia-*` wheels into the bundle venv.
+
+For native bundles, host ABI checks use `readelf` or `objdump`. If neither is found,
+the host installs `binutils` when running as root with system auto-install enabled,
+or fails with the package hint instead of silently skipping the ABI check.
 
 ## Weight downloads
 
