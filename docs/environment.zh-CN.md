@@ -37,6 +37,9 @@ serve。未列出的变量**无效**。布尔开关：`1`、`true`、`yes`、`on
 `.so`、检查 host glibc/libstdc++，并确保 CUDA userland（`libcublas`/`libcudart`）——宿主已提供则
 直接用宿主 loader，否则把匹配的 `nvidia-*` wheel 装进 bundle venv。
 
+native bundle 的 host ABI 检查使用 `readelf` 或 `objdump`。两者都不存在时，host 会在
+root 且系统自动安装开启时安装 `binutils`，否则明确报错并给出安装提示，不会静默跳过 ABI 检查。
+
 ## 权重下载
 
 Hugging Face：

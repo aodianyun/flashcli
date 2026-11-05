@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/aodianyun/flashcli/go/internal/hostabi"
 	"github.com/aodianyun/flashcli/go/internal/manifest"
 	"github.com/aodianyun/flashcli/go/internal/progress"
 	"github.com/aodianyun/flashcli/go/internal/system"
@@ -57,4 +58,24 @@ func capStrings(caps []system.Capability) []string {
 		out[i] = string(c)
 	}
 	return out
+}
+
+func ensureELFInspector(quiet, autoInstall bool) error {
+	if envBool("FLASHCLI_SKIP_NATIVE_HOST_ABI") || hostabi.InspectorAvailable() {
+		return nil
+	}
+	hint := "binutils"
+	if !autoInstall || !system.AutoInstallEnabled() {
+		return fmt.Errorf("missing readelf/objdump for native host ABI check; install %s and retry", hint)
+	}
+	if !quiet {
+		progress.Note("installing system capability: ELF inspector (%s)", hint)
+	}
+	if err := system.InstallBinutils(context.Background(), quiet); err != nil {
+		return fmt.Errorf("ELF inspector installation failed: %w", err)
+	}
+	if !hostabi.InspectorAvailable() {
+		return fmt.Errorf("readelf/objdump still missing after installing %s", hint)
+	}
+	return nil
 }

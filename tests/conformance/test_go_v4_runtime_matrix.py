@@ -18,6 +18,14 @@ _SAFE = re.compile(r"[^A-Za-z0-9._+\-]+")
 _RUNTIME_ENV = "sm120-cu130-linux-x86_64-py312"
 
 
+def _add_elf_inspector(bin_dir: Path) -> None:
+    for name in ("readelf", "objdump"):
+        tool = shutil.which(name)
+        if tool:
+            os.symlink(tool, bin_dir / name)
+            return
+
+
 def _runtime_id(path: Path, name: str) -> str:
     safe = _SAFE.sub("-", name.strip()).strip("-") or "bundle"
     digest = hashlib.sha256(str(path).encode()).hexdigest()[:12]
@@ -257,6 +265,7 @@ def test_v4_missing_c_compiler_never_fails_before_entry(
     bundle = _copy_bundle(tmp_path)
     empty = tmp_path / "empty-bin"
     empty.mkdir()
+    _add_elf_inspector(empty)
     proc = _invoke(
         go_binary,
         bundle,
@@ -278,6 +287,7 @@ def test_v4_missing_c_compiler_auto_install_fake_apt(
     bundle = _copy_bundle(tmp_path)
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
+    _add_elf_inspector(fake_bin)
     nvidia_smi = shutil.which("nvidia-smi")
     if nvidia_smi:
         os.symlink(nvidia_smi, fake_bin / "nvidia-smi")
@@ -328,6 +338,7 @@ def test_v4_auto_install_failure_reports_reason(go_binary: Path, tmp_path: Path)
     bundle = _copy_bundle(tmp_path)
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
+    _add_elf_inspector(fake_bin)
     apt = fake_bin / "apt-get"
     apt.write_text("#!/bin/sh\nexit 42\n", encoding="utf-8")
     apt.chmod(0o755)

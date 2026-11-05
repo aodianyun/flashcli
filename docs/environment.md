@@ -40,6 +40,10 @@ selected cell has tagged `.so`, check host glibc/libstdc++, and ensure CUDA user
 (`libcublas`/`libcudart`) — using the host loader when already present, else `pip install` the
 matching `nvidia-*` wheels into the bundle venv.
 
+For native bundles, host ABI checks use `readelf` or `objdump`. If neither is found,
+the host installs `binutils` when running as root with system auto-install enabled,
+or fails with the package hint instead of silently skipping the ABI check.
+
 ## Weight downloads
 
 Hugging Face:

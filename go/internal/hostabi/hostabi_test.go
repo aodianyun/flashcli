@@ -1,6 +1,10 @@
 package hostabi
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestParseVersionText(t *testing.T) {
 	req := ParseVersionText("Version needs section '.gnu.version_r':\n  GLIBC_2.2.5\n  GLIBC_2.34\n  GLIBCXX_3.4.21\n  GLIBCXX_3.4.30\n  CXXABI_1.3.13\n")
@@ -25,5 +29,20 @@ func TestCheckSkipsWhenDisabled(t *testing.T) {
 	t.Setenv("FLASHCLI_SKIP_NATIVE_HOST_ABI", "1")
 	if errs := Check([]string{"/no/such/lib.so"}, true); errs != nil {
 		t.Fatalf("expected skip, got %v", errs)
+	}
+}
+
+func TestInspectorAvailable(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PATH", dir)
+	if InspectorAvailable() {
+		t.Fatal("empty PATH should have no ELF inspector")
+	}
+	tool := filepath.Join(dir, "readelf")
+	if err := os.WriteFile(tool, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !InspectorAvailable() {
+		t.Fatal("readelf should be detected")
 	}
 }

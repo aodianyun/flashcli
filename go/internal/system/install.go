@@ -82,6 +82,56 @@ func Install(ctx context.Context, missing []Capability, abi string, quiet bool) 
 	return nil
 }
 
+// InstallBinutils installs the host ELF inspector used by native preflight.
+// The caller must enforce the auto-install policy before calling.
+func InstallBinutils(ctx context.Context, quiet bool) error {
+	if os.Geteuid() != 0 {
+		return fmt.Errorf("system package installation requires root; install binutils manually")
+	}
+	mgr, err := DetectManager()
+	if err != nil {
+		return err
+	}
+	packages := []string{"binutils"}
+	if mgr == APK {
+		packages = []string{"binutils"}
+	}
+	if mgr == APT {
+		update := exec.CommandContext(ctx, "apt-get", "update", "-qq")
+		update.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+		if quiet {
+			update.Stdout = nil
+			update.Stderr = nil
+		} else {
+			update.Stdout = os.Stdout
+			update.Stderr = os.Stderr
+		}
+		if err := update.Run(); err != nil {
+			return fmt.Errorf("apt-get update failed: %w", err)
+		}
+	}
+	argv := installArgv(mgr, packages)
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Env = os.Environ()
+	if mgr == APT {
+		cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
+	}
+	if quiet {
+		cmd.Stdout = nil
+		cmd.Stderr = nil
+	} else {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s failed: %w", strings.Join(argv, " "), err)
+	}
+	return nil
+}
+
+// BinutilsHint returns the distro package hint for the ELF inspector.
+func BinutilsHint() string { return "binutils" }
+
 func installArgv(mgr Manager, packages []string) []string {
 	switch mgr {
 	case APT:
