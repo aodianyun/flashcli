@@ -113,7 +113,7 @@ Standalone Python 自动供给（当 bundle `python_abi` 缺失）：
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `FLASHCLI_QUIET` | `0` | 减少 `run`/`serve`/`pull`/`sync` 输出。 |
-| `FLASHCLI_GO_RELEASE_BASE` / `FLASHCLI_GO_RELEASE_API` | GitHub releases | `flashcli upgrade` 覆盖（如 Gitee）。 |
+| `FLASHCLI_GO_RELEASE_BASE` / `FLASHCLI_GO_RELEASE_API` | GitHub releases；镜像模式开启时为 Gitee | `flashcli upgrade` 覆盖（如 Gitee）。 |
 
 ## 镜像（国内友好）
 

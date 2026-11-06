@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/aodianyun/flashcli/go/internal/mirror"
 	"github.com/aodianyun/flashcli/go/internal/selfupdate"
 	"github.com/aodianyun/flashcli/go/internal/version"
 )
@@ -18,8 +19,19 @@ import (
 const (
 	defaultReleaseBase = "https://github.com/aodianyun/flashcli/releases/download"
 	defaultReleaseAPI  = "https://api.github.com/repos/aodianyun/flashcli/releases/latest"
+	giteeReleaseBase   = "https://gitee.com/aodiansoft/flashcli/releases/download"
+	giteeReleaseAPI    = "https://gitee.com/api/v5/repos/aodiansoft/flashcli/releases/latest"
 	checksumsAsset     = "sha256sums.txt"
 )
+
+// releaseDefaults selects the Gitee release mirror when mirror mode is on.
+// Explicit --base-url / FLASHCLI_GO_RELEASE_* values still take precedence.
+func releaseDefaults() (base, api string) {
+	if mirror.Enabled() {
+		return giteeReleaseBase, giteeReleaseAPI
+	}
+	return defaultReleaseBase, defaultReleaseAPI
+}
 
 func upgradeCmd() *cobra.Command {
 	var check bool
@@ -36,8 +48,9 @@ func upgradeCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 			client := &http.Client{}
-			base := firstNonEmpty(baseURL, os.Getenv("FLASHCLI_GO_RELEASE_BASE"), defaultReleaseBase)
-			api := firstNonEmpty(os.Getenv("FLASHCLI_GO_RELEASE_API"), defaultReleaseAPI)
+			defaultBase, defaultAPI := releaseDefaults()
+			base := firstNonEmpty(baseURL, os.Getenv("FLASHCLI_GO_RELEASE_BASE"), defaultBase)
+			api := firstNonEmpty(os.Getenv("FLASHCLI_GO_RELEASE_API"), defaultAPI)
 
 			if target == "" {
 				exe, err := selfupdate.Executable()
