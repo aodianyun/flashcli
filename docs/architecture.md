@@ -221,8 +221,6 @@ See [module_layers.md](module_layers.md) for the authoritative host / infer / pr
 | `flashcli-bundle/higgs_audio:1.0.1` | `run` |
 | `flashcli-bundle/pi05_libero_nexus:1.0.3` | `run`, `serve` |
 
-See [model_bundle_standard.md](model_bundle_standard.md).
-
 ## Related docs
 
 - [module_layers.md](module_layers.md) — three-layer module ownership and import rules

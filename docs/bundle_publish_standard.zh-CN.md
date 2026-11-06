@@ -54,7 +54,7 @@ my_bundle/                              ← 上传根（版本目录内容）
 │   ├── api.py
 │   └── …
 └── runtime/
-    └── sm120-cu130-linux-x86_64-py312/ ← env key = 目录名
+    └── sm120-cu130-linux-x86_64-py312/ ← runtime 目录名任意
         ├── flash_rt_kernels-{abi}-sm120-cu130-linux-x86_64-py312.so
         └── flash_rt_fa2-{abi}-sm120-cu130-linux-x86_64-py312.so
 ```
