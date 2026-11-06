@@ -10,7 +10,7 @@ How maintainers build **multi CUDA / SM native artifacts** and publish via **Fla
 
 | Bundle | SM | CUDA lines | Python ABI | Native modules |
 |--------|-----|------------|------------|----------------|
-| `pi05_libero` | **89**, **120** | cu124 (SM89), cu130 | **3.12** (`python_abi: 312`) | `flash_rt_kernels`, `flash_rt_fa2` |
+| `pi05_libero` | **120** | **cu130 only** | **3.12** (`python_abi: 312`) | `flash_rt_kernels`, `flash_rt_fa2` |
 | `qwen3_vl_8b_nvfp4` | **120** | **cu130 only** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2`, `flash_rt_fp4`, `flash_rt_qwen3_vl_kernels` |
 | `groot_n16` | **120** | **cu130 only** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2` |
 | `higgs_audio` | **120** | **cu130 only** | **3.10** | `flash_rt_kernels`, `flash_rt_fa2` |
@@ -29,16 +29,16 @@ After `pack_bundle.sh`:
 
 ```text
 dist/
-  flashcli-bundle.json    # environments: { env_key: { runtime: "runtime/<runtime-dir>" } }
+  flashcli-bundle.json    # environments: { env_key: { runtime: "<runtime-dir>" } }
   run.py, flash_rt/, ...
-  runtime/
+  runtime/                 # conventional root layout; manifest path is arbitrary
     sm89-cu124-linux-x86_64-py312/
       flash_rt_kernels-...-py312.so
       flash_rt_fa2-...-py312.so
     ...
 ```
 
-At runtime, flashcli loads matching `.so` files directly from `runtime/<runtime-dir>/` in the cached bundle root (no copy to `lib/`).
+At runtime, flashcli loads matching `.so` files directly from the selected environment's declared runtime directory (the examples use `runtime/<runtime-dir>/`).
 
 Each published bundle is pinned by a **FlashHub ref** (`flashcli-bundle/<name>:<version>`) — see [model_bundle_standard.md](model_bundle_standard.md).
 
@@ -52,12 +52,12 @@ Each published bundle is pinned by a **FlashHub ref** (`flashcli-bundle/<name>:<
 
 1. `bash scripts/release_bundle.sh --bundle <name> --clean` (current env; add `--matrix` for full matrix)
 2. Upload the full `dist/` tree to FlashHub
-3. Tell users to pin the new ref (e.g. bump version in `flashcli-bundle/pi05_libero:1.0.5`)
+3. Tell users to pin the new ref (e.g. bump version in `flashcli-bundle/pi05_libero:1.0.6`)
 
 Example repo URL:
 
 ```text
-https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.5
+https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.6
 ```
 
 ## Shared release pipeline
@@ -92,9 +92,9 @@ bash build.sh --repo-root /path/to/FlashRT
 
 ## pi05_libero
 
-**GPU**: SM89 (Ada) and SM120 (Blackwell). **CUDA**: cu124 (SM89 only); cu130 (SM89 + SM120 — cu130 matrix pass also cross-builds `sm120-cu130`).
+**GPU**: SM120 (Blackwell). **CUDA**: cu130 only.
 
-Host keys: `sm89-cu124-linux-x86_64-py312`, `sm89-cu130-linux-x86_64-py312`, `sm120-cu130-linux-x86_64-py312`. Check: `flashcli models show flashcli-bundle/pi05_libero:1.0.5`.
+Host key: `sm120-cu130-linux-x86_64-py312`. Check: `flashcli models show flashcli-bundle/pi05_libero:1.0.6`.
 
 Upload `dist/` to FlashHub; users pin `flashcli-bundle/pi05_libero:<version>`.
 
@@ -104,8 +104,8 @@ Upload `dist/` to FlashHub; users pin `flashcli-bundle/pi05_libero:<version>`.
 
 | Stage | Behavior |
 |-------|----------|
-| `flashcli bundle sync` | FlashHub API → manifest → preflight → source tree + this env’s `runtime/` |
-| `flashcli run` | bundle venv installs torch → load `runtime/<runtime-dir>/*.so` → weights → `entry` |
+| `flashcli bundle sync` | FlashHub API → manifest → preflight → common files + this env’s declared runtime directory |
+| `flashcli run` | bundle venv installs torch → load `.so` from the declared runtime directory → weights → `entry` |
 
 Do not use a system Python that mismatches manifest `python_abi`.
 
@@ -118,4 +118,4 @@ flashcli run bundles/pi05_libero \
 
 Preset ref and bundle format: [model_bundle_standard.md](model_bundle_standard.md).
 
-Local dev trees need `.so` under the selected environment’s `runtime/<runtime-dir>/` (`build.sh` → `lib/`, then stage to `runtime/`; see bundle `BUILD.md`).
+Local dev trees need `.so` under the selected environment’s declared runtime directory (examples use `runtime/<runtime-dir>/`; `build.sh` → `lib/`, then stage to that directory; see bundle `BUILD.md`).

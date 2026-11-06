@@ -38,7 +38,7 @@ from flashcli_bundle.preset import Preset
 
 | Bundle | GPU | CUDA 用户态 | 说明 |
 |--------|-----|-------------|------|
-| `pi05_libero` | **SM89**（Ada）、**SM120**（Blackwell） | cu124（SM89）· cu130 | SM120 用 `sm120-cu130` 单元 |
+| `pi05_libero` | **SM120**（Blackwell） | **仅 cu130** | per-environment 根目录（`sm120-cu130-linux-x86_64-py312/`） |
 | `higgs_audio` | **SM120**（Blackwell） | **仅 cu130** | Python 3.10 |
 
 ### 软件
@@ -102,20 +102,23 @@ flashcli models list
 
 ```text
 pi05_libero/
-├── flashcli-bundle.json      # manifest（必填字段见下）
-├── run.py                    # entry.run → RunEngine
-├── _pi05_compat.py           # bundle 私有 helper
-├── flash_rt/                 # FlashRT Python 树（staging）
-├── lib/                      # 本地 build：本机 *.so
-├── runtime/                  # pack 后：runtime/<runtime-dir>/*.so
-├── release-matrix.env        # 发布矩阵（SM、CUDA、py ABI）
-├── _bundle_build.sh          # cmake + 编译逻辑
-├── build.sh                  # 本地单环境 build
-├── release.sh                # → scripts/release_bundle.sh
-└── dist/                     # 发布产物（上传 FlashHub）
+├── flashcli-bundle.json                  # manifest（必填字段见下）
+├── sm120-cu130-linux-x86_64-py312/      # environment runtime 目录
+│   ├── run.py                           # entry.run → main
+│   ├── _pi05_compat.py                  # bundle 私有 helper
+│   ├── flash_rt/                        # FlashRT Python 树（可选）
+│   ├── flash_rt_kernels-...so
+│   └── flash_rt_fa2-...so
+├── release-matrix.env                   # 发布矩阵（SM、CUDA、py ABI）
+├── _bundle_build.sh                     # cmake + 编译逻辑
+├── build.sh                             # 本地单环境 build
+├── release.sh                           # → scripts/release_bundle.sh
+└── dist/                                # 发布产物（上传 FlashHub）
 ```
 
-**仅原生** bundle（`entry.kind = native-abi|native-exec`）省略 `run.py` / `flash_rt/`，C 库放在 `runtime/<runtime-dir>/substrate/`。
+**仅原生** bundle（`entry.kind = native-abi|native-exec`）省略 `run.py` / `flash_rt/`，C 库放在声明的 runtime 目录（例如 `runtime/<runtime-dir>/substrate/`）。
+
+Python bundle 的 `flash_rt/` 是可选的。每个 environment 的 `runtime` 路径任意；根 `runtime/<runtime-dir>/` 布局只是约定，不是 host 硬要求。需要按 environment 隔离时，把 `runtime` 指向整个 environment 目录，并把 `run.py`、helper、可选 `flash_rt/` 和 `.so` 直接放在该目录下。所有已声明 runtime 目录之外的文件都是公共文件，会为所有 environment 下载。详见 [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) §2.3。
 
 ### manifest 必填要点（format_version 4）
 
@@ -127,7 +130,6 @@ pi05_libero/
   "name": "pi05_libero",
   "description": "Pi0.5 LIBERO VLA",
   "defaults": {
-    "entry": { "run": { "module": "run", "attr": "RunEngine" } },
     "python_abi": "312",
     "run_options": [ ... ],
     "python_dependencies": {
@@ -136,14 +138,21 @@ pi05_libero/
     "weights": { "source": "huggingface", "repo": "org/model", "revision": "0123456789abcdef0123456789abcdef01234567" }
   },
   "environments": {
-    "sm89-cu124-linux-x86_64-py312": {
-      "runtime": "runtime/sm89-cu124-linux-x86_64-py312"
+    "sm120-cu130-linux-x86_64-py312": {
+      "runtime": "sm120-cu130-linux-x86_64-py312",
+      "entry": {
+        "run": {
+          "module": "sm120-cu130-linux-x86_64-py312.run",
+          "attr": "main",
+          "mode": "script"
+        }
+      }
     }
   }
 }
 ```
 
-- **`defaults` / `environments`**：均必填。
+- **`defaults` / `environments`**：均必填。entry 可放在 `defaults.entry`，也可放在 `environments.<key>.entry`。
 - native environment 必须有 `runtime`；Python/CPU environment 可省略。
 - 多个 environment 可指向同一 runtime 目录。fallback 用 `match`（无 `priority`）；同维度且可重叠的 fallback 会在 `bundle validate` 失败。
 - **`protocol_version`**：必须与已安装 `flashcli-bundle` 的 `PROTOCOL_VERSION` 一致（当前为 **1**）。
@@ -168,7 +177,7 @@ export FLASHRT_REPO=/path/to/FlashRT   # 或省略，由脚本 clone
 bash bundles/pi05_libero/build.sh --repo-root "$FLASHRT_REPO" -j "$(nproc)"
 ```
 
-**做什么**：`_bundle_build.sh` 调 FlashRT cmake，产出 `lib/flash_rt_*.so`，并 staging `flash_rt/`。
+**做什么**：`_bundle_build.sh` 调 FlashRT cmake，把 native `.so` 和 `flash_rt/` staging 到声明的 environment runtime 目录。
 
 **仅原生** bundle：构建 Python-free 的 C 库（如 FA2 raw → `flashrt_exec`/producer → Nexus），stage 到 `runtime/<runtime-dir>/substrate/`。
 
@@ -217,7 +226,7 @@ bash scripts/release_bundle.sh --bundle pi05_libero --clean
 bash scripts/release_bundle.sh --bundle higgs_audio --clean
 ```
 
-等价于进入 `bundles/<name>/` 执行 `bash release.sh --clean`。脚本调用 bundle 的 `build.sh`，然后只 pack 当前 `runtime/<runtime-dir>/` 单元。完整 Docker/多 CUDA 矩阵需显式加 `--matrix`。
+等价于进入 `bundles/<name>/` 执行 `bash release.sh --clean`。脚本调用 bundle 的 `build.sh`，然后只 pack 当前 manifest 声明的 runtime 目录。完整 Docker/多 CUDA 矩阵需显式加 `--matrix`。
 
 ### 脚本内部阶段
 
@@ -226,7 +235,7 @@ bash scripts/release_bundle.sh --bundle higgs_audio --clean
 | **1. 读 `release-matrix.env`** | 确定 SM、CUDA tags、Python ABI、Docker 镜像、打包文件列表 | 矩阵维度 |
 | **2. 确保 FlashRT** | clone/update `../FlashRT`（可 `export FLASHRT_REPO=` 覆盖） | 源码 |
 | **3. 当前环境 build** | `build.sh`（`--matrix` 时走 `_bundle_build.sh`） | 当前 env `.so` |
-| **4. 写入 `runtime/`** | 当前 env 的 `runtime/<runtime-dir>/` | native 制品 |
+| **4. 写入 runtime 目录** | 当前 env 的 manifest 声明 runtime 目录（示例 `runtime/<runtime-dir>/`） | native 制品 |
 | **5. `pack_bundle.sh`** | 复制 entry、当前 runtime 单元、刷新 manifest | `dist/` 源码树 |
 | **6. 校验** | ABI / layout / manifest options / protocol | 失败则 exit |
 
@@ -236,7 +245,7 @@ bash scripts/release_bundle.sh --bundle higgs_audio --clean
 bash scripts/release_bundle.sh --bundle pi05_libero --matrix --clean
 ```
 
-`--clean`：删除 `lib/`、`dist/`、`.build-matrix/` 等，避免脏缓存。`pack.sh` 也支持 `--all-envs` / `--verify-matrix` 做完整矩阵打包。
+`--clean`：删除 `lib/`、`dist/`、`.build-matrix/` 等，避免脏缓存。`pack.sh` 也支持 `--all-envs` / `--verify-matrix` 做完整矩阵打包。矩阵校验按 manifest 声明的 runtime 路径进行，传统根 `runtime/<env-key>/` 和 per-environment 根目录都支持。
 
 ### 后台跑 + 看日志
 
@@ -251,24 +260,22 @@ bash scripts/run_bg.sh --name release-pi05 --tail
 ```text
 bundles/pi05_libero/dist/
 ├── flashcli-bundle.json
-├── run.py
-├── flash_rt/
-├── runtime/
-│   ├── sm89-cu124-linux-x86_64-py312/
-│   │   └── flash_rt_*.so
-│   └── sm89-cu130-linux-x86_64-py312/
-│       └── flash_rt_*.so
-└── ...
+└── sm120-cu130-linux-x86_64-py312/
+    ├── run.py
+    ├── _pi05_compat.py
+    ├── flash_rt/
+    ├── flash_rt_kernels-...so
+    └── flash_rt_fa2-...so
 ```
 
-**`dist/` 必须最小**：不要把 `build.sh`、`.build-*`、测试、refs、缓存或未使用的 FlashRT 模型/frontend 打进包。build 脚本必须 staging 最小 `flash_rt/`；`pack` 只复制 `RELEASE_PACK_FILES` + 选中的 runtime 单元。
+**`dist/` 必须最小**：不要把 `build.sh`、`.build-*`、测试、refs、缓存或未使用的 FlashRT 模型/frontend 打进包。build 脚本必须 staging 最小发布树（存在 `flash_rt/` 时一并裁剪）；`pack` 只复制 `RELEASE_PACK_FILES` + 选中的 runtime 单元。
 
 ---
 
 ## 7. 发布前 Checklist
 
 - [ ] `flashcli bundle validate bundles/<name>` 通过
-- [ ] `dist/runtime/` 含 manifest 声明的全部 env key
+- [ ] `dist/` 含 `environments` 声明的全部 runtime 目录
 - [ ] `protocol_version` 与 `flashcli-bundle` 包一致
 - [ ] 目标 GPU 上 `flashcli run` / `serve` smoke 通过
 - [ ] `dist/` 无开发垃圾文件
@@ -281,11 +288,11 @@ bundles/pi05_libero/dist/
 2. 获得语义化 URL，例如：
 
    ```text
-   https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.5
+   https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.6
    ```
 
 3. 在 README / BUILD 中更新固定 ref：
-   - 例如：`flashcli-bundle/pi05_libero:1.0.5`
+   - 例如：`flashcli-bundle/pi05_libero:1.0.6`
 
 4. 用户侧：安装/升级 flashcli 后，执行 `flashcli run <ref>` 或 `flashcli bundle sync <ref>` 从新版本 sync。
 
@@ -295,11 +302,11 @@ bundles/pi05_libero/dist/
 
 | 项目 | pi05_libero | higgs_audio |
 |------|-------------|------------|
-| SM | 89 | 120 |
-| CUDA | 124 + 130 | **仅 130** |
+| SM | 120 | 120 |
+| CUDA | **仅 130** | **仅 130** |
 | python_abi | 312 | 310 |
 | entry | run | run |
-| Docker cu124 | 24.05-py3 | — |
+| Docker cu124 | — | — |
 | Docker cu130 | 25.10-py3 | 25.10-py3 |
 
 细节：[runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md)

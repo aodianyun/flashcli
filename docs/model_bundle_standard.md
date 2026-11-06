@@ -49,12 +49,15 @@ The host first matches an exact `environments.<env>` key. If none matches, it ev
 ```text
 {bundle_root}/
 ├── flashcli-bundle.json
-├── run.py / serve.py
-├── flash_rt/
-└── runtime/<runtime-dir>/      # FlashHub sync; load .so from here at runtime
+├── run.py / serve.py            # may also live inside the runtime directory
+├── flash_rt/                    # optional
+└── <runtime-dir>/               # declared by environments.<key>.runtime
+    └── *.so                     # loaded directly from this directory
 ```
 
-> Native-only bundles (`defaults.entry.kind = native-abi|native-exec`) omit `run.py`/`serve.py` and `flash_rt/`; C libraries live under `runtime/<runtime-dir>/substrate/`.
+Only the selected environment's declared runtime directory is downloaded. Every file outside all declared runtime directories is common and is downloaded for every environment. The path is arbitrary; examples commonly use `runtime/<runtime-dir>/`. `flash_rt/` is optional; a root `flash_rt/` is common and takes precedence, while a runtime-local one is importable because the selected runtime directory is appended to `sys.path`.
+
+> Native-only bundles (`defaults.entry.kind = native-abi|native-exec`) omit `run.py`/`serve.py` and `flash_rt/`; C libraries live under the selected runtime directory (for example `runtime/<runtime-dir>/substrate/`).
 
 Weights are **not** in the bundle. v4 uses a readable shared store keyed by `source + repo + revision` (normally `~/.flashcli/models/store/...`); extra weights default to `<store>/extra/<key>/`.
 
@@ -62,7 +65,7 @@ Weights are **not** in the bundle. v4 uses a readable shared store keyed by `sou
 
 1. Parse REF → local directory uses `local_root`; otherwise `bundle.repo` URL (or synced marker)
 2. FlashHub manifest → **preflight** env key on this host
-3. Download entry tree + **only** matching `runtime/<runtime-dir>/`
+3. Download the manifest, common files, and **only** the selected environment's declared runtime directory
 4. `kind=python`: create bundle venv (`python_abi`, manifest torch). Native kinds skip the venv.
 5. `kind=python`: **re-exec** infer inside the bundle venv — [architecture.md](architecture.md). `native-exec`/`native-abi`: the host spawns / `dlopen`s the bundle backend directly.
 6. **Host** (before inference): ensure `weights` + `extra_weights` + `post_pull`. The host writes the expected remote file set to `<weights_dir>/.flashcli_download.json` **before** transferring, resumes interrupted downloads, and accepts a complete manifest offline; `flashcli pull` re-lists and rewrites it. 7. **Bundle**: resolve local checkpoint only (`HF_HUB_OFFLINE=1`); run `entry` (or the native backend)

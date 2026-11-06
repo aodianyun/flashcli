@@ -12,7 +12,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 
 1. **推理在 bundle 内** — bundle 拥有**全部模型专属逻辑**：前向、预处理/后处理、模态形状与 dtype、输入/输出语义、option→端口映射与默认值。flashcli 只是**通用、与模型无关的驱动器**：解析 ref、准备环境、调用 bundle 提供的接口——`kind=python` 用 `entry`，`native-exec`/`native-abi` 用声明的 model-runtime ABI + manifest `native` 块。**host（`go/`）中不得出现任何模型专属常量、形状或预处理。**
 2. **Preset ref** — 用户使用 `namespace/bundle:version`；`FLASHCLI_FLASHHUB_API` 配置 API 基址。
-3. **manifest-first + 分包下载** — 先拉 manifest → preflight 匹配 `runtime` env key → 只下载本 env 的 `runtime/<runtime-dir>/`。
+3. **manifest-first + 分包下载** — 先拉 manifest → preflight 匹配 `environments` → 下载公共文件，以及只下载选中 environment 声明的 runtime 目录。
 4. **固定 Python ABI** — 每个 bundle 一个 venv（`python_abi`）；CLI 准备完成后 **re-exec** 进 bundle venv。
 5. **单一 Go 主机** — 主机为 `go/` 静态二进制；bundle venv 仅 pip **`flashcli-bundle[infer]`**（protocol + infer）。
 6. **一条命令** — `flashcli run <preset>` 串联：sync → 依赖 → 权重（主机缺失则下载）→ `post_pull` → bundle venv 内离线推理。
@@ -81,7 +81,7 @@ sequenceDiagram
   U->>CLI: flashcli run flashcli-bundle/pi05_libero:1.0.5
   CLI->>FH: 拉取 repo index（若未 sync）
   FH-->>CLI: files[] + download_url
-  CLI->>FH: 同步 entry 树 + runtime/<runtime-dir>/
+  CLI->>FH: 同步公共文件 + 声明的 runtime 目录
   CLI->>Pre: env key + native cell + host ABI + CUDA userland
   CLI->>W: ensure 权重（+ post_pull/extra_pull）
   CLI->>Venv: 创建 bundle venv + torch 依赖
@@ -159,12 +159,13 @@ bundle venv 默认用 **uv** 创建与安装（仍保持每模型隔离）。uv 
 ```text
 {bundle_root}/
 ├── flashcli-bundle.json
-├── run.py
-├── flash_rt/
-└── runtime/<runtime-dir>/       # 选中 runtime 目录的 native *.so（就地加载，不拷贝到 lib/）
+├── run.py                       # 也可放在 runtime 目录内
+├── flash_rt/                    # 可选
+└── <runtime-dir>/               # 由 environments.<key>.runtime 声明
+    └── *.so                     # 从选中的目录就地加载
 ```
 
-> 仅原生 bundle 省略 `run.py` / `flash_rt/`，C 库放在 `runtime/<runtime-dir>/substrate/`。
+> 仅原生 bundle 省略 `run.py` / `flash_rt/`，C 库放在选中的 runtime 目录（例如 `runtime/<runtime-dir>/substrate/`）。所有已声明 runtime 目录之外的文件都是公共文件，会为每个 environment 下载。
 
 详见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
 
