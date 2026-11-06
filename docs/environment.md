@@ -118,7 +118,7 @@ Standalone Python provisioning (when the bundle `python_abi` is missing):
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `FLASHCLI_QUIET` | `0` | Less output from `run`/`serve`/`pull`/`sync`. |
-| `FLASHCLI_GO_RELEASE_BASE` / `FLASHCLI_GO_RELEASE_API` | GitHub releases | Override for `flashcli upgrade` (e.g. Gitee). |
+| `FLASHCLI_GO_RELEASE_BASE` / `FLASHCLI_GO_RELEASE_API` | GitHub releases; Gitee when mirror mode is on | Override for `flashcli upgrade` (e.g. Gitee). |
 
 ## Mirrors (China-friendly)
 
