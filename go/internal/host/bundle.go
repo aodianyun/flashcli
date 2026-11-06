@@ -69,7 +69,7 @@ func EnsureBundle(refStr string, quiet, force bool) (root, ver, variant string, 
 	if envKey == "" {
 		return "", "", "", fmt.Errorf("bundle %q has no runtime environment for this machine", m.Name)
 	}
-	if _, err := client.SyncBundle(ctx, repoURL, bundleDir, m.RuntimeMap()[envKey], quiet); err != nil {
+	if _, err := client.SyncBundle(ctx, repoURL, bundleDir, m.RuntimeMap()[envKey], runtimeRels(m), quiet); err != nil {
 		return "", "", "", err
 	}
 	runtimeID := runtime.IDFromRepo(repoURL, p.Name)
@@ -175,11 +175,16 @@ func PreflightBundle(m *manifest.Manifest, root, venvPython string, quiet, autoI
 		return envKey, nil
 	}
 	dir := filepath.Join(root, filepath.FromSlash(rel))
+	if !native.HasNativeArtifacts(dir) {
+		// A declared runtime directory may be a pure-Python environment root;
+		// no native artifacts are required when the entry does not use them.
+		return envKey, nil
+	}
 	if err := EnsureELFInspector(quiet, autoInstall); err != nil {
 		return "", err
 	}
 	if len(native.DiscoverModuleBases(dir, "")) == 0 && !hasSubstrateSO(dir) {
-		return "", errs.Envf("Bundle %s missing native .so under %s for environment %q. Run pack/release or build into runtime/%s/.", root, rel, envKey, rel)
+		return "", errs.Envf("Bundle %s has native files under %s for environment %q but none are recognized. Check the .so filename/build tag.", root, rel, envKey)
 	}
 	if err := hostabi.Ensure(native.NativeSOPaths(dir, ""), quiet); err != nil {
 		return "", err
@@ -266,6 +271,20 @@ func Pull(ctx context.Context, refStr string, opts PullOptions) (PullResult, err
 	}
 	emit("done", checkpoint)
 	return PullResult{BundleRoot: bundleRoot, Version: ver, Variant: variant, Checkpoint: checkpoint}, nil
+}
+
+func runtimeRels(m *manifest.Manifest) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(m.RuntimeMap()))
+	for _, rel := range m.RuntimeMap() {
+		rel = strings.Trim(strings.TrimSpace(rel), "/")
+		if rel == "" || seen[rel] {
+			continue
+		}
+		seen[rel] = true
+		out = append(out, rel)
+	}
+	return out
 }
 
 func hasSubstrateSO(dir string) bool {

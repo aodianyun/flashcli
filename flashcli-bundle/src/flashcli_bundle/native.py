@@ -12,6 +12,7 @@ from flashcli_bundle.manifest import (
     BundleManifest,
     bundle_python_abi,
     bundle_python_root,
+    bundle_runtime_map,
 )
 from flashcli_bundle.manifest_ext import bundle_active_native_dir, resolve_bundle_env_key
 from flashcli_bundle.native_naming import (
@@ -279,13 +280,42 @@ def probe_native_python_abi(bundle: BundleManifest, *, gpu: GpuInfo | None = Non
         return
 
 
+def runtime_has_native_artifacts(native_dir: Path) -> bool:
+    """True when a runtime directory contains native libraries."""
+    if not native_dir.is_dir():
+        return False
+    if any(native_dir.glob("*.so")):
+        return True
+    substrate = native_dir / "substrate"
+    return substrate.is_dir() and any(substrate.glob("*.so"))
+
+
 def ensure_bundle_importable(bundle: BundleManifest, *, gpu: GpuInfo | None = None) -> None:
     py_str = str(bundle_python_root(bundle).resolve())
     if py_str not in sys.path:
         sys.path.insert(0, py_str)
+
     env_key = os.environ.get("FLASHCLI_RUNTIME_ENV_KEY", "").strip()
-    runtime_map = bundle.raw.get("runtime") if isinstance(bundle.raw.get("runtime"), dict) else {}
-    if env_key and not str(runtime_map.get(env_key, "")).strip():
-        # Pure-Python/CPU environment: no native modules to register.
+    runtime_map = bundle_runtime_map(bundle)
+    rel = str(runtime_map.get(env_key, "")).strip() if env_key else ""
+    runtime_dir: Path | None = None
+    if rel:
+        runtime_dir = (bundle.bundle_root / rel).resolve()
+        # Append (not insert) so the bundle root keeps precedence and only
+        # modules that are not otherwise importable resolve from the selected
+        # environment directory. This keeps per-env flash_rt/ and helpers
+        # importable without changing existing bundles or entry code.
+        runtime_str = str(runtime_dir)
+        if runtime_dir.is_dir() and runtime_str not in sys.path:
+            sys.path.append(runtime_str)
+
+    if env_key and not rel:
+        # Pure-Python/CPU environment with no environment directory.
+        _register_from_paths({})
+        return
+    if runtime_dir is not None and not runtime_has_native_artifacts(runtime_dir):
+        # The runtime directory is a Python-only environment root: import
+        # flash_rt if present, but do not require native artifacts.
+        _register_from_paths({})
         return
     register_native_modules(bundle, gpu=gpu)

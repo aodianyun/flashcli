@@ -17,11 +17,20 @@ External specification for **third-party bundle authors**: directory layout, `fl
 | **Version** | Pinned by the FlashHub ref (`flashcli-bundle/<name>:<version>`), not by a version file |
 | **Build provenance** | Recorded as `build.sources[]` (`name` + `source` + `commit`) in the published manifest |
 
-**Python vs native-only bundles.** A Python bundle uses `defaults.entry` plus its `flash_rt/` tree. A **native-only** bundle sets `entry.kind` to `native-abi` or `native-exec` (see [bundle_execution_abi.md](bundle_execution_abi.md) §6–7): it ships **no** Python entry and **no** `flash_rt/`, and places its C libraries under `runtime/<runtime-dir>/substrate/`.
+**Python vs native-only bundles.** A Python bundle uses a Python `entry` and may carry a `flash_rt/` tree. `flash_rt/` is optional and may live at the bundle root or inside an environment runtime directory. A **native-only** bundle sets `entry.kind` to `native-abi` or `native-exec` (see [bundle_execution_abi.md](bundle_execution_abi.md) §6–7): it ships **no** Python entry and **no** `flash_rt/`, and places its C libraries under the selected runtime directory (for example `runtime/<runtime-dir>/substrate/`).
 
 **v4 model.** One bundle = one model + one execution implementation. Platform differences live in `environments`. `variants`, `backends`, and `entries` are not valid in v4; use separate bundles for different models/backends.
 
-End users resolve bundles via inline refs (`flashcli-bundle/<name>:<version>`). flashcli downloads `flashcli-bundle.json` first, selects the host environment, then downloads only the matching `runtime/<runtime-dir>/` tree.
+End users resolve bundles via inline refs (`flashcli-bundle/<name>:<version>`). flashcli downloads `flashcli-bundle.json` first, selects the host environment, then downloads only that environment's declared runtime directory. Every file outside the selected runtime directory is common and is downloaded for every environment.
+
+**Layout contract.** The hard layout requirements are:
+
+1. `flashcli-bundle.json` exists at the bundle root and conforms to this standard.
+2. Every relative path declared by the manifest exists and stays inside the bundle root: entry module files, environment `runtime` directories, and native `library` / `preload` globs.
+3. The entry is importable and conforms to the execution contract; declared native libraries are loadable.
+4. Only the selected environment's declared runtime directory is downloaded. Files outside every declared runtime directory are common and are downloaded for every environment.
+
+Everything else is a convention or recommendation: the `runtime/` directory name, whether `flash_rt/` is shared or per-environment, and whether runtime cells share code. See §2.3 for an isolated per-environment layout.
 
 ---
 
@@ -29,7 +38,11 @@ End users resolve bundles via inline refs (`flashcli-bundle/<name>:<version>`). 
 
 Upload the **entire publish root** (preserve relative paths). The FlashHub semantic API returns `data.files[]` with `download_url`, `file_name`, `file_size`, and `md5_hash` per file; paths in `download_url` must match the tree below.
 
+Runtime directories are declared by `environments.<key>.runtime` and may be any relative path under the publish root. The `runtime/` prefix used below is a convention, not a requirement. Everything outside the selected environment's runtime directory is common and downloaded for every environment.
+
 ### 2.1 Single environment (example: pi05_libero)
+
+The root `runtime/<runtime-dir>/` layout below is a common convention, not a requirement. See §2.3 for a per-environment alternative.
 
 ```text
 my_bundle/                              ← upload root (version directory contents)
@@ -64,29 +77,71 @@ my_bundle/
         └── flash_rt_fa2-…-py312.so
 ```
 
-### 2.3 Minimal publish package (required)
+### 2.3 Per-environment roots (recommended for isolated code)
+
+Put each environment's entry, helpers, optional `flash_rt/`, and native libraries directly in its declared runtime directory:
+
+```text
+my_bundle/
+├── flashcli-bundle.json
+├── sm89-cu124-linux-x86_64-py312/
+│   ├── run.py
+│   ├── _helper.py
+│   ├── flash_rt/
+│   └── flash_rt_kernels-{abi}-sm89-cu124-linux-x86_64-py312.so
+└── sm120-cu130-linux-x86_64-py312/
+    ├── run.py
+    ├── _helper.py
+    ├── flash_rt/
+    └── flash_rt_kernels-{abi}-sm120-cu130-linux-x86_64-py312.so
+```
+
+In this layout `environments.<key>.runtime` points at the whole environment directory (for example `"runtime": "sm89-cu124-linux-x86_64-py312"`), so the complete cell is downloaded only for that environment. Files outside every declared runtime directory are common: they are copied for all environments. If a file must not be shared, place it inside the environment's runtime directory.
+
+The manifest points each environment at that whole directory and at its own entry:
+
+```json
+"environments": {
+  "sm89-cu124-linux-x86_64-py312": {
+    "runtime": "sm89-cu124-linux-x86_64-py312",
+    "entry": {
+      "run": { "module": "sm89-cu124-linux-x86_64-py312.run", "attr": "RunEngine" }
+    }
+  },
+  "sm120-cu130-linux-x86_64-py312": {
+    "runtime": "sm120-cu130-linux-x86_64-py312",
+    "entry": {
+      "run": { "module": "sm120-cu130-linux-x86_64-py312.run", "attr": "RunEngine" }
+    }
+  }
+}
+```
+
+Native `.so` files are discovered directly in the runtime directory; put them there rather than in a nested `runtime/` subdirectory.
+
+### 2.4 Minimal publish package (required)
 
 The publish tree MUST be minimal, not merely free of build scripts:
 
-- Include only the manifest, entry modules/helpers, `flash_rt/` modules reachable from the entry, and the `runtime/<runtime-dir>/` cells declared by `environments`.
-- `flash_rt/` MUST be staged from the FlashRT tree by dependency need. Do not ship unrelated models, frontends, tests, reference implementations, examples, docs, caches, or unused optional modules.
+- Include only the manifest, entry modules/helpers, optional `flash_rt/` modules reachable from the entry, and the runtime directories declared by `environments`.
+- `flash_rt/` is optional. If present, stage only the modules reachable from the entry. Do not ship unrelated models, frontends, tests, reference implementations, examples, docs, caches, or unused optional modules.
 - A bundle may include optional modules only when a manifest-declared option or environment can reach them. "Just in case" files are not publishable.
 - A current-environment release contains exactly that one runtime cell; a full matrix contains exactly the cells listed in `environments`.
 
-Pack/build tooling owns this pruning: bundle build scripts MUST stage a minimal `flash_rt/`, and `pack` MUST copy only `RELEASE_PACK_FILES` + the selected runtime cell.
+Pack/build tooling owns this pruning: bundle build scripts MUST stage a minimal publish tree, and `pack` MUST copy only `RELEASE_PACK_FILES` + the selected runtime cell.
 
-### 2.4 Must not appear in the publish package
+### 2.5 Must not appear in the publish package
 
 | Path / file | Reason |
 |-------------|--------|
-| `flash_rt_*.so` at bundle root | Native libs must live under `runtime/<runtime-dir>/` |
+| `flash_rt_*.so` at bundle root | Native libs must live under the environment's declared runtime directory |
 | Dev-only files (`build.sh`, `.build-*`, tests, refs, examples, docs, caches) | Not required at inference time |
 | Unused `flash_rt` model/frontend/backend modules | Not reachable from the entry; increases package size |
 | `flash_rt/` `.so`/`.pyc`/`__pycache__` | `flash_rt/` is Python source only |
 | Model weight checkpoints | Declared in manifest `weights` / `extra_weights`; fetched externally |
 | Top-level `runtime`, `variants`, `backends`, `entries` | v4 uses `environments`; these fields are not part of v4 |
 
-### 2.4 Preset refs (for integrators)
+### 2.6 Preset refs (for integrators)
 
 ```text
 flashcli-bundle/<name>:<version>
@@ -121,8 +176,8 @@ Generated artifacts (never committed):
 
 Script contracts:
 
-- **build / matrix cell** MAY add tagged native libs (`lib/`, or `runtime/<env>/substrate/` for native-only) and MAY write `.build/manifest-overlay.json`; it MUST NOT modify `flashcli-bundle.json`.
-- **pack** reads the author manifest read-only, copies the selected native cell(s) into `runtime/`, merges `build` from the overlay, and writes the merged manifest only to `dist/flashcli-bundle.json`.
+- **build / matrix cell** MAY add tagged native libs to the environment's runtime directory (examples: `runtime/<env>/`, or `runtime/<env>/substrate/` for native-only) and MAY write `.build/manifest-overlay.json`; it MUST NOT modify `flashcli-bundle.json`.
+- **pack** reads the author manifest read-only, copies the selected runtime cell(s) to their manifest-declared paths, merges `build` from the overlay, and writes the merged manifest only to `dist/flashcli-bundle.json`.
 - **pack default** is the current host environment only. Use `--all-envs` / `--verify-matrix` for a full matrix release.
 - End users and FlashHub consume **`dist/flashcli-bundle.json`**, never the overlay alone.
 
@@ -136,7 +191,7 @@ Script contracts:
 | `name` | yes | Bundle id (descriptive only); matching the FlashHub repo name is a readability convention |
 | `description` | recommended | Human-readable summary |
 | `defaults` | yes | Model-wide configuration shared by all environments |
-| `environments` | yes | Non-empty env-key → platform overrides; every entry requires `runtime` |
+| `environments` | yes | Non-empty env-key → platform overrides; `runtime` is required for native entries and optional for pure-Python/CPU environments |
 | `build` | generated | FlashRT/build provenance; written into `dist/` by pack |
 | `system` | optional | System capabilities required at runtime (see §3.4.1) |
 | `resources` | optional | Measured VRAM footprint for flashserver admission (see §3.4.2) |
@@ -145,6 +200,8 @@ Script contracts:
 | `variants` / `backends` / `entries` | forbidden | v4 has one model and one implementation; split bundles instead |
 
 ### 3.2 `defaults.entry`
+
+`defaults.entry` defines capabilities shared by all environments. A bundle may instead declare entries only under `environments.<key>.entry`; an environment may also add or override a capability. `module` is always relative to the bundle root and may point inside the selected runtime directory.
 
 ```json
 "entry": {
@@ -446,17 +503,18 @@ Published manifests record the immutable source repositories used to build the b
 
 ### 4.1 Module location and imports
 
-- `entry.*.module` maps to `{module}.py` (or a package directory) under the bundle root.
-- The bundle root is added to `sys.path`; entry and co-located helpers may import each other directly.
+- `entry.*.module` maps to `{module}.py` (or a package directory) under the bundle root. It may live at the root or inside the selected environment's runtime directory.
+- The bundle root is added to `sys.path` first. The selected environment's runtime directory is appended to `sys.path` when it exists, so per-environment `flash_rt/` and helpers are importable without entry changes. A root `flash_rt/` takes precedence over a runtime-local one.
+- Module names are passed to `importlib.import_module`, so a path segment may contain `-` (for example `sm120-cu130-linux-x86_64-py312.run`). Literal `import sm120-cu...` syntax is not valid; use relative imports or `importlib` inside the module.
 - Entry code may depend on **`flashcli_bundle`** only. Do not `import flashcli` (the CLI package).
 
 ### 4.2 Native `.so` loading
 
 Before invoking the entry, flashcli:
 
-1. Selects the matching `runtime/<runtime-dir>/` from the selected environment.
-2. Registers its `.so` files as extension modules (import names such as `flash_rt_kernels`, `flash_rt_fa2`; no env suffix).
-3. Adds the bundle root to `sys.path` so `import flash_rt` and local helpers work.
+1. Selects the runtime directory declared by the selected environment.
+2. Registers its `.so` files as extension modules (import names such as `flash_rt_kernels`, `flash_rt_fa2`; no env suffix). A runtime directory with no `.so` is valid and is treated as a Python-only environment root.
+3. Adds the bundle root to `sys.path` first, then appends the selected runtime directory so `import flash_rt` and local helpers work.
 
 Script mode must not load `.so` through environment variables or manual `dlopen`.
 
@@ -488,6 +546,8 @@ Do not rely on internal variables such as `FLASHCLI_RUNTIME_ID`, `FLASHCLI_IN_BU
 | `entry.serve.module: "serve"` | `serve.py` with `ServeEngine` or `main` |
 | Both | Both files are required |
 
+The file path is always `{entry.*.module}` under the bundle root; it may be at the root or inside the selected environment's runtime directory (for example `entry.run.module: "sm120-cu130-linux-x86_64-py312.run"`).
+
 ---
 
 ## 5. Native `.so` layout and naming
@@ -509,12 +569,12 @@ Native-only bundles omit the `-py{PY}` segment. Non-NVIDIA platform tails are al
 
 ### 5.2 Directory rules
 
-1. Native `.so` files live under a runtime directory such as `runtime/<dir>/`; the directory name is arbitrary.
+1. Native `.so` files live directly in the runtime directory declared by `environments.<key>.runtime`. The path is arbitrary; the examples use `runtime/<dir>/` as a convention.
 2. Multiple environments may point to the same runtime directory and share the same `.so` files.
 3. Do not ship `.so` at the bundle root or under `lib/`.
-4. `flash_rt/` contains Python source only, no `.so`, `.pyc`, or `__pycache__`.
-5. On sync, end users download the selected runtime directory once, plus the shared source tree.
-6. A runtime-less Python environment needs no `flash_rt/` unless the entry imports it.
+4. `flash_rt/` is optional. If present, it contains Python source only, no `.so`, `.pyc`, or `__pycache__`.
+5. On sync, end users download the selected runtime directory, plus every common file outside all declared runtime directories. Other environment runtime directories are not downloaded.
+6. A runtime directory with no `.so` is a Python-only environment root. Per-environment code placed there is downloaded only for that environment.
 
 ### 5.3 Filename pattern
 
@@ -532,7 +592,7 @@ Native-only bundles omit the `-py{PY}` segment. Non-NVIDIA platform tails are al
 
 - Each supported `(SM, CUDA, python_abi)` combination gets one environment key.
 - All cells should expose the same `module_base` set unless a platform genuinely differs.
-- A release may contain one environment (current host) or a full matrix, but the manifest's `environments` must match the uploaded `runtime/` directories exactly.
+- A release may contain one environment (current host) or a full matrix, but the manifest's `environments` must match the uploaded runtime directories exactly.
 
 ---
 
@@ -546,10 +606,11 @@ Native-only bundles omit the `-py{PY}` segment. Non-NVIDIA platform tails are al
 - [ ] `flashcli-bundle.json` at publish root
 - [ ] Every Python `entry.*.module` has a matching file and symbol
 - [ ] `python_abi` + `python_dependencies` present for Python entries; any `-py` suffix on an env key matches `python_abi`
-- [ ] Every non-empty `environments.<key>.runtime` has a directory with at least one recognizable native `.so` (or `substrate/*.so` for native-only)
+- [ ] Every non-empty `environments.<key>.runtime` directory exists; if it contains native `.so` files, they are recognized (or `substrate/*.so` for native-only)
+- [ ] Files that must not be shared are inside the environment runtime directory; all other files are intentionally common
 - [ ] Shared runtime directories are referenced by compatible environments; no ambiguous fallback
 - [ ] No stray `.so` at bundle root, under `lib/`, or inside `flash_rt/`
-- [ ] `flash_rt/` present when a Python environment has a native runtime; absent for runtime-less CPU and native-only bundles
+- [ ] `flash_rt/` is optional. If present at the bundle root it is common to all environments; if per-environment it lives inside that runtime directory
 - [ ] `build.sources[]` present with `name` + `source` + `commit`; all environments use the same sources
 - [ ] Every `weights` and `extra_weights` revision is a full immutable commit SHA (no `main`/`master`/branch/tag)
 - [ ] `flashcli bundle validate` passes

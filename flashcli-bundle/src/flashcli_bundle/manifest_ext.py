@@ -196,16 +196,13 @@ def validate_bundle_layout(
             probe_abi=probe_abi,
             env_key=env_key,
             python_for_minor=python_for_minor,
+            allow_empty=True,
         )
     )
     errors.extend(validate_weights_spec(bundle))
     errors.extend(validate_bundle_options(bundle))
     errors.extend(validate_bundle_protocol_version(bundle))
     errors.extend(validate_bundle_execution(bundle))
-
-    runtime_map = bundle_runtime_map(bundle)
-    if any(str(rel).strip() for rel in runtime_map.values()) and not (bundle.bundle_root / "flash_rt").is_dir():
-        errors.append("missing flash_rt/ Python tree")
 
     if bundle.name == "groot_n17":
         vendor_meta = bundle.bundle_root / "gr00t" / "VENDOR.json"

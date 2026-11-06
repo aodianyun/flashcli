@@ -10,7 +10,7 @@
 
 | Bundle | SM | CUDA 线 | Python ABI | Native 模块 |
 |--------|-----|---------|------------|-------------|
-| `pi05_libero` | **89**、**120** | cu124（SM89）、cu130 | **3.12**（`python_abi: 312`） | `flash_rt_kernels`, `flash_rt_fa2` |
+| `pi05_libero` | **120** | **仅 cu130** | **3.12**（`python_abi: 312`） | `flash_rt_kernels`, `flash_rt_fa2` |
 | `qwen3_vl_8b_nvfp4` | **120** | **仅 cu130** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2`, `flash_rt_fp4`, `flash_rt_qwen3_vl_kernels` |
 | `groot_n16` | **120** | **仅 cu130** | **3.12** | `flash_rt_kernels`, `flash_rt_fa2` |
 | `higgs_audio` | **120** | **仅 cu130** | **3.10** | `flash_rt_kernels`, `flash_rt_fa2` |
@@ -29,9 +29,9 @@ OS / arch：**linux-x86_64**。配置见 `bundles/<name>/release-matrix.env`。
 
 ```text
 dist/
-  flashcli-bundle.json    # environments: { env_key: { runtime: "runtime/<runtime-dir>" } }
+  flashcli-bundle.json    # environments: { env_key: { runtime: "<runtime-dir>" } }
   run.py, flash_rt/, ...
-  runtime/
+  runtime/                 # 常见根布局；manifest 路径任意
     sm89-cu124-linux-x86_64-py312/
       flash_rt_kernels-...-py312.so
       flash_rt_fa2-...-py312.so
@@ -39,7 +39,7 @@ dist/
       ...
 ```
 
-运行时 flashcli 直接从缓存 bundle 根下的 `runtime/<runtime-dir>/` 加载匹配 env 的 `.so`（不会拷贝到 `lib/`）。
+运行时 flashcli 直接从选中 environment 声明的 runtime 目录加载 `.so`（示例使用 `runtime/<runtime-dir>/`）。
 
 每个已发布 bundle 由 **FlashHub ref**（`flashcli-bundle/<name>:<version>`）固定 — 见 [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
 
@@ -55,23 +55,21 @@ dist/
 
 1. `bash scripts/release_bundle.sh --bundle <name> --clean`（当前环境；完整矩阵加 `--matrix`）
 2. 上传 `dist/` 整棵树到 FlashHub
-3. 告知用户固定新 ref（如在文档中更新 `flashcli-bundle/pi05_libero:1.0.5`）
+3. 告知用户固定新 ref（如在文档中更新 `flashcli-bundle/pi05_libero:1.0.6`）
 
 示例 repo URL：
 
 ```text
-https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.5
+https://flashhub-api.aodianyun.com/api/v1/repos/flashcli-bundle/pi05_libero:1.0.6
 ```
 
 ### FA2（pi05_libero）
 
-**SM89 + SM120**；manifest 含 `sm89-cu124`、`sm89-cu130`、`sm120-cu130` runtime 档。
+**SM120**；manifest 含 `sm120-cu130` runtime 档。
 
 | CUDA 线 | FA2 / 内核策略 |
 |---------|----------------|
-| **cu124**（SM89） | `FA2_ARCH_NATIVE_ONLY` → sm_89 AOT |
-| **cu130**（SM89） | FA2 多架构；kernels 为 sm_89 |
-| **cu130**（SM120） | cu130 矩阵 pass 交叉编译 sm120 单元 |
+| **cu130**（SM120） | FA2/kernels 为 sm120 构建；per-environment 根目录 |
 
 ## 矩阵构建（通用脚本）
 
@@ -105,11 +103,12 @@ bash build.sh --repo-root "$FLASHRT_REPO"
 
 | 阶段 | 行为 |
 |------|------|
-| `flashcli bundle sync` | FlashHub API → manifest → preflight → 下载源码树 + 本 env `runtime/` |
-| `flashcli run` | bundle venv 装 torch → 从 `runtime/<runtime-dir>/` 加载 `.so` → 权重 → `entry` |
+| `flashcli bundle sync` | FlashHub API → manifest → preflight → 下载公共文件 + 本 env 声明的 runtime 目录 |
+| `flashcli run` | bundle venv 装 torch → 从声明的 runtime 目录加载 `.so` → 权重 → `entry` |
 
-本机环境键示例：`sm89-cu124-linux-x86_64-py312`、`sm120-cu130-linux-x86_64-py312`（NVIDIA）。env key 固定尾部为 `-{os}-{arch}-py{PY}`，前缀 `platform_tail` 可为 opaque（如 `gfx942-rocm611-linux-x86_64-py312`）。host 自动检测仍生成 NVIDIA 风格 key；调试新平台可设 `FLASHCLI_RUNTIME_ENV_KEY` 强制选中 manifest cell。  
-查看匹配：`flashcli models show flashcli-bundle/pi05_libero:1.0.5`
+本机环境键示例：`sm120-cu130-linux-x86_64-py312`（NVIDIA）。env key 固定尾部为 `-{os}-{arch}-py{PY}`，前缀 `platform_tail` 可为 opaque（如 `gfx942-rocm611-linux-x86_64-py312`）。host 自动检测仍生成 NVIDIA 风格 key；调试新平台可设 `FLASHCLI_RUNTIME_ENV_KEY` 强制选中 manifest cell。
+
+查看匹配：`flashcli models show flashcli-bundle/pi05_libero:1.0.6`
 
 **不要**用与 manifest `python_abi` 不一致的系统 Python 跑 bundle（会在 venv / preflight 阶段失败）。
 
@@ -120,6 +119,6 @@ flashcli run bundles/pi05_libero \
   --image /path/to.jpg
 ```
 
-本地 dev 树需在 `environments` 对应的 `runtime/<runtime-dir>/` 下有 `.so`（`build.sh` 先产出到 `lib/`，再 staging 到 `runtime/`；见各 bundle `BUILD.md`）。
+本地 dev 树需在 `environments` 声明的 runtime 目录下有 `.so`（示例使用 `runtime/<runtime-dir>/`；`build.sh` 先产出到 `lib/`，再 staging 到该目录；见各 bundle `BUILD.md`）。
 
 ---

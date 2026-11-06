@@ -17,11 +17,20 @@
 | **版本** | 由 FlashHub ref（`flashcli-bundle/<name>:<version>`）固定，不使用版本文件 |
 | **构建溯源** | 发布 manifest 的 `build.sources[]`（`name` + `source` + `commit`） |
 
-**Python 与仅原生 bundle。** 常规 bundle 使用 `defaults.entry` 并携带 `flash_rt/` 树。**仅原生** bundle 把 `entry.kind` 设为 `native-abi` 或 `native-exec`（见 [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) §6–7）：**不带** Python entry、**不带** `flash_rt/`，C 库放在 `runtime/<runtime-dir>/substrate/`。
+**Python 与仅原生 bundle。** 常规 bundle 使用 Python `entry`，并可选携带 `flash_rt/` 树；`flash_rt/` 可位于 bundle 根，也可位于某个 environment 的 runtime 目录内。**仅原生** bundle 把 `entry.kind` 设为 `native-abi` 或 `native-exec`（见 [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) §6–7）：**不带** Python entry、**不带** `flash_rt/`，C 库放在选中的 runtime 目录（例如 `runtime/<runtime-dir>/substrate/`）。
 
 **v4 模型。** 一个 bundle = 一个模型 + 一个执行实现；平台差异放 `environments`。v4 不允许 `variants`、`backends`、`entries`；不同模型/后端拆成不同 bundle。
 
-终端用户通过 inline ref（`flashcli-bundle/<name>:<version>`）获取 bundle。flashcli 先下载 `flashcli-bundle.json`，匹配宿主环境，再只下载对应的 `runtime/<runtime-dir>/`。
+终端用户通过 inline ref（`flashcli-bundle/<name>:<version>`）获取 bundle。flashcli 先下载 `flashcli-bundle.json`，匹配宿主环境，再只下载该 environment 声明的 runtime 目录。选中 runtime 目录之外的所有文件都是公共文件，每个 environment 都会下载。
+
+**布局契约。** 布局层面的硬要求只有：
+
+1. bundle 根存在 `flashcli-bundle.json`，且符合本规范；
+2. manifest 声明的所有相对路径都存在且不逃逸 bundle 根：entry 模块文件、environment `runtime` 目录、native `library` / `preload` glob；
+3. entry 可 import 且符合执行契约；声明了的 native 库可加载；
+4. 只下载选中 environment 声明的 runtime 目录；所有已声明 runtime 目录之外的文件都是公共文件，每个 environment 都会下载。
+
+其余都是约定或建议：目录是否叫 `runtime/`、`flash_rt/` 是共享还是 per-environment、以及各 runtime 是否共享代码。按 environment 隔离的布局见 §2.3。
 
 ---
 
@@ -29,7 +38,11 @@
 
 上传 **整个发布树根目录**（保持相对路径不变）。FlashHub 语义化 API 返回 `data.files[]`，每项含 `download_url`、`file_name`、`file_size`、`md5_hash`；`download_url` 路径须与下表一致。
 
+runtime 目录由 `environments.<key>.runtime` 声明，可以是发布根下的任意相对路径；下文示例中的 `runtime/` 前缀只是约定，不是强制要求。选中 environment 的 runtime 目录之外的文件都是公共文件，每个 environment 都会下载。
+
 ### 2.1 单环境（示例：pi05_libero）
+
+下面的根 `runtime/<runtime-dir>/` 布局是常见约定，不是强制要求。per-environment 布局见 §2.3。
 
 ```text
 my_bundle/                              ← 上传根（版本目录内容）
@@ -41,7 +54,7 @@ my_bundle/                              ← 上传根（版本目录内容）
 │   ├── api.py
 │   └── …
 └── runtime/
-    └── sm120-cu130-linux-x86_64-py312/ ← env key = 目录名
+    └── sm120-cu130-linux-x86_64-py312/ ← runtime 目录名任意
         ├── flash_rt_kernels-{abi}-sm120-cu130-linux-x86_64-py312.so
         └── flash_rt_fa2-{abi}-sm120-cu130-linux-x86_64-py312.so
 ```
@@ -64,29 +77,71 @@ my_bundle/
         └── flash_rt_fa2-…-py312.so
 ```
 
-### 2.3 发布包必须最小（强制）
+### 2.3 每个 environment 独立根目录（推荐用于代码隔离）
+
+把每个 environment 的 entry、helper、可选 `flash_rt/` 和 native 库直接放在它声明的 runtime 目录下：
+
+```text
+my_bundle/
+├── flashcli-bundle.json
+├── sm89-cu124-linux-x86_64-py312/
+│   ├── run.py
+│   ├── _helper.py
+│   ├── flash_rt/
+│   └── flash_rt_kernels-{abi}-sm89-cu124-linux-x86_64-py312.so
+└── sm120-cu130-linux-x86_64-py312/
+    ├── run.py
+    ├── _helper.py
+    ├── flash_rt/
+    └── flash_rt_kernels-{abi}-sm120-cu130-linux-x86_64-py312.so
+```
+
+这种布局下 `environments.<key>.runtime` 指向整个 environment 目录（例如 `"runtime": "sm89-cu124-linux-x86_64-py312"`），因此整个单元只会为该 environment 下载。所有已声明 runtime 目录之外的文件都是公共文件，会为所有 environment 下载。不需要共享的文件必须放进对应 environment 的 runtime 目录。
+
+manifest 把每个 environment 指向整个目录，并指定自己的 entry：
+
+```json
+"environments": {
+  "sm89-cu124-linux-x86_64-py312": {
+    "runtime": "sm89-cu124-linux-x86_64-py312",
+    "entry": {
+      "run": { "module": "sm89-cu124-linux-x86_64-py312.run", "attr": "RunEngine" }
+    }
+  },
+  "sm120-cu130-linux-x86_64-py312": {
+    "runtime": "sm120-cu130-linux-x86_64-py312",
+    "entry": {
+      "run": { "module": "sm120-cu130-linux-x86_64-py312.run", "attr": "RunEngine" }
+    }
+  }
+}
+```
+
+native `.so` 直接从 runtime 目录查找，请直接放在该目录下，不要再嵌套一层 `runtime/`。
+
+### 2.4 发布包必须最小（强制）
 
 发布树**必须最小**，不能只做到“没有 build 脚本”：
 
-- 只包含 manifest、entry 模块/helper、entry 可达的 `flash_rt/` 模块，以及 `environments` 声明的 `runtime/<runtime-dir>/` 单元。
-- `flash_rt/` 必须按依赖需要从 FlashRT 树 staging；不得携带无关模型、frontend、测试、reference、示例、文档、缓存或未使用的可选模块。
+- 只包含 manifest、entry 模块/helper、可选的 entry 可达 `flash_rt/` 模块，以及 `environments` 声明的 runtime 目录。
+- `flash_rt/` 可选；存在时只 staging entry 可达的模块。不得携带无关模型、frontend、测试、reference、示例、文档、缓存或未使用的可选模块。
 - 只有 manifest 声明的 option 或 environment 能触达的可选模块才允许保留；“以防万一”的文件不可发布。
 - 当前环境发布只放当前一个 runtime 单元；完整矩阵只放 `environments` 列出的单元。
 
-裁剪由 build/pack 负责：bundle build 脚本必须 staging 最小 `flash_rt/`，`pack` 只能复制 `RELEASE_PACK_FILES` + 选中的 runtime 单元。
+裁剪由 build/pack 负责：bundle build 脚本必须 staging 最小发布树，`pack` 只能复制 `RELEASE_PACK_FILES` + 选中的 runtime 单元。
 
-### 2.4 不应出现在发布包中的内容
+### 2.5 不应出现在发布包中的内容
 
 | 路径 / 文件 | 原因 |
 |-------------|------|
-| bundle 根目录下的 `flash_rt_*.so` | native 必须位于 `runtime/<runtime-dir>/` |
+| bundle 根目录下的 `flash_rt_*.so` | native 必须位于该 environment 声明的 runtime 目录 |
 | `build.sh`、`.build-*`、测试、refs、示例、文档、缓存 | 非推理必需 |
 | 未使用的 `flash_rt` 模型/frontend/backend 模块 | entry 不可达，增大发布包 |
 | `flash_rt/` 内 `.so` / `.pyc` / `__pycache__` | `flash_rt/` 只放 Python 源码 |
 | 模型权重 checkpoint | 由 manifest `weights` / `extra_weights` 声明外部拉取 |
 | 顶层 `runtime`、`variants`、`backends`、`entries` | v4 使用 `environments`；这些字段不属于 v4 |
 
-### 2.4 Preset ref（供集成方参考）
+### 2.6 Preset ref（供集成方参考）
 
 ```text
 flashcli-bundle/<name>:<version>
@@ -121,8 +176,8 @@ flashcli run flashcli-bundle/qwen3_8b_nvfp4:1.0.0
 
 脚本契约：
 
-- **build / matrix cell** 可新增 tagged native 库（`lib/`，native-only 用 `runtime/<env>/substrate/`），可写 `.build/manifest-overlay.json`；**不得** 改 `flashcli-bundle.json`。
-- **pack** 只读作者 manifest，把选中的 native 单元复制到 `runtime/`，合并 overlay 的 `build`，只写 `dist/flashcli-bundle.json`。
+- **build / matrix cell** 可把 tagged native 库加到 environment 的 runtime 目录（示例：`runtime/<env>/`，native-only 用 `runtime/<env>/substrate/`），可写 `.build/manifest-overlay.json`；**不得** 改 `flashcli-bundle.json`。
+- **pack** 只读作者 manifest，把选中的 runtime 单元复制到 manifest 声明的路径，合并 overlay 的 `build`，只写 `dist/flashcli-bundle.json`。
 - **pack 默认** 只处理当前宿主环境；完整矩阵用 `--all-envs` / `--verify-matrix`。
 - 终端用户与 FlashHub 消费 **`dist/flashcli-bundle.json`**，不是单独 overlay。
 
@@ -136,7 +191,7 @@ flashcli run flashcli-bundle/qwen3_8b_nvfp4:1.0.0
 | `name` | 是 | bundle 标识（仅描述）；与 FlashHub 仓库名一致只是可读性约定 |
 | `description` | 建议 | 用户可读说明 |
 | `defaults` | 是 | 所有环境共享的模型配置 |
-| `environments` | 是 | 非空 env key → 平台覆盖；每项必须有 `runtime` |
+| `environments` | 是 | 非空 env key → 平台覆盖；native entry 必须有 `runtime`，纯 Python/CPU 环境可省略 |
 | `build` | 生成 | FlashRT/构建溯源；由 pack 写入 `dist/` |
 | `resources` | 可选 | flashserver 调度使用的实测显存占用（见 §3.4.2） |
 | `runtime_abi_version` | 条件 | `native-abi` 必填，固定 **1** |
@@ -144,6 +199,8 @@ flashcli run flashcli-bundle/qwen3_8b_nvfp4:1.0.0
 | `variants` / `backends` / `entries` | 禁止 | v4 一个模型一个实现；拆分 bundle |
 
 ### 3.2 `defaults.entry`
+
+`defaults.entry` 定义所有 environment 共享的 capability。也可以在 `environments.<key>.entry` 中只声明 per-environment entry；environment 还可以新增或覆盖某个 capability。`module` 始终相对 bundle 根，可以指向选中 runtime 目录内部。
 
 ```json
 "entry": {
@@ -164,7 +221,7 @@ flashcli run flashcli-bundle/qwen3_8b_nvfp4:1.0.0
 |--------|------|
 | `run` / `serve` | capability；`run` 启用 `flashcli run`，`serve` 启用 `flashcli serve` |
 | `kind` | `python`（默认）、`native-exec`、`native-abi` |
-| `module` | 相对 bundle 根的 Python 模块名（仅 Python） |
+| `module` | 相对 bundle 根的 Python 模块名，可包含选中 runtime 目录内的路径（仅 Python） |
 | `attr` | 类/可调用名（`RunEngine`/`ServeEngine` 或 script `main`） |
 | `mode` | `engine`（默认）或 `script`（仅 Python） |
 
@@ -442,17 +499,18 @@ host 提供的 `--checkpoint`、`--host`、`--port` 不在这里声明。environ
 
 ### 4.1 模块位置与 import
 
-- `entry.*.module` 对应 bundle 根下的 `{module}.py`（或包目录）。
-- bundle 根会加入 `sys.path`；entry 与同目录 helper 可直接互相 import。
+- `entry.*.module` 对应 bundle 根下的 `{module}.py`（或包目录）。它可以位于根目录，也可以位于选中 environment 的 runtime 目录内。
+- bundle 根会先加入 `sys.path`；选中 environment 的 runtime 目录存在时会追加到 `sys.path`，因此 per-environment 的 `flash_rt/` 和 helper 无需改 entry 即可 import。根目录 `flash_rt/` 优先于 runtime 目录内的同名包。
+- 模块名通过 `importlib.import_module` 加载，因此路径段可以包含 `-`（例如 `sm120-cu130-linux-x86_64-py312.run`）。源码中不能写 `import sm120-cu...` 这种字面语法；请用相对 import 或 `importlib`。
 - entry 只能依赖 **`flashcli_bundle`**；不要 `import flashcli`（CLI 包）。
 
 ### 4.2 Native `.so` 加载
 
 调用 entry 前，flashcli：
 
-1. 从选中的 environment 找到 `runtime/<runtime-dir>/`。
-2. 把其中 `.so` 注册为扩展模块（导入名如 `flash_rt_kernels`、`flash_rt_fa2`，不带 env 后缀）。
-3. 把 bundle 根加入 `sys.path`，使 `import flash_rt` 和本地 helper 可用。
+1. 找到选中 environment 声明的 runtime 目录。
+2. 把其中 `.so` 注册为扩展模块（导入名如 `flash_rt_kernels`、`flash_rt_fa2`，不带 env 后缀）。runtime 目录没有 `.so` 也是合法的，此时视为纯 Python environment 根目录。
+3. 先把 bundle 根加入 `sys.path`，再追加选中的 runtime 目录，使 `import flash_rt` 和本地 helper 可用。
 
 script 模式不得通过环境变量或手动 `dlopen` 加载 `.so`。
 
@@ -484,6 +542,8 @@ script 模式不得通过环境变量或手动 `dlopen` 加载 `.so`。
 | `entry.serve.module: "serve"` | `serve.py`，含 `ServeEngine` 或 `main` |
 | 两者兼有 | 两个文件都必须存在 |
 
+文件路径始终是 bundle 根下的 `{entry.*.module}`；可以位于根目录，也可以位于选中 environment 的 runtime 目录内（例如 `entry.run.module: "sm120-cu130-linux-x86_64-py312.run"`）。
+
 ---
 
 ## 5. Native `.so` 目录与命名
@@ -505,12 +565,12 @@ native-only bundle 省略 `-py{PY}`。允许非 NVIDIA platform_tail（如 `gfx9
 
 ### 5.2 目录规则
 
-1. native `.so` 位于 `runtime/<dir>/` 等 runtime 目录；目录名任意。
+1. native `.so` 直接放在 `environments.<key>.runtime` 声明的 runtime 目录下。路径任意；示例中的 `runtime/<dir>/` 只是约定。
 2. 多个 environment 可以指向同一个 runtime 目录并共享同一批 `.so`。
 3. 禁止在 bundle 根或 `lib/` 下放 `.so`。
-4. `flash_rt/` 只放 Python 源码，不含 `.so`、`.pyc`、`__pycache__`。
-5. sync 时只下载选中的 runtime 目录一次，以及共享源码树。
-6. 无 runtime 的 Python 环境不需要 `flash_rt/`，除非 entry 显式 import。
+4. `flash_rt/` 可选；存在时只放 Python 源码，不含 `.so`、`.pyc`、`__pycache__`。
+5. sync 时下载选中的 runtime 目录，以及所有已声明 runtime 目录之外的公共文件；其他 environment 的 runtime 目录不下载。
+6. runtime 目录没有 `.so` 时视为纯 Python environment 根目录；放在其中的 per-environment 代码只会为该 environment 下载。
 
 ### 5.3 文件名规则
 
@@ -528,7 +588,7 @@ native-only bundle 省略 `-py{PY}`。允许非 NVIDIA platform_tail（如 `gfx9
 
 - 每个 `(SM, CUDA, python_abi)` 组合对应一个 environment key。
 - 各单元应暴露相同的 `module_base` 集合，除非平台确实不同。
-- 发布可以是当前单环境或完整矩阵，但 manifest `environments` 必须与上传的 `runtime/` 目录严格一致。
+- 发布可以是当前单环境或完整矩阵，但 manifest `environments` 必须与上传的 runtime 目录严格一致。
 
 ---
 
@@ -542,10 +602,11 @@ native-only bundle 省略 `-py{PY}`。允许非 NVIDIA platform_tail（如 `gfx9
 - [ ] `flashcli-bundle.json` 位于发布根目录
 - [ ] 每个 Python `entry.*.module` 都有文件与符号
 - [ ] Python entry 有 `python_abi` + `python_dependencies`；env key 带 `-py` 后缀时必须与 `python_abi` 一致
-- [ ] 每个非空 `environments.<key>.runtime` 都有目录，且含至少一个可识别 native `.so`（native-only 可为 `substrate/*.so`）
+- [ ] 每个非空 `environments.<key>.runtime` 目录都存在；如果含 native `.so`，文件名可识别（native-only 可为 `substrate/*.so`）
+- [ ] 不应共享的文件位于对应 environment 的 runtime 目录内；其余文件确认为公共文件
 - [ ] 共享 runtime 目录的 environments 兼容；fallback 无歧义
 - [ ] bundle 根、`lib/`、`flash_rt/` 内无 stray `.so`
-- [ ] Python entry 在有 native runtime 时带 `flash_rt/`；无 runtime 的 CPU 环境和 native-only bundle 可不带
+- [ ] `flash_rt/` 可选。位于 bundle 根时对所有 environment 公共；位于 runtime 目录内时属于该 environment
 - [ ] `dist/flashcli-bundle.json` 有 `build.sources[]`（`name` + `source` + `commit`）；所有 environment 使用同一组 sources
 - [ ] 所有 `weights` / `extra_weights` 的 revision 都是完整不可变 commit SHA（禁止 `main`/`master`/分支/tag）
 - [ ] `flashcli bundle validate` 通过

@@ -10,6 +10,7 @@ from flashcli_bundle.preset import Preset
 
 ROOT = Path(__file__).resolve().parents[1]
 PI05_ROOT = ROOT / "bundles" / "pi05_libero"
+PI05_ENV_ROOT = PI05_ROOT / "sm120-cu130-linux-x86_64-py312"
 
 
 def test_pi05_default_manifest_is_script_mode() -> None:
@@ -20,7 +21,7 @@ def test_pi05_default_manifest_is_script_mode() -> None:
 
 
 def test_pi05_script_run_has_no_flashcli_bundle_import() -> None:
-    text = (PI05_ROOT / "run.py").read_text(encoding="utf-8")
+    text = (PI05_ENV_ROOT / "run.py").read_text(encoding="utf-8")
     assert "from flashcli_bundle" not in text
     assert "import flashcli_bundle" not in text
     assert "def main(" in text

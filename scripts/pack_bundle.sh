@@ -43,7 +43,7 @@ Use --all-envs/--verify-matrix for a full release matrix.
 
 Outputs under dist/:
   flashcli-bundle.json + bundle source tree (run.py, flash_rt/, …)
-  runtime/<env-key>/ — per-env native .so files
+  <runtime-dir>/ — per-env native .so files at manifest-declared paths
 
 Usage:
   bash scripts/pack_bundle.sh [OPTIONS]
@@ -124,6 +124,27 @@ if [[ -d "${runtime_root}" ]]; then
 fi
 if [[ "${PACK_NATIVE_LAYOUT}" == "lib" && ! -d "${native_lib}" ]]; then
   PACK_NATIVE_LAYOUT="none"
+fi
+# v4 may declare arbitrary runtime paths (for example one environment root per
+# env) without a top-level runtime/ directory. Enable matrix verification when
+# the manifest declares any non-empty runtime directory.
+if [[ "${PACK_NATIVE_LAYOUT}" == "none" && -f "${BUNDLE_DIR}/flashcli-bundle.json" ]]; then
+  if python3 - "${BUNDLE_DIR}/flashcli-bundle.json" <<'PY'
+import json
+import sys
+
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+runtime = data.get("runtime")
+if not isinstance(runtime, dict):
+    runtime = {}
+    for key, block in (data.get("environments") or {}).items():
+        if isinstance(block, dict):
+            runtime[key] = block.get("runtime", "")
+raise SystemExit(0 if any(str(rel).strip() for rel in runtime.values()) else 1)
+PY
+  then
+    PACK_NATIVE_LAYOUT="runtime"
+  fi
 fi
 
 if [[ "${VERIFY_MATRIX}" -eq 1 && "${PACK_NATIVE_LAYOUT}" != "none" ]]; then

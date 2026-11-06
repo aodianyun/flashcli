@@ -2,9 +2,9 @@
 
 <p align="right"><a href="BUILD.md">English</a> · <strong>简体中文</strong></p>
 
-维护者流程：编译 FlashRT native、放入 `runtime/<runtime-dir>/`、校验、冒烟 `run`。
+维护者流程：编译 FlashRT native、放入 environment 根目录（`<env-key>/`：`run.py`、`flash_rt/`、`*.so`）、校验、冒烟 `run`。
 
-**要求：** Linux · NVIDIA SM89 或 SM120 · 对应 CUDA 用户态 · FlashRT 源码 · flashcli 开发环境。
+**要求：** Linux · NVIDIA SM120 · CUDA 13.x 用户态 · FlashRT 源码 · flashcli 开发环境。
 
 ```bash
 cd /path/to/flashcli
@@ -19,12 +19,6 @@ export FLASHRT_REPO=/path/to/FlashRT
 
 ```bash
 bash bundles/pi05_libero/build.sh --repo-root "$FLASHRT_REPO" -j "$(nproc)"
-```
-
-仅 SM89 的 FA2 加速（仅开发，勿用于发布）：
-
-```bash
-bash bundles/pi05_libero/build.sh --repo-root "$FLASHRT_REPO" --fa2-native-only
 ```
 
 ## 2. 打包（可选，生成 `dist/`）
@@ -59,7 +53,7 @@ flashcli run "$BUNDLE" \
 
 ## 5. 发布
 
-将 `dist/` 上传 FlashHub，ref 如 `flashcli-bundle/pi05_libero:1.0.5`（按实际版本号调整）。
+将 `dist/` 上传 FlashHub，ref 如 `flashcli-bundle/pi05_libero:1.0.6`（按实际版本号调整）。
 
 ## 故障排查（构建）
 

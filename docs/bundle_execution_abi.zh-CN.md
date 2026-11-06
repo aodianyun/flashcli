@@ -69,14 +69,14 @@ flashcli **如何调用某个 bundle 的推理入口**的权威契约，且与�
 
 capability 仍按 `entry` 推断：`run` 块启用 `flashcli run`，`serve` 块启用 `flashcli serve`。
 
-**v4 的 entry 位置。** v4 默认 entry 位于 `defaults.entry`；`environments.<env>.entry` 可按平台覆盖。v4 不再有 variants/backends/entries：不同后端拆成不同 bundle。
+**v4 的 entry 位置。** v4 的 `defaults.entry` 定义共享 capability；`environments.<env>.entry` 可按平台新增或覆盖。也可以只在 environment 下声明 entry。v4 不再有 variants/backends/entries：不同后端拆成不同 bundle。
 
 ### 3.1 仅原生 bundle 作者清单
 
 **仅原生** bundle（无 Python entry）需发布：
 
-- `flashcli-bundle.json`：`format_version: 4`、`protocol_version: 1`；`defaults.entry.kind = native-abi|native-exec`；对应的原生版本轴（`runtime_abi_version` 和/或 `exec_protocol_version` = `1`）；`defaults.weights`；`defaults.run_options`/`serve_options`；以及 `environments.<env>.runtime` 指向**无 py** 的单元（`runtime/sm{SM}-cu{CUDA}-{os}-{arch}/substrate`）。**省略** `python_abi`、`python_dependencies`、`flash_rt/`。
-- `runtime/<runtime-dir>/substrate/`：model-runtime `.so`。`native-abi` 放导出 `frt_model_runtime_open_v1` 的 producer `.so`（及 `preload` 库）；`native-exec` 放由 `native.command` 引用的可执行文件（任意语言）。
+- `flashcli-bundle.json`：`format_version: 4`、`protocol_version: 1`；`defaults.entry.kind = native-abi|native-exec`；对应的原生版本轴（`runtime_abi_version` 和/或 `exec_protocol_version` = `1`）；`defaults.weights`；`defaults.run_options`/`serve_options`；以及 `environments.<env>.runtime` 指向**无 py** 的单元（例如 `runtime/sm{SM}-cu{CUDA}-{os}-{arch}/substrate`）。**省略** `python_abi`、`python_dependencies`、`flash_rt/`。
+- 声明的 runtime 目录（例如 `runtime/<runtime-dir>/substrate/`）放 model-runtime `.so`。`native-abi` 放导出 `frt_model_runtime_open_v1` 的 producer `.so`（及 `preload` 库）；`native-exec` 放由 `native.command` 引用的可执行文件（任意语言）。
 - **模型专属细节全部归 bundle**（预处理、模态形状/dtype、默认值、option→端口映射）；host 是通用的，不得写死这些（§4）。
 
 `native-abi` 也可声明 `native.session_library` + `loader_symbol`，经 Nexus 内嵌 session 驱动（§7.6）。`native-exec` 除 `native.command` 外不需要知道任何东西；进程讲 NDJSON `stdio` 或 `http`（§6）。
@@ -85,7 +85,7 @@ capability 仍按 `entry` 推断：`run` 块启用 `flashcli run`，`serve` 块�
 
 ## 4. 公共生命周期（所有 kind）
 
-调用时，host 已完成：解析 ref、同步 bundle 树、选择匹配的 `runtime/<runtime-dir>/`、创建 bundle venv（Python kind 仍需建 infer venv，且 Python 是通用运行时）、下载并校验权重、应用 manifest `env`。kind 仅改变**入口如何启动与驱动**。
+调用时，host 已完成：解析 ref、同步 bundle 树、选择声明的 runtime 目录、创建 bundle venv（Python kind 仍需建 infer venv，且 Python 是通用运行时）、下载并校验权重、应用 manifest `env`。kind 仅改变**入口如何启动与驱动**。
 
 共享保证：
 
@@ -182,7 +182,7 @@ host `dlopen` 一个模型运行时共享库并在**进程内**驱动。这是**
 
 | 字段 | 必填 | 说明 |
 |------|------|------|
-| `library` | 是 | 模型运行时 `.so`；glob 必须唯一匹配。允许占位符；`{runtime_dir}` = 选中的 `runtime/<runtime-dir>/`。 |
+| `library` | 是 | 模型运行时 `.so`；glob 必须唯一匹配。允许占位符；`{runtime_dir}` = environment 声明的选中 runtime 目录。 |
 | `open_symbol` | 否 | 工厂符号；默认 `frt_model_runtime_open_v1`。 |
 | `preload` | 否 | 有序共享库列表，在 `library` **之前**以 `RTLD_GLOBAL` 加载。每项 glob 唯一匹配。 |
 | `config` | 否 | 序列化为 JSON 并作为 `config_json` 传给 `open_symbol` 的对象。允许占位符，尤其是来自 `run_options`/`serve_options` 的 `{option:<name>}`。 |

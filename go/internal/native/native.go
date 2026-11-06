@@ -183,6 +183,42 @@ func ValidateRuntimeMatrix(root string, runtimeMap map[string]string) []string {
 	return errors
 }
 
+// ValidateRuntimeMatrixOptional checks that every declared runtime directory
+// exists and validates native artifacts when any are present. Directories with
+// no native libraries are accepted as pure-Python environment roots.
+func ValidateRuntimeMatrixOptional(root string, runtimeMap map[string]string) []string {
+	var errors []string
+	seen := map[string]bool{}
+	for _, rel := range runtimeMap {
+		rel = strings.Trim(rel, "/")
+		if rel == "" || seen[rel] {
+			continue
+		}
+		seen[rel] = true
+		dir := filepath.Join(root, filepath.FromSlash(rel))
+		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+			errors = append(errors, "missing "+rel+"/ for runtime "+quote(rel))
+			continue
+		}
+		if !HasNativeArtifacts(dir) {
+			continue
+		}
+		errors = append(errors, ValidateRuntimeCell(root, rel, dir)...)
+	}
+	sort.Strings(errors)
+	return errors
+}
+
+// HasNativeArtifacts reports whether a runtime directory contains native
+// libraries, either directly or under substrate/.
+func HasNativeArtifacts(dir string) bool {
+	if len(soFiles(dir)) > 0 {
+		return true
+	}
+	matches, _ := filepath.Glob(filepath.Join(dir, "substrate", "*.so"))
+	return len(matches) > 0
+}
+
 // ValidateRuntimeCell checks one runtime cell directory. The directory name is
 // informational; native artifacts are identified by module_base prefix and
 // parsed build tag, not by the selected environment key.
