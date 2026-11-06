@@ -9,11 +9,17 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 func TestWantFile(t *testing.T) {
 	env := "runtime/sm120-cu130-linux-x86_64-py310"
+	all := []string{
+		env,
+		"runtime/sm89-cu124-linux-x86_64-py310",
+		"runtime/shared-cell",
+	}
 	cases := map[string]bool{
 		"flashcli-bundle.json": true,
 		"run.py":               true,
@@ -23,9 +29,30 @@ func TestWantFile(t *testing.T) {
 		"runtime/shared-cell/lib.so":                    false,
 	}
 	for path, want := range cases {
-		if got := WantFile(path, env); got != want {
+		if got := WantFile(path, env, all); got != want {
 			t.Fatalf("WantFile(%q) = %v, want %v", path, got, want)
 		}
+	}
+}
+
+func TestWantFileArbitraryRuntime(t *testing.T) {
+	selected := "sm120-cu130-linux-x86_64-py312"
+	all := []string{"sm89-cu124-linux-x86_64-py312", selected}
+	cases := map[string]bool{
+		"flashcli-bundle.json":                  true,
+		"sm120-cu130-linux-x86_64-py312/run.py": true,
+		"sm120-cu130-linux-x86_64-py312/a.so":   true,
+		"sm89-cu124-linux-x86_64-py312/run.py":  false,
+		"common/README.md":                      true,
+		"runtime/legacy-cell/a.so":              false,
+	}
+	for path, want := range cases {
+		if got := WantFile(path, selected, all); got != want {
+			t.Fatalf("WantFile(%q) = %v, want %v", path, got, want)
+		}
+	}
+	if !WantFile("sm120-cu130-linux-x86_64-py312x/a.so", selected, all) {
+		t.Fatal("prefix match must require a path boundary")
 	}
 }
 
@@ -131,13 +158,71 @@ func TestDownloadFileMD5Mismatch(t *testing.T) {
 
 func TestWantFileSharedRuntime(t *testing.T) {
 	shared := "runtime/shared"
-	if !WantFile("runtime/shared/lib.so", shared) {
+	all := []string{shared, "runtime/other"}
+	if !WantFile("runtime/shared/lib.so", shared, all) {
 		t.Fatal("selected shared runtime must be synced")
 	}
-	if !WantFile("runtime/shared/substrate/lib.so", shared) {
+	if !WantFile("runtime/shared/substrate/lib.so", shared, all) {
 		t.Fatal("nested files under selected shared runtime must be synced")
 	}
-	if WantFile("runtime/other/lib.so", shared) {
+	if WantFile("runtime/other/lib.so", shared, all) {
 		t.Fatal("unselected runtime must not be synced")
+	}
+}
+
+func TestSyncBundleArbitraryRuntimeIsolation(t *testing.T) {
+	files := map[string]string{
+		"flashcli-bundle.json": `{"name":"demo"}`,
+		"common/README.md":     "common",
+		"env-a/run.py":         "a",
+		"env-a/kernels.so":     "a-so",
+		"env-b/run.py":         "b",
+		"env-b/kernels.so":     "b-so",
+		"runtime/other/x.so":   "other",
+	}
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	mux.HandleFunc("/index", func(w http.ResponseWriter, r *http.Request) {
+		var entries []map[string]any
+		for path, body := range files {
+			entries = append(entries, map[string]any{
+				"download_url": srv.URL + "/repo/1/versions/1/" + path,
+				"file_name":    filepath.Base(path),
+				"file_size":    len(body),
+				"md5_hash":     "",
+			})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 0,
+			"data": map[string]any{"files": entries},
+		})
+	})
+	mux.HandleFunc("/repo/1/versions/1/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/repo/1/versions/1/")
+		body, ok := files[path]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(body))
+	})
+
+	client := &Client{HTTP: srv.Client(), CacheDir: t.TempDir(), UserAgent: "test"}
+	bundleDir := t.TempDir()
+	if _, err := client.SyncBundle(
+		context.Background(), srv.URL+"/index", bundleDir, "env-a", []string{"env-a", "env-b"}, true,
+	); err != nil {
+		t.Fatalf("SyncBundle: %v", err)
+	}
+	for _, rel := range []string{"flashcli-bundle.json", "common/README.md", "env-a/run.py", "env-a/kernels.so"} {
+		if _, err := os.Stat(filepath.Join(bundleDir, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("expected %s: %v", rel, err)
+		}
+	}
+	for _, rel := range []string{"env-b/run.py", "env-b/kernels.so", "runtime/other/x.so"} {
+		if _, err := os.Stat(filepath.Join(bundleDir, filepath.FromSlash(rel))); err == nil {
+			t.Fatalf("unexpected %s", rel)
+		}
 	}
 }

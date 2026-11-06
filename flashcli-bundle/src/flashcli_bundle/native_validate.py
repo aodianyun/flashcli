@@ -149,6 +149,8 @@ def _validate_runtime_cell(
     bundle: BundleManifest,
     env_key: str,
     native_dir: Path,
+    *,
+    allow_empty: bool = False,
 ) -> list[str]:
     rel = native_dir.relative_to(bundle.bundle_root)
     errors: list[str] = []
@@ -175,6 +177,10 @@ def _validate_runtime_cell(
 
     if not matched_modules:
         if (native_dir / "substrate").is_dir() and any((native_dir / "substrate").glob("*.so")):
+            return errors
+        if allow_empty and not list(native_dir.glob("*.so")):
+            # A declared runtime directory may be a pure-Python environment
+            # root; native artifacts are optional unless the entry uses them.
             return errors
         errors.append(f"{rel}/ has no recognized native .so artifacts")
         return errors
@@ -204,8 +210,16 @@ def _validate_runtime_cell(
 
     return errors
 
-def validate_native_runtime_matrix(bundle: BundleManifest) -> list[str]:
-    """Check each manifest ``runtime/<env-key>/`` directory for required ``.so`` files."""
+def validate_native_runtime_matrix(
+    bundle: BundleManifest,
+    *,
+    allow_empty: bool = False,
+) -> list[str]:
+    """Check each manifest runtime directory for native ``.so`` files.
+
+    When ``allow_empty`` is true, directories with no native libraries are
+    accepted as pure-Python environment roots.
+    """
     try:
         runtime_map = bundle_runtime_map(bundle)
     except ValueError as exc:
@@ -216,7 +230,11 @@ def validate_native_runtime_matrix(bundle: BundleManifest) -> list[str]:
         if not str(rel_path).strip():
             continue
         native_dir = (bundle.bundle_root / rel_path.strip().lstrip("/")).resolve()
-        errors.extend(_validate_runtime_cell(bundle, env_key, native_dir))
+        errors.extend(
+            _validate_runtime_cell(
+                bundle, env_key, native_dir, allow_empty=allow_empty
+            )
+        )
     return errors
 
 
@@ -260,9 +278,10 @@ def validate_native_runtime(
     probe_abi: bool = True,
     env_key: str | None = None,
     python_for_minor: PythonForMinorFn | None = None,
+    allow_empty: bool = False,
 ) -> list[str]:
     if env_key is None:
-        errors = validate_native_runtime_matrix(bundle)
+        errors = validate_native_runtime_matrix(bundle, allow_empty=allow_empty)
         cells: list[tuple[str, Path]] = []
         try:
             for key, rel in bundle_runtime_map(bundle).items():
@@ -275,11 +294,13 @@ def validate_native_runtime(
         try:
             rel = bundle_runtime_map(bundle)[env_key]
         except (ValueError, KeyError):
-            return validate_native_runtime_matrix(bundle)
+            return validate_native_runtime_matrix(bundle, allow_empty=allow_empty)
         if not str(rel).strip():
             return []
         native_dir = (bundle.bundle_root / rel.strip().lstrip("/")).resolve()
-        errors = _validate_runtime_cell(bundle, env_key, native_dir)
+        errors = _validate_runtime_cell(
+            bundle, env_key, native_dir, allow_empty=allow_empty
+        )
         cells = [(env_key, native_dir)]
 
     if probe_abi:

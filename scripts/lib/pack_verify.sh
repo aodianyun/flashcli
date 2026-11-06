@@ -1,4 +1,4 @@
-# Matrix + ABI verification before packing lib/*.so or runtime/<env-key>/
+# Matrix + ABI verification before packing lib/*.so or manifest-declared runtime dirs.
 # Requires: log, die, verify_native_matrix_multi, verify_native_lib_python_abi
 
 pack_verify_runtime_matrix() {
@@ -7,31 +7,55 @@ pack_verify_runtime_matrix() {
   if [[ -n "${RELEASE_NATIVE_MODULES:-}" ]]; then
     read -r -a modules <<< "${RELEASE_NATIVE_MODULES}"
   fi
-  local runtime_root="${bundle_dir}/runtime"
-  [[ -d "${runtime_root}" ]] || die "Missing ${runtime_root}"
+  local manifest="${bundle_dir}/flashcli-bundle.json"
+  local -A rel_by_env=()
+  if [[ -f "${manifest}" ]]; then
+    while IFS=$'\t' read -r key rel; do
+      [[ -n "${key}" ]] && rel_by_env["${key}"]="${rel}"
+    done < <(python3 - "${manifest}" <<'PY'
+import json
+import sys
 
-  local cuda py env_key cell_dir mod pattern
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+runtime = data.get("runtime")
+if not isinstance(runtime, dict):
+    runtime = {}
+    for key, block in (data.get("environments") or {}).items():
+        if isinstance(block, dict):
+            runtime[key] = block.get("runtime", "")
+for key, rel in runtime.items():
+    print(f"{key}\t{rel or ''}")
+PY
+)
+  fi
+
+  local cuda py env_key rel cell_dir mod pattern
   local -a matches=()
   for cuda in ${cuda_tags}; do
     for py in ${py_minors}; do
       env_key="$(runtime_env_key "${sm}" "${cuda}" "${os_name}" "${arch}" "${py}")"
-      cell_dir="${runtime_root}/${env_key}"
-      [[ -d "${cell_dir}" ]] || die "Missing runtime/${env_key} (run build.sh first)"
+      rel="runtime/${env_key}"
+      if [[ -n "${rel_by_env[${env_key}]+x}" ]]; then
+        rel="${rel_by_env[${env_key}]}"
+      fi
+      [[ -n "${rel}" ]] || die "environment ${env_key} declares no runtime directory"
+      cell_dir="${bundle_dir}/${rel}"
+      [[ -d "${cell_dir}" ]] || die "Missing ${rel} for environment ${env_key} (run build.sh first)"
       if [[ ${#modules[@]} -eq 0 ]]; then
         shopt -s nullglob
         matches=( "${cell_dir}"/*-sm"${sm}"-cu"${cuda}"-"${os_name}"-"${arch}"-py"${py}".so )
         shopt -u nullglob
-        [[ ${#matches[@]} -ge 1 ]] || die "runtime/${env_key} has no .so artifacts"
+        [[ ${#matches[@]} -ge 1 ]] || die "${rel} has no .so artifacts"
       else
         for mod in "${modules[@]}"; do
           pattern="${cell_dir}/${mod}*-sm${sm}-cu${cuda}-${os_name}-${arch}-py${py}.so"
           shopt -s nullglob
           matches=( ${pattern} )
           shopt -u nullglob
-          [[ ${#matches[@]} -ge 1 ]] || die "Missing runtime/${env_key}/${mod}*.so"
+          [[ ${#matches[@]} -ge 1 ]] || die "Missing ${rel}/${mod}*.so"
         done
       fi
-      log "runtime/${env_key} OK"
+      log "${rel} OK"
     done
   done
 }

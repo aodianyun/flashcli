@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -71,7 +72,7 @@ func ensureBundleRef(refStr string, quiet, force bool) (string, string, string, 
 	if envKey == "" {
 		return "", "", "", fmt.Errorf("bundle %q has no runtime environment for this machine", m.Name)
 	}
-	if _, err := client.SyncBundle(ctx, repoURL, bundleDir, m.RuntimeMap()[envKey], quiet); err != nil {
+	if _, err := client.SyncBundle(ctx, repoURL, bundleDir, m.RuntimeMap()[envKey], runtimeRels(m), quiet); err != nil {
 		return "", "", "", err
 	}
 	runtimeID := runtime.IDFromRepo(repoURL, p.Name)
@@ -133,6 +134,20 @@ func writeLocalMarkers(m *manifest.Manifest, root, variant string) (string, erro
 		return "", err
 	}
 	return runtimeID, nil
+}
+
+func runtimeRels(m *manifest.Manifest) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(m.RuntimeMap()))
+	for _, rel := range m.RuntimeMap() {
+		rel = strings.Trim(strings.TrimSpace(rel), "/")
+		if rel == "" || seen[rel] {
+			continue
+		}
+		seen[rel] = true
+		out = append(out, rel)
+	}
+	return out
 }
 
 func resolveEnvKey(m *manifest.Manifest) string {

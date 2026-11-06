@@ -409,7 +409,8 @@ func validateNativeABI(cap string, native map[string]any) []string {
 // Validate runs structural + execution validation (no native .so probing yet).
 func Validate(m *Manifest) []string {
 	var errors []string
-	if m.NeedsPythonVenv() {
+	pythonBundle := hasPythonEntryForAnyEnvironment(m)
+	if pythonBundle {
 		if abi := m.PythonABIOrEmpty(); abi == "" {
 			errors = append(errors, fmt.Sprintf("Bundle %q has a python entry but no valid python_abi (expected e.g. '312')", m.Name))
 		}
@@ -417,24 +418,16 @@ func Validate(m *Manifest) []string {
 	if rt, ok := m.Raw["runtime"].(map[string]any); !ok || len(rt) == 0 {
 		errors = append(errors, "missing runtime map (env_key → runtime/<env-key>/ path)")
 	}
-	for _, capSpec := range []struct {
-		cap  string
-		spec *EntrySpec
-	}{{"run", m.EntryRun}, {"serve", m.EntryServe}} {
-		spec := capSpec.spec
-		if spec == nil || spec.Kind != "python" {
-			continue
-		}
-		path := filepath.Join(m.Root, filepath.FromSlash(strings.ReplaceAll(spec.Module, ".", "/"))+".py")
-		if _, err := os.Stat(path); err != nil {
-			errors = append(errors, fmt.Sprintf("entry.%s module file not found: %s (module %q under %s)", capSpec.cap, path, spec.Module, m.Root))
-		}
-	}
+	errors = append(errors, validateEntryFiles(m)...)
 	errors = append(errors, validatePythonDependencies(m)...)
 	errors = append(errors, validateRuntimeSuffix(m)...)
 	errors = append(errors, validateSystemRequirements(m)...)
 	errors = append(errors, validateSystemRequirements(m)...)
-	errors = append(errors, native.ValidateRuntimeMatrix(m.Root, m.RuntimeMap())...)
+	if pythonBundle {
+		errors = append(errors, native.ValidateRuntimeMatrixOptional(m.Root, m.RuntimeMap())...)
+	} else {
+		errors = append(errors, native.ValidateRuntimeMatrix(m.Root, m.RuntimeMap())...)
+	}
 	errors = append(errors, validateWeights(m)...)
 	errors = append(errors, validateOptions(m)...)
 	errors = append(errors, ValidateExecution(m)...)
