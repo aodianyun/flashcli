@@ -49,7 +49,7 @@ FINALIZE_MATRIX_MANIFEST=0
 
 usage() {
   cat <<EOF
-Assemble a Pi0.5 flashcli model bundle (flat layout: *.so + flash_rt/ + run.py at bundle root).
+Assemble a Pi0.5 flashcli model bundle (per-environment layout: <env-key>/{run.py,flash_rt/,*.so}).
 
 Usage:
   bash flashcli/scripts/build_pi05_bundle.sh --bundle-dir DIR [OPTIONS]
@@ -76,7 +76,7 @@ Options:
   --build-id ID           manifest build_id
   --min-driver VER        manifest min_driver_version
   --cutlass-branch REF    CUTLASS tag (default: v4.4.2)
-  --merge-native          Install .so under lib/ (accumulate matrix cells)
+  --merge-native          Keep existing flash_rt/ when staging a matrix cell
   --fa2-native-only       Fast dev: FA2 sm_\${GPU_ARCH} only (breaks SM120; not for release)
   --skip-manifest         Skip .build/manifest-overlay.json (matrix intermediate cell)
   --finalize-matrix-manifest  Scan lib/ and write multi-env manifest (after full matrix)
@@ -354,12 +354,17 @@ finalize_matrix_manifest() {
 
 stage_bundle_runtime() {
   local native_lib="${BUNDLE_DIR}/lib"
-  local lib_dir="${BUNDLE_DIR}"
-  if [[ "${MERGE_NATIVE}" -eq 1 ]]; then
-    lib_dir="${native_lib}"
-    mkdir -p "${native_lib}"
+  local py_bin="${PYTHON_BIN:-python3}"
+  if [[ -z "${PYTHON_MINOR}" ]]; then
+    PYTHON_MINOR="$("${py_bin}" -c 'import sys; print(f"{sys.version_info.major}{sys.version_info.minor:02d}")')"
   fi
-  local py_dir="${BUNDLE_DIR}/flash_rt"
+
+  local env_key env_dir
+  env_key="$(runtime_env_key "${SM}" "${CUDA_TAG}" "${OS_NAME}" "${CPU_ARCH}" "${PYTHON_MINOR}")"
+  env_dir="${BUNDLE_DIR}/${env_key}"
+  mkdir -p "${env_dir}"
+  local lib_dir="${env_dir}"
+  local py_dir="${env_dir}/flash_rt"
   local flash_rt_src="${REPO_ROOT}/flash_rt"
   local build_src="${BUILD_DIR:-${REPO_ROOT}/build}/native-out"
   local skip_py_stage=0
@@ -371,16 +376,7 @@ stage_bundle_runtime() {
     rm -rf "${py_dir}"
   fi
   rm -rf "${BUNDLE_DIR}/runtime"
-  if [[ "${MERGE_NATIVE}" -eq 1 ]]; then
-    rm -f "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so
-  else
-    rm -f "${BUNDLE_DIR}"/flash_rt_*.so "${BUNDLE_DIR}"/libfmha_fp16_strided.so
-  fi
-
-  local py_bin="${PYTHON_BIN:-python3}"
-  if [[ -z "${PYTHON_MINOR}" ]]; then
-    PYTHON_MINOR="$("${py_bin}" -c 'import sys; print(f"{sys.version_info.major}{sys.version_info.minor:02d}")')"
-  fi
+  rm -f "${env_dir}"/flash_rt_*.so "${env_dir}"/libfmha_fp16_strided.so
 
   local git_commit flashrt_tag build_id torch_idx min_drv flashrt_abi native_tag
   git_commit="$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)"
@@ -554,8 +550,13 @@ fi
 
 resolve_repo_root
 if [[ "${STAGE_FLASH_RT_ONLY}" -eq 1 ]]; then
-  stage_pi05_flash_rt_minimal "${BUNDLE_DIR}/flash_rt"
-  log "Minimal flash_rt/ staged; native runtime untouched"
+  detect_platform
+  [[ -n "${SM}" ]] || detect_sm
+  [[ -n "${CUDA_TAG}" ]] || detect_cuda_tag
+  PYTHON_MINOR="${PYTHON_MINOR:-$(python3 -c 'import sys; print(f"{sys.version_info.major}{sys.version_info.minor:02d}")')}"
+  env_key="$(runtime_env_key "${SM}" "${CUDA_TAG}" "${OS_NAME}" "${CPU_ARCH}" "${PYTHON_MINOR}")"
+  stage_pi05_flash_rt_minimal "${BUNDLE_DIR}/${env_key}/flash_rt"
+  log "Minimal flash_rt/ staged under ${env_key}/; native runtime untouched"
   exit 0
 fi
 ensure_runtime_requirements_file

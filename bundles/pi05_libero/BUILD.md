@@ -2,9 +2,9 @@
 
 <p align="right"><strong>English</strong> · <a href="BUILD.zh-CN.md">简体中文</a></p>
 
-Maintainer workflow: compile FlashRT natives, stage into `runtime/<runtime-dir>/`, validate, smoke `run`.
+Maintainer workflow: compile FlashRT natives, stage into the environment root (`<env-key>/` with `run.py`, `flash_rt/`, `*.so`), validate, smoke `run`.
 
-**Requires:** Linux · NVIDIA SM89 or SM120 · matching CUDA userland · FlashRT source tree · flashcli dev checkout.
+**Requires:** Linux · NVIDIA SM120 · CUDA 13.x userland · FlashRT source tree · flashcli dev checkout.
 
 ```bash
 cd /path/to/flashcli
@@ -19,12 +19,6 @@ export FLASHRT_REPO=/path/to/FlashRT
 
 ```bash
 bash bundles/pi05_libero/build.sh --repo-root "$FLASHRT_REPO" -j "$(nproc)"
-```
-
-SM89-only FA2 speedup (dev only, not for release):
-
-```bash
-bash bundles/pi05_libero/build.sh --repo-root "$FLASHRT_REPO" --fa2-native-only
 ```
 
 ## 2. Pack (optional, for `dist/`)
@@ -59,7 +53,7 @@ flashcli run "$BUNDLE" \
 
 ## 5. Publish
 
-Upload `dist/` to FlashHub as `flashcli-bundle/pi05_libero:1.0.5` (bump version as needed).
+Upload `dist/` to FlashHub as `flashcli-bundle/pi05_libero:1.0.6` (bump version as needed).
 
 ## Troubleshooting (build)
 

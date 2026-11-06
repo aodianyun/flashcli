@@ -1,4 +1,7 @@
 # Assembled by build.sh (Linux + NVIDIA GPU)
+/sm120-cu130-linux-x86_64-py312/flash_rt/
+/sm120-cu130-linux-x86_64-py312/*.so
+/sm120-cu130-linux-x86_64-py312/__pycache__/
 /flash_rt/
 /flash_rt_*.so
 /flash_rt_fp4.so
