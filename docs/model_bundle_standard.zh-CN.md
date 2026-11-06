@@ -49,12 +49,15 @@ host 先匹配精确 `environments.<env>` key；没有精确匹配时，再按 f
 ```text
 {bundle_root}/
 ├── flashcli-bundle.json
-├── run.py / serve.py
-├── flash_rt/
-└── runtime/<runtime-dir>/
+├── run.py / serve.py            # 也可放在 runtime 目录内
+├── flash_rt/                    # 可选
+└── <runtime-dir>/               # 由 environments.<key>.runtime 声明
+    └── *.so                     # 直接从该目录加载
 ```
 
-> 仅原生 bundle（`defaults.entry.kind = native-abi|native-exec`）省略 `run.py`/`serve.py` 与 `flash_rt/`；C 库放在 `runtime/<runtime-dir>/substrate/`。
+只下载选中 environment 声明的 runtime 目录。所有已声明 runtime 目录之外的文件都是公共文件，会为每个 environment 下载。路径任意；示例通常用 `runtime/<runtime-dir>/`。`flash_rt/` 可选；根目录的 `flash_rt/` 是公共代码且优先，runtime 目录内的版本因为选中 runtime 目录会追加到 `sys.path` 也可以 import。
+
+> 仅原生 bundle（`defaults.entry.kind = native-abi|native-exec`）省略 `run.py`/`serve.py` 与 `flash_rt/`；C 库放在选中的 runtime 目录（例如 `runtime/<runtime-dir>/substrate/`）。
 
 权重不在 bundle 内。v4 使用按 `source + repo + revision` 派生的共享 store（通常在 `~/.flashcli/models/store/...`）；extra weights 默认 `<store>/extra/<key>/`。
 
@@ -62,7 +65,7 @@ host 先匹配精确 `environments.<env>` key；没有精确匹配时，再按 f
 
 1. 解析 REF → 若为本地目录则用 `local_root`；否则 `bundle.repo`（或已 sync 的 marker）
 2. FlashHub manifest → 本机 **preflight** env key
-3. 下载 entry + 匹配的 `runtime/<runtime-dir>/`
+3. 下载 manifest、公共文件，以及 **仅** 选中 environment 声明的 runtime 目录
 4. `kind=python`：创建 bundle venv（`python_abi`、manifest 中的 torch）。native kind 跳过 venv。
 5. `kind=python`：在 bundle venv 内 **re-exec** infer — [architecture.zh-CN.md](architecture.zh-CN.md)。`native-exec`/`native-abi`：host 直接 spawn / `dlopen` bundle backend。
 6. **主机**（推理前）：确保 `weights` + `extra_weights` + `post_pull`。主机在**传输前**把远端预期文件集写入 `<weights_dir>/.flashcli_download.json`，中断后按预期集续传；完整清单可离线接受；`flashcli pull` 会重新列远端并重写清单。7. **bundle**：仅解析本地 checkpoint（`HF_HUB_OFFLINE=1`）；运行 `entry`（或原生 backend）

@@ -1,6 +1,9 @@
 package manifest
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -371,5 +374,102 @@ func TestSystemRequiresPythonABIForHeaders(t *testing.T) {
 	errs := validateSystemRequirements(m)
 	if len(errs) == 0 || !strings.Contains(strings.Join(errs, " "), "requires python_abi") {
 		t.Fatalf("errors = %v", errs)
+	}
+}
+
+func writeBundleFile(t *testing.T, root, rel, body string) {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestV4AllowsPythonRuntimeCellWithoutNativeOrFlashRt(t *testing.T) {
+	root := t.TempDir()
+	envKey := "sm89-cu124-linux-x86_64-py312"
+	data := map[string]any{
+		"format": Format, "format_version": 4, "protocol_version": 1,
+		"name": "demo",
+		"defaults": map[string]any{
+			"python_abi": "312",
+			"python_dependencies": map[string]any{
+				"torch": false,
+				"pip":   []any{},
+			},
+			"run_options": []any{map[string]any{"name": "prompt", "help": "x"}},
+			"weights":     map[string]any{"source": "huggingface", "repo": "org/demo"},
+		},
+		"environments": map[string]any{
+			envKey: map[string]any{
+				"runtime": envKey,
+				"entry": map[string]any{
+					"run": map[string]any{"module": envKey + ".run", "attr": "RunEngine"},
+				},
+			},
+		},
+	}
+	blob, _ := json.Marshal(data)
+	if err := os.WriteFile(filepath.Join(root, Filename), blob, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeBundleFile(t, root, envKey+"/run.py", "class RunEngine: pass\n")
+
+	m, err := Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if errs := Validate(m); len(errs) != 0 {
+		t.Fatalf("Validate errors = %v", errs)
+	}
+}
+
+func TestV4ValidatesEnvironmentEntryFiles(t *testing.T) {
+	root := t.TempDir()
+	envA := "sm89-cu124-linux-x86_64-py312"
+	envB := "sm120-cu130-linux-x86_64-py312"
+	data := map[string]any{
+		"format": Format, "format_version": 4, "protocol_version": 1,
+		"name": "demo",
+		"defaults": map[string]any{
+			"python_abi": "312",
+			"python_dependencies": map[string]any{
+				"torch": false,
+				"pip":   []any{},
+			},
+			"run_options": []any{map[string]any{"name": "prompt", "help": "x"}},
+			"weights":     map[string]any{"source": "huggingface", "repo": "org/demo"},
+		},
+		"environments": map[string]any{
+			envA: map[string]any{
+				"runtime": envA,
+				"entry":   map[string]any{"run": map[string]any{"module": envA + ".run", "attr": "RunEngine"}},
+			},
+			envB: map[string]any{
+				"runtime": envB,
+				"entry":   map[string]any{"run": map[string]any{"module": envB + ".run", "attr": "RunEngine"}},
+			},
+		},
+	}
+	blob, _ := json.Marshal(data)
+	if err := os.WriteFile(filepath.Join(root, Filename), blob, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeBundleFile(t, root, envA+"/run.py", "class RunEngine: pass\n")
+
+	m, err := Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := Validate(m)
+	if len(errs) == 0 {
+		t.Fatal("expected missing environment entry error")
+	}
+	joined := strings.Join(errs, "\n")
+	if !strings.Contains(joined, envB+".run") {
+		t.Fatalf("errors missing env B entry: %v", errs)
 	}
 }

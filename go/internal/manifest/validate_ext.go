@@ -60,10 +60,27 @@ func ResolveVariant(m *Manifest, variant string) (string, error) {
 // hasPythonEntry reports whether any capability (top-level or variant) uses the
 // Python backend.
 func hasPythonEntry(m *Manifest) bool {
-	return m.NeedsPythonVenv()
+	return hasPythonEntryForAnyEnvironment(m)
 }
 
 func validatePythonDependencies(m *Manifest) []string {
+	if m.FormatVersion >= FormatVersionV4 {
+		var errors []string
+		for _, key := range m.EnvironmentKeys() {
+			envManifest, err := m.ApplyEnv(key)
+			if err != nil {
+				errors = append(errors, err.Error())
+				continue
+			}
+			if !envManifest.NeedsPythonVenv() {
+				continue
+			}
+			if _, ok := envManifest.Raw["python_dependencies"].(map[string]any); !ok {
+				errors = append(errors, fmt.Sprintf("environments.%s missing python_dependencies", key))
+			}
+		}
+		return errors
+	}
 	if !hasPythonEntry(m) {
 		return nil
 	}
@@ -135,6 +152,18 @@ func sameWeights(a, b map[string]any) bool {
 }
 
 func validateWeights(m *Manifest) []string {
+	if m.FormatVersion >= FormatVersionV4 {
+		var errors []string
+		for _, key := range m.EnvironmentKeys() {
+			envManifest, err := m.ApplyEnv(key)
+			if err != nil {
+				errors = append(errors, err.Error())
+				continue
+			}
+			errors = append(errors, validateWeightsForManifest(envManifest, "environments."+key+": ")...)
+		}
+		return errors
+	}
 	variants := variantBlocksRaw(m)
 	if len(variants) > 0 {
 		names := make([]string, 0, len(variants))
@@ -187,25 +216,29 @@ func validateWeights(m *Manifest) []string {
 		return errors
 	}
 
+	return validateWeightsForManifest(m, "")
+}
+
+func validateWeightsForManifest(m *Manifest, prefix string) []string {
 	spec, _ := m.Raw["weights"].(map[string]any)
 	if HasLocalWeights(m, "") {
 		return nil
 	}
 	if len(spec) == 0 {
-		return []string{"weights: no local checkpoint/ (or weights/) and no weights download spec in flashcli-bundle.json — add weights.repo or ship weights in the bundle"}
+		return []string{prefix + "weights: no local checkpoint/ (or weights/) and no weights download spec in flashcli-bundle.json — add weights.repo or ship weights in the bundle"}
 	}
 	source := strings.ToLower(mapString(spec["source"], "huggingface"))
 	switch source {
 	case "huggingface", "modelscope":
 		if mapString(spec["repo"], "") == "" {
-			return []string{fmt.Sprintf("weights.repo is required when source is %s", source)}
+			return []string{prefix + fmt.Sprintf("weights.repo is required when source is %s", source)}
 		}
 	case "url":
 		if mapString(spec["url"], "") == "" {
-			return []string{"weights.url is required when source is url"}
+			return []string{prefix + "weights.url is required when source is url"}
 		}
 	default:
-		return []string{fmt.Sprintf("unsupported weights.source: %q", source)}
+		return []string{prefix + fmt.Sprintf("unsupported weights.source: %q", source)}
 	}
 	return nil
 }
@@ -229,6 +262,18 @@ func optionEntriesMissingHelp(block []any, prefix string) []string {
 }
 
 func validateOptions(m *Manifest) []string {
+	if m.FormatVersion >= FormatVersionV4 {
+		var errors []string
+		for _, key := range m.EnvironmentKeys() {
+			envManifest, err := m.ApplyEnv(key)
+			if err != nil {
+				errors = append(errors, err.Error())
+				continue
+			}
+			errors = append(errors, validateOptionsForManifest(envManifest, "environments."+key)...)
+		}
+		return errors
+	}
 	hasRun := m.EntryRun != nil
 	hasServe := m.EntryServe != nil
 	variants := variantBlocksRaw(m)
@@ -267,18 +312,23 @@ func validateOptions(m *Manifest) []string {
 		return errors
 	}
 
-	if hasRun {
+	return validateOptionsForManifest(m, "top-level")
+}
+
+func validateOptionsForManifest(m *Manifest, label string) []string {
+	var errors []string
+	if m.EntryRun != nil {
 		ro, ok := m.Raw["run_options"].([]any)
 		if !ok || len(ro) == 0 {
-			errors = append(errors, "missing top-level run_options (required for entry.run)")
+			errors = append(errors, fmt.Sprintf("missing %s run_options (required for entry.run)", label))
 		} else {
 			errors = append(errors, optionEntriesMissingHelp(ro, "run_options")...)
 		}
 	}
-	if hasServe {
+	if m.EntryServe != nil {
 		so, ok := m.Raw["serve_options"].([]any)
 		if !ok || len(so) == 0 {
-			errors = append(errors, "missing top-level serve_options (required for entry.serve)")
+			errors = append(errors, fmt.Sprintf("missing %s serve_options (required for entry.serve)", label))
 		} else {
 			errors = append(errors, optionEntriesMissingHelp(so, "serve_options")...)
 		}
@@ -288,23 +338,65 @@ func validateOptions(m *Manifest) []string {
 
 func validateBundleSpecifics(m *Manifest) []string {
 	var errors []string
-	if hasPythonEntry(m) {
-		hasRuntime := false
-		for _, rel := range m.RuntimeMap() {
-			if strings.TrimSpace(rel) != "" {
-				hasRuntime = true
-				break
-			}
-		}
-		if hasRuntime {
-			if info, err := os.Stat(filepath.Join(m.Root, "flash_rt")); err != nil || !info.IsDir() {
-				errors = append(errors, "missing flash_rt/ Python tree")
-			}
-		}
-	}
 	if m.Name == "groot_n17" {
 		if _, err := os.Stat(filepath.Join(m.Root, "gr00t", "VENDOR.json")); err != nil {
 			errors = append(errors, "missing vendored gr00t/ (run bundles/groot_n17/vendor_gr00t.sh or build.sh)")
+		}
+	}
+	return errors
+}
+
+// hasPythonEntryForAnyEnvironment reports whether any capability, including
+// v4 environment overrides, uses the Python backend.
+func hasPythonEntryForAnyEnvironment(m *Manifest) bool {
+	if m.NeedsPythonVenv() {
+		return true
+	}
+	if m.FormatVersion < FormatVersionV4 {
+		return false
+	}
+	for _, key := range m.EnvironmentKeys() {
+		envManifest, err := m.ApplyEnv(key)
+		if err != nil {
+			continue
+		}
+		if envManifest.NeedsPythonVenv() {
+			return true
+		}
+	}
+	return false
+}
+
+// validateEntryFiles checks every effective Python entry module, including v4
+// per-environment overrides. Entry modules are relative to the bundle root.
+func validateEntryFiles(m *Manifest) []string {
+	var errors []string
+	seen := map[string]bool{}
+	check := func(label string, spec *EntrySpec) {
+		if spec == nil || spec.Kind != "python" {
+			return
+		}
+		key := spec.Module
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		path := filepath.Join(m.Root, filepath.FromSlash(strings.ReplaceAll(spec.Module, ".", "/"))+".py")
+		if _, err := os.Stat(path); err != nil {
+			errors = append(errors, fmt.Sprintf("%s module file not found: %s (module %q under %s)", label, path, spec.Module, m.Root))
+		}
+	}
+	check("entry.run", m.EntryRun)
+	check("entry.serve", m.EntryServe)
+	if m.FormatVersion >= FormatVersionV4 {
+		for _, key := range m.EnvironmentKeys() {
+			envManifest, err := m.ApplyEnv(key)
+			if err != nil {
+				errors = append(errors, err.Error())
+				continue
+			}
+			check("environments."+key+".entry.run", envManifest.EntryRun)
+			check("environments."+key+".entry.serve", envManifest.EntryServe)
 		}
 	}
 	return errors

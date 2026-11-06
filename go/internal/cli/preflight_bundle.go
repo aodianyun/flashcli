@@ -35,11 +35,16 @@ func preflightBundle(m *manifest.Manifest, root, venvPython string, quiet, autoI
 		return envKey, nil
 	}
 	dir := filepath.Join(root, filepath.FromSlash(rel))
+	if !native.HasNativeArtifacts(dir) {
+		// A declared runtime directory may be a pure-Python environment root;
+		// no native artifacts are required when the entry does not use them.
+		return envKey, nil
+	}
 	if err := ensureELFInspector(quiet, autoInstall); err != nil {
 		return "", err
 	}
 	if len(native.DiscoverModuleBases(dir, "")) == 0 && !hasSubstrateSO(dir) {
-		return "", errs.Envf("Bundle %s missing native .so under %s for environment %q. Run pack/release or build into runtime/%s/.", root, rel, envKey, rel)
+		return "", errs.Envf("Bundle %s has native files under %s for environment %q but none are recognized. Check the .so filename/build tag.", root, rel, envKey)
 	}
 	if err := hostabi.Ensure(native.NativeSOPaths(dir, ""), quiet); err != nil {
 		return "", err

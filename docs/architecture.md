@@ -12,7 +12,7 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 
 1. **Inference lives in the bundle** — the bundle owns **all model-specific logic**: the forward pass, preprocessing/postprocessing, modality shapes and dtypes, input/output semantics, and option→port mapping/defaults. flashcli is a **generic, model-agnostic driver**: it resolves the ref, prepares the environment, and invokes the bundle-provided interface — `entry` for `kind=python`, or the declared model-runtime ABI + manifest `native` block for `native-exec`/`native-abi`. **No model-specific constants, shapes, or preprocessing may live in the host** (`go/`).
 2. **Preset ref** — users pass `namespace/bundle:version`; `FLASHCLI_FLASHHUB_API` sets the API base.
-3. **Manifest-first + split download** — fetch manifest → preflight against `runtime` keys → download only this host’s `runtime/<runtime-dir>/`.
+3. **Manifest-first + split download** — fetch manifest → preflight against `environments` → download common files plus only the selected environment's declared runtime directory.
 4. **Fixed Python ABI** — one venv per bundle (`python_abi`); CLI **re-execs** into that venv after prepare.
 5. **Single Go host** — the host is a static Go binary; bundle venvs pip-install **`flashcli-bundle[infer]`** (never a host `flashcli` package).
 6. **One command** — `flashcli run <ref>` chains sync → deps → weights (host download if missing) → `post_pull` → offline inference in bundle venv.
@@ -82,7 +82,7 @@ sequenceDiagram
   U->>CLI: flashcli run flashcli-bundle/pi05_libero:1.0.5
   CLI->>FH: fetch repo index (if not synced)
   FH-->>CLI: files[] + download_url
-  CLI->>FH: sync entry tree + runtime/<runtime-dir>/
+  CLI->>FH: sync common files + declared runtime dir
   CLI->>Pre: env key + native cell + host ABI + CUDA userland
   CLI->>W: ensure weights (+ post_pull/extra_pull)
   CLI->>Venv: create bundle venv + torch deps
@@ -193,12 +193,13 @@ sha256 verification into `~/.flashcli/tools/uv/<version>/`.
 ```text
 {bundle_root}/
 ├── flashcli-bundle.json
-├── run.py
-├── flash_rt/
-└── runtime/<runtime-dir>/       # native *.so for the selected runtime directory (loaded in place)
+├── run.py                       # may also live inside the runtime directory
+├── flash_rt/                    # optional
+└── <runtime-dir>/               # declared by environments.<key>.runtime
+    └── *.so                     # loaded in place from the selected directory
 ```
 
-> Native-only bundles omit `run.py` / `flash_rt/` and keep their C libraries under `runtime/<runtime-dir>/substrate/`.
+> Native-only bundles omit `run.py` / `flash_rt/` and keep their C libraries under the selected runtime directory (for example `runtime/<runtime-dir>/substrate/`). Files outside all declared runtime directories are common and are downloaded for every environment.
 
 See [model_bundle_standard.md](model_bundle_standard.md).
 
@@ -219,8 +220,6 @@ See [module_layers.md](module_layers.md) for the authoritative host / infer / pr
 | `flashcli-bundle/wan22:1.0.1` | `run` |
 | `flashcli-bundle/higgs_audio:1.0.1` | `run` |
 | `flashcli-bundle/pi05_libero_nexus:1.0.3` | `run`, `serve` |
-
-See [model_bundle_standard.md](model_bundle_standard.md).
 
 ## Related docs
 

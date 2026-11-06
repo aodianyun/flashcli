@@ -353,3 +353,35 @@ def test_v4_auto_install_failure_reports_reason(go_binary: Path, tmp_path: Path)
     assert proc.returncode != 0
     assert "system capability installation failed" in proc.stderr
     assert "apt-get" in proc.stderr
+
+
+def test_v4_per_environment_root_without_native_or_flash_rt(
+    go_binary: Path, tmp_path: Path
+) -> None:
+    bundle = tmp_path / "v4_per_env_root"
+    shutil.copytree(FIXTURE, bundle)
+    shutil.rmtree(bundle / "flash_rt", ignore_errors=True)
+    shutil.rmtree(bundle / "runtime", ignore_errors=True)
+    env_key = "sm120-cu130-linux-x86_64-py312"
+    env_dir = bundle / env_key
+    env_dir.mkdir()
+    shutil.move(str(bundle / "run.py"), str(env_dir / "run.py"))
+    data = json.loads((bundle / "flashcli-bundle.json").read_text(encoding="utf-8"))
+    data["defaults"].pop("entry", None)
+    data["environments"] = {
+        env_key: {
+            "runtime": env_key,
+            "entry": {
+                "run": {
+                    "kind": "python",
+                    "module": f"{env_key}.run",
+                    "attr": "RunEngine",
+                }
+            },
+        }
+    }
+    (bundle / "flashcli-bundle.json").write_text(
+        json.dumps(data, indent=2) + "\n", encoding="utf-8"
+    )
+    out = _run(go_binary, bundle, tmp_path, key=env_key)
+    assert f"V4_RUNTIME_MATRIX_OK {env_key}" in out

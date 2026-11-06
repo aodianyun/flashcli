@@ -317,8 +317,10 @@ var ErrNotFound = errors.New("flashhub: not found")
 
 // SyncBundle downloads the bundle entry tree plus only the selected runtime
 // directory into bundleDir, and returns the parsed manifest. runtimeRel may be
-// empty for pure-Python bundles.
-func (c *Client) SyncBundle(ctx context.Context, repoURL, bundleDir, runtimeRel string, quiet bool) (map[string]any, error) {
+// empty for pure-Python bundles. allRuntimeRels lists every runtime directory
+// declared by the manifest so unselected cells are skipped even when they do
+// not live under the legacy top-level runtime/ directory.
+func (c *Client) SyncBundle(ctx context.Context, repoURL, bundleDir, runtimeRel string, allRuntimeRels []string, quiet bool) (map[string]any, error) {
 	// Always fetch a fresh index: a cached one may list artifacts from an
 	// earlier upload (stale download URLs → 404).
 	ix, err := c.FetchIndex(ctx, repoURL, false)
@@ -345,7 +347,7 @@ func (c *Client) SyncBundle(ctx context.Context, repoURL, bundleDir, runtimeRel 
 	var wanted []File
 	var totalBytes int64
 	for _, f := range ix.Files {
-		if !WantFile(f.Path, runtimeRel) {
+		if !WantFile(f.Path, runtimeRel, allRuntimeRels) {
 			continue
 		}
 		wanted = append(wanted, f)
@@ -365,18 +367,36 @@ func (c *Client) SyncBundle(ctx context.Context, repoURL, bundleDir, runtimeRel 
 	return manifest, nil
 }
 
-// WantFile reports whether a repo-relative path should be synced: everything
-// outside runtime/, plus only the selected runtime directory (if any).
-func WantFile(path, runtimeRel string) bool {
+// WantFile reports whether a repo-relative path should be synced. The selected
+// runtime directory is always included. Other manifest-declared runtime
+// directories are excluded, regardless of where they live. Paths under the
+// legacy top-level runtime/ tree are also excluded unless selected.
+func WantFile(path, runtimeRel string, allRuntimeRels []string) bool {
 	p := strings.Trim(path, "/")
-	if !strings.HasPrefix(p, "runtime/") {
+	selected := strings.Trim(strings.TrimSpace(runtimeRel), "/")
+	if selected != "" && pathWithin(p, selected) {
 		return true
 	}
-	runtimeRel = strings.Trim(strings.TrimSpace(runtimeRel), "/")
-	if runtimeRel == "" {
+	for _, rel := range allRuntimeRels {
+		rel = strings.Trim(strings.TrimSpace(rel), "/")
+		if rel == "" || rel == selected {
+			continue
+		}
+		if pathWithin(p, rel) {
+			return false
+		}
+	}
+	// Preserve the legacy behavior: unselected cells under the top-level
+	// runtime/ tree are never downloaded, even if the manifest no longer
+	// declares them (for example stale directories from an older release).
+	if strings.HasPrefix(p, "runtime/") {
 		return false
 	}
-	return p == runtimeRel || strings.HasPrefix(p, runtimeRel+"/")
+	return true
+}
+
+func pathWithin(path, rel string) bool {
+	return path == rel || strings.HasPrefix(path, rel+"/")
 }
 
 // MarkerName is the bundle sync marker filename.

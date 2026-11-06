@@ -3,15 +3,8 @@
   "format_version": 4,
   "protocol_version": 1,
   "name": "pi05_libero",
-  "description": "Pi0.5 LIBERO VLA — HuggingFace lerobot/pi05_libero_finetuned_v044 (script: run.py)",
+  "description": "Pi0.5 LIBERO VLA — HuggingFace lerobot/pi05_libero_finetuned_v044 (script: run.py; per-environment root)",
   "defaults": {
-    "entry": {
-      "run": {
-        "module": "run",
-        "attr": "main",
-        "mode": "script"
-      }
-    },
     "python_abi": "312",
     "python_dependencies": {
       "torch": {
@@ -92,7 +85,15 @@
   },
   "environments": {
     "sm120-cu130-linux-x86_64-py312": {
-      "runtime": "runtime/sm120-cu130-linux-x86_64-py312"
+      "runtime": "sm120-cu130-linux-x86_64-py312",
+      "entry": {
+        "run": {
+          "kind": "python",
+          "module": "sm120-cu130-linux-x86_64-py312.run",
+          "attr": "main",
+          "mode": "script"
+        }
+      }
     }
   }
 }

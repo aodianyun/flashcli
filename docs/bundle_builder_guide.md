@@ -34,7 +34,7 @@ Native-only bundles have no Python entry at all (see §5).
 
 | Bundle | GPU | CUDA userland | Notes |
 |--------|-----|---------------|-------|
-| `pi05_libero` | SM89 (Ada), SM120 (Blackwell) | cu124 (SM89) · cu130 | SM120 uses the `sm120-cu130` cell |
+| `pi05_libero` | SM120 (Blackwell) | **cu130 only** | per-environment root (`sm120-cu130-linux-x86_64-py312/`) |
 | `higgs_audio` | SM120 (Blackwell) | **cu130 only** | Python 3.10 |
 
 **Software:** Linux x86_64 · Docker + NVIDIA Container Toolkit (matrix releases run in containers) · Go ≥ 1.24 (host) · bundle venvs pin their own `python_abi`.
@@ -85,20 +85,23 @@ Python bundle (example `bundles/pi05_libero/`):
 
 ```text
 pi05_libero/
-├── flashcli-bundle.json      # author manifest (see §4.1)
-├── run.py                    # entry.run → RunEngine
-├── _pi05_compat.py           # bundle-private helper
-├── flash_rt/                 # FlashRT Python tree (staged)
-├── lib/                      # local build: host *.so
-├── runtime/<runtime-dir>/        # pack output: *.so (+ substrate/ for native)
-├── release-matrix.env        # SM / CUDA / py ABI / pack files
-├── _bundle_build.sh          # cmake + build logic
-├── build.sh                  # local single-env build
-├── release.sh                # → scripts/release_bundle.sh
-└── dist/                     # publish tree
+├── flashcli-bundle.json                  # author manifest (see §4.1)
+├── sm120-cu130-linux-x86_64-py312/      # environment runtime directory
+│   ├── run.py                           # entry.run → main
+│   ├── _pi05_compat.py                  # bundle-private helper
+│   ├── flash_rt/                        # FlashRT Python tree (optional)
+│   ├── flash_rt_kernels-...so
+│   └── flash_rt_fa2-...so
+├── release-matrix.env                   # SM / CUDA / py ABI / pack files
+├── _bundle_build.sh                     # cmake + build logic
+├── build.sh                             # local single-env build
+├── release.sh                           # → scripts/release_bundle.sh
+└── dist/                                # publish tree
 ```
 
-Native-only bundles (`defaults.entry.kind = native-abi|native-exec`) omit `run.py` / `flash_rt/` and place their C libraries under `runtime/<runtime-dir>/substrate/`.
+Native-only bundles (`defaults.entry.kind = native-abi|native-exec`) omit `run.py` / `flash_rt/` and place their C libraries in the declared runtime directory (for example `runtime/<runtime-dir>/substrate/`).
+
+`flash_rt/` is optional for Python bundles. Each environment's `runtime` path is arbitrary; the root `runtime/<runtime-dir>/` layout is a convention, not a host requirement. For per-environment isolation, set `runtime` to the whole environment directory and put `run.py`, helpers, optional `flash_rt/`, and `.so` files directly there. Files outside every declared runtime directory are common and are downloaded for all environments. See [bundle_publish_standard.md](bundle_publish_standard.md) §2.3.
 
 ### 4.1 Manifest essentials (format_version 4)
 
@@ -110,21 +113,27 @@ Native-only bundles (`defaults.entry.kind = native-abi|native-exec`) omit `run.p
   "name": "pi05_libero",
   "description": "Pi0.5 LIBERO VLA",
   "defaults": {
-    "entry": { "run": { "module": "run", "attr": "RunEngine" } },
     "python_abi": "312",
     "run_options": [ "…" ],
     "python_dependencies": { "torch": { "package": "torch", "index": "auto" } },
     "weights": { "source": "huggingface", "repo": "org/model", "revision": "0123456789abcdef0123456789abcdef01234567" }
   },
   "environments": {
-    "sm89-cu124-linux-x86_64-py312": {
-      "runtime": "runtime/sm89-cu124-linux-x86_64-py312"
+    "sm120-cu130-linux-x86_64-py312": {
+      "runtime": "sm120-cu130-linux-x86_64-py312",
+      "entry": {
+        "run": {
+          "module": "sm120-cu130-linux-x86_64-py312.run",
+          "attr": "main",
+          "mode": "script"
+        }
+      }
     }
   }
 }
 ```
 
-- `defaults` and `environments` are required.
+- `defaults` and `environments` are required. Entry may be defined in `defaults.entry` or per environment under `environments.<key>.entry`.
 - `runtime` is required for native environments; Python/CPU environments may omit it.
 - Multiple environments may point to the same runtime directory. Fallback entries use `match` (no `priority`); equal-specificity overlapping fallbacks fail `bundle validate`.
 - `protocol_version` must equal the installed `flashcli-bundle` `PROTOCOL_VERSION` (currently **1**).
@@ -150,7 +159,7 @@ export FLASHRT_REPO=/path/to/FlashRT   # optional; the script can clone it
 bash bundles/pi05_libero/build.sh --repo-root "$FLASHRT_REPO" -j "$(nproc)"
 ```
 
-Python bundles build FlashRT pybind extensions into `lib/` + stage `flash_rt/`.
+Python bundles stage FlashRT pybind extensions and `flash_rt/` into the declared environment runtime directory.
 Native bundles build the Python-free C libraries (e.g. FA2 raw → `flashrt_exec`/producer → Nexus) and stage them under `runtime/<runtime-dir>/substrate/`.
 
 **B — validate manifest + layout**
@@ -188,14 +197,14 @@ One command from the repo root builds and packs the **current host environment o
 bash scripts/release_bundle.sh --bundle pi05_libero --clean
 ```
 
-Equivalent to `cd bundles/<name> && bash release.sh --clean`. It runs the bundle's `build.sh`, then packs only the staged `runtime/<runtime-dir>/` cell. Pass `--matrix` for the full Docker/multi-CUDA matrix release.
+Equivalent to `cd bundles/<name> && bash release.sh --clean`. It runs the bundle's `build.sh`, then packs only the staged, manifest-declared runtime directory. Pass `--matrix` for the full Docker/multi-CUDA matrix release.
 
 | Stage | Action | Output |
 |-------|--------|--------|
 | 1. Read `release-matrix.env` | SM, CUDA tags, Python ABI, Docker images, pack files | matrix dims |
 | 2. Ensure FlashRT | clone/update `../FlashRT` (`FLASHRT_REPO` overrides) | source |
 | 3. Current-env build | `build.sh` (or `_bundle_build.sh` via `--matrix`) | current native libs |
-| 4. Write `runtime/` | `runtime/<runtime-dir>/…` for the current env | native artifacts |
+| 4. Write runtime directory | manifest-declared runtime dir for the current env (examples use `runtime/<runtime-dir>/`) | native artifacts |
 | 5. `pack.sh` | copy entry tree + current runtime cell, refresh manifest | `dist/` |
 | 6. Validate | ABI / layout / manifest options / protocol | exit on failure |
 
@@ -205,7 +214,7 @@ Full matrix (opt-in):
 bash scripts/release_bundle.sh --bundle pi05_libero --matrix --clean
 ```
 
-`--clean` removes `lib/`, `dist/`, `.build*` to avoid stale caches. `pack.sh` also accepts `--all-envs` / `--verify-matrix` for a full matrix pack.
+`--clean` removes `lib/`, `dist/`, `.build*` to avoid stale caches. `pack.sh` also accepts `--all-envs` / `--verify-matrix` for a full matrix pack. Matrix verification follows the runtime paths declared in the manifest, so both the conventional root `runtime/<env-key>/` layout and per-environment roots are verified.
 
 Background run + logs:
 
@@ -214,7 +223,7 @@ bash scripts/run_bg.sh --name release-pi05 -- bash scripts/release_bundle.sh --b
 bash scripts/run_bg.sh --name release-pi05 --tail
 ```
 
-**Keep `dist/` minimal.** Do not ship `build.sh`, `.build*/`, tests, refs, caches, or unused FlashRT models/frontends. Build scripts must stage a minimal `flash_rt/`; `pack` copies only `RELEASE_PACK_FILES` + the selected runtime cell.
+**Keep `dist/` minimal.** Do not ship `build.sh`, `.build*/`, tests, refs, caches, or unused FlashRT models/frontends. Build scripts must stage a minimal publish tree (including `flash_rt/` when present); `pack` copies only `RELEASE_PACK_FILES` + the selected runtime cell.
 
 ---
 
@@ -222,7 +231,7 @@ bash scripts/run_bg.sh --name release-pi05 --tail
 
 - [ ] `flashcli bundle validate bundles/<name>` passes
 - [ ] `format_version: 4`, `protocol_version: 1`
-- [ ] `dist/runtime/` contains every environment declared in `environments`
+- [ ] `dist/` contains every runtime directory declared by `environments`
 - [ ] `dist/flashcli-bundle.json` carries `build.sources[]`
 - [ ] Every `weights` / `extra_weights` revision is a full immutable commit SHA
 - [ ] Smoke `flashcli run` / `serve` on the target GPU
@@ -233,8 +242,8 @@ bash scripts/run_bg.sh --name release-pi05 --tail
 ## 8. Upload to FlashHub
 
 1. Upload the whole **`dist/`** tree to FlashHub.
-2. Note the pinned ref, e.g. `flashcli-bundle/pi05_libero:1.0.5`.
-3. Update the ref in the bundle `README.md` / `BUILD.md`, e.g. `flashcli-bundle/pi05_libero:1.0.5`.
+2. Note the pinned ref, e.g. `flashcli-bundle/pi05_libero:1.0.6`.
+3. Update the ref in the bundle `README.md` / `BUILD.md`, e.g. `flashcli-bundle/pi05_libero:1.0.6`.
 4. Users sync it with `flashcli run <ref>` or `flashcli bundle sync <ref>`.
 
 ---
@@ -243,11 +252,11 @@ bash scripts/run_bg.sh --name release-pi05 --tail
 
 | | pi05_libero | higgs_audio |
 |---|---|---|
-| SM | 89 | 120 |
-| CUDA | 124 + 130 | **130 only** |
+| SM | 120 | 120 |
+| CUDA | **130 only** | **130 only** |
 | python_abi | 312 | 310 |
 | entry | run | run |
-| Docker cu124 | 24.05-py3 | — |
+| Docker cu124 | — | — |
 | Docker cu130 | 25.10-py3 | 25.10-py3 |
 
 Details: [runtime-matrix.md](runtime-matrix.md).
