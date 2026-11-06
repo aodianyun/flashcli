@@ -60,8 +60,19 @@ def _write_bundle(root: Path, *, per_env_flash_rt: bool, root_flash_rt: bool) ->
 @pytest.fixture(autouse=True)
 def _env_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FLASHCLI_RUNTIME_ENV_KEY", ENV_KEY)
-    sys.modules.pop("flash_rt", None)
+    for name in list(sys.modules):
+        if name == "flash_rt" or name.startswith("flash_rt."):
+            sys.modules.pop(name, None)
     sys.modules.pop("helper", None)
+
+
+def _isolate_flash_rt_paths() -> list[str]:
+    """Drop other tests' bundle roots so ``flash_rt`` resolves from this fixture."""
+    old = list(sys.path)
+    sys.path[:] = [
+        p for p in sys.path if not p or not (Path(p) / "flash_rt").is_dir()
+    ]
+    return old
 
 
 def test_layout_allows_python_runtime_dir_without_flash_rt_or_so(tmp_path: Path) -> None:
@@ -73,6 +84,7 @@ def test_layout_allows_python_runtime_dir_without_flash_rt_or_so(tmp_path: Path)
 def test_runtime_dir_is_appended_to_sys_path(tmp_path: Path) -> None:
     env_dir = _write_bundle(tmp_path, per_env_flash_rt=True, root_flash_rt=False)
     bundle = load_bundle_manifest(tmp_path)
+    old_path = _isolate_flash_rt_paths()
     try:
         ensure_bundle_importable(bundle)
         assert str(env_dir.resolve()) in sys.path
@@ -81,8 +93,7 @@ def test_runtime_dir_is_appended_to_sys_path(tmp_path: Path) -> None:
         helper = importlib.import_module("helper")
         assert helper.VALUE == 7
     finally:
-        if str(env_dir.resolve()) in sys.path:
-            sys.path.remove(str(env_dir.resolve()))
+        sys.path[:] = old_path
         sys.modules.pop("flash_rt", None)
         sys.modules.pop("helper", None)
 
@@ -90,12 +101,11 @@ def test_runtime_dir_is_appended_to_sys_path(tmp_path: Path) -> None:
 def test_root_flash_rt_wins_over_runtime_flash_rt(tmp_path: Path) -> None:
     _write_bundle(tmp_path, per_env_flash_rt=True, root_flash_rt=True)
     bundle = load_bundle_manifest(tmp_path)
+    old_path = _isolate_flash_rt_paths()
     try:
         ensure_bundle_importable(bundle)
         rt = importlib.import_module("flash_rt")
         assert rt.SOURCE == "root"
     finally:
-        for p in (str((tmp_path / ENV_KEY).resolve()), str(tmp_path.resolve())):
-            if p in sys.path:
-                sys.path.remove(p)
+        sys.path[:] = old_path
         sys.modules.pop("flash_rt", None)
