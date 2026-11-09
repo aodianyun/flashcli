@@ -36,6 +36,11 @@ $Payload = Join-Path $env:TEMP ("flashserver-installer-payload-" + [guid]::NewGu
 New-Item -ItemType Directory -Force -Path $Payload | Out-Null
 try {
     Copy-Item $SetupExe (Join-Path $Payload "flashserver-setup-windows-amd64.exe")
+    $ClientExe = Join-Path $Root "desktop\target\release\FlashServer.exe"
+    if (-not (Test-Path $ClientExe)) {
+        throw "missing $ClientExe; run 'cargo build --release' in desktop/ first"
+    }
+    Copy-Item $ClientExe (Join-Path $Payload "FlashServer.exe")
     foreach ($name in @(
         "flashcli-linux-amd64",
         "flashserver-linux-amd64",

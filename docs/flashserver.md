@@ -19,7 +19,16 @@ flashcli serve     → one model process, OpenAI-compatible API
 
 ## Local console
 
-Open `http://localhost:8790/` after installation. The embedded console shows GPU/VRAM, utilization, temperature, clocks, power (when the driver exposes it), CUDA/SM/torch environment, CUDA process memory (native Linux; WSL usually does not expose it), CPU model/cores/load/per-core utilization, RAM/swap, 5-minute GPU and CPU charts, service uptime, cached models, loaded models, logs, and can load/unload models and test chat. It is served by the same binary (no extra assets or Node build). The HTTP contract is published at `/openapi.yaml` and mirrored in [openapi.yaml](openapi.yaml).
+Open `http://localhost:8790/` after installation. The embedded console shows GPU/VRAM, utilization, temperature, clocks, power (when the driver exposes it), CUDA/SM/torch environment, CUDA process memory (native Linux; WSL usually does not expose it), CPU model/cores/load/per-core utilization, RAM/swap, 5-minute GPU and CPU charts, service uptime, cached models, loaded models, logs, and can load/unload models and test chat. It is served by the same binary (no extra assets or Node build). The HTTP contract is published at `/openapi.yaml` and mirrored in [openapi.yaml](openapi.yaml). Live clients can use `GET /v1/ws` (system snapshot 1 Hz + job progress).
+
+## Desktop client
+
+The Windows installer ships `FlashServer.exe`, a Rust + Slint desktop client (no WebView): overview (GPU/CPU/RAM/charts), model cache and load/unload, loaded models, logs, service start/stop and auto-start control. It talks to the daemon over WebSocket (`/v1/ws`) with HTTP fallback.
+
+- Source: `desktop/`; build with `cargo build --release` (Rust MSVC toolchain; put `cargo` on PATH). Output: `desktop/target/release/FlashServer.exe` (~10 MB).
+- Memory: ~35-50 MB working set with the software renderer (forced by default; override with `SLINT_BACKEND`).
+- Service buttons use `wsl.exe` (no UAC). The auto-start toggle calls `flashserver-setup --start-service/--stop-service` and therefore prompts for UAC.
+- The code compiles cross-platform; service control is wired for Windows/WSL first, Linux uses `systemctl` (best effort) and macOS has no flashserver backend yet.
 
 ## Windows UI installer
 
@@ -95,6 +104,7 @@ GET  /v1/logs                   ?kind=server|model&ref=...&lines=N
 GET  /v1/gpu                    devices + CUDA processes
 GET  /v1/gpu/history            ?seconds=N recent GPU+CPU telemetry samples
 GET  /v1/system/history         alias of /v1/gpu/history
+GET  /v1/ws                     WebSocket: 1 Hz system snapshots + job progress
 POST /v1/pull
 GET  /v1/jobs/{id}
 GET  /v1/jobs/{id}/events
@@ -159,6 +169,15 @@ A v4 environment overlay may override it. Bundles without the field are admitted
 `flashserver` starts `flashcli serve <ref> --host <serve_host> --port <allocated>` on load and stops that child on unload/shutdown. It waits for `/health` before reporting `ready`.
 
 Linux uses a system-level systemd service. WSL enables systemd and uses a Windows `ONLOGON` task that starts the distro and keeps it alive with a hidden `sleep infinity` session; WSL's `vmIdleTimeout` otherwise stops the distro (and the resident service) about a minute after the last session exits. No custom WSL image is used in this phase.
+
+Service control without uninstalling:
+
+```powershell
+flashserver-setup.exe --stop-service   # stop daemon, disable auto-start (admin)
+flashserver-setup.exe --start-service  # enable auto-start, start daemon (admin)
+```
+
+The desktop client exposes the same actions; stopping/starting the daemon itself does not need elevation, only the auto-start change does. The current auto-start state is reported by `/v1/system` (`enabled`, `disabled` or `unknown`).
 
 ## Uninstall
 

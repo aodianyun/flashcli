@@ -33,10 +33,12 @@ WizardStyle=modern
 UninstallDisplayIcon={app}\payload\flashserver-setup.exe
 SetupLogging=yes
 UsePreviousAppDir=yes
-CloseApplications=no
+CloseApplications=yes
+RestartApplications=no
 
 [Files]
 Source: "{#PayloadDir}\flashserver-setup-windows-amd64.exe"; DestDir: "{app}\payload"; DestName: "flashserver-setup.exe"; Flags: ignoreversion
+Source: "{#PayloadDir}\FlashServer.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\flashcli-linux-amd64"; DestDir: "{app}\payload"; Flags: ignoreversion
 Source: "{#PayloadDir}\flashserver-linux-amd64"; DestDir: "{app}\payload"; Flags: ignoreversion
 Source: "{#PayloadDir}\flashcli-linux-arm64"; DestDir: "{app}\payload"; Flags: ignoreversion skipifsourcedoesntexist
@@ -47,13 +49,14 @@ Source: "{#PayloadDir}\sha256sums.txt"; DestDir: "{app}\payload"; Flags: ignorev
 Name: "desktopicon"; Description: "Create a desktop shortcut to the FlashServer console"; GroupDescription: "Additional icons:"
 
 [Icons]
-Name: "{autoprograms}\FlashServer"; Filename: "http://localhost:8790/"
-Name: "{autodesktop}\FlashServer"; Filename: "http://localhost:8790/"; Tasks: desktopicon
+Name: "{autoprograms}\FlashServer"; Filename: "{app}\FlashServer.exe"
+Name: "{autodesktop}\FlashServer"; Filename: "{app}\FlashServer.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "http://localhost:8790/"; Description: "Open the FlashServer console"; Flags: postinstall shellexec nowait skipifsilent
+Filename: "{app}\FlashServer.exe"; Description: "Launch FlashServer"; Flags: postinstall nowait skipifsilent
 
 [UninstallRun]
+Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM FlashServer.exe"; Flags: runhidden; RunOnceId: "StopFlashServerClient"
 Filename: "{app}\payload\flashserver-setup.exe"; Parameters: "--uninstall"; RunOnceId: "RemoveFlashServerService"; Flags: waituntilterminated runhidden
 
 [Code]
@@ -94,4 +97,4 @@ end;
 [Messages]
 WelcomeLabel2=This will install FlashServer, enable WSL2/Ubuntu, and configure the resident model scheduler.%n%nAdministrator privileges are required.
 FinishedHeadingLabel=FlashServer is installed
-FinishedLabel=FlashServer is installed and its service has been started.%n%nOpen http://localhost:8790/ to manage models, check GPU resources, and test inference.
+FinishedLabel=FlashServer is installed and its service has been started.%n%nThe desktop client is opened automatically; you can also open http://localhost:8790/ in a browser.

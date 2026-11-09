@@ -19,7 +19,16 @@ flashcli serve     → 单模型进程，OpenAI-compatible API
 
 ## 本地控制台
 
-安装后打开 `http://localhost:8790/`。内置控制台展示 GPU/显存、利用率、温度、频率、功耗（驱动提供时）、CUDA/SM/torch 环境、CUDA 进程显存（原生 Linux；WSL 通常不暴露进程列表）、CPU 型号/核心/负载/每核利用率、内存/Swap、GPU 与 CPU 5 分钟曲线、服务运行时长、缓存模型、已加载模型、日志，并支持加载/卸载模型和对话测试。页面随二进制内嵌，不需要额外资源或 Node 构建。HTTP 契约发布在 `/openapi.yaml`，源文件见 [openapi.yaml](openapi.yaml)。
+安装后打开 `http://localhost:8790/`。内置控制台展示 GPU/显存、利用率、温度、频率、功耗（驱动提供时）、CUDA/SM/torch 环境、CUDA 进程显存（原生 Linux；WSL 通常不暴露进程列表）、CPU 型号/核心/负载/每核利用率、内存/Swap、GPU 与 CPU 5 分钟曲线、服务运行时长、缓存模型、已加载模型、日志，并支持加载/卸载模型和对话测试。页面随二进制内嵌，不需要额外资源或 Node 构建。HTTP 契约发布在 `/openapi.yaml`，源文件见 [openapi.yaml](openapi.yaml)。实时客户端可用 `GET /v1/ws`（1Hz 系统快照 + 任务进度）。
+
+## 桌面客户端
+
+Windows 安装包内置 `FlashServer.exe`：Rust + Slint 原生客户端（不使用 WebView），包含概览（GPU/CPU/内存/曲线）、模型缓存与加载/卸载、已加载模型、日志、服务启停和开机启动开关。通过 WebSocket（`/v1/ws`）接收实时数据，HTTP 兜底。
+
+- 源码：`desktop/`；构建：`cargo build --release`（Rust MSVC 工具链，`cargo` 需在 PATH）。产物：`desktop/target/release/FlashServer.exe`（约 10MB）。
+- 内存：软件渲染约 35~50MB 工作集（默认强制软件渲染，可用 `SLINT_BACKEND` 覆盖）。
+- 服务启停走 `wsl.exe`，不需要 UAC；开机启动开关调用 `flashserver-setup --start-service/--stop-service`，会弹 UAC。
+- 代码可跨平台编译；服务控制优先 Windows/WSL，Linux 走 `systemctl`（尽力而为），macOS 暂无 flashserver 后端。
 
 ## Windows UI 安装包
 
@@ -94,6 +103,7 @@ GET  /v1/logs                   ?kind=server|model&ref=...&lines=N
 GET  /v1/gpu                    设备 + CUDA 进程
 GET  /v1/gpu/history            ?seconds=N 最近 GPU+CPU 遥测采样
 GET  /v1/system/history         /v1/gpu/history 的别名
+GET  /v1/ws                     WebSocket：1Hz 系统快照 + 任务进度
 POST /v1/pull
 GET  /v1/jobs/{id}
 GET  /v1/jobs/{id}/events
@@ -158,6 +168,15 @@ v4 环境 overlay 可以覆盖。未声明该字段的 bundle 只按槽位限制
 `flashserver` 在 `load` 时启动 `flashcli serve <ref> --host <serve_host> --port <allocated>`，在 `unload`/退出时停止子进程；等待 `/health` 后才返回 `ready`。
 
 Linux 使用 system-level systemd service。WSL 启用 systemd，并用 Windows `ONLOGON` 任务启动 WSL 发行版，同时以隐藏的 `sleep infinity` 会话保持其常驻；否则 WSL 的 `vmIdleTimeout` 会在最后一个会话退出约一分钟后停掉发行版（以及常驻服务）。本阶段不制作自定义 WSL 镜像。
+
+无需卸载即可控制服务：
+
+```powershell
+flashserver-setup.exe --stop-service   # 停止服务并禁用开机启动（管理员）
+flashserver-setup.exe --start-service  # 启用开机启动并启动服务（管理员）
+```
+
+桌面客户端提供同样的操作；服务启停本身不需要提权，只有开机启动变更需要。`/v1/system` 会报告当前开机启动状态（`enabled`、`disabled` 或 `unknown`）。
 
 ## 卸载
 
