@@ -19,7 +19,7 @@ flashcli serve     → one model process, OpenAI-compatible API
 
 ## Local console
 
-Open `http://localhost:8790/` after installation. The embedded console shows GPU/VRAM, service uptime, cached models, loaded models, logs, and can load/unload models and test chat. It is served by the same binary (no extra assets or Node build).
+Open `http://localhost:8790/` after installation. The embedded console shows GPU/VRAM, utilization, temperature, clocks, power (when the driver exposes it), CUDA/SM/torch environment, CUDA process memory (native Linux; WSL usually does not expose it), a 5-minute telemetry chart, service uptime, cached models, loaded models, logs, and can load/unload models and test chat. It is served by the same binary (no extra assets or Node build). The HTTP contract is published at `/openapi.yaml` and mirrored in [openapi.yaml](openapi.yaml).
 
 ## Windows UI installer
 
@@ -49,7 +49,7 @@ Linux:
 sudo flashserver-setup
 ```
 
-It installs `flashcli`/`flashserver` under `/usr/local/bin`, writes `/etc/flashserver/config.json`, creates `flashserver.service`, enables it at boot, and checks `/health`.
+It installs `flashcli`/`flashserver` under `/usr/local/bin`, writes `/etc/flashserver/config.json`, creates `flashserver.service`, enables it at boot, and checks `/health`. Setup prints `[n/N]` step lines and writes the full trace (including `wsl.exe`/`schtasks.exe` output) to `~/.flashcli/logs/setup.log`.
 
 Windows:
 
@@ -68,7 +68,6 @@ By default setup downloads the matching `flashcli-linux-<arch>` and `flashserver
 ```json
 {
   "addr": "127.0.0.1:8790",
-  "token": "local-secret",
   "flashcli_bin": "/usr/local/bin/flashcli",
   "public_host": "127.0.0.1",
   "serve_host": "127.0.0.1",
@@ -80,7 +79,7 @@ By default setup downloads the matching `flashcli-linux-<arch>` and `flashserver
 
 - `max_loaded=0`: admit by GPU memory only.
 - WSL uses `addr=0.0.0.0:8790`, `public_host=localhost`, `serve_host=0.0.0.0` so Windows can reach the WSL services through localhost forwarding.
-- `token` protects every API path except `/health`; send `Authorization: Bearer <token>` or `X-Flashcli-Token`.
+- `token` is optional and absent by default. When set, it protects every API path except `/health`, `/`, `/ui/*`, and `/openapi.yaml`; send `Authorization: Bearer <token>` or `X-Flashcli-Token`.
 
 ## API
 
@@ -91,27 +90,33 @@ GET  /v1/models                 cached models + loaded instances
 GET  /v1/models/loaded
 GET  /v1/storage
 GET  /v1/resources              GPU, loaded models, slot counts
-GET  /v1/system                 OS/WSL/GPU/driver/uptime/version
+GET  /v1/system                 OS/WSL/GPU/driver/CUDA/SM/torch/uptime/version
 GET  /v1/logs                   ?kind=server|model&ref=...&lines=N
-GET  /v1/gpu
+GET  /v1/gpu                    devices + CUDA processes
+GET  /v1/gpu/history            ?seconds=N recent telemetry samples
 POST /v1/pull
 GET  /v1/jobs/{id}
 GET  /v1/jobs/{id}/events
 POST /v1/models/load            {"ref":"...","async":true} → job_id (or endpoint/pid/state)
 POST /v1/models/unload          {"ref":"..."}
 POST /v1/ui/chat                local console helper: {"ref":"...","body":{...}}
+GET  /openapi.yaml              OpenAPI 3.1 contract
 GET  /                          embedded local console
 ```
+
+The authoritative request/response schema is [openapi.yaml](openapi.yaml) (also served at `/openapi.yaml`).
 
 There is intentionally no `/v1/infer` endpoint. After `load`, call the returned `endpoint` directly.
 
 ```bash
-curl -H "X-Flashcli-Token: $TOKEN" -H 'Content-Type: application/json' \
+curl -H 'Content-Type: application/json' \
   -d '{"ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.0"}' \
   http://127.0.0.1:8790/v1/models/load
 
 curl http://127.0.0.1:18100/v1/chat/completions ...
 ```
+
+Add `-H "X-Flashcli-Token: $TOKEN"` only when a token is configured.
 
 `load` requires a bundle with a `serve` entry. Run-only bundles (VLA policies and similar) are rejected immediately with the bundle's own error, for example `bundle "pi05_libero" does not support serve`; use `flashcli run <ref>` for those.
 

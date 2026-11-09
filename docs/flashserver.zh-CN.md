@@ -19,7 +19,7 @@ flashcli serve     → 单模型进程，OpenAI-compatible API
 
 ## 本地控制台
 
-安装后打开 `http://localhost:8790/`。内置控制台展示 GPU/显存、服务运行时长、缓存模型、已加载模型、日志，并支持加载/卸载模型和对话测试。页面随二进制内嵌，不需要额外资源或 Node 构建。
+安装后打开 `http://localhost:8790/`。内置控制台展示 GPU/显存、利用率、温度、频率、功耗（驱动提供时）、CUDA/SM/torch 环境、CUDA 进程显存（原生 Linux；WSL 通常不暴露进程列表）、5 分钟遥测曲线、服务运行时长、缓存模型、已加载模型、日志，并支持加载/卸载模型和对话测试。页面随二进制内嵌，不需要额外资源或 Node 构建。HTTP 契约发布在 `/openapi.yaml`，源文件见 [openapi.yaml](openapi.yaml)。
 
 ## Windows UI 安装包
 
@@ -48,7 +48,7 @@ Linux：
 sudo flashserver-setup
 ```
 
-安装到 `/usr/local/bin`，写入 `/etc/flashserver/config.json`，创建 `flashserver.service`，设置开机启动，并检查 `/health`。
+安装到 `/usr/local/bin`，写入 `/etc/flashserver/config.json`，创建 `flashserver.service`，设置开机启动，并检查 `/health`。setup 会打印 `[n/N]` 步骤，并把完整跟踪（含 `wsl.exe`/`schtasks.exe` 输出）写入 `~/.flashcli/logs/setup.log`。
 
 Windows：
 
@@ -67,7 +67,6 @@ flashserver-setup.exe
 ```json
 {
   "addr": "127.0.0.1:8790",
-  "token": "local-secret",
   "flashcli_bin": "/usr/local/bin/flashcli",
   "public_host": "127.0.0.1",
   "serve_host": "127.0.0.1",
@@ -79,7 +78,7 @@ flashserver-setup.exe
 
 - `max_loaded=0`：只按显存准入。
 - WSL 使用 `addr=0.0.0.0:8790`、`public_host=localhost`、`serve_host=0.0.0.0`，通过 localhost forwarding 让 Windows 访问 WSL 服务。
-- `token` 保护除 `/health` 外的 API；请求头使用 `Authorization: Bearer <token>` 或 `X-Flashcli-Token`。
+- `token` 可选，默认不写。设置后除 `/health`、`/`、`/ui/*`、`/openapi.yaml` 外的 API 都需要 `Authorization: Bearer <token>` 或 `X-Flashcli-Token`。
 
 ## API
 
@@ -90,27 +89,33 @@ GET  /v1/models                 本地缓存模型 + 已加载实例
 GET  /v1/models/loaded
 GET  /v1/storage
 GET  /v1/resources              GPU、已加载模型、槽位
-GET  /v1/system                 OS/WSL/GPU/驱动/运行时长/版本
+GET  /v1/system                 OS/WSL/GPU/驱动/CUDA/SM/torch/运行时长/版本
 GET  /v1/logs                   ?kind=server|model&ref=...&lines=N
-GET  /v1/gpu
+GET  /v1/gpu                    设备 + CUDA 进程
+GET  /v1/gpu/history            ?seconds=N 最近遥测采样
 POST /v1/pull
 GET  /v1/jobs/{id}
 GET  /v1/jobs/{id}/events
 POST /v1/models/load            {"ref":"...","async":true} → job_id（或 endpoint/pid/state）
 POST /v1/models/unload          {"ref":"..."}
 POST /v1/ui/chat                本地控制台代转：{"ref":"...","body":{...}}
+GET  /openapi.yaml              OpenAPI 3.1 契约
 GET  /                          内置本地控制台
 ```
+
+请求/响应 schema 以 [openapi.yaml](openapi.yaml) 为准（也通过 `/openapi.yaml` 提供）。
 
 不提供 `/v1/infer`。`load` 成功后直接访问返回的 `endpoint`。
 
 ```bash
-curl -H "X-Flashcli-Token: $TOKEN" -H 'Content-Type: application/json' \
+curl -H 'Content-Type: application/json' \
   -d '{"ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.0"}' \
   http://127.0.0.1:8790/v1/models/load
 
 curl http://127.0.0.1:18100/v1/chat/completions ...
 ```
+
+只有配置了 token 时才需要加 `-H "X-Flashcli-Token: $TOKEN"`。
 
 `load` 要求 bundle 提供 `serve` 入口。只有 `run` 的 bundle（VLA 策略等）会被立即拒绝，并返回 bundle 自身的原因，例如 `bundle "pi05_libero" does not support serve`；这类模型请使用 `flashcli run <ref>`。
 

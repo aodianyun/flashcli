@@ -42,6 +42,14 @@ Python tests only cover `flashcli_bundle` (protocol/infer) + conformance now; in
 - `tests/conformance/test_command_parity.py` — the Go command tree must cover the expected surface (`PYTHON_COMMANDS` = the historical contract checklist) and list Go-only commands in `GO_ONLY_COMMANDS`.
 - `tests/conformance/test_go_parity.py` — execution-ABI validation agreement across fixtures.
 
+## flashserver (resident scheduler + local console)
+- `go/cmd/flashserver` (daemon), `go/cmd/flashserver-setup` (installer backend), `go/internal/server` (HTTP API + console), `go/internal/setup` (Linux/WSL install), `go/internal/gpu` (nvidia-smi telemetry).
+- The console is embedded from `go/internal/server/web` (`go:embed`); no Node build. API auth is **off by default** (local single-user); `--token` enables `X-Flashcli-Token`/Bearer. `FLASHCLI_WEB_DIR` overrides assets for development.
+- `docs/openapi.yaml` is the authoritative HTTP contract and is served at `/openapi.yaml`. A copy lives at `go/internal/server/openapi.yaml`; `TestOpenAPISpecInSync` fails if they drift — copy the docs file after editing.
+- Windows UI installer: `installer/windows/flashserver.iss` + `scripts/build_windows_installer.ps1` (needs Inno Setup 6). It consumes `dist/go` produced by `scripts/build_go.sh` / a local build.
+- WSL: the setup writes a per-user `ONLOGON` task with a hidden `sleep infinity` keepalive (WSL `vmIdleTimeout` stops the distro otherwise). Service PATH includes `/usr/lib/wsl/lib` for `nvidia-smi`.
+- Go tests for `server`, `cuda`, `nativeabi`, `nativeexec` only build/run on Linux (purego); on Windows run them in WSL, e.g. `cd go && /usr/local/go/bin/go test ./...`.
+
 ## Architecture invariants
 - Protocol `flashcli-bundle` keeps `dependencies = []` — no fastapi/uvicorn/torch/`huggingface_hub` there.
 - The Go host never imports Python infer code; it re-execs `python -m flashcli_bundle.infer` (or drives a native backend). Never prepend host site-packages/PYTHONPATH.

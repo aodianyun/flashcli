@@ -17,7 +17,8 @@
 | [bundle_publish_standard.md](bundle_publish_standard.md) | external authors | **Authoritative** manifest, entry, `.so`, FlashHub layout |
 | [bundle_execution_abi.md](bundle_execution_abi.md) | external authors | `entry.kind` backends, native process / `.so` contracts, conformance |
 | [model_bundle_standard.md](model_bundle_standard.md) | integrators | Preset ref syntax + end-user runtime flow |
-| [flashserver.md](flashserver.md) | users / integrators | Resident scheduler, setup, WSL2, resource admission |
+| [flashserver.md](flashserver.md) | users / integrators | Resident scheduler, local console, setup, WSL2, resource admission |
+| [openapi.yaml](openapi.yaml) | integrators | **Authoritative** HTTP contract for the local daemon (also served at `/openapi.yaml`) |
 | [environment.md](environment.md) | users | Environment variables, mirrors, cache paths |
 | [architecture.md](architecture.md) | contributors | Runtime flow, core principles, host vs bundle |
 | [module_layers.md](module_layers.md) | contributors | Host / infer / protocol package boundaries |

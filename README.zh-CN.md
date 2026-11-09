@@ -103,6 +103,7 @@ flashcli run bundles/pi05_libero --prompt "pick up the red block"
 | **终端用户** | 本 README（安装 + 运行）→ bundle [README](bundles/README.zh-CN.md) → [environment.zh-CN.md](docs/environment.zh-CN.md) |
 | **集成方** | [FlashHub](https://flashhub.top) → [model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md) —— preset ref 语法 |
 | **Bundle 作者** | [bundle_publish_standard.zh-CN.md](docs/bundle_publish_standard.zh-CN.md) → [flashcli-bundle/README.md](flashcli-bundle/README.md) |
+| **桌面 / 本地服务** | [flashserver.zh-CN.md](docs/flashserver.zh-CN.md) —— Windows 安装包、本地控制台、HTTP API（[openapi.yaml](docs/openapi.yaml)） |
 
 host、bundle venv 与 FlashHub 同步的工作方式：[architecture.zh-CN.md](docs/architecture.zh-CN.md)。完整索引：[docs/README.zh-CN.md](docs/README.zh-CN.md)。
 

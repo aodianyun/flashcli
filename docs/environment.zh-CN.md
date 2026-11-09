@@ -31,6 +31,7 @@ serve。未列出的变量**无效**。布尔开关：`1`、`true`、`yes`、`on
 | `FLASHCLI_SKIP_CUDA_USERLAND` | `0` | 跳过 `libcublas`/`libcudart` 探测/安装。 |
 | `FLASHCLI_SKIP_NATIVE_HOST_ABI` | `0` | 跳过针对所选 `.so` 的 glibc/libstdc++（`GLIBC_`/`GLIBCXX_`）门禁。 |
 | `FLASHCLI_SKIP_PREFLIGHT` | `0` | 跳过 env key + native cell + host ABI + CUDA 预检（仅调试）。 |
+| `FLASHCLI_WEB_DIR` | 未设置 | `flashserver` 控制台从该目录读取静态资源，替代内嵌副本（开发/定制）。 |
 | `FLASHCLI_AUTO_INSTALL_SYSTEM` | `auto` | 仅 root 下安装 bundle 声明的系统能力（`c-compiler`、`cxx-compiler`、`python-headers`）；`never` 禁用。 |
 
 `run`/`serve`/`pull`/`bundle sync` 会把本机 GPU 与 manifest `runtime` 匹配、校验所选 cell 的
