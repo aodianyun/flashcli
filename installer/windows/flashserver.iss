@@ -17,6 +17,7 @@
 AppId={{D3F7A5E2-8C1B-4F6A-9E2D-7B4C1A9F3E21}
 AppName=FlashServer
 AppVersion={#AppVersion}
+SetupIconFile=flashserver.ico
 AppPublisher=FlashHub
 AppPublisherURL=https://flashhub.top
 DefaultDirName={autopf}\FlashServer

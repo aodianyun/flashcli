@@ -27,18 +27,19 @@ export struct StorageItem {
 component Btn inherits Rectangle {
     in property <string> text;
     in property <bool> primary: false;
+    in property <bool> danger: false;
     in property <bool> enabled: true;
     callback clicked;
     height: 34px;
     min-width: 72px;
     border-radius: 9px;
-    background: !root.enabled ? #171b23 : (root.primary ? #3f7bff : #1d2330);
+    background: !root.enabled ? #171b23 : (root.danger ? #3a1b22 : (root.primary ? #3f7bff : #1d2330));
     border-width: 1px;
-    border-color: root.primary ? #3f7bff : #2c3444;
+    border-color: root.danger ? #6b2c38 : (root.primary ? #3f7bff : #2c3444);
     opacity: root.enabled ? 1.0 : 0.5;
     Text {
         text: root.text;
-        color: root.primary ? white : #e6e9ef;
+        color: root.danger ? #ff9aa5 : (root.primary ? white : #e6e9ef);
         font-size: 13px;
         horizontal-alignment: center;
         vertical-alignment: center;
@@ -53,6 +54,7 @@ component Tab inherits Rectangle {
     in property <bool> active: false;
     callback clicked;
     height: 38px;
+    width: 96px;
     border-radius: 8px;
     background: root.active ? #1b2230 : transparent;
     Text {
@@ -74,6 +76,7 @@ component Card inherits Rectangle {
     VerticalLayout {
         padding: 16px;
         spacing: 10px;
+        alignment: start;
         Text {
             text: root.title;
             color: #cfd6e4;
@@ -87,15 +90,16 @@ component Card inherits Rectangle {
 component Bar inherits Rectangle {
     in property <float> value: 0;
     in property <brush> fill: #4f8cff;
-    height: 8px;
+    in property <length> thickness: 8px;
+    height: root.thickness;
     border-radius: 4px;
     background: #0d1016;
     border-width: 1px;
     border-color: #222835;
     Rectangle {
-        width: parent.width * clamp(root.value / 100, 0, 1);
+        width: parent.width * clamp(root.value / 100, 0, 1) < 3px ? 3px : parent.width * clamp(root.value / 100, 0, 1);
         height: parent.height;
-        border-radius: 4px;
+        border-radius: 2px;
         background: root.fill;
     }
 }
@@ -109,8 +113,9 @@ component KV inherits HorizontalLayout {
 
 export component AppWindow inherits Window {
     title: "FlashServer";
+    icon: @image-url("icon.png");
     width: 1180px;
-    height: 860px;
+    height: 820px;
     background: #0f1115;
 
     in-out property <bool> running: false;
@@ -144,6 +149,12 @@ export component AppWindow inherits Window {
     in-out property <int> current-tab: 0;
     in-out property <image> gpu-chart;
     in-out property <image> cpu-chart;
+
+    in-out property <bool> dialog-open: false;
+    in-out property <int> dialog-action: 0;
+    in-out property <string> dialog-title: "";
+    in-out property <string> dialog-message: "";
+    in-out property <string> dialog-ref: "";
 
     callback refresh();
     callback start-service();
@@ -238,6 +249,7 @@ export component AppWindow inherits Window {
                     Card {
                         title: "算力资源";
                         horizontal-stretch: 5;
+                        vertical-stretch: 0;
                         Text { text: root.gpu-name; color: #e6e9ef; font-size: 14px; font-weight: 600; }
                         HorizontalLayout {
                             Text { text: "利用率"; color: #8b93a3; font-size: 12px; horizontal-stretch: 1; }
@@ -250,11 +262,12 @@ export component AppWindow inherits Window {
                         }
                         Bar { value: root.gpu-mem; fill: #2bd4a7; }
                         Text { text: root.gpu-meta; color: #8b93a3; font-size: 12px; wrap: word-wrap; }
-                        Image { source: root.gpu-chart; height: 76px; width: 100%; image-fit: fill; }
+                        Image { source: root.gpu-chart; height: 76px; width: 100%; vertical-stretch: 1; image-fit: fill; }
                     }
                     Card {
                         title: "处理器";
                         horizontal-stretch: 4;
+                        vertical-stretch: 0;
                         Text { text: root.cpu-name; color: #e6e9ef; font-size: 13px; font-weight: 600; }
                         HorizontalLayout {
                             Text { text: "利用率"; color: #8b93a3; font-size: 12px; horizontal-stretch: 1; }
@@ -272,7 +285,7 @@ export component AppWindow inherits Window {
                                     for c in root.cores-left : HorizontalLayout {
                                         spacing: 6px;
                                         Text { text: c.label; color: #8b93a3; font-size: 10px; width: 26px; vertical-alignment: center; }
-                                        Bar { value: c.value; fill: #6f9bff; horizontal-stretch: 1; }
+                                        Bar { value: c.value; fill: #6f9bff; thickness: 5px; horizontal-stretch: 1; }
                                         Text { text: Math.round(c.value) + "%"; color: #8b93a3; font-size: 10px; width: 30px; horizontal-alignment: right; vertical-alignment: center; }
                                     }
                                 }
@@ -282,13 +295,13 @@ export component AppWindow inherits Window {
                                     for c in root.cores-right : HorizontalLayout {
                                         spacing: 6px;
                                         Text { text: c.label; color: #8b93a3; font-size: 10px; width: 26px; vertical-alignment: center; }
-                                        Bar { value: c.value; fill: #6f9bff; horizontal-stretch: 1; }
+                                        Bar { value: c.value; fill: #6f9bff; thickness: 5px; horizontal-stretch: 1; }
                                         Text { text: Math.round(c.value) + "%"; color: #8b93a3; font-size: 10px; width: 30px; horizontal-alignment: right; vertical-alignment: center; }
                                     }
                                 }
                             }
                         }
-                        Image { source: root.cpu-chart; height: 48px; width: 100%; image-fit: fill; }
+                        Image { source: root.cpu-chart; height: 48px; width: 100%; vertical-stretch: 0; image-fit: fill; }
                         HorizontalLayout {
                             Text { text: "内存"; color: #8b93a3; font-size: 12px; horizontal-stretch: 1; }
                             Text { text: root.mem-text; color: #e6e9ef; font-size: 12px; }
@@ -306,18 +319,20 @@ export component AppWindow inherits Window {
                     Card {
                         title: "服务状态";
                         horizontal-stretch: 1;
+                        vertical-stretch: 0;
                         KV { k: "运行时长"; v: root.uptime-text; }
                         KV { k: "开机启动"; v: root.autostart; }
                         KV { k: "服务信息"; v: root.service-info; }
                         HorizontalLayout {
                             spacing: 8px;
                             Btn { text: "启动服务"; primary: true; enabled: !root.running; clicked => { root.start-service(); } }
-                            Btn { text: "停止服务"; enabled: root.running; clicked => { root.stop-service(); } }
+                            Btn { text: "停止服务"; enabled: root.running; clicked => { root.dialog-action = 1; root.dialog-title = "停止服务"; root.dialog-message = "停止后正在加载/运行的模型会中断，已加载模型将不可用。确定停止？"; root.dialog-open = true; } }
                         }
                     }
                     Card {
                         title: "磁盘占用";
                         horizontal-stretch: 1;
+                        vertical-stretch: 0;
                         for s in root.storage : KV { k: s.name; v: s.size; }
                     }
                 }
@@ -381,7 +396,7 @@ export component AppWindow inherits Window {
                             spacing: 10px;
                             Text { text: l.name; color: #e6e9ef; font-size: 12px; horizontal-stretch: 1; overflow: elide; }
                             Btn { text: "复制地址"; clicked => { root.copy-text(l.endpoint); } }
-                            Btn { text: "卸载"; clicked => { root.do-unload(l.name); } }
+                            Btn { text: "卸载"; danger: true; clicked => { root.dialog-action = 3; root.dialog-ref = l.name; root.dialog-title = "卸载模型"; root.dialog-message = "卸载后该模型的推理服务会停止，权重和缓存保留。确定卸载？"; root.dialog-open = true; } }
                         }
                         Text { text: l.endpoint + "   " + l.meta; color: #8b93a3; font-size: 11px; }
                     }
@@ -410,7 +425,8 @@ export component AppWindow inherits Window {
         }
 
         // PAGE: settings
-        if root.current-tab == 4 : VerticalLayout {
+        if root.current-tab == 4 : ScrollView {
+            VerticalLayout {
             padding: 18px;
             spacing: 16px;
             Card {
@@ -420,7 +436,7 @@ export component AppWindow inherits Window {
                 HorizontalLayout {
                     spacing: 8px;
                     Btn { text: "启用开机启动"; primary: true; clicked => { root.enable-autostart(); } }
-                    Btn { text: "禁用并停止"; clicked => { root.disable-autostart(); } }
+                    Btn { text: "禁用并停止"; danger: true; clicked => { root.dialog-action = 2; root.dialog-title = "禁用开机启动"; root.dialog-message = "会同时停止当前服务并取消开机启动。确定继续？"; root.dialog-open = true; } }
                     Btn { text: "打开 Web 控制台"; clicked => { root.open-console(); } }
                 }
             }
@@ -429,7 +445,50 @@ export component AppWindow inherits Window {
                 KV { k: "客户端"; v: "FlashServer Desktop v" + root.version; }
                 KV { k: "通信"; v: "WebSocket /v1/ws + HTTP /v1/*"; }
                 Text { text: "模型推理与调度由本机 flashserver 完成；客户端只负责监控与控制。"; color: #8b93a3; font-size: 12px; wrap: word-wrap; }
-                Btn { text: "退出客户端"; clicked => { root.quit-app(); } }
+                Btn { text: "退出客户端"; danger: true; clicked => { root.dialog-action = 4; root.dialog-title = "退出客户端"; root.dialog-message = "退出客户端不会停止 FlashServer 服务。确定退出？"; root.dialog-open = true; } }
+            }
+            }
+        }
+    }
+
+    Rectangle {
+        visible: root.dialog-open;
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        background: #000000b0;
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: 420px;
+            height: 200px;
+            border-radius: 14px;
+            background: #1b1f29;
+            border-width: 1px;
+            border-color: #33405c;
+            VerticalLayout {
+                padding: 20px;
+                spacing: 12px;
+                Text { text: root.dialog-title; color: #e6e9ef; font-size: 16px; font-weight: 600; }
+                Text { text: root.dialog-message; color: #8b93a3; font-size: 12px; wrap: word-wrap; }
+                Rectangle { vertical-stretch: 1; }
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: 8px;
+                    Btn { text: "取消"; clicked => { root.dialog-open = false; } }
+                    Btn {
+                        text: "确认";
+                        danger: true;
+                        clicked => {
+                            if (root.dialog-action == 1) { root.stop-service(); }
+                            if (root.dialog-action == 2) { root.disable-autostart(); }
+                            if (root.dialog-action == 3) { root.do-unload(root.dialog-ref); }
+                            if (root.dialog-action == 4) { root.quit-app(); }
+                            root.dialog-open = false;
+                        }
+                    }
+                }
             }
         }
     }
