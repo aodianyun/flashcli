@@ -44,10 +44,45 @@ Source: "{#PayloadDir}\flashserver-linux-arm64"; DestDir: "{app}\payload"; Flags
 Source: "{#PayloadDir}\sha256sums.txt"; DestDir: "{app}\payload"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Run]
-Filename: "{app}\payload\flashserver-setup.exe"; Parameters: "--backend wsl --bin-dir ""{app}\payload"""; StatusMsg: "Installing WSL2 and flashserver..."; Flags: waituntilterminated runhidden
+Filename: "http://localhost:8790/health"; Description: "Open the FlashServer health page"; Flags: postinstall shellexec nowait skipifsilent
 
 [UninstallRun]
 Filename: "{app}\payload\flashserver-setup.exe"; Parameters: "--uninstall"; RunOnceId: "RemoveFlashServerService"; Flags: waituntilterminated runhidden
+
+[Code]
+var
+  SetupOK: Boolean;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    SetupOK := Exec(
+      ExpandConstant('{app}\payload\flashserver-setup.exe'),
+      '--backend wsl --bin-dir "' + ExpandConstant('{app}\payload') + '"',
+      ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+    if not SetupOK then
+      MsgBox('FlashServer setup did not complete (exit code ' + IntToStr(ResultCode) + ').' + #13#10 +
+        'See the log: %USERPROFILE%\.flashcli\logs\setup.log', mbError, MB_OK);
+  end;
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if CurPageID = wpFinished then
+  begin
+    if SetupOK then
+      WizardForm.FinishedLabel.Caption :=
+        'FlashServer is installed and running.' + #13#10 + #13#10 +
+        'Health: http://localhost:8790/health'
+    else
+      WizardForm.FinishedLabel.Caption :=
+        'FlashServer installation needs attention.' + #13#10 + #13#10 +
+        'Check %USERPROFILE%\.flashcli\logs\setup.log and run the installer again.';
+  end;
+end;
 
 [Messages]
 WelcomeLabel2=This will install FlashServer, enable WSL2/Ubuntu, and configure the resident model scheduler.%n%nAdministrator privileges are required.
