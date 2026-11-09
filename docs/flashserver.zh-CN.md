@@ -120,6 +120,22 @@ curl http://127.0.0.1:18100/v1/chat/completions ...
 
 `load` 要求 bundle 提供 `serve` 入口。只有 `run` 的 bundle（VLA 策略等）会被立即拒绝，并返回 bundle 自身的原因，例如 `bundle "pi05_libero" does not support serve`；这类模型请使用 `flashcli run <ref>`。
 
+## 耗时参考
+
+Windows 11 + 已有 WSL2 Ubuntu、RTX 4060 8GB、约 100 Mbit/s 网络下的参考值。首次准备占大头；后续命中缓存。
+
+| 阶段 | 已缓存 | 首次 |
+|---|---|---|
+| UI 安装包 + setup（`[1/8]`…`[8/8]`） | 4–6 秒 | 无 WSL2/Ubuntu：再加 5–15 分钟，通常需重启一次 |
+| Bundle 同步（FlashHub） | ~0 | 181 MiB @ ~4.7 MB/s ≈ 46 秒 |
+| 权重下载（ModelScope/HF） | ~0 | ~7 GiB @ ~19 MB/s ≈ 6–7 分钟 |
+| Python 3.12 + venv + torch/依赖 | ~0 | 约 2–5 分钟（取决于网络/缓存） |
+| 模型加载 + autotune（pi05） | 约 40 秒 | 准备完成后相同 |
+| 单次推理（pi05，10×7 actions） | 约 3.3–3.6 秒 | — |
+| smoke 模型经 `/v1/models/load` | 约 2.5 秒 | — |
+
+重复安装 + smoke 加载约 8 秒；安装 + 首次 pi05 推理约 10–15 分钟。实际随 bundle/权重大小和下载速度变化。
+
 ## 资源准入
 
 以下情况 `load` 返回 `409 RESOURCE_EXHAUSTED`：

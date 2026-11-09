@@ -121,6 +121,22 @@ Add `-H "X-Flashcli-Token: $TOKEN"` only when a token is configured.
 
 `load` requires a bundle with a `serve` entry. Run-only bundles (VLA policies and similar) are rejected immediately with the bundle's own error, for example `bundle "pi05_libero" does not support serve`; use `flashcli run <ref>` for those.
 
+## Timing expectations
+
+Reference measurements on a Windows 11 host with an existing WSL2 Ubuntu, RTX 4060 8 GB, and a ~100 Mbit/s link. First-run preparation dominates; repeat runs hit the cache.
+
+| Phase | Warm / cached | First time |
+|---|---|---|
+| UI installer + setup (`[1/8]`…`[8/8]`) | 4–6 s | WSL2/Ubuntu missing: +5–15 min and usually one reboot |
+| Bundle sync (FlashHub) | ~0 | ~46 s for 181 MiB at ~4.7 MB/s |
+| Weights (ModelScope/HF) | ~0 | ~6–7 min for ~7 GiB at ~19 MB/s |
+| Python 3.12 + venv + torch/deps | ~0 | ~2–5 min (network/cache dependent) |
+| Model load + autotune (pi05) | ~40 s | same, after preparation |
+| Single inference (pi05, 10×7 actions) | ~3.3–3.6 s | — |
+| Smoke model load via `/v1/models/load` | ~2.5 s | — |
+
+Repeat install + smoke load is roughly 8 s; install + first pi05 inference is roughly 10–15 min. These scale with bundle/weight size and download speed.
+
 ## Resource admission
 
 `load` is rejected with `409 RESOURCE_EXHAUSTED` when:
