@@ -59,7 +59,10 @@ func installLinux(ctx context.Context, env Env, opts Options, out io.Writer) err
 	if err := i.run(ctx, "systemctl", "daemon-reload"); err != nil {
 		return err
 	}
-	if err := i.run(ctx, "systemctl", "enable", "--now", opts.ServiceName); err != nil {
+	if err := i.run(ctx, "systemctl", "enable", opts.ServiceName); err != nil {
+		return err
+	}
+	if err := i.run(ctx, "systemctl", "restart", opts.ServiceName); err != nil {
 		return err
 	}
 	if opts.DryRun {

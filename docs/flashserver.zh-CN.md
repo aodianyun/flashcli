@@ -25,7 +25,7 @@ FlashServer-Setup-<version>.exe
 ```
 
 安装包会以管理员权限运行，检查/安装 WSL2 Ubuntu，安装 Linux payload，启动
-`flashserver.service`，创建 Windows 启动任务，并检查
+`flashserver.service`，创建 Windows 登录任务，并检查
 `http://localhost:8790/health`。如果启用 WSL2 需要重启，重启后再次运行安装包即可；
 setup 引擎是幂等的。
 
@@ -51,7 +51,7 @@ Windows：
 flashserver-setup.exe
 ```
 
-使用官方 Ubuntu WSL2（不制作自定义镜像），在 `/etc/wsl.conf` 启用 systemd，在 WSL 内安装 Linux 二进制和 `flashserver.service`，并创建 `flashserver-wsl` Windows 启动任务。
+使用官方 Ubuntu WSL2（不制作自定义镜像），在 `/etc/wsl.conf` 启用 systemd，在 WSL 内安装 Linux 二进制和 `flashserver.service`，并创建 `flashserver-wsl` 登录任务。
 
 默认会下载匹配的 `flashcli-linux-<arch>` 和 `flashserver-linux-<arch>` release assets，并校验 `sha256sums.txt`。也可以用 `--bin-dir DIR` 使用本地资产，或用 `--release-version` / `--release-base` 固定 release 来源。
 
@@ -124,7 +124,7 @@ v4 环境 overlay 可以覆盖。未声明该字段的 bundle 只按槽位限制
 
 `flashserver` 在 `load` 时启动 `flashcli serve <ref> --host <serve_host> --port <allocated>`，在 `unload`/退出时停止子进程；等待 `/health` 后才返回 `ready`。
 
-Linux 使用 system-level systemd service。WSL 启用 systemd，并用 Windows `ONSTART` 计划任务启动 WSL 和 service。本阶段不制作自定义 WSL 镜像。
+Linux 使用 system-level systemd service。WSL 启用 systemd，并用 Windows `ONLOGON` 任务启动 WSL 发行版，同时以隐藏的 `sleep infinity` 会话保持其常驻；否则 WSL 的 `vmIdleTimeout` 会在最后一个会话退出约一分钟后停掉发行版（以及常驻服务）。本阶段不制作自定义 WSL 镜像。
 
 ## 卸载
 

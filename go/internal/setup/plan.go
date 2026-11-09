@@ -30,7 +30,7 @@ func Detect(ctx context.Context) Env {
 	if env.OS == "windows" {
 		c, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
-		env.WSL = exec.CommandContext(c, "wsl.exe", "--status").Run() == nil
+		env.WSL = exec.CommandContext(c, sysExe("wsl.exe"), "--status").Run() == nil
 	}
 	return env
 }
@@ -67,11 +67,11 @@ func Plan(env Env, backend string) ([]Step, error) {
 		}
 		return []Step{
 			{Name: "check-wsl2", Description: "check WSL2 availability"},
-			{Name: "ensure-distro", Description: "ensure the Ubuntu WSL distribution", Command: []string{"wsl.exe", "--install", "-d", "Ubuntu"}},
+			{Name: "ensure-distro", Description: "ensure the Ubuntu WSL distribution", Command: []string{"wsl.exe", "--install", "-d", "Ubuntu", "--no-launch"}},
 			{Name: "install", Description: "install flashcli and flashserver inside WSL"},
 			{Name: "configure", Description: "write flashserver config and systemd inside WSL"},
 			{Name: "start", Description: "enable and start flashserver inside WSL"},
-			{Name: "startup", Description: "create a Windows startup task for WSL"},
+			{Name: "startup", Description: "create a Windows logon task for WSL"},
 			{Name: "health", Description: "check flashserver health via localhost"},
 		}, nil
 	default:

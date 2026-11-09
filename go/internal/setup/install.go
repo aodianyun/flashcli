@@ -31,6 +31,7 @@ type Options struct {
 	ReleaseBase    string
 	ReleaseAPI     string
 	Uninstall      bool
+	PathEnv        string
 }
 
 // Run installs flashserver for the detected platform.
@@ -142,15 +143,27 @@ func (i installer) copyBinary(name, dest string) error {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return err
 	}
-	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
+	// Write a sibling temp file and rename it into place: replacing a running
+	// executable in place fails with ETXTBSY, an atomic rename does not.
+	tmp := dest + ".tmp"
+	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
 	if err != nil {
 		return err
 	}
 	if _, err := io.Copy(out, in); err != nil {
 		out.Close()
+		_ = os.Remove(tmp)
 		return err
 	}
-	return out.Close()
+	if err := out.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, dest); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 func resolveBinary(dir, name, goos, goarch string) string {
@@ -172,6 +185,20 @@ func randomToken() string {
 		return "flashserver-local"
 	}
 	return hex.EncodeToString(b[:])
+}
+
+// sysExe resolves a Windows system utility by absolute path. Go's exec refuses
+// PATH hits that resolve relative to the current directory, and elevated
+// processes are often started in C:\Windows\System32. On other platforms the
+// name is returned unchanged.
+func sysExe(name string) string {
+	if root := os.Getenv("SystemRoot"); root != "" {
+		p := filepath.Join(root, "System32", name)
+		if info, err := os.Stat(p); err == nil && !info.IsDir() {
+			return p
+		}
+	}
+	return name
 }
 
 func currentUser() string {

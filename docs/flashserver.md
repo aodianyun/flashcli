@@ -25,7 +25,7 @@ FlashServer-Setup-<version>.exe
 ```
 
 It runs elevated, checks/installs WSL2 Ubuntu, installs the Linux payload,
-starts `flashserver.service`, creates the Windows startup task, and verifies
+starts `flashserver.service`, creates the Windows logon task, and verifies
 `http://localhost:8790/health`. If Windows requires a reboot to enable WSL2,
 the installer should be run again after reboot; the setup engine is idempotent.
 
@@ -51,7 +51,7 @@ Windows:
 flashserver-setup.exe
 ```
 
-It uses the official Ubuntu WSL2 distribution (no custom image), enables systemd in `/etc/wsl.conf`, installs the Linux binaries inside WSL, registers `flashserver.service`, and creates the `flashserver-wsl` Windows startup task.
+It uses the official Ubuntu WSL2 distribution (no custom image), enables systemd in `/etc/wsl.conf`, installs the Linux binaries inside WSL, registers `flashserver.service`, and creates the `flashserver-wsl` logon task.
 
 By default setup downloads the matching `flashcli-linux-<arch>` and `flashserver-linux-<arch>` release assets and verifies `sha256sums.txt`. Use `--bin-dir DIR` to consume local release assets instead, or `--release-version` / `--release-base` to pin a release source.
 
@@ -124,7 +124,7 @@ A v4 environment overlay may override it. Bundles without the field are admitted
 
 `flashserver` starts `flashcli serve <ref> --host <serve_host> --port <allocated>` on load and stops that child on unload/shutdown. It waits for `/health` before reporting `ready`.
 
-Linux uses a system-level systemd service. WSL enables systemd and uses a Windows `ONSTART` scheduled task to start the WSL distro and service. No custom WSL image is used in this phase.
+Linux uses a system-level systemd service. WSL enables systemd and uses a Windows `ONLOGON` task that starts the distro and keeps it alive with a hidden `sleep infinity` session; WSL's `vmIdleTimeout` otherwise stops the distro (and the resident service) about a minute after the last session exits. No custom WSL image is used in this phase.
 
 ## Uninstall
 

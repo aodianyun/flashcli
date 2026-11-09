@@ -17,6 +17,9 @@ func systemdUnit(opts Options, binDir string) string {
 		b.WriteString("User=" + opts.User + "\n")
 	}
 	b.WriteString("Environment=FLASHCLI_HOME=" + opts.Home + "\n")
+	if opts.PathEnv != "" {
+		b.WriteString("Environment=PATH=" + opts.PathEnv + "\n")
+	}
 	if opts.Home != "" {
 		b.WriteString("Environment=HOME=" + path.Dir(opts.Home) + "\n")
 	}
