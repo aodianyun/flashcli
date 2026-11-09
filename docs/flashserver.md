@@ -19,7 +19,7 @@ flashcli serve     → one model process, OpenAI-compatible API
 
 ## Local console
 
-Open `http://localhost:8790/` after installation. The embedded console shows GPU/VRAM, utilization, temperature, clocks, power (when the driver exposes it), CUDA/SM/torch environment, CUDA process memory (native Linux; WSL usually does not expose it), a 5-minute telemetry chart, service uptime, cached models, loaded models, logs, and can load/unload models and test chat. It is served by the same binary (no extra assets or Node build). The HTTP contract is published at `/openapi.yaml` and mirrored in [openapi.yaml](openapi.yaml).
+Open `http://localhost:8790/` after installation. The embedded console shows GPU/VRAM, utilization, temperature, clocks, power (when the driver exposes it), CUDA/SM/torch environment, CUDA process memory (native Linux; WSL usually does not expose it), CPU model/cores/load/per-core utilization, RAM/swap, 5-minute GPU and CPU charts, service uptime, cached models, loaded models, logs, and can load/unload models and test chat. It is served by the same binary (no extra assets or Node build). The HTTP contract is published at `/openapi.yaml` and mirrored in [openapi.yaml](openapi.yaml).
 
 ## Windows UI installer
 
@@ -90,10 +90,11 @@ GET  /v1/models                 cached models + loaded instances
 GET  /v1/models/loaded
 GET  /v1/storage
 GET  /v1/resources              GPU, loaded models, slot counts
-GET  /v1/system                 OS/WSL/GPU/driver/CUDA/SM/torch/uptime/version
+GET  /v1/system                 OS/WSL/GPU/driver/CUDA/SM/torch/CPU/RAM/uptime
 GET  /v1/logs                   ?kind=server|model&ref=...&lines=N
 GET  /v1/gpu                    devices + CUDA processes
-GET  /v1/gpu/history            ?seconds=N recent telemetry samples
+GET  /v1/gpu/history            ?seconds=N recent GPU+CPU telemetry samples
+GET  /v1/system/history         alias of /v1/gpu/history
 POST /v1/pull
 GET  /v1/jobs/{id}
 GET  /v1/jobs/{id}/events

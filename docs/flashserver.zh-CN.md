@@ -19,7 +19,7 @@ flashcli serve     → 单模型进程，OpenAI-compatible API
 
 ## 本地控制台
 
-安装后打开 `http://localhost:8790/`。内置控制台展示 GPU/显存、利用率、温度、频率、功耗（驱动提供时）、CUDA/SM/torch 环境、CUDA 进程显存（原生 Linux；WSL 通常不暴露进程列表）、5 分钟遥测曲线、服务运行时长、缓存模型、已加载模型、日志，并支持加载/卸载模型和对话测试。页面随二进制内嵌，不需要额外资源或 Node 构建。HTTP 契约发布在 `/openapi.yaml`，源文件见 [openapi.yaml](openapi.yaml)。
+安装后打开 `http://localhost:8790/`。内置控制台展示 GPU/显存、利用率、温度、频率、功耗（驱动提供时）、CUDA/SM/torch 环境、CUDA 进程显存（原生 Linux；WSL 通常不暴露进程列表）、CPU 型号/核心/负载/每核利用率、内存/Swap、GPU 与 CPU 5 分钟曲线、服务运行时长、缓存模型、已加载模型、日志，并支持加载/卸载模型和对话测试。页面随二进制内嵌，不需要额外资源或 Node 构建。HTTP 契约发布在 `/openapi.yaml`，源文件见 [openapi.yaml](openapi.yaml)。
 
 ## Windows UI 安装包
 
@@ -89,10 +89,11 @@ GET  /v1/models                 本地缓存模型 + 已加载实例
 GET  /v1/models/loaded
 GET  /v1/storage
 GET  /v1/resources              GPU、已加载模型、槽位
-GET  /v1/system                 OS/WSL/GPU/驱动/CUDA/SM/torch/运行时长/版本
+GET  /v1/system                 OS/WSL/GPU/驱动/CUDA/SM/torch/CPU/内存/运行时长
 GET  /v1/logs                   ?kind=server|model&ref=...&lines=N
 GET  /v1/gpu                    设备 + CUDA 进程
-GET  /v1/gpu/history            ?seconds=N 最近遥测采样
+GET  /v1/gpu/history            ?seconds=N 最近 GPU+CPU 遥测采样
+GET  /v1/system/history         /v1/gpu/history 的别名
 POST /v1/pull
 GET  /v1/jobs/{id}
 GET  /v1/jobs/{id}/events
