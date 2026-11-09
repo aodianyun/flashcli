@@ -142,3 +142,5 @@ tr:last-child td { border-bottom: 0; }
 }
 .toast.err { border-left-color: var(--danger); }
 .toast.ok { border-left-color: var(--accent-2); }
+a.link { color: #8fb4ff; text-decoration: none; }
+a.link:hover { text-decoration: underline; }
