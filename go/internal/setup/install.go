@@ -2,8 +2,6 @@ package setup
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -85,9 +83,8 @@ func normalizeOptions(env Env, opts Options) Options {
 	if opts.Addr == "" {
 		opts.Addr = "127.0.0.1:8790"
 	}
-	if opts.Token == "" {
-		opts.Token = randomToken()
-	}
+	// Authentication is off by default: this is a single-user local daemon.
+	// Pass --token to require X-Flashcli-Token/Bearer on every API call.
 	if opts.ServiceName == "" {
 		opts.ServiceName = "flashserver"
 	}
@@ -188,14 +185,6 @@ func resolveBinary(dir, name, goos, goarch string) string {
 		}
 	}
 	return candidates[0]
-}
-
-func randomToken() string {
-	var b [24]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "flashserver-local"
-	}
-	return hex.EncodeToString(b[:])
 }
 
 // sysExe resolves a Windows system utility by absolute path. Go's exec refuses
