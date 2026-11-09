@@ -65,6 +65,7 @@ func installLinux(ctx context.Context, env Env, opts Options, out io.Writer) err
 	if err := i.run(ctx, "systemctl", "restart", opts.ServiceName); err != nil {
 		return err
 	}
+	_ = os.WriteFile("/etc/flashserver/autostart", []byte("enabled\n"), 0o644)
 	if opts.DryRun {
 		return nil
 	}

@@ -82,7 +82,12 @@ func installWSL(ctx context.Context, env Env, opts Options, out io.Writer) error
 	}); err != nil {
 		return err
 	}
-	if err := stepf(out, 7, total, "Configuring auto-start", func() error { return createStartupTask(ctx, opts, &i) }); err != nil {
+	if err := stepf(out, 7, total, "Configuring auto-start", func() error {
+		if err := createStartupTask(ctx, opts, &i); err != nil {
+			return err
+		}
+		return writeToWSL(ctx, opts, autostartMarker, []byte("enabled\n"), 0o644)
+	}); err != nil {
 		return err
 	}
 	if opts.DryRun {

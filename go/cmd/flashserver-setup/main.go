@@ -31,10 +31,15 @@ func main() {
 	flag.StringVar(&opts.ReleaseBase, "release-base", "", "release asset base URL")
 	flag.StringVar(&opts.ReleaseAPI, "release-api", "", "release API URL")
 	flag.BoolVar(&opts.Uninstall, "uninstall", false, "remove the flashserver service/config/binary (keeps model caches)")
+	flag.BoolVar(&opts.StopService, "stop-service", false, "stop the service and disable auto-start")
+	flag.BoolVar(&opts.StartService, "start-service", false, "enable auto-start and start the service")
 	showVersion := flag.Bool("version", false, "print version")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println(version.Version)
+		return
+	}
+	if (opts.StopService || opts.StartService) && ensureElevated() {
 		return
 	}
 

@@ -29,6 +29,8 @@ type Options struct {
 	ReleaseBase    string
 	ReleaseAPI     string
 	Uninstall      bool
+	StopService    bool
+	StartService   bool
 	PathEnv        string
 }
 
@@ -40,6 +42,12 @@ func Run(ctx context.Context, env Env, opts Options, out io.Writer) error {
 	}
 	if opts.Uninstall {
 		return uninstall(ctx, env, opts, out)
+	}
+	if opts.StopService {
+		return stopService(ctx, env, opts, out)
+	}
+	if opts.StartService {
+		return startService(ctx, env, opts, out)
 	}
 	cleanup, err := ensureAssetBinaries(ctx, env, &opts, out)
 	if err != nil {
