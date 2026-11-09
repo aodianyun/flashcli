@@ -238,6 +238,17 @@ func (m *Manager) List() []InstanceInfo {
 	return out
 }
 
+// Endpoint returns the loopback endpoint of a loaded model.
+func (m *Manager) Endpoint(refStr string) (string, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	inst, ok := m.instances[refStr]
+	if !ok || inst.process == nil {
+		return "", false
+	}
+	return inst.process.Endpoint(), true
+}
+
 // Close stops all resident models.
 func (m *Manager) Close(ctx context.Context) {
 	m.mu.Lock()

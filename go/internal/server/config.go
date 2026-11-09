@@ -34,6 +34,7 @@ func LoadConfig(path string) (Config, error) {
 func NewFromConfig(cfg Config) *Server {
 	s := New(cfg.Addr)
 	s.Token = cfg.Token
+	s.LogDir = cfg.LogDir
 	if s.Manager != nil {
 		s.Manager = NewManagerWithOptions(FlashcliLauncher{
 			Bin: cfg.FlashcliBin, Host: cfg.ServeHost, PublicHost: cfg.PublicHost, LogDir: cfg.LogDir,

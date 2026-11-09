@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -52,6 +53,7 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	log.SetOutput(io.MultiWriter(os.Stderr, server.LogSink()))
 	if err := server.NewFromConfig(cfg).Run(ctx); err != nil {
 		log.Fatal(err)
 	}

@@ -46,6 +46,18 @@ func nvidiaSMI() string {
 	return "nvidia-smi"
 }
 
+// DriverVersion returns the installed NVIDIA driver version.
+func DriverVersion(ctx context.Context) (string, error) {
+	c, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(c, nvidiaSMI(), "--query-gpu=driver_version", "--format=csv,noheader").Output()
+	if err != nil {
+		return "", err
+	}
+	line := strings.TrimSpace(strings.Split(string(out), "\n")[0])
+	return line, nil
+}
+
 // Parse parses nvidia-smi CSV output. Values are MiB and converted to bytes.
 func Parse(out string) ([]Device, error) {
 	var devices []Device

@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/aodianyun/flashcli/go/internal/gpu"
@@ -36,6 +37,8 @@ type Server struct {
 	Jobs    *JobManager
 	Manager *Manager
 	GPU     func(context.Context) ([]gpu.Device, error)
+	LogDir  string
+	Started time.Time
 }
 
 // New creates a server with the default local configuration.
@@ -51,12 +54,15 @@ func New(addr string) *Server {
 		Jobs:    NewJobManager(),
 		Manager: NewManagerWithOptions(FlashcliLauncher{}, ManagerOptions{GPU: gpuProbe}),
 		GPU:     gpuProbe,
+		Started: time.Now(),
 	}
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
+	mux.HandleFunc("GET /v1/system", s.system)
+	mux.HandleFunc("GET /v1/logs", s.logs)
 	mux.HandleFunc("GET /v1/version", s.version)
 	mux.HandleFunc("GET /v1/models", s.models)
 	mux.HandleFunc("GET /v1/models/loaded", s.loadedModels)
@@ -68,6 +74,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/jobs/{id}/events", s.jobEvents)
 	mux.HandleFunc("POST /v1/models/load", s.loadModel)
 	mux.HandleFunc("POST /v1/models/unload", s.unloadModel)
+	mux.HandleFunc("POST /v1/ui/chat", s.uiChat)
+	mux.HandleFunc("GET /", s.ui)
 	return s.authorize(mux)
 }
 
@@ -76,7 +84,7 @@ func (s *Server) authorize(next http.Handler) http.Handler {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" {
+		if r.URL.Path == "/health" || r.URL.Path == "/" || strings.HasPrefix(r.URL.Path, "/ui/") {
 			next.ServeHTTP(w, r)
 			return
 		}
