@@ -1,10 +1,16 @@
 package server
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/aodianyun/flashcli/go/internal/gpu"
 )
 
 func TestTailFile(t *testing.T) {
@@ -44,5 +50,42 @@ func TestServerLogRing(t *testing.T) {
 	lines := serverLogLines(2)
 	if got := strings.Join(lines, ","); got != "b,c" {
 		t.Fatalf("lines = %q", got)
+	}
+}
+
+func TestOpenAPISpecInSync(t *testing.T) {
+	doc, err := os.ReadFile(filepath.Join("..", "..", "..", "docs", "openapi.yaml"))
+	if err != nil {
+		t.Fatalf("read docs/openapi.yaml: %v", err)
+	}
+	if string(doc) != string(openapiDoc) {
+		t.Fatal("docs/openapi.yaml and go/internal/server/openapi.yaml differ; copy the docs file into the server package")
+	}
+}
+
+func TestGpuHistorySamples(t *testing.T) {
+	util := 37
+	s := &Server{GPU: func(context.Context) ([]gpu.Device, error) {
+		return []gpu.Device{{Index: 0, MemoryUsed: 1024, UtilizationGPU: &util}}, nil
+	}}
+	s.sampleGPUHistory(context.Background())
+	s.sampleGPUHistory(context.Background())
+	req := httptest.NewRequest(http.MethodGet, "/v1/gpu/history?seconds=60", nil)
+	rec := httptest.NewRecorder()
+	s.gpuHistory(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	var payload struct {
+		Samples []GpuSample `json:"samples"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Samples) != 2 {
+		t.Fatalf("samples = %d", len(payload.Samples))
+	}
+	if got := payload.Samples[0].Devices[0].UtilizationGPU; got == nil || *got != 37 {
+		t.Fatalf("util = %v", got)
 	}
 }

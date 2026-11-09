@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aodianyun/flashcli/go/internal/gpu"
@@ -39,6 +40,10 @@ type Server struct {
 	GPU     func(context.Context) ([]gpu.Device, error)
 	LogDir  string
 	Started time.Time
+
+	histMu   sync.Mutex
+	history  []GpuSample
+	histOnce sync.Once
 }
 
 // New creates a server with the default local configuration.
@@ -63,12 +68,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("GET /v1/system", s.system)
 	mux.HandleFunc("GET /v1/logs", s.logs)
+	mux.HandleFunc("GET /openapi.yaml", s.openapi)
 	mux.HandleFunc("GET /v1/version", s.version)
 	mux.HandleFunc("GET /v1/models", s.models)
 	mux.HandleFunc("GET /v1/models/loaded", s.loadedModels)
 	mux.HandleFunc("GET /v1/storage", s.storage)
 	mux.HandleFunc("GET /v1/resources", s.resources)
 	mux.HandleFunc("GET /v1/gpu", s.gpuStatus)
+	mux.HandleFunc("GET /v1/gpu/history", s.gpuHistory)
 	mux.HandleFunc("POST /v1/pull", s.pull)
 	mux.HandleFunc("GET /v1/jobs/{id}", s.job)
 	mux.HandleFunc("GET /v1/jobs/{id}/events", s.jobEvents)
@@ -84,7 +91,7 @@ func (s *Server) authorize(next http.Handler) http.Handler {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" || r.URL.Path == "/" || strings.HasPrefix(r.URL.Path, "/ui/") {
+		if r.URL.Path == "/health" || r.URL.Path == "/" || r.URL.Path == "/openapi.yaml" || strings.HasPrefix(r.URL.Path, "/ui/") {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -98,6 +105,7 @@ func (s *Server) authorize(next http.Handler) http.Handler {
 }
 
 func (s *Server) Run(ctx context.Context) error {
+	s.startGPUHistory(ctx)
 	// Go treats the IPv4 wildcard 0.0.0.0 as a wildcard and may bind a
 	// dual-stack socket. Windows' WSL localhost relay then exposes only ::1,
 	// so explicit 127.0.0.1 clients fail. Pin the socket family to the
@@ -184,7 +192,7 @@ func (s *Server) resources(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) gpuStatus(w http.ResponseWriter, r *http.Request) {
 	if s.GPU == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"devices": []any{}})
+		writeJSON(w, http.StatusOK, map[string]any{"devices": []any{}, "processes": []any{}})
 		return
 	}
 	devices, err := s.GPU(r.Context())
@@ -192,7 +200,7 @@ func (s *Server) gpuStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"devices": devices})
+	writeJSON(w, http.StatusOK, map[string]any{"devices": devices, "processes": gpuProcesses(r.Context())})
 }
 
 func (s *Server) storage(w http.ResponseWriter, r *http.Request) {

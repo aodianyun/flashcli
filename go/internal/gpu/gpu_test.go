@@ -56,3 +56,13 @@ func TestParseTelemetryUnavailable(t *testing.T) {
 		t.Fatalf("driver = %q", d.DriverVersion)
 	}
 }
+
+func TestParseProcesses(t *testing.T) {
+	procs := ParseProcesses("1234, python, 3072\nbad-line\n5678, /usr/bin/python3, N/A\n")
+	if len(procs) != 1 {
+		t.Fatalf("procs = %+v", procs)
+	}
+	if procs[0].PID != 1234 || procs[0].Name != "python" || procs[0].MemoryBytes != 3072*1024*1024 {
+		t.Fatalf("proc = %+v", procs[0])
+	}
+}

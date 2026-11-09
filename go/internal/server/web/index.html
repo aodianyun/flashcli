@@ -38,6 +38,13 @@
         <article class="card">
           <h3 data-i18n="ov.gpu">算力资源</h3>
           <div id="gpu-list" class="gpu-list"></div>
+          <canvas id="gpu-chart" class="gpu-chart" height="64"></canvas>
+          <div class="chart-legend">
+            <span><i class="sw util"></i><span data-i18n="ov.util">利用率</span></span>
+            <span><i class="sw mem"></i><span data-i18n="ov.memFull">全卡显存</span></span>
+          </div>
+          <h4 class="subhead" data-i18n="ov.procs">进程占用</h4>
+          <div id="gpu-procs" class="gpu-procs"></div>
         </article>
         <article class="card">
           <h3 data-i18n="ov.service">服务状态</h3>

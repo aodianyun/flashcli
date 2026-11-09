@@ -2,7 +2,7 @@
 (() => {
   const TOKEN = window.FLASHSERVER_TOKEN || "";
   const $ = (sel) => document.querySelector(sel);
-  const state = { sys: null, models: [], loaded: [], storage: [], tab: "overview", lang: localStorage.getItem("fs.lang") || "zh", online: null };
+  const state = { sys: null, models: [], loaded: [], storage: [], gpuProcs: [], history: [], tab: "overview", lang: localStorage.getItem("fs.lang") || "zh", online: null };
 
   const I18N = {
     zh: {
@@ -27,6 +27,8 @@
       "ov.vram": "显存", "ov.none": "无",
       "ov.util": "利用率", "ov.temp": "温度", "ov.power": "功耗", "ov.fan": "风扇",
       "ov.clock": "频率", "ov.memFull": "全卡显存", "ov.detail": "详情",
+      "ov.procs": "进程占用", "ov.cuda": "CUDA", "ov.history": "近 5 分钟",
+      "ov.procsNA": "WSL 下 nvidia-smi 不提供进程级显存",
       "ab.auth": "API 鉴权", "ab.authOff": "关闭（本地使用）", "ab.authOn": "开启",
       "job.events": "进度",
     },
@@ -52,6 +54,8 @@
       "ov.vram": "VRAM", "ov.none": "none",
       "ov.util": "Util", "ov.temp": "Temp", "ov.power": "Power", "ov.fan": "Fan",
       "ov.clock": "Clock", "ov.memFull": "GPU memory", "ov.detail": "Details",
+      "ov.procs": "CUDA processes", "ov.cuda": "CUDA", "ov.history": "Last 5 min",
+      "ov.procsNA": "WSL does not expose per-process GPU memory",
       "ab.auth": "API auth", "ab.authOff": "off (local)", "ab.authOn": "on",
       "job.events": "Progress",
     },
@@ -108,16 +112,20 @@
 
   async function refresh() {
     try {
-      const [sys, models, loaded, storage] = await Promise.all([
+      const [sys, models, loaded, storage, gpu, hist] = await Promise.all([
         api("/v1/system").then((r) => r.json()),
         api("/v1/models").then((r) => r.json()),
         api("/v1/models/loaded").then((r) => r.json()),
         api("/v1/storage").then((r) => r.json()),
+        api("/v1/gpu").then((r) => r.json()).catch(() => ({ devices: [], processes: [] })),
+        api("/v1/gpu/history?seconds=300").then((r) => r.json()).catch(() => ({ samples: [] })),
       ]);
       state.sys = sys;
       state.models = models.models || [];
       state.loaded = loaded.models || (models.loaded || []);
       state.storage = storage.areas || [];
+      state.gpuProcs = gpu.processes || [];
+      state.history = hist.samples || [];
       state.online = true;
       setStatus("ok");
       $("#version").textContent = "v" + (sys.version || "—");
@@ -152,6 +160,9 @@
           if (g.power_draw_w != null) bits.push(`${t("ov.power")} ${g.power_draw_w.toFixed(0)}${g.power_limit_w != null ? "/" + g.power_limit_w.toFixed(0) : ""} W`);
           if (g.clock_graphics_mhz != null) bits.push(`${t("ov.clock")} ${g.clock_graphics_mhz}${g.clock_memory_mhz != null ? "/" + g.clock_memory_mhz : ""} MHz`);
           if (g.fan_speed_pct != null) bits.push(`${t("ov.fan")} ${g.fan_speed_pct}%`);
+          if (state.sys.cuda_version) bits.push(`CUDA ${state.sys.cuda_version}`);
+          if (state.sys.sm) bits.push(`SM ${state.sys.sm}${g.compute_cap ? " (" + g.compute_cap + ")" : ""}`);
+          if (state.sys.torch_index) bits.push(`torch ${state.sys.torch_index}`);
           return `<div>
             <div class="gpu-name">${esc(g.name)}${g.driver_version ? `<span class="muted" style="font-weight:400;margin-left:8px">driver ${esc(g.driver_version)}</span>` : ""}</div>
             <div class="gpu-meta" style="margin:0 0 6px"><span>${t("ov.util")}</span><span>${util != null ? util + "%" : "—"}</span></div>
@@ -162,6 +173,12 @@
           </div>`;
         }).join("")
       : `<div class="muted">${esc(state.sys.gpu_error || t("ov.none"))}</div>`;
+
+    const procs = state.gpuProcs || [];
+    $("#gpu-procs").innerHTML = procs.length
+      ? procs.map((p) => `<div class="proc"><span class="name">${esc(p.name)} <span class="muted">PID ${p.pid}</span></span><span>${fmtBytes(p.memory_bytes)}</span></div>`).join("")
+      : `<div class="muted">${state.sys.wsl ? t("ov.procsNA") : "—"}</div>`;
+    drawGpuChart();
 
     const s = state.sys;
     $("#service-info").innerHTML = [
@@ -176,6 +193,48 @@
       ? state.storage.map((a) => `<div class="row" style="justify-content:space-between;padding:5px 0">
           <span>${esc(a.name)}</span><span class="muted">${fmtBytes(a.bytes)}</span></div>`).join("")
       : `<div class="muted">—</div>`;
+  }
+
+  function drawGpuChart() {
+    const canvas = $("#gpu-chart");
+    if (!canvas) return;
+    const samples = state.history || [];
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth || 400;
+    const h = 64;
+    canvas.width = Math.max(1, Math.round(w * dpr));
+    canvas.height = Math.round(h * dpr);
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    if (samples.length < 2) {
+      ctx.fillStyle = "#8b93a3";
+      ctx.font = "11px sans-serif";
+      ctx.fillText(t("ov.history"), 8, h / 2);
+      return;
+    }
+    const total = (state.sys && state.sys.gpu && state.sys.gpu[0] && state.sys.gpu[0].memory_total_bytes) || 1;
+    const util = samples.map((s) => {
+      const d = s.devices && s.devices[0];
+      return d && d.utilization_gpu_pct != null ? d.utilization_gpu_pct : 0;
+    });
+    const mem = samples.map((s) => {
+      const d = s.devices && s.devices[0];
+      return ((d && d.memory_used_bytes) || 0) / total * 100;
+    });
+    const plot = (series, color) => {
+      ctx.beginPath();
+      series.forEach((v, i) => {
+        const x = 8 + ((w - 16) * i) / (series.length - 1);
+        const y = h - 6 - ((h - 12) * Math.min(100, Math.max(0, v))) / 100;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+    };
+    plot(util, "#4f8cff");
+    plot(mem, "#2bd4a7");
   }
 
   function renderModels() {
@@ -252,6 +311,8 @@
       [t("ov.host"), esc(s.hostname || "—")],
       [t("ov.kernel"), esc(s.kernel || "—")],
       [t("ov.driver"), esc(s.driver_version || "—")],
+      ["CUDA", esc(s.cuda_version || "—") + (s.cuda_tag ? " / " + esc(s.cuda_tag) : "")],
+      ["SM / torch", (s.sm ? "sm" + esc(s.sm) : "—") + (s.torch_index ? " / " + esc(s.torch_index) : "")],
       [t("ov.uptime"), fmtUptime(s.uptime_seconds)],
       [t("ab.auth"), s.auth ? t("ab.authOn") : t("ab.authOff")],
     ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");

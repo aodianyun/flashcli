@@ -1,0 +1,4 @@
+# Keep executable scripts LF-only: CRLF breaks shebangs on Linux/WSL.
+*.sh text eol=lf
+*.py text eol=lf
+tests/conformance/fixtures/** text eol=lf

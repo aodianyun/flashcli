@@ -30,9 +30,10 @@ type Device struct {
 	DriverVersion     string   `json:"driver_version,omitempty"`
 	PersistenceMode   string   `json:"persistence_mode,omitempty"`
 	ComputeMode       string   `json:"compute_mode,omitempty"`
+	ComputeCap        string   `json:"compute_cap,omitempty"`
 }
 
-const queryFields = "index,name,memory.total,memory.used,memory.free,utilization.gpu,utilization.memory,temperature.gpu,power.draw,power.limit,fan.speed,clocks.current.graphics,clocks.current.memory,driver_version,persistence_mode,compute_mode"
+const queryFields = "index,name,memory.total,memory.used,memory.free,utilization.gpu,utilization.memory,temperature.gpu,power.draw,power.limit,fan.speed,clocks.current.graphics,clocks.current.memory,driver_version,persistence_mode,compute_mode,compute_cap"
 
 // Probe queries nvidia-smi. It works on Linux, WSL2, and Windows hosts that
 // expose nvidia-smi in PATH.
@@ -58,6 +59,29 @@ func DriverVersion(ctx context.Context) (string, error) {
 	return line, nil
 }
 
+// CUDAVersion returns the CUDA version supported by the installed driver
+// (from the nvidia-smi header, e.g. "13.1").
+func CUDAVersion(ctx context.Context) (string, error) {
+	c, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(c, nvidiaSMI()).Output()
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		idx := strings.Index(line, "CUDA Version:")
+		if idx < 0 {
+			continue
+		}
+		rest := strings.TrimSpace(line[idx+len("CUDA Version:"):])
+		rest = strings.Trim(rest, "| ")
+		if fields := strings.Fields(rest); len(fields) > 0 {
+			return strings.TrimSpace(fields[0]), nil
+		}
+	}
+	return "", nil
+}
+
 // nvidiaSMI resolves the probe binary. Services on WSL2 get a minimal PATH
 // that omits /usr/lib/wsl/lib, so fall back to the standard driver mount.
 func nvidiaSMI() string {
@@ -70,6 +94,51 @@ func nvidiaSMI() string {
 		}
 	}
 	return "nvidia-smi"
+}
+
+// Process is one CUDA compute process reported by nvidia-smi.
+type Process struct {
+	PID         int    `json:"pid"`
+	Name        string `json:"name"`
+	MemoryBytes int64  `json:"memory_bytes"`
+}
+
+// Processes lists CUDA compute processes and their device memory usage.
+func Processes(ctx context.Context) ([]Process, error) {
+	c, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(c, nvidiaSMI(), "--query-compute-apps=pid,process_name,used_memory", "--format=csv,noheader,nounits").Output()
+	if err != nil {
+		return nil, fmt.Errorf("nvidia-smi processes: %w", err)
+	}
+	return ParseProcesses(string(out)), nil
+}
+
+// ParseProcesses parses `--query-compute-apps` output; malformed rows are skipped.
+func ParseProcesses(out string) []Process {
+	var procs []Process
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		fields := strings.SplitN(line, ",", 3)
+		if len(fields) < 3 {
+			continue
+		}
+		pid, err := strconv.Atoi(strings.TrimSpace(fields[0]))
+		if err != nil {
+			continue
+		}
+		memMiB, err := strconv.ParseInt(strings.TrimSpace(fields[2]), 10, 64)
+		if err != nil {
+			continue
+		}
+		procs = append(procs, Process{
+			PID: pid, Name: strings.TrimSpace(fields[1]), MemoryBytes: memMiB * 1024 * 1024,
+		})
+	}
+	return procs
 }
 
 // Parse parses nvidia-smi CSV output. Values are MiB and converted to bytes.
@@ -118,6 +187,9 @@ func Parse(out string) ([]Device, error) {
 			dev.DriverVersion = optString(fields[13])
 			dev.PersistenceMode = optString(fields[14])
 			dev.ComputeMode = optString(fields[15])
+		}
+		if len(fields) >= 17 {
+			dev.ComputeCap = optString(fields[16])
 		}
 		devices = append(devices, dev)
 	}

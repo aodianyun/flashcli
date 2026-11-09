@@ -15,11 +15,21 @@ import (
 	"time"
 
 	"github.com/aodianyun/flashcli/go/internal/gpu"
+	"github.com/aodianyun/flashcli/go/internal/preflight"
 	"github.com/aodianyun/flashcli/go/internal/version"
 )
 
 //go:embed web/*
 var webFS embed.FS
+
+//go:embed openapi.yaml
+var openapiDoc []byte
+
+func (s *Server) openapi(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = w.Write(openapiDoc)
+}
 
 func (s *Server) system(w http.ResponseWriter, r *http.Request) {
 	out := map[string]any{
@@ -49,6 +59,16 @@ func (s *Server) system(w http.ResponseWriter, r *http.Request) {
 	}
 	if driver, err := gpu.DriverVersion(r.Context()); err == nil && driver != "" {
 		out["driver_version"] = driver
+	}
+	if cuda, err := gpu.CUDAVersion(r.Context()); err == nil && cuda != "" {
+		out["cuda_version"] = cuda
+	}
+	if info := preflight.DetectGPU(); info != nil {
+		out["sm"] = info.SM
+		out["cuda_tag"] = "cu" + info.CudaTag
+		if info.TorchIndex != "" {
+			out["torch_index"] = info.TorchIndex
+		}
 	}
 	if s.Manager != nil {
 		loaded, maxLoaded := s.Manager.Slots()
