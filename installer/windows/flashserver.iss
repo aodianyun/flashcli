@@ -43,8 +43,15 @@ Source: "{#PayloadDir}\flashcli-linux-arm64"; DestDir: "{app}\payload"; Flags: i
 Source: "{#PayloadDir}\flashserver-linux-arm64"; DestDir: "{app}\payload"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "{#PayloadDir}\sha256sums.txt"; DestDir: "{app}\payload"; Flags: ignoreversion skipifsourcedoesntexist
 
+[Tasks]
+Name: "desktopicon"; Description: "Create a desktop shortcut to the FlashServer console"; GroupDescription: "Additional icons:"
+
+[Icons]
+Name: "{autoprograms}\FlashServer"; Filename: "http://localhost:8790/"
+Name: "{autodesktop}\FlashServer"; Filename: "http://localhost:8790/"; Tasks: desktopicon
+
 [Run]
-Filename: "http://localhost:8790/health"; Description: "Open the FlashServer health page"; Flags: postinstall shellexec nowait skipifsilent
+Filename: "http://localhost:8790/"; Description: "Open the FlashServer console"; Flags: postinstall shellexec nowait skipifsilent
 
 [UninstallRun]
 Filename: "{app}\payload\flashserver-setup.exe"; Parameters: "--uninstall"; RunOnceId: "RemoveFlashServerService"; Flags: waituntilterminated runhidden
@@ -76,7 +83,7 @@ begin
     if SetupOK then
       WizardForm.FinishedLabel.Caption :=
         'FlashServer is installed and running.' + #13#10 + #13#10 +
-        'Health: http://localhost:8790/health'
+        'Health: http://localhost:8790/'
     else
       WizardForm.FinishedLabel.Caption :=
         'FlashServer installation needs attention.' + #13#10 + #13#10 +
@@ -87,4 +94,4 @@ end;
 [Messages]
 WelcomeLabel2=This will install FlashServer, enable WSL2/Ubuntu, and configure the resident model scheduler.%n%nAdministrator privileges are required.
 FinishedHeadingLabel=FlashServer is installed
-FinishedLabel=FlashServer is installed and its service has been started.%n%nOpen http://localhost:8790/health to verify the local scheduler.
+FinishedLabel=FlashServer is installed and its service has been started.%n%nOpen http://localhost:8790/ to manage models, check GPU resources, and test inference.
