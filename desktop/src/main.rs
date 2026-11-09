@@ -390,6 +390,25 @@ fn apply_system(ui: &AppWindow, v: &Value, charts: Option<Charts>) {
             meta.push(format!("torch {torch}"));
         }
         ui.set_gpu_meta(meta.join(" · ").into());
+        ui.set_gpu_driver(gpu["driver_version"].as_str().unwrap_or("—").into());
+        ui.set_gpu_cuda(v["cuda_version"].as_str().unwrap_or("—").into());
+        let sm = v["sm"].as_str().unwrap_or("");
+        let cap = gpu["compute_cap"].as_str().unwrap_or("");
+        ui.set_gpu_sm(if sm.is_empty() {
+            "—".into()
+        } else if cap.is_empty() {
+            format!("sm{sm}").into()
+        } else {
+            format!("sm{sm} ({cap})").into()
+        });
+        ui.set_gpu_torch(v["torch_index"].as_str().unwrap_or("—").into());
+    } else {
+        ui.set_gpu_name("GPU 不可用".into());
+        ui.set_gpu_meta(v["gpu_error"].as_str().unwrap_or("nvidia-smi 不可用").into());
+        ui.set_gpu_driver("—".into());
+        ui.set_gpu_cuda("—".into());
+        ui.set_gpu_sm("—".into());
+        ui.set_gpu_torch("—".into());
     }
 
     let cpu = &v["cpu"];
@@ -446,11 +465,11 @@ fn apply_system(ui: &AppWindow, v: &Value, charts: Option<Charts>) {
 
     if let Some(c) = charts {
         ui.set_gpu_chart(render_chart(
-            &[(&c.gpu_util, (79, 140, 255)), (&c.gpu_mem, (43, 212, 167))],
+            &[(&c.gpu_util, (26, 115, 232)), (&c.gpu_mem, (52, 168, 83))],
             640,
             76,
         ));
-        ui.set_cpu_chart(render_chart(&[(&c.cpu, (255, 176, 32))], 640, 48));
+        ui.set_cpu_chart(render_chart(&[(&c.cpu, (251, 188, 4))], 640, 48));
     }
 }
 
@@ -712,12 +731,12 @@ fn render_chart(lines: &[(&[f32], (u8, u8, u8))], w: u32, h: u32) -> Image {
     {
         let pixels = buffer.make_mut_slice();
         for p in pixels.iter_mut() {
-            *p = Rgba8Pixel { r: 15, g: 17, b: 21, a: 255 };
+            *p = Rgba8Pixel { r: 255, g: 255, b: 255, a: 255 };
         }
         for frac in [0.25f32, 0.5, 0.75] {
             let y = (h as f32 * frac) as u32;
             for x in 0..w {
-                pixels[(y * w + x) as usize] = Rgba8Pixel { r: 34, g: 38, b: 48, a: 255 };
+                pixels[(y * w + x) as usize] = Rgba8Pixel { r: 232, g: 234, b: 237, a: 255 };
             }
         }
         for (data, color) in lines {
