@@ -87,6 +87,11 @@ func NewManagerWithOptions(l Launcher, opts ManagerOptions) *Manager {
 
 // Load starts a serve process for ref if it is not already resident.
 func (m *Manager) Load(ctx context.Context, refStr string) (*InstanceInfo, error) {
+	return m.LoadWithProgress(ctx, refStr, nil)
+}
+
+// LoadWithProgress is Load with coarse progress events (bundle/weights/venv).
+func (m *Manager) LoadWithProgress(ctx context.Context, refStr string, progress func(phase, message string)) (*InstanceInfo, error) {
 	for {
 		m.mu.Lock()
 		if inst, ok := m.instances[refStr]; ok {
@@ -107,7 +112,7 @@ func (m *Manager) Load(ctx context.Context, refStr string) (*InstanceInfo, error
 		m.loading[refStr] = wait
 		m.mu.Unlock()
 
-		info, err := m.load(ctx, refStr)
+		info, err := m.load(ctx, refStr, progress)
 		m.mu.Lock()
 		delete(m.loading, refStr)
 		close(wait)
@@ -119,9 +124,12 @@ func (m *Manager) Load(ctx context.Context, refStr string) (*InstanceInfo, error
 	}
 }
 
-func (m *Manager) load(ctx context.Context, refStr string) (InstanceInfo, error) {
+func (m *Manager) load(ctx context.Context, refStr string, progress func(phase, message string)) (InstanceInfo, error) {
 	if m.launcher == nil {
 		return InstanceInfo{}, errors.New("serve launcher is not configured")
+	}
+	if progress != nil && !ref.IsFlashHub(refStr) {
+		progress("prepare", "preparing local bundle")
 	}
 	inspect := m.opts.Inspect
 	if inspect == nil {
@@ -152,7 +160,14 @@ func (m *Manager) load(ctx context.Context, refStr string) (InstanceInfo, error)
 		return InstanceInfo{}, err
 	}
 	deadline := time.Now().Add(120 * time.Second)
+	lastLog := ""
 	for {
+		if progress != nil {
+			if line := strings.TrimSpace(proc.LastLog()); line != "" && line != lastLog {
+				lastLog = line
+				progress("progress", line)
+			}
+		}
 		if err := proc.Healthy(ctx); err == nil {
 			break
 		}

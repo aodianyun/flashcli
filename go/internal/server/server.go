@@ -49,6 +49,9 @@ type Server struct {
 	cpuPrev    []cpuCounters
 	cpuUsage   float64
 	cpuPerCore []float64
+
+	wsMu      sync.Mutex
+	wsClients map[*wsClient]struct{}
 }
 
 // New creates a server with the default local configuration.
@@ -82,6 +85,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/gpu", s.gpuStatus)
 	mux.HandleFunc("GET /v1/gpu/history", s.gpuHistory)
 	mux.HandleFunc("GET /v1/system/history", s.gpuHistory)
+	mux.HandleFunc("GET /v1/ws", s.ws)
 	mux.HandleFunc("POST /v1/pull", s.pull)
 	mux.HandleFunc("GET /v1/jobs/{id}", s.job)
 	mux.HandleFunc("GET /v1/jobs/{id}/events", s.jobEvents)
@@ -106,12 +110,18 @@ func (s *Server) authorize(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		// Browser WebSocket clients cannot set headers; allow a query token.
+		if r.URL.Path == "/v1/ws" && r.URL.Query().Get("token") == s.Token {
+			next.ServeHTTP(w, r)
+			return
+		}
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "unauthorized"})
 	})
 }
 
 func (s *Server) Run(ctx context.Context) error {
 	s.startGPUHistory(ctx)
+	go s.forwardJobs(ctx)
 	// Go treats the IPv4 wildcard 0.0.0.0 as a wildcard and may bind a
 	// dual-stack socket. Windows' WSL localhost relay then exposes only ::1,
 	// so explicit 127.0.0.1 clients fail. Pin the socket family to the

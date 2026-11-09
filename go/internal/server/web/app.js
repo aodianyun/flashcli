@@ -18,6 +18,7 @@
       "chat.none": "请先加载一个支持 serve 的模型",
       "log.title": "日志", "log.server": "服务", "log.model": "模型", "log.auto": "自动刷新",
       "ab.title": "系统信息", "ab.api": "API 文档：/v1/* 接口为本地 HTTP API，健康检查 /health。",
+      "ab.autostart": "开机启动",
       "common.loading": "加载中", "common.ready": "就绪", "common.missing": "缺失",
       "common.refresh": "刷新", "common.yes": "是", "common.no": "否",
       "toast.loading": "正在加载", "toast.loaded": "加载完成", "toast.unloaded": "已卸载",
@@ -47,6 +48,7 @@
       "chat.none": "Load a serve-capable model first",
       "log.title": "Logs", "log.server": "Server", "log.model": "Model", "log.auto": "Auto refresh",
       "ab.title": "System", "ab.api": "API: local HTTP endpoints under /v1/*; health check at /health.",
+      "ab.autostart": "Auto-start",
       "common.loading": "loading", "common.ready": "ready", "common.missing": "missing",
       "common.refresh": "Refresh", "common.yes": "yes", "common.no": "no",
       "toast.loading": "Loading", "toast.loaded": "Loaded", "toast.unloaded": "Unloaded",
@@ -376,6 +378,7 @@
       ["SM / torch", (s.sm ? "sm" + esc(s.sm) : "—") + (s.torch_index ? " / " + esc(s.torch_index) : "")],
       [t("ov.uptime"), fmtUptime(s.uptime_seconds)],
       [t("ab.auth"), s.auth ? t("ab.authOn") : t("ab.authOff")],
+      [t("ab.autostart"), esc(s.autostart || "unknown")],
     ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
   }
 

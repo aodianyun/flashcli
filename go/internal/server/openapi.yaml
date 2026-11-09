@@ -325,6 +325,23 @@ paths:
           description: Streaming or non-streaming completion passthrough
         '404':
           $ref: '#/components/responses/Error'
+  /v1/ws:
+    get:
+      summary: Live WebSocket stream (system snapshots + job progress)
+      description: |
+        Upgrades to WebSocket. The server sends `hello`, then a `system`
+        snapshot once per second and `job` progress messages for pull/load
+        jobs. When a token is configured, pass `?token=...` because browsers
+        cannot set headers on WebSocket handshakes.
+      parameters:
+        - name: token
+          in: query
+          schema: { type: string }
+      responses:
+        '101':
+          description: Switching protocols
+        '401':
+          $ref: '#/components/responses/Error'
   /openapi.yaml:
     get:
       summary: This OpenAPI document
@@ -415,11 +432,11 @@ components:
         arch: { type: string }
         wsl: { type: boolean }
         auth: { type: boolean }
+        autostart: { type: string, enum: [enabled, disabled, unknown] }
         hostname: { type: string }
         kernel: { type: string }
         driver_version: { type: string }
-        cuda_version: { type: string, example: '13.1' }
-        cuda_tag: { type: string, example: 'cu130' }
+        cuda_version: { type: string, example: '13.1' }        cuda_tag: { type: string, example: 'cu130' }
         sm: { type: string, example: '89' }
         torch_index: { type: string, example: 'cu130' }
         started_at: { type: string, format: date-time }

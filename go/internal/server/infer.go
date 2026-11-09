@@ -30,7 +30,7 @@ func (s *Server) loadModel(w http.ResponseWriter, r *http.Request) {
 		refStr := req.Ref
 		job := s.Jobs.Start(context.Background(), "load", refStr, func(ctx context.Context, emit func(string, string)) error {
 			emit("loading", "loading "+refStr)
-			info, err := s.Manager.Load(ctx, refStr)
+			info, err := s.Manager.LoadWithProgress(ctx, refStr, emit)
 			if err != nil {
 				return err
 			}

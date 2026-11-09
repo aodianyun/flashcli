@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -32,6 +33,10 @@ func (s *Server) openapi(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) system(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.systemSnapshot(r.Context()))
+}
+
+func (s *Server) systemSnapshot(ctx context.Context) map[string]any {
 	out := map[string]any{
 		"version":               version.Version,
 		"protocol_version":      version.ProtocolVersion,
@@ -51,16 +56,16 @@ func (s *Server) system(w http.ResponseWriter, r *http.Request) {
 		out["kernel"] = strings.TrimSpace(string(blob))
 	}
 	if s.GPU != nil {
-		if devices, err := s.GPU(r.Context()); err == nil {
+		if devices, err := s.GPU(ctx); err == nil {
 			out["gpu"] = devices
 		} else {
 			out["gpu_error"] = err.Error()
 		}
 	}
-	if driver, err := gpu.DriverVersion(r.Context()); err == nil && driver != "" {
+	if driver, err := gpu.DriverVersion(ctx); err == nil && driver != "" {
 		out["driver_version"] = driver
 	}
-	if cuda, err := gpu.CUDAVersion(r.Context()); err == nil && cuda != "" {
+	if cuda, err := gpu.CUDAVersion(ctx); err == nil && cuda != "" {
 		out["cuda_version"] = cuda
 	}
 	if info := preflight.DetectGPU(); info != nil {
@@ -70,13 +75,21 @@ func (s *Server) system(w http.ResponseWriter, r *http.Request) {
 			out["torch_index"] = info.TorchIndex
 		}
 	}
+	if blob, err := os.ReadFile("/etc/flashserver/autostart"); err == nil {
+		if v := strings.TrimSpace(string(blob)); v != "" {
+			out["autostart"] = v
+		}
+	} else {
+		out["autostart"] = "unknown"
+	}
 	out["cpu"] = s.cpuPayload()
 	if s.Manager != nil {
 		loaded, maxLoaded := s.Manager.Slots()
 		out["loaded_count"] = loaded
 		out["max_loaded"] = maxLoaded
+		out["loaded"] = s.loaded()
 	}
-	writeJSON(w, http.StatusOK, out)
+	return out
 }
 
 func isWSL() bool {
