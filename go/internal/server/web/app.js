@@ -25,6 +25,8 @@
       "ov.uptime": "运行时长", "ov.version": "版本", "ov.host": "主机", "ov.kernel": "内核",
       "ov.driver": "驱动", "ov.os": "系统", "ov.auth": "鉴权", "ov.loadedCount": "已加载",
       "ov.vram": "显存", "ov.none": "无",
+      "ov.util": "利用率", "ov.temp": "温度", "ov.power": "功耗", "ov.fan": "风扇",
+      "ov.clock": "频率", "ov.memFull": "全卡显存", "ov.detail": "详情",
       "ab.auth": "API 鉴权", "ab.authOff": "关闭（本地使用）", "ab.authOn": "开启",
       "job.events": "进度",
     },
@@ -48,6 +50,8 @@
       "ov.uptime": "Uptime", "ov.version": "Version", "ov.host": "Host", "ov.kernel": "Kernel",
       "ov.driver": "Driver", "ov.os": "OS", "ov.auth": "Auth", "ov.loadedCount": "Loaded",
       "ov.vram": "VRAM", "ov.none": "none",
+      "ov.util": "Util", "ov.temp": "Temp", "ov.power": "Power", "ov.fan": "Fan",
+      "ov.clock": "Clock", "ov.memFull": "GPU memory", "ov.detail": "Details",
       "ab.auth": "API auth", "ab.authOff": "off (local)", "ab.authOn": "on",
       "job.events": "Progress",
     },
@@ -142,10 +146,19 @@
           const total = g.memory_total_bytes || 1;
           const used = g.memory_used_bytes || 0;
           const pct = Math.min(100, (used / total) * 100);
+          const util = g.utilization_gpu_pct;
+          const bits = [];
+          if (g.temperature_c != null) bits.push(`${t("ov.temp")} ${g.temperature_c}°C`);
+          if (g.power_draw_w != null) bits.push(`${t("ov.power")} ${g.power_draw_w.toFixed(0)}${g.power_limit_w != null ? "/" + g.power_limit_w.toFixed(0) : ""} W`);
+          if (g.clock_graphics_mhz != null) bits.push(`${t("ov.clock")} ${g.clock_graphics_mhz}${g.clock_memory_mhz != null ? "/" + g.clock_memory_mhz : ""} MHz`);
+          if (g.fan_speed_pct != null) bits.push(`${t("ov.fan")} ${g.fan_speed_pct}%`);
           return `<div>
-            <div class="gpu-name">${esc(g.name)}</div>
+            <div class="gpu-name">${esc(g.name)}${g.driver_version ? `<span class="muted" style="font-weight:400;margin-left:8px">driver ${esc(g.driver_version)}</span>` : ""}</div>
+            <div class="gpu-meta" style="margin:0 0 6px"><span>${t("ov.util")}</span><span>${util != null ? util + "%" : "—"}</span></div>
+            <div class="bar"><span style="width:${util != null ? Math.min(100, util) : 0}%"></span></div>
+            <div class="gpu-meta" style="margin:8px 0 6px"><span>${t("ov.memFull")}</span><span>${fmtBytes(used)} / ${fmtBytes(total)}</span></div>
             <div class="bar"><span style="width:${pct.toFixed(1)}%"></span></div>
-            <div class="gpu-meta"><span>${t("ov.vram")} ${fmtBytes(used)} / ${fmtBytes(total)}</span><span>${pct.toFixed(0)}%</span></div>
+            <div class="gpu-meta" style="margin-top:10px;flex-wrap:wrap;gap:6px 14px">${bits.map((b) => `<span>${esc(b)}</span>`).join("")}</div>
           </div>`;
         }).join("")
       : `<div class="muted">${esc(state.sys.gpu_error || t("ov.none"))}</div>`;

@@ -18,18 +18,44 @@ type Device struct {
 	MemoryTotal int64  `json:"memory_total_bytes"`
 	MemoryUsed  int64  `json:"memory_used_bytes"`
 	MemoryFree  int64  `json:"memory_free_bytes"`
+
+	UtilizationGPU    *int     `json:"utilization_gpu_pct,omitempty"`
+	UtilizationMemory *int     `json:"utilization_memory_pct,omitempty"`
+	TemperatureC      *int     `json:"temperature_c,omitempty"`
+	PowerDrawW        *float64 `json:"power_draw_w,omitempty"`
+	PowerLimitW       *float64 `json:"power_limit_w,omitempty"`
+	FanSpeedPct       *int     `json:"fan_speed_pct,omitempty"`
+	ClockGraphicsMHz  *int     `json:"clock_graphics_mhz,omitempty"`
+	ClockMemoryMHz    *int     `json:"clock_memory_mhz,omitempty"`
+	DriverVersion     string   `json:"driver_version,omitempty"`
+	PersistenceMode   string   `json:"persistence_mode,omitempty"`
+	ComputeMode       string   `json:"compute_mode,omitempty"`
 }
+
+const queryFields = "index,name,memory.total,memory.used,memory.free,utilization.gpu,utilization.memory,temperature.gpu,power.draw,power.limit,fan.speed,clocks.current.graphics,clocks.current.memory,driver_version,persistence_mode,compute_mode"
 
 // Probe queries nvidia-smi. It works on Linux, WSL2, and Windows hosts that
 // expose nvidia-smi in PATH.
 func Probe(ctx context.Context) ([]Device, error) {
 	c, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(c, nvidiaSMI(), "--query-gpu=index,name,memory.total,memory.used,memory.free", "--format=csv,noheader,nounits").Output()
+	out, err := exec.CommandContext(c, nvidiaSMI(), "--query-gpu="+queryFields, "--format=csv,noheader,nounits").Output()
 	if err != nil {
 		return nil, fmt.Errorf("nvidia-smi: %w", err)
 	}
 	return Parse(string(out))
+}
+
+// DriverVersion returns the installed NVIDIA driver version.
+func DriverVersion(ctx context.Context) (string, error) {
+	c, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(c, nvidiaSMI(), "--query-gpu=driver_version", "--format=csv,noheader").Output()
+	if err != nil {
+		return "", err
+	}
+	line := strings.TrimSpace(strings.Split(string(out), "\n")[0])
+	return line, nil
 }
 
 // nvidiaSMI resolves the probe binary. Services on WSL2 get a minimal PATH
@@ -46,19 +72,9 @@ func nvidiaSMI() string {
 	return "nvidia-smi"
 }
 
-// DriverVersion returns the installed NVIDIA driver version.
-func DriverVersion(ctx context.Context) (string, error) {
-	c, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(c, nvidiaSMI(), "--query-gpu=driver_version", "--format=csv,noheader").Output()
-	if err != nil {
-		return "", err
-	}
-	line := strings.TrimSpace(strings.Split(string(out), "\n")[0])
-	return line, nil
-}
-
 // Parse parses nvidia-smi CSV output. Values are MiB and converted to bytes.
+// The first five columns are required; the extended telemetry columns are
+// optional so older/limited drivers still parse.
 func Parse(out string) ([]Device, error) {
 	var devices []Device
 	for _, line := range strings.Split(out, "\n") {
@@ -67,7 +83,7 @@ func Parse(out string) ([]Device, error) {
 			continue
 		}
 		fields := strings.Split(line, ",")
-		if len(fields) != 5 {
+		if len(fields) < 5 {
 			return nil, fmt.Errorf("unexpected nvidia-smi line: %q", line)
 		}
 		index, err := strconv.Atoi(strings.TrimSpace(fields[0]))
@@ -86,10 +102,24 @@ func Parse(out string) ([]Device, error) {
 		if err != nil {
 			return nil, err
 		}
-		devices = append(devices, Device{
+		dev := Device{
 			Index: index, Name: strings.TrimSpace(fields[1]),
 			MemoryTotal: total, MemoryUsed: used, MemoryFree: free,
-		})
+		}
+		if len(fields) >= 16 {
+			dev.UtilizationGPU = optInt(fields[5])
+			dev.UtilizationMemory = optInt(fields[6])
+			dev.TemperatureC = optInt(fields[7])
+			dev.PowerDrawW = optFloat(fields[8])
+			dev.PowerLimitW = optFloat(fields[9])
+			dev.FanSpeedPct = optInt(fields[10])
+			dev.ClockGraphicsMHz = optInt(fields[11])
+			dev.ClockMemoryMHz = optInt(fields[12])
+			dev.DriverVersion = optString(fields[13])
+			dev.PersistenceMode = optString(fields[14])
+			dev.ComputeMode = optString(fields[15])
+		}
+		devices = append(devices, dev)
 	}
 	return devices, nil
 }
@@ -100,4 +130,26 @@ func mib(raw string) (int64, error) {
 		return 0, fmt.Errorf("gpu memory %q: %w", raw, err)
 	}
 	return v * 1024 * 1024, nil
+}
+
+func optString(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" || strings.EqualFold(s, "N/A") || strings.HasPrefix(s, "[") {
+		return ""
+	}
+	return s
+}
+
+func optInt(raw string) *int {
+	if v, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil {
+		return &v
+	}
+	return nil
+}
+
+func optFloat(raw string) *float64 {
+	if v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64); err == nil {
+		return &v
+	}
+	return nil
 }
