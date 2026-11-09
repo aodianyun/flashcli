@@ -255,6 +255,11 @@ func createStartupTask(ctx context.Context, opts Options, i *installer) error {
 		}
 		return fmt.Errorf("create logon task: %w", err)
 	}
+	// Kick the keepalive now: the distro would otherwise idle-stop (and take
+	// the service with it) before the next logon.
+	if err := exec.CommandContext(ctx, sysExe("schtasks.exe"), "/Run", "/TN", task).Run(); err != nil {
+		i.printf("warn: could not start logon task %s: %v\n", task, err)
+	}
 	return nil
 }
 
