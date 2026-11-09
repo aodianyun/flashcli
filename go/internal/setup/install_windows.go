@@ -3,6 +3,7 @@
 package setup
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -18,13 +19,19 @@ import (
 
 func installWSL(ctx context.Context, env Env, opts Options, out io.Writer) error {
 	i := installer{env: env, opts: opts, out: out}
-	if err := wslAvailable(ctx); err != nil {
+	linuxArch := env.Arch
+	binDir := path.Join(opts.Prefix, "bin")
+	total := 8
+	if opts.DryRun {
+		total = 7
+	}
+	if err := stepf(out, 1, total, "Checking WSL2", func() error { return wslAvailable(ctx) }); err != nil {
 		return err
 	}
-	if err := ensureDistro(ctx, opts, &i); err != nil {
+	if err := stepf(out, 2, total, "Preparing Ubuntu", func() error { return ensureDistro(ctx, opts, &i) }); err != nil {
 		return err
 	}
-	if err := ensureSystemd(ctx, opts, &i); err != nil {
+	if err := stepf(out, 3, total, "Enabling systemd", func() error { return ensureSystemd(ctx, opts, &i) }); err != nil {
 		return err
 	}
 	if strings.ContainsAny(opts.Home, ":\\") {
@@ -34,12 +41,12 @@ func installWSL(ctx context.Context, env Env, opts Options, out io.Writer) error
 	// systemd's default PATH omits the WSL2 driver mount, which hides nvidia-smi
 	// from the service and from bundle subprocesses.
 	opts.PathEnv = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/lib/wsl/lib"
-	linuxArch := env.Arch
-	binDir := path.Join(opts.Prefix, "bin")
-	if err := copyToWSL(ctx, opts, resolveBinary(opts.BinDir, "flashcli", "linux", linuxArch), path.Join(binDir, "flashcli")); err != nil {
-		return err
-	}
-	if err := copyToWSL(ctx, opts, resolveBinary(opts.BinDir, "flashserver", "linux", linuxArch), path.Join(binDir, "flashserver")); err != nil {
+	if err := stepf(out, 4, total, "Installing flashcli/flashserver", func() error {
+		if err := copyToWSL(ctx, opts, resolveBinary(opts.BinDir, "flashcli", "linux", linuxArch), path.Join(binDir, "flashcli")); err != nil {
+			return err
+		}
+		return copyToWSL(ctx, opts, resolveBinary(opts.BinDir, "flashserver", "linux", linuxArch), path.Join(binDir, "flashserver"))
+	}); err != nil {
 		return err
 	}
 	cfg, err := json.MarshalIndent(map[string]any{
@@ -55,29 +62,49 @@ func installWSL(ctx context.Context, env Env, opts Options, out io.Writer) error
 	if err != nil {
 		return err
 	}
-	if err := writeToWSL(ctx, opts, opts.ConfigPath, append(cfg, '\n'), 0o600); err != nil {
+	if err := stepf(out, 5, total, "Writing configuration", func() error {
+		if err := writeToWSL(ctx, opts, opts.ConfigPath, append(cfg, '\n'), 0o600); err != nil {
+			return err
+		}
+		unit := systemdUnit(opts, binDir)
+		if err := writeToWSL(ctx, opts, "/etc/systemd/system/"+opts.ServiceName+".service", []byte(unit), 0o644); err != nil {
+			return err
+		}
+		return wslRoot(ctx, opts, "systemctl", "daemon-reload")
+	}); err != nil {
 		return err
 	}
-	unit := systemdUnit(opts, binDir)
-	if err := writeToWSL(ctx, opts, "/etc/systemd/system/"+opts.ServiceName+".service", []byte(unit), 0o644); err != nil {
+	if err := stepf(out, 6, total, "Starting flashserver", func() error {
+		if err := wslRoot(ctx, opts, "systemctl", "enable", opts.ServiceName); err != nil {
+			return err
+		}
+		return wslRoot(ctx, opts, "systemctl", "restart", opts.ServiceName)
+	}); err != nil {
 		return err
 	}
-	if err := wslRoot(ctx, opts, "systemctl", "daemon-reload"); err != nil {
-		return err
-	}
-	if err := wslRoot(ctx, opts, "systemctl", "enable", opts.ServiceName); err != nil {
-		return err
-	}
-	if err := wslRoot(ctx, opts, "systemctl", "restart", opts.ServiceName); err != nil {
-		return err
-	}
-	if err := createStartupTask(ctx, opts, &i); err != nil {
+	if err := stepf(out, 7, total, "Configuring auto-start", func() error { return createStartupTask(ctx, opts, &i) }); err != nil {
 		return err
 	}
 	if opts.DryRun {
 		return nil
 	}
-	return waitHealth(ctx, opts.Addr, opts.Token)
+	if err := stepf(out, 8, total, "Checking health", func() error { return waitHealth(ctx, opts.Addr, opts.Token) }); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "\nFlashServer is running: http://localhost:8790/health\n")
+	fmt.Fprintf(out, "Token/config: /etc/flashserver/config.json (inside WSL)\n")
+	return nil
+}
+
+// stepf prints a friendly progress line and reports the outcome.
+func stepf(out io.Writer, n, total int, name string, fn func() error) error {
+	fmt.Fprintf(out, "[%d/%d] %-28s ", n, total, name)
+	if err := fn(); err != nil {
+		fmt.Fprintln(out, "FAILED")
+		return err
+	}
+	fmt.Fprintln(out, "ok")
+	return nil
 }
 
 func wslAvailable(ctx context.Context) error {
@@ -151,8 +178,8 @@ func copyToWSL(ctx context.Context, opts Options, src, dest string) error {
 	script := "mkdir -p " + shellQuote(path.Dir(dest)) + " && cat > " + shellQuote(dest+".tmp") + " && chmod 755 " + shellQuote(dest+".tmp") + " && mv -f " + shellQuote(dest+".tmp") + " " + shellQuote(dest)
 	cmd := exec.CommandContext(ctx, sysExe("wsl.exe"), "-d", opts.Distro, "-u", "root", "--", "sh", "-c", script)
 	cmd.Stdin = f
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = diag
+	cmd.Stderr = diag
 	return cmd.Run()
 }
 
@@ -160,8 +187,8 @@ func writeToWSL(ctx context.Context, opts Options, dest string, data []byte, mod
 	script := "mkdir -p " + shellQuote(path.Dir(dest)) + " && cat > " + shellQuote(filepath.ToSlash(dest)) + " && chmod " + fmt.Sprintf("%o", mode) + " " + shellQuote(dest)
 	cmd := exec.CommandContext(ctx, sysExe("wsl.exe"), "-d", opts.Distro, "-u", "root", "--", "sh", "-c", script)
 	cmd.Stdin = strings.NewReader(string(data))
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = diag
+	cmd.Stderr = diag
 	if opts.DryRun {
 		fmt.Fprintf(os.Stdout, "$ write %s (WSL %s)\n", dest, opts.Distro)
 		return nil
@@ -172,8 +199,8 @@ func writeToWSL(ctx context.Context, opts Options, dest string, data []byte, mod
 func wslRoot(ctx context.Context, opts Options, name string, args ...string) error {
 	base := []string{"-d", opts.Distro, "-u", "root", "--", name}
 	cmd := exec.CommandContext(ctx, sysExe("wsl.exe"), append(base, args...)...)
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = diag
+	cmd.Stderr = diag
 	return cmd.Run()
 }
 
@@ -218,9 +245,17 @@ func createStartupTask(ctx context.Context, opts Options, i *installer) error {
 		args = append(args, "/RU", user, "/IT")
 	}
 	cmd := exec.CommandContext(ctx, sysExe("schtasks.exe"), args...)
-	cmd.Stdout = i.out
-	cmd.Stderr = i.out
-	return cmd.Run()
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	if err := cmd.Run(); err != nil {
+		detail := strings.TrimSpace(buf.String())
+		if detail != "" {
+			return fmt.Errorf("create logon task: %w (%s)", err, detail)
+		}
+		return fmt.Errorf("create logon task: %w", err)
+	}
+	return nil
 }
 
 // wslKeepaliveScript writes a hidden logon script. WSL's vmIdleTimeout stops

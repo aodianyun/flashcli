@@ -35,8 +35,8 @@ func uninstallWSL(ctx context.Context, env Env, opts Options, out io.Writer) err
 	task := "flashserver-wsl"
 	i.printf("remove Windows logon task %s\n", task)
 	cmd := exec.CommandContext(ctx, sysExe("schtasks.exe"), "/Delete", "/F", "/TN", task)
-	cmd.Stdout = i.out
-	cmd.Stderr = i.out
+	cmd.Stdout = diag
+	cmd.Stderr = diag
 	if err := cmd.Run(); err != nil {
 		i.printf("logon task removal returned: %v\n", err)
 	}

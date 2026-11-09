@@ -4,8 +4,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 
+	"github.com/aodianyun/flashcli/go/internal/paths"
 	"github.com/aodianyun/flashcli/go/internal/setup"
 	"github.com/aodianyun/flashcli/go/internal/version"
 )
@@ -38,7 +41,21 @@ func main() {
 	ctx := context.Background()
 	env := setup.Detect(ctx)
 	backend := setup.EffectiveBackend(env, opts.Backend)
-	fmt.Printf("flashserver-setup %s\nOS: %s/%s  WSL: %v  backend: %s\n", version.Version, env.OS, env.Arch, env.WSL, backend)
+	logFile := openSetupLog()
+	if logFile != nil {
+		defer logFile.Close()
+		setup.SetLog(logFile)
+	}
+	out := io.Writer(os.Stdout)
+	if logFile != nil {
+		out = io.MultiWriter(os.Stdout, logFile)
+	}
+	fmt.Fprintf(out, "flashserver-setup %s\n", version.Version)
+	fmt.Fprintf(out, "System: %s/%s, WSL: %v, backend: %s\n", env.OS, env.Arch, env.WSL, backend)
+	if logFile != nil {
+		fmt.Fprintf(out, "Log: %s\n", logFile.Name())
+	}
+	fmt.Fprintln(out)
 	if opts.DryRun {
 		steps, err := setup.Plan(env, opts.Backend)
 		if err != nil {
@@ -46,12 +63,26 @@ func main() {
 			os.Exit(2)
 		}
 		for i, step := range steps {
-			fmt.Printf("%d. %-16s %s\n", i+1, step.Name, step.Description)
+			fmt.Fprintf(out, "  %d. %-16s %s\n", i+1, step.Name, step.Description)
 		}
-		fmt.Println()
+		fmt.Fprintln(out)
 	}
-	if err := setup.Run(ctx, env, opts, os.Stdout); err != nil {
+	if err := setup.Run(ctx, env, opts, out); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(2)
 	}
+}
+
+// openSetupLog writes the full setup trace (including WSL/schtasks output) so
+// the UI installer and support can diagnose failures.
+func openSetupLog() *os.File {
+	dir := filepath.Join(paths.Home(), "logs")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil
+	}
+	f, err := os.OpenFile(filepath.Join(dir, "setup.log"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	if err != nil {
+		return nil
+	}
+	return f
 }

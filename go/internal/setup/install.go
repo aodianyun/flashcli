@@ -103,6 +103,17 @@ type installer struct {
 	out  io.Writer
 }
 
+// diag receives child-process output (wsl.exe, schtasks.exe). It defaults to
+// discard so the user-facing output stays clean; main redirects it to a log.
+var diag io.Writer = io.Discard
+
+// SetLog redirects child-process diagnostics to w.
+func SetLog(w io.Writer) {
+	if w != nil {
+		diag = w
+	}
+}
+
 func (i installer) printf(format string, args ...any) {
 	fmt.Fprintf(i.out, format, args...)
 }
