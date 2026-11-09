@@ -13,8 +13,13 @@ flashcli serve     → one model process, OpenAI-compatible API
 ## Scope
 
 - Linux native and Windows WSL2 (official Ubuntu distribution).
-- No remote mode. No inference proxy: `flashserver` returns each model's endpoint.
+- No remote mode. Inference endpoints are returned to clients; the local console uses a same-origin helper (`/v1/ui/chat`) to avoid browser CORS.
+- Authentication is **off by default** (single-user local daemon). Pass `--token`/write `token` in the config to require `X-Flashcli-Token` or `Authorization: Bearer` on API calls.
 - `flashserver` must run as a boot-started service. It schedules multiple models when GPU memory and the configured slot limit allow it.
+
+## Local console
+
+Open `http://localhost:8790/` after installation. The embedded console shows GPU/VRAM, service uptime, cached models, loaded models, logs, and can load/unload models and test chat. It is served by the same binary (no extra assets or Node build).
 
 ## Windows UI installer
 
@@ -26,8 +31,9 @@ FlashServer-Setup-<version>.exe
 
 It runs elevated, checks/installs WSL2 Ubuntu, installs the Linux payload,
 starts `flashserver.service`, creates the Windows logon task, and verifies
-`http://localhost:8790/health`. If Windows requires a reboot to enable WSL2,
-the installer should be run again after reboot; the setup engine is idempotent.
+the daemon. On success it opens `http://localhost:8790/` (the local console).
+If Windows requires a reboot to enable WSL2, run the installer again after
+reboot; the setup engine is idempotent.
 
 The CLI remains available for automation:
 
@@ -85,12 +91,16 @@ GET  /v1/models                 cached models + loaded instances
 GET  /v1/models/loaded
 GET  /v1/storage
 GET  /v1/resources              GPU, loaded models, slot counts
+GET  /v1/system                 OS/WSL/GPU/driver/uptime/version
+GET  /v1/logs                   ?kind=server|model&ref=...&lines=N
 GET  /v1/gpu
 POST /v1/pull
 GET  /v1/jobs/{id}
 GET  /v1/jobs/{id}/events
-POST /v1/models/load            {"ref":"..."} → endpoint/pid/state
+POST /v1/models/load            {"ref":"...","async":true} → job_id (or endpoint/pid/state)
 POST /v1/models/unload          {"ref":"..."}
+POST /v1/ui/chat                local console helper: {"ref":"...","body":{...}}
+GET  /                          embedded local console
 ```
 
 There is intentionally no `/v1/infer` endpoint. After `load`, call the returned `endpoint` directly.

@@ -13,8 +13,13 @@ flashcli serve     → 单模型进程，OpenAI-compatible API
 ## 范围
 
 - 支持 Linux 原生和 Windows WSL2（官方 Ubuntu 发行版）。
-- 不做 remote 模式，不代理推理；`flashserver` 返回每个模型的 endpoint。
+- 不做 remote 模式；推理 endpoint 返回给客户端，本地控制台通过同源 `/v1/ui/chat` 代转以避免浏览器 CORS。
+- 默认**关闭鉴权**（单用户本地守护进程）。需要时用 `--token` 或配置里的 `token` 开启，API 调用需带 `X-Flashcli-Token` 或 `Authorization: Bearer`。
 - `flashserver` 必须开机启动并常驻。显存和槽位允许时可以加载多个模型。
+
+## 本地控制台
+
+安装后打开 `http://localhost:8790/`。内置控制台展示 GPU/显存、服务运行时长、缓存模型、已加载模型、日志，并支持加载/卸载模型和对话测试。页面随二进制内嵌，不需要额外资源或 Node 构建。
 
 ## Windows UI 安装包
 
@@ -25,9 +30,9 @@ FlashServer-Setup-<version>.exe
 ```
 
 安装包会以管理员权限运行，检查/安装 WSL2 Ubuntu，安装 Linux payload，启动
-`flashserver.service`，创建 Windows 登录任务，并检查
-`http://localhost:8790/health`。如果启用 WSL2 需要重启，重启后再次运行安装包即可；
-setup 引擎是幂等的。
+`flashserver.service`，创建 Windows 登录任务，并检查守护进程。成功后自动打开
+`http://localhost:8790/`（本地控制台）。如果启用 WSL2 需要重启，重启后再次运行
+安装包即可；setup 引擎是幂等的。
 
 自动化场景仍可使用 CLI：
 
@@ -85,12 +90,16 @@ GET  /v1/models                 本地缓存模型 + 已加载实例
 GET  /v1/models/loaded
 GET  /v1/storage
 GET  /v1/resources              GPU、已加载模型、槽位
+GET  /v1/system                 OS/WSL/GPU/驱动/运行时长/版本
+GET  /v1/logs                   ?kind=server|model&ref=...&lines=N
 GET  /v1/gpu
 POST /v1/pull
 GET  /v1/jobs/{id}
 GET  /v1/jobs/{id}/events
-POST /v1/models/load            {"ref":"..."} → endpoint/pid/state
+POST /v1/models/load            {"ref":"...","async":true} → job_id（或 endpoint/pid/state）
 POST /v1/models/unload          {"ref":"..."}
+POST /v1/ui/chat                本地控制台代转：{"ref":"...","body":{...}}
+GET  /                          内置本地控制台
 ```
 
 不提供 `/v1/infer`。`load` 成功后直接访问返回的 `endpoint`。
