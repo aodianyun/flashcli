@@ -103,6 +103,8 @@ curl -H "X-Flashcli-Token: $TOKEN" -H 'Content-Type: application/json' \
 curl http://127.0.0.1:18100/v1/chat/completions ...
 ```
 
+`load` 要求 bundle 提供 `serve` 入口。只有 `run` 的 bundle（VLA 策略等）会被立即拒绝，并返回 bundle 自身的原因，例如 `bundle "pi05_libero" does not support serve`；这类模型请使用 `flashcli run <ref>`。
+
 ## 资源准入
 
 以下情况 `load` 返回 `409 RESOURCE_EXHAUSTED`：

@@ -103,6 +103,8 @@ curl -H "X-Flashcli-Token: $TOKEN" -H 'Content-Type: application/json' \
 curl http://127.0.0.1:18100/v1/chat/completions ...
 ```
 
+`load` requires a bundle with a `serve` entry. Run-only bundles (VLA policies and similar) are rejected immediately with the bundle's own error, for example `bundle "pi05_libero" does not support serve`; use `flashcli run <ref>` for those.
+
 ## Resource admission
 
 `load` is rejected with `409 RESOURCE_EXHAUSTED` when:
