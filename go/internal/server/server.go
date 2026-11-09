@@ -90,7 +90,20 @@ func (s *Server) authorize(next http.Handler) http.Handler {
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	ln, err := net.Listen("tcp", s.Addr)
+	// Go treats the IPv4 wildcard 0.0.0.0 as a wildcard and may bind a
+	// dual-stack socket. Windows' WSL localhost relay then exposes only ::1,
+	// so explicit 127.0.0.1 clients fail. Pin the socket family to the
+	// configured wildcard.
+	network := "tcp"
+	if host, _, err := net.SplitHostPort(s.Addr); err == nil {
+		switch host {
+		case "0.0.0.0":
+			network = "tcp4"
+		case "::", "[::]":
+			network = "tcp6"
+		}
+	}
+	ln, err := net.Listen(network, s.Addr)
 	if err != nil {
 		return err
 	}

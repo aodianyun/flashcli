@@ -16,6 +16,7 @@ import (
 	"github.com/ebitengine/purego"
 
 	"github.com/aodianyun/flashcli/go/internal/errs"
+	"github.com/aodianyun/flashcli/go/internal/paths"
 	"github.com/aodianyun/flashcli/go/internal/venv"
 )
 
@@ -186,6 +187,46 @@ func (v venvRunner) Run(ctx context.Context, argv []string, _ []string) error {
 	return v.r.Run(ctx, argv)
 }
 
+// CompatDir creates unversioned SONAME symlinks for pip-provided CUDA
+// libraries. Model code commonly calls ctypes.CDLL("libcudart.so"), while the
+// wheels ship only libcudart.so.<major>. Returns the symlink directory (or nil
+// when nothing was linked).
+func CompatDir(purelib string, sonames []string) []string {
+	home := paths.Home()
+	if home == "" || len(sonames) == 0 {
+		return nil
+	}
+	dir := filepath.Join(home, "lib", "cuda-compat")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil
+	}
+	added := false
+	for _, name := range sonames {
+		i := strings.Index(name, ".so.")
+		if i < 0 {
+			continue
+		}
+		short := name[:i+3] // libcudart.so.13 -> libcudart.so
+		src := FindSoname(purelib, name)
+		if src == "" {
+			continue
+		}
+		dst := filepath.Join(dir, short)
+		if target, err := os.Readlink(dst); err == nil && target == src {
+			added = true
+			continue
+		}
+		_ = os.Remove(dst)
+		if err := os.Symlink(src, dst); err == nil {
+			added = true
+		}
+	}
+	if !added {
+		return nil
+	}
+	return []string{dir}
+}
+
 // Ensure makes the required CUDA libs loadable (installing into the venv if allowed).
 func Ensure(ctx context.Context, python, cudaTag string, quiet, install bool, runner Runner) error {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("FLASHCLI_SKIP_CUDA_USERLAND"))) {
@@ -200,7 +241,7 @@ func Ensure(ctx context.Context, python, cudaTag string, quiet, install bool, ru
 		runner = ExecRunner{}
 	}
 	purelib := Purelib(python)
-	PrependLDLibraryPath(NvidiaLibDirs(purelib))
+	PrependLDLibraryPath(append(NvidiaLibDirs(purelib), CompatDir(purelib, sonames)...))
 
 	missing := func() []string {
 		var out []string
@@ -232,7 +273,7 @@ func Ensure(ctx context.Context, python, cudaTag string, quiet, install bool, ru
 	if err := venv.InstallArgs(ctx, venvRunner{runner}, python, args, quiet); err != nil {
 		return errs.EnvWrapf("pip install failed for CUDA userland cu%s: %s", cudaTag, err)
 	}
-	PrependLDLibraryPath(NvidiaLibDirs(purelib))
+	PrependLDLibraryPath(append(NvidiaLibDirs(purelib), CompatDir(purelib, sonames)...))
 	if still := missing(); len(still) > 0 {
 		return errs.EnvWrapf("Missing CUDA userland libraries for native cu%s after install: %s", cudaTag, strings.Join(still, ", "))
 	}

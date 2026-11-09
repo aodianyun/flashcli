@@ -4,6 +4,7 @@ package gpu
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -24,11 +25,25 @@ type Device struct {
 func Probe(ctx context.Context) ([]Device, error) {
 	c, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(c, "nvidia-smi", "--query-gpu=index,name,memory.total,memory.used,memory.free", "--format=csv,noheader,nounits").Output()
+	out, err := exec.CommandContext(c, nvidiaSMI(), "--query-gpu=index,name,memory.total,memory.used,memory.free", "--format=csv,noheader,nounits").Output()
 	if err != nil {
 		return nil, fmt.Errorf("nvidia-smi: %w", err)
 	}
 	return Parse(string(out))
+}
+
+// nvidiaSMI resolves the probe binary. Services on WSL2 get a minimal PATH
+// that omits /usr/lib/wsl/lib, so fall back to the standard driver mount.
+func nvidiaSMI() string {
+	if p, err := exec.LookPath("nvidia-smi"); err == nil {
+		return p
+	}
+	for _, p := range []string{"/usr/lib/wsl/lib/nvidia-smi", `C:\Windows\System32\nvidia-smi.exe`} {
+		if info, err := os.Stat(p); err == nil && !info.IsDir() {
+			return p
+		}
+	}
+	return "nvidia-smi"
 }
 
 // Parse parses nvidia-smi CSV output. Values are MiB and converted to bytes.
