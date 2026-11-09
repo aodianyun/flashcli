@@ -15,18 +15,22 @@ import (
 
 // Options controls installation.
 type Options struct {
-	Backend     string
-	DryRun      bool
-	BinDir      string
-	Prefix      string
-	Home        string
-	User        string
-	Distro      string
-	Addr        string
-	Token       string
-	ServiceName string
-	ConfigPath  string
-	NoService   bool
+	Backend        string
+	DryRun         bool
+	BinDir         string
+	Prefix         string
+	Home           string
+	User           string
+	Distro         string
+	Addr           string
+	Token          string
+	ServiceName    string
+	ConfigPath     string
+	NoService      bool
+	ReleaseVersion string
+	ReleaseBase    string
+	ReleaseAPI     string
+	Uninstall      bool
 }
 
 // Run installs flashserver for the detected platform.
@@ -35,6 +39,14 @@ func Run(ctx context.Context, env Env, opts Options, out io.Writer) error {
 	if opts.DryRun {
 		return nil
 	}
+	if opts.Uninstall {
+		return uninstall(ctx, env, opts, out)
+	}
+	cleanup, err := ensureAssetBinaries(ctx, env, &opts, out)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 	backend := EffectiveBackend(env, opts.Backend)
 	switch backend {
 	case "native":

@@ -24,6 +24,10 @@ func main() {
 	flag.StringVar(&opts.ServiceName, "service-name", "flashserver", "service name")
 	flag.StringVar(&opts.ConfigPath, "config", "/etc/flashserver/config.json", "flashserver config path")
 	flag.BoolVar(&opts.NoService, "no-service", false, "install binaries/config only; do not install or start a service")
+	flag.StringVar(&opts.ReleaseVersion, "release-version", "", "release version to download (default: this setup build; dev uses latest)")
+	flag.StringVar(&opts.ReleaseBase, "release-base", "", "release asset base URL")
+	flag.StringVar(&opts.ReleaseAPI, "release-api", "", "release API URL")
+	flag.BoolVar(&opts.Uninstall, "uninstall", false, "remove the flashserver service/config/binary (keeps model caches)")
 	showVersion := flag.Bool("version", false, "print version")
 	flag.Parse()
 	if *showVersion {

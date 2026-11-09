@@ -91,7 +91,7 @@ func ensureDistro(ctx context.Context, opts Options, i *installer) error {
 		i.printf("$ wsl.exe --install -d %s\n", opts.Distro)
 		return nil
 	}
-	if err := i.run(ctx, "wsl.exe", "--install", "-d", opts.Distro); err != nil {
+	if err := i.run(ctx, "wsl.exe", "--install", "-d", opts.Distro, "--no-launch"); err != nil {
 		return fmt.Errorf("install WSL distro %s: %w", opts.Distro, err)
 	}
 	for deadline := time.Now().Add(2 * time.Minute); time.Now().Before(deadline); {
@@ -118,7 +118,7 @@ func ensureSystemd(ctx context.Context, opts Options, i *installer) error {
 	}
 	// A changed wsl.conf needs a distro restart before systemd is available.
 	if err := wslRoot(ctx, opts, "systemctl", "is-system-running"); err != nil {
-		_ = exec.CommandContext(ctx, "wsl.exe", "--shutdown").Run()
+		_ = exec.CommandContext(ctx, "wsl.exe", "--terminate", opts.Distro).Run()
 		time.Sleep(time.Second)
 	}
 	return nil

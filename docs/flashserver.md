@@ -16,12 +16,31 @@ flashcli serve     → one model process, OpenAI-compatible API
 - No remote mode. No inference proxy: `flashserver` returns each model's endpoint.
 - `flashserver` must run as a boot-started service. It schedules multiple models when GPU memory and the configured slot limit allow it.
 
+## Windows UI installer
+
+Windows users should use the UI installer rather than the CLI:
+
+```text
+FlashServer-Setup-<version>.exe
+```
+
+It runs elevated, checks/installs WSL2 Ubuntu, installs the Linux payload,
+starts `flashserver.service`, creates the Windows startup task, and verifies
+`http://localhost:8790/health`. If Windows requires a reboot to enable WSL2,
+the installer should be run again after reboot; the setup engine is idempotent.
+
+The CLI remains available for automation:
+
+```powershell
+flashserver-setup.exe --backend wsl
+```
+
 ## Install
 
 Linux:
 
 ```bash
-sudo flashserver-setup --backend native --bin-dir /path/to/release-assets
+sudo flashserver-setup
 ```
 
 It installs `flashcli`/`flashserver` under `/usr/local/bin`, writes `/etc/flashserver/config.json`, creates `flashserver.service`, enables it at boot, and checks `/health`.
@@ -29,12 +48,14 @@ It installs `flashcli`/`flashserver` under `/usr/local/bin`, writes `/etc/flashs
 Windows:
 
 ```powershell
-flashserver-setup.exe --backend wsl --bin-dir C:\path\to\release-assets
+flashserver-setup.exe
 ```
 
-It uses the official Ubuntu WSL2 distribution (no custom image), enables systemd in `/etc/wsl.conf`, installs the Linux binaries inside WSL, registers `flashserver.service`, and creates the `flashserver-wsl` Windows startup task. The binaries named `flashcli-linux-<arch>` and `flashserver-linux-<arch>` must be in `--bin-dir`.
+It uses the official Ubuntu WSL2 distribution (no custom image), enables systemd in `/etc/wsl.conf`, installs the Linux binaries inside WSL, registers `flashserver.service`, and creates the `flashserver-wsl` Windows startup task.
 
-`--dry-run` prints the platform plan without changing the host. `--no-service` installs binaries and config only; use it in containers or hosts without an active systemd (start `flashserver --config ...` manually).
+By default setup downloads the matching `flashcli-linux-<arch>` and `flashserver-linux-<arch>` release assets and verifies `sha256sums.txt`. Use `--bin-dir DIR` to consume local release assets instead, or `--release-version` / `--release-base` to pin a release source.
+
+`--backend` defaults to `auto` (`native` on Linux, `wsl` on Windows) and normally does not need to be specified. `--dry-run` prints the platform plan without changing the host. `--no-service` installs binaries and config only; use it in containers or hosts without an active systemd (start `flashserver --config ...` manually).
 
 ## Config
 
@@ -104,3 +125,11 @@ A v4 environment overlay may override it. Bundles without the field are admitted
 `flashserver` starts `flashcli serve <ref> --host <serve_host> --port <allocated>` on load and stops that child on unload/shutdown. It waits for `/health` before reporting `ready`.
 
 Linux uses a system-level systemd service. WSL enables systemd and uses a Windows `ONSTART` scheduled task to start the WSL distro and service. No custom WSL image is used in this phase.
+
+## Uninstall
+
+```bash
+sudo flashserver-setup --uninstall
+```
+
+Removes the service, config, and flashserver binary. Keeps `FLASHCLI_HOME`, bundles, and model weights. Windows uninstall is wired through the UI installer; WSL distro and model caches are kept.

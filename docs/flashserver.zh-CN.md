@@ -16,12 +16,31 @@ flashcli serve     → 单模型进程，OpenAI-compatible API
 - 不做 remote 模式，不代理推理；`flashserver` 返回每个模型的 endpoint。
 - `flashserver` 必须开机启动并常驻。显存和槽位允许时可以加载多个模型。
 
+## Windows UI 安装包
+
+Windows 用户应优先使用 UI 安装包，而不是命令行：
+
+```text
+FlashServer-Setup-<version>.exe
+```
+
+安装包会以管理员权限运行，检查/安装 WSL2 Ubuntu，安装 Linux payload，启动
+`flashserver.service`，创建 Windows 启动任务，并检查
+`http://localhost:8790/health`。如果启用 WSL2 需要重启，重启后再次运行安装包即可；
+setup 引擎是幂等的。
+
+自动化场景仍可使用 CLI：
+
+```powershell
+flashserver-setup.exe --backend wsl
+```
+
 ## 安装
 
 Linux：
 
 ```bash
-sudo flashserver-setup --backend native --bin-dir /path/to/release-assets
+sudo flashserver-setup
 ```
 
 安装到 `/usr/local/bin`，写入 `/etc/flashserver/config.json`，创建 `flashserver.service`，设置开机启动，并检查 `/health`。
@@ -29,12 +48,14 @@ sudo flashserver-setup --backend native --bin-dir /path/to/release-assets
 Windows：
 
 ```powershell
-flashserver-setup.exe --backend wsl --bin-dir C:\path\to\release-assets
+flashserver-setup.exe
 ```
 
-使用官方 Ubuntu WSL2（不制作自定义镜像），在 `/etc/wsl.conf` 启用 systemd，在 WSL 内安装 Linux 二进制和 `flashserver.service`，并创建 `flashserver-wsl` Windows 启动任务。`--bin-dir` 中需要 `flashcli-linux-<arch>` 和 `flashserver-linux-<arch>`。
+使用官方 Ubuntu WSL2（不制作自定义镜像），在 `/etc/wsl.conf` 启用 systemd，在 WSL 内安装 Linux 二进制和 `flashserver.service`，并创建 `flashserver-wsl` Windows 启动任务。
 
-`--dry-run` 只打印安装计划，不修改主机。`--no-service` 只安装二进制和配置，适用于容器或没有运行 systemd 的环境（之后手动运行 `flashserver --config ...`）。
+默认会下载匹配的 `flashcli-linux-<arch>` 和 `flashserver-linux-<arch>` release assets，并校验 `sha256sums.txt`。也可以用 `--bin-dir DIR` 使用本地资产，或用 `--release-version` / `--release-base` 固定 release 来源。
+
+`--backend` 默认是 `auto`（Linux 为 `native`，Windows 为 `wsl`），通常不需要手动指定。`--dry-run` 只打印安装计划，不修改主机。`--no-service` 只安装二进制和配置，适用于容器或没有运行 systemd 的环境（之后手动运行 `flashserver --config ...`）。
 
 ## 配置
 
@@ -104,3 +125,11 @@ v4 环境 overlay 可以覆盖。未声明该字段的 bundle 只按槽位限制
 `flashserver` 在 `load` 时启动 `flashcli serve <ref> --host <serve_host> --port <allocated>`，在 `unload`/退出时停止子进程；等待 `/health` 后才返回 `ready`。
 
 Linux 使用 system-level systemd service。WSL 启用 systemd，并用 Windows `ONSTART` 计划任务启动 WSL 和 service。本阶段不制作自定义 WSL 镜像。
+
+## 卸载
+
+```bash
+sudo flashserver-setup --uninstall
+```
+
+移除 service、配置和 flashserver 二进制，保留 `FLASHCLI_HOME`、bundle 和模型权重。Windows 通过 UI 安装包卸载；WSL 发行版和模型缓存保留。
