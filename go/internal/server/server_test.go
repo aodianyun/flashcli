@@ -118,6 +118,8 @@ func (f *fakeServe) Ref() string                   { return f.ref }
 func (f *fakeServe) Endpoint() string              { return f.endpoint }
 func (f *fakeServe) PID() int                      { return 1234 }
 func (f *fakeServe) Healthy(context.Context) error { return nil }
+func (f *fakeServe) Running() bool                 { return !f.stopped }
+func (f *fakeServe) LastLog() string               { return "" }
 func (f *fakeServe) Stop(context.Context) error    { f.stopped = true; return nil }
 
 type fakeLauncher struct {

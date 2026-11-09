@@ -30,6 +30,9 @@ type ServeProcess interface {
 	Endpoint() string
 	PID() int
 	Healthy(context.Context) error
+	Running() bool
+	// LastLog returns the tail of the child's log (empty when unavailable).
+	LastLog() string
 	Stop(context.Context) error
 }
 
@@ -152,6 +155,15 @@ func (m *Manager) load(ctx context.Context, refStr string) (InstanceInfo, error)
 	for {
 		if err := proc.Healthy(ctx); err == nil {
 			break
+		}
+		// Return the child's own error instead of waiting out the deadline
+		// (e.g. a run-only bundle rejects serve immediately).
+		if !proc.Running() {
+			_ = proc.Stop(context.Background())
+			if detail := strings.TrimSpace(proc.LastLog()); detail != "" {
+				return InstanceInfo{}, fmt.Errorf("serve process for %s exited: %s", refStr, detail)
+			}
+			return InstanceInfo{}, fmt.Errorf("serve process for %s exited before becoming ready", refStr)
 		}
 		if time.Now().After(deadline) {
 			_ = proc.Stop(context.Background())
@@ -367,12 +379,14 @@ func (l FlashcliLauncher) Start(ctx context.Context, refStr string, port int) (S
 	cmd.Env = append(os.Environ(), l.ExtraEnv...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
+	logPath := ""
 	if l.LogDir != "" {
 		if err := os.MkdirAll(l.LogDir, 0o755); err != nil {
 			return nil, err
 		}
 		name := strings.NewReplacer("/", "_", "\\", "_", ":", "_").Replace(refStr) + ".log"
-		f, err := os.OpenFile(filepath.Join(l.LogDir, name), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		logPath = filepath.Join(l.LogDir, name)
+		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 		if err != nil {
 			return nil, err
 		}
@@ -382,11 +396,17 @@ func (l FlashcliLauncher) Start(ctx context.Context, refStr string, port int) (S
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	return &flashcliProcess{
-		ref: refStr, cmd: cmd, port: port,
+	p := &flashcliProcess{
+		ref: refStr, cmd: cmd, port: port, logPath: logPath,
 		endpoint: "http://" + publicHost + ":" + strconv.Itoa(port),
 		client:   &http.Client{Timeout: 5 * time.Second},
-	}, nil
+		done:     make(chan struct{}),
+	}
+	go func() {
+		p.waitErr = cmd.Wait()
+		close(p.done)
+	}()
+	return p, nil
 }
 
 type flashcliProcess struct {
@@ -395,6 +415,9 @@ type flashcliProcess struct {
 	port     int
 	endpoint string
 	client   *http.Client
+	logPath  string
+	done     chan struct{}
+	waitErr  error
 }
 
 func (p *flashcliProcess) Ref() string      { return p.ref }
@@ -404,6 +427,54 @@ func (p *flashcliProcess) PID() int {
 		return 0
 	}
 	return p.cmd.Process.Pid
+}
+
+// Running reports whether the child has not exited yet.
+func (p *flashcliProcess) Running() bool {
+	if p.done == nil {
+		return false
+	}
+	select {
+	case <-p.done:
+		return false
+	default:
+		return true
+	}
+}
+
+// LastLog returns the last non-empty line written by the child.
+func (p *flashcliProcess) LastLog() string {
+	if p.logPath == "" {
+		return ""
+	}
+	f, err := os.Open(p.logPath)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return ""
+	}
+	const tail = 4096
+	off := info.Size() - tail
+	if off < 0 {
+		off = 0
+	}
+	if _, err := f.Seek(off, 0); err != nil {
+		return ""
+	}
+	blob := make([]byte, info.Size()-off)
+	if _, err := f.Read(blob); err != nil && err.Error() != "EOF" {
+		return ""
+	}
+	lines := strings.Split(strings.TrimSpace(string(blob)), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if line := strings.TrimSpace(lines[i]); line != "" {
+			return line
+		}
+	}
+	return ""
 }
 
 func (p *flashcliProcess) Healthy(ctx context.Context) error {
@@ -426,19 +497,22 @@ func (p *flashcliProcess) Stop(ctx context.Context) error {
 	if p.cmd == nil || p.cmd.Process == nil {
 		return nil
 	}
-	_ = p.cmd.Process.Signal(os.Interrupt)
-	done := make(chan error, 1)
-	go func() { done <- p.cmd.Wait() }()
 	select {
-	case <-done:
+	case <-p.done:
+		return nil
+	default:
+	}
+	_ = p.cmd.Process.Signal(os.Interrupt)
+	select {
+	case <-p.done:
 		return nil
 	case <-time.After(15 * time.Second):
 		_ = p.cmd.Process.Kill()
-		<-done
+		<-p.done
 		return nil
 	case <-ctx.Done():
 		_ = p.cmd.Process.Kill()
-		<-done
+		<-p.done
 		return nil
 	}
 }
