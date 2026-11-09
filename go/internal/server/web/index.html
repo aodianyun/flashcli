@@ -34,26 +34,52 @@
 
   <main>
     <section class="panel active" id="panel-overview">
-      <div class="grid">
-        <article class="card">
-          <h3 data-i18n="ov.gpu">算力资源</h3>
-          <div id="gpu-list" class="gpu-list"></div>
-          <canvas id="gpu-chart" class="gpu-chart" height="64"></canvas>
-          <div class="chart-legend">
-            <span><i class="sw util"></i><span data-i18n="ov.util">利用率</span></span>
-            <span><i class="sw mem"></i><span data-i18n="ov.memFull">全卡显存</span></span>
-          </div>
-          <h4 class="subhead" data-i18n="ov.procs">进程占用</h4>
-          <div id="gpu-procs" class="gpu-procs"></div>
-        </article>
-        <article class="card">
-          <h3 data-i18n="ov.service">服务状态</h3>
-          <dl class="kv" id="service-info"></dl>
-        </article>
-        <article class="card">
-          <h3 data-i18n="ov.storage">磁盘占用</h3>
-          <div id="storage-list"></div>
-        </article>
+      <div class="overview">
+        <div class="col-main">
+          <article class="card">
+            <h3 data-i18n="ov.gpu">算力资源</h3>
+            <div id="gpu-list" class="gpu-list"></div>
+            <canvas id="gpu-chart" class="gpu-chart" height="64"></canvas>
+            <div class="chart-legend">
+              <span><i class="sw util"></i><span data-i18n="ov.util">利用率</span></span>
+              <span><i class="sw mem"></i><span data-i18n="ov.memFull">全卡显存</span></span>
+            </div>
+            <h4 class="subhead" data-i18n="ov.procs">进程占用</h4>
+            <div id="gpu-procs" class="gpu-procs"></div>
+          </article>
+
+          <article class="card">
+            <h3><span data-i18n="ov.cpu">处理器</span> <span id="cpu-model" class="muted" style="font-weight:400"></span></h3>
+            <div class="cpu-head">
+              <div class="metric"><span class="value" id="cpu-usage">—</span><span class="muted" data-i18n="cpu.usage">利用率</span></div>
+              <div class="metric"><span class="value" id="cpu-load">—</span><span class="muted" data-i18n="cpu.load">负载 1/5/15</span></div>
+              <div class="metric"><span class="value" id="cpu-cores">—</span><span class="muted" data-i18n="cpu.cores">核心 / 线程</span></div>
+            </div>
+            <div class="bar"><span id="cpu-bar"></span></div>
+            <div id="cpu-cores-list" class="core-grid"></div>
+            <canvas id="cpu-chart" class="gpu-chart" height="48"></canvas>
+            <div class="chart-legend">
+              <span><i class="sw cpu"></i><span data-i18n="cpu.chart">CPU 近 5 分钟</span></span>
+            </div>
+            <div class="mem-block">
+              <div class="mem-line"><span data-i18n="cpu.mem">内存</span><span id="mem-text">—</span></div>
+              <div class="bar"><span id="mem-bar"></span></div>
+              <div class="mem-line"><span data-i18n="cpu.swap">Swap</span><span id="swap-text">—</span></div>
+              <div class="bar"><span id="swap-bar"></span></div>
+            </div>
+          </article>
+        </div>
+
+        <div class="col-side">
+          <article class="card">
+            <h3 data-i18n="ov.service">服务状态</h3>
+            <dl class="kv" id="service-info"></dl>
+          </article>
+          <article class="card">
+            <h3 data-i18n="ov.storage">磁盘占用</h3>
+            <div id="storage-list"></div>
+          </article>
+        </div>
       </div>
     </section>
 

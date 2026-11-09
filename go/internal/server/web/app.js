@@ -29,6 +29,8 @@
       "ov.clock": "频率", "ov.memFull": "全卡显存", "ov.detail": "详情",
       "ov.procs": "进程占用", "ov.cuda": "CUDA", "ov.history": "近 5 分钟",
       "ov.procsNA": "WSL 下 nvidia-smi 不提供进程级显存",
+      "ov.cpu": "处理器", "cpu.usage": "利用率", "cpu.load": "负载 1/5/15", "cpu.cores": "核心 / 线程",
+      "cpu.mem": "内存", "cpu.swap": "Swap", "cpu.chart": "CPU 近 5 分钟",
       "ab.auth": "API 鉴权", "ab.authOff": "关闭（本地使用）", "ab.authOn": "开启",
       "job.events": "进度",
     },
@@ -56,6 +58,8 @@
       "ov.clock": "Clock", "ov.memFull": "GPU memory", "ov.detail": "Details",
       "ov.procs": "CUDA processes", "ov.cuda": "CUDA", "ov.history": "Last 5 min",
       "ov.procsNA": "WSL does not expose per-process GPU memory",
+      "ov.cpu": "CPU", "cpu.usage": "Usage", "cpu.load": "Load 1/5/15", "cpu.cores": "Cores / threads",
+      "cpu.mem": "Memory", "cpu.swap": "Swap", "cpu.chart": "CPU, last 5 min",
       "ab.auth": "API auth", "ab.authOff": "off (local)", "ab.authOn": "on",
       "job.events": "Progress",
     },
@@ -118,7 +122,7 @@
         api("/v1/models/loaded").then((r) => r.json()),
         api("/v1/storage").then((r) => r.json()),
         api("/v1/gpu").then((r) => r.json()).catch(() => ({ devices: [], processes: [] })),
-        api("/v1/gpu/history?seconds=300").then((r) => r.json()).catch(() => ({ samples: [] })),
+        api("/v1/system/history?seconds=300").then((r) => r.json()).catch(() => ({ samples: [] })),
       ]);
       state.sys = sys;
       state.models = models.models || [];
@@ -179,6 +183,7 @@
       ? procs.map((p) => `<div class="proc"><span class="name">${esc(p.name)} <span class="muted">PID ${p.pid}</span></span><span>${fmtBytes(p.memory_bytes)}</span></div>`).join("")
       : `<div class="muted">${state.sys.wsl ? t("ov.procsNA") : "—"}</div>`;
     drawGpuChart();
+    renderCPU();
 
     const s = state.sys;
     $("#service-info").innerHTML = [
@@ -235,6 +240,60 @@
     };
     plot(util, "#4f8cff");
     plot(mem, "#2bd4a7");
+  }
+
+  function renderCPU() {
+    const c = state.sys && state.sys.cpu;
+    if (!c) return;
+    $("#cpu-model").textContent = c.model || "";
+    const usage = c.usage_pct || 0;
+    $("#cpu-usage").textContent = usage.toFixed(1) + "%";
+    $("#cpu-load").textContent = [c.load1, c.load5, c.load15].filter((v) => v != null).map((v) => v.toFixed(2)).join(" / ");
+    $("#cpu-cores").textContent = `${c.cores || "?"} / ${c.threads || "?"}` + (c.mhz ? ` · ${Math.round(c.mhz)} MHz` : "");
+    $("#cpu-bar").style.width = Math.min(100, usage) + "%";
+    const cores = c.per_core_pct || [];
+    $("#cpu-cores-list").innerHTML = cores.slice(0, 32).map((v, i) =>
+      `<div class="core"><span>C${i}</span><div class="bar"><span style="width:${Math.min(100, v).toFixed(1)}%"></span></div><span>${v.toFixed(0)}%</span></div>`
+    ).join("");
+    const memTotal = c.mem_total_bytes || 1;
+    const memUsed = c.mem_used_bytes || 0;
+    $("#mem-text").textContent = `${fmtBytes(memUsed)} / ${fmtBytes(memTotal)}`;
+    $("#mem-bar").style.width = Math.min(100, (memUsed / memTotal) * 100).toFixed(1) + "%";
+    const swapTotal = c.swap_total_bytes || 0;
+    const swapUsed = c.swap_used_bytes || 0;
+    $("#swap-text").textContent = swapTotal ? `${fmtBytes(swapUsed)} / ${fmtBytes(swapTotal)}` : "—";
+    $("#swap-bar").style.width = swapTotal ? Math.min(100, (swapUsed / swapTotal) * 100).toFixed(1) + "%" : "0%";
+    drawCpuChart();
+  }
+
+  function drawCpuChart() {
+    const canvas = $("#cpu-chart");
+    if (!canvas) return;
+    const samples = state.history || [];
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth || 400;
+    const h = 48;
+    canvas.width = Math.max(1, Math.round(w * dpr));
+    canvas.height = Math.round(h * dpr);
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    if (samples.length < 2) {
+      ctx.fillStyle = "#8b93a3";
+      ctx.font = "11px sans-serif";
+      ctx.fillText(t("cpu.chart"), 8, h / 2);
+      return;
+    }
+    const series = samples.map((s) => (s.cpu_usage_pct != null ? s.cpu_usage_pct : 0));
+    ctx.beginPath();
+    series.forEach((v, i) => {
+      const x = 8 + ((w - 16) * i) / (series.length - 1);
+      const y = h - 5 - ((h - 10) * Math.min(100, Math.max(0, v))) / 100;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = "#ffb020";
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
   }
 
   function renderModels() {
@@ -308,6 +367,8 @@
     $("#about-info").innerHTML = [
       ["FlashServer", esc(s.version)],
       [t("ov.os"), `${esc(s.os)}/${esc(s.arch)}`],
+      ["CPU", esc(s.cpu && s.cpu.model ? s.cpu.model : "—") + (s.cpu ? ` · ${s.cpu.cores || "?"}/${s.cpu.threads || "?"}` : "")],
+      [t("cpu.mem"), s.cpu ? `${fmtBytes(s.cpu.mem_used_bytes || 0)} / ${fmtBytes(s.cpu.mem_total_bytes || 0)}` : "—"],
       [t("ov.host"), esc(s.hostname || "—")],
       [t("ov.kernel"), esc(s.kernel || "—")],
       [t("ov.driver"), esc(s.driver_version || "—")],

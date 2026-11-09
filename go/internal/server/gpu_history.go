@@ -18,28 +18,31 @@ type GpuSampleDevice struct {
 	PowerDrawW      *float64 `json:"power_draw_w,omitempty"`
 }
 
-// GpuSample is one point in the daemon's GPU telemetry ring.
+// GpuSample is one point in the daemon's telemetry ring.
 type GpuSample struct {
-	Time    time.Time         `json:"time"`
-	Devices []GpuSampleDevice `json:"devices"`
+	Time        time.Time         `json:"time"`
+	CPUUsagePct *float64          `json:"cpu_usage_pct,omitempty"`
+	Devices     []GpuSampleDevice `json:"devices"`
 }
 
 const (
-	gpuSampleInterval = 5 * time.Second
-	gpuSampleMax      = 360 // 30 minutes at 5s
+	telemetryInterval = 2 * time.Second
+	gpuSampleMax      = 900 // 30 minutes at 2s
 )
 
 func (s *Server) startGPUHistory(ctx context.Context) {
 	s.histOnce.Do(func() {
 		go func() {
-			ticker := time.NewTicker(gpuSampleInterval)
+			ticker := time.NewTicker(telemetryInterval)
 			defer ticker.Stop()
+			s.pollCPU()
 			s.sampleGPUHistory(ctx)
 			for {
 				select {
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
+					s.pollCPU()
 					s.sampleGPUHistory(ctx)
 				}
 			}
@@ -56,6 +59,12 @@ func (s *Server) sampleGPUHistory(ctx context.Context) {
 		return
 	}
 	sample := GpuSample{Time: time.Now().UTC()}
+	s.cpuMu.Lock()
+	if s.cpuPerCore != nil {
+		usage := s.cpuUsage
+		sample.CPUUsagePct = &usage
+	}
+	s.cpuMu.Unlock()
 	for _, d := range devices {
 		sample.Devices = append(sample.Devices, GpuSampleDevice{
 			Index: d.Index, UtilizationGPU: d.UtilizationGPU,

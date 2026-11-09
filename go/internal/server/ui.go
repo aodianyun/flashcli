@@ -70,6 +70,7 @@ func (s *Server) system(w http.ResponseWriter, r *http.Request) {
 			out["torch_index"] = info.TorchIndex
 		}
 	}
+	out["cpu"] = s.cpuPayload()
 	if s.Manager != nil {
 		loaded, maxLoaded := s.Manager.Slots()
 		out["loaded_count"] = loaded

@@ -44,6 +44,11 @@ type Server struct {
 	histMu   sync.Mutex
 	history  []GpuSample
 	histOnce sync.Once
+
+	cpuMu      sync.Mutex
+	cpuPrev    []cpuCounters
+	cpuUsage   float64
+	cpuPerCore []float64
 }
 
 // New creates a server with the default local configuration.
@@ -76,6 +81,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/resources", s.resources)
 	mux.HandleFunc("GET /v1/gpu", s.gpuStatus)
 	mux.HandleFunc("GET /v1/gpu/history", s.gpuHistory)
+	mux.HandleFunc("GET /v1/system/history", s.gpuHistory)
 	mux.HandleFunc("POST /v1/pull", s.pull)
 	mux.HandleFunc("GET /v1/jobs/{id}", s.job)
 	mux.HandleFunc("GET /v1/jobs/{id}/events", s.jobEvents)

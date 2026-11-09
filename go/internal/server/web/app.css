@@ -52,6 +52,19 @@ body {
 .panel.active { display: block; }
 .grid { display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: 16px; }
 @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+.overview { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr); gap: 16px; align-items: start; }
+.col-main, .col-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+@media (max-width: 980px) { .overview { grid-template-columns: 1fr; } }
+.cpu-head { display: flex; gap: 28px; margin-bottom: 10px; flex-wrap: wrap; }
+.metric { display: flex; flex-direction: column; gap: 2px; }
+.metric .value { font-size: 22px; font-weight: 600; line-height: 1.2; }
+.core-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 16px; margin-top: 12px; }
+.core { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); }
+.core .bar { flex: 1; height: 5px; }
+.core .bar > span { background: linear-gradient(90deg, #4f8cff, #8fb4ff); }
+.mem-block { margin-top: 14px; }
+.mem-line { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin: 8px 0 4px; }
+.chart-legend .sw.cpu { background: var(--warn); }
 .card {
   background: linear-gradient(180deg, var(--panel), var(--panel-2));
   border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px;

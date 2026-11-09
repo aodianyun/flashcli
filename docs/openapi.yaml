@@ -91,6 +91,24 @@ paths:
                   samples:
                     type: array
                     items: { $ref: '#/components/schemas/GpuSample' }
+  /v1/system/history:
+    get:
+      summary: Recent GPU + CPU telemetry samples (alias of /v1/gpu/history)
+      parameters:
+        - name: seconds
+          in: query
+          schema: { type: integer, minimum: 10, maximum: 900, default: 300 }
+      responses:
+        '200':
+          description: Telemetry history (oldest first)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  samples:
+                    type: array
+                    items: { $ref: '#/components/schemas/GpuSample' }
   /v1/resources:
     get:
       summary: Admission view used by the scheduler
@@ -375,6 +393,7 @@ components:
       type: object
       properties:
         time: { type: string, format: date-time }
+        cpu_usage_pct: { type: number }
         devices:
           type: array
           items:
@@ -411,6 +430,26 @@ components:
           type: array
           items: { $ref: '#/components/schemas/GpuDevice' }
         gpu_error: { type: string }
+        cpu: { $ref: '#/components/schemas/CpuInfo' }
+    CpuInfo:
+      type: object
+      properties:
+        model: { type: string }
+        threads: { type: integer }
+        cores: { type: integer }
+        mhz: { type: number }
+        usage_pct: { type: number }
+        per_core_pct:
+          type: array
+          items: { type: number }
+        load1: { type: number }
+        load5: { type: number }
+        load15: { type: number }
+        mem_total_bytes: { type: integer, format: int64 }
+        mem_used_bytes: { type: integer, format: int64 }
+        mem_available_bytes: { type: integer, format: int64 }
+        swap_total_bytes: { type: integer, format: int64 }
+        swap_used_bytes: { type: integer, format: int64 }
     Resources:
       type: object
       properties:
