@@ -31,16 +31,47 @@ powershell -ExecutionPolicy Bypass -File scripts/build_windows_installer.ps1
 ```text
 UI installer (admin)
   → install payload under %ProgramFiles%\FlashServer\payload
-  → run flashserver-setup.exe --backend wsl --bin-dir ...
-  → WSL2 / Ubuntu / systemd / flashserver.service
-  → Windows ONSTART startup task
-  → health check via localhost:8790
+  → flashserver-setup.exe --backend wsl --bin-dir ... --progress-file ...
+  → [1/8] check/enable WSL2 (`wsl --install --no-distribution`, DISM fallback)
+  → [2/8] install/register Ubuntu
+  → [3/8] enable systemd
+  → [4/8] copy flashcli/flashserver into WSL
+  → [5/8] write /etc/flashserver/config.json + systemd unit
+  → [6/8] start flashserver.service
+  → [7/8] create the Windows ONLOGON keepalive task
+  → [8/8] wait for /health
+  → installer re-checks systemctl + /health
   → launch FlashServer.exe (desktop client, egui/eframe)
 ```
 
-The UI installer runs the setup engine hidden and reports the final status in
-the wizard. If Windows requires a reboot to finish enabling WSL2, reboot and
-run the installer again; the setup engine is idempotent.
+The installer shows a live progress page and parses the setup progress file
+(`[n/8] step` lines plus a final `DONE <code>`). Exit codes: `0` ready, `3`
+restart required to finish enabling WSL2, `2` error. On exit `3` the client is
+not launched; restart Windows and run the installer again (setup is idempotent).
+On success the finished page means the environment was verified (service active
+and `/health` returning 200), not merely that files were copied.
+
+If Windows requires a reboot to finish enabling WSL2, the first run stops at
+step 1 with the restart message. Run the installer again after reboot.
+
+## Clean Windows VM test
+
+Use a Windows 10 2004+/Windows 11 x64 VM with internet access and nested
+virtualization enabled (VT-x/AMD-V).
+
+1. Confirm `wsl.exe --status` fails and `wsl.exe -l -v` lists no Ubuntu.
+2. Run the installer. The setup progress page must appear; the first run may
+   stop at step 1 and ask for a restart.
+3. Restart, run the installer again, and confirm steps 1-8 complete with
+   "FlashServer is installed and ready."
+4. Verify independently:
+   ```powershell
+   wsl.exe -l -v
+   wsl.exe -d Ubuntu -u root systemctl is-active flashserver   # active
+   (Invoke-WebRequest -UseBasicParsing http://localhost:8790/health).StatusCode  # 200
+   ```
+5. Confirm the client opens, the overview shows the service running, and
+   auto-start is enabled. Re-run the installer to cover the repair path.
 
 ## Notes
 

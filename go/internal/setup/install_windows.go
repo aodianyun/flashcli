@@ -25,7 +25,7 @@ func installWSL(ctx context.Context, env Env, opts Options, out io.Writer) error
 	if opts.DryRun {
 		total = 7
 	}
-	if err := stepf(out, 1, total, "Checking WSL2", func() error { return wslAvailable(ctx) }); err != nil {
+	if err := stepf(out, 1, total, "Checking WSL2", func() error { return ensureWSL(ctx, opts, &i) }); err != nil {
 		return err
 	}
 	if err := stepf(out, 2, total, "Preparing Ubuntu", func() error { return ensureDistro(ctx, opts, &i) }); err != nil {
@@ -112,13 +112,68 @@ func stepf(out io.Writer, n, total int, name string, fn func() error) error {
 	return nil
 }
 
-func wslAvailable(ctx context.Context) error {
+// ensureWSL makes WSL2 available on a clean Windows install. `wsl --install`
+// both enables the optional features and installs the WSL app/kernel; when the
+// OS still needs a restart it reports ErrRebootRequired so the UI can offer one
+// and ask the user to run the installer again.
+func ensureWSL(ctx context.Context, opts Options, i *installer) error {
+	if wslStatusOK(ctx) {
+		return nil
+	}
+	i.printf("WSL2 not detected; enabling it (this can take several minutes)...\n")
+	if opts.DryRun {
+		i.printf("$ wsl.exe --install --no-distribution\n")
+		return nil
+	}
+
+	enableCtx, cancel := context.WithTimeout(ctx, 20*time.Minute)
+	wslErr := i.run(enableCtx, sysExe("wsl.exe"), "--install", "--no-distribution")
+	cancel()
+	if wslErr != nil {
+		// Older Windows 10 builds do not know --no-distribution (or --install).
+		i.printf("wsl --install failed (%v); enabling the optional features with DISM\n", wslErr)
+		dismCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+		err1 := dismEnable(dismCtx, i, "Microsoft-Windows-Subsystem-Linux")
+		err2 := dismEnable(dismCtx, i, "VirtualMachinePlatform")
+		cancel()
+		if err1 != nil && err2 != nil {
+			return fmt.Errorf("enable WSL2 features: %v; %v", err1, err2)
+		}
+	}
+
+	// A newly enabled WSL app or optional feature normally needs a reboot; poll
+	// briefly so a machine that is ready without one still proceeds.
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		if wslStatusOK(ctx) {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%w: restart Windows, then run Setup again (or run `wsl --install` from an elevated terminal)", ErrRebootRequired)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(3 * time.Second):
+		}
+	}
+}
+
+func wslStatusOK(ctx context.Context) bool {
 	c, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	if err := exec.CommandContext(c, sysExe("wsl.exe"), "--status").Run(); err != nil {
-		return fmt.Errorf("WSL2 is not available; run `wsl --install` as administrator: %w", err)
+	return exec.CommandContext(c, sysExe("wsl.exe"), "--status").Run() == nil
+}
+
+// dismEnable treats DISM's 3010 (ERROR_SUCCESS_REBOOT_REQUIRED) as success.
+func dismEnable(ctx context.Context, i *installer, feature string) error {
+	err := i.run(ctx, sysExe("dism.exe"), "/online", "/enable-feature",
+		"/featurename:"+feature, "/all", "/norestart")
+	if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() == 3010 {
+		i.printf("%s enabled; a restart is required\n", feature)
+		return nil
 	}
-	return nil
+	return err
 }
 
 func ensureDistro(ctx context.Context, opts Options, i *installer) error {
@@ -138,9 +193,12 @@ func ensureDistro(ctx context.Context, opts Options, i *installer) error {
 		return nil
 	}
 	if err := i.run(ctx, sysExe("wsl.exe"), "--install", "-d", opts.Distro, "--no-launch"); err != nil {
+		if !wslStatusOK(ctx) {
+			return fmt.Errorf("%w: WSL2 must be restarted before %s can be used (%v)", ErrRebootRequired, opts.Distro, err)
+		}
 		return fmt.Errorf("install WSL distro %s: %w", opts.Distro, err)
 	}
-	for deadline := time.Now().Add(2 * time.Minute); time.Now().Before(deadline); {
+	for deadline := time.Now().Add(10 * time.Minute); time.Now().Before(deadline); {
 		if err := wslRoot(ctx, opts, "true"); err == nil {
 			return nil
 		}
@@ -149,6 +207,9 @@ func ensureDistro(ctx context.Context, opts Options, i *installer) error {
 			return ctx.Err()
 		case <-time.After(3 * time.Second):
 		}
+	}
+	if !wslStatusOK(ctx) {
+		return fmt.Errorf("%w: restart Windows, then run Setup again to finish installing %s", ErrRebootRequired, opts.Distro)
 	}
 	return fmt.Errorf("WSL distro %s did not become available; complete the WSL install (a reboot may be required) and rerun", opts.Distro)
 }

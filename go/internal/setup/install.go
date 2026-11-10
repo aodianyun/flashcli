@@ -2,6 +2,7 @@ package setup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,11 @@ import (
 	"path/filepath"
 	"strings"
 )
+
+// ErrRebootRequired reports that Windows must be restarted before WSL2 can be
+// used. The setup command maps it to exit code 3 (the UI installer offers a
+// restart and asks the user to run setup again).
+var ErrRebootRequired = errors.New("restart required to finish enabling WSL2")
 
 // Options controls installation.
 type Options struct {

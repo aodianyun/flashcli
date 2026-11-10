@@ -42,11 +42,51 @@ Windows users should use the UI installer rather than the CLI:
 FlashServer-Setup-<version>.exe
 ```
 
-It runs elevated, checks/installs WSL2 Ubuntu, installs the Linux payload,
-starts `flashserver.service`, creates the Windows logon task, and verifies
-the daemon. On success it opens the desktop client; API docs are at
-`http://localhost:8790/docs`. If Windows requires a reboot to enable WSL2,
-run the installer again after reboot; the setup engine is idempotent.
+It runs elevated and drives `flashserver-setup` behind a live progress page
+(`Step N of 8`, with the current phase) instead of a silent wait:
+
+```text
+UI installer (admin)
+  → extract payload to %ProgramFiles%\FlashServer\payload
+  → [1/8] check WSL2; enable it with `wsl --install --no-distribution` when missing
+  → [2/8] install/register Ubuntu (DISM fallback for older Windows 10)
+  → [3/8] enable systemd  → [4/8] install Linux payload
+  → [5/8] write config + unit → [6/8] start service
+  → [7/8] create the Windows logon task → [8/8] wait for /health
+  → re-check `systemctl is-active flashserver` and /health
+  → launch the desktop client
+```
+
+If enabling WSL2 requires a Windows restart, setup exits with code **3**. The
+installer explains that a restart is required, keeps the client closed, and the
+finished page asks you to run Setup again after restarting. The second run is
+idempotent and completes the Ubuntu/service installation. On success the
+finished page means the environment was verified ready, not just that files were
+copied; API docs are at `http://localhost:8790/docs`.
+
+For automation/debugging, `flashserver-setup --progress-file FILE` writes the
+`[n/8]` lines and a final `DONE <code>` (`0` ready, `3` restart required, `2`
+error). The full trace including `wsl.exe`/`schtasks.exe` output is written to
+`%USERPROFILE%\.flashcli\logs\setup.log`.
+
+### Clean Windows VM check
+
+Use a Windows 10 2004+/Windows 11 x64 VM with internet access and nested
+virtualization enabled (VT-x/AMD-V); WSL2 cannot start without it.
+
+1. Confirm the VM is clean: `wsl.exe --status` fails and `wsl.exe -l -v` lists no Ubuntu.
+2. Run `FlashServer-Setup-<version>.exe`. The wizard must show the setup progress
+   page; on a machine without WSL2 the first run may stop at step 1 and ask for a restart.
+3. Restart when asked and run the installer again. It must show steps 1-8 and finish
+   with "FlashServer is installed and ready."
+4. Verify the environment independently:
+   ```powershell
+   wsl.exe -l -v
+   wsl.exe -d Ubuntu -u root systemctl is-active flashserver   # active
+   (Invoke-WebRequest -UseBasicParsing http://localhost:8790/health).StatusCode  # 200
+   ```
+5. Confirm the desktop client opens, the overview shows the service running, and
+   auto-start is enabled. Re-running the installer must succeed without duplicating services.
 
 The CLI remains available for automation:
 
@@ -64,13 +104,18 @@ sudo flashserver-setup
 
 It installs `flashcli`/`flashserver` under `/usr/local/bin`, writes `/etc/flashserver/config.json`, creates `flashserver.service`, enables it at boot, and checks `/health`. Setup prints `[n/N]` step lines and writes the full trace (including `wsl.exe`/`schtasks.exe` output) to `~/.flashcli/logs/setup.log`.
 
-Windows:
+Windows (run from an elevated terminal; the UI installer does this automatically):
 
 ```powershell
 flashserver-setup.exe
 ```
 
-It uses the official Ubuntu WSL2 distribution (no custom image), enables systemd in `/etc/wsl.conf`, installs the Linux binaries inside WSL, registers `flashserver.service`, and creates the `flashserver-wsl` logon task.
+It uses the official Ubuntu WSL2 distribution (no custom image), enables WSL2
+itself when missing (`wsl --install --no-distribution`, with a DISM fallback on
+older Windows 10), enables systemd in `/etc/wsl.conf`, installs the Linux
+binaries inside WSL, registers `flashserver.service`, and creates the
+`flashserver-wsl` logon task. A first run on a machine with no WSL2 may require
+one Windows restart; run setup again afterwards.
 
 By default setup downloads the matching `flashcli-linux-<arch>` and `flashserver-linux-<arch>` release assets and verifies `sha256sums.txt`. Use `--bin-dir DIR` to consume local release assets instead, or `--release-version` / `--release-base` to pin a release source.
 

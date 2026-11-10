@@ -42,10 +42,48 @@ Windows 用户应优先使用 UI 安装包，而不是命令行：
 FlashServer-Setup-<version>.exe
 ```
 
-安装包会以管理员权限运行，检查/安装 WSL2 Ubuntu，安装 Linux payload，启动
-`flashserver.service`，创建 Windows 登录任务，并检查守护进程。成功后自动打开
-桌面客户端；API 文档在 `http://localhost:8790/docs`。如果启用 WSL2 需要重启，重启后
-再次运行安装包即可；setup 引擎是幂等的。
+安装包会以管理员权限运行，并通过实时进度页（`Step N of 8` + 当前阶段）驱动
+`flashserver-setup`，不再静默等待：
+
+```text
+UI 安装包（管理员）
+  → 解压 payload 到 %ProgramFiles%\FlashServer\payload
+  → [1/8] 检查 WSL2；缺失时执行 `wsl --install --no-distribution` 自动启用
+  → [2/8] 安装/注册 Ubuntu（旧版 Windows 10 回退到 DISM）
+  → [3/8] 启用 systemd  → [4/8] 安装 Linux payload
+  → [5/8] 写配置 + service → [6/8] 启动服务
+  → [7/8] 创建 Windows 登录任务 → [8/8] 等待 /health
+  → 再次检查 `systemctl is-active flashserver` 和 /health
+  → 打开桌面客户端
+```
+
+如果启用 WSL2 需要重启 Windows，setup 会以退出码 **3** 结束。安装包会明确提示
+需要重启，不启动客户端；完成页会要求在重启后再次运行安装包。第二次运行是幂等的，
+会继续完成 Ubuntu/服务安装。成功后的完成页表示环境已通过就绪校验，而不仅是文件复制
+完成；API 文档在 `http://localhost:8790/docs`。
+
+自动化/排障时，`flashserver-setup --progress-file FILE` 会写入 `[n/8]` 行和最后的
+`DONE <code>`（`0` 就绪、`3` 需要重启、`2` 出错）。完整跟踪（含
+`wsl.exe`/`schtasks.exe` 输出）写入 `%USERPROFILE%\.flashcli\logs\setup.log`。
+
+### 干净 Windows 虚拟机验证
+
+使用 Windows 10 2004+/Windows 11 x64 虚拟机，能访问网络，并开启嵌套虚拟化
+（VT-x/AMD-V）；没有嵌套虚拟化时 WSL2 无法启动。
+
+1. 确认虚拟机是干净的：`wsl.exe --status` 失败，`wsl.exe -l -v` 中没有 Ubuntu。
+2. 运行 `FlashServer-Setup-<version>.exe`。向导必须显示安装进度页；没有 WSL2 时第一次
+   运行可能停在步骤 1 并提示重启。
+3. 按提示重启后再次运行安装包。必须显示步骤 1-8，并以
+   “FlashServer is installed and ready.” 结束。
+4. 独立验证环境：
+   ```powershell
+   wsl.exe -l -v
+   wsl.exe -d Ubuntu -u root systemctl is-active flashserver   # active
+   (Invoke-WebRequest -UseBasicParsing http://localhost:8790/health).StatusCode  # 200
+   ```
+5. 确认桌面客户端自动打开、总览页显示服务运行、开机启动已启用。再次运行安装包必须成功，
+   且不会重复创建服务。
 
 自动化场景仍可使用 CLI：
 
@@ -63,13 +101,17 @@ sudo flashserver-setup
 
 安装到 `/usr/local/bin`，写入 `/etc/flashserver/config.json`，创建 `flashserver.service`，设置开机启动，并检查 `/health`。setup 会打印 `[n/N]` 步骤，并把完整跟踪（含 `wsl.exe`/`schtasks.exe` 输出）写入 `~/.flashcli/logs/setup.log`。
 
-Windows：
+Windows（在管理员终端中运行；UI 安装包会自动提权）：
 
 ```powershell
 flashserver-setup.exe
 ```
 
-使用官方 Ubuntu WSL2（不制作自定义镜像），在 `/etc/wsl.conf` 启用 systemd，在 WSL 内安装 Linux 二进制和 `flashserver.service`，并创建 `flashserver-wsl` 登录任务。
+使用官方 Ubuntu WSL2（不制作自定义镜像）；WSL2 缺失时会自动启用
+（`wsl --install --no-distribution`，旧版 Windows 10 回退到 DISM），在
+`/etc/wsl.conf` 启用 systemd，在 WSL 内安装 Linux 二进制和
+`flashserver.service`，并创建 `flashserver-wsl` 登录任务。没有 WSL2 的机器第一次
+运行可能需要重启一次 Windows，之后再次运行 setup。
 
 默认会下载匹配的 `flashcli-linux-<arch>` 和 `flashserver-linux-<arch>` release assets，并校验 `sha256sums.txt`。也可以用 `--bin-dir DIR` 使用本地资产，或用 `--release-version` / `--release-base` 固定 release 来源。
 

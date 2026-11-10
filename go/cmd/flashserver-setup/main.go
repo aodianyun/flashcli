@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -14,6 +15,10 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	var opts setup.Options
 	flag.StringVar(&opts.Backend, "backend", "auto", "backend: auto, native, or wsl")
 	flag.BoolVar(&opts.DryRun, "dry-run", false, "print the installation plan and commands without changing the host")
@@ -35,14 +40,15 @@ func main() {
 	flag.BoolVar(&opts.StartService, "start-service", false, "enable auto-start and start the service")
 	flag.BoolVar(&opts.EnableAutostart, "enable-autostart", false, "enable auto-start without starting the service")
 	flag.BoolVar(&opts.DisableAutostart, "disable-autostart", false, "disable auto-start without stopping the service")
+	progressPath := flag.String("progress-file", "", "write machine-readable setup progress to this file")
 	showVersion := flag.Bool("version", false, "print version")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println(version.Version)
-		return
+		return 0
 	}
 	if (opts.StopService || opts.StartService || opts.EnableAutostart || opts.DisableAutostart) && ensureElevated() {
-		return
+		return 0
 	}
 
 	ctx := context.Background()
@@ -57,6 +63,17 @@ func main() {
 	if logFile != nil {
 		out = io.MultiWriter(os.Stdout, logFile)
 	}
+	var progressFile *os.File
+	if *progressPath != "" {
+		f, err := os.Create(*progressPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warn: progress file: %v\n", err)
+		} else {
+			progressFile = f
+			defer progressFile.Close()
+			out = io.MultiWriter(out, progressFile)
+		}
+	}
 	fmt.Fprintf(out, "flashserver-setup %s\n", version.Version)
 	fmt.Fprintf(out, "System: %s/%s, WSL: %v, backend: %s\n", env.OS, env.Arch, env.WSL, backend)
 	if logFile != nil {
@@ -67,17 +84,33 @@ func main() {
 		steps, err := setup.Plan(env, opts.Backend)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(2)
+			if progressFile != nil {
+				fmt.Fprintf(progressFile, "DONE 2\n")
+				_ = progressFile.Sync()
+			}
+			return 2
 		}
 		for i, step := range steps {
 			fmt.Fprintf(out, "  %d. %-16s %s\n", i+1, step.Name, step.Description)
 		}
 		fmt.Fprintln(out)
 	}
+	code := 0
 	if err := setup.Run(ctx, env, opts, out); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(2)
+		if errors.Is(err, setup.ErrRebootRequired) {
+			fmt.Fprintln(out, "\nWindows must be restarted before WSL2 can be used.")
+			fmt.Fprintln(out, "Restart the computer, then run Setup again to finish the installation.")
+			code = 3
+		} else {
+			code = 2
+		}
 	}
+	if progressFile != nil {
+		fmt.Fprintf(progressFile, "DONE %d\n", code)
+		_ = progressFile.Sync()
+	}
+	return code
 }
 
 // openSetupLog writes the full setup trace (including WSL/schtasks output) so
