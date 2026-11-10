@@ -39,13 +39,15 @@ func stopService(ctx context.Context, env Env, opts Options, out io.Writer) erro
 // service and keepalive session untouched.
 func disableAutostart(ctx context.Context, env Env, opts Options, out io.Writer) error {
 	i := installer{env: env, opts: opts, out: out}
+	var firstErr error
 	if err := waitWSL(ctx, opts); err == nil {
 		if err := wslRoot(ctx, opts, "systemctl", "disable", opts.ServiceName); err != nil {
-			i.printf("warn: disable systemd unit: %v\n", err)
+			firstErr = fmt.Errorf("disable systemd unit: %w", err)
+		} else {
+			_ = writeToWSL(ctx, opts, autostartMarker, []byte("disabled\n"), 0o644)
 		}
-		_ = writeToWSL(ctx, opts, autostartMarker, []byte("disabled\n"), 0o644)
 	} else {
-		i.printf("warn: WSL is not reachable: %v\n", err)
+		firstErr = fmt.Errorf("WSL is not reachable: %w", err)
 	}
 	var buf bytes.Buffer
 	cmd := exec.CommandContext(ctx, sysExe("schtasks.exe"), "/Change", "/TN", "flashserver-wsl", "/DISABLE")
@@ -53,6 +55,9 @@ func disableAutostart(ctx context.Context, env Env, opts Options, out io.Writer)
 	cmd.Stderr = &buf
 	if err := cmd.Run(); err != nil {
 		i.printf("warn: disable logon task: %v (%s)\n", err, bytes.TrimSpace(buf.Bytes()))
+	}
+	if firstErr != nil {
+		return firstErr
 	}
 	fmt.Fprintln(out, "Auto-start disabled; FlashServer is still running.")
 	return nil

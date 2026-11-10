@@ -109,6 +109,7 @@ struct Settings {
 
 enum Event {
     System(Value),
+    ServiceDown,
     Models(Value),
     Storage(Value),
     Logs(Option<String>),
@@ -280,6 +281,22 @@ impl App {
                 Event::Models(v) => {
                     self.models = parse_models(&v, self.system.as_ref());
                     self.sync_model_selection();
+                }
+                Event::ServiceDown => {
+                    self.system = None;
+                    for model in &mut self.models {
+                        model.loaded = false;
+                        model.endpoint.clear();
+                        model.pid = 0;
+                        model.loaded_at.clear();
+                    }
+                    self.sync_model_selection();
+                    if self.loading {
+                        self.loading = false;
+                        self.load_pct = None;
+                        self.load_message.clear();
+                        self.load_status = "服务已停止".into();
+                    }
                 }
                 Event::Storage(v) => {
                     let (areas, total, sizes) = parse_storage(&v);
@@ -1704,7 +1721,13 @@ impl App {
                     spawn_action(self.tx.clone(), ctx.clone(), Action::Stop);
                 }
                 Pending::DisableAutostart => {
-                    spawn_action(self.tx.clone(), ctx.clone(), Action::DisableAutostart);
+                    spawn_action(
+                        self.tx.clone(),
+                        ctx.clone(),
+                        Action::DisableAutostart {
+                            keep_stopped: self.system.is_none(),
+                        },
+                    );
                 }
                 Pending::Unload(name) => {
                     spawn_unload(self.tx.clone(), ctx.clone(), name);
@@ -2293,20 +2316,33 @@ fn push_point(points: &mut Vec<[f64; 2]>, x: f64, y: f32) {
 // ---------- threads ----------
 
 fn start_http(tx: Sender<Event>, ctx: egui::Context) {
-    std::thread::spawn(move || loop {
-        if let Some(v) = get_json("/v1/system") {
-            let _ = tx.send(Event::System(v));
-            ctx.request_repaint();
+    std::thread::spawn(move || {
+        let mut system_fails = 0;
+        loop {
+            match get_json("/v1/system") {
+                Some(v) => {
+                    system_fails = 0;
+                    let _ = tx.send(Event::System(v));
+                    ctx.request_repaint();
+                }
+                None => {
+                    system_fails += 1;
+                    if system_fails >= 2 {
+                        let _ = tx.send(Event::ServiceDown);
+                        ctx.request_repaint();
+                    }
+                }
+            }
+            if let Some(v) = get_json("/v1/models") {
+                let _ = tx.send(Event::Models(v));
+                ctx.request_repaint();
+            }
+            if let Some(v) = get_json("/v1/storage") {
+                let _ = tx.send(Event::Storage(v));
+                ctx.request_repaint();
+            }
+            std::thread::sleep(Duration::from_secs(2));
         }
-        if let Some(v) = get_json("/v1/models") {
-            let _ = tx.send(Event::Models(v));
-            ctx.request_repaint();
-        }
-        if let Some(v) = get_json("/v1/storage") {
-            let _ = tx.send(Event::Storage(v));
-            ctx.request_repaint();
-        }
-        std::thread::sleep(Duration::from_secs(2));
     });
 }
 
@@ -2372,16 +2408,36 @@ enum Action {
     Start,
     Stop,
     EnableAutostart,
-    DisableAutostart,
+    DisableAutostart { keep_stopped: bool },
 }
 
 fn spawn_action(tx: Sender<Event>, ctx: egui::Context, action: Action) {
     std::thread::spawn(move || {
         let result = match action {
             Action::Start => start_service(),
-            Action::Stop => stop_service(),
+            Action::Stop => match stop_service() {
+                Ok(message) => {
+                    let _ = tx.send(Event::ServiceDown);
+                    Ok(message)
+                }
+                Err(err) => Err(err),
+            },
             Action::EnableAutostart => set_autostart(true),
-            Action::DisableAutostart => set_autostart(false),
+            Action::DisableAutostart { keep_stopped } => match set_autostart(false) {
+                Ok(message) => {
+                    if keep_stopped {
+                        if let Err(err) = stop_service() {
+                            Err(format!("{message}；停止服务失败：{err}"))
+                        } else {
+                            let _ = tx.send(Event::ServiceDown);
+                            Ok(message)
+                        }
+                    } else {
+                        Ok(message)
+                    }
+                }
+                Err(err) => Err(err),
+            },
         };
         let _ = tx.send(Event::Status(match result {
             Ok(m) => m,
@@ -2747,7 +2803,7 @@ fn start_service() -> Result<String, String> {
 }
 
 fn stop_service() -> Result<String, String> {
-    let _ = run_wsl(&["systemctl", "stop", "flashserver"]);
+    run_wsl(&["systemctl", "stop", "flashserver"])?;
     let _ = run_wsl(&["pkill", "-f", "sleep infinity"]);
     Ok("服务已停止".into())
 }
@@ -2762,7 +2818,7 @@ fn set_autostart(enabled: bool) -> Result<String, String> {
             "--disable-autostart"
         };
         let script = format!(
-            "Start-Process -Verb RunAs -WindowStyle Hidden -Wait -FilePath '{}' -ArgumentList '{}'",
+            "try {{ $p = Start-Process -Verb RunAs -WindowStyle Hidden -Wait -PassThru -ErrorAction Stop -FilePath '{}' -ArgumentList '{}'; exit $p.ExitCode }} catch {{ exit 1 }}",
             setup.replace('\'', "''"),
             arg
         );
@@ -2778,7 +2834,12 @@ fn set_autostart(enabled: bool) -> Result<String, String> {
             }
             .into())
         } else {
-            Err("管理员授权被取消或执行失败".into())
+            let detail = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            if detail.is_empty() {
+                Err("管理员授权被取消或执行失败".into())
+            } else {
+                Err(detail)
+            }
         }
     }
     #[cfg(not(windows))]
