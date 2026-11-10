@@ -126,10 +126,11 @@ func (s *Server) logs(w http.ResponseWriter, r *http.Request) {
 		n = 2000
 	}
 	kind := r.URL.Query().Get("kind")
+	since := strings.TrimSpace(r.URL.Query().Get("since"))
 	switch kind {
 	case "", "server":
 		lines := serverLogLines(n)
-		if journal, err := journalTail(n); err == nil && len(journal) > 0 {
+		if journal, err := journalTail(n, since); err == nil && len(journal) > 0 {
 			lines = journal
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"kind": "server", "lines": lines})
@@ -161,16 +162,20 @@ func serveLogName(refStr string) string {
 
 // journalTail reads the service log from journald. The in-memory ring buffer is
 // only a fallback for non-systemd dev runs.
-func journalTail(n int) ([]string, error) {
+func journalTail(n int, since string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "journalctl", "-u", "flashserver", "--no-pager",
-		"-n", strconv.Itoa(n), "-o", "short-iso").Output()
+	args := []string{"-u", "flashserver", "--no-pager",
+		"-n", strconv.Itoa(n), "-o", "short-iso"}
+	if secs, err := strconv.ParseUint(strings.TrimSpace(since), 10, 64); err == nil {
+		args = append(args, "--since=@"+strconv.FormatUint(secs, 10))
+	}
+	out, err := exec.CommandContext(ctx, "journalctl", args...).Output()
 	if err != nil {
 		return nil, err
 	}
 	text := strings.TrimRight(string(out), "\n")
-	if text == "" {
+	if text == "" || strings.HasPrefix(text, "-- No entries --") {
 		return nil, nil
 	}
 	return strings.Split(text, "\n"), nil

@@ -367,6 +367,10 @@ paths:
         - name: lines
           in: query
           schema: { type: integer, minimum: 1, maximum: 2000, default: 200 }
+        - name: since
+          in: query
+          description: Unix seconds; only return entries newer than this time
+          schema: { type: integer, format: int64 }
       responses:
         '200':
           description: Log lines (oldest first)
