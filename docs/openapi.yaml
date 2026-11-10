@@ -629,6 +629,7 @@ components:
         variant: { type: string }
         bundle_cached: { type: boolean }
         weights_cached: { type: boolean }
+        serve: { type: boolean, description: Bundle declares a serve entry }
         bundle_bytes: { type: integer, format: int64 }
         weights_bytes: { type: integer, format: int64 }
         directory: { type: string }

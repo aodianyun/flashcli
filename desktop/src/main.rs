@@ -40,6 +40,7 @@ struct ModelRow {
     name: String,
     bundle_ready: bool,
     weights_ready: bool,
+    serve: bool,
     bundle_bytes: f64,
     weights_bytes: f64,
     loaded: bool,
@@ -57,7 +58,11 @@ impl ModelRow {
         if self.loaded {
             "已加载"
         } else if self.bundle_ready && self.weights_ready {
-            "就绪"
+            if self.serve {
+                "就绪"
+            } else {
+                "仅 run"
+            }
         } else if self.bundle_ready {
             "缺权重"
         } else {
@@ -672,13 +677,14 @@ impl App {
                             ui.label(fmt_bytes(m.total_bytes()));
                         });
                         row.col(|ui| {
-                            ui.label(egui::RichText::new(m.status()).color(
-                                if m.loaded || m.ready() {
-                                    green(ui)
-                                } else {
-                                    red(ui)
-                                },
-                            ));
+                            let color = if m.loaded || (m.ready() && m.serve) {
+                                green(ui)
+                            } else if m.ready() {
+                                ui.visuals().weak_text_color()
+                            } else {
+                                red(ui)
+                            };
+                            ui.label(egui::RichText::new(m.status()).color(color));
                         });
                         row.col(|ui| {
                             if m.loaded {
@@ -691,8 +697,13 @@ impl App {
                                     unload_request = Some(m.name.clone());
                                 }
                             } else if m.ready() {
-                                if ui.small_button("加载").clicked() {
-                                    load_request = Some(m.name.clone());
+                                if m.serve {
+                                    if ui.small_button("加载").clicked() {
+                                        load_request = Some(m.name.clone());
+                                    }
+                                } else {
+                                    ui.label(egui::RichText::new("—").weak())
+                                        .on_hover_text("该 bundle 只声明了 run，不能通过服务加载");
                                 }
                             } else if ui.small_button("下载").clicked() {
                                 pull_request = Some(m.name.clone());
@@ -977,6 +988,15 @@ impl App {
                             &size_text(model.weights_ready, model.weights_bytes),
                         );
                         kv(ui, "总大小", &fmt_bytes(model.total_bytes()));
+                        kv(
+                            ui,
+                            "服务",
+                            if model.serve {
+                                "支持 serve"
+                            } else {
+                                "仅支持 run"
+                            },
+                        );
                         if model.loaded {
                             kv(ui, "Endpoint", &model.endpoint);
                             kv(ui, "PID", &model.pid.to_string());
@@ -992,10 +1012,16 @@ impl App {
                         if button(ui, "复制 Endpoint").clicked() {
                             ui.ctx().copy_text(model.endpoint.clone());
                         }
-                    } else if model.ready() {
+                    } else if model.ready() && model.serve {
                         if primary_button(ui, "加载").clicked() {
                             load = true;
                         }
+                    } else if model.ready() {
+                        ui.label(
+                            egui::RichText::new("该 bundle 仅支持 flashcli run")
+                                .weak()
+                                .small(),
+                        );
                     } else if button(ui, "下载").clicked() {
                         pull = true;
                     }
@@ -1576,6 +1602,7 @@ fn parse_models(v: &Value, system: Option<&Value>) -> Vec<ModelRow> {
                         name,
                         bundle_ready: m["bundle_cached"].as_bool().unwrap_or(false),
                         weights_ready: m["weights_cached"].as_bool().unwrap_or(false),
+                        serve: m["serve"].as_bool().unwrap_or(true),
                         bundle_bytes: m["bundle_bytes"].as_f64().unwrap_or(0.0),
                         weights_bytes: m["weights_bytes"].as_f64().unwrap_or(0.0),
                         loaded: info.is_some(),

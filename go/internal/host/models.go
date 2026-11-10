@@ -23,6 +23,7 @@ type Model struct {
 	Variant       string `json:"variant,omitempty"`
 	BundleCached  bool   `json:"bundle_cached"`
 	WeightsCached bool   `json:"weights_cached"`
+	Serve         bool   `json:"serve"`
 	BundleBytes   int64  `json:"bundle_bytes"`
 	WeightsBytes  int64  `json:"weights_bytes"`
 	Directory     string `json:"directory"`
@@ -66,6 +67,7 @@ func ListModels() ([]Model, error) {
 			Variant:       variant,
 			BundleCached:  bundleOK,
 			WeightsCached: weightsOK,
+			Serve:         bundleOK && bundleServes(bundleRoot),
 			BundleBytes:   dirSize(filepath.Join(paths.Bundles(), filepath.FromSlash(key))),
 			WeightsBytes:  dirSize(filepath.Join(paths.Models(), filepath.FromSlash(weightsKey))),
 			Directory:     filepath.ToSlash(filepath.Join(paths.Home(), "{bundles,models}", weightsKey)),
@@ -139,6 +141,36 @@ func bundleRootUsable(root string) bool {
 	}
 	_, err = manifest.Load(root)
 	return err == nil
+}
+
+// bundleServes reports whether the bundle declares a serve entry, either at the
+// top level or in one of its environment variants.
+func bundleServes(root string) bool {
+	if strings.TrimSpace(root) == "" {
+		return false
+	}
+	blob, err := os.ReadFile(filepath.Join(root, flashhub.ManifestPath))
+	if err != nil {
+		return false
+	}
+	var doc struct {
+		Entry        map[string]json.RawMessage `json:"entry"`
+		Environments map[string]struct {
+			Entry map[string]json.RawMessage `json:"entry"`
+		} `json:"environments"`
+	}
+	if json.Unmarshal(blob, &doc) != nil {
+		return false
+	}
+	if _, ok := doc.Entry["serve"]; ok {
+		return true
+	}
+	for _, env := range doc.Environments {
+		if _, ok := env.Entry["serve"]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func markerWeightsKey(marker map[string]any, fallback, bundleRoot string) string {

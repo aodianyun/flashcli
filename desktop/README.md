@@ -6,7 +6,7 @@ Native desktop client for `flashserver`, built with Rust + [egui/eframe](https:/
 
 - Overview: GPU environment (driver/CUDA/compute capability/torch/temperature/clocks/power) with a 0-100 utilization/VRAM chart, CPU info with a 0-100 usage chart, service state and disk usage. A flat status bar shows GPU/VRAM/CPU/RAM percentages.
 - Models: one page for local and FlashHub sources.
-  - Local: bundle/weight readiness, separate bundle and weight sizes, total size, loaded state, async load with bundle/weight/dependency progress, row details (endpoint/PID/loaded time, unload, copy endpoint).
+  - Local: bundle/weight readiness, serve capability (run-only bundles are marked "仅 run"), separate bundle and weight sizes, total size, loaded state, async load with bundle/weight/dependency progress, row details (endpoint/PID/loaded time, unload, copy endpoint).
   - FlashHub: search the public catalog, filter by category, browse versions with size/file count and load a version directly.
 - Logs: `journalctl` tail (last 300 lines, auto-refreshed every second) with a full-log download.
 - Settings: start/stop the daemon without elevation; enable/disable auto-start (UAC) through `flashserver-setup`; dark/light theme; API docs; quit.
