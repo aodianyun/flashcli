@@ -80,7 +80,8 @@ func ListModels() ([]Model, error) {
 	return out, nil
 }
 
-// Storage returns apparent sizes for the local cache areas.
+// Storage returns unique allocated disk usage for the local cache areas.
+// Hardlinked files are counted once across all areas.
 func Storage() []Area {
 	items := []struct {
 		name string
@@ -94,8 +95,9 @@ func Storage() []Area {
 		{"python", filepath.Join(paths.Home(), "python")},
 	}
 	out := make([]Area, 0, len(items))
+	seen := map[fileKey]bool{}
 	for _, item := range items {
-		out = append(out, Area{Name: item.name, Path: filepath.ToSlash(item.path), Bytes: dirSize(item.path)})
+		out = append(out, Area{Name: item.name, Path: filepath.ToSlash(item.path), Bytes: dirUsage(item.path, seen)})
 	}
 	return out
 }
@@ -233,6 +235,35 @@ func dirSize(root string) int64 {
 		if info, err := d.Info(); err == nil {
 			total += info.Size()
 		}
+		return nil
+	})
+	return total
+}
+
+type fileKey struct {
+	dev uint64
+	ino uint64
+}
+
+// dirUsage sums allocated bytes while counting each inode only once. Hardlinked
+// files (uv cache <-> runtimes) would otherwise be double-counted across areas.
+func dirUsage(root string, seen map[fileKey]bool) int64 {
+	var total int64
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return nil
+		}
+		if key, ok := fileKeyFor(info); ok {
+			if seen[key] {
+				return nil
+			}
+			seen[key] = true
+		}
+		total += allocatedBytes(info)
 		return nil
 	})
 	return total

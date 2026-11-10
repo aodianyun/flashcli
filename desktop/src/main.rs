@@ -2086,7 +2086,7 @@ fn parse_storage(v: &Value) -> (Vec<(String, String)>, f64) {
                     let bytes = a["bytes"].as_f64().unwrap_or(0.0);
                     total += bytes;
                     (
-                        a["name"].as_str().unwrap_or("").to_string(),
+                        storage_label(a["name"].as_str().unwrap_or("")).to_string(),
                         fmt_bytes(bytes),
                     )
                 })
@@ -2094,6 +2094,18 @@ fn parse_storage(v: &Value) -> (Vec<(String, String)>, f64) {
         })
         .unwrap_or_default();
     (rows, total)
+}
+
+fn storage_label(name: &str) -> &str {
+    match name {
+        "bundles" => "Bundle",
+        "models" => "权重",
+        "runtimes" => "运行时(共享)",
+        "cache" => "下载缓存(共享)",
+        "tools" => "工具",
+        "python" => "Python",
+        other => other,
+    }
 }
 
 fn push_point(points: &mut Vec<[f64; 2]>, x: f64, y: f32) {
