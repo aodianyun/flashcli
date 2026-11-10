@@ -21,6 +21,10 @@ type cleanResult struct {
 	SharedWeights bool   `json:"shared_weights,omitempty"`
 }
 
+type storageCleanRequest struct {
+	Targets []string `json:"targets"`
+}
+
 // cleanModels removes local caches for the requested refs. Loaded or
 // in-flight models are skipped; shared weights/bundle trees are kept.
 func (s *Server) cleanModels(w http.ResponseWriter, r *http.Request) {
@@ -67,4 +71,31 @@ func (s *Server) cleanModels(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"results": results, "freed_bytes": total})
+}
+
+// cleanStorage removes shared caches (cache/python/tools/runtimes). Runtime
+// cleanup is refused while any model is resident or loading.
+func (s *Server) cleanStorage(w http.ResponseWriter, r *http.Request) {
+	var req storageCleanRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.Targets) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "targets is required"})
+		return
+	}
+	for _, target := range req.Targets {
+		if target != "runtimes" {
+			continue
+		}
+		if s.Manager != nil {
+			if slots, _ := s.Manager.Slots(); slots > 0 {
+				writeJSON(w, http.StatusConflict, map[string]any{"error": "unload all models before cleaning runtimes"})
+				return
+			}
+		}
+	}
+	freed, err := host.CleanSharedCaches(req.Targets)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"freed_bytes": freed, "targets": req.Targets})
 }

@@ -114,6 +114,7 @@ enum Event {
     Logs(Option<String>),
     LogsNote(String),
     CleanNote(String),
+    StorageNote(String),
     Status(String),
     Job(JobEvent),
     Catalog { repos: Vec<HubRepo>, total: i64 },
@@ -164,6 +165,10 @@ pub struct App {
     hub_error: String,
     storage: Vec<(String, String)>,
     storage_total: f64,
+    storage_sizes: HashMap<String, f64>,
+    storage_note: String,
+    cache_dialog: bool,
+    cache_selected: HashSet<String>,
     logs: String,
     logs_busy: bool,
     logs_at: Option<Instant>,
@@ -217,6 +222,10 @@ impl App {
             hub_error: String::new(),
             storage: Vec::new(),
             storage_total: 0.0,
+            storage_sizes: HashMap::new(),
+            storage_note: String::new(),
+            cache_dialog: false,
+            cache_selected: HashSet::new(),
             logs: String::new(),
             logs_busy: false,
             logs_at: None,
@@ -273,9 +282,10 @@ impl App {
                     self.sync_model_selection();
                 }
                 Event::Storage(v) => {
-                    let (areas, total) = parse_storage(&v);
+                    let (areas, total, sizes) = parse_storage(&v);
                     self.storage = areas;
                     self.storage_total = total;
+                    self.storage_sizes = sizes;
                 }
                 Event::Logs(text) => {
                     if let Some(text) = text {
@@ -286,6 +296,7 @@ impl App {
                 }
                 Event::LogsNote(note) => self.logs_note = note,
                 Event::CleanNote(note) => self.models_note = note,
+                Event::StorageNote(note) => self.storage_note = note,
                 Event::Status(text) => self.load_status = text,
                 Event::Job(job) => self.apply_job(job),
                 Event::Catalog { repos, total } => {
@@ -1414,6 +1425,41 @@ impl App {
                 });
 
                 ui.add_space(10.0);
+                panel(ui, "存储", |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            egui::RichText::new("共享缓存：运行时 / Python / 工具 / 下载缓存")
+                                .weak()
+                                .small(),
+                        );
+                        ui.with_layout(
+                            egui::Layout::right_to_left(egui::Align::Center),
+                            |ui| {
+                                if ui
+                                    .add(
+                                        egui::Button::new(
+                                            egui::RichText::new("清理缓存…").color(red(ui)),
+                                        )
+                                        .min_size(egui::vec2(120.0, 28.0)),
+                                    )
+                                    .clicked()
+                                {
+                                    self.cache_dialog = true;
+                                    self.cache_selected.clear();
+                                    for key in ["cache", "python", "tools", "runtimes"] {
+                                        self.cache_selected.insert(key.to_string());
+                                    }
+                                }
+                            },
+                        );
+                    });
+                    if !self.storage_note.is_empty() {
+                        ui.add_space(4.0);
+                        ui.label(egui::RichText::new(&self.storage_note).weak().small());
+                    }
+                });
+
+                ui.add_space(10.0);
                 panel(ui, "外观", |ui| {
                     ui.horizontal(|ui| {
                         ui.label("主题");
@@ -1454,6 +1500,134 @@ impl App {
             self.dark = dark;
             apply_theme(ctx, dark);
             save_settings(&Settings { dark });
+        }
+    }
+
+    fn show_cache_dialog(&mut self, ctx: &egui::Context) {
+        if !self.cache_dialog || self.dialog.is_some() || self.model_detail.is_some() {
+            return;
+        }
+        let dark = ctx.style().visuals.dark_mode;
+        let loaded = self
+            .system
+            .as_ref()
+            .map(|s| s["loaded_count"].as_i64().unwrap_or(0) > 0)
+            .unwrap_or(false);
+        let targets = [
+            ("cache", "下载缓存", "uv / pip / FlashHub 索引"),
+            ("python", "Python 运行时", "共享解释器与标准库"),
+            ("tools", "工具", "uv 等下载工具"),
+            ("runtimes", "模型运行时", "torch / CUDA，下次加载会重新安装"),
+        ];
+        let mut selected = self.cache_selected.clone();
+        if loaded {
+            selected.remove("runtimes");
+        }
+        let mut close = false;
+        let mut confirm = false;
+        modal_backdrop(ctx, dark, &mut close);
+        egui::Window::new("cache_clean_dialog")
+            .title_bar(false)
+            .order(egui::Order::Foreground)
+            .frame(dialog_frame(dark))
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.set_width(540.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("清理缓存").size(16.0).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(egui::RichText::new("×").size(18.0))
+                                    .min_size(egui::vec2(28.0, 24.0)),
+                            )
+                            .clicked()
+                        {
+                            close = true;
+                        }
+                    });
+                });
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(12.0);
+                ui.label("选择要删除的共享缓存：");
+                ui.add_space(6.0);
+                for &(key, label, description) in &targets {
+                    let size = self.storage_sizes.get(key).copied().unwrap_or(0.0);
+                    let locked = key == "runtimes" && loaded;
+                    let mut checked = selected.contains(key);
+                    ui.horizontal(|ui| {
+                        let response =
+                            ui.add_enabled(!locked, egui::Checkbox::new(&mut checked, ""));
+                        if response.changed() {
+                            if checked {
+                                selected.insert(key.to_string());
+                            } else {
+                                selected.remove(key);
+                            }
+                        }
+                        ui.label(egui::RichText::new(label).strong());
+                        ui.label(egui::RichText::new(description).weak().small());
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.label(fmt_bytes(size));
+                        });
+                    });
+                    if locked {
+                        ui.label(
+                            egui::RichText::new("已加载模型，先卸载才能清理运行时")
+                                .weak()
+                                .small(),
+                        );
+                    }
+                }
+                ui.add_space(10.0);
+                ui.separator();
+                ui.add_space(10.0);
+                let total: f64 = targets
+                    .iter()
+                    .filter(|(key, _, _)| selected.contains(*key))
+                    .map(|(key, _, _)| self.storage_sizes.get(*key).copied().unwrap_or(0.0))
+                    .sum();
+                ui.label(egui::RichText::new(format!("将释放约 {}", fmt_bytes(total))).strong());
+                ui.label(
+                    egui::RichText::new(
+                        "模型 Bundle/权重不受影响；运行时删除后会在下次加载模型时重新下载/安装。",
+                    )
+                    .weak()
+                    .small(),
+                );
+                ui.add_space(12.0);
+                ui.separator();
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    ui.add_space((ui.available_width() - 200.0).max(0.0));
+                    if button(ui, "取消").clicked() {
+                        close = true;
+                    }
+                    ui.add_space(8.0);
+                    let enabled = !selected.is_empty();
+                    let response = ui.add_enabled(
+                        enabled,
+                        egui::Button::new(egui::RichText::new("清理").color(egui::Color32::WHITE))
+                            .fill(egui::Color32::from_rgb(176, 54, 48))
+                            .min_size(egui::vec2(96.0, 28.0)),
+                    );
+                    if response.clicked() {
+                        confirm = true;
+                    }
+                });
+            });
+        self.cache_selected = selected;
+        if close {
+            self.cache_dialog = false;
+        }
+        if confirm && !self.cache_selected.is_empty() {
+            let targets: Vec<String> = self.cache_selected.iter().cloned().collect();
+            self.cache_dialog = false;
+            self.storage_note.clear();
+            spawn_storage_clean(self.tx.clone(), ctx.clone(), targets);
         }
     }
 
@@ -1669,6 +1843,7 @@ impl eframe::App for App {
             }
         });
 
+        self.show_cache_dialog(ctx);
         self.show_dialog(ctx);
     }
 }
@@ -2075,8 +2250,9 @@ fn parse_hub_detail(v: &Value) -> HubDetail {
     }
 }
 
-fn parse_storage(v: &Value) -> (Vec<(String, String)>, f64) {
+fn parse_storage(v: &Value) -> (Vec<(String, String)>, f64, HashMap<String, f64>) {
     let mut total = 0.0;
+    let mut sizes = HashMap::new();
     let rows = v["areas"]
         .as_array()
         .map(|items| {
@@ -2085,15 +2261,14 @@ fn parse_storage(v: &Value) -> (Vec<(String, String)>, f64) {
                 .map(|a| {
                     let bytes = a["bytes"].as_f64().unwrap_or(0.0);
                     total += bytes;
-                    (
-                        storage_label(a["name"].as_str().unwrap_or("")).to_string(),
-                        fmt_bytes(bytes),
-                    )
+                    let raw = a["name"].as_str().unwrap_or("");
+                    sizes.insert(raw.to_string(), bytes);
+                    (storage_label(raw).to_string(), fmt_bytes(bytes))
                 })
                 .collect()
         })
         .unwrap_or_default();
-    (rows, total)
+    (rows, total, sizes)
 }
 
 fn storage_label(name: &str) -> &str {
@@ -2380,6 +2555,24 @@ fn spawn_clean(tx: Sender<Event>, ctx: egui::Context, refs: Vec<String>) {
         let _ = tx.send(Event::CleanNote(note));
         if let Some(v) = get_json("/v1/models") {
             let _ = tx.send(Event::Models(v));
+        }
+        ctx.request_repaint();
+    });
+}
+
+fn spawn_storage_clean(tx: Sender<Event>, ctx: egui::Context, targets: Vec<String>) {
+    std::thread::spawn(move || {
+        let body = serde_json::json!({ "targets": targets });
+        let note = match post_json("/v1/storage/clean", &body) {
+            Ok(v) => {
+                let freed = v["freed_bytes"].as_f64().unwrap_or(0.0);
+                format!("共享缓存已清理，释放 {}", fmt_bytes(freed))
+            }
+            Err(e) => format!("清理缓存失败：{e}"),
+        };
+        let _ = tx.send(Event::StorageNote(note));
+        if let Some(v) = get_json("/v1/storage") {
+            let _ = tx.send(Event::Storage(v));
         }
         ctx.request_repaint();
     });

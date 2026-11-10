@@ -138,14 +138,30 @@ Content-Type: application/json
 
     <div class="api">
       <h2><span class="method get">GET</span><span class="path">/v1/storage</span></h2>
-      <p class="desc">各缓存目录占用（字节）。</p>
+      <p class="desc">各缓存目录占用（唯一分配字节，硬链接只计一次）。</p>
       <pre>{
   "areas": [
-    {"name":"bundles","path":"/root/.flashcli/bundles","bytes":190862747},
-    {"name":"models","path":"/root/.flashcli/models","bytes":7473129719},
-    {"name":"cache","path":"/root/.flashcli/cache","bytes":5368709120}
+    {"name":"bundles","path":"/root/.flashcli/bundles","bytes":0},
+    {"name":"models","path":"/root/.flashcli/models","bytes":0},
+    {"name":"runtimes","path":"/root/.flashcli/runtimes","bytes":6196068352},
+    {"name":"cache","path":"/root/.flashcli/cache","bytes":30916608}
   ]
 }</pre>
+    </div>
+
+    <div class="api">
+      <h2><span class="method post">POST</span><span class="path">/v1/storage/clean</span></h2>
+      <p class="desc">删除共享缓存：下载缓存、Python 运行时、工具、模型运行时。模型 Bundle/权重不受影响。</p>
+      <h3>请求参数</h3>
+      <table class="params">
+        <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+        <tr><td><code>targets</code></td><td>string[]</td><td><code>cache</code> / <code>python</code> / <code>tools</code> / <code>runtimes</code>。</td></tr>
+      </table>
+      <h3>请求示例</h3>
+      <pre>{"targets":["cache","python","tools","runtimes"]}</pre>
+      <h3>响应示例</h3>
+      <pre>{"freed_bytes":6196068352,"targets":["cache","python","tools","runtimes"]}</pre>
+      <div class="note">有已加载或正在加载的模型时，<code>runtimes</code> 会返回 409；运行时删除后下次加载模型会重新下载/安装。</div>
     </div>
   </section>
 
@@ -358,6 +374,7 @@ data: {"time":"2026-11-10T02:31:26Z","phase":"done"}</pre>
       <tr><td><span class="tag">GET</span></td><td><code>/v1/models</code></td><td>缓存模型、bundle/权重状态、serve 能力、已加载实例</td></tr>
       <tr><td><span class="tag">GET</span></td><td><code>/v1/models/loaded</code></td><td>已加载实例</td></tr>
       <tr><td><span class="tag">GET</span></td><td><code>/v1/storage</code></td><td>缓存目录占用</td></tr>
+      <tr><td><span class="tag">POST</span></td><td><code>/v1/storage/clean</code></td><td>清理共享缓存（运行时/Python/工具/下载）</td></tr>
       <tr><td><span class="tag">POST</span></td><td><code>/v1/models/load</code></td><td>加载模型（异步任务）</td></tr>
       <tr><td><span class="tag">POST</span></td><td><code>/v1/models/unload</code></td><td>卸载模型</td></tr>
       <tr><td><span class="tag">POST</span></td><td><code>/v1/models/clean</code></td><td>清理本地模型缓存（多选）</td></tr>

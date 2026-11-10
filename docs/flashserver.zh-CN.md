@@ -23,7 +23,7 @@ flashcli serve     → 单模型进程，OpenAI-compatible API
 
 ## 桌面客户端
 
-Windows 安装包内置 `FlashServer.exe`：Rust + egui/eframe 原生客户端（不使用 WebView，启动无黑色控制台窗口），包含概览（卡片布局的 GPU/CPU 环境信息与 0-100 曲线、两行紧凑的服务/磁盘卡片、底部 GPU/显存/CPU/内存扁平状态条）、模型（本地缓存 + 按需搜索的 FlashHub 目录/分类/版本、Bundle 与权重分开显示大小、加载状态、异步加载进度、行详情与卸载、多选缓存清理）、日志（`journalctl` tail、清空、原生「另存为」）、设置（服务启停、开机启动、主题、API 文档）。通过 WebSocket（`/v1/ws`）接收实时数据，HTTP 轮询兜底。
+Windows 安装包内置 `FlashServer.exe`：Rust + egui/eframe 原生客户端（不使用 WebView，启动无黑色控制台窗口），包含概览（卡片布局的 GPU/CPU 环境信息与 0-100 曲线、两行紧凑的服务/磁盘卡片、底部 GPU/显存/CPU/内存扁平状态条）、模型（本地缓存 + 按需搜索的 FlashHub 目录/分类/版本、Bundle 与权重分开显示大小、加载状态、异步加载进度、行详情与卸载、多选缓存清理）、日志（`journalctl` tail、清空、原生「另存为」）、设置（服务启停、开机启动、共享缓存清理、主题、API 文档）。通过 WebSocket（`/v1/ws`）接收实时数据，HTTP 轮询兜底。
 
 - 源码：`desktop/`；构建：`cargo build --release`（Rust MSVC 工具链，`cargo` 需在 PATH）。产物：`desktop/target/release/FlashServer.exe`（约 4.7MB）。
 - 内存：约 110~125MB 工作集（GPU 上下文 + 中文字体 + egui 存储）。

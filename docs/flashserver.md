@@ -23,7 +23,7 @@ Open `http://localhost:8790/` after installation. The embedded console shows GPU
 
 ## Desktop client
 
-The Windows installer ships `FlashServer.exe`, a Rust + egui/eframe desktop client (no WebView, no console window): overview (card layout with GPU/CPU environment and 0-100 charts, compact two-row service/disk cards, flat GPU/VRAM/CPU/RAM status bar), models (local cache plus on-demand FlashHub search/categories/versions, separate bundle/weight sizes, loaded state, async load progress, row details with unload, and multi-select cache cleanup), logs (`journalctl` tail with clear and native Save-As), and settings (service start/stop, auto-start, theme, API docs). It talks to the daemon over WebSocket (`/v1/ws`) with HTTP polling as fallback.
+The Windows installer ships `FlashServer.exe`, a Rust + egui/eframe desktop client (no WebView, no console window): overview (card layout with GPU/CPU environment and 0-100 charts, compact two-row service/disk cards, flat GPU/VRAM/CPU/RAM status bar), models (local cache plus on-demand FlashHub search/categories/versions, separate bundle/weight sizes, loaded state, async load progress, row details with unload, and multi-select cache cleanup), logs (`journalctl` tail with clear and native Save-As), and settings (service start/stop, auto-start, shared-cache cleanup with per-item sizes, theme, API docs). It talks to the daemon over WebSocket (`/v1/ws`) with HTTP polling as fallback.
 
 - Source: `desktop/`; build with `cargo build --release` (Rust MSVC toolchain; put `cargo` on PATH). Output: `desktop/target/release/FlashServer.exe` (~4.7 MB).
 - Memory: ~110-125 MB working set (GPU context + CJK font + egui stores).

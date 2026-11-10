@@ -75,3 +75,35 @@ func TestCleanModelsValidation(t *testing.T) {
 		t.Fatalf("status=%d", rec.Code)
 	}
 }
+
+func TestCleanStorage(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FLASHCLI_HOME", home)
+	cache := filepath.Join(home, "cache", "uv", "file.bin")
+	if err := os.MkdirAll(filepath.Dir(cache), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cache, make([]byte, 8192), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/storage/clean",
+		strings.NewReader(`{"targets":["cache"]}`))
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload struct {
+		Freed int64 `json:"freed_bytes"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Freed <= 0 {
+		t.Fatalf("freed=%d", payload.Freed)
+	}
+	if _, err := os.Stat(filepath.Join(home, "cache")); !os.IsNotExist(err) {
+		t.Fatalf("cache still exists: %v", err)
+	}
+}

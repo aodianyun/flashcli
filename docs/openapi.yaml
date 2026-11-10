@@ -232,7 +232,7 @@ paths:
           $ref: '#/components/responses/Error'
   /v1/storage:
     get:
-      summary: Disk usage per cache area
+      summary: Disk usage per cache area (unique allocated bytes)
       responses:
         '200':
           description: Storage areas
@@ -244,6 +244,45 @@ paths:
                   areas:
                     type: array
                     items: { $ref: '#/components/schemas/StorageArea' }
+  /v1/storage/clean:
+    post:
+      summary: Remove shared caches (download cache, Python, tools, runtimes)
+      description: Runtimes cannot be removed while a model is loaded or loading.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targets]
+              properties:
+                targets:
+                  type: array
+                  items:
+                    type: string
+                    enum: [cache, python, tools, runtimes]
+      responses:
+        '200':
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  freed_bytes: { type: integer, format: int64 }
+                  targets:
+                    type: array
+                    items: { type: string }
+        '400':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Models are loaded; runtimes cannot be removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
   /v1/pull:
     post:
       summary: Download a bundle/weights asynchronously
