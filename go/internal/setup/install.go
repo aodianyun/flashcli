@@ -31,6 +31,7 @@ type Options struct {
 	Uninstall        bool
 	StopService      bool
 	StartService     bool
+	EnableAutostart  bool
 	DisableAutostart bool
 	PathEnv          string
 }
@@ -43,6 +44,9 @@ func Run(ctx context.Context, env Env, opts Options, out io.Writer) error {
 	}
 	if opts.Uninstall {
 		return uninstall(ctx, env, opts, out)
+	}
+	if opts.EnableAutostart {
+		return enableAutostart(ctx, env, opts, out)
 	}
 	if opts.DisableAutostart {
 		return disableAutostart(ctx, env, opts, out)

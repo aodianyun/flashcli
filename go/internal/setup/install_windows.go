@@ -83,7 +83,7 @@ func installWSL(ctx context.Context, env Env, opts Options, out io.Writer) error
 		return err
 	}
 	if err := stepf(out, 7, total, "Configuring auto-start", func() error {
-		if err := createStartupTask(ctx, opts, &i); err != nil {
+		if err := createStartupTask(ctx, opts, &i, true); err != nil {
 			return err
 		}
 		return writeToWSL(ctx, opts, autostartMarker, []byte("enabled\n"), 0o644)
@@ -231,7 +231,7 @@ func waitWSL(ctx context.Context, opts Options) error {
 	}
 }
 
-func createStartupTask(ctx context.Context, opts Options, i *installer) error {
+func createStartupTask(ctx context.Context, opts Options, i *installer, runNow bool) error {
 	task := "flashserver-wsl"
 	user := currentUserQualified()
 	vbs, err := wslKeepaliveScript(opts)
@@ -262,8 +262,10 @@ func createStartupTask(ctx context.Context, opts Options, i *installer) error {
 	}
 	// Kick the keepalive now: the distro would otherwise idle-stop (and take
 	// the service with it) before the next logon.
-	if err := exec.CommandContext(ctx, sysExe("schtasks.exe"), "/Run", "/TN", task).Run(); err != nil {
-		i.printf("warn: could not start logon task %s: %v\n", task, err)
+	if runNow {
+		if err := exec.CommandContext(ctx, sysExe("schtasks.exe"), "/Run", "/TN", task).Run(); err != nil {
+			i.printf("warn: could not start logon task %s: %v\n", task, err)
+		}
 	}
 	return nil
 }

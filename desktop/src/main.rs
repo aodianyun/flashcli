@@ -116,6 +116,9 @@ enum Event {
     LogsNote(String),
     CleanNote(String),
     StorageNote(String),
+    OpBusy(String),
+    OpDone(Result<String, String>),
+    Autostart(bool),
     Status(String),
     Job(JobEvent),
     Catalog { repos: Vec<HubRepo>, total: i64 },
@@ -175,6 +178,9 @@ pub struct App {
     logs_at: Option<Instant>,
     logs_since: Option<u64>,
     logs_note: String,
+    autostart_known: Option<bool>,
+    op_busy: Option<String>,
+    op_note: Option<(String, bool, Instant)>,
     selected_models: HashSet<String>,
     known_models: HashSet<String>,
     models_note: String,
@@ -232,6 +238,9 @@ impl App {
             logs_at: None,
             logs_since: None,
             logs_note: String::new(),
+            autostart_known: None,
+            op_busy: None,
+            op_note: None,
             selected_models: HashSet::new(),
             known_models: HashSet::new(),
             models_note: String::new(),
@@ -253,6 +262,11 @@ impl App {
         while let Ok(ev) = self.rx.try_recv() {
             match ev {
                 Event::System(v) => {
+                    self.autostart_known = match v["autostart"].as_str() {
+                        Some("enabled") => Some(true),
+                        Some("disabled") => Some(false),
+                        _ => self.autostart_known,
+                    };
                     let t = v["uptime_seconds"].as_f64().unwrap_or(self.x + 1.0);
                     if t + 0.5 < self.x {
                         // Service restarted: uptime went backwards, start new charts.
@@ -314,6 +328,18 @@ impl App {
                 Event::LogsNote(note) => self.logs_note = note,
                 Event::CleanNote(note) => self.models_note = note,
                 Event::StorageNote(note) => self.storage_note = note,
+                Event::OpBusy(label) => {
+                    self.op_busy = Some(label);
+                    self.op_note = None;
+                }
+                Event::OpDone(result) => {
+                    self.op_busy = None;
+                    self.op_note = match result {
+                        Ok(message) => Some((message, true, Instant::now())),
+                        Err(error) => Some((error, false, Instant::now())),
+                    };
+                }
+                Event::Autostart(enabled) => self.autostart_known = Some(enabled),
                 Event::Status(text) => self.load_status = text,
                 Event::Job(job) => self.apply_job(job),
                 Event::Catalog { repos, total } => {
@@ -382,6 +408,17 @@ impl App {
             }
         }
         self.known_models = self.models.iter().map(|m| m.name.clone()).collect();
+    }
+
+    fn autostart_state(&self) -> Option<bool> {
+        self.system
+            .as_ref()
+            .and_then(|s| match s["autostart"].as_str() {
+                Some("enabled") => Some(true),
+                Some("disabled") => Some(false),
+                _ => None,
+            })
+            .or(self.autostart_known)
     }
 
     fn overview(&mut self, ui: &mut egui::Ui) {
@@ -593,11 +630,7 @@ impl App {
                         "运行时长",
                         &fmt_uptime(sys["uptime_seconds"].as_f64().unwrap_or(0.0)),
                     );
-                    pair(
-                        ui,
-                        "开机启动",
-                        translate_autostart(sys["autostart"].as_str().unwrap_or("unknown")),
-                    );
+                    pair(ui, "开机启动", autostart_text(self.autostart_state()));
                     pair(ui, "监听", "8790");
                     ui.end_row();
                     pair(
@@ -1400,20 +1433,13 @@ impl App {
                             kv(
                                 ui,
                                 "开机启动",
-                                self.system
-                                    .as_ref()
-                                    .map(|s| translate_autostart(s["autostart"].as_str().unwrap_or("unknown")))
-                                    .unwrap_or("未知"),
+                                autostart_text(self.autostart_state()),
                             );
                             kv(ui, "监听地址", "127.0.0.1:8790");
                         });
                     ui.add_space(8.0);
                     let running = self.system.is_some();
-                    let autostart = self
-                        .system
-                        .as_ref()
-                        .map(|s| s["autostart"].as_str().unwrap_or("unknown") == "enabled")
-                        .unwrap_or(false);
+                    let autostart = self.autostart_state().unwrap_or(false);
                     ui.horizontal(|ui| {
                         if running {
                             if danger_button(ui, "停止服务").clicked() {
@@ -1648,6 +1674,64 @@ impl App {
         }
     }
 
+    fn show_busy_overlay(&self, ctx: &egui::Context) {
+        let Some(label) = &self.op_busy else {
+            return;
+        };
+        let dark = ctx.style().visuals.dark_mode;
+        let mut ignored = false;
+        modal_backdrop(ctx, dark, &mut ignored);
+        egui::Window::new("busy_overlay")
+            .title_bar(false)
+            .order(egui::Order::Foreground)
+            .frame(dialog_frame(dark))
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.set_width(300.0);
+                ui.horizontal(|ui| {
+                    ui.add(egui::Spinner::new().size(18.0));
+                    ui.label(egui::RichText::new(label).size(14.0));
+                });
+            });
+    }
+
+    fn show_toast(&self, ctx: &egui::Context) {
+        let Some((message, ok, at)) = &self.op_note else {
+            return;
+        };
+        if at.elapsed() > Duration::from_secs(4) {
+            return;
+        }
+        let dark = ctx.style().visuals.dark_mode;
+        let color = if *ok {
+            if dark {
+                egui::Color32::from_rgb(78, 201, 176)
+            } else {
+                egui::Color32::from_rgb(16, 124, 16)
+            }
+        } else if dark {
+            egui::Color32::from_rgb(244, 135, 113)
+        } else {
+            egui::Color32::from_rgb(196, 43, 28)
+        };
+        egui::Area::new(egui::Id::new("op_toast"))
+            .order(egui::Order::Foreground)
+            .anchor(egui::Align2::CENTER_BOTTOM, [0.0, -24.0])
+            .interactable(false)
+            .show(ctx, |ui| {
+                egui::Frame::NONE
+                    .fill(card_fill_dark(dark))
+                    .stroke(card_stroke_dark(dark))
+                    .corner_radius(6)
+                    .inner_margin(egui::Margin::symmetric(14, 8))
+                    .show(ui, |ui| {
+                        ui.label(egui::RichText::new(message).color(color).size(13.0));
+                    });
+            });
+    }
+
     fn show_dialog(&mut self, ctx: &egui::Context) {
         let Some(dialog) = self.dialog.as_ref() else {
             return;
@@ -1868,6 +1952,11 @@ impl eframe::App for App {
 
         self.show_cache_dialog(ctx);
         self.show_dialog(ctx);
+        self.show_busy_overlay(ctx);
+        self.show_toast(ctx);
+        if self.op_busy.is_some() {
+            ctx.request_repaint_after(Duration::from_millis(100));
+        }
     }
 }
 
@@ -2404,6 +2493,7 @@ fn start_ws(tx: Sender<Event>, ctx: egui::Context) {
     });
 }
 
+#[derive(Clone, Copy)]
 enum Action {
     Start,
     Stop,
@@ -2411,10 +2501,46 @@ enum Action {
     DisableAutostart { keep_stopped: bool },
 }
 
+impl Action {
+    fn label(self) -> &'static str {
+        match self {
+            Action::Start => "正在启动服务…",
+            Action::Stop => "正在停止服务…",
+            Action::EnableAutostart => "正在启用开机启动…",
+            Action::DisableAutostart { .. } => "正在禁用开机启动…",
+        }
+    }
+}
+
 fn spawn_action(tx: Sender<Event>, ctx: egui::Context, action: Action) {
     std::thread::spawn(move || {
+        let _ = tx.send(Event::OpBusy(action.label().into()));
+        ctx.request_repaint();
+        let autostart = match action {
+            Action::EnableAutostart => Some(true),
+            Action::DisableAutostart { .. } => Some(false),
+            _ => None,
+        };
         let result = match action {
-            Action::Start => start_service(),
+            Action::Start => match start_service() {
+                Ok(message) => {
+                    let mut ready = false;
+                    for _ in 0..16 {
+                        if let Some(v) = get_json("/v1/system") {
+                            let _ = tx.send(Event::System(v));
+                            ready = true;
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(500));
+                    }
+                    if ready {
+                        Ok(message)
+                    } else {
+                        Err("服务启动命令已执行，但健康检查超时".into())
+                    }
+                }
+                Err(err) => Err(err),
+            },
             Action::Stop => match stop_service() {
                 Ok(message) => {
                     let _ = tx.send(Event::ServiceDown);
@@ -2439,11 +2565,31 @@ fn spawn_action(tx: Sender<Event>, ctx: egui::Context, action: Action) {
                 Err(err) => Err(err),
             },
         };
-        let _ = tx.send(Event::Status(match result {
-            Ok(m) => m,
-            Err(e) => format!("失败：{e}"),
-        }));
+        if result.is_ok() {
+            if let Some(state) = autostart {
+                let _ = tx.send(Event::Autostart(state));
+            }
+            if matches!(
+                action,
+                Action::EnableAutostart | Action::DisableAutostart { .. }
+            ) {
+                if let Some(v) = get_json("/v1/system") {
+                    let _ = tx.send(Event::System(v));
+                }
+            }
+        }
+        let ok = result.is_ok();
+        let _ = tx.send(Event::OpDone(result));
         ctx.request_repaint();
+        if ok && !matches!(action, Action::Stop) {
+            if let Some(v) = get_json("/v1/models") {
+                let _ = tx.send(Event::Models(v));
+            }
+            if let Some(v) = get_json("/v1/storage") {
+                let _ = tx.send(Event::Storage(v));
+            }
+            ctx.request_repaint();
+        }
     });
 }
 
@@ -2813,7 +2959,7 @@ fn set_autostart(enabled: bool) -> Result<String, String> {
     {
         let setup = setup_bin().ok_or_else(|| "找不到 flashserver-setup.exe".to_string())?;
         let arg = if enabled {
-            "--start-service"
+            "--enable-autostart"
         } else {
             "--disable-autostart"
         };
@@ -2822,10 +2968,10 @@ fn set_autostart(enabled: bool) -> Result<String, String> {
             setup.replace('\'', "''"),
             arg
         );
-        let out = std::process::Command::new("powershell.exe")
-            .args(["-NoProfile", "-Command", &script])
-            .output()
-            .map_err(|e| e.to_string())?;
+        let mut cmd = std::process::Command::new("powershell.exe");
+        cmd.args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script]);
+        hide(&mut cmd);
+        let out = cmd.output().map_err(|e| e.to_string())?;
         if out.status.success() {
             Ok(if enabled {
                 "已启用开机启动"
@@ -3047,11 +3193,11 @@ fn fmt_uptime(sec: f64) -> String {
     }
 }
 
-fn translate_autostart(value: &str) -> &'static str {
-    match value {
-        "enabled" => "已启用",
-        "disabled" => "已禁用",
-        _ => "未知",
+fn autostart_text(state: Option<bool>) -> &'static str {
+    match state {
+        Some(true) => "已启用",
+        Some(false) => "已禁用",
+        None => "未知",
     }
 }
 

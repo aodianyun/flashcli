@@ -35,6 +35,23 @@ func stopService(ctx context.Context, env Env, opts Options, out io.Writer) erro
 	return nil
 }
 
+// enableAutostart registers logon auto-start without starting the service.
+func enableAutostart(ctx context.Context, env Env, opts Options, out io.Writer) error {
+	i := installer{env: env, opts: opts, out: out}
+	if err := waitWSL(ctx, opts); err != nil {
+		return err
+	}
+	if err := wslRoot(ctx, opts, "systemctl", "enable", opts.ServiceName); err != nil {
+		return fmt.Errorf("enable systemd unit: %w", err)
+	}
+	if err := createStartupTask(ctx, opts, &i, false); err != nil {
+		return err
+	}
+	_ = writeToWSL(ctx, opts, autostartMarker, []byte("enabled\n"), 0o644)
+	fmt.Fprintln(out, "Auto-start enabled; FlashServer is not started.")
+	return nil
+}
+
 // disableAutostart removes boot/logon auto-start but leaves the running
 // service and keepalive session untouched.
 func disableAutostart(ctx context.Context, env Env, opts Options, out io.Writer) error {
@@ -72,7 +89,7 @@ func startService(ctx context.Context, env Env, opts Options, out io.Writer) err
 	if err := wslRoot(ctx, opts, "systemctl", "enable", opts.ServiceName); err != nil {
 		return err
 	}
-	if err := createStartupTask(ctx, opts, &i); err != nil {
+	if err := createStartupTask(ctx, opts, &i, true); err != nil {
 		return err
 	}
 	_ = writeToWSL(ctx, opts, autostartMarker, []byte("enabled\n"), 0o644)
