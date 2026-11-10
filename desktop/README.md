@@ -4,11 +4,11 @@ Native desktop client for `flashserver`, built with Rust + [egui/eframe](https:/
 
 ## Features
 
-- Overview: GPU environment (driver/CUDA/compute capability/torch/temperature/clocks/power) with a 0-100 utilization/VRAM chart, CPU info with a 0-100 usage chart, service state and disk usage. A flat status bar shows GPU/VRAM/CPU/RAM percentages.
+- Overview: GPU environment (driver/CUDA/compute capability/torch/temperature/clocks/power) with a 0-100 utilization/VRAM chart, CPU info with a 0-100 usage chart, and compact two-row service/disk cards (disk title includes the total). A flat status bar shows GPU/VRAM/CPU/RAM percentages.
 - Models: one page for local and FlashHub sources.
   - Local: bundle/weight readiness, serve capability (run-only bundles are marked "仅 run"), separate bundle and weight sizes, total size, loaded state, async load with bundle/weight/dependency progress, row details (endpoint/PID/loaded time, unload, copy endpoint).
-  - FlashHub: search the public catalog, filter by category, browse versions with size/file count and load a version directly.
-- Logs: `journalctl` tail (last 300 lines, auto-refreshed every second) with a full-log download.
+  - FlashHub: nothing is listed until you search or pick a category; then browse versions with size/file count and load a version directly.
+- Logs: `journalctl` tail (last 300 lines, refreshed every second), "清空" switches to new entries only, "另存为…" saves the full log via a native file dialog.
 - Settings: start/stop the daemon without elevation; enable/disable auto-start (UAC) through `flashserver-setup`; dark/light theme; API docs; quit.
 - Destructive actions (stop service, disable auto-start, unload, quit) require confirmation.
 - Live data: WebSocket `/v1/ws` (1 Hz system snapshots + job progress), HTTP polling fallback.
@@ -16,6 +16,8 @@ Native desktop client for `flashserver`, built with Rust + [egui/eframe](https:/
 ## Build (Windows)
 
 Requirements: Rust MSVC toolchain (`rustup default stable-x86_64-pc-windows-msvc`), Windows SDK/MSVC build tools.
+
+The release binary uses the Windows GUI subsystem, so it starts without a console window. `rfd` is used for the native "Save As" dialog.
 
 ```powershell
 cd desktop

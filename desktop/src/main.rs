@@ -1,3 +1,5 @@
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -110,6 +112,7 @@ enum Event {
     Models(Value),
     Storage(Value),
     Logs(Option<String>),
+    LogsNote(String),
     Status(String),
     Job(JobEvent),
     Catalog { repos: Vec<HubRepo>, total: i64 },
@@ -155,11 +158,15 @@ pub struct App {
     hub_selected: Option<i64>,
     hub_detail: Option<HubDetail>,
     hub_busy: bool,
+    hub_searched: bool,
     hub_error: String,
     storage: Vec<(String, String)>,
+    storage_total: f64,
     logs: String,
     logs_busy: bool,
     logs_at: Option<Instant>,
+    logs_since: Option<u64>,
+    logs_note: String,
     load_ref: String,
     load_status: String,
     loading: bool,
@@ -201,11 +208,15 @@ impl App {
             hub_selected: None,
             hub_detail: None,
             hub_busy: false,
+            hub_searched: false,
             hub_error: String::new(),
             storage: Vec::new(),
+            storage_total: 0.0,
             logs: String::new(),
             logs_busy: false,
             logs_at: None,
+            logs_since: None,
+            logs_note: String::new(),
             load_ref: String::new(),
             load_status: String::new(),
             loading: false,
@@ -250,7 +261,11 @@ impl App {
                     self.system = Some(v);
                 }
                 Event::Models(v) => self.models = parse_models(&v, self.system.as_ref()),
-                Event::Storage(v) => self.storage = parse_storage(&v),
+                Event::Storage(v) => {
+                    let (areas, total) = parse_storage(&v);
+                    self.storage = areas;
+                    self.storage_total = total;
+                }
                 Event::Logs(text) => {
                     if let Some(text) = text {
                         self.logs = text;
@@ -258,6 +273,7 @@ impl App {
                     self.logs_busy = false;
                     self.logs_at = Some(Instant::now());
                 }
+                Event::LogsNote(note) => self.logs_note = note,
                 Event::Status(text) => self.load_status = text,
                 Event::Job(job) => self.apply_job(job),
                 Event::Catalog { repos, total } => {
@@ -409,10 +425,14 @@ impl App {
             plot(
                 ui,
                 "gpu_plot",
-                150.0,
+                168.0,
                 &[
-                    (&self.gpu_util, egui::Color32::from_rgb(55, 148, 255)),
-                    (&self.gpu_mem, egui::Color32::from_rgb(78, 201, 176)),
+                    (
+                        "利用率",
+                        &self.gpu_util,
+                        egui::Color32::from_rgb(55, 148, 255),
+                    ),
+                    ("显存", &self.gpu_mem, egui::Color32::from_rgb(78, 201, 176)),
                 ],
             );
         });
@@ -450,18 +470,35 @@ impl App {
                     );
                     kv(
                         ui,
-                        "负载 1m",
-                        &format!("{:.2}", cpu["load1"].as_f64().unwrap_or(0.0)),
+                        "负载 1/5/15m",
+                        &format!(
+                            "{:.2} / {:.2} / {:.2}",
+                            cpu["load1"].as_f64().unwrap_or(0.0),
+                            cpu["load5"].as_f64().unwrap_or(0.0),
+                            cpu["load15"].as_f64().unwrap_or(0.0)
+                        ),
                     );
+                    let mem_total = cpu["mem_total_bytes"].as_f64().unwrap_or(0.0);
+                    let mem_used = cpu["mem_used_bytes"].as_f64().unwrap_or(0.0);
                     kv(
                         ui,
-                        "负载 5m",
-                        &format!("{:.2}", cpu["load5"].as_f64().unwrap_or(0.0)),
+                        "内存",
+                        &format!("{} / {}", fmt_bytes(mem_used), fmt_bytes(mem_total)),
                     );
+                    let wsl = if sys["wsl"].as_bool().unwrap_or(false) {
+                        " · WSL2"
+                    } else {
+                        ""
+                    };
                     kv(
                         ui,
-                        "负载 15m",
-                        &format!("{:.2}", cpu["load15"].as_f64().unwrap_or(0.0)),
+                        "系统",
+                        &format!(
+                            "{} / {}{}",
+                            sys["os"].as_str().unwrap_or("—"),
+                            sys["arch"].as_str().unwrap_or("—"),
+                            wsl
+                        ),
                     );
                 });
             ui.add_space(2.0);
@@ -471,8 +508,8 @@ impl App {
             plot(
                 ui,
                 "cpu_plot",
-                150.0,
-                &[(&self.cpu, egui::Color32::from_rgb(215, 186, 125))],
+                168.0,
+                &[("利用率", &self.cpu, egui::Color32::from_rgb(215, 186, 125))],
             );
         });
     }
@@ -491,43 +528,56 @@ impl App {
                     n => n.to_string(),
                 }
             );
-            ui.horizontal_wrapped(|ui| {
-                stat(
-                    ui,
-                    "运行时长",
-                    &fmt_uptime(sys["uptime_seconds"].as_f64().unwrap_or(0.0)),
-                );
-                stat(
-                    ui,
-                    "开机启动",
-                    translate_autostart(sys["autostart"].as_str().unwrap_or("unknown")),
-                );
-                stat(ui, "监听", "8790");
-                stat(
-                    ui,
-                    "认证",
-                    if sys["auth"].as_bool().unwrap_or(false) {
-                        "已开启"
-                    } else {
-                        "未开启"
-                    },
-                );
-                stat(ui, "已加载", &loaded);
-            });
+            egui::Grid::new("service_rows")
+                .num_columns(6)
+                .spacing([12.0, 6.0])
+                .show(ui, |ui| {
+                    pair(
+                        ui,
+                        "运行时长",
+                        &fmt_uptime(sys["uptime_seconds"].as_f64().unwrap_or(0.0)),
+                    );
+                    pair(
+                        ui,
+                        "开机启动",
+                        translate_autostart(sys["autostart"].as_str().unwrap_or("unknown")),
+                    );
+                    pair(ui, "监听", "8790");
+                    ui.end_row();
+                    pair(
+                        ui,
+                        "认证",
+                        if sys["auth"].as_bool().unwrap_or(false) {
+                            "已开启"
+                        } else {
+                            "未开启"
+                        },
+                    );
+                    pair(ui, "已加载", &loaded);
+                    pair(ui, "版本", env!("CARGO_PKG_VERSION"));
+                    ui.end_row();
+                });
         });
     }
 
     fn storage_panel(&self, ui: &mut egui::Ui) {
-        panel(ui, "磁盘占用", |ui| {
+        let title = format!("磁盘占用 · 总 {}", fmt_bytes(self.storage_total));
+        panel(ui, &title, |ui| {
             if self.storage.is_empty() {
                 ui.label("—");
                 return;
             }
-            ui.horizontal_wrapped(|ui| {
-                for (name, size) in &self.storage {
-                    stat(ui, name, size);
-                }
-            });
+            egui::Grid::new("storage_rows")
+                .num_columns(6)
+                .spacing([12.0, 6.0])
+                .show(ui, |ui| {
+                    for (index, (name, size)) in self.storage.iter().enumerate() {
+                        pair(ui, name, size);
+                        if (index + 1) % 3 == 0 {
+                            ui.end_row();
+                        }
+                    }
+                });
         });
     }
 
@@ -544,8 +594,9 @@ impl App {
                 .clicked()
             {
                 self.model_tab = ModelTab::Hub;
-                if self.hub_repos.is_empty() && !self.hub_busy {
-                    self.load_hub(ui.ctx());
+                if self.hub_tags.is_empty() && !self.hub_busy {
+                    self.hub_busy = true;
+                    spawn_catalog_tags(self.tx.clone(), ui.ctx().clone());
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -620,7 +671,9 @@ impl App {
             ui.add_sized(
                 [width, 28.0],
                 egui::TextEdit::singleline(&mut self.load_ref)
-                    .hint_text("flashcli-bundle/<name>:<version>"),
+                    .hint_text("flashcli-bundle/<name>:<version>")
+                    .vertical_align(egui::Align::Center)
+                    .margin(egui::Margin::symmetric(8, 4)),
             );
             if ui.button("加载").clicked() {
                 let ref_str = self.load_ref.trim().to_string();
@@ -737,7 +790,10 @@ impl App {
         ui.horizontal(|ui| {
             let resp = ui.add_sized(
                 [240.0, 28.0],
-                egui::TextEdit::singleline(&mut self.hub_query).hint_text("搜索 FlashHub 模型"),
+                egui::TextEdit::singleline(&mut self.hub_query)
+                    .hint_text("搜索 FlashHub 模型")
+                    .vertical_align(egui::Align::Center)
+                    .margin(egui::Margin::symmetric(8, 4)),
             );
             let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             let tags = self.hub_tags.clone();
@@ -774,14 +830,20 @@ impl App {
             ui.label(egui::RichText::new(&self.hub_error).color(red(ui)).small());
         }
         ui.add_space(4.0);
-        ui.label(
-            egui::RichText::new(format!("共 {} 个仓库", self.hub_total))
-                .weak()
-                .small(),
-        );
+        if self.hub_searched {
+            ui.label(
+                egui::RichText::new(format!("共 {} 个仓库", self.hub_total))
+                    .weak()
+                    .small(),
+            );
+        }
         if self.hub_repos.is_empty() {
             if !self.hub_busy {
-                ui.label("没有结果。检查网络或换个关键词。");
+                if self.hub_searched {
+                    ui.label("没有结果。换个关键词或分类再试。");
+                } else {
+                    ui.label("输入关键词或选择分类后点击「搜索」。");
+                }
             }
             return;
         }
@@ -915,6 +977,7 @@ impl App {
 
     fn load_hub(&mut self, ctx: &egui::Context) {
         self.hub_busy = true;
+        self.hub_searched = true;
         self.hub_error.clear();
         self.hub_detail = None;
         self.hub_selected = None;
@@ -941,41 +1004,68 @@ impl App {
         let Some(model) = self.model_detail.clone() else {
             return;
         };
-        let mut open = true;
+        let dark = ctx.style().visuals.dark_mode;
         let mut close = false;
         let mut load = false;
         let mut unload = false;
         let mut pull = false;
-        egui::Window::new("模型详情")
-            .open(&mut open)
+        egui::Window::new("model_detail_dialog")
+            .title_bar(false)
+            .frame(dialog_frame(dark))
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
-                ui.set_min_width(480.0);
+                ui.set_min_width(540.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("模型详情").size(16.0).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(egui::RichText::new("×").size(18.0))
+                                    .min_size(egui::vec2(28.0, 24.0)),
+                            )
+                            .clicked()
+                        {
+                            close = true;
+                        }
+                    });
+                });
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(12.0);
+
                 ui.label(
                     egui::RichText::new(&model.name)
                         .monospace()
                         .strong()
                         .size(14.0),
                 );
-                ui.add_space(4.0);
+                ui.add_space(6.0);
                 let (status_color, status) = if model.loaded {
                     (green(ui), "已加载")
-                } else if model.ready() {
+                } else if model.ready() && model.serve {
                     (green(ui), "就绪")
+                } else if model.ready() {
+                    (ui.visuals().weak_text_color(), "仅 run")
                 } else if model.bundle_ready {
                     (red(ui), "缺权重")
                 } else {
                     (red(ui), "缺 Bundle")
                 };
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("状态").weak());
-                    ui.label(egui::RichText::new(status).color(status_color));
-                });
+                chip(ui, status, status_color);
+
+                ui.add_space(14.0);
+                ui.label(
+                    egui::RichText::new("存储")
+                        .size(12.0)
+                        .strong()
+                        .color(ui.visuals().weak_text_color()),
+                );
+                ui.add_space(6.0);
                 egui::Grid::new("model_detail")
                     .num_columns(2)
-                    .spacing([18.0, 6.0])
+                    .spacing([18.0, 7.0])
                     .show(ui, |ui| {
                         kv(
                             ui,
@@ -997,16 +1087,35 @@ impl App {
                                 "仅支持 run"
                             },
                         );
-                        if model.loaded {
+                    });
+
+                if model.loaded {
+                    ui.add_space(14.0);
+                    ui.separator();
+                    ui.add_space(12.0);
+                    ui.label(
+                        egui::RichText::new("运行信息")
+                            .size(12.0)
+                            .strong()
+                            .color(ui.visuals().weak_text_color()),
+                    );
+                    ui.add_space(6.0);
+                    egui::Grid::new("model_runtime")
+                        .num_columns(2)
+                        .spacing([18.0, 7.0])
+                        .show(ui, |ui| {
                             kv(ui, "Endpoint", &model.endpoint);
                             kv(ui, "PID", &model.pid.to_string());
                             kv(ui, "加载时间", &model.loaded_at);
-                        }
-                    });
+                        });
+                }
+
+                ui.add_space(16.0);
+                ui.separator();
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
                     if model.loaded {
-                        if danger_button(ui, "卸载").clicked() {
+                        if destructive_button(ui, "卸载").clicked() {
                             unload = true;
                         }
                         if button(ui, "复制 Endpoint").clicked() {
@@ -1025,12 +1134,16 @@ impl App {
                     } else if button(ui, "下载").clicked() {
                         pull = true;
                     }
+                });
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    ui.add_space((ui.available_width() - 96.0).max(0.0));
                     if button(ui, "关闭").clicked() {
                         close = true;
                     }
                 });
             });
-        if close || !open {
+        if close {
             self.model_detail = None;
         }
         if unload {
@@ -1055,15 +1168,57 @@ impl App {
     }
 
     fn logs_page(&mut self, ui: &mut egui::Ui) {
+        let mut clear = false;
+        let mut reset = false;
+        let mut export = false;
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("服务日志").strong());
-            ui.label(egui::RichText::new("自动刷新 · 最近 300 行").weak().small());
+            ui.label(
+                egui::RichText::new(if self.logs_since.is_some() {
+                    "仅显示清空后的新日志"
+                } else {
+                    "最近 300 行"
+                })
+                .weak()
+                .small(),
+            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("下载完整日志").clicked() {
-                    let _ = webbrowser::open("http://localhost:8790/v1/logs/download?kind=server");
+                if ui.button("另存为…").clicked() {
+                    export = true;
+                }
+                if ui.button("清空").clicked() {
+                    clear = true;
+                }
+                if self.logs_since.is_some() && ui.button("最新 300 行").clicked() {
+                    reset = true;
                 }
             });
         });
+        if !self.logs_note.is_empty() {
+            ui.add_space(4.0);
+            ui.label(egui::RichText::new(&self.logs_note).weak().small());
+        }
+        if clear {
+            self.logs.clear();
+            self.logs_since = Some(now_epoch());
+            self.logs_note = "已清空当前显示，仅显示之后的新日志。".into();
+            self.logs_at = None;
+        }
+        if reset {
+            self.logs_since = None;
+            self.logs_note.clear();
+            self.logs_at = None;
+        }
+        if export {
+            if let Some(path) = rfd::FileDialog::new()
+                .set_title("保存完整日志")
+                .set_file_name("flashserver.log")
+                .add_filter("日志", &["log", "txt"])
+                .save_file()
+            {
+                spawn_export_logs(self.tx.clone(), ui.ctx().clone(), path);
+            }
+        }
         ui.add_space(8.0);
         card_frame(ui)
             .inner_margin(egui::Margin::symmetric(12, 10))
@@ -1183,24 +1338,59 @@ impl App {
     }
 
     fn show_dialog(&mut self, ctx: &egui::Context) {
-        let Some(dialog) = &self.dialog else {
+        let Some(dialog) = self.dialog.as_ref() else {
             return;
         };
+        let title = dialog.title.clone();
+        let message = dialog.message.clone();
+        let destructive = matches!(
+            dialog.action,
+            Pending::StopService | Pending::DisableAutostart | Pending::Unload(_)
+        );
+        let dark = ctx.style().visuals.dark_mode;
         let mut close = false;
         let mut confirm = false;
-        egui::Window::new(&dialog.title)
+        egui::Window::new("confirm_dialog")
+            .title_bar(false)
+            .frame(dialog_frame(dark))
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
-                ui.set_min_width(320.0);
-                ui.label(&dialog.message);
-                ui.add_space(8.0);
+                ui.set_min_width(420.0);
                 ui.horizontal(|ui| {
-                    if ui.button("取消").clicked() {
+                    ui.label(egui::RichText::new(&title).size(16.0).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(egui::RichText::new("×").size(18.0))
+                                    .min_size(egui::vec2(28.0, 24.0)),
+                            )
+                            .clicked()
+                        {
+                            close = true;
+                        }
+                    });
+                });
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(12.0);
+                ui.label(&message);
+                ui.add_space(16.0);
+                ui.separator();
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    ui.add_space((ui.available_width() - 200.0).max(0.0));
+                    if button(ui, "取消").clicked() {
                         close = true;
                     }
-                    if ui.button("确认").clicked() {
+                    ui.add_space(8.0);
+                    let response = if destructive {
+                        destructive_button(ui, "确认")
+                    } else {
+                        primary_button(ui, "确认")
+                    };
+                    if response.clicked() {
                         confirm = true;
                     }
                 });
@@ -1243,7 +1433,7 @@ impl eframe::App for App {
                 .unwrap_or(true);
             if due {
                 self.logs_busy = true;
-                spawn_logs(self.tx.clone(), ctx.clone());
+                spawn_logs(self.tx.clone(), ctx.clone(), self.logs_since);
             }
         }
         let dark = ctx.style().visuals.dark_mode;
@@ -1263,7 +1453,7 @@ impl eframe::App for App {
                         self.tab = tab;
                         if tab == Tab::Logs {
                             self.logs_busy = true;
-                            spawn_logs(self.tx.clone(), ctx.clone());
+                            spawn_logs(self.tx.clone(), ctx.clone(), self.logs_since);
                         }
                     }
                     ui.add_space(2.0);
@@ -1357,20 +1547,28 @@ impl eframe::App for App {
 
 // ---------- widgets ----------
 
-fn card_fill(ui: &egui::Ui) -> egui::Color32 {
-    if ui.visuals().dark_mode {
+fn card_fill_dark(dark: bool) -> egui::Color32 {
+    if dark {
         egui::Color32::from_rgb(33, 33, 36)
     } else {
         egui::Color32::WHITE
     }
 }
 
-fn card_stroke(ui: &egui::Ui) -> egui::Stroke {
-    if ui.visuals().dark_mode {
+fn card_stroke_dark(dark: bool) -> egui::Stroke {
+    if dark {
         egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(52, 52, 58))
     } else {
         egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(222, 225, 230))
     }
+}
+
+fn card_fill(ui: &egui::Ui) -> egui::Color32 {
+    card_fill_dark(ui.visuals().dark_mode)
+}
+
+fn card_stroke(ui: &egui::Ui) -> egui::Stroke {
+    card_stroke_dark(ui.visuals().dark_mode)
 }
 
 fn side_fill(dark: bool) -> egui::Color32 {
@@ -1397,6 +1595,14 @@ fn card_frame(ui: &egui::Ui) -> egui::Frame {
         .inner_margin(egui::Margin::symmetric(14, 12))
 }
 
+fn dialog_frame(dark: bool) -> egui::Frame {
+    egui::Frame::NONE
+        .fill(card_fill_dark(dark))
+        .stroke(card_stroke_dark(dark))
+        .corner_radius(10)
+        .inner_margin(egui::Margin::symmetric(18, 16))
+}
+
 fn panel(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {
     card_frame(ui).show(ui, |ui| {
         let width = ui.available_width();
@@ -1407,6 +1613,11 @@ fn panel(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {
         ui.add_space(6.0);
         add(ui);
     });
+}
+
+fn pair(ui: &mut egui::Ui, label: &str, value: &str) {
+    ui.label(egui::RichText::new(label).weak().small());
+    ui.label(egui::RichText::new(value).size(13.0));
 }
 
 fn legend(ui: &mut egui::Ui, color: egui::Color32, text: &str) {
@@ -1513,7 +1724,12 @@ fn progress_width(ui: &egui::Ui) -> f32 {
     }
 }
 
-fn plot(ui: &mut egui::Ui, id: &str, height: f32, series: &[(&Vec<[f64; 2]>, egui::Color32)]) {
+fn plot(
+    ui: &mut egui::Ui,
+    id: &str,
+    height: f32,
+    series: &[(&str, &Vec<[f64; 2]>, egui::Color32)],
+) {
     use egui_plot::{Line, Plot, PlotPoints};
     Plot::new(id)
         .height(height)
@@ -1522,10 +1738,12 @@ fn plot(ui: &mut egui::Ui, id: &str, height: f32, series: &[(&Vec<[f64; 2]>, egu
         .allow_drag(false)
         .allow_zoom(false)
         .allow_scroll(false)
+        .label_formatter(|name, point| format!("{name}: {:.0}%", point.y))
+        .y_axis_formatter(|mark, _| format!("{:.0}%", mark.value))
         .show(ui, |plot_ui| {
-            for (points, color) in series {
+            for (name, points, color) in series {
                 let pts: PlotPoints = points.iter().copied().collect();
-                plot_ui.line(Line::new(pts).color(*color));
+                plot_ui.line(Line::new(pts).name(*name).color(*color));
             }
         });
 }
@@ -1546,6 +1764,24 @@ fn danger_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
         [96.0, 28.0],
         egui::Button::new(egui::RichText::new(text).color(red(ui))),
     )
+}
+
+fn destructive_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
+    ui.add_sized(
+        [96.0, 28.0],
+        egui::Button::new(egui::RichText::new(text).color(egui::Color32::WHITE))
+            .fill(egui::Color32::from_rgb(176, 54, 48)),
+    )
+}
+
+fn chip(ui: &mut egui::Ui, text: &str, color: egui::Color32) {
+    egui::Frame::NONE
+        .fill(color.gamma_multiply(0.18))
+        .corner_radius(10)
+        .inner_margin(egui::Margin::symmetric(9, 3))
+        .show(ui, |ui| {
+            ui.label(egui::RichText::new(text).color(color).small().strong());
+        });
 }
 
 fn accent(ui: &egui::Ui) -> egui::Color32 {
@@ -1672,21 +1908,25 @@ fn parse_hub_detail(v: &Value) -> HubDetail {
     }
 }
 
-fn parse_storage(v: &Value) -> Vec<(String, String)> {
-    v["areas"]
+fn parse_storage(v: &Value) -> (Vec<(String, String)>, f64) {
+    let mut total = 0.0;
+    let rows = v["areas"]
         .as_array()
         .map(|items| {
             items
                 .iter()
                 .map(|a| {
+                    let bytes = a["bytes"].as_f64().unwrap_or(0.0);
+                    total += bytes;
                     (
                         a["name"].as_str().unwrap_or("").to_string(),
-                        fmt_bytes(a["bytes"].as_f64().unwrap_or(0.0)),
+                        fmt_bytes(bytes),
                     )
                 })
                 .collect()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+    (rows, total)
 }
 
 fn push_point(points: &mut Vec<[f64; 2]>, x: f64, y: f32) {
@@ -1939,9 +2179,13 @@ fn spawn_unload(tx: Sender<Event>, ctx: egui::Context, ref_str: String) {
     });
 }
 
-fn spawn_logs(tx: Sender<Event>, ctx: egui::Context) {
+fn spawn_logs(tx: Sender<Event>, ctx: egui::Context, since: Option<u64>) {
     std::thread::spawn(move || {
-        let text = get_json("/v1/logs?kind=server&lines=300").map(|v| {
+        let mut path = String::from("/v1/logs?kind=server&lines=300");
+        if let Some(since) = since {
+            path.push_str(&format!("&since={since}"));
+        }
+        let text = get_json(&path).map(|v| {
             v["lines"]
                 .as_array()
                 .map(|lines| {
@@ -1956,6 +2200,37 @@ fn spawn_logs(tx: Sender<Event>, ctx: egui::Context) {
         let _ = tx.send(Event::Logs(text));
         ctx.request_repaint();
     });
+}
+
+fn spawn_export_logs(tx: Sender<Event>, ctx: egui::Context, path: PathBuf) {
+    std::thread::spawn(move || {
+        let result = (|| -> Result<(), String> {
+            let agent = ureq::AgentBuilder::new()
+                .timeout(Duration::from_secs(120))
+                .build();
+            let resp = agent
+                .get(&format!("{BASE}/v1/logs/download?kind=server"))
+                .call()
+                .map_err(|e| e.to_string())?;
+            let mut reader = resp.into_reader();
+            let mut file = std::fs::File::create(&path).map_err(|e| e.to_string())?;
+            std::io::copy(&mut reader, &mut file).map_err(|e| e.to_string())?;
+            Ok(())
+        })();
+        let note = match result {
+            Ok(()) => format!("已保存到 {}", path.display()),
+            Err(err) => format!("保存失败：{err}"),
+        };
+        let _ = tx.send(Event::LogsNote(note));
+        ctx.request_repaint();
+    });
+}
+
+fn now_epoch() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 // ---------- HTTP / service ----------
@@ -2172,11 +2447,52 @@ fn apply_theme(ctx: &egui::Context, dark: bool) {
     } else {
         visuals.panel_fill = egui::Color32::from_rgb(244, 245, 247);
         visuals.window_fill = egui::Color32::WHITE;
-        visuals.extreme_bg_color = egui::Color32::from_rgb(255, 255, 255);
+        visuals.extreme_bg_color = egui::Color32::WHITE;
         visuals.faint_bg_color = egui::Color32::from_rgb(248, 249, 250);
         visuals.selection.bg_fill = egui::Color32::from_rgb(0, 120, 212);
     }
-    ctx.set_visuals(visuals);
+    visuals.selection.stroke = egui::Stroke::new(1.0_f32, egui::Color32::WHITE);
+
+    let border = if dark {
+        egui::Color32::from_rgb(66, 66, 72)
+    } else {
+        egui::Color32::from_rgb(206, 211, 218)
+    };
+    let inactive_bg = if dark {
+        egui::Color32::from_rgb(44, 44, 48)
+    } else {
+        egui::Color32::from_rgb(252, 252, 253)
+    };
+    let hover_bg = if dark {
+        egui::Color32::from_rgb(56, 56, 61)
+    } else {
+        egui::Color32::from_rgb(242, 245, 249)
+    };
+    let active_bg = if dark {
+        egui::Color32::from_rgb(64, 64, 70)
+    } else {
+        egui::Color32::from_rgb(233, 238, 244)
+    };
+    let hover_border = if dark {
+        egui::Color32::from_rgb(82, 156, 214)
+    } else {
+        egui::Color32::from_rgb(120, 165, 210)
+    };
+    visuals.widgets.inactive.bg_fill = inactive_bg;
+    visuals.widgets.inactive.weak_bg_fill = inactive_bg;
+    visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0_f32, border);
+    visuals.widgets.inactive.corner_radius = egui::CornerRadius::same(6);
+    visuals.widgets.hovered.bg_fill = hover_bg;
+    visuals.widgets.hovered.weak_bg_fill = hover_bg;
+    visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0_f32, hover_border);
+    visuals.widgets.hovered.corner_radius = egui::CornerRadius::same(6);
+    visuals.widgets.active.bg_fill = active_bg;
+    visuals.widgets.active.weak_bg_fill = active_bg;
+    visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0_f32, hover_border);
+    visuals.widgets.active.corner_radius = egui::CornerRadius::same(6);
+    visuals.widgets.open = visuals.widgets.hovered;
+    visuals.window_stroke = egui::Stroke::new(1.0_f32, border);
+    visuals.menu_corner_radius = egui::CornerRadius::same(8);
 
     let mut style = (*ctx.style()).clone();
     style.spacing.item_spacing = egui::vec2(8.0, 6.0);
@@ -2193,8 +2509,12 @@ fn apply_theme(ctx: &egui::Context, dark: bool) {
         .insert(egui::TextStyle::Heading, egui::FontId::proportional(16.0));
     style
         .text_styles
+        .insert(egui::TextStyle::Small, egui::FontId::proportional(12.0));
+    style
+        .text_styles
         .insert(egui::TextStyle::Monospace, egui::FontId::monospace(13.0));
     ctx.set_style(style);
+    ctx.set_visuals(visuals);
 }
 
 fn install_fonts(ctx: &egui::Context) {
