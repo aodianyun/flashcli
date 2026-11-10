@@ -353,6 +353,36 @@ paths:
                   state: { type: string, const: unloaded }
         '400':
           $ref: '#/components/responses/Error'
+  /v1/models/clean:
+    post:
+      summary: Remove local bundle/weights caches for models
+      description: Loaded or in-flight models are skipped; weights shared with another cached ref are kept.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refs]
+              properties:
+                refs:
+                  type: array
+                  maxItems: 100
+                  items: { type: string }
+      responses:
+        '200':
+          description: Per-ref cleanup result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  freed_bytes: { type: integer, format: int64 }
+                  results:
+                    type: array
+                    items: { $ref: '#/components/schemas/CleanResult' }
+        '400':
+          $ref: '#/components/responses/Error'
   /v1/logs:
     get:
       summary: Tail daemon or per-model logs
@@ -495,6 +525,15 @@ components:
       type: object
       properties:
         error: { type: string }
+    CleanResult:
+      type: object
+      properties:
+        ref: { type: string }
+        removed: { type: boolean }
+        freed_bytes: { type: integer, format: int64 }
+        skipped: { type: string }
+        shared_bundle: { type: boolean }
+        shared_weights: { type: boolean }
     CatalogVersion:
       type: object
       properties:

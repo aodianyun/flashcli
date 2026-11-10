@@ -205,6 +205,21 @@ data: {"time":"2026-11-10T02:31:26Z","phase":"done"}</pre>
     </div>
 
     <div class="api">
+      <h2><span class="method post">POST</span><span class="path">/v1/models/clean</span></h2>
+      <p class="desc">删除本地 Bundle、权重和缓存记录。已加载或正在加载的模型会跳过；与其他模型共享的权重会保留。</p>
+      <h3>请求示例</h3>
+      <pre>{"refs":["flashcli-bundle/qwen3_8b_nvfp4:1.0.6","flashserver-smoke"]}</pre>
+      <h3>响应示例</h3>
+      <pre>{
+  "freed_bytes": 7663992466,
+  "results": [
+    {"ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.6","removed":true,"freed_bytes":7663992466},
+    {"ref":"flashserver-smoke","removed":false,"skipped":"loaded"}
+  ]
+}</pre>
+    </div>
+
+    <div class="api">
       <h2><span class="method post">POST</span><span class="path">/v1/pull</span></h2>
       <p class="desc">异步下载 bundle、运行时和权重，不启动推理服务。</p>
       <pre>{"ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.6"}</pre>
@@ -345,6 +360,7 @@ data: {"time":"2026-11-10T02:31:26Z","phase":"done"}</pre>
       <tr><td><span class="tag">GET</span></td><td><code>/v1/storage</code></td><td>缓存目录占用</td></tr>
       <tr><td><span class="tag">POST</span></td><td><code>/v1/models/load</code></td><td>加载模型（异步任务）</td></tr>
       <tr><td><span class="tag">POST</span></td><td><code>/v1/models/unload</code></td><td>卸载模型</td></tr>
+      <tr><td><span class="tag">POST</span></td><td><code>/v1/models/clean</code></td><td>清理本地模型缓存（多选）</td></tr>
       <tr><td><span class="tag">POST</span></td><td><code>/v1/pull</code></td><td>下载 bundle/权重（异步任务）</td></tr>
       <tr><td><span class="tag">GET</span></td><td><code>/v1/jobs/{id}</code></td><td>任务状态与事件</td></tr>
       <tr><td><span class="tag">GET</span></td><td><code>/v1/jobs/{id}/events</code></td><td>任务进度 SSE</td></tr>

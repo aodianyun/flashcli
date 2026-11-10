@@ -1,6 +1,6 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::{Duration, Instant};
@@ -113,6 +113,7 @@ enum Event {
     Storage(Value),
     Logs(Option<String>),
     LogsNote(String),
+    CleanNote(String),
     Status(String),
     Job(JobEvent),
     Catalog { repos: Vec<HubRepo>, total: i64 },
@@ -132,6 +133,7 @@ enum Pending {
     StopService,
     DisableAutostart,
     Unload(String),
+    Clean(Vec<String>),
     Quit,
 }
 
@@ -167,6 +169,9 @@ pub struct App {
     logs_at: Option<Instant>,
     logs_since: Option<u64>,
     logs_note: String,
+    selected_models: HashSet<String>,
+    known_models: HashSet<String>,
+    models_note: String,
     load_ref: String,
     load_status: String,
     loading: bool,
@@ -217,6 +222,9 @@ impl App {
             logs_at: None,
             logs_since: None,
             logs_note: String::new(),
+            selected_models: HashSet::new(),
+            known_models: HashSet::new(),
+            models_note: String::new(),
             load_ref: String::new(),
             load_status: String::new(),
             loading: false,
@@ -260,7 +268,10 @@ impl App {
                     }
                     self.system = Some(v);
                 }
-                Event::Models(v) => self.models = parse_models(&v, self.system.as_ref()),
+                Event::Models(v) => {
+                    self.models = parse_models(&v, self.system.as_ref());
+                    self.sync_model_selection();
+                }
                 Event::Storage(v) => {
                     let (areas, total) = parse_storage(&v);
                     self.storage = areas;
@@ -274,6 +285,7 @@ impl App {
                     self.logs_at = Some(Instant::now());
                 }
                 Event::LogsNote(note) => self.logs_note = note,
+                Event::CleanNote(note) => self.models_note = note,
                 Event::Status(text) => self.load_status = text,
                 Event::Job(job) => self.apply_job(job),
                 Event::Catalog { repos, total } => {
@@ -326,6 +338,22 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    fn sync_model_selection(&mut self) {
+        let cleanable: HashSet<String> = self
+            .models
+            .iter()
+            .filter(|m| !m.loaded)
+            .map(|m| m.name.clone())
+            .collect();
+        self.selected_models.retain(|r| cleanable.contains(r));
+        for name in &cleanable {
+            if !self.known_models.contains(name) {
+                self.selected_models.insert(name.clone());
+            }
+        }
+        self.known_models = self.models.iter().map(|m| m.name.clone()).collect();
     }
 
     fn overview(&mut self, ui: &mut egui::Ui) {
@@ -659,13 +687,46 @@ impl App {
         let total_bytes: f64 = self.models.iter().map(|m| m.total_bytes()).sum();
         let ready = self.models.iter().filter(|m| m.ready()).count();
         let loaded = self.models.iter().filter(|m| m.loaded).count();
+        let selected_bytes: f64 = self
+            .models
+            .iter()
+            .filter(|m| self.selected_models.contains(&m.name))
+            .map(|m| m.total_bytes())
+            .sum();
+        let selected_count = self.selected_models.len();
         ui.horizontal_wrapped(|ui| {
             stat(ui, "本地模型", &self.models.len().to_string());
             stat(ui, "已就绪", &ready.to_string());
             stat(ui, "已加载", &loaded.to_string());
             stat(ui, "总占用", &fmt_bytes(total_bytes));
         });
-        ui.add_space(6.0);
+        ui.add_space(4.0);
+        let mut clean_request: Option<Vec<String>> = None;
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new(format!(
+                    "已选 {} 个 · {}",
+                    selected_count,
+                    fmt_bytes(selected_bytes)
+                ))
+                .weak()
+                .small(),
+            );
+            if ui
+                .add_enabled(
+                    selected_count > 0,
+                    egui::Button::new(egui::RichText::new("清理所选").color(red(ui)))
+                        .min_size(egui::vec2(110.0, 28.0)),
+                )
+                .clicked()
+            {
+                clean_request = Some(self.selected_models.iter().cloned().collect());
+            }
+            if !self.models_note.is_empty() {
+                ui.label(egui::RichText::new(&self.models_note).weak().small());
+            }
+        });
+        ui.add_space(4.0);
         ui.horizontal(|ui| {
             let width = (ui.available_width() - 110.0).max(200.0);
             ui.add_sized(
@@ -688,6 +749,15 @@ impl App {
             return;
         }
 
+        let mut selected = self.selected_models.clone();
+        let cleanable: Vec<String> = self
+            .models
+            .iter()
+            .filter(|m| !m.loaded)
+            .map(|m| m.name.clone())
+            .collect();
+        let all_selected = !cleanable.is_empty() && cleanable.iter().all(|r| selected.contains(r));
+        let mut toggle_all: Option<bool> = None;
         let mut detail_request = None;
         let mut load_request = None;
         let mut pull_request = None;
@@ -695,6 +765,7 @@ impl App {
         TableBuilder::new(ui)
             .striped(true)
             .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+            .column(Column::exact(34.0))
             .column(Column::remainder())
             .column(Column::exact(86.0))
             .column(Column::exact(92.0))
@@ -702,6 +773,14 @@ impl App {
             .column(Column::exact(76.0))
             .column(Column::exact(96.0))
             .header(26.0, |mut header| {
+                header.col(|ui| {
+                    let mut all = all_selected;
+                    let response =
+                        ui.add_enabled(!cleanable.is_empty(), egui::Checkbox::new(&mut all, ""));
+                    if response.changed() {
+                        toggle_all = Some(all);
+                    }
+                });
                 for title in ["模型", "Bundle", "权重", "总大小", "状态", "操作"] {
                     header.col(|ui| {
                         ui.strong(title);
@@ -711,6 +790,21 @@ impl App {
             .body(|mut body| {
                 for m in &self.models {
                     body.row(32.0, |mut row| {
+                        row.col(|ui| {
+                            let mut checked = selected.contains(&m.name);
+                            let response =
+                                ui.add_enabled(!m.loaded, egui::Checkbox::new(&mut checked, ""));
+                            if response.changed() {
+                                if checked {
+                                    selected.insert(m.name.clone());
+                                } else {
+                                    selected.remove(&m.name);
+                                }
+                            }
+                            if m.loaded {
+                                response.on_disabled_hover_text("先卸载才能清理");
+                            }
+                        });
                         row.col(|ui| {
                             let response = ui.add(
                                 egui::Label::new(egui::RichText::new(&m.name).monospace())
@@ -760,8 +854,37 @@ impl App {
                     });
                 }
             });
+        if let Some(all) = toggle_all {
+            if all {
+                for name in cleanable {
+                    selected.insert(name);
+                }
+            } else {
+                for name in cleanable {
+                    selected.remove(&name);
+                }
+            }
+        }
+        self.selected_models = selected;
         if let Some(m) = detail_request {
             self.model_detail = Some(m);
+        }
+        if let Some(refs) = clean_request {
+            let bytes: f64 = self
+                .models
+                .iter()
+                .filter(|m| refs.contains(&m.name))
+                .map(|m| m.total_bytes())
+                .sum();
+            self.dialog = Some(DialogState {
+                title: "清理模型缓存".into(),
+                message: format!(
+                    "将删除所选 {} 个模型的本地 Bundle、权重和缓存记录（约 {}）。\n清理后需要重新下载才能使用；已加载的模型不会被清理。\n确定清理？",
+                    refs.len(),
+                    fmt_bytes(bytes)
+                ),
+                action: Pending::Clean(refs),
+            });
         }
         if let Some(name) = load_request {
             spawn_job(self.tx.clone(), ui.ctx().clone(), name, false);
@@ -1342,7 +1465,10 @@ impl App {
         let message = dialog.message.clone();
         let destructive = matches!(
             dialog.action,
-            Pending::StopService | Pending::DisableAutostart | Pending::Unload(_)
+            Pending::StopService
+                | Pending::DisableAutostart
+                | Pending::Unload(_)
+                | Pending::Clean(_)
         );
         let dark = ctx.style().visuals.dark_mode;
         let mut close = false;
@@ -1408,6 +1534,9 @@ impl App {
                 }
                 Pending::Unload(name) => {
                     spawn_unload(self.tx.clone(), ctx.clone(), name);
+                }
+                Pending::Clean(refs) => {
+                    spawn_clean(self.tx.clone(), ctx.clone(), refs);
                 }
                 Pending::Quit => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -2200,6 +2329,45 @@ fn spawn_hub_detail(tx: Sender<Event>, ctx: egui::Context, id: i64) {
             None => {
                 let _ = tx.send(Event::HubError("读取仓库失败，请稍后重试".to_string()));
             }
+        }
+        ctx.request_repaint();
+    });
+}
+
+fn spawn_clean(tx: Sender<Event>, ctx: egui::Context, refs: Vec<String>) {
+    std::thread::spawn(move || {
+        let body = serde_json::json!({ "refs": refs });
+        let note = match post_json("/v1/models/clean", &body) {
+            Ok(v) => {
+                let freed = v["freed_bytes"].as_f64().unwrap_or(0.0);
+                let results = v["results"].as_array();
+                let removed = results
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter(|r| r["removed"].as_bool().unwrap_or(false))
+                            .count()
+                    })
+                    .unwrap_or(0);
+                let skipped = results
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter(|r| !r["skipped"].as_str().unwrap_or("").is_empty())
+                            .count()
+                    })
+                    .unwrap_or(0);
+                let mut note = format!("已清理 {removed} 个模型，释放 {}", fmt_bytes(freed));
+                if skipped > 0 {
+                    note.push_str(&format!("；跳过 {skipped} 个（已加载/占用中）"));
+                }
+                note
+            }
+            Err(e) => format!("清理失败：{e}"),
+        };
+        let _ = tx.send(Event::CleanNote(note));
+        if let Some(v) = get_json("/v1/models") {
+            let _ = tx.send(Event::Models(v));
         }
         ctx.request_repaint();
     });

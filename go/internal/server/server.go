@@ -99,6 +99,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/jobs/{id}/events", s.jobEvents)
 	mux.HandleFunc("POST /v1/models/load", s.loadModel)
 	mux.HandleFunc("POST /v1/models/unload", s.unloadModel)
+	mux.HandleFunc("POST /v1/models/clean", s.cleanModels)
 	mux.HandleFunc("POST /v1/ui/chat", s.uiChat)
 	mux.HandleFunc("GET /", s.ui)
 	return s.authorize(mux)

@@ -242,6 +242,17 @@ func (m *Manager) Slots() (int, int) {
 	return len(m.instances) + m.pending, m.opts.MaxLoaded
 }
 
+// Busy reports whether a reference is loaded or currently being loaded.
+func (m *Manager) Busy(ref string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.instances[ref]; ok {
+		return true
+	}
+	_, ok := m.loading[ref]
+	return ok
+}
+
 // List returns resident models.
 func (m *Manager) List() []InstanceInfo {
 	m.mu.Lock()
