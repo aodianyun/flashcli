@@ -47,7 +47,7 @@ Source: "{#PayloadDir}\flashserver-linux-arm64"; DestDir: "{app}\payload"; Flags
 Source: "{#PayloadDir}\sha256sums.txt"; DestDir: "{app}\payload"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Tasks]
-Name: "desktopicon"; Description: "Create a desktop shortcut to the FlashServer console"; GroupDescription: "Additional icons:"
+Name: "desktopicon"; Description: "Create a desktop shortcut to the FlashServer client"; GroupDescription: "Additional icons:"
 
 [Icons]
 Name: "{autoprograms}\FlashServer"; Filename: "{app}\FlashServer.exe"
@@ -87,7 +87,8 @@ begin
     if SetupOK then
       WizardForm.FinishedLabel.Caption :=
         'FlashServer is installed and running.' + #13#10 + #13#10 +
-        'Health: http://localhost:8790/'
+        'Client: started automatically' + #13#10 +
+        'API docs: http://localhost:8790/docs'
     else
       WizardForm.FinishedLabel.Caption :=
         'FlashServer installation needs attention.' + #13#10 + #13#10 +
@@ -98,4 +99,4 @@ end;
 [Messages]
 WelcomeLabel2=This will install FlashServer, enable WSL2/Ubuntu, and configure the resident model scheduler.%n%nAdministrator privileges are required.
 FinishedHeadingLabel=FlashServer is installed
-FinishedLabel=FlashServer is installed and its service has been started.%n%nThe desktop client is opened automatically; you can also open http://localhost:8790/ in a browser.
+FinishedLabel=FlashServer is installed and its service has been started.%n%nThe desktop client is opened automatically; API docs are at http://localhost:8790/docs.

@@ -16,6 +16,7 @@ Requirements:
 - Inno Setup 6 (`ISCC.exe` on PATH or in the default Program Files location)
 - `dist/go/flashserver-setup-windows-amd64.exe`
 - `dist/go/flashcli-linux-*` and `dist/go/flashserver-linux-*`
+- `desktop/target/release/FlashServer.exe` (`cargo build --release` in `desktop/`)
 
 The output is written to `dist/windows/FlashServer-Setup-<version>.exe`.
 
@@ -28,6 +29,7 @@ UI installer (admin)
   → WSL2 / Ubuntu / systemd / flashserver.service
   → Windows ONSTART startup task
   → health check via localhost:8790
+  → launch FlashServer.exe (desktop client, egui/eframe)
 ```
 
 The UI installer runs the setup engine hidden and reports the final status in
@@ -38,5 +40,5 @@ run the installer again; the setup engine is idempotent.
 
 - The UI is only a wrapper; automation and troubleshooting should use
   `flashserver-setup.exe` directly.
-- A future Windows desktop client can use the existing flashserver API for
-  model load/unload and resource display.
+- The desktop client (`FlashServer.exe`) talks to the same HTTP/WebSocket API;
+  its API reference is served at `http://localhost:8790/docs`.

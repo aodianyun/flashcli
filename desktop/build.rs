@@ -1,6 +1,4 @@
 fn main() {
-    slint_build::compile("ui/app.slint").expect("slint build failed");
-
     #[cfg(windows)]
     {
         let mut res = winres::WindowsResource::new();

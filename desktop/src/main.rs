@@ -1,584 +1,1989 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::time::{Duration, Instant};
 
-slint::include_modules!();
-
-use std::process::Command;
-use std::time::Duration;
-
+use eframe::egui;
+use egui_extras::{Column, TableBuilder};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use slint::{Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, VecModel, Weak};
 
 const BASE: &str = "http://127.0.0.1:8790";
 
-#[derive(Clone, Default)]
-struct Charts {
-    gpu_util: Vec<f32>,
-    gpu_mem: Vec<f32>,
-    cpu: Vec<f32>,
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Tab {
+    Overview,
+    Models,
+    Logs,
+    Settings,
 }
 
-#[derive(Default)]
-struct History {
-    gpu_util: Vec<f32>,
-    gpu_mem: Vec<f32>,
-    cpu: Vec<f32>,
-}
-
-impl History {
-    fn push(&mut self, gpu_util: f32, gpu_mem: f32, cpu: f32) {
-        for (buf, value) in [
-            (&mut self.gpu_util, gpu_util),
-            (&mut self.gpu_mem, gpu_mem),
-            (&mut self.cpu, cpu),
-        ] {
-            buf.push(value.clamp(0.0, 100.0));
-            if buf.len() > 120 {
-                buf.remove(0);
-            }
-        }
-    }
-    fn snapshot(&self) -> Charts {
-        Charts {
-            gpu_util: self.gpu_util.clone(),
-            gpu_mem: self.gpu_mem.clone(),
-            cpu: self.cpu.clone(),
+impl Tab {
+    fn label(self) -> &'static str {
+        match self {
+            Tab::Overview => "概览",
+            Tab::Models => "模型",
+            Tab::Logs => "日志",
+            Tab::Settings => "设置",
         }
     }
 }
 
-fn main() {
-    // Software rendering is reliable on WSL/VM/RDP setups where OpenGL may be
-    // unavailable; allow an explicit override via SLINT_BACKEND.
-    if std::env::var_os("SLINT_BACKEND").is_none() {
-        std::env::set_var("SLINT_BACKEND", "winit-software");
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ModelTab {
+    Local,
+    Hub,
+}
+
+#[derive(Clone)]
+struct ModelRow {
+    name: String,
+    bundle_ready: bool,
+    weights_ready: bool,
+    bundle_bytes: f64,
+    weights_bytes: f64,
+    loaded: bool,
+    endpoint: String,
+    pid: i64,
+    loaded_at: String,
+}
+
+impl ModelRow {
+    fn total_bytes(&self) -> f64 {
+        self.bundle_bytes + self.weights_bytes
     }
 
-    let ui = AppWindow::new().expect("failed to create window");
-    ui.set_version("1.0.6.2026.11.06".into());
-
-    wire_callbacks(&ui);
-    start_ws(ui.as_weak());
-    start_poll(ui.as_weak());
-    refresh_async(ui.as_weak());
-
-    ui.run().expect("ui failed");
-}
-
-fn wire_callbacks(ui: &AppWindow) {
-    let weak = ui.as_weak();
-    ui.on_refresh(move || refresh_async(weak.clone()));
-
-    let weak = ui.as_weak();
-    ui.on_start_service(move || {
-        let weak = weak.clone();
-        std::thread::spawn(move || {
-            let result = start_service();
-            set_status(&weak, result);
-            std::thread::sleep(Duration::from_millis(800));
-            refresh_async(weak.clone());
-        });
-    });
-
-    let weak = ui.as_weak();
-    ui.on_stop_service(move || {
-        let weak = weak.clone();
-        std::thread::spawn(move || {
-            let result = stop_service();
-            set_status(&weak, result);
-            std::thread::sleep(Duration::from_millis(500));
-            refresh_async(weak.clone());
-        });
-    });
-
-    let weak = ui.as_weak();
-    ui.on_enable_autostart(move || {
-        let weak = weak.clone();
-        std::thread::spawn(move || {
-            let result = set_autostart(true);
-            set_status(&weak, result);
-            std::thread::sleep(Duration::from_secs(1));
-            refresh_async(weak.clone());
-        });
-    });
-
-    let weak = ui.as_weak();
-    ui.on_disable_autostart(move || {
-        let weak = weak.clone();
-        std::thread::spawn(move || {
-            let result = set_autostart(false);
-            set_status(&weak, result);
-            std::thread::sleep(Duration::from_secs(1));
-            refresh_async(weak.clone());
-        });
-    });
-
-    let weak = ui.as_weak();
-    ui.on_do_load(move |ref_str| {
-        let weak = weak.clone();
-        let ref_str = ref_str.to_string();
-        std::thread::spawn(move || load_model(weak, ref_str));
-    });
-
-    let weak = ui.as_weak();
-    ui.on_do_unload(move |ref_str| {
-        let weak = weak.clone();
-        let ref_str = ref_str.to_string();
-        std::thread::spawn(move || {
-            let body = serde_json::json!({ "ref": ref_str });
-            let result = post_json("/v1/models/unload", &body);
-            set_status(&weak, result.map(|_| "已卸载".to_string()));
-            refresh_async(weak.clone());
-        });
-    });
-
-    let weak = ui.as_weak();
-    ui.on_open_console(move || {
-        let _ = webbrowser::open(BASE);
-        let _ = weak;
-    });
-
-    ui.on_quit_app(|| std::process::exit(0));
-
-    let weak = ui.as_weak();
-    ui.on_load_logs(move || {
-        let weak = weak.clone();
-        std::thread::spawn(move || {
-            if let Some(v) = get_json("/v1/logs?kind=server&lines=300") {
-                let text = v["lines"]
-                    .as_array()
-                    .map(|lines| {
-                        lines
-                            .iter()
-                            .filter_map(|l| l.as_str())
-                            .collect::<Vec<_>>()
-                            .join("\n")
-                    })
-                    .unwrap_or_default();
-                let _ = slint::invoke_from_event_loop(move || {
-                    if let Some(ui) = weak.upgrade() {
-                        ui.set_logs(text.into());
-                    }
-                });
-            }
-        });
-    });
-
-    let weak = ui.as_weak();
-    ui.on_copy_text(move |text| {
-        if let Ok(mut clipboard) = arboard::Clipboard::new() {
-            let _ = clipboard.set_text(text.to_string());
-        }
-        let _ = weak;
-    });
-}
-
-fn set_status(weak: &Weak<AppWindow>, result: Result<String, String>) {
-    let message = match result {
-        Ok(m) => m,
-        Err(e) => format!("失败：{e}"),
-    };
-    let weak = weak.clone();
-    let _ = slint::invoke_from_event_loop(move || {
-        if let Some(ui) = weak.upgrade() {
-            ui.set_load_status(message.into());
-        }
-    });
-}
-
-// ---------- WebSocket ----------
-
-fn start_ws(weak: Weak<AppWindow>) {
-    std::thread::spawn(move || {
-        let mut history = History::default();
-        loop {
-            match ewebsock::connect("ws://127.0.0.1:8790/v1/ws", ewebsock::Options::default()) {
-                Ok((_sender, receiver)) => loop {
-                    let mut closed = false;
-                    while let Some(event) = receiver.try_recv() {
-                        match event {
-                            ewebsock::WsEvent::Message(ewebsock::WsMessage::Text(text)) => {
-                                handle_ws(&weak, &mut history, &text);
-                            }
-                            ewebsock::WsEvent::Closed | ewebsock::WsEvent::Error(_) => {
-                                closed = true;
-                                break;
-                            }
-                            _ => {}
-                        }
-                    }
-                    if closed {
-                        break;
-                    }
-                    std::thread::sleep(Duration::from_millis(100));
-                },
-                Err(_) => {
-                    set_offline(&weak);
-                    std::thread::sleep(Duration::from_secs(2));
-                }
-            }
-        }
-    });
-}
-
-fn handle_ws(weak: &Weak<AppWindow>, history: &mut History, text: &str) {
-    let Ok(value) = serde_json::from_str::<Value>(text) else {
-        return;
-    };
-    match value["type"].as_str().unwrap_or("") {
-        "system" => {
-            let data = &value["data"];
-            let gpu_util = data["gpu"][0]["utilization_gpu_pct"].as_f64().unwrap_or(0.0) as f32;
-            let mem_total = data["gpu"][0]["memory_total_bytes"].as_f64().unwrap_or(0.0);
-            let mem_used = data["gpu"][0]["memory_used_bytes"].as_f64().unwrap_or(0.0);
-            let gpu_mem = if mem_total > 0.0 { (mem_used / mem_total * 100.0) as f32 } else { 0.0 };
-            let cpu = data["cpu"]["usage_pct"].as_f64().unwrap_or(0.0) as f32;
-            history.push(gpu_util, gpu_mem, cpu);
-            let charts = history.snapshot();
-            let data = data.clone();
-            let weak = weak.clone();
-            let _ = slint::invoke_from_event_loop(move || {
-                if let Some(ui) = weak.upgrade() {
-                    apply_system(&ui, &data, Some(charts));
-                }
-            });
-        }
-        "job" => {
-            let data = &value["data"];
-            let event = &data["event"];
-            let msg = format!(
-                "{} {} {}",
-                data["type"].as_str().unwrap_or("job"),
-                event["phase"].as_str().unwrap_or(""),
-                event["message"].as_str().unwrap_or("")
-            );
-            let state = data["state"].as_str().unwrap_or("").to_string();
-            let weak = weak.clone();
-            let _ = slint::invoke_from_event_loop(move || {
-                if let Some(ui) = weak.upgrade() {
-                    ui.set_load_status(msg.trim().to_string().into());
-                    if state == "done" || state == "failed" {
-                        // the poll loop also refreshes; keep the message visible
-                    }
-                }
-            });
-        }
-        _ => {}
-    }
-}
-
-fn set_offline(weak: &Weak<AppWindow>) {
-    let weak = weak.clone();
-    let _ = slint::invoke_from_event_loop(move || {
-        if let Some(ui) = weak.upgrade() {
-            ui.set_running(false);
-            ui.set_status_text("已停止".into());
-        }
-    });
-}
-
-// ---------- HTTP polling ----------
-
-fn start_poll(weak: Weak<AppWindow>) {
-    std::thread::spawn(move || loop {
-        if let Some(system) = get_json("/v1/system") {
-            let weak2 = weak.clone();
-            let _ = slint::invoke_from_event_loop(move || {
-                if let Some(ui) = weak2.upgrade() {
-                    apply_system(&ui, &system, None);
-                }
-            });
-        }
-        if let Some(models) = get_json("/v1/models") {
-            if let Some(loaded) = get_json("/v1/models/loaded") {
-                let weak2 = weak.clone();
-                let _ = slint::invoke_from_event_loop(move || {
-                    if let Some(ui) = weak2.upgrade() {
-                        apply_models(&ui, &models, &loaded);
-                    }
-                });
-            }
-        }
-        if let Some(storage) = get_json("/v1/storage") {
-            let weak2 = weak.clone();
-            let _ = slint::invoke_from_event_loop(move || {
-                if let Some(ui) = weak2.upgrade() {
-                    apply_storage(&ui, &storage);
-                }
-            });
-        }
-        std::thread::sleep(Duration::from_secs(5));
-    });
-}
-
-fn refresh_async(weak: Weak<AppWindow>) {
-    std::thread::spawn(move || {
-        if let Some(system) = get_json("/v1/system") {
-            let weak2 = weak.clone();
-            let _ = slint::invoke_from_event_loop(move || {
-                if let Some(ui) = weak2.upgrade() {
-                    apply_system(&ui, &system, None);
-                }
-            });
+    fn status(&self) -> &'static str {
+        if self.loaded {
+            "已加载"
+        } else if self.bundle_ready && self.weights_ready {
+            "就绪"
+        } else if self.bundle_ready {
+            "缺权重"
         } else {
-            set_offline(&weak);
+            "缺 Bundle"
         }
-        if let Some(models) = get_json("/v1/models") {
-            if let Some(loaded) = get_json("/v1/models/loaded") {
-                let weak2 = weak.clone();
-                let _ = slint::invoke_from_event_loop(move || {
-                    if let Some(ui) = weak2.upgrade() {
-                        apply_models(&ui, &models, &loaded);
+    }
+
+    fn ready(&self) -> bool {
+        self.bundle_ready && self.weights_ready
+    }
+}
+
+#[derive(Clone)]
+struct HubRepo {
+    id: i64,
+    namespace: String,
+    name: String,
+    model_name: String,
+    tags: Vec<String>,
+    versions: i64,
+    downloads: i64,
+}
+
+#[derive(Clone)]
+struct HubVersion {
+    version: String,
+    size: f64,
+    files: i64,
+    status: String,
+}
+
+#[derive(Clone)]
+struct HubDetail {
+    repo_id: i64,
+    versions: Vec<HubVersion>,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+struct Settings {
+    dark: bool,
+}
+
+enum Event {
+    System(Value),
+    Models(Value),
+    Storage(Value),
+    Logs(Option<String>),
+    Status(String),
+    Job(JobEvent),
+    Catalog { repos: Vec<HubRepo>, total: i64 },
+    CatalogTags(Vec<(i64, String)>),
+    HubDetail(HubDetail),
+    HubError(String),
+}
+
+struct JobEvent {
+    phase: String,
+    message: String,
+    state: String,
+    verb: String,
+}
+
+enum Pending {
+    StopService,
+    DisableAutostart,
+    Unload(String),
+    Quit,
+}
+
+struct DialogState {
+    title: String,
+    message: String,
+    action: Pending,
+}
+
+pub struct App {
+    rx: Receiver<Event>,
+    tx: Sender<Event>,
+    tab: Tab,
+    model_tab: ModelTab,
+    dark: bool,
+    system: Option<Value>,
+    models: Vec<ModelRow>,
+    model_detail: Option<ModelRow>,
+    hub_query: String,
+    hub_tag: i64,
+    hub_tags: Vec<(i64, String)>,
+    hub_repos: Vec<HubRepo>,
+    hub_total: i64,
+    hub_selected: Option<i64>,
+    hub_detail: Option<HubDetail>,
+    hub_busy: bool,
+    hub_error: String,
+    storage: Vec<(String, String)>,
+    logs: String,
+    logs_busy: bool,
+    logs_at: Option<Instant>,
+    load_ref: String,
+    load_status: String,
+    loading: bool,
+    load_phase: String,
+    load_message: String,
+    load_pct: Option<f32>,
+    dialog: Option<DialogState>,
+    gpu_util: Vec<[f64; 2]>,
+    gpu_mem: Vec<[f64; 2]>,
+    cpu: Vec<[f64; 2]>,
+    x: f64,
+}
+
+impl App {
+    fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        install_fonts(&cc.egui_ctx);
+        let settings = load_settings();
+        let dark = settings.dark;
+        apply_theme(&cc.egui_ctx, dark);
+
+        let (tx, rx) = channel();
+        start_http(tx.clone(), cc.egui_ctx.clone());
+        start_ws(tx.clone(), cc.egui_ctx.clone());
+
+        Self {
+            rx,
+            tx,
+            tab: Tab::Overview,
+            model_tab: ModelTab::Local,
+            dark,
+            system: None,
+            models: Vec::new(),
+            model_detail: None,
+            hub_query: String::new(),
+            hub_tag: 0,
+            hub_tags: Vec::new(),
+            hub_repos: Vec::new(),
+            hub_total: 0,
+            hub_selected: None,
+            hub_detail: None,
+            hub_busy: false,
+            hub_error: String::new(),
+            storage: Vec::new(),
+            logs: String::new(),
+            logs_busy: false,
+            logs_at: None,
+            load_ref: String::new(),
+            load_status: String::new(),
+            loading: false,
+            load_phase: String::new(),
+            load_message: String::new(),
+            load_pct: None,
+            dialog: None,
+            gpu_util: Vec::new(),
+            gpu_mem: Vec::new(),
+            cpu: Vec::new(),
+            x: 0.0,
+        }
+    }
+
+    fn drain_events(&mut self) {
+        while let Ok(ev) = self.rx.try_recv() {
+            match ev {
+                Event::System(v) => {
+                    let t = v["uptime_seconds"].as_f64().unwrap_or(self.x + 1.0);
+                    if t + 0.5 < self.x {
+                        // Service restarted: uptime went backwards, start new charts.
+                        self.gpu_util.clear();
+                        self.gpu_mem.clear();
+                        self.cpu.clear();
                     }
-                });
-            }
-        }
-        if let Some(storage) = get_json("/v1/storage") {
-            let weak2 = weak.clone();
-            let _ = slint::invoke_from_event_loop(move || {
-                if let Some(ui) = weak2.upgrade() {
-                    apply_storage(&ui, &storage);
+                    if self.gpu_util.is_empty() || t - self.x >= 0.5 {
+                        self.x = t;
+                        let gpu = &v["gpu"][0];
+                        let util = gpu["utilization_gpu_pct"].as_f64().unwrap_or(0.0) as f32;
+                        let total = gpu["memory_total_bytes"].as_f64().unwrap_or(0.0);
+                        let used = gpu["memory_used_bytes"].as_f64().unwrap_or(0.0);
+                        let mem = if total > 0.0 {
+                            (used / total * 100.0) as f32
+                        } else {
+                            0.0
+                        };
+                        let cpu = v["cpu"]["usage_pct"].as_f64().unwrap_or(0.0) as f32;
+                        push_point(&mut self.gpu_util, t, util);
+                        push_point(&mut self.gpu_mem, t, mem);
+                        push_point(&mut self.cpu, t, cpu);
+                    }
+                    self.system = Some(v);
                 }
+                Event::Models(v) => self.models = parse_models(&v, self.system.as_ref()),
+                Event::Storage(v) => self.storage = parse_storage(&v),
+                Event::Logs(text) => {
+                    if let Some(text) = text {
+                        self.logs = text;
+                    }
+                    self.logs_busy = false;
+                    self.logs_at = Some(Instant::now());
+                }
+                Event::Status(text) => self.load_status = text,
+                Event::Job(job) => self.apply_job(job),
+                Event::Catalog { repos, total } => {
+                    self.hub_repos = repos;
+                    self.hub_total = total;
+                    self.hub_busy = false;
+                    self.hub_error.clear();
+                }
+                Event::CatalogTags(tags) => {
+                    self.hub_tags = tags;
+                    self.hub_busy = false;
+                }
+                Event::HubDetail(detail) => {
+                    self.hub_selected = Some(detail.repo_id);
+                    self.hub_detail = Some(detail);
+                    self.hub_busy = false;
+                }
+                Event::HubError(err) => {
+                    self.hub_error = err;
+                    self.hub_busy = false;
+                }
+            }
+        }
+    }
+
+    fn apply_job(&mut self, job: JobEvent) {
+        if !job.message.is_empty() {
+            if let Some(pct) = parse_pct(&job.message) {
+                self.load_pct = Some(pct);
+            }
+            self.load_message = job.message.clone();
+        }
+        if !job.phase.is_empty() {
+            self.load_phase = translate_phase(&job.phase).to_string();
+        }
+        match job.state.as_str() {
+            "running" => {
+                self.loading = true;
+                self.load_status.clear();
+            }
+            "done" => {
+                self.loading = false;
+                self.load_pct = Some(100.0);
+                self.load_message.clear();
+                self.load_status = format!("{}完成", job.verb);
+            }
+            "failed" => {
+                self.loading = false;
+                self.load_status = format!("{}失败：{}", job.verb, job.message);
+            }
+            _ => {}
+        }
+    }
+
+    fn overview(&mut self, ui: &mut egui::Ui) {
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                ui.label(egui::RichText::new("算力资源").small().strong().weak());
+                ui.add_space(8.0);
+                let width = ui.available_width();
+                let half = ((width - 12.0) / 2.0).max(320.0);
+                ui.horizontal_top(|ui| {
+                    ui.vertical(|ui| {
+                        ui.set_width(half);
+                        self.gpu_card(ui);
+                    });
+                    ui.add_space(12.0);
+                    ui.vertical(|ui| {
+                        ui.set_width((width - half - 12.0).max(320.0));
+                        self.cpu_card(ui);
+                    });
+                });
+                ui.add_space(12.0);
+                ui.horizontal_top(|ui| {
+                    ui.vertical(|ui| {
+                        ui.set_width(half);
+                        self.service_panel(ui);
+                    });
+                    ui.add_space(12.0);
+                    ui.vertical(|ui| {
+                        ui.set_width((width - half - 12.0).max(320.0));
+                        self.storage_panel(ui);
+                    });
+                });
             });
-        }
-    });
-}
-
-fn apply_system(ui: &AppWindow, v: &Value, charts: Option<Charts>) {
-    ui.set_running(true);
-    ui.set_status_text("运行中".into());
-    ui.set_version(v["version"].as_str().unwrap_or("").into());
-    ui.set_uptime_text(fmt_uptime(v["uptime_seconds"].as_f64().unwrap_or(0.0)).into());
-    ui.set_service_info(
-        format!(
-            "已加载 {}/{}",
-            v["loaded_count"].as_i64().unwrap_or(0),
-            match v["max_loaded"].as_i64().unwrap_or(0) {
-                0 => "不限".to_string(),
-                n => n.to_string(),
-            }
-        )
-        .into(),
-    );
-    ui.set_autostart(translate_autostart(v["autostart"].as_str().unwrap_or("unknown")).into());
-
-    let gpu = &v["gpu"][0];
-    if !gpu.is_null() {
-        let total = gpu["memory_total_bytes"].as_f64().unwrap_or(0.0);
-        let used = gpu["memory_used_bytes"].as_f64().unwrap_or(0.0);
-        ui.set_gpu_name(gpu["name"].as_str().unwrap_or("").into());
-        ui.set_gpu_util(gpu["utilization_gpu_pct"].as_f64().unwrap_or(0.0) as f32);
-        ui.set_gpu_mem(if total > 0.0 { (used / total * 100.0) as f32 } else { 0.0 });
-        ui.set_gpu_mem_text(format!("{} / {}", fmt_bytes(used), fmt_bytes(total)).into());
-        let mut meta = Vec::new();
-        if let Some(t) = gpu["temperature_c"].as_i64() {
-            meta.push(format!("{t}°C"));
-        }
-        if let (Some(cg), Some(cm)) = (
-            gpu["clock_graphics_mhz"].as_i64(),
-            gpu["clock_memory_mhz"].as_i64(),
-        ) {
-            meta.push(format!("{cg}/{cm} MHz"));
-        }
-        if let Some(cuda) = v["cuda_version"].as_str() {
-            let sm = v["sm"].as_str().unwrap_or("");
-            meta.push(format!("CUDA {cuda}"));
-            if !sm.is_empty() {
-                meta.push(format!("SM {sm}"));
-            }
-        }
-        if let Some(torch) = v["torch_index"].as_str() {
-            meta.push(format!("torch {torch}"));
-        }
-        ui.set_gpu_meta(meta.join(" · ").into());
-        ui.set_gpu_driver(gpu["driver_version"].as_str().unwrap_or("—").into());
-        ui.set_gpu_cuda(v["cuda_version"].as_str().unwrap_or("—").into());
-        let sm = v["sm"].as_str().unwrap_or("");
-        let cap = gpu["compute_cap"].as_str().unwrap_or("");
-        ui.set_gpu_sm(if sm.is_empty() {
-            "—".into()
-        } else if cap.is_empty() {
-            format!("sm{sm}").into()
-        } else {
-            format!("sm{sm} ({cap})").into()
-        });
-        ui.set_gpu_torch(v["torch_index"].as_str().unwrap_or("—").into());
-    } else {
-        ui.set_gpu_name("GPU 不可用".into());
-        ui.set_gpu_meta(v["gpu_error"].as_str().unwrap_or("nvidia-smi 不可用").into());
-        ui.set_gpu_driver("—".into());
-        ui.set_gpu_cuda("—".into());
-        ui.set_gpu_sm("—".into());
-        ui.set_gpu_torch("—".into());
     }
 
-    let cpu = &v["cpu"];
-    if !cpu.is_null() {
-        ui.set_cpu_name(cpu["model"].as_str().unwrap_or("").into());
-        let cores = cpu["cores"].as_i64().unwrap_or(0);
-        let threads = cpu["threads"].as_i64().unwrap_or(0);
-        let mhz = cpu["mhz"].as_f64().unwrap_or(0.0);
-        let l1 = cpu["load1"].as_f64().unwrap_or(0.0);
-        let l5 = cpu["load5"].as_f64().unwrap_or(0.0);
-        let l15 = cpu["load15"].as_f64().unwrap_or(0.0);
-        ui.set_cpu_meta(
-            format!("{cores}C/{threads}T · {mhz:.0} MHz · load {l1:.2}/{l5:.2}/{l15:.2}").into(),
-        );
-        ui.set_cpu_util(cpu["usage_pct"].as_f64().unwrap_or(0.0) as f32);
-        let per_core = cpu["per_core_pct"].as_array().cloned().unwrap_or_default();
-        let items: Vec<CoreItem> = per_core
-            .iter()
-            .enumerate()
-            .map(|(i, v)| CoreItem {
-                label: format!("C{i}").into(),
-                value: v.as_f64().unwrap_or(0.0) as f32,
-            })
-            .collect();
-        let mid = (items.len() + 1) / 2;
-        let (left, right) = items.split_at(mid);
-        ui.set_cores_left(ModelRc::new(VecModel::from(left.to_vec())));
-        ui.set_cores_right(ModelRc::new(VecModel::from(right.to_vec())));
-        let mem_total = cpu["mem_total_bytes"].as_f64().unwrap_or(0.0);
-        let mem_used = cpu["mem_used_bytes"].as_f64().unwrap_or(0.0);
-        ui.set_mem_text(format!("{} / {}", fmt_bytes(mem_used), fmt_bytes(mem_total)).into());
-        ui.set_mem_pct(if mem_total > 0.0 { (mem_used / mem_total * 100.0) as f32 } else { 0.0 });
-        let swap_total = cpu["swap_total_bytes"].as_f64().unwrap_or(0.0);
-        let swap_used = cpu["swap_used_bytes"].as_f64().unwrap_or(0.0);
-        ui.set_swap_text(if swap_total > 0.0 {
-            format!("{} / {}", fmt_bytes(swap_used), fmt_bytes(swap_total))
-        } else {
-            "—".to_string()
-        }.into());
-        ui.set_swap_pct(if swap_total > 0.0 { (swap_used / swap_total * 100.0) as f32 } else { 0.0 });
-    }
-
-    let mut loaded = Vec::new();
-    for item in v["loaded"].as_array().cloned().unwrap_or_default() {
-        let pid = item["pid"].as_i64().unwrap_or(0);
-        let loaded_at = item["loaded_at"].as_str().unwrap_or("");
-        loaded.push(LoadedItem {
-            name: item["ref"].as_str().unwrap_or("").into(),
-            endpoint: item["endpoint"].as_str().unwrap_or("").into(),
-            meta: format!("PID {pid} · {loaded_at}").into(),
-        });
-    }
-    ui.set_loaded(ModelRc::new(VecModel::from(loaded)));
-
-    if let Some(c) = charts {
-        ui.set_gpu_chart(render_chart(
-            &[(&c.gpu_util, (26, 115, 232)), (&c.gpu_mem, (52, 168, 83))],
-            640,
-            76,
-        ));
-        ui.set_cpu_chart(render_chart(&[(&c.cpu, (251, 188, 4))], 640, 48));
-    }
-}
-
-fn apply_models(ui: &AppWindow, models: &Value, loaded: &Value) {
-    let loaded_refs: Vec<String> = loaded["models"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default()
-        .iter()
-        .filter_map(|m| m["ref"].as_str().map(|s| s.to_string()))
-        .collect();
-    let items: Vec<ModelItem> = models["models"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default()
-        .iter()
-        .map(|m| {
-            let name = m["ref"].as_str().unwrap_or("").to_string();
-            let ready = m["bundle_cached"].as_bool().unwrap_or(false)
-                && m["weights_cached"].as_bool().unwrap_or(false);
-            let bytes = m["bundle_bytes"].as_f64().unwrap_or(0.0)
-                + m["weights_bytes"].as_f64().unwrap_or(0.0);
-            ModelItem {
-                name: name.clone().into(),
-                status: if ready { "就绪".into() } else { "缺失".into() },
-                size: fmt_bytes(bytes).into(),
-                loaded: loaded_refs.contains(&name),
-                ready,
-            }
-        })
-        .collect();
-    ui.set_models(ModelRc::new(VecModel::from(items)));
-}
-
-fn apply_storage(ui: &AppWindow, storage: &Value) {
-    let items: Vec<StorageItem> = storage["areas"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default()
-        .iter()
-        .map(|a| StorageItem {
-            name: a["name"].as_str().unwrap_or("").into(),
-            size: fmt_bytes(a["bytes"].as_f64().unwrap_or(0.0)).into(),
-        })
-        .collect();
-    ui.set_storage(ModelRc::new(VecModel::from(items)));
-}
-
-// ---------- actions ----------
-
-fn load_model(weak: Weak<AppWindow>, ref_str: String) {
-    let body = serde_json::json!({ "ref": ref_str, "async": true });
-    let result = post_json("/v1/models/load", &body);
-    match result {
-        Ok(v) => {
-            let job = v["job_id"].as_str().unwrap_or("").to_string();
-            if job.is_empty() {
-                set_status(&weak, Ok("已加载".into()));
-                refresh_async(weak);
+    fn gpu_card(&self, ui: &mut egui::Ui) {
+        panel(ui, "显卡", |ui| {
+            let Some(sys) = &self.system else {
+                ui.label("等待数据…");
+                return;
+            };
+            let gpu = &sys["gpu"][0];
+            if gpu.is_null() {
+                ui.label(egui::RichText::new("GPU 不可用").strong().color(red(ui)));
+                ui.label(sys["gpu_error"].as_str().unwrap_or("nvidia-smi 不可用"));
                 return;
             }
-            for _ in 0..2400 {
-                std::thread::sleep(Duration::from_millis(700));
-                let Some(j) = get_json(&format!("/v1/jobs/{job}")) else {
-                    continue;
-                };
-                let state = j["state"].as_str().unwrap_or("");
-                let phase = j["events"]
-                    .as_array()
-                    .and_then(|e| e.last())
-                    .and_then(|e| e["phase"].as_str())
-                    .unwrap_or("");
-                let message = j["events"]
-                    .as_array()
-                    .and_then(|e| e.last())
-                    .and_then(|e| e["message"].as_str())
-                    .unwrap_or("");
-                set_status(&weak, Ok(format!("{phase} {message}").trim().to_string()));
-                if state == "done" {
-                    set_status(&weak, Ok("加载完成".into()));
-                    refresh_async(weak.clone());
-                    return;
-                }
-                if state == "failed" {
-                    set_status(&weak, Err(j["error"].as_str().unwrap_or("load failed").to_string()));
-                    return;
+            ui.label(
+                egui::RichText::new(gpu["name"].as_str().unwrap_or("GPU"))
+                    .strong()
+                    .size(15.0),
+            );
+            let mut meta = Vec::new();
+            if let Some(t) = gpu["temperature_c"].as_i64() {
+                meta.push(format!("{t}°C"));
+            }
+            if let (Some(cg), Some(cm)) = (
+                gpu["clock_graphics_mhz"].as_i64(),
+                gpu["clock_memory_mhz"].as_i64(),
+            ) {
+                meta.push(format!("{cg}/{cm} MHz"));
+            }
+            if let Some(limit) = gpu["power_limit_w"].as_f64() {
+                match gpu["power_draw_w"].as_f64() {
+                    Some(draw) => meta.push(format!("{draw:.0}/{limit:.0} W")),
+                    None => meta.push(format!("≤{limit:.0} W")),
                 }
             }
-            set_status(&weak, Err("加载超时".into()));
+            if let Some(fan) = gpu["fan_speed_pct"].as_i64() {
+                meta.push(format!("风扇 {fan}%"));
+            }
+            egui::Grid::new("gpu_env")
+                .num_columns(2)
+                .spacing([14.0, 4.0])
+                .show(ui, |ui| {
+                    kv(ui, "驱动", gpu["driver_version"].as_str().unwrap_or("—"));
+                    kv(ui, "CUDA", sys["cuda_version"].as_str().unwrap_or("—"));
+                    let sm = sys["sm"].as_str().unwrap_or("");
+                    let cap = gpu["compute_cap"].as_str().unwrap_or("");
+                    let sm_text = if sm.is_empty() {
+                        "—".to_string()
+                    } else if cap.is_empty() {
+                        format!("sm{sm}")
+                    } else {
+                        format!("sm{sm} ({cap})")
+                    };
+                    kv(ui, "计算能力", &sm_text);
+                    kv(ui, "torch", sys["torch_index"].as_str().unwrap_or("—"));
+                    kv(ui, "状态", &meta.join(" · "));
+                });
+            ui.add_space(2.0);
+            ui.horizontal(|ui| {
+                legend(ui, egui::Color32::from_rgb(55, 148, 255), "利用率");
+                legend(ui, egui::Color32::from_rgb(78, 201, 176), "显存");
+            });
+            plot(
+                ui,
+                "gpu_plot",
+                150.0,
+                &[
+                    (&self.gpu_util, egui::Color32::from_rgb(55, 148, 255)),
+                    (&self.gpu_mem, egui::Color32::from_rgb(78, 201, 176)),
+                ],
+            );
+        });
+    }
+
+    fn cpu_card(&self, ui: &mut egui::Ui) {
+        panel(ui, "处理器", |ui| {
+            let Some(sys) = &self.system else {
+                ui.label("等待数据…");
+                return;
+            };
+            let cpu = &sys["cpu"];
+            ui.label(
+                egui::RichText::new(cpu["model"].as_str().unwrap_or("CPU"))
+                    .strong()
+                    .size(15.0),
+            );
+            egui::Grid::new("cpu_info")
+                .num_columns(2)
+                .spacing([14.0, 4.0])
+                .show(ui, |ui| {
+                    kv(
+                        ui,
+                        "核心/线程",
+                        &format!(
+                            "{}C / {}T",
+                            cpu["cores"].as_i64().unwrap_or(0),
+                            cpu["threads"].as_i64().unwrap_or(0)
+                        ),
+                    );
+                    kv(
+                        ui,
+                        "当前频率",
+                        &format!("{:.0} MHz", cpu["mhz"].as_f64().unwrap_or(0.0)),
+                    );
+                    kv(
+                        ui,
+                        "负载 1m",
+                        &format!("{:.2}", cpu["load1"].as_f64().unwrap_or(0.0)),
+                    );
+                    kv(
+                        ui,
+                        "负载 5m",
+                        &format!("{:.2}", cpu["load5"].as_f64().unwrap_or(0.0)),
+                    );
+                    kv(
+                        ui,
+                        "负载 15m",
+                        &format!("{:.2}", cpu["load15"].as_f64().unwrap_or(0.0)),
+                    );
+                });
+            ui.add_space(2.0);
+            ui.horizontal(|ui| {
+                legend(ui, egui::Color32::from_rgb(215, 186, 125), "利用率");
+            });
+            plot(
+                ui,
+                "cpu_plot",
+                150.0,
+                &[(&self.cpu, egui::Color32::from_rgb(215, 186, 125))],
+            );
+        });
+    }
+
+    fn service_panel(&self, ui: &mut egui::Ui) {
+        panel(ui, "服务状态", |ui| {
+            let Some(sys) = &self.system else {
+                ui.label("服务未运行");
+                return;
+            };
+            let loaded = format!(
+                "{} / {}",
+                sys["loaded_count"].as_i64().unwrap_or(0),
+                match sys["max_loaded"].as_i64().unwrap_or(0) {
+                    0 => "不限".to_string(),
+                    n => n.to_string(),
+                }
+            );
+            ui.horizontal_wrapped(|ui| {
+                stat(
+                    ui,
+                    "运行时长",
+                    &fmt_uptime(sys["uptime_seconds"].as_f64().unwrap_or(0.0)),
+                );
+                stat(
+                    ui,
+                    "开机启动",
+                    translate_autostart(sys["autostart"].as_str().unwrap_or("unknown")),
+                );
+                stat(ui, "监听", "8790");
+                stat(
+                    ui,
+                    "认证",
+                    if sys["auth"].as_bool().unwrap_or(false) {
+                        "已开启"
+                    } else {
+                        "未开启"
+                    },
+                );
+                stat(ui, "已加载", &loaded);
+            });
+        });
+    }
+
+    fn storage_panel(&self, ui: &mut egui::Ui) {
+        panel(ui, "磁盘占用", |ui| {
+            if self.storage.is_empty() {
+                ui.label("—");
+                return;
+            }
+            ui.horizontal_wrapped(|ui| {
+                for (name, size) in &self.storage {
+                    stat(ui, name, size);
+                }
+            });
+        });
+    }
+
+    fn models_page(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            if ui
+                .selectable_label(self.model_tab == ModelTab::Local, "本地模型")
+                .clicked()
+            {
+                self.model_tab = ModelTab::Local;
+            }
+            if ui
+                .selectable_label(self.model_tab == ModelTab::Hub, "FlashHub")
+                .clicked()
+            {
+                self.model_tab = ModelTab::Hub;
+                if self.hub_repos.is_empty() && !self.hub_busy {
+                    self.load_hub(ui.ctx());
+                }
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if self.hub_busy {
+                    ui.add(egui::Spinner::new().size(14.0));
+                }
+            });
+        });
+        ui.add_space(6.0);
+        self.load_progress(ui);
+        match self.model_tab {
+            ModelTab::Local => self.local_models(ui),
+            ModelTab::Hub => self.hub_models(ui),
         }
-        Err(e) => set_status(&weak, Err(e)),
+        self.show_model_detail(ui.ctx());
+    }
+
+    fn load_progress(&self, ui: &mut egui::Ui) {
+        if !self.loading && self.load_status.is_empty() {
+            return;
+        }
+        ui.add_space(6.0);
+        card_frame(ui).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                if self.loading {
+                    ui.add(egui::Spinner::new().size(14.0));
+                    ui.label(
+                        egui::RichText::new(&self.load_phase)
+                            .strong()
+                            .color(accent(ui)),
+                    );
+                    if !self.load_message.is_empty() {
+                        ui.label(egui::RichText::new(&self.load_message).weak().small());
+                    }
+                } else {
+                    let color = if self.load_status.contains("失败") {
+                        red(ui)
+                    } else {
+                        green(ui)
+                    };
+                    ui.label(egui::RichText::new(&self.load_status).color(color));
+                }
+            });
+            if self.loading {
+                let bar = match self.load_pct {
+                    Some(pct) => egui::ProgressBar::new((pct / 100.0).clamp(0.0, 1.0))
+                        .desired_width(progress_width(ui))
+                        .show_percentage(),
+                    None => egui::ProgressBar::new(0.0)
+                        .desired_width(progress_width(ui))
+                        .animate(true),
+                };
+                ui.add(bar);
+            }
+        });
+    }
+
+    fn local_models(&mut self, ui: &mut egui::Ui) {
+        let total_bytes: f64 = self.models.iter().map(|m| m.total_bytes()).sum();
+        let ready = self.models.iter().filter(|m| m.ready()).count();
+        let loaded = self.models.iter().filter(|m| m.loaded).count();
+        ui.horizontal_wrapped(|ui| {
+            stat(ui, "本地模型", &self.models.len().to_string());
+            stat(ui, "已就绪", &ready.to_string());
+            stat(ui, "已加载", &loaded.to_string());
+            stat(ui, "总占用", &fmt_bytes(total_bytes));
+        });
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            let width = (ui.available_width() - 110.0).max(200.0);
+            ui.add_sized(
+                [width, 28.0],
+                egui::TextEdit::singleline(&mut self.load_ref)
+                    .hint_text("flashcli-bundle/<name>:<version>"),
+            );
+            if ui.button("加载").clicked() {
+                let ref_str = self.load_ref.trim().to_string();
+                if !ref_str.is_empty() {
+                    spawn_job(self.tx.clone(), ui.ctx().clone(), ref_str, false);
+                }
+            }
+        });
+        ui.add_space(8.0);
+        if self.models.is_empty() {
+            ui.label("本地还没有缓存模型。切到「FlashHub」搜索并加载。");
+            return;
+        }
+
+        let mut detail_request = None;
+        let mut load_request = None;
+        let mut pull_request = None;
+        let mut unload_request = None;
+        TableBuilder::new(ui)
+            .striped(true)
+            .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+            .column(Column::remainder())
+            .column(Column::exact(86.0))
+            .column(Column::exact(92.0))
+            .column(Column::exact(86.0))
+            .column(Column::exact(76.0))
+            .column(Column::exact(96.0))
+            .header(26.0, |mut header| {
+                for title in ["模型", "Bundle", "权重", "总大小", "状态", "操作"] {
+                    header.col(|ui| {
+                        ui.strong(title);
+                    });
+                }
+            })
+            .body(|mut body| {
+                for m in &self.models {
+                    body.row(32.0, |mut row| {
+                        row.col(|ui| {
+                            let response = ui.add(
+                                egui::Label::new(egui::RichText::new(&m.name).monospace())
+                                    .sense(egui::Sense::click()),
+                            );
+                            if response.clicked() {
+                                detail_request = Some(m.clone());
+                            }
+                        });
+                        row.col(|ui| {
+                            size_cell(ui, m.bundle_ready, m.bundle_bytes);
+                        });
+                        row.col(|ui| {
+                            size_cell(ui, m.weights_ready, m.weights_bytes);
+                        });
+                        row.col(|ui| {
+                            ui.label(fmt_bytes(m.total_bytes()));
+                        });
+                        row.col(|ui| {
+                            ui.label(egui::RichText::new(m.status()).color(
+                                if m.loaded || m.ready() {
+                                    green(ui)
+                                } else {
+                                    red(ui)
+                                },
+                            ));
+                        });
+                        row.col(|ui| {
+                            if m.loaded {
+                                if ui
+                                    .add(egui::Button::new(
+                                        egui::RichText::new("卸载").color(red(ui)),
+                                    ))
+                                    .clicked()
+                                {
+                                    unload_request = Some(m.name.clone());
+                                }
+                            } else if m.ready() {
+                                if ui.small_button("加载").clicked() {
+                                    load_request = Some(m.name.clone());
+                                }
+                            } else if ui.small_button("下载").clicked() {
+                                pull_request = Some(m.name.clone());
+                            }
+                        });
+                    });
+                }
+            });
+        if let Some(m) = detail_request {
+            self.model_detail = Some(m);
+        }
+        if let Some(name) = load_request {
+            spawn_job(self.tx.clone(), ui.ctx().clone(), name, false);
+        }
+        if let Some(name) = pull_request {
+            spawn_job(self.tx.clone(), ui.ctx().clone(), name, true);
+        }
+        if let Some(name) = unload_request {
+            self.dialog = Some(DialogState {
+                title: "卸载模型".into(),
+                message: format!(
+                    "卸载后该模型的推理服务会停止，权重和缓存保留。\n确定卸载 {name}？"
+                ),
+                action: Pending::Unload(name),
+            });
+        }
+    }
+
+    fn hub_models(&mut self, ui: &mut egui::Ui) {
+        let mut run_search = false;
+        ui.horizontal(|ui| {
+            let resp = ui.add_sized(
+                [240.0, 28.0],
+                egui::TextEdit::singleline(&mut self.hub_query).hint_text("搜索 FlashHub 模型"),
+            );
+            let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            let tags = self.hub_tags.clone();
+            let mut tag_label = "全部分类".to_string();
+            for (id, name) in &tags {
+                if *id == self.hub_tag {
+                    tag_label = name.clone();
+                }
+            }
+            egui::ComboBox::from_id_salt("hub_tag")
+                .selected_text(tag_label)
+                .width(120.0)
+                .show_ui(ui, |ui| {
+                    if ui
+                        .selectable_value(&mut self.hub_tag, 0, "全部分类")
+                        .clicked()
+                    {
+                        run_search = true;
+                    }
+                    for (id, name) in &tags {
+                        if ui.selectable_value(&mut self.hub_tag, *id, name).clicked() {
+                            run_search = true;
+                        }
+                    }
+                });
+            if ui.button("搜索").clicked() || enter {
+                run_search = true;
+            }
+        });
+        if run_search {
+            self.load_hub(ui.ctx());
+        }
+        if !self.hub_error.is_empty() {
+            ui.label(egui::RichText::new(&self.hub_error).color(red(ui)).small());
+        }
+        ui.add_space(4.0);
+        ui.label(
+            egui::RichText::new(format!("共 {} 个仓库", self.hub_total))
+                .weak()
+                .small(),
+        );
+        if self.hub_repos.is_empty() {
+            if !self.hub_busy {
+                ui.label("没有结果。检查网络或换个关键词。");
+            }
+            return;
+        }
+
+        let mut selected = None;
+        TableBuilder::new(ui)
+            .id_salt("hub_repos")
+            .striped(true)
+            .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+            .column(Column::remainder())
+            .column(Column::exact(230.0))
+            .column(Column::exact(100.0))
+            .column(Column::exact(56.0))
+            .column(Column::exact(64.0))
+            .max_scroll_height(320.0)
+            .header(26.0, |mut header| {
+                for title in ["仓库", "模型", "分类", "版本", "下载"] {
+                    header.col(|ui| {
+                        ui.strong(title);
+                    });
+                }
+            })
+            .body(|mut body| {
+                for r in &self.hub_repos {
+                    body.row(30.0, |mut row| {
+                        row.col(|ui| {
+                            let label = format!("{}/{}", r.namespace, r.name);
+                            if ui
+                                .selectable_label(
+                                    self.hub_selected == Some(r.id),
+                                    egui::RichText::new(label).monospace(),
+                                )
+                                .clicked()
+                            {
+                                selected = Some(r.id);
+                            }
+                        });
+                        row.col(|ui| {
+                            ui.label(egui::RichText::new(&r.model_name).weak().small());
+                        });
+                        row.col(|ui| {
+                            ui.label(egui::RichText::new(r.tags.join(" ")).small());
+                        });
+                        row.col(|ui| {
+                            ui.label(r.versions.to_string());
+                        });
+                        row.col(|ui| {
+                            ui.label(r.downloads.to_string());
+                        });
+                    });
+                }
+            });
+        if let Some(id) = selected {
+            self.select_hub(id, ui.ctx());
+        }
+
+        let Some(detail) = self.hub_detail.clone() else {
+            return;
+        };
+        let Some(repo) = self
+            .hub_repos
+            .iter()
+            .find(|r| r.id == detail.repo_id)
+            .cloned()
+        else {
+            return;
+        };
+        ui.add_space(10.0);
+        let mut load_ref = None;
+        panel(ui, "版本", |ui| {
+            ui.horizontal(|ui| {
+                ui.label(
+                    egui::RichText::new(format!("{}/{}", repo.namespace, repo.name))
+                        .monospace()
+                        .strong(),
+                );
+                ui.label(egui::RichText::new(&repo.model_name).weak().small());
+            });
+            ui.add_space(4.0);
+            if detail.versions.is_empty() {
+                ui.label("该仓库没有公开版本。");
+                return;
+            }
+            TableBuilder::new(ui)
+                .id_salt("hub_versions")
+                .striped(true)
+                .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+                .column(Column::exact(110.0))
+                .column(Column::exact(110.0))
+                .column(Column::exact(70.0))
+                .column(Column::exact(110.0))
+                .column(Column::remainder())
+                .header(24.0, |mut header| {
+                    for title in ["版本", "Bundle 大小", "文件", "状态", "操作"] {
+                        header.col(|ui| {
+                            ui.strong(title);
+                        });
+                    }
+                })
+                .body(|mut body| {
+                    for v in &detail.versions {
+                        body.row(30.0, |mut row| {
+                            row.col(|ui| {
+                                ui.monospace(&v.version);
+                            });
+                            row.col(|ui| {
+                                ui.label(fmt_bytes(v.size));
+                            });
+                            row.col(|ui| {
+                                ui.label(v.files.to_string());
+                            });
+                            row.col(|ui| {
+                                ui.label(egui::RichText::new(&v.status).weak().small());
+                            });
+                            row.col(|ui| {
+                                if ui.small_button("加载").clicked() {
+                                    load_ref = Some(format!(
+                                        "{}/{}:{}",
+                                        repo.namespace, repo.name, v.version
+                                    ));
+                                }
+                            });
+                        });
+                    }
+                });
+        });
+        if let Some(reference) = load_ref {
+            spawn_job(self.tx.clone(), ui.ctx().clone(), reference, false);
+        }
+    }
+
+    fn load_hub(&mut self, ctx: &egui::Context) {
+        self.hub_busy = true;
+        self.hub_error.clear();
+        self.hub_detail = None;
+        self.hub_selected = None;
+        let query = self.hub_query.trim().to_string();
+        let tag = if self.hub_tag > 0 {
+            Some(self.hub_tag)
+        } else {
+            None
+        };
+        spawn_catalog(self.tx.clone(), ctx.clone(), query, tag);
+        if self.hub_tags.is_empty() {
+            spawn_catalog_tags(self.tx.clone(), ctx.clone());
+        }
+    }
+
+    fn select_hub(&mut self, id: i64, ctx: &egui::Context) {
+        self.hub_selected = Some(id);
+        self.hub_detail = None;
+        self.hub_busy = true;
+        spawn_hub_detail(self.tx.clone(), ctx.clone(), id);
+    }
+
+    fn show_model_detail(&mut self, ctx: &egui::Context) {
+        let Some(model) = self.model_detail.clone() else {
+            return;
+        };
+        let mut open = true;
+        let mut close = false;
+        let mut load = false;
+        let mut unload = false;
+        let mut pull = false;
+        egui::Window::new("模型详情")
+            .open(&mut open)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.set_min_width(480.0);
+                ui.label(
+                    egui::RichText::new(&model.name)
+                        .monospace()
+                        .strong()
+                        .size(14.0),
+                );
+                ui.add_space(4.0);
+                let (status_color, status) = if model.loaded {
+                    (green(ui), "已加载")
+                } else if model.ready() {
+                    (green(ui), "就绪")
+                } else if model.bundle_ready {
+                    (red(ui), "缺权重")
+                } else {
+                    (red(ui), "缺 Bundle")
+                };
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("状态").weak());
+                    ui.label(egui::RichText::new(status).color(status_color));
+                });
+                egui::Grid::new("model_detail")
+                    .num_columns(2)
+                    .spacing([18.0, 6.0])
+                    .show(ui, |ui| {
+                        kv(
+                            ui,
+                            "Bundle",
+                            &size_text(model.bundle_ready, model.bundle_bytes),
+                        );
+                        kv(
+                            ui,
+                            "权重",
+                            &size_text(model.weights_ready, model.weights_bytes),
+                        );
+                        kv(ui, "总大小", &fmt_bytes(model.total_bytes()));
+                        if model.loaded {
+                            kv(ui, "Endpoint", &model.endpoint);
+                            kv(ui, "PID", &model.pid.to_string());
+                            kv(ui, "加载时间", &model.loaded_at);
+                        }
+                    });
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    if model.loaded {
+                        if danger_button(ui, "卸载").clicked() {
+                            unload = true;
+                        }
+                        if button(ui, "复制 Endpoint").clicked() {
+                            ui.ctx().copy_text(model.endpoint.clone());
+                        }
+                    } else if model.ready() {
+                        if primary_button(ui, "加载").clicked() {
+                            load = true;
+                        }
+                    } else if button(ui, "下载").clicked() {
+                        pull = true;
+                    }
+                    if button(ui, "关闭").clicked() {
+                        close = true;
+                    }
+                });
+            });
+        if close || !open {
+            self.model_detail = None;
+        }
+        if unload {
+            self.model_detail = None;
+            self.dialog = Some(DialogState {
+                title: "卸载模型".into(),
+                message: format!(
+                    "卸载后该模型的推理服务会停止，权重和缓存保留。\n确定卸载 {}？",
+                    model.name
+                ),
+                action: Pending::Unload(model.name.clone()),
+            });
+        }
+        if load {
+            self.model_detail = None;
+            spawn_job(self.tx.clone(), ctx.clone(), model.name.clone(), false);
+        }
+        if pull {
+            self.model_detail = None;
+            spawn_job(self.tx.clone(), ctx.clone(), model.name.clone(), true);
+        }
+    }
+
+    fn logs_page(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("服务日志").strong());
+            ui.label(egui::RichText::new("自动刷新 · 最近 300 行").weak().small());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("下载完整日志").clicked() {
+                    let _ = webbrowser::open("http://localhost:8790/v1/logs/download?kind=server");
+                }
+            });
+        });
+        ui.add_space(8.0);
+        card_frame(ui)
+            .inner_margin(egui::Margin::symmetric(12, 10))
+            .show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.set_min_height(ui.available_height());
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .stick_to_bottom(true)
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(&self.logs).monospace().size(13.0),
+                            )
+                            .wrap(),
+                        );
+                    });
+            });
+    }
+
+    fn settings_page(&mut self, ui: &mut egui::Ui) {
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                panel(ui, "服务", |ui| {
+                    egui::Grid::new("service_rows")
+                        .num_columns(2)
+                        .spacing([18.0, 6.0])
+                        .show(ui, |ui| {
+                            kv(ui, "当前状态", if self.system.is_some() { "运行中" } else { "已停止" });
+                            kv(
+                                ui,
+                                "开机启动",
+                                self.system
+                                    .as_ref()
+                                    .map(|s| translate_autostart(s["autostart"].as_str().unwrap_or("unknown")))
+                                    .unwrap_or("未知"),
+                            );
+                            kv(ui, "监听地址", "127.0.0.1:8790");
+                        });
+                    ui.add_space(8.0);
+                    let running = self.system.is_some();
+                    let autostart = self
+                        .system
+                        .as_ref()
+                        .map(|s| s["autostart"].as_str().unwrap_or("unknown") == "enabled")
+                        .unwrap_or(false);
+                    ui.horizontal(|ui| {
+                        if running {
+                            if danger_button(ui, "停止服务").clicked() {
+                                self.dialog = Some(DialogState {
+                                    title: "停止服务".into(),
+                                    message: "停止后正在加载/运行的模型会中断，已加载模型将不可用。\n确定停止？".into(),
+                                    action: Pending::StopService,
+                                });
+                            }
+                        } else if primary_button(ui, "启动服务").clicked() {
+                            spawn_action(self.tx.clone(), ui.ctx().clone(), Action::Start);
+                        }
+                        ui.add_space(8.0);
+                        if autostart {
+                            if danger_button(ui, "禁用开机启动").clicked() {
+                                self.dialog = Some(DialogState {
+                                    title: "禁用开机启动".into(),
+                                    message: "会同时停止当前服务并取消开机启动。\n确定继续？".into(),
+                                    action: Pending::DisableAutostart,
+                                });
+                            }
+                        } else if button(ui, "启用开机启动").clicked() {
+                            spawn_action(self.tx.clone(), ui.ctx().clone(), Action::EnableAutostart);
+                        }
+                    });
+                });
+
+                ui.add_space(10.0);
+                panel(ui, "外观", |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("主题");
+                        let dark = self.dark;
+                        if ui.selectable_label(dark, "深色").clicked() && !dark {
+                            self.set_theme(ui.ctx(), true);
+                        }
+                        if ui.selectable_label(!dark, "浅色").clicked() && dark {
+                            self.set_theme(ui.ctx(), false);
+                        }
+                        ui.label(egui::RichText::new("（Ctrl+T 快速切换）").weak().small());
+                    });
+                });
+
+                ui.add_space(10.0);
+                panel(ui, "关于", |ui| {
+                    ui.label(format!("FlashServer Desktop v{}", env!("CARGO_PKG_VERSION")));
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
+                        if button(ui, "API 文档").clicked() {
+                            let _ = webbrowser::open("http://localhost:8790/docs");
+                        }
+                        ui.add_space(8.0);
+                        if danger_button(ui, "退出客户端").clicked() {
+                            self.dialog = Some(DialogState {
+                                title: "退出客户端".into(),
+                                message: "退出客户端不会停止 FlashServer 服务。\n确定退出？".into(),
+                                action: Pending::Quit,
+                            });
+                        }
+                    });
+                });
+            });
+    }
+
+    fn set_theme(&mut self, ctx: &egui::Context, dark: bool) {
+        if self.dark != dark {
+            self.dark = dark;
+            apply_theme(ctx, dark);
+            save_settings(&Settings { dark });
+        }
+    }
+
+    fn show_dialog(&mut self, ctx: &egui::Context) {
+        let Some(dialog) = &self.dialog else {
+            return;
+        };
+        let mut close = false;
+        let mut confirm = false;
+        egui::Window::new(&dialog.title)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.set_min_width(320.0);
+                ui.label(&dialog.message);
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui.button("取消").clicked() {
+                        close = true;
+                    }
+                    if ui.button("确认").clicked() {
+                        confirm = true;
+                    }
+                });
+            });
+        if close {
+            self.dialog = None;
+        }
+        if confirm {
+            let dialog = self.dialog.take().unwrap();
+            match dialog.action {
+                Pending::StopService => {
+                    spawn_action(self.tx.clone(), ctx.clone(), Action::Stop);
+                }
+                Pending::DisableAutostart => {
+                    spawn_action(self.tx.clone(), ctx.clone(), Action::DisableAutostart);
+                }
+                Pending::Unload(name) => {
+                    spawn_unload(self.tx.clone(), ctx.clone(), name);
+                }
+                Pending::Quit => {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+            }
+        }
     }
 }
 
-fn start_service() -> Result<String, String> {
-    run_wsl(&["systemctl", "start", "flashserver"])?;
-    spawn_keepalive();
-    Ok("服务已启动".into())
+impl eframe::App for App {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.drain_events();
+        ctx.request_repaint_after(Duration::from_millis(500));
+        if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::T)) {
+            let dark = !self.dark;
+            self.set_theme(ctx, dark);
+        }
+        if self.tab == Tab::Logs && !self.logs_busy {
+            let due = self
+                .logs_at
+                .map(|t| t.elapsed() >= Duration::from_secs(1))
+                .unwrap_or(true);
+            if due {
+                self.logs_busy = true;
+                spawn_logs(self.tx.clone(), ctx.clone());
+            }
+        }
+        let dark = ctx.style().visuals.dark_mode;
+
+        egui::SidePanel::left("nav")
+            .resizable(false)
+            .exact_width(200.0)
+            .frame(
+                egui::Frame::NONE
+                    .fill(side_fill(dark))
+                    .inner_margin(egui::Margin::symmetric(10, 8)),
+            )
+            .show(ctx, |ui| {
+                ui.add_space(8.0);
+                for tab in [Tab::Overview, Tab::Models, Tab::Logs, Tab::Settings] {
+                    if nav_item(ui, self.tab == tab, tab.label()).clicked() {
+                        self.tab = tab;
+                        if tab == Tab::Logs {
+                            self.logs_busy = true;
+                            spawn_logs(self.tx.clone(), ctx.clone());
+                        }
+                    }
+                    ui.add_space(2.0);
+                }
+                ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
+                    ui.label(
+                        egui::RichText::new(format!("v{}", env!("CARGO_PKG_VERSION")))
+                            .weak()
+                            .small(),
+                    );
+                    if let Some(sys) = &self.system {
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "运行时长 {}",
+                                fmt_uptime(sys["uptime_seconds"].as_f64().unwrap_or(0.0))
+                            ))
+                            .weak()
+                            .small(),
+                        );
+                    }
+                    let (color, text) = if self.system.is_some() {
+                        (green(ui), "运行中")
+                    } else {
+                        (red(ui), "已停止")
+                    };
+                    ui.horizontal(|ui| {
+                        ui.colored_label(color, "●");
+                        ui.label(text);
+                    });
+                });
+            });
+
+        egui::TopBottomPanel::bottom("status")
+            .frame(
+                egui::Frame::NONE
+                    .fill(status_fill(dark))
+                    .inner_margin(egui::Margin::symmetric(14, 5)),
+            )
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    let Some(sys) = &self.system else {
+                        ui.label(
+                            egui::RichText::new("服务未运行 · 无遥测数据")
+                                .weak()
+                                .small(),
+                        );
+                        return;
+                    };
+                    let gpu = &sys["gpu"][0];
+                    let util = gpu["utilization_gpu_pct"].as_f64().unwrap_or(0.0) as f32;
+                    let total = gpu["memory_total_bytes"].as_f64().unwrap_or(0.0);
+                    let used = gpu["memory_used_bytes"].as_f64().unwrap_or(0.0);
+                    let vram = if total > 0.0 {
+                        (used / total * 100.0) as f32
+                    } else {
+                        0.0
+                    };
+                    let cpu = &sys["cpu"];
+                    let cpu_pct = cpu["usage_pct"].as_f64().unwrap_or(0.0) as f32;
+                    let mem_total = cpu["mem_total_bytes"].as_f64().unwrap_or(0.0);
+                    let mem_used = cpu["mem_used_bytes"].as_f64().unwrap_or(0.0);
+                    let mem_pct = if mem_total > 0.0 {
+                        (mem_used / mem_total * 100.0) as f32
+                    } else {
+                        0.0
+                    };
+                    flat_metric(ui, "GPU", util, egui::Color32::from_rgb(55, 148, 255));
+                    ui.add_space(16.0);
+                    flat_metric(ui, "显存", vram, egui::Color32::from_rgb(78, 201, 176));
+                    ui.add_space(16.0);
+                    flat_metric(ui, "CPU", cpu_pct, egui::Color32::from_rgb(215, 186, 125));
+                    ui.add_space(16.0);
+                    flat_metric(ui, "内存", mem_pct, egui::Color32::from_rgb(197, 134, 192));
+                });
+            });
+
+        let frame = egui::Frame::central_panel(&ctx.style()).inner_margin(egui::Margin::same(12));
+        egui::CentralPanel::default().frame(frame).show(ctx, |ui| {
+            ui.add_space(4.0);
+            match self.tab {
+                Tab::Overview => self.overview(ui),
+                Tab::Models => self.models_page(ui),
+                Tab::Logs => self.logs_page(ui),
+                Tab::Settings => self.settings_page(ui),
+            }
+        });
+
+        self.show_dialog(ctx);
+    }
 }
 
-fn stop_service() -> Result<String, String> {
-    let _ = run_wsl(&["systemctl", "stop", "flashserver"]);
-    let _ = run_wsl(&["pkill", "-f", "sleep infinity"]);
-    Ok("服务已停止".into())
+// ---------- widgets ----------
+
+fn card_fill(ui: &egui::Ui) -> egui::Color32 {
+    if ui.visuals().dark_mode {
+        egui::Color32::from_rgb(33, 33, 36)
+    } else {
+        egui::Color32::WHITE
+    }
+}
+
+fn card_stroke(ui: &egui::Ui) -> egui::Stroke {
+    if ui.visuals().dark_mode {
+        egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(52, 52, 58))
+    } else {
+        egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(222, 225, 230))
+    }
+}
+
+fn side_fill(dark: bool) -> egui::Color32 {
+    if dark {
+        egui::Color32::from_rgb(19, 19, 21)
+    } else {
+        egui::Color32::from_rgb(236, 238, 241)
+    }
+}
+
+fn status_fill(dark: bool) -> egui::Color32 {
+    if dark {
+        egui::Color32::from_rgb(21, 21, 23)
+    } else {
+        egui::Color32::from_rgb(239, 241, 244)
+    }
+}
+
+fn card_frame(ui: &egui::Ui) -> egui::Frame {
+    egui::Frame::NONE
+        .fill(card_fill(ui))
+        .stroke(card_stroke(ui))
+        .corner_radius(8)
+        .inner_margin(egui::Margin::symmetric(14, 12))
+}
+
+fn panel(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {
+    card_frame(ui).show(ui, |ui| {
+        let width = ui.available_width();
+        if width.is_finite() {
+            ui.set_width(width);
+        }
+        ui.label(egui::RichText::new(title).small().strong().weak());
+        ui.add_space(6.0);
+        add(ui);
+    });
+}
+
+fn legend(ui: &mut egui::Ui, color: egui::Color32, text: &str) {
+    ui.colored_label(color, "●");
+    ui.label(egui::RichText::new(text).weak().small());
+    ui.add_space(10.0);
+}
+
+fn stat(ui: &mut egui::Ui, label: &str, value: &str) {
+    ui.label(egui::RichText::new(label).weak().small());
+    ui.label(egui::RichText::new(value).small());
+    ui.add_space(14.0);
+}
+
+fn size_text(ready: bool, bytes: f64) -> String {
+    if ready {
+        fmt_bytes(bytes)
+    } else {
+        "缺失".to_string()
+    }
+}
+
+fn size_cell(ui: &mut egui::Ui, ready: bool, bytes: f64) {
+    if ready {
+        ui.label(fmt_bytes(bytes));
+    } else {
+        ui.label(egui::RichText::new("缺失").color(red(ui)).small());
+    }
+}
+
+fn kv(ui: &mut egui::Ui, key: &str, value: &str) {
+    ui.label(egui::RichText::new(key).weak());
+    ui.label(value);
+    ui.end_row();
+}
+
+fn nav_item(ui: &mut egui::Ui, selected: bool, text: &str) -> egui::Response {
+    let width = ui.available_width();
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(width, 30.0), egui::Sense::click());
+    if ui.is_rect_visible(rect) {
+        let visuals = ui.visuals().clone();
+        let bg = if selected {
+            visuals.selection.bg_fill
+        } else if response.is_pointer_button_down_on() {
+            visuals.widgets.active.bg_fill
+        } else if response.hovered() {
+            visuals.widgets.hovered.bg_fill
+        } else {
+            egui::Color32::TRANSPARENT
+        };
+        if bg != egui::Color32::TRANSPARENT {
+            ui.painter().rect_filled(rect, 4.0, bg);
+        }
+        let color = if selected {
+            egui::Color32::WHITE
+        } else {
+            visuals.text_color()
+        };
+        ui.painter().text(
+            rect.left_center() + egui::vec2(12.0, 0.0),
+            egui::Align2::LEFT_CENTER,
+            text,
+            egui::FontId::proportional(13.0),
+            color,
+        );
+    }
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, text)
+    });
+    response
+}
+
+fn flat_metric(ui: &mut egui::Ui, label: &str, pct: f32, color: egui::Color32) {
+    ui.label(egui::RichText::new(label).weak().small());
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(90.0, 6.0), egui::Sense::hover());
+    let track = if ui.visuals().dark_mode {
+        egui::Color32::from_rgb(58, 58, 62)
+    } else {
+        egui::Color32::from_rgb(222, 224, 228)
+    };
+    let painter = ui.painter();
+    painter.rect_filled(rect, 3.0, track);
+    let pct = pct.clamp(0.0, 100.0);
+    if pct > 0.0 {
+        let fill = egui::Rect::from_min_size(
+            rect.min,
+            egui::vec2(rect.width() * pct / 100.0, rect.height()),
+        );
+        painter.rect_filled(fill, 3.0, color);
+    }
+    ui.label(
+        egui::RichText::new(format!("{pct:>3.0}%"))
+            .small()
+            .monospace(),
+    );
+}
+
+fn progress_width(ui: &egui::Ui) -> f32 {
+    let w = ui.available_width();
+    if w.is_finite() && w > 1.0 {
+        w
+    } else {
+        200.0
+    }
+}
+
+fn plot(ui: &mut egui::Ui, id: &str, height: f32, series: &[(&Vec<[f64; 2]>, egui::Color32)]) {
+    use egui_plot::{Line, Plot, PlotPoints};
+    Plot::new(id)
+        .height(height)
+        .include_y(0.0)
+        .include_y(100.0)
+        .allow_drag(false)
+        .allow_zoom(false)
+        .allow_scroll(false)
+        .show(ui, |plot_ui| {
+            for (points, color) in series {
+                let pts: PlotPoints = points.iter().copied().collect();
+                plot_ui.line(Line::new(pts).color(*color));
+            }
+        });
+}
+
+fn button(ui: &mut egui::Ui, text: &str) -> egui::Response {
+    ui.add_sized([96.0, 28.0], egui::Button::new(text))
+}
+
+fn primary_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
+    ui.add_sized(
+        [96.0, 28.0],
+        egui::Button::new(egui::RichText::new(text).color(egui::Color32::WHITE)).fill(accent(ui)),
+    )
+}
+
+fn danger_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
+    ui.add_sized(
+        [96.0, 28.0],
+        egui::Button::new(egui::RichText::new(text).color(red(ui))),
+    )
+}
+
+fn accent(ui: &egui::Ui) -> egui::Color32 {
+    if ui.visuals().dark_mode {
+        egui::Color32::from_rgb(55, 148, 255)
+    } else {
+        egui::Color32::from_rgb(26, 115, 232)
+    }
+}
+
+fn green(ui: &egui::Ui) -> egui::Color32 {
+    if ui.visuals().dark_mode {
+        egui::Color32::from_rgb(78, 201, 176)
+    } else {
+        egui::Color32::from_rgb(16, 124, 16)
+    }
+}
+
+fn red(ui: &egui::Ui) -> egui::Color32 {
+    if ui.visuals().dark_mode {
+        egui::Color32::from_rgb(244, 135, 113)
+    } else {
+        egui::Color32::from_rgb(196, 43, 28)
+    }
+}
+
+// ---------- data ----------
+
+fn parse_models(v: &Value, system: Option<&Value>) -> Vec<ModelRow> {
+    let mut loaded: HashMap<String, (String, i64, String)> = HashMap::new();
+    if let Some(items) = system.and_then(|s| s["loaded"].as_array()) {
+        for m in items {
+            if let Some(name) = m["ref"].as_str() {
+                loaded.insert(
+                    name.to_string(),
+                    (
+                        m["endpoint"].as_str().unwrap_or("").to_string(),
+                        m["pid"].as_i64().unwrap_or(0),
+                        m["loaded_at"].as_str().unwrap_or("").to_string(),
+                    ),
+                );
+            }
+        }
+    }
+    v["models"]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .map(|m| {
+                    let name = m["ref"].as_str().unwrap_or("").to_string();
+                    let info = loaded.get(&name).cloned();
+                    ModelRow {
+                        name,
+                        bundle_ready: m["bundle_cached"].as_bool().unwrap_or(false),
+                        weights_ready: m["weights_cached"].as_bool().unwrap_or(false),
+                        bundle_bytes: m["bundle_bytes"].as_f64().unwrap_or(0.0),
+                        weights_bytes: m["weights_bytes"].as_f64().unwrap_or(0.0),
+                        loaded: info.is_some(),
+                        endpoint: info.as_ref().map(|i| i.0.clone()).unwrap_or_default(),
+                        pid: info.as_ref().map(|i| i.1).unwrap_or(0),
+                        loaded_at: info.as_ref().map(|i| i.2.clone()).unwrap_or_default(),
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn parse_catalog(v: &Value) -> (Vec<HubRepo>, i64) {
+    let total = v["total"].as_i64().unwrap_or(0);
+    let repos = v["repos"]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .map(|r| HubRepo {
+                    id: r["id"].as_i64().unwrap_or(0),
+                    namespace: r["namespace"].as_str().unwrap_or("").to_string(),
+                    name: r["name"].as_str().unwrap_or("").to_string(),
+                    model_name: r["model_name"].as_str().unwrap_or("").to_string(),
+                    tags: r["tags"]
+                        .as_array()
+                        .map(|tags| {
+                            tags.iter()
+                                .filter_map(|t| t["name"].as_str().map(str::to_string))
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                    versions: r["version_count"].as_i64().unwrap_or(0),
+                    downloads: r["downloads"].as_i64().unwrap_or(0),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    (repos, total)
+}
+
+fn parse_hub_detail(v: &Value) -> HubDetail {
+    HubDetail {
+        repo_id: v["repo"]["id"].as_i64().unwrap_or(0),
+        versions: v["versions"]
+            .as_array()
+            .map(|items| {
+                items
+                    .iter()
+                    .map(|x| {
+                        let status = match x["release_status"].as_str().unwrap_or("") {
+                            "released" => "正式",
+                            "pre-release" => "预发布",
+                            other => other,
+                        };
+                        HubVersion {
+                            version: x["version"].as_str().unwrap_or("").to_string(),
+                            size: x["size"].as_f64().unwrap_or(0.0),
+                            files: x["file_count"].as_i64().unwrap_or(0),
+                            status: status.to_string(),
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+    }
+}
+
+fn parse_storage(v: &Value) -> Vec<(String, String)> {
+    v["areas"]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .map(|a| {
+                    (
+                        a["name"].as_str().unwrap_or("").to_string(),
+                        fmt_bytes(a["bytes"].as_f64().unwrap_or(0.0)),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn push_point(points: &mut Vec<[f64; 2]>, x: f64, y: f32) {
+    points.push([x, y as f64]);
+    if points.len() > 600 {
+        points.remove(0);
+    }
+}
+
+// ---------- threads ----------
+
+fn start_http(tx: Sender<Event>, ctx: egui::Context) {
+    std::thread::spawn(move || loop {
+        if let Some(v) = get_json("/v1/system") {
+            let _ = tx.send(Event::System(v));
+            ctx.request_repaint();
+        }
+        if let Some(v) = get_json("/v1/models") {
+            let _ = tx.send(Event::Models(v));
+            ctx.request_repaint();
+        }
+        if let Some(v) = get_json("/v1/storage") {
+            let _ = tx.send(Event::Storage(v));
+            ctx.request_repaint();
+        }
+        std::thread::sleep(Duration::from_secs(2));
+    });
+}
+
+fn start_ws(tx: Sender<Event>, ctx: egui::Context) {
+    std::thread::spawn(move || loop {
+        match ewebsock::connect("ws://127.0.0.1:8790/v1/ws", ewebsock::Options::default()) {
+            Ok((_sender, receiver)) => loop {
+                let mut closed = false;
+                while let Some(event) = receiver.try_recv() {
+                    match event {
+                        ewebsock::WsEvent::Message(ewebsock::WsMessage::Text(text)) => {
+                            if let Ok(v) = serde_json::from_str::<Value>(&text) {
+                                match v["type"].as_str().unwrap_or("") {
+                                    "system" => {
+                                        let _ = tx.send(Event::System(v["data"].clone()));
+                                    }
+                                    "job" => {
+                                        let data = &v["data"];
+                                        let verb = if data["type"].as_str() == Some("pull") {
+                                            "下载"
+                                        } else {
+                                            "加载"
+                                        };
+                                        let _ = tx.send(Event::Job(JobEvent {
+                                            phase: data["event"]["phase"]
+                                                .as_str()
+                                                .unwrap_or("")
+                                                .to_string(),
+                                            message: data["event"]["message"]
+                                                .as_str()
+                                                .unwrap_or("")
+                                                .to_string(),
+                                            state: data["state"].as_str().unwrap_or("").to_string(),
+                                            verb: verb.to_string(),
+                                        }));
+                                    }
+                                    _ => {}
+                                }
+                                ctx.request_repaint();
+                            }
+                        }
+                        ewebsock::WsEvent::Closed | ewebsock::WsEvent::Error(_) => {
+                            closed = true;
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+                if closed {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            },
+            Err(_) => {
+                let _ = tx.send(Event::Status(String::new()));
+                std::thread::sleep(Duration::from_secs(2));
+            }
+        }
+    });
+}
+
+enum Action {
+    Start,
+    Stop,
+    EnableAutostart,
+    DisableAutostart,
+}
+
+fn spawn_action(tx: Sender<Event>, ctx: egui::Context, action: Action) {
+    std::thread::spawn(move || {
+        let result = match action {
+            Action::Start => start_service(),
+            Action::Stop => stop_service(),
+            Action::EnableAutostart => set_autostart(true),
+            Action::DisableAutostart => set_autostart(false),
+        };
+        let _ = tx.send(Event::Status(match result {
+            Ok(m) => m,
+            Err(e) => format!("失败：{e}"),
+        }));
+        ctx.request_repaint();
+    });
+}
+
+fn spawn_job(tx: Sender<Event>, ctx: egui::Context, ref_str: String, pull: bool) {
+    std::thread::spawn(move || {
+        let verb = if pull { "下载" } else { "加载" };
+        let endpoint = if pull { "/v1/pull" } else { "/v1/models/load" };
+        let _ = tx.send(Event::Job(JobEvent {
+            phase: "prepare".into(),
+            message: format!("提交{verb}任务"),
+            state: "running".into(),
+            verb: verb.to_string(),
+        }));
+        let body = serde_json::json!({ "ref": ref_str, "async": true });
+        match post_json(endpoint, &body) {
+            Ok(v) => {
+                let job = v["job_id"].as_str().unwrap_or("").to_string();
+                if job.is_empty() {
+                    let _ = tx.send(Event::Status(format!("已{verb}")));
+                    ctx.request_repaint();
+                    return;
+                }
+                for _ in 0..2400 {
+                    std::thread::sleep(Duration::from_millis(700));
+                    let Some(j) = get_json(&format!("/v1/jobs/{job}")) else {
+                        continue;
+                    };
+                    let state = j["state"].as_str().unwrap_or("").to_string();
+                    let last = j["events"].as_array().and_then(|e| e.last());
+                    let phase = last.and_then(|e| e["phase"].as_str()).unwrap_or("");
+                    let message = last.and_then(|e| e["message"].as_str()).unwrap_or("");
+                    let _ = tx.send(Event::Job(JobEvent {
+                        phase: phase.to_string(),
+                        message: message.to_string(),
+                        state,
+                        verb: verb.to_string(),
+                    }));
+                    ctx.request_repaint();
+                    if phase == "done" || phase == "failed" {
+                        return;
+                    }
+                }
+                let _ = tx.send(Event::Status(format!("{verb}超时")));
+            }
+            Err(e) => {
+                let _ = tx.send(Event::Job(JobEvent {
+                    phase: "failed".into(),
+                    message: e,
+                    state: "failed".into(),
+                    verb: verb.to_string(),
+                }));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+fn spawn_catalog(tx: Sender<Event>, ctx: egui::Context, query: String, tag: Option<i64>) {
+    std::thread::spawn(move || {
+        let mut params = vec![
+            ("page_size", "100".to_string()),
+            ("sort", "updated".to_string()),
+        ];
+        if !query.is_empty() {
+            params.push(("q", query));
+        }
+        if let Some(tag) = tag {
+            params.push(("tag", tag.to_string()));
+        }
+        match get_json_query("/v1/catalog", &params) {
+            Some(v) if v["repos"].is_array() => {
+                let (repos, total) = parse_catalog(&v);
+                let _ = tx.send(Event::Catalog { repos, total });
+            }
+            Some(v) => {
+                let _ = tx.send(Event::HubError(
+                    v["error"]
+                        .as_str()
+                        .unwrap_or("FlashHub 请求失败")
+                        .to_string(),
+                ));
+            }
+            None => {
+                let _ = tx.send(Event::HubError(
+                    "无法连接 FlashHub，请检查网络或代理设置".to_string(),
+                ));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+fn spawn_catalog_tags(tx: Sender<Event>, ctx: egui::Context) {
+    std::thread::spawn(move || {
+        let tags = get_json_timeout("/v1/catalog/tags", 20)
+            .map(|v| {
+                v["tags"]
+                    .as_array()
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(|t| {
+                                Some((t["id"].as_i64()?, t["name"].as_str()?.to_string()))
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+        let _ = tx.send(Event::CatalogTags(tags));
+        ctx.request_repaint();
+    });
+}
+
+fn spawn_hub_detail(tx: Sender<Event>, ctx: egui::Context, id: i64) {
+    std::thread::spawn(move || {
+        match get_json_timeout(&format!("/v1/catalog/{id}"), 20) {
+            Some(v) if v["repo"].is_object() => {
+                let _ = tx.send(Event::HubDetail(parse_hub_detail(&v)));
+            }
+            Some(v) => {
+                let _ = tx.send(Event::HubError(
+                    v["error"].as_str().unwrap_or("读取仓库失败").to_string(),
+                ));
+            }
+            None => {
+                let _ = tx.send(Event::HubError("读取仓库失败，请稍后重试".to_string()));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+fn spawn_unload(tx: Sender<Event>, ctx: egui::Context, ref_str: String) {
+    std::thread::spawn(move || {
+        let body = serde_json::json!({ "ref": ref_str });
+        let status = match post_json("/v1/models/unload", &body) {
+            Ok(_) => "已卸载".to_string(),
+            Err(e) => format!("卸载失败：{e}"),
+        };
+        let _ = tx.send(Event::Status(status));
+        ctx.request_repaint();
+    });
+}
+
+fn spawn_logs(tx: Sender<Event>, ctx: egui::Context) {
+    std::thread::spawn(move || {
+        let text = get_json("/v1/logs?kind=server&lines=300").map(|v| {
+            v["lines"]
+                .as_array()
+                .map(|lines| {
+                    lines
+                        .iter()
+                        .filter_map(|l| l.as_str())
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })
+                .unwrap_or_default()
+        });
+        let _ = tx.send(Event::Logs(text));
+        ctx.request_repaint();
+    });
+}
+
+// ---------- HTTP / service ----------
+
+fn agent() -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(3))
+        .build()
+}
+
+fn get_json(path: &str) -> Option<Value> {
+    agent()
+        .get(&format!("{BASE}{path}"))
+        .call()
+        .ok()?
+        .into_json()
+        .ok()
+}
+
+fn get_json_query(path: &str, params: &[(&str, String)]) -> Option<Value> {
+    let mut request = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(20))
+        .build()
+        .get(&format!("{BASE}{path}"));
+    for (key, value) in params {
+        request = request.query(key, value);
+    }
+    request.call().ok()?.into_json().ok()
+}
+
+fn get_json_timeout(path: &str, secs: u64) -> Option<Value> {
+    ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(secs))
+        .build()
+        .get(&format!("{BASE}{path}"))
+        .call()
+        .ok()?
+        .into_json()
+        .ok()
+}
+
+fn post_json(path: &str, body: &Value) -> Result<Value, String> {
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(60))
+        .build();
+    match agent.post(&format!("{BASE}{path}")).send_json(body) {
+        Ok(resp) => resp.into_json::<Value>().map_err(|e| e.to_string()),
+        Err(ureq::Error::Status(_, resp)) => Err(resp.into_string().unwrap_or_default()),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 #[cfg(windows)]
 fn run_wsl(args: &[&str]) -> Result<(), String> {
-    let mut cmd = Command::new("wsl.exe");
+    let mut cmd = std::process::Command::new("wsl.exe");
     cmd.args(["-d", "Ubuntu", "-u", "root", "--"]).args(args);
     hide(&mut cmd);
     let out = cmd.output().map_err(|e| e.to_string())?;
@@ -591,22 +1996,24 @@ fn run_wsl(args: &[&str]) -> Result<(), String> {
 
 #[cfg(windows)]
 fn spawn_keepalive() {
-    let mut cmd = Command::new("wsl.exe");
+    let mut cmd = std::process::Command::new("wsl.exe");
     cmd.args(["-d", "Ubuntu", "-u", "root", "--", "sleep", "infinity"]);
     hide(&mut cmd);
     let _ = cmd.spawn();
 }
 
 #[cfg(windows)]
-fn hide(cmd: &mut Command) {
+fn hide(cmd: &mut std::process::Command) {
     use std::os::windows::process::CommandExt;
     cmd.creation_flags(0x08000000);
 }
 
 #[cfg(not(windows))]
 fn run_wsl(args: &[&str]) -> Result<(), String> {
-    let (program, rest) = args.split_first().ok_or_else(|| "empty command".to_string())?;
-    let out = Command::new(program)
+    let (program, rest) = args
+        .split_first()
+        .ok_or_else(|| "empty command".to_string())?;
+    let out = std::process::Command::new(program)
         .args(rest)
         .output()
         .map_err(|e| e.to_string())?;
@@ -620,28 +2027,59 @@ fn run_wsl(args: &[&str]) -> Result<(), String> {
 #[cfg(not(windows))]
 fn spawn_keepalive() {}
 
+fn start_service() -> Result<String, String> {
+    run_wsl(&["systemctl", "start", "flashserver"])?;
+    spawn_keepalive();
+    Ok("服务已启动".into())
+}
+
+fn stop_service() -> Result<String, String> {
+    let _ = run_wsl(&["systemctl", "stop", "flashserver"]);
+    let _ = run_wsl(&["pkill", "-f", "sleep infinity"]);
+    Ok("服务已停止".into())
+}
+
 fn set_autostart(enabled: bool) -> Result<String, String> {
     #[cfg(windows)]
     {
         let setup = setup_bin().ok_or_else(|| "找不到 flashserver-setup.exe".to_string())?;
-        let arg = if enabled { "--start-service" } else { "--stop-service" };
+        let arg = if enabled {
+            "--start-service"
+        } else {
+            "--stop-service"
+        };
         let script = format!(
             "Start-Process -Verb RunAs -WindowStyle Hidden -Wait -FilePath '{}' -ArgumentList '{}'",
             setup.replace('\'', "''"),
             arg
         );
-        let out = Command::new("powershell.exe")
+        let out = std::process::Command::new("powershell.exe")
             .args(["-NoProfile", "-Command", &script])
             .output()
             .map_err(|e| e.to_string())?;
-        if out.status.success() { Ok(if enabled { "已启用开机启动" } else { "已禁用开机启动" }.into()) }
-        else { Err("管理员授权被取消或执行失败".into()) }
+        if out.status.success() {
+            Ok(if enabled {
+                "已启用开机启动"
+            } else {
+                "已禁用开机启动"
+            }
+            .into())
+        } else {
+            Err("管理员授权被取消或执行失败".into())
+        }
     }
     #[cfg(not(windows))]
     {
         let action = if enabled { "enable" } else { "disable" };
-        let out = Command::new("systemctl").args([action, "flashserver"]).output().map_err(|e| e.to_string())?;
-        if out.status.success() { Ok("已更新开机启动".into()) } else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
+        let out = std::process::Command::new("systemctl")
+            .args([action, "flashserver"])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if out.status.success() {
+            Ok("已更新开机启动".into())
+        } else {
+            Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+        }
     }
 }
 
@@ -665,29 +2103,101 @@ fn setup_bin() -> Option<String> {
     None
 }
 
-// ---------- helpers ----------
+// ---------- settings / fonts / theme ----------
 
-fn get_json(path: &str) -> Option<Value> {
-    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(3)).build();
-    agent
-        .get(&format!("{BASE}{path}"))
-        .call()
-        .ok()?
-        .into_json::<Value>()
-        .ok()
+fn settings_path() -> Option<PathBuf> {
+    let base = std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
+    Some(base.join("FlashServer").join("settings.json"))
 }
 
-fn post_json(path: &str, body: &Value) -> Result<Value, String> {
-    let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(60)).build();
-    match agent.post(&format!("{BASE}{path}")).send_json(body) {
-        Ok(resp) => resp.into_json::<Value>().map_err(|e| e.to_string()),
-        Err(ureq::Error::Status(_, resp)) => {
-            let text = resp.into_string().unwrap_or_default();
-            Err(text)
+fn load_settings() -> Settings {
+    settings_path()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|s| serde_json::from_str(s.trim_start_matches('\u{feff}')).ok())
+        .unwrap_or(Settings { dark: true })
+}
+
+fn save_settings(s: &Settings) {
+    if let Some(path) = settings_path() {
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
         }
-        Err(e) => Err(e.to_string()),
+        if let Ok(text) = serde_json::to_string_pretty(s) {
+            let _ = std::fs::write(path, text);
+        }
     }
 }
+
+fn apply_theme(ctx: &egui::Context, dark: bool) {
+    let mut visuals = if dark {
+        egui::Visuals::dark()
+    } else {
+        egui::Visuals::light()
+    };
+    if dark {
+        visuals.panel_fill = egui::Color32::from_rgb(26, 26, 28);
+        visuals.window_fill = egui::Color32::from_rgb(34, 34, 37);
+        visuals.extreme_bg_color = egui::Color32::from_rgb(44, 44, 48);
+        visuals.faint_bg_color = egui::Color32::from_rgb(34, 34, 37);
+        visuals.selection.bg_fill = egui::Color32::from_rgb(14, 99, 156);
+    } else {
+        visuals.panel_fill = egui::Color32::from_rgb(244, 245, 247);
+        visuals.window_fill = egui::Color32::WHITE;
+        visuals.extreme_bg_color = egui::Color32::from_rgb(255, 255, 255);
+        visuals.faint_bg_color = egui::Color32::from_rgb(248, 249, 250);
+        visuals.selection.bg_fill = egui::Color32::from_rgb(0, 120, 212);
+    }
+    ctx.set_visuals(visuals);
+
+    let mut style = (*ctx.style()).clone();
+    style.spacing.item_spacing = egui::vec2(8.0, 6.0);
+    style.spacing.button_padding = egui::vec2(10.0, 4.0);
+    style.spacing.interact_size.y = 26.0;
+    style
+        .text_styles
+        .insert(egui::TextStyle::Body, egui::FontId::proportional(13.0));
+    style
+        .text_styles
+        .insert(egui::TextStyle::Button, egui::FontId::proportional(13.0));
+    style
+        .text_styles
+        .insert(egui::TextStyle::Heading, egui::FontId::proportional(16.0));
+    style
+        .text_styles
+        .insert(egui::TextStyle::Monospace, egui::FontId::monospace(13.0));
+    ctx.set_style(style);
+}
+
+fn install_fonts(ctx: &egui::Context) {
+    let candidates = [
+        r"C:\Windows\Fonts\msyh.ttc",
+        r"C:\Windows\Fonts\msyhbd.ttc",
+        "/System/Library/Fonts/PingFang.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    ];
+    let mut fonts = egui::FontDefinitions::default();
+    for path in candidates {
+        if let Ok(bytes) = std::fs::read(path) {
+            fonts
+                .font_data
+                .insert("cjk".to_owned(), egui::FontData::from_owned(bytes).into());
+            for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+                fonts
+                    .families
+                    .entry(family)
+                    .or_default()
+                    .push("cjk".to_owned());
+            }
+            break;
+        }
+    }
+    ctx.set_fonts(fonts);
+}
+
+// ---------- format ----------
 
 fn fmt_bytes(n: f64) -> String {
     let units = ["B", "KiB", "MiB", "GiB", "TiB"];
@@ -726,51 +2236,63 @@ fn translate_autostart(value: &str) -> &'static str {
     }
 }
 
-fn render_chart(lines: &[(&[f32], (u8, u8, u8))], w: u32, h: u32) -> Image {
-    let mut buffer = SharedPixelBuffer::<Rgba8Pixel>::new(w, h);
-    {
-        let pixels = buffer.make_mut_slice();
-        for p in pixels.iter_mut() {
-            *p = Rgba8Pixel { r: 255, g: 255, b: 255, a: 255 };
-        }
-        for frac in [0.25f32, 0.5, 0.75] {
-            let y = (h as f32 * frac) as u32;
-            for x in 0..w {
-                pixels[(y * w + x) as usize] = Rgba8Pixel { r: 232, g: 234, b: 237, a: 255 };
-            }
-        }
-        for (data, color) in lines {
-            if data.len() < 2 {
-                continue;
-            }
-            for i in 1..data.len() {
-                let x0 = ((i - 1) as f32 / (data.len() - 1) as f32 * (w - 1) as f32) as i32;
-                let x1 = (i as f32 / (data.len() - 1) as f32 * (w - 1) as f32) as i32;
-                let y0 = ((h - 6) as f32 - data[i - 1].clamp(0.0, 100.0) / 100.0 * (h - 12) as f32) as i32;
-                let y1 = ((h - 6) as f32 - data[i].clamp(0.0, 100.0) / 100.0 * (h - 12) as f32) as i32;
-                draw_line(pixels, w, h, x0, y0, x1, y1, *color);
-            }
-        }
-    }
-    Image::from_rgba8(buffer)
-}
-
-fn draw_line(pixels: &mut [Rgba8Pixel], w: u32, h: u32, x0: i32, y0: i32, x1: i32, y1: i32, color: (u8, u8, u8)) {
-    let dx = (x1 - x0).abs();
-    let dy = (y1 - y0).abs();
-    let steps = dx.max(dy).max(1);
-    for i in 0..=steps {
-        let t = i as f32 / steps as f32;
-        let x = x0 as f32 + (x1 - x0) as f32 * t;
-        let y = y0 as f32 + (y1 - y0) as f32 * t;
-        paint(pixels, w, h, x as i32, y as i32, color);
-        paint(pixels, w, h, x as i32 + 1, y as i32, color);
+fn translate_phase(phase: &str) -> &str {
+    match phase {
+        "prepare" => "准备 Bundle",
+        "resolve" => "解析引用",
+        "pull" => "拉取 Bundle",
+        "bundle" => "下载 Bundle",
+        "weights" | "download" => "下载权重",
+        "venv" | "deps" | "dependencies" => "安装依赖",
+        "progress" => "启动服务",
+        "done" => "完成",
+        "failed" => "失败",
+        other => other,
     }
 }
 
-fn paint(pixels: &mut [Rgba8Pixel], w: u32, h: u32, x: i32, y: i32, color: (u8, u8, u8)) {
-    if x < 0 || y < 0 || x >= w as i32 || y >= h as i32 {
-        return;
+fn parse_pct(message: &str) -> Option<f32> {
+    let mut found = None;
+    for token in message.split_whitespace() {
+        let Some(idx) = token.find('%') else {
+            continue;
+        };
+        let num: String = token[..idx]
+            .chars()
+            .filter(|c| c.is_ascii_digit() || *c == '.')
+            .collect();
+        if let Ok(value) = num.parse::<f32>() {
+            found = Some(value.clamp(0.0, 100.0));
+        }
     }
-    pixels[(y as u32 * w + x as u32) as usize] = Rgba8Pixel { r: color.0, g: color.1, b: color.2, a: 255 };
+    found
+}
+
+fn main() -> eframe::Result<()> {
+    let icon = image::load_from_memory(include_bytes!("../ui/icon.png"))
+        .ok()
+        .map(|img| {
+            let rgba = img.to_rgba8();
+            egui::IconData {
+                rgba: rgba.as_raw().clone(),
+                width: rgba.width(),
+                height: rgba.height(),
+            }
+        });
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_inner_size([1180.0, 760.0])
+        .with_min_inner_size([900.0, 600.0])
+        .with_position([40.0, 40.0]);
+    if let Some(icon) = icon {
+        viewport = viewport.with_icon(std::sync::Arc::new(icon));
+    }
+    let options = eframe::NativeOptions {
+        viewport,
+        ..Default::default()
+    };
+    eframe::run_native(
+        "FlashServer",
+        options,
+        Box::new(|cc| Ok(Box::new(App::new(cc)))),
+    )
 }

@@ -107,7 +107,7 @@ flashcli run bundles/pi05_libero --prompt "pick up the red block"
 | **End user** | This README (install + run) → bundle [README](bundles/README.md) → [environment.md](docs/environment.md) |
 | **Integrator** | [FlashHub](https://flashhub.top) → [model_bundle_standard.md](docs/model_bundle_standard.md) — preset ref syntax |
 | **Bundle author** | [bundle_publish_standard.md](docs/bundle_publish_standard.md) → [flashcli-bundle/README.md](flashcli-bundle/README.md) |
-| **Desktop / local server** | [flashserver.md](docs/flashserver.md) — Windows installer, local console, HTTP API ([openapi.yaml](docs/openapi.yaml)) |
+| **Desktop / local server** | [flashserver.md](docs/flashserver.md) — Windows installer, desktop client, local console, HTTP API ([openapi.yaml](docs/openapi.yaml)) |
 
 How the host, bundle venv, and FlashHub sync work: [architecture.md](docs/architecture.md). Full index: [docs/README.md](docs/README.md).
 

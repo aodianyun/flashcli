@@ -19,15 +19,18 @@ flashcli serve     → one model process, OpenAI-compatible API
 
 ## Local console
 
-Open `http://localhost:8790/` after installation. The embedded console shows GPU/VRAM, utilization, temperature, clocks, power (when the driver exposes it), CUDA/SM/torch environment, CUDA process memory (native Linux; WSL usually does not expose it), CPU model/cores/load/per-core utilization, RAM/swap, 5-minute GPU and CPU charts, service uptime, cached models, loaded models, logs, and can load/unload models and test chat. It is served by the same binary (no extra assets or Node build). The HTTP contract is published at `/openapi.yaml` and mirrored in [openapi.yaml](openapi.yaml). Live clients can use `GET /v1/ws` (system snapshot 1 Hz + job progress).
+Open `http://localhost:8790/` after installation. The embedded console shows GPU/VRAM, utilization, temperature, clocks, power (when the driver exposes it), CUDA/SM/torch environment, CUDA process memory (native Linux; WSL usually does not expose it), CPU model/cores/load/per-core utilization, RAM/swap, 5-minute GPU and CPU charts, service uptime, cached models, loaded models, logs, and can load/unload models and test chat. It is served by the same binary (no extra assets or Node build). The HTTP contract is published at `/openapi.yaml`, an HTML reference is served at `/docs`, and the source is mirrored in [openapi.yaml](openapi.yaml). Live clients can use `GET /v1/ws` (system snapshot 1 Hz + job progress). `GET /v1/catalog` proxies the public FlashHub catalog (search, categories, versions) and `GET /v1/logs/download` returns the full daemon journal.
 
 ## Desktop client
 
-The Windows installer ships `FlashServer.exe`, a Rust + Slint desktop client (no WebView): overview (GPU/CPU/RAM/charts), model cache and load/unload, loaded models, logs, service start/stop and auto-start control. It talks to the daemon over WebSocket (`/v1/ws`) with HTTP fallback.
+The Windows installer ships `FlashServer.exe`, a Rust + egui/eframe desktop client (no WebView): overview (card layout with GPU/CPU environment and 0-100 charts, flat GPU/VRAM/CPU/RAM status bar), models (local cache plus FlashHub catalog search/categories/versions, separate bundle/weight sizes, loaded state, async load progress and row details with unload), logs (`journalctl` tail with full-log download), and settings (service start/stop, auto-start, theme, API docs). It talks to the daemon over WebSocket (`/v1/ws`) with HTTP polling as fallback.
 
-- Source: `desktop/`; build with `cargo build --release` (Rust MSVC toolchain; put `cargo` on PATH). Output: `desktop/target/release/FlashServer.exe` (~10 MB).
-- Memory: ~35-50 MB working set with the software renderer (forced by default; override with `SLINT_BACKEND`).
+- Source: `desktop/`; build with `cargo build --release` (Rust MSVC toolchain; put `cargo` on PATH). Output: `desktop/target/release/FlashServer.exe` (~4.7 MB).
+- Memory: ~110-125 MB working set (GPU context + CJK font + egui stores).
+- Theme: dark by default, switched in Settings or with `Ctrl+T`; saved to `%LOCALAPPDATA%\FlashServer\settings.json`.
+- Destructive actions (stop service, disable auto-start, unload model, quit) ask for confirmation.
 - Service buttons use `wsl.exe` (no UAC). The auto-start toggle calls `flashserver-setup --start-service/--stop-service` and therefore prompts for UAC.
+- API docs open `http://localhost:8790/docs`.
 - The code compiles cross-platform; service control is wired for Windows/WSL first, Linux uses `systemctl` (best effort) and macOS has no flashserver backend yet.
 
 ## Windows UI installer
@@ -40,9 +43,9 @@ FlashServer-Setup-<version>.exe
 
 It runs elevated, checks/installs WSL2 Ubuntu, installs the Linux payload,
 starts `flashserver.service`, creates the Windows logon task, and verifies
-the daemon. On success it opens `http://localhost:8790/` (the local console).
-If Windows requires a reboot to enable WSL2, run the installer again after
-reboot; the setup engine is idempotent.
+the daemon. On success it opens the desktop client; API docs are at
+`http://localhost:8790/docs`. If Windows requires a reboot to enable WSL2,
+run the installer again after reboot; the setup engine is idempotent.
 
 The CLI remains available for automation:
 

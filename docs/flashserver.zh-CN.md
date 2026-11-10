@@ -19,15 +19,18 @@ flashcli serve     → 单模型进程，OpenAI-compatible API
 
 ## 本地控制台
 
-安装后打开 `http://localhost:8790/`。内置控制台展示 GPU/显存、利用率、温度、频率、功耗（驱动提供时）、CUDA/SM/torch 环境、CUDA 进程显存（原生 Linux；WSL 通常不暴露进程列表）、CPU 型号/核心/负载/每核利用率、内存/Swap、GPU 与 CPU 5 分钟曲线、服务运行时长、缓存模型、已加载模型、日志，并支持加载/卸载模型和对话测试。页面随二进制内嵌，不需要额外资源或 Node 构建。HTTP 契约发布在 `/openapi.yaml`，源文件见 [openapi.yaml](openapi.yaml)。实时客户端可用 `GET /v1/ws`（1Hz 系统快照 + 任务进度）。
+安装后打开 `http://localhost:8790/`。内置控制台展示 GPU/显存、利用率、温度、频率、功耗（驱动提供时）、CUDA/SM/torch 环境、CUDA 进程显存（原生 Linux；WSL 通常不暴露进程列表）、CPU 型号/核心/负载/每核利用率、内存/Swap、GPU 与 CPU 5 分钟曲线、服务运行时长、缓存模型、已加载模型、日志，并支持加载/卸载模型和对话测试。页面随二进制内嵌，不需要额外资源或 Node 构建。HTTP 契约发布在 `/openapi.yaml`，HTML 参考页在 `/docs`，源文件见 [openapi.yaml](openapi.yaml)。实时客户端可用 `GET /v1/ws`（1Hz 系统快照 + 任务进度）。`GET /v1/catalog` 代理 FlashHub 公共目录（搜索、分类、版本），`GET /v1/logs/download` 返回完整服务日志。
 
 ## 桌面客户端
 
-Windows 安装包内置 `FlashServer.exe`：Rust + Slint 原生客户端（不使用 WebView），包含概览（GPU/CPU/内存/曲线）、模型缓存与加载/卸载、已加载模型、日志、服务启停和开机启动开关。通过 WebSocket（`/v1/ws`）接收实时数据，HTTP 兜底。
+Windows 安装包内置 `FlashServer.exe`：Rust + egui/eframe 原生客户端（不使用 WebView），包含概览（卡片布局的 GPU/CPU 环境信息与 0-100 曲线、底部 GPU/显存/CPU/内存扁平状态条）、模型（本地缓存 + FlashHub 目录搜索/分类/版本、Bundle 与权重分开显示大小、加载状态、异步加载进度、行详情与卸载）、日志（`journalctl` tail 与完整日志下载）、设置（服务启停、开机启动、主题、API 文档）。通过 WebSocket（`/v1/ws`）接收实时数据，HTTP 轮询兜底。
 
-- 源码：`desktop/`；构建：`cargo build --release`（Rust MSVC 工具链，`cargo` 需在 PATH）。产物：`desktop/target/release/FlashServer.exe`（约 10MB）。
-- 内存：软件渲染约 35~50MB 工作集（默认强制软件渲染，可用 `SLINT_BACKEND` 覆盖）。
+- 源码：`desktop/`；构建：`cargo build --release`（Rust MSVC 工具链，`cargo` 需在 PATH）。产物：`desktop/target/release/FlashServer.exe`（约 4.7MB）。
+- 内存：约 110~125MB 工作集（GPU 上下文 + 中文字体 + egui 存储）。
+- 主题：默认深色，可在设置中切换或用 `Ctrl+T`；保存在 `%LOCALAPPDATA%\FlashServer\settings.json`。
+- 破坏性操作（停止服务、禁用开机启动、卸载模型、退出客户端）都会二次确认。
 - 服务启停走 `wsl.exe`，不需要 UAC；开机启动开关调用 `flashserver-setup --start-service/--stop-service`，会弹 UAC。
+- 「API 文档」按钮打开 `http://localhost:8790/docs`。
 - 代码可跨平台编译；服务控制优先 Windows/WSL，Linux 走 `systemctl`（尽力而为），macOS 暂无 flashserver 后端。
 
 ## Windows UI 安装包
@@ -40,8 +43,8 @@ FlashServer-Setup-<version>.exe
 
 安装包会以管理员权限运行，检查/安装 WSL2 Ubuntu，安装 Linux payload，启动
 `flashserver.service`，创建 Windows 登录任务，并检查守护进程。成功后自动打开
-`http://localhost:8790/`（本地控制台）。如果启用 WSL2 需要重启，重启后再次运行
-安装包即可；setup 引擎是幂等的。
+桌面客户端；API 文档在 `http://localhost:8790/docs`。如果启用 WSL2 需要重启，重启后
+再次运行安装包即可；setup 引擎是幂等的。
 
 自动化场景仍可使用 CLI：
 
