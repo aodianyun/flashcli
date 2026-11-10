@@ -29,7 +29,8 @@ Windows 安装包内置 `FlashServer.exe`：Rust + egui/eframe 原生客户端�
 - 内存：约 110~125MB 工作集（GPU 上下文 + 中文字体 + egui 存储）。
 - 主题：默认深色，可在设置中切换或用 `Ctrl+T`；保存在 `%LOCALAPPDATA%\FlashServer\settings.json`。
 - 破坏性操作（停止服务、禁用开机启动、卸载模型、退出客户端）都会二次确认。
-- 服务启停走 `wsl.exe`，不需要 UAC；开机启动开关调用 `flashserver-setup --start-service/--disable-autostart`，会弹 UAC。
+- 服务启停走 `wsl.exe`，不需要 UAC；开机启动开关调用 `flashserver-setup --enable-autostart/--disable-autostart`，会弹 UAC，且不会启动或停止服务。
+- 服务状态与开机启动完全独立：停止不会禁用自启，启动不会启用自启，自启开关也不会启动/停止服务。耗时操作会显示模态进度遮罩，完成后弹出结果提示。
 - 「API 文档」按钮打开 `http://localhost:8790/docs`。
 - 代码可跨平台编译；服务控制优先 Windows/WSL，Linux 走 `systemctl`（尽力而为），macOS 暂无 flashserver 后端。
 
@@ -90,19 +91,20 @@ flashserver-setup.exe
 
 - `max_loaded=0`：只按显存准入。
 - WSL 使用 `addr=0.0.0.0:8790`、`public_host=localhost`、`serve_host=0.0.0.0`，通过 localhost forwarding 让 Windows 访问 WSL 服务。
-- `token` 可选，默认不写。设置后除 `/health`、`/`、`/ui/*`、`/openapi.yaml` 外的 API 都需要 `Authorization: Bearer <token>` 或 `X-Flashcli-Token`。
+- `token` 可选，默认不写。设置后除 `/health`、`/`、`/docs`、`/ui/*`、`/openapi.yaml` 外的 API 都需要 `Authorization: Bearer <token>` 或 `X-Flashcli-Token`。
 
 ## API
 
 ```text
 GET  /health
 GET  /v1/version
-GET  /v1/models                 本地缓存模型 + 已加载实例
+GET  /v1/models                 本地缓存模型 + 已加载实例 + serve 能力
 GET  /v1/models/loaded
-GET  /v1/storage
+GET  /v1/storage                各区域唯一分配字节（硬链接只计一次）
 GET  /v1/resources              GPU、已加载模型、槽位
 GET  /v1/system                 OS/WSL/GPU/驱动/CUDA/SM/torch/CPU/内存/运行时长
-GET  /v1/logs                   ?kind=server|model&ref=...&lines=N
+GET  /v1/logs                   ?kind=server|model&ref=...&lines=N&since=unix
+GET  /v1/logs/download          完整服务/模型日志附件
 GET  /v1/gpu                    设备 + CUDA 进程
 GET  /v1/gpu/history            ?seconds=N 最近 GPU+CPU 遥测采样
 GET  /v1/system/history         /v1/gpu/history 的别名
@@ -112,10 +114,18 @@ GET  /v1/jobs/{id}
 GET  /v1/jobs/{id}/events
 POST /v1/models/load            {"ref":"...","async":true} → job_id（或 endpoint/pid/state）
 POST /v1/models/unload          {"ref":"..."}
+POST /v1/models/clean           {"refs":[...]} 清理本地 Bundle/权重
+POST /v1/storage/clean          {"targets":["cache","python","tools","runtimes"]}
+GET  /v1/catalog                ?q=&tag=&sort=updated|downloads&page=&page_size=
+GET  /v1/catalog/tags
+GET  /v1/catalog/{id}           仓库详情 + 版本列表
 POST /v1/ui/chat                本地控制台代转：{"ref":"...","body":{...}}
+GET  /docs                      HTML API 参考
 GET  /openapi.yaml              OpenAPI 3.1 契约
 GET  /                          内置本地控制台
 ```
+
+`/v1/models/clean` 会跳过已加载/正在加载的模型，并保留与其他模型共享的权重；`/v1/storage/clean` 在有模型常驻/加载时拒绝清理 `runtimes`；两者都返回释放字节数。
 
 请求/响应 schema 以 [openapi.yaml](openapi.yaml) 为准（也通过 `/openapi.yaml` 提供）。
 
@@ -177,6 +187,7 @@ Linux 使用 system-level systemd service。WSL 启用 systemd，并用 Windows 
 ```powershell
 flashserver-setup.exe --stop-service        # 停止服务并禁用开机启动（管理员）
 flashserver-setup.exe --disable-autostart  # 仅禁用开机启动，服务继续运行（管理员）
+flashserver-setup.exe --enable-autostart   # 仅启用开机启动，服务保持当前状态（管理员）
 flashserver-setup.exe --start-service      # 启用开机启动并启动服务（管理员）
 ```
 

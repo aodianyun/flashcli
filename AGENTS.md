@@ -6,6 +6,8 @@ flashcli is the host CLI that distributes and runs FlashRT **Model Bundles**. It
 - `go/` — the host (module `github.com/aodianyun/flashcli/go`): `cmd/flashcli` + `internal/*`. The Python host (`src/flashcli/`) was **removed**; do not reintroduce it.
 - `flashcli-bundle/` — protocol + infer package (`flashcli_bundle`); separate `pyproject.toml`, `dependencies = []`, not on PyPI. Installed into bundle venvs as `flashcli-bundle[infer]`.
 - `bundles/<name>/` — bundle **sources** only; published artifacts live on FlashHub, not in git.
+- `desktop/` — egui/eframe desktop client.
+- `installer/windows/` — Inno Setup installer (built by `scripts/build_windows_package.ps1`).
 - `scripts/` — build/release pipeline · `docs/` — authoritative specs · `tests/` — pytest.
 
 ## Dev setup
@@ -19,6 +21,7 @@ Distribution:
 ```bash
 bash install.sh [--mirror]          # one-click host install (build-from-source, else release assets)
 bash scripts/build_go.sh [OUT]      # cross-compile + sha256sums (version from pyproject)
+powershell -ExecutionPolicy Bypass -File scripts/build_windows_package.ps1  # client + Go + Windows installer
 bash scripts/release_go.sh [--upload]  # build, optionally publish to GitHub + Gitee
 bash scripts/verify_release.sh [--version X]  # isolated install + smoke (never touches host state)
 ```

@@ -16,6 +16,8 @@ Thank you for contributing. This project is intended for open source on GitHub. 
 flashcli/
 ├── flashcli-bundle/        # Bundle protocol + infer package (flashcli_bundle)
 ├── go/                     # Host CLI (Go binary; no model forward passes)
+├── desktop/                # egui/eframe desktop client + Windows installer source
+├── installer/windows/      # Inno Setup installer source
 ├── bundles/                  # Model bundle sources + release-matrix.env
 ├── scripts/                  # Shared release pipeline
 └── docs/                     # User-facing documentation (maintainer docs: see CONTRIBUTING)
@@ -134,8 +136,12 @@ unpublished test/draft releases.
 3. Tag `vX` on the `main` release commit; push the tag.
 4. `bash scripts/release_go.sh --upload` builds and publishes both GitHub and Gitee
    (target branch defaults to `main`; override with `FLASHCLI_RELEASE_TARGET`).
-5. Write the release notes per the standard below on **both** platforms.
-6. Verify the published assets in a clean environment:
+5. Build the Windows package on Windows:
+   `powershell -ExecutionPolicy Bypass -File scripts/build_windows_package.ps1`
+   (client + Go assets + `FlashServer-Setup-<version>.exe`; use `-GoBin` if `go` is not on PATH).
+6. Upload `FlashServer-Setup-<version>.exe` and its SHA256 with the release assets.
+7. Write the release notes per the standard below on **both** platforms.
+8. Verify the published assets in a clean environment:
    `bash scripts/verify_release.sh --version X` (isolated prefix; add `--mirror` for Gitee).
 
 - **Bundles**: follow the maintainer checklist below and [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md).
@@ -158,6 +164,7 @@ Concise; **Features** and **Fixes** only. Bold the key terms. Same text on GitHu
 ## Assets
 - `flashcli-linux-amd64` sha256 `<…>`
 - `flashcli-linux-arm64` sha256 `<…>`
+- `FlashServer-Setup-<version>.exe` sha256 `<…>`
 
 **Full Changelog**: <compare or commits link>
 ```

@@ -5,20 +5,26 @@ Linux payload and invokes the same `flashserver-setup` engine used by the CLI.
 
 ## Build
 
-On Windows, after building the release assets:
+On Windows, build the client, Go assets, and installer in one command:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build_windows_package.ps1
+```
+
+Options: `-SkipClient`, `-SkipGo`, `-GoBin <dir>` (when `go` is not on PATH), `-OutDir <dir>`.
+
+Requirements (checked by the script):
+
+- Go >= 1.24 and Rust MSVC toolchain (`cargo`)
+- Inno Setup 6 (`ISCC.exe` on PATH or in the default Program Files location)
+
+The output is written to `dist/windows/FlashServer-Setup-<version>.exe` and printed with its SHA256.
+
+Manual/low-level path (after the client and `dist/go` assets already exist):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/build_windows_installer.ps1
 ```
-
-Requirements:
-
-- Inno Setup 6 (`ISCC.exe` on PATH or in the default Program Files location)
-- `dist/go/flashserver-setup-windows-amd64.exe`
-- `dist/go/flashcli-linux-*` and `dist/go/flashserver-linux-*`
-- `desktop/target/release/FlashServer.exe` (`cargo build --release` in `desktop/`)
-
-The output is written to `dist/windows/FlashServer-Setup-<version>.exe`.
 
 ## Runtime flow
 

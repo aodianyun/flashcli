@@ -39,8 +39,9 @@ type Area struct {
 	Bytes int64  `json:"bytes"`
 }
 
-// ListModels returns locally cached bundle/model entries. It is intentionally
-// local-only; FlashHub catalog expansion can be added on top later.
+// ListModels returns locally cached bundle/model entries with readiness and
+// serve capability. The public FlashHub catalog is served separately by the
+// server's /v1/catalog proxy.
 func ListModels() ([]Model, error) {
 	markers, err := readMarkers()
 	if err != nil {

@@ -29,7 +29,8 @@ The Windows installer ships `FlashServer.exe`, a Rust + egui/eframe desktop clie
 - Memory: ~110-125 MB working set (GPU context + CJK font + egui stores).
 - Theme: dark by default, switched in Settings or with `Ctrl+T`; saved to `%LOCALAPPDATA%\FlashServer\settings.json`.
 - Destructive actions (stop service, disable auto-start, unload model, quit) ask for confirmation.
-- Service buttons use `wsl.exe` (no UAC). The auto-start toggle calls `flashserver-setup --start-service/--disable-autostart` and therefore prompts for UAC.
+- Service buttons use `wsl.exe` (no UAC). The auto-start toggle calls `flashserver-setup --enable-autostart/--disable-autostart` and therefore prompts for UAC; it does not start or stop the service.
+- Service state and auto-start are independent: stopping never disables auto-start, starting never enables it, and auto-start changes never start/stop the service. Long operations show a modal progress overlay and a result toast.
 - API docs open `http://localhost:8790/docs`.
 - The code compiles cross-platform; service control is wired for Windows/WSL first, Linux uses `systemctl` (best effort) and macOS has no flashserver backend yet.
 
@@ -91,19 +92,20 @@ By default setup downloads the matching `flashcli-linux-<arch>` and `flashserver
 
 - `max_loaded=0`: admit by GPU memory only.
 - WSL uses `addr=0.0.0.0:8790`, `public_host=localhost`, `serve_host=0.0.0.0` so Windows can reach the WSL services through localhost forwarding.
-- `token` is optional and absent by default. When set, it protects every API path except `/health`, `/`, `/ui/*`, and `/openapi.yaml`; send `Authorization: Bearer <token>` or `X-Flashcli-Token`.
+- `token` is optional and absent by default. When set, it protects every API path except `/health`, `/`, `/docs`, `/ui/*`, and `/openapi.yaml`; send `Authorization: Bearer <token>` or `X-Flashcli-Token`.
 
 ## API
 
 ```text
 GET  /health
 GET  /v1/version
-GET  /v1/models                 cached models + loaded instances
+GET  /v1/models                 cached models + loaded instances + serve capability
 GET  /v1/models/loaded
-GET  /v1/storage
+GET  /v1/storage                unique allocated bytes per area (hardlinks counted once)
 GET  /v1/resources              GPU, loaded models, slot counts
 GET  /v1/system                 OS/WSL/GPU/driver/CUDA/SM/torch/CPU/RAM/uptime
-GET  /v1/logs                   ?kind=server|model&ref=...&lines=N
+GET  /v1/logs                   ?kind=server|model&ref=...&lines=N&since=unix
+GET  /v1/logs/download          full daemon/model log attachment
 GET  /v1/gpu                    devices + CUDA processes
 GET  /v1/gpu/history            ?seconds=N recent GPU+CPU telemetry samples
 GET  /v1/system/history         alias of /v1/gpu/history
@@ -113,10 +115,18 @@ GET  /v1/jobs/{id}
 GET  /v1/jobs/{id}/events
 POST /v1/models/load            {"ref":"...","async":true} → job_id (or endpoint/pid/state)
 POST /v1/models/unload          {"ref":"..."}
+POST /v1/models/clean           {"refs":[...]} remove local bundle/weight caches
+POST /v1/storage/clean          {"targets":["cache","python","tools","runtimes"]}
+GET  /v1/catalog                ?q=&tag=&sort=updated|downloads&page=&page_size=
+GET  /v1/catalog/tags
+GET  /v1/catalog/{id}           repository detail + versions
 POST /v1/ui/chat                local console helper: {"ref":"...","body":{...}}
+GET  /docs                      HTML API reference
 GET  /openapi.yaml              OpenAPI 3.1 contract
 GET  /                          embedded local console
 ```
+
+`/v1/models/clean` refuses loaded/in-flight refs and keeps weights shared with another cached ref. `/v1/storage/clean` refuses `runtimes` while models are resident/loading; both return freed bytes.
 
 The authoritative request/response schema is [openapi.yaml](openapi.yaml) (also served at `/openapi.yaml`).
 
@@ -178,6 +188,7 @@ Service control without uninstalling:
 ```powershell
 flashserver-setup.exe --stop-service        # stop daemon, disable auto-start (admin)
 flashserver-setup.exe --disable-autostart  # disable auto-start, keep daemon running (admin)
+flashserver-setup.exe --enable-autostart   # enable auto-start, keep current run state (admin)
 flashserver-setup.exe --start-service      # enable auto-start, start daemon (admin)
 ```
 
