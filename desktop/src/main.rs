@@ -1716,18 +1716,28 @@ impl App {
         } else {
             egui::Color32::from_rgb(196, 43, 28)
         };
+        let font = egui::FontId::proportional(13.0);
+        let text_width =
+            ctx.fonts(|fonts| fonts.layout_no_wrap(message.clone(), font, color).size().x);
+        let max_width = (ctx.screen_rect().width() - 96.0).min(720.0).max(180.0);
+        let width = (text_width + 4.0).clamp(180.0, max_width);
         egui::Area::new(egui::Id::new("op_toast"))
             .order(egui::Order::Foreground)
             .anchor(egui::Align2::CENTER_BOTTOM, [0.0, -24.0])
             .interactable(false)
             .show(ctx, |ui| {
+                ui.set_max_width(width);
                 egui::Frame::NONE
                     .fill(card_fill_dark(dark))
                     .stroke(card_stroke_dark(dark))
                     .corner_radius(6)
                     .inner_margin(egui::Margin::symmetric(14, 8))
                     .show(ui, |ui| {
-                        ui.label(egui::RichText::new(message).color(color).size(13.0));
+                        ui.set_width(width);
+                        ui.add(
+                            egui::Label::new(egui::RichText::new(message).color(color).size(13.0))
+                                .wrap(),
+                        );
                     });
             });
     }
