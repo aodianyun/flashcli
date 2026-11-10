@@ -25,6 +25,19 @@ func stopService(ctx context.Context, env Env, opts Options, out io.Writer) erro
 	return nil
 }
 
+func disableAutostart(ctx context.Context, env Env, opts Options, out io.Writer) error {
+	if os.Geteuid() != 0 {
+		return fmt.Errorf("service control requires root; rerun with sudo")
+	}
+	i := installer{env: env, opts: opts, out: out}
+	if err := i.run(ctx, "systemctl", "disable", opts.ServiceName); err != nil {
+		return err
+	}
+	_ = os.WriteFile(autostartMarker, []byte("disabled\n"), 0o644)
+	fmt.Fprintln(out, "Auto-start disabled; FlashServer is still running.")
+	return nil
+}
+
 func startService(ctx context.Context, env Env, opts Options, out io.Writer) error {
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("service control requires root; rerun with sudo")

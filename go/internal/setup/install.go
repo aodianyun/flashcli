@@ -13,25 +13,26 @@ import (
 
 // Options controls installation.
 type Options struct {
-	Backend        string
-	DryRun         bool
-	BinDir         string
-	Prefix         string
-	Home           string
-	User           string
-	Distro         string
-	Addr           string
-	Token          string
-	ServiceName    string
-	ConfigPath     string
-	NoService      bool
-	ReleaseVersion string
-	ReleaseBase    string
-	ReleaseAPI     string
-	Uninstall      bool
-	StopService    bool
-	StartService   bool
-	PathEnv        string
+	Backend          string
+	DryRun           bool
+	BinDir           string
+	Prefix           string
+	Home             string
+	User             string
+	Distro           string
+	Addr             string
+	Token            string
+	ServiceName      string
+	ConfigPath       string
+	NoService        bool
+	ReleaseVersion   string
+	ReleaseBase      string
+	ReleaseAPI       string
+	Uninstall        bool
+	StopService      bool
+	StartService     bool
+	DisableAutostart bool
+	PathEnv          string
 }
 
 // Run installs flashserver for the detected platform.
@@ -42,6 +43,9 @@ func Run(ctx context.Context, env Env, opts Options, out io.Writer) error {
 	}
 	if opts.Uninstall {
 		return uninstall(ctx, env, opts, out)
+	}
+	if opts.DisableAutostart {
+		return disableAutostart(ctx, env, opts, out)
 	}
 	if opts.StopService {
 		return stopService(ctx, env, opts, out)

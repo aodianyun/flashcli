@@ -1280,7 +1280,7 @@ impl App {
                             if danger_button(ui, "禁用开机启动").clicked() {
                                 self.dialog = Some(DialogState {
                                     title: "禁用开机启动".into(),
-                                    message: "会同时停止当前服务并取消开机启动。\n确定继续？".into(),
+                                    message: "只取消开机启动，当前运行的服务不受影响。\n确定继续？".into(),
                                     action: Pending::DisableAutostart,
                                 });
                             }
@@ -2386,7 +2386,7 @@ fn set_autostart(enabled: bool) -> Result<String, String> {
         let arg = if enabled {
             "--start-service"
         } else {
-            "--stop-service"
+            "--disable-autostart"
         };
         let script = format!(
             "Start-Process -Verb RunAs -WindowStyle Hidden -Wait -FilePath '{}' -ArgumentList '{}'",

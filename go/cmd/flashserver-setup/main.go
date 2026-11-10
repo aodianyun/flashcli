@@ -33,13 +33,14 @@ func main() {
 	flag.BoolVar(&opts.Uninstall, "uninstall", false, "remove the flashserver service/config/binary (keeps model caches)")
 	flag.BoolVar(&opts.StopService, "stop-service", false, "stop the service and disable auto-start")
 	flag.BoolVar(&opts.StartService, "start-service", false, "enable auto-start and start the service")
+	flag.BoolVar(&opts.DisableAutostart, "disable-autostart", false, "disable auto-start without stopping the service")
 	showVersion := flag.Bool("version", false, "print version")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println(version.Version)
 		return
 	}
-	if (opts.StopService || opts.StartService) && ensureElevated() {
+	if (opts.StopService || opts.StartService || opts.DisableAutostart) && ensureElevated() {
 		return
 	}
 

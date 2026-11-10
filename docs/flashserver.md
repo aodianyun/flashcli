@@ -29,7 +29,7 @@ The Windows installer ships `FlashServer.exe`, a Rust + egui/eframe desktop clie
 - Memory: ~110-125 MB working set (GPU context + CJK font + egui stores).
 - Theme: dark by default, switched in Settings or with `Ctrl+T`; saved to `%LOCALAPPDATA%\FlashServer\settings.json`.
 - Destructive actions (stop service, disable auto-start, unload model, quit) ask for confirmation.
-- Service buttons use `wsl.exe` (no UAC). The auto-start toggle calls `flashserver-setup --start-service/--stop-service` and therefore prompts for UAC.
+- Service buttons use `wsl.exe` (no UAC). The auto-start toggle calls `flashserver-setup --start-service/--disable-autostart` and therefore prompts for UAC.
 - API docs open `http://localhost:8790/docs`.
 - The code compiles cross-platform; service control is wired for Windows/WSL first, Linux uses `systemctl` (best effort) and macOS has no flashserver backend yet.
 
@@ -176,8 +176,9 @@ Linux uses a system-level systemd service. WSL enables systemd and uses a Window
 Service control without uninstalling:
 
 ```powershell
-flashserver-setup.exe --stop-service   # stop daemon, disable auto-start (admin)
-flashserver-setup.exe --start-service  # enable auto-start, start daemon (admin)
+flashserver-setup.exe --stop-service        # stop daemon, disable auto-start (admin)
+flashserver-setup.exe --disable-autostart  # disable auto-start, keep daemon running (admin)
+flashserver-setup.exe --start-service      # enable auto-start, start daemon (admin)
 ```
 
 The desktop client exposes the same actions; stopping/starting the daemon itself does not need elevation, only the auto-start change does. The current auto-start state is reported by `/v1/system` (`enabled`, `disabled` or `unknown`).

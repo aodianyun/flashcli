@@ -35,6 +35,29 @@ func stopService(ctx context.Context, env Env, opts Options, out io.Writer) erro
 	return nil
 }
 
+// disableAutostart removes boot/logon auto-start but leaves the running
+// service and keepalive session untouched.
+func disableAutostart(ctx context.Context, env Env, opts Options, out io.Writer) error {
+	i := installer{env: env, opts: opts, out: out}
+	if err := waitWSL(ctx, opts); err == nil {
+		if err := wslRoot(ctx, opts, "systemctl", "disable", opts.ServiceName); err != nil {
+			i.printf("warn: disable systemd unit: %v\n", err)
+		}
+		_ = writeToWSL(ctx, opts, autostartMarker, []byte("disabled\n"), 0o644)
+	} else {
+		i.printf("warn: WSL is not reachable: %v\n", err)
+	}
+	var buf bytes.Buffer
+	cmd := exec.CommandContext(ctx, sysExe("schtasks.exe"), "/Change", "/TN", "flashserver-wsl", "/DISABLE")
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	if err := cmd.Run(); err != nil {
+		i.printf("warn: disable logon task: %v (%s)\n", err, bytes.TrimSpace(buf.Bytes()))
+	}
+	fmt.Fprintln(out, "Auto-start disabled; FlashServer is still running.")
+	return nil
+}
+
 // startService re-enables the logon task and starts the daemon.
 func startService(ctx context.Context, env Env, opts Options, out io.Writer) error {
 	i := installer{env: env, opts: opts, out: out}

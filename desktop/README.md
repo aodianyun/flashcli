@@ -31,7 +31,7 @@ cargo build --release
 
 - The Windows installer copies the binary to `{app}\FlashServer.exe` and opens it after installation.
 - The client looks for `flashserver-setup.exe` in `payload\flashserver-setup.exe`, `..\payload\flashserver-setup.exe` or next to itself; `FLASHSERVER_SETUP_BIN` overrides the path.
-- Service start/stop runs `wsl.exe -d Ubuntu -u root systemctl ...` on Windows. Auto-start changes call `flashserver-setup --start-service/--stop-service` (UAC).
+- Service start/stop runs `wsl.exe -d Ubuntu -u root systemctl ...` on Windows. Auto-start changes call `flashserver-setup --start-service/--disable-autostart` (UAC).
 - Settings (currently the theme) live in `%LOCALAPPDATA%\FlashServer\settings.json`; a UTF-8 BOM is tolerated.
 
 ## Keyboard

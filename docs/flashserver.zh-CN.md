@@ -29,7 +29,7 @@ Windows 安装包内置 `FlashServer.exe`：Rust + egui/eframe 原生客户端�
 - 内存：约 110~125MB 工作集（GPU 上下文 + 中文字体 + egui 存储）。
 - 主题：默认深色，可在设置中切换或用 `Ctrl+T`；保存在 `%LOCALAPPDATA%\FlashServer\settings.json`。
 - 破坏性操作（停止服务、禁用开机启动、卸载模型、退出客户端）都会二次确认。
-- 服务启停走 `wsl.exe`，不需要 UAC；开机启动开关调用 `flashserver-setup --start-service/--stop-service`，会弹 UAC。
+- 服务启停走 `wsl.exe`，不需要 UAC；开机启动开关调用 `flashserver-setup --start-service/--disable-autostart`，会弹 UAC。
 - 「API 文档」按钮打开 `http://localhost:8790/docs`。
 - 代码可跨平台编译；服务控制优先 Windows/WSL，Linux 走 `systemctl`（尽力而为），macOS 暂无 flashserver 后端。
 
@@ -175,8 +175,9 @@ Linux 使用 system-level systemd service。WSL 启用 systemd，并用 Windows 
 无需卸载即可控制服务：
 
 ```powershell
-flashserver-setup.exe --stop-service   # 停止服务并禁用开机启动（管理员）
-flashserver-setup.exe --start-service  # 启用开机启动并启动服务（管理员）
+flashserver-setup.exe --stop-service        # 停止服务并禁用开机启动（管理员）
+flashserver-setup.exe --disable-autostart  # 仅禁用开机启动，服务继续运行（管理员）
+flashserver-setup.exe --start-service      # 启用开机启动并启动服务（管理员）
 ```
 
 桌面客户端提供同样的操作；服务启停本身不需要提权，只有开机启动变更需要。`/v1/system` 会报告当前开机启动状态（`enabled`、`disabled` 或 `unknown`）。
