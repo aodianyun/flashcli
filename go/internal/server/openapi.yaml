@@ -149,6 +149,87 @@ paths:
                   models:
                     type: array
                     items: { $ref: '#/components/schemas/LoadedModel' }
+  /v1/catalog:
+    get:
+      summary: Search the public FlashHub catalog
+      parameters:
+        - name: q
+          in: query
+          description: Repository name search
+          schema: { type: string }
+        - name: tag
+          in: query
+          description: Tag id from /v1/catalog/tags
+          schema: { type: integer }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [updated, downloads] }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Catalog page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  repos:
+                    type: array
+                    items: { $ref: '#/components/schemas/CatalogRepository' }
+                  total: { type: integer }
+                  page: { type: integer }
+                  page_size: { type: integer }
+        '502':
+          $ref: '#/components/responses/Error'
+  /v1/catalog/tags:
+    get:
+      summary: FlashHub repository categories
+      responses:
+        '200':
+          description: Tags
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tags:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+                        name_cn: { type: string }
+  /v1/catalog/{id}:
+    get:
+      summary: One FlashHub repository with its versions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Repository and versions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  repo: { $ref: '#/components/schemas/CatalogRepository' }
+                  versions:
+                    type: array
+                    items: { $ref: '#/components/schemas/CatalogVersion' }
+                  total: { type: integer }
+        '400':
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
   /v1/storage:
     get:
       summary: Disk usage per cache area
@@ -303,6 +384,27 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
+  /v1/logs/download:
+    get:
+      summary: Download the full daemon or per-model log
+      parameters:
+        - name: kind
+          in: query
+          schema: { type: string, enum: [server, model], default: server }
+        - name: ref
+          in: query
+          description: Required when kind=model
+          schema: { type: string }
+      responses:
+        '200':
+          description: Plain-text log attachment
+          content:
+            text/plain:
+              schema: { type: string }
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
   /v1/ui/chat:
     post:
       summary: Console helper that forwards one chat completion
@@ -342,6 +444,16 @@ paths:
           description: Switching protocols
         '401':
           $ref: '#/components/responses/Error'
+  /docs:
+    get:
+      summary: Interactive HTML API reference
+      security: []
+      responses:
+        '200':
+          description: HTML API reference
+          content:
+            text/html:
+              schema: { type: string }
   /openapi.yaml:
     get:
       summary: This OpenAPI document
@@ -379,6 +491,35 @@ components:
       type: object
       properties:
         error: { type: string }
+    CatalogVersion:
+      type: object
+      properties:
+        id: { type: integer }
+        version: { type: string }
+        size: { type: integer, format: int64 }
+        file_count: { type: integer }
+        release_status: { type: string }
+        status: { type: string }
+        created_at: { type: string, format: date-time }
+    CatalogRepository:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        namespace: { type: string, example: flashcli-bundle }
+        model_name: { type: string }
+        version_count: { type: integer }
+        downloads: { type: integer }
+        latest_version: { type: string }
+        updated_at: { type: string, format: date-time }
+        tags:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              name: { type: string }
+              name_cn: { type: string }
     GpuDevice:
       type: object
       required: [index, name, memory_total_bytes, memory_used_bytes, memory_free_bytes]
@@ -436,7 +577,8 @@ components:
         hostname: { type: string }
         kernel: { type: string }
         driver_version: { type: string }
-        cuda_version: { type: string, example: '13.1' }        cuda_tag: { type: string, example: 'cu130' }
+        cuda_version: { type: string, example: '13.1' }
+        cuda_tag: { type: string, example: 'cu130' }
         sm: { type: string, example: '89' }
         torch_index: { type: string, example: 'cu130' }
         started_at: { type: string, format: date-time }

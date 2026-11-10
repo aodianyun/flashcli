@@ -68,18 +68,27 @@ func CUDAVersion(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for _, line := range strings.Split(string(out), "\n") {
-		idx := strings.Index(line, "CUDA Version:")
-		if idx < 0 {
-			continue
-		}
-		rest := strings.TrimSpace(line[idx+len("CUDA Version:"):])
-		rest = strings.Trim(rest, "| ")
-		if fields := strings.Fields(rest); len(fields) > 0 {
-			return strings.TrimSpace(fields[0]), nil
+	return ParseCUDAVersion(string(out)), nil
+}
+
+// ParseCUDAVersion extracts the driver's CUDA version from nvidia-smi output.
+// Classic drivers print "CUDA Version: 12.4"; newer Windows/WSL drivers print
+// "CUDA UMD Version: 13.3" instead.
+func ParseCUDAVersion(out string) string {
+	keys := []string{"CUDA UMD Version:", "CUDA Version:"}
+	for _, line := range strings.Split(out, "\n") {
+		for _, key := range keys {
+			idx := strings.Index(line, key)
+			if idx < 0 {
+				continue
+			}
+			rest := strings.Trim(strings.TrimSpace(line[idx+len(key):]), "| ")
+			if fields := strings.Fields(rest); len(fields) > 0 {
+				return fields[0]
+			}
 		}
 	}
-	return "", nil
+	return ""
 }
 
 // nvidiaSMI resolves the probe binary. Services on WSL2 get a minimal PATH

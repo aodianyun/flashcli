@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlashServer API</title>
+<style>
+  :root { color-scheme: light dark; --bg:#f7f8fa; --panel:#fff; --text:#202124; --muted:#5f6368; --line:#e3e5e8; --code:#f1f3f4; --accent:#1a73e8; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1e1e1e; --panel:#252526; --text:#cccccc; --muted:#8a8a8a; --line:#3c3c3c; --code:#2d2d30; --accent:#3794ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.6 "Segoe UI","Microsoft YaHei",system-ui,sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 32px 24px 64px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin-bottom: 24px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; margin-bottom: 16px; }
+  h2 { font-size: 15px; margin: 0 0 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; }
+  tr:last-child td { border-bottom: 0; }
+  code, pre { font-family: Consolas, ui-monospace, monospace; }
+  code { background: var(--code); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code); padding: 14px; border-radius: 8px; overflow: auto; font-size: 12.5px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .tag { display:inline-block; font-size: 11px; padding: 1px 6px; border:1px solid var(--line); border-radius: 4px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>FlashServer API</h1>
+  <div class="sub">本地模型调度服务 · <code>http://localhost:8790</code> · 权威契约：<a href="/openapi.yaml">openapi.yaml</a></div>
+
+  <section>
+    <h2>认证</h2>
+    <p>默认关闭。配置了 token 时，除 <code>/health</code>、<code>/docs</code>、<code>/openapi.yaml</code>、<code>/</code> 外需要
+      <code>X-Flashcli-Token: &lt;token&gt;</code> 或 <code>Authorization: Bearer &lt;token&gt;</code>。</p>
+  </section>
+
+  <section>
+    <h2>系统与资源</h2>
+    <table>
+      <tr><th>方法</th><th>路径</th><th>说明</th></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/health</code></td><td>存活检查</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/system</code></td><td>系统、GPU/CPU/内存、CUDA/SM/torch、开机启动状态</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/gpu</code></td><td>GPU 设备与 CUDA 进程</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/gpu/history?seconds=300</code></td><td>GPU/CPU 遥测历史</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/resources</code></td><td>准入视图（GPU/已加载/槽位）</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/models</code></td><td>本地缓存模型</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/models/loaded</code></td><td>已加载模型</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/storage</code></td><td>磁盘占用</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/logs?kind=server|model&amp;ref=...&amp;lines=200</code></td><td>日志（journalctl tail，最多 2000 行）</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/logs/download?kind=server|model&amp;ref=...</code></td><td>下载完整日志</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/ws</code></td><td>WebSocket：1Hz 系统快照 + 任务进度</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>FlashHub 目录</h2>
+    <table>
+      <tr><th>方法</th><th>路径</th><th>说明</th></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/catalog?q=pi05&amp;tag=1&amp;sort=updated&amp;page=1&amp;page_size=20</code></td><td>搜索仓库</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/catalog/tags</code></td><td>分类列表</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/catalog/{id}</code></td><td>仓库详情 + 版本列表</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>模型生命周期</h2>
+    <table>
+      <tr><th>方法</th><th>路径</th><th>说明</th></tr>
+      <tr><td><span class="tag">POST</span></td><td><code>/v1/models/load</code></td><td><code>{"ref":"flashcli-bundle/name:version","async":true}</code></td></tr>
+      <tr><td><span class="tag">POST</span></td><td><code>/v1/models/unload</code></td><td><code>{"ref":"..."}</code></td></tr>
+      <tr><td><span class="tag">POST</span></td><td><code>/v1/pull</code></td><td>下载 bundle/权重（异步任务）</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/jobs/{id}</code></td><td>任务状态</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/jobs/{id}/events</code></td><td>任务进度 SSE</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>示例</h2>
+    <pre># 加载模型（异步）
+curl -X POST http://localhost:8790/v1/models/load \
+  -H 'Content-Type: application/json' \
+  -d '{"ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.0","async":true}'
+
+# 查询任务
+curl http://localhost:8790/v1/jobs/load-1
+
+# 推理：使用 load 返回的 endpoint
+curl http://localhost:PORT/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"qwen3","messages":[{"role":"user","content":"Hello"}]}'</pre>
+  </section>
+</main>
+</body>
+</html>

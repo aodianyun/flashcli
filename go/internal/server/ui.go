@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -25,6 +26,17 @@ var webFS embed.FS
 
 //go:embed openapi.yaml
 var openapiDoc []byte
+
+func (s *Server) apiDocs(w http.ResponseWriter, _ *http.Request) {
+	blob, err := readWeb("docs.html")
+	if err != nil {
+		http.NotFound(w, nil)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = w.Write(blob)
+}
 
 func (s *Server) openapi(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
@@ -116,7 +128,11 @@ func (s *Server) logs(w http.ResponseWriter, r *http.Request) {
 	kind := r.URL.Query().Get("kind")
 	switch kind {
 	case "", "server":
-		writeJSON(w, http.StatusOK, map[string]any{"kind": "server", "lines": serverLogLines(n)})
+		lines := serverLogLines(n)
+		if journal, err := journalTail(n); err == nil && len(journal) > 0 {
+			lines = journal
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"kind": "server", "lines": lines})
 	case "model":
 		refStr := strings.TrimSpace(r.URL.Query().Get("ref"))
 		if refStr == "" {
@@ -141,6 +157,57 @@ func (s *Server) logs(w http.ResponseWriter, r *http.Request) {
 
 func serveLogName(refStr string) string {
 	return strings.NewReplacer("/", "_", "\\", "_", ":", "_").Replace(refStr) + ".log"
+}
+
+// journalTail reads the service log from journald. The in-memory ring buffer is
+// only a fallback for non-systemd dev runs.
+func journalTail(n int) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "journalctl", "-u", "flashserver", "--no-pager",
+		"-n", strconv.Itoa(n), "-o", "short-iso").Output()
+	if err != nil {
+		return nil, err
+	}
+	text := strings.TrimRight(string(out), "\n")
+	if text == "" {
+		return nil, nil
+	}
+	return strings.Split(text, "\n"), nil
+}
+
+func (s *Server) downloadLogs(w http.ResponseWriter, r *http.Request) {
+	kind := r.URL.Query().Get("kind")
+	if kind == "model" {
+		refStr := strings.TrimSpace(r.URL.Query().Get("ref"))
+		if refStr == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "ref is required"})
+			return
+		}
+		if s.LogDir == "" {
+			writeJSON(w, http.StatusNotFound, map[string]any{"error": "serve log directory is not configured"})
+			return
+		}
+		name := serveLogName(refStr)
+		path := filepath.Join(s.LogDir, name)
+		if _, err := os.Stat(path); err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]any{"error": "log not found"})
+			return
+		}
+		w.Header().Set("Content-Disposition", "attachment; filename=\""+name+"\"")
+		http.ServeFile(w, r, path)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	blob, err := exec.CommandContext(ctx, "journalctl", "-u", "flashserver", "--no-pager", "-o", "short-iso").Output()
+	if err != nil || len(blob) == 0 {
+		blob = []byte(strings.Join(serverLogLines(2000), "\n") + "\n")
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"flashserver.log\"")
+	_, _ = w.Write(blob)
 }
 
 func tailFile(path string, n int) ([]string, error) {

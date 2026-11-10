@@ -57,6 +57,20 @@ func TestParseTelemetryUnavailable(t *testing.T) {
 	}
 }
 
+func TestParseCUDAVersion(t *testing.T) {
+	classic := "| NVIDIA-SMI 535.104.05   Driver Version: 535.104.05   CUDA Version: 12.2 |\n"
+	if got := ParseCUDAVersion(classic); got != "12.2" {
+		t.Fatalf("classic cuda = %q", got)
+	}
+	umd := "| NVIDIA-SMI 610.57.01   KMD Version: 610.88   CUDA UMD Version: 13.3 |\n"
+	if got := ParseCUDAVersion(umd); got != "13.3" {
+		t.Fatalf("umd cuda = %q", got)
+	}
+	if got := ParseCUDAVersion("no header"); got != "" {
+		t.Fatalf("missing cuda = %q", got)
+	}
+}
+
 func TestParseProcesses(t *testing.T) {
 	procs := ParseProcesses("1234, python, 3072\nbad-line\n5678, /usr/bin/python3, N/A\n")
 	if len(procs) != 1 {

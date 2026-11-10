@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aodianyun/flashcli/go/internal/flashhub"
 	"github.com/aodianyun/flashcli/go/internal/gpu"
 	"github.com/aodianyun/flashcli/go/internal/host"
 	"github.com/aodianyun/flashcli/go/internal/version"
@@ -35,6 +36,7 @@ type Server struct {
 	Token   string
 	Source  Source
 	Puller  Puller
+	Catalog CatalogSource
 	Jobs    *JobManager
 	Manager *Manager
 	GPU     func(context.Context) ([]gpu.Device, error)
@@ -64,6 +66,7 @@ func New(addr string) *Server {
 		Addr:    addr,
 		Source:  defaultSource{},
 		Puller:  hostPuller{},
+		Catalog: flashhub.NewClient(),
 		Jobs:    NewJobManager(),
 		Manager: NewManagerWithOptions(FlashcliLauncher{}, ManagerOptions{GPU: gpuProbe}),
 		GPU:     gpuProbe,
@@ -76,10 +79,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("GET /v1/system", s.system)
 	mux.HandleFunc("GET /v1/logs", s.logs)
+	mux.HandleFunc("GET /v1/logs/download", s.downloadLogs)
 	mux.HandleFunc("GET /openapi.yaml", s.openapi)
+	mux.HandleFunc("GET /docs", s.apiDocs)
 	mux.HandleFunc("GET /v1/version", s.version)
 	mux.HandleFunc("GET /v1/models", s.models)
 	mux.HandleFunc("GET /v1/models/loaded", s.loadedModels)
+	mux.HandleFunc("GET /v1/catalog", s.catalogRepos)
+	mux.HandleFunc("GET /v1/catalog/tags", s.catalogTags)
+	mux.HandleFunc("GET /v1/catalog/{id}", s.catalogRepo)
 	mux.HandleFunc("GET /v1/storage", s.storage)
 	mux.HandleFunc("GET /v1/resources", s.resources)
 	mux.HandleFunc("GET /v1/gpu", s.gpuStatus)
@@ -101,7 +109,7 @@ func (s *Server) authorize(next http.Handler) http.Handler {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" || r.URL.Path == "/" || r.URL.Path == "/openapi.yaml" || strings.HasPrefix(r.URL.Path, "/ui/") {
+		if r.URL.Path == "/health" || r.URL.Path == "/" || r.URL.Path == "/docs" || r.URL.Path == "/openapi.yaml" || strings.HasPrefix(r.URL.Path, "/ui/") {
 			next.ServeHTTP(w, r)
 			return
 		}
