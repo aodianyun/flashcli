@@ -741,24 +741,19 @@ impl App {
                         });
                         row.col(|ui| {
                             if m.loaded {
-                                if ui
-                                    .add(egui::Button::new(
-                                        egui::RichText::new("卸载").color(red(ui)),
-                                    ))
-                                    .clicked()
-                                {
+                                if table_danger_button(ui, "卸载").clicked() {
                                     unload_request = Some(m.name.clone());
                                 }
                             } else if m.ready() {
                                 if m.serve {
-                                    if ui.small_button("加载").clicked() {
+                                    if table_button(ui, "加载").clicked() {
                                         load_request = Some(m.name.clone());
                                     }
                                 } else {
                                     ui.label(egui::RichText::new("—").weak())
                                         .on_hover_text("该 bundle 只声明了 run，不能通过服务加载");
                                 }
-                            } else if ui.small_button("下载").clicked() {
+                            } else if table_button(ui, "下载").clicked() {
                                 pull_request = Some(m.name.clone());
                             }
                         });
@@ -959,7 +954,7 @@ impl App {
                                 ui.label(egui::RichText::new(&v.status).weak().small());
                             });
                             row.col(|ui| {
-                                if ui.small_button("加载").clicked() {
+                                if table_button(ui, "加载").clicked() {
                                     load_ref = Some(format!(
                                         "{}/{}:{}",
                                         repo.namespace, repo.name, v.version
@@ -1009,14 +1004,16 @@ impl App {
         let mut load = false;
         let mut unload = false;
         let mut pull = false;
+        modal_backdrop(ctx, dark, &mut close);
         egui::Window::new("model_detail_dialog")
             .title_bar(false)
+            .order(egui::Order::Foreground)
             .frame(dialog_frame(dark))
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
-                ui.set_min_width(540.0);
+                ui.set_width(560.0);
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("模型详情").size(16.0).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1350,14 +1347,16 @@ impl App {
         let dark = ctx.style().visuals.dark_mode;
         let mut close = false;
         let mut confirm = false;
+        modal_backdrop(ctx, dark, &mut close);
         egui::Window::new("confirm_dialog")
             .title_bar(false)
+            .order(egui::Order::Foreground)
             .frame(dialog_frame(dark))
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
-                ui.set_min_width(420.0);
+                ui.set_width(440.0);
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new(&title).size(16.0).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1591,7 +1590,7 @@ fn card_frame(ui: &egui::Ui) -> egui::Frame {
     egui::Frame::NONE
         .fill(card_fill(ui))
         .stroke(card_stroke(ui))
-        .corner_radius(8)
+        .corner_radius(6)
         .inner_margin(egui::Margin::symmetric(14, 12))
 }
 
@@ -1599,8 +1598,33 @@ fn dialog_frame(dark: bool) -> egui::Frame {
     egui::Frame::NONE
         .fill(card_fill_dark(dark))
         .stroke(card_stroke_dark(dark))
-        .corner_radius(10)
+        .corner_radius(8)
         .inner_margin(egui::Margin::symmetric(18, 16))
+        .shadow(egui::epaint::Shadow {
+            offset: [0, 10],
+            blur: 28,
+            spread: 0,
+            color: egui::Color32::from_black_alpha(if dark { 130 } else { 45 }),
+        })
+}
+
+fn modal_backdrop(ctx: &egui::Context, dark: bool, close: &mut bool) {
+    let screen = ctx.screen_rect();
+    egui::Area::new(egui::Id::new("modal_backdrop"))
+        .order(egui::Order::Middle)
+        .fixed_pos(screen.min)
+        .interactable(true)
+        .show(ctx, |ui| {
+            let (rect, response) = ui.allocate_exact_size(screen.size(), egui::Sense::click());
+            ui.painter().rect_filled(
+                rect,
+                0.0,
+                egui::Color32::from_black_alpha(if dark { 110 } else { 60 }),
+            );
+            if response.clicked() {
+                *close = true;
+            }
+        });
 }
 
 fn panel(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {
@@ -1669,7 +1693,7 @@ fn nav_item(ui: &mut egui::Ui, selected: bool, text: &str) -> egui::Response {
             egui::Color32::TRANSPARENT
         };
         if bg != egui::Color32::TRANSPARENT {
-            ui.painter().rect_filled(rect, 4.0, bg);
+            ui.painter().rect_filled(rect, 3.0, bg);
         }
         let color = if selected {
             egui::Color32::WHITE
@@ -1777,11 +1801,25 @@ fn destructive_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
 fn chip(ui: &mut egui::Ui, text: &str, color: egui::Color32) {
     egui::Frame::NONE
         .fill(color.gamma_multiply(0.18))
-        .corner_radius(10)
+        .corner_radius(6)
         .inner_margin(egui::Margin::symmetric(9, 3))
         .show(ui, |ui| {
             ui.label(egui::RichText::new(text).color(color).small().strong());
         });
+}
+
+fn table_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
+    ui.add_sized(
+        [64.0, 25.0],
+        egui::Button::new(egui::RichText::new(text).size(12.5)),
+    )
+}
+
+fn table_danger_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
+    ui.add_sized(
+        [64.0, 25.0],
+        egui::Button::new(egui::RichText::new(text).color(red(ui)).size(12.5)),
+    )
 }
 
 fn accent(ui: &egui::Ui) -> egui::Color32 {
@@ -2481,18 +2519,18 @@ fn apply_theme(ctx: &egui::Context, dark: bool) {
     visuals.widgets.inactive.bg_fill = inactive_bg;
     visuals.widgets.inactive.weak_bg_fill = inactive_bg;
     visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0_f32, border);
-    visuals.widgets.inactive.corner_radius = egui::CornerRadius::same(6);
+    visuals.widgets.inactive.corner_radius = egui::CornerRadius::same(4);
     visuals.widgets.hovered.bg_fill = hover_bg;
     visuals.widgets.hovered.weak_bg_fill = hover_bg;
     visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0_f32, hover_border);
-    visuals.widgets.hovered.corner_radius = egui::CornerRadius::same(6);
+    visuals.widgets.hovered.corner_radius = egui::CornerRadius::same(4);
     visuals.widgets.active.bg_fill = active_bg;
     visuals.widgets.active.weak_bg_fill = active_bg;
     visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0_f32, hover_border);
-    visuals.widgets.active.corner_radius = egui::CornerRadius::same(6);
+    visuals.widgets.active.corner_radius = egui::CornerRadius::same(4);
     visuals.widgets.open = visuals.widgets.hovered;
     visuals.window_stroke = egui::Stroke::new(1.0_f32, border);
-    visuals.menu_corner_radius = egui::CornerRadius::same(8);
+    visuals.menu_corner_radius = egui::CornerRadius::same(6);
 
     let mut style = (*ctx.style()).clone();
     style.spacing.item_spacing = egui::vec2(8.0, 6.0);
