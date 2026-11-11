@@ -13,7 +13,7 @@ Native desktop client for `flashserver`, built with Rust + [egui/eframe](https:/
 - API URL: reads `%LOCALAPPDATA%\FlashServer\api-url.txt` (written by setup when the default port 8790 is reserved) and falls back to `http://127.0.0.1:8790`. The settings page shows the selected address.
 - Copy actions (Serve address, usage example) show a result toast; the usage example is also selectable.
 - Destructive actions (stop service, disable auto-start, stop model, quit) require confirmation.
-- Live data: WebSocket `/v1/ws` (1 Hz system snapshots + job progress), HTTP polling fallback.
+- Live data: WebSocket `/v1/ws` streams system, model, storage, mirror and job state; HTTP is used for commands and on-demand queries only (no polling).
 - Load/start progress shows the bundle ref, current phase (bundle sync, Python runtime/venv, weights for load; serve/health for start), file/byte counts and percentage. Checksum-mismatched downloads are retried. A completed load/start banner disappears after a few seconds.
 - Downloads are serialized; load/download/start actions are disabled while a job is active and the current row shows "加载中…/下载中…/启动中…".
 - Model size is Bundle + per-model runtime + weights. Weights are shared by `source/repo@revision` and may be repeated across rows, while model totals de-dupe by weights key. Runtime directories are per bundle/version. Settings shows the grouped shared cache (downloads + base Python + uv); model bundles/weights/runtimes are cleaned from the Models page.

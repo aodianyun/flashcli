@@ -47,7 +47,7 @@ func (c *wsClient) writeLoop(ctx context.Context) {
 	}
 }
 
-// ws streams system snapshots (1 Hz) and job progress over WebSocket.
+// ws streams realtime snapshots (system/models/storage/mirror) and job progress.
 func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 	if err != nil {
@@ -75,17 +75,40 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 		"protocol_version": version.ProtocolVersion,
 	})
 	client.send(map[string]any{"type": "system", "data": s.systemSnapshot(ctx)})
+	s.sendWSSnapshots(ctx, client)
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
+	snapTicker := time.NewTicker(2 * time.Second)
+	defer snapTicker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
 			client.send(map[string]any{"type": "system", "data": s.systemSnapshot(ctx)})
+		case <-snapTicker.C:
+			s.sendWSSnapshots(ctx, client)
 		}
 	}
+}
+
+func (s *Server) sendWSSnapshots(ctx context.Context, client *wsClient) {
+	if s.Source != nil {
+		if models, err := s.Source.Models(ctx); err == nil {
+			client.send(map[string]any{
+				"type": "models",
+				"data": map[string]any{"models": models, "loaded": s.loaded()},
+			})
+		}
+		if areas, err := s.Source.Storage(ctx); err == nil {
+			client.send(map[string]any{
+				"type": "storage",
+				"data": map[string]any{"areas": areas},
+			})
+		}
+	}
+	client.send(map[string]any{"type": "mirror", "data": mirrorPayload()})
 }
 
 func (s *Server) addWSClient(c *wsClient) {

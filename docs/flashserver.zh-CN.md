@@ -23,7 +23,7 @@ flashcli serve     → 单模型进程，OpenAI-compatible API
 
 ## 桌面客户端
 
-Windows 安装包内置 `FlashServer.exe`：Rust + egui/eframe 原生客户端（不使用 WebView，启动无黑色控制台窗口），包含概览（卡片布局的 GPU/CPU 环境信息与 0-100 曲线、两行紧凑的服务/磁盘卡片、底部 GPU/显存/CPU/内存扁平状态条）、模型（本地缓存 + 按需搜索的 FlashHub 目录/分类/版本、Bundle/运行时/权重分开显示大小、就绪与启动状态、异步加载/启动进度、行操作“使用/更多（查看信息、查看日志、停止）”、run/serve 冒烟测试（日志对话框）、多选缓存清理）、日志（`journalctl` 服务日志或指定模型的 serve 日志，支持返回服务日志、清空和原生“另存为”）、设置（服务启停、开机启动、国内镜像、共享缓存清理、主题、API 文档）。“使用”对话框显示目标 Serve 地址、OpenAI 兼容 curl 示例、API 文档、模型列表和本地控制台入口。模型详情只展示信息并提供启动/加载，使用/日志/停止仍保留在行操作中。通过 WebSocket（`/v1/ws`）接收实时数据，HTTP 轮询兜底。加载进度（Bundle 同步、Python 运行时/venv、权重）和启动进度（serve 进程/健康检查）会显示 bundle 引用、当前阶段、文件/字节数和百分比；校验失败的下载会自动重试。下载串行执行：有任务进行中时客户端禁用加载/下载/启动按钮，重复 `/v1/pull` 返回 HTTP 409。「加载」会把 Bundle、Python 运行时/venv 和权重准备到就绪状态；就绪后才能「启动」，「停止」会结束该模型的 serve 进程。模型大小 = Bundle + 该模型运行时 + 权重；权重按 `source/repo@revision` 存储，可能被多个 bundle 版本共享（合计按权重 key 去重），而每个 bundle/版本有独立的运行时目录。设置中只统计/清理共享缓存（下载缓存 + 基础 Python + uv）；模型 Bundle/权重/运行时在「模型」页清理。
+Windows 安装包内置 `FlashServer.exe`：Rust + egui/eframe 原生客户端（不使用 WebView，启动无黑色控制台窗口），包含概览（卡片布局的 GPU/CPU 环境信息与 0-100 曲线、两行紧凑的服务/磁盘卡片、底部 GPU/显存/CPU/内存扁平状态条）、模型（本地缓存 + 按需搜索的 FlashHub 目录/分类/版本、Bundle/运行时/权重分开显示大小、就绪与启动状态、异步加载/启动进度、行操作“使用/更多（查看信息、查看日志、停止）”、run/serve 冒烟测试（日志对话框）、多选缓存清理）、日志（`journalctl` 服务日志或指定模型的 serve 日志，支持返回服务日志、清空和原生“另存为”）、设置（服务启停、开机启动、国内镜像、共享缓存清理、主题、API 文档）。“使用”对话框显示目标 Serve 地址、OpenAI 兼容 curl 示例、API 文档、模型列表和本地控制台入口。模型详情只展示信息并提供启动/加载，使用/日志/停止仍保留在行操作中。通过 WebSocket（`/v1/ws`）接收系统、模型列表、存储、镜像和任务进度；HTTP 仅用于命令和按需查询（加载、拉取、日志、目录、清理）。加载进度（Bundle 同步、Python 运行时/venv、权重）和启动进度（serve 进程/健康检查）会显示 bundle 引用、当前阶段、文件/字节数和百分比；校验失败的下载会自动重试。下载串行执行：有任务进行中时客户端禁用加载/下载/启动按钮，重复 `/v1/pull` 返回 HTTP 409。「加载」会把 Bundle、Python 运行时/venv 和权重准备到就绪状态；就绪后才能「启动」，「停止」会结束该模型的 serve 进程。模型大小 = Bundle + 该模型运行时 + 权重；权重按 `source/repo@revision` 存储，可能被多个 bundle 版本共享（合计按权重 key 去重），而每个 bundle/版本有独立的运行时目录。设置中只统计/清理共享缓存（下载缓存 + 基础 Python + uv）；模型 Bundle/权重/运行时在「模型」页清理。
 
 - 源码：`desktop/`；构建：`cargo build --release`（Rust MSVC 工具链，`cargo` 需在 PATH）。产物：`desktop/target/release/FlashServer.exe`（约 4.7MB）。
 - 内存：约 110~125MB 工作集（GPU 上下文 + 中文字体 + egui 存储）。
@@ -175,7 +175,7 @@ GET  /v1/logs/download          完整服务/模型日志附件
 GET  /v1/gpu                    设备 + CUDA 进程
 GET  /v1/gpu/history            ?seconds=N 最近 GPU+CPU 遥测采样
 GET  /v1/system/history         /v1/gpu/history 的别名
-GET  /v1/ws                     WebSocket：1Hz 系统快照 + 任务进度
+GET  /v1/ws                     WebSocket：系统/模型/存储/镜像快照 + 任务进度
 POST /v1/pull
 GET  /v1/jobs/{id}
 GET  /v1/jobs/{id}/events

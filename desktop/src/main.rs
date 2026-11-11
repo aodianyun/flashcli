@@ -2,9 +2,8 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use eframe::egui;
@@ -282,8 +281,6 @@ pub struct App {
     load_pct: Option<f32>,
     job_ref: String,
     job_verb: String,
-    job_active: Option<Arc<AtomicBool>>,
-    ws_connected: Arc<AtomicBool>,
     dialog: Option<DialogState>,
     smoke: Option<SmokeState>,
     gpu_util: Vec<[f64; 2]>,
@@ -300,9 +297,7 @@ impl App {
         apply_theme(&cc.egui_ctx, dark);
 
         let (tx, rx) = channel();
-        let ws_connected = Arc::new(AtomicBool::new(false));
-        start_http(tx.clone(), cc.egui_ctx.clone(), ws_connected.clone());
-        start_ws(tx.clone(), cc.egui_ctx.clone(), ws_connected.clone());
+        start_ws(tx.clone(), cc.egui_ctx.clone());
 
         Self {
             rx,
@@ -352,8 +347,6 @@ impl App {
             load_pct: None,
             job_ref: String::new(),
             job_verb: String::new(),
-            job_active: None,
-            ws_connected,
             dialog: None,
             smoke: None,
             gpu_util: Vec::new(),
@@ -518,8 +511,6 @@ impl App {
         pull: bool,
         verb: &'static str,
     ) {
-        let active = Arc::new(AtomicBool::new(true));
-        self.job_active = Some(active.clone());
         self.job_ref = ref_str.clone();
         self.job_verb = verb.to_string();
         self.loading = true;
@@ -527,15 +518,7 @@ impl App {
         self.load_status_at = None;
         self.load_message.clear();
         self.load_pct = None;
-        spawn_job(
-            self.tx.clone(),
-            ctx.clone(),
-            ref_str,
-            pull,
-            verb,
-            active,
-            self.ws_connected.clone(),
-        );
+        spawn_job(self.tx.clone(), ctx.clone(), ref_str, pull, verb);
     }
 
     fn apply_job(&mut self, job: JobEvent) {
@@ -574,17 +557,11 @@ impl App {
                 self.load_message.clear();
                 self.load_status = format!("{}完成", job.verb);
                 self.load_status_at = Some(Instant::now());
-                if let Some(active) = self.job_active.take() {
-                    active.store(false, Ordering::Relaxed);
-                }
             }
             "failed" => {
                 self.loading = false;
                 self.load_status = format!("{}失败：{}", job.verb, job.message);
                 self.load_status_at = None;
-                if let Some(active) = self.job_active.take() {
-                    active.store(false, Ordering::Relaxed);
-                }
             }
             _ => {}
         }
@@ -3116,116 +3093,94 @@ fn push_point(points: &mut Vec<[f64; 2]>, x: f64, y: f32) {
 
 // ---------- threads ----------
 
-fn start_http(tx: Sender<Event>, ctx: egui::Context, ws_connected: Arc<AtomicBool>) {
+fn start_ws(tx: Sender<Event>, ctx: egui::Context) {
     std::thread::spawn(move || {
-        let mut system_fails = 0;
+        let mut reconnect_fails = 0;
         loop {
-            if !ws_connected.load(Ordering::Relaxed) {
-                match get_json("/v1/system") {
-                    Some(v) => {
-                        system_fails = 0;
-                        let _ = tx.send(Event::System(v));
-                        ctx.request_repaint();
-                    }
-                    None => {
-                        system_fails += 1;
-                        if system_fails >= 2 {
-                            let _ = tx.send(Event::ServiceDown);
-                            ctx.request_repaint();
-                        }
-                    }
-                }
-            }
-            if let Some(v) = get_json("/v1/models") {
-                let _ = tx.send(Event::Models(v));
-                ctx.request_repaint();
-            }
-            if let Some(v) = get_json("/v1/storage") {
-                let _ = tx.send(Event::Storage(v));
-                ctx.request_repaint();
-            }
-            if let Some(v) = get_json("/v1/mirror") {
-                let _ = tx.send(Event::Mirror(v));
-                ctx.request_repaint();
-            }
-            std::thread::sleep(Duration::from_secs(2));
-        }
-    });
-}
-
-fn start_ws(tx: Sender<Event>, ctx: egui::Context, ws_connected: Arc<AtomicBool>) {
-    std::thread::spawn(move || loop {
-        let ws_url = if let Some(rest) = api_base().strip_prefix("http://") {
-            format!("ws://{rest}/v1/ws")
-        } else if let Some(rest) = api_base().strip_prefix("https://") {
-            format!("wss://{rest}/v1/ws")
-        } else {
-            format!("{}/v1/ws", api_base())
-        };
-        match ewebsock::connect(ws_url, ewebsock::Options::default()) {
-            Ok((_sender, receiver)) => {
-                ws_connected.store(true, Ordering::Relaxed);
-                loop {
-                    let mut closed = false;
-                    while let Some(event) = receiver.try_recv() {
-                        match event {
-                            ewebsock::WsEvent::Message(ewebsock::WsMessage::Text(text)) => {
-                                if let Ok(v) = serde_json::from_str::<Value>(&text) {
-                                    match v["type"].as_str().unwrap_or("") {
-                                        "system" => {
-                                            let _ = tx.send(Event::System(v["data"].clone()));
+            let ws_url = if let Some(rest) = api_base().strip_prefix("http://") {
+                format!("ws://{rest}/v1/ws")
+            } else if let Some(rest) = api_base().strip_prefix("https://") {
+                format!("wss://{rest}/v1/ws")
+            } else {
+                format!("{}/v1/ws", api_base())
+            };
+            match ewebsock::connect(ws_url, ewebsock::Options::default()) {
+                Ok((_sender, receiver)) => {
+                    reconnect_fails = 0;
+                    loop {
+                        let mut closed = false;
+                        while let Some(event) = receiver.try_recv() {
+                            match event {
+                                ewebsock::WsEvent::Message(ewebsock::WsMessage::Text(text)) => {
+                                    if let Ok(v) = serde_json::from_str::<Value>(&text) {
+                                        match v["type"].as_str().unwrap_or("") {
+                                            "system" => {
+                                                let _ = tx.send(Event::System(v["data"].clone()));
+                                            }
+                                            "models" => {
+                                                let _ = tx.send(Event::Models(v["data"].clone()));
+                                            }
+                                            "storage" => {
+                                                let _ = tx.send(Event::Storage(v["data"].clone()));
+                                            }
+                                            "mirror" => {
+                                                let _ = tx.send(Event::Mirror(v["data"].clone()));
+                                            }
+                                            "job" => {
+                                                let data = &v["data"];
+                                                let verb = if data["type"].as_str() == Some("pull")
+                                                {
+                                                    "下载"
+                                                } else {
+                                                    "启动"
+                                                };
+                                                let _ = tx.send(Event::Job(JobEvent {
+                                                    phase: data["event"]["phase"]
+                                                        .as_str()
+                                                        .unwrap_or("")
+                                                        .to_string(),
+                                                    message: data["event"]["message"]
+                                                        .as_str()
+                                                        .unwrap_or("")
+                                                        .to_string(),
+                                                    state: data["state"]
+                                                        .as_str()
+                                                        .unwrap_or("")
+                                                        .to_string(),
+                                                    verb: verb.to_string(),
+                                                    reference: data["ref"]
+                                                        .as_str()
+                                                        .unwrap_or("")
+                                                        .to_string(),
+                                                    authoritative: false,
+                                                }));
+                                            }
+                                            _ => {}
                                         }
-                                        "job" => {
-                                            let data = &v["data"];
-                                            let verb = if data["type"].as_str() == Some("pull") {
-                                                "下载"
-                                            } else {
-                                                "启动"
-                                            };
-                                            let _ = tx.send(Event::Job(JobEvent {
-                                                phase: data["event"]["phase"]
-                                                    .as_str()
-                                                    .unwrap_or("")
-                                                    .to_string(),
-                                                message: data["event"]["message"]
-                                                    .as_str()
-                                                    .unwrap_or("")
-                                                    .to_string(),
-                                                state: data["state"]
-                                                    .as_str()
-                                                    .unwrap_or("")
-                                                    .to_string(),
-                                                verb: verb.to_string(),
-                                                reference: data["ref"]
-                                                    .as_str()
-                                                    .unwrap_or("")
-                                                    .to_string(),
-                                                authoritative: false,
-                                            }));
-                                        }
-                                        _ => {}
+                                        ctx.request_repaint();
                                     }
-                                    ctx.request_repaint();
                                 }
+                                ewebsock::WsEvent::Closed | ewebsock::WsEvent::Error(_) => {
+                                    closed = true;
+                                    break;
+                                }
+                                _ => {}
                             }
-                            ewebsock::WsEvent::Closed | ewebsock::WsEvent::Error(_) => {
-                                closed = true;
-                                break;
-                            }
-                            _ => {}
                         }
+                        if closed {
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(100));
                     }
-                    if closed {
-                        break;
-                    }
-                    std::thread::sleep(Duration::from_millis(100));
                 }
-                ws_connected.store(false, Ordering::Relaxed);
-            }
-            Err(_) => {
-                ws_connected.store(false, Ordering::Relaxed);
-                let _ = tx.send(Event::Status(String::new()));
-                std::thread::sleep(Duration::from_secs(2));
+                Err(_) => {
+                    reconnect_fails += 1;
+                    if reconnect_fails >= 3 {
+                        let _ = tx.send(Event::ServiceDown);
+                    }
+                    let _ = tx.send(Event::Status(String::new()));
+                    std::thread::sleep(Duration::from_secs(2));
+                }
             }
         }
     });
@@ -3337,8 +3292,6 @@ fn spawn_job(
     ref_str: String,
     pull: bool,
     verb: &'static str,
-    active: Arc<AtomicBool>,
-    ws_connected: Arc<AtomicBool>,
 ) {
     std::thread::spawn(move || {
         let endpoint = if pull { "/v1/pull" } else { "/v1/models/load" };
@@ -3354,55 +3307,18 @@ fn spawn_job(
         let body = serde_json::json!({ "ref": ref_str, "async": true });
         match post_json(endpoint, &body) {
             Ok(v) => {
-                let job = v["job_id"].as_str().unwrap_or("").to_string();
+                let job = v["job_id"].as_str().unwrap_or("");
                 if job.is_empty() {
-                    active.store(false, Ordering::Relaxed);
                     let _ = tx.send(Event::Status(format!("已{verb}")));
-                    ctx.request_repaint();
-                    return;
                 }
-                for _ in 0..2400 {
-                    if !active.load(Ordering::Relaxed) {
-                        return;
-                    }
-                    std::thread::sleep(Duration::from_millis(700));
-                    // WebSocket is the primary progress channel. Only fall
-                    // back to polling while it is unavailable.
-                    if ws_connected.load(Ordering::Relaxed) {
-                        continue;
-                    }
-                    let Some(j) = get_json(&format!("/v1/jobs/{job}")) else {
-                        continue;
-                    };
-                    let state = j["state"].as_str().unwrap_or("").to_string();
-                    let last = j["events"].as_array().and_then(|e| e.last());
-                    let phase = last.and_then(|e| e["phase"].as_str()).unwrap_or("");
-                    let message = last.and_then(|e| e["message"].as_str()).unwrap_or("");
-                    let _ = tx.send(Event::Job(JobEvent {
-                        phase: phase.to_string(),
-                        message: message.to_string(),
-                        state: state.clone(),
-                        verb: verb.to_string(),
-                        reference: j["ref"].as_str().unwrap_or(event_ref.as_str()).to_string(),
-                        authoritative: true,
-                    }));
-                    ctx.request_repaint();
-                    if phase == "done" || phase == "failed" {
-                        active.store(false, Ordering::Relaxed);
-                        return;
-                    }
-                }
-                active.store(false, Ordering::Relaxed);
-                let _ = tx.send(Event::Status(format!("{verb}超时")));
             }
             Err(e) => {
-                active.store(false, Ordering::Relaxed);
                 let _ = tx.send(Event::Job(JobEvent {
                     phase: "failed".into(),
                     message: e,
                     state: "failed".into(),
                     verb: verb.to_string(),
-                    reference: event_ref.clone(),
+                    reference: event_ref,
                     authoritative: true,
                 }));
             }
