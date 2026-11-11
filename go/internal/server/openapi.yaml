@@ -301,6 +301,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/JobRef' }
+        '409':
+          description: Another download is already running
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /v1/jobs/{id}:
     get:
       summary: Job state and events
