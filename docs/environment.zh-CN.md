@@ -93,8 +93,8 @@ uv 安装器（Python bundle venv；uv **不随包发布**，按需供给）：
 | `UV_INDEX_URL` | `PIP_INDEX_URL` | uv 使用的 PyPI 索引（未设时取 `PIP_INDEX_URL`）。 |
 
 供给优先使用配置的 PyPI 索引（wheel），失败回退 GitHub Release 的 tarball。
-已供给的 uv 位于 `$FLASHCLI_HOME/tools/uv/<version>/uv`；用
-`flashcli cache clean --tools`（或 `--all` 同时清缓存 + FlashHub repo-index；`--flashhub` 只清 repo-index）删除；
+已供给的 uv 位于 `$FLASHCLI_HOME/tools/uv/<version>/uv`；`flashcli cache clean`
+会删除整个共享缓存组（下载缓存、基础 Python 和已供给的 uv）；
 `flashcli cache prune` 清理未使用的缓存项。
 
 Standalone Python 自动供给（当 bundle `python_abi` 缺失）：
