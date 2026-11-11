@@ -51,11 +51,12 @@ Windows 安装包内置 `FlashServer.exe`：Rust + egui/eframe 原生客户端�
 Windows 用户应优先使用 UI 安装包，而不是命令行：
 
 ```text
-FlashServer-Setup-<version>.exe
+flashserver-setup-windows-amd64.exe
 ```
 
 安装包会以管理员权限运行，并通过实时进度页（`Step N of 8` + 当前阶段）驱动
-`flashserver-setup`，不再静默等待：
+`flashserver-setup`，不再静默等待。发布资产保持标准 OS/arch 命名，版本体现在
+release tag 和安装包元数据中：
 
 ```text
 UI 安装包（管理员）
@@ -95,7 +96,7 @@ Windows 可能把默认端口 `8790` 保留在 Hyper-V/WinNAT 的排除端口范
 （VT-x/AMD-V）；没有嵌套虚拟化时 WSL2 无法启动。
 
 1. 确认虚拟机是干净的：`wsl.exe --status` 失败，`wsl.exe -l -v` 中没有 Ubuntu。
-2. 运行 `FlashServer-Setup-<version>.exe`。向导必须显示安装进度页；没有 WSL2 时第一次
+2. 运行 `flashserver-setup-windows-amd64.exe`。向导必须显示安装进度页；没有 WSL2 时第一次
    运行可能停在步骤 1 并提示重启。
 3. 按提示重启后再次运行安装包。必须显示步骤 1-8，并以
    “FlashServer is installed and ready.” 结束。

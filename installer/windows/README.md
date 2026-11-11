@@ -1,6 +1,6 @@
 # Windows installer
 
-`FlashServer-Setup-<version>.exe` is the Windows UI entry point. It bundles the
+`flashserver-setup-windows-amd64.exe` is the Windows UI entry point. It bundles the
 Linux payload and invokes the same `flashserver-setup` engine used by the CLI.
 
 ## Build
@@ -18,7 +18,7 @@ Requirements (checked by the script):
 - Go >= 1.24 and Rust MSVC toolchain (`cargo`)
 - Inno Setup 6 (`ISCC.exe` on PATH or in the default Program Files location)
 
-The output is written to `dist/windows/FlashServer-Setup-<version>.exe` and printed with its SHA256.
+The output is written to `dist/windows/flashserver-setup-windows-amd64.exe` and printed with its SHA256.
 
 Manual/low-level path (after the client and `dist/go` assets already exist):
 

@@ -5,7 +5,7 @@
 #   bash scripts/release_go.sh
 #   bash scripts/release_go.sh --upload
 #   bash scripts/release_go.sh --upload --notes-file dist/release-notes.md \
-#     --windows-installer dist/windows/FlashServer-Setup-<version>.exe
+#     --windows-installer dist/windows/flashserver-setup-windows-amd64.exe
 #   FLASHCLI_GO_TARGETS="linux/amd64" bash scripts/release_go.sh
 #
 # Publishing (--upload):
@@ -19,7 +19,7 @@
 # Options:
 #   --upload                     Publish to GitHub + Gitee after building.
 #   --notes-file FILE            Release notes body (Markdown) for both hosts.
-#   --windows-installer FILE     Include FlashServer-Setup-<version>.exe as an asset.
+#   --windows-installer FILE     Include flashserver-setup-windows-amd64.exe as an asset.
 #   --allow-non-target           Allow publishing from a branch other than the target.
 #
 # Environment:
@@ -31,7 +31,7 @@
 # Artifacts (dist/go/):
 #   flashcli-<os>-<arch>          (raw binary; consumed by install.sh)
 #   flashserver-<os>-<arch>       (resident scheduler)
-#   flashserver-setup-<os>-<arch> (installer; Windows asset is .exe)
+#   flashserver-setup-windows-amd64.exe (UI installer when supplied; otherwise the CLI setup binary)
 #   sha256sums.txt
 set -euo pipefail
 
@@ -95,26 +95,48 @@ fi
 
 bash "$ROOT/scripts/build_go.sh" "$OUT"
 
-ASSETS=()
-for f in "$OUT"/flashcli-* "$OUT"/flashserver-* "$OUT"/sha256sums.txt; do
-  [ -f "$f" ] && ASSETS+=("$f")
-done
+STAGE="${FLASHCLI_RELEASE_STAGE:-$ROOT/dist/release}"
+rm -rf "$STAGE"
+mkdir -p "$STAGE"
+
+WIN_ASSET="flashserver-setup-windows-amd64.exe"
 if [ -z "$WINDOWS_INSTALLER" ] && [ -n "${FLASHCLI_WINDOWS_INSTALLER:-}" ]; then
   WINDOWS_INSTALLER="$FLASHCLI_WINDOWS_INSTALLER"
 fi
+for f in "$OUT"/flashcli-* "$OUT"/flashserver-*; do
+  [ -f "$f" ] || continue
+  name="$(basename "$f")"
+  if [ -n "$WINDOWS_INSTALLER" ] && [ "$name" = "$WIN_ASSET" ]; then
+    continue
+  fi
+  cp "$f" "$STAGE/$name"
+done
 if [ -n "$WINDOWS_INSTALLER" ]; then
   [ -f "$WINDOWS_INSTALLER" ] || die "Windows installer not found: $WINDOWS_INSTALLER"
-  expected_installer="FlashServer-Setup-${VERSION}.exe"
-  [ "$(basename "$WINDOWS_INSTALLER")" = "$expected_installer" ] \
-    || die "Windows installer must be named $expected_installer"
-  ASSETS+=("$WINDOWS_INSTALLER")
+  [ "$(basename "$WINDOWS_INSTALLER")" = "$WIN_ASSET" ] \
+    || die "Windows installer must be named $WIN_ASSET"
+  cp "$WINDOWS_INSTALLER" "$STAGE/$WIN_ASSET"
   if command -v sha256sum >/dev/null 2>&1; then
-    echo "Windows installer sha256: $(sha256sum "$WINDOWS_INSTALLER" | awk '{print $1}')"
+    echo "Windows installer sha256: $(sha256sum "$STAGE/$WIN_ASSET" | awk '{print $1}')"
   elif command -v shasum >/dev/null 2>&1; then
-    echo "Windows installer sha256: $(shasum -a 256 "$WINDOWS_INSTALLER" | awk '{print $1}')"
+    echo "Windows installer sha256: $(shasum -a 256 "$STAGE/$WIN_ASSET" | awk '{print $1}')"
   fi
 fi
-[ "${#ASSETS[@]}" -gt 0 ] || die "no release assets found in $OUT"
+
+if command -v sha256sum >/dev/null 2>&1; then
+  sha_cmd=(sha256sum)
+elif command -v shasum >/dev/null 2>&1; then
+  sha_cmd=(shasum -a 256)
+else
+  die "neither sha256sum nor shasum is available"
+fi
+( cd "$STAGE" && "${sha_cmd[@]}" flashcli-* flashserver-* > sha256sums.txt )
+
+ASSETS=()
+for f in "$STAGE"/flashcli-* "$STAGE"/flashserver-* "$STAGE"/sha256sums.txt; do
+  [ -f "$f" ] && ASSETS+=("$f")
+done
+[ "${#ASSETS[@]}" -gt 0 ] || die "no release assets found in $STAGE"
 
 NOTES_BODY="flashcli-go ${VERSION} (static binaries + sha256sums)"
 if [ -n "$NOTES_FILE" ]; then
@@ -292,7 +314,7 @@ if [ "$UPLOAD" = "1" ]; then
   publish_gitee || failed=1
   [ "$failed" = "0" ] || die "one or more release uploads failed"
 else
-  echo "[ok] artifacts in $OUT"
+  echo "[ok] release assets in $STAGE"
   echo "    publish: GITHUB_TOKEN=... GITEE_TOKEN=... bash scripts/release_go.sh --upload"
   echo "    (or: gh auth login; GITEE_TOKEN=<gitee-token> bash scripts/release_go.sh --upload)"
 fi

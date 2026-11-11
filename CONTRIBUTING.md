@@ -147,9 +147,9 @@ unpublished test/draft releases.
 2. Sync `dev` → `main` (squash-and-record, above) so `main` carries the validated commit.
 3. On Windows from `main`, build the installer:
    `powershell -ExecutionPolicy Bypass -File scripts/build_windows_package.ps1`
-   (client + Go assets + `FlashServer-Setup-<version>.exe`; use `-GoBin` if `go` is not on PATH).
+   (client + Go assets + `flashserver-setup-windows-amd64.exe`; use `-GoBin` if `go` is not on PATH).
 4. On Linux/macOS (or Windows Git Bash) from `main`, publish both hosts in one command:
-   `bash scripts/release_go.sh --upload --notes-file <notes.md> --windows-installer dist/windows/FlashServer-Setup-<version>.exe`
+   `bash scripts/release_go.sh --upload --notes-file <notes.md> --windows-installer dist/windows/flashserver-setup-windows-amd64.exe`
    The script requires a clean `main` equal to `origin/main`, creates/pushes tag `vX` at HEAD, builds the Linux/Windows Go assets, uploads them plus the Windows installer, and fails if either GitHub or Gitee upload fails. Use `FLASHCLI_RELEASE_TARGET` only for a different release branch; `--allow-non-target` is for tests only.
 5. Write release notes per the standard below on **both** platforms. `--notes-file` uses the same body for GitHub and Gitee; if omitted, the script uses a minimal generated note.
 6. Verify the published assets in a clean environment:
@@ -176,7 +176,7 @@ Concise; **Features** and **Fixes** only. Bold the key terms. Same text on GitHu
 ## Assets
 - `flashcli-linux-amd64` sha256 `<…>`
 - `flashcli-linux-arm64` sha256 `<…>`
-- `FlashServer-Setup-<version>.exe` sha256 `<…>`
+- `flashserver-setup-windows-amd64.exe` sha256 `<…>`
 
 **Full Changelog**: <compare or commits link>
 ```
