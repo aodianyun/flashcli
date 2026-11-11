@@ -8,7 +8,6 @@ import (
 
 	"github.com/aodianyun/flashcli/go/internal/flashhub"
 	"github.com/aodianyun/flashcli/go/internal/paths"
-	"github.com/aodianyun/flashcli/go/internal/runtime"
 )
 
 // RemoveResult reports what was removed for one model reference.
@@ -29,102 +28,44 @@ func RemoveCachedRef(ref string) (RemoveResult, error) {
 	if ref == "" {
 		return RemoveResult{}, fmt.Errorf("ref is required")
 	}
-	markers, err := readMarkers()
-	if err != nil {
-		return RemoveResult{}, err
-	}
-	var targets, others []map[string]any
-	for _, marker := range markers {
-		name := stringValue(marker["ref"])
-		key := stringValue(marker["cache_key"])
-		if name == ref || (name == "" && key == ref) {
-			targets = append(targets, marker)
-		} else {
-			others = append(others, marker)
-		}
-	}
+	targets, others := splitMarkers(Markers(), ref)
 	if len(targets) == 0 {
 		return RemoveResult{}, fmt.Errorf("model %q is not cached", ref)
 	}
 
 	bundlesRoot := paths.Bundles()
-	modelsRoot := paths.Models()
-	runtimes := readRuntimeIndex()
-	sharedBundles := map[string]bool{}
-	sharedWeights := map[string]bool{}
-	sharedRuntimes := map[string]bool{}
-	for _, marker := range others {
-		key := stringValue(marker["cache_key"])
-		sharedBundles[key] = true
-		wk := markerWeightsKey(marker, key, stringValue(marker["bundle_root"]))
-		if wk != "" {
-			sharedWeights[wk] = true
-		}
-		if rid := markerRuntimeID(marker, runtimes); rid != "" {
-			sharedRuntimes[rid] = true
-		}
-	}
-
+	sharedBundles, sharedWeights, _ := sharedCacheKeys(others)
 	res := RemoveResult{Ref: ref, Removed: true}
-	seenBundles := map[string]bool{}
-	seenWeights := map[string]bool{}
-	seenRuntimes := map[string]bool{}
 	for _, marker := range targets {
 		key := stringValue(marker["cache_key"])
 		if key == "" {
 			continue
 		}
-		bundleRoot := stringValue(marker["bundle_root"])
-		weightsKey := markerWeightsKey(marker, key, bundleRoot)
 		bundleDir := filepath.Join(bundlesRoot, filepath.FromSlash(key))
-		markerPath := filepath.Join(bundleDir, flashhub.MarkerName)
-
-		if !seenBundles[key] {
-			seenBundles[key] = true
+		if sharedBundles[key] {
+			res.SharedBundle = true
 			if safeUnder(bundlesRoot, bundleDir) {
-				if sharedBundles[key] {
-					res.SharedBundle = true
-					_ = os.Remove(markerPath)
-				} else {
-					res.FreedBytes += dirSize(bundleDir)
-					if err := os.RemoveAll(bundleDir); err != nil {
-						return res, err
-					}
-				}
+				_ = os.Remove(filepath.Join(bundleDir, flashhub.MarkerName))
 			}
 		}
+		weightsKey := markerWeightsKey(marker, key, stringValue(marker["bundle_root"]))
+		if weightsKey != "" && sharedWeights[weightsKey] {
+			res.SharedWeights = true
+		}
+	}
 
-		if weightsKey != "" && !seenWeights[weightsKey] {
-			seenWeights[weightsKey] = true
-			weightsDir := filepath.Join(modelsRoot, filepath.FromSlash(weightsKey))
-			if safeUnder(modelsRoot, weightsDir) {
-				if sharedWeights[weightsKey] {
-					res.SharedWeights = true
-				} else {
-					res.FreedBytes += dirSize(weightsDir)
-					if err := os.RemoveAll(weightsDir); err != nil {
-						return res, err
-					}
-				}
-			}
+	before := storageTotal()
+	for _, path := range RefPaths(ref, true) {
+		if !safeUnder(paths.Home(), path) {
+			return res, fmt.Errorf("refusing to remove %s", path)
 		}
-
-		runtimeID := markerRuntimeID(marker, runtimes)
-		if runtimeID == "" || seenRuntimes[runtimeID] {
-			continue
-		}
-		seenRuntimes[runtimeID] = true
-		if sharedRuntimes[runtimeID] {
-			continue
-		}
-		runtimeDir := runtime.Dir(runtimeID)
-		if !safeUnder(paths.Runtimes(), runtimeDir) {
-			continue
-		}
-		res.FreedBytes += dirUsage(runtimeDir, map[fileKey]bool{})
-		if err := os.RemoveAll(runtimeDir); err != nil {
+		if err := os.RemoveAll(path); err != nil {
 			return res, err
 		}
+	}
+	res.FreedBytes = before - storageTotal()
+	if res.FreedBytes < 0 {
+		res.FreedBytes = 0
 	}
 	return res, nil
 }

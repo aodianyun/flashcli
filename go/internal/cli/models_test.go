@@ -172,7 +172,7 @@ func TestModelsListShowsUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := cliOutput(t, "models", "list")
-	for _, want := range []string{"BUNDLE SIZE", "WEIGHTS SIZE", "2.0 KiB"} {
+	for _, want := range []string{"BUNDLE SIZE", "RUNTIME", "WEIGHTS SIZE", "2.0 KiB"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in output:\n%s", want, out)
 		}
@@ -183,7 +183,7 @@ func TestDUUsage(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("FLASHCLI_HOME", home)
 	out := cliOutput(t, "du")
-	for _, want := range []string{"Disk usage (apparent size)", "bundles", "models", "runtimes", "total"} {
+	for _, want := range []string{"Disk usage (unique allocated)", "bundles", "models", "runtimes", "total"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in output:\n%s", want, out)
 		}

@@ -8,7 +8,7 @@ For **integrators** wiring presets to FlashHub. Full manifest / entry / `.so` sp
 
 Published Model Bundles live on **[FlashHub](https://flashhub.top)**. Pick a repo/version there, then pass its ref to flashcli. There is **no bundled catalog file** in the flashcli repo.
 
-`flashcli models list` shows **locally cached** refs with bundle/weights disk usage (after `run`, `serve`, `pull`, or `bundle sync`).
+`flashcli models list` shows **locally cached** refs with bundle/runtime/weights disk usage and shared-weight markers (after `run`, `serve`, `pull`, or `bundle sync`).
 
 ## Preset ref (FlashHub)
 
@@ -91,9 +91,9 @@ Bundles without `entry.kind` behave exactly as before. Full contract: [bundle_ex
 ## Quick checks
 
 ```bash
-flashcli models list          # cached refs + per-ref bundle/weights usage
+flashcli models list          # cached refs + per-ref bundle/runtime/weights usage
 flashcli models show <ref>
-flashcli du                   # total bundles/models/runtimes/cache usage
+flashcli du                   # unique allocated bundles/models/runtimes/cache usage
 flashcli bundle validate /path/to/bundle
 flashcli run <ref> --help
 ```

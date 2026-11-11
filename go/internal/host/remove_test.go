@@ -122,3 +122,29 @@ func TestRemoveCachedRefRemovesRuntime(t *testing.T) {
 		t.Fatalf("runtime dir still exists: %v", err)
 	}
 }
+
+func TestRemoveCachedRefMatchesCanonicalCacheKey(t *testing.T) {
+	t.Setenv("FLASHCLI_HOME", t.TempDir())
+	bundleDir := writeTestMarker(t, "demo/1.0.0", "", "demo/1.0.0")
+	weightsDir := filepath.Join(paths.Models(), "demo", "1.0.0")
+	if err := os.MkdirAll(weightsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(weightsDir, "weights.bin"), []byte("weights-data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := RemoveCachedRef("flashcli-bundle/demo:1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Removed {
+		t.Fatalf("res = %+v", res)
+	}
+	if _, err := os.Stat(bundleDir); !os.IsNotExist(err) {
+		t.Fatalf("bundle dir still exists: %v", err)
+	}
+	if _, err := os.Stat(weightsDir); !os.IsNotExist(err) {
+		t.Fatalf("weights dir still exists: %v", err)
+	}
+}

@@ -193,6 +193,8 @@ GET  /                          内置本地控制台
 
 `/v1/models/clean` 会跳过已启动/正在启动的模型，并保留与其他模型共享的权重；`/v1/storage/clean` 在有模型常驻/启动时拒绝清理 `runtimes`；两者都返回释放字节数。
 
+磁盘统计和清理路径选择位于共享的 `host` 包：`flashcli du` 与 `/v1/storage` 使用同一套唯一分配字节统计，`flashcli models list` 与 `/v1/models` 使用同一份模型数据，`flashcli bundle clean` 与 `/v1/models/clean` 使用同一套 ref 路径解析。
+
 请求/响应 schema 以 [openapi.yaml](openapi.yaml) 为准（也通过 `/openapi.yaml` 提供）。
 
 不提供 `/v1/infer`。`load` 成功后直接访问返回的 `endpoint`。

@@ -8,7 +8,7 @@
 
 已发布的 Model Bundle 在 **[FlashHub](https://flashhub.top)**。在站点选择 repo/版本后，将 ref 传给 flashcli。flashcli 仓库内**无 bundled catalog 文件**。
 
-`flashcli models list` 显示**本机已缓存**的 ref 及其 bundle/weights 磁盘占用（在 `run`、`serve`、`pull` 或 `bundle sync` 之后）。
+`flashcli models list` 显示**本机已缓存**的 ref 及其 bundle/运行时/权重磁盘占用（在 `run`、`serve`、`pull` 或 `bundle sync` 之后），并标注共享权重。
 
 ## Preset ref（FlashHub）
 
@@ -91,9 +91,9 @@ bundle 的 `entry` 决定 flashcli 如何调用推理。无论哪种，用户命
 ## 快速校验
 
 ```bash
-flashcli models list          # 缓存 ref + 每个 ref 的 bundle/weights 占用
+flashcli models list          # 缓存 ref + 每个 ref 的 bundle/运行时/权重占用
 flashcli models show <ref>
-flashcli du                   # bundles/models/runtimes/cache 总占用
+flashcli du                   # bundles/models/runtimes/cache 唯一分配占用
 flashcli bundle validate /path/to/bundle
 flashcli run <ref> --help
 ```

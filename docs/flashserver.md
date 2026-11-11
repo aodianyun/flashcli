@@ -202,6 +202,8 @@ GET  /                          embedded local console
 
 `/v1/models/clean` refuses loaded/in-flight refs and keeps weights shared with another cached ref. `/v1/storage/clean` refuses `runtimes` while models are resident/loading; both return freed bytes.
 
+Disk accounting and cleanup path selection live in the shared `host` package: `flashcli du` uses the same unique-allocation accounting as `/v1/storage`, `flashcli models list` uses the same model data as `/v1/models`, and `flashcli bundle clean` uses the same ref-path resolver as `/v1/models/clean`.
+
 The authoritative request/response schema is [openapi.yaml](openapi.yaml) (also served at `/openapi.yaml`).
 
 There is intentionally no `/v1/infer` endpoint. After `load`, call the returned `endpoint` directly.

@@ -219,6 +219,17 @@ func bundleRootUsable(root string) bool {
 	return err == nil
 }
 
+// BundleRootUsable reports whether root contains a loadable bundle manifest.
+func BundleRootUsable(root string) bool {
+	return bundleRootUsable(root)
+}
+
+// MarkerWeightsKey resolves the shared source/repo@revision store key for a
+// cached bundle marker.
+func MarkerWeightsKey(marker map[string]any, fallback, bundleRoot string) string {
+	return markerWeightsKey(marker, fallback, bundleRoot)
+}
+
 // bundleServes reports whether the bundle declares a serve entry, either at the
 // top level or in one of its environment variants.
 func bundleServes(root string) bool {
