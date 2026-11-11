@@ -212,3 +212,12 @@ func TestStreamRunnerPTYPercent(t *testing.T) {
 	}
 	t.Fatalf("no percent update: %v", updates)
 }
+func TestCleanProgressLine(t *testing.T) {
+	line := withPercent(cleanLine("\x1b[2K? Preparing packages... (0/1) torch ------------------------------ 38.58 MiB/732.78 MiB"))
+	if strings.Contains(line, "---") {
+		t.Fatalf("bar not stripped: %q", line)
+	}
+	if !strings.Contains(line, "5%") || !strings.Contains(line, "torch") {
+		t.Fatalf("line = %q", line)
+	}
+}
