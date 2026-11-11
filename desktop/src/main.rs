@@ -287,6 +287,7 @@ pub struct App {
     job_verb: String,
     dialog: Option<DialogState>,
     smoke: Option<SmokeState>,
+    closing: bool,
     gpu_util: Vec<[f64; 2]>,
     gpu_mem: Vec<[f64; 2]>,
     cpu: Vec<[f64; 2]>,
@@ -353,6 +354,7 @@ impl App {
             job_verb: String::new(),
             dialog: None,
             smoke: None,
+            closing: false,
             gpu_util: Vec::new(),
             gpu_mem: Vec::new(),
             cpu: Vec::new(),
@@ -545,6 +547,9 @@ impl App {
 
     fn apply_job(&mut self, job: JobEvent) {
         if job.kind == "smoke" {
+            if self.smoke.is_none() {
+                return;
+            }
             let reference = job.reference.clone();
             let smoke = self.smoke.get_or_insert_with(|| SmokeState {
                 title: if reference.is_empty() {
@@ -2377,6 +2382,7 @@ impl App {
                 egui::ScrollArea::vertical()
                     .max_height(420.0)
                     .auto_shrink([false, false])
+                    .stick_to_bottom(true)
                     .show(ui, |ui| {
                         ui.add(
                             egui::Label::new(egui::RichText::new(&smoke.log).monospace().small())
@@ -2532,6 +2538,18 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.drain_events();
+        if !self.closing && ctx.input(|i| i.viewport().close_requested()) {
+            self.closing = true;
+            if let Some(smoke) = &self.smoke {
+                if smoke.running && !smoke.job_id.is_empty() {
+                    let _ = post_json_timeout(
+                        &format!("/v1/jobs/{}/cancel", smoke.job_id),
+                        &serde_json::json!({}),
+                        2,
+                    );
+                }
+            }
+        }
         ctx.request_repaint_after(Duration::from_millis(500));
         if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::T)) {
             let dark = !self.dark;

@@ -179,6 +179,7 @@ GET  /v1/ws                     WebSocket：系统/模型/存储/镜像快照 + 
 POST /v1/pull
 GET  /v1/jobs/{id}
 GET  /v1/jobs/{id}/events
+POST /v1/jobs/{id}/cancel        取消正在运行的任务（smoke/下载/加载）
 POST /v1/models/load            {"ref":"...","async":true} → job_id（或 endpoint/pid/state）
 POST /v1/models/unload          {"ref":"..."}
 POST /v1/models/smoke           {"ref":"..."} run-only 冒烟测试 / 已启动 serve 请求测试

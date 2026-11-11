@@ -189,6 +189,7 @@ GET  /v1/ws                     WebSocket: system/models/storage/mirror snapshot
 POST /v1/pull
 GET  /v1/jobs/{id}
 GET  /v1/jobs/{id}/events
+POST /v1/jobs/{id}/cancel        cancel a running job (smoke/download/load)
 POST /v1/models/load            {"ref":"...","async":true} → job_id (or endpoint/pid/state)
 POST /v1/models/unload          {"ref":"..."}
 POST /v1/models/smoke           {"ref":"..."} run-only smoke test or started-serve request test
