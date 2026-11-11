@@ -253,6 +253,7 @@ func cacheCmd() *cobra.Command {
 		Short: "Cache utilities",
 	}
 	var useUV, useTools, useFlashhub, useAll, useStorage, yes bool
+	var storageTargets []string
 	clean := &cobra.Command{
 		Use:   "clean",
 		Short: "Remove package caches or all shared storage areas",
@@ -280,8 +281,15 @@ func cacheCmd() *cobra.Command {
 					}
 				}
 			}
+			for _, name := range storageTargets {
+				path, ok := host.SharedCachePath(name)
+				if !ok {
+					return fmt.Errorf("unknown storage target %q (want cache, python, tools, or runtimes)", name)
+				}
+				targets = append(targets, path)
+			}
 			if len(targets) == 0 {
-				return fmt.Errorf("nothing selected: use --uv, --tools, --flashhub, --storage, or --all")
+				return fmt.Errorf("nothing selected: use --uv, --tools, --flashhub, --target, --storage, or --all")
 			}
 			selected, err := confirmCleanup(cmd, targets, yes)
 			if err != nil {
@@ -295,6 +303,7 @@ func cacheCmd() *cobra.Command {
 	clean.Flags().BoolVar(&useFlashhub, "flashhub", false, "Remove the FlashHub repo-index cache")
 	clean.Flags().BoolVar(&useAll, "all", false, "Remove the uv cache, uv binaries, and FlashHub repo-index cache")
 	clean.Flags().BoolVar(&useStorage, "storage", false, "Remove all shared storage areas (cache, python, tools, runtimes) like /v1/storage/clean; stop models first")
+	clean.Flags().StringArrayVar(&storageTargets, "target", nil, "Shared storage area to remove: cache, python, tools, or runtimes (repeatable)")
 	clean.Flags().BoolVarP(&yes, "yes", "y", false, "Skip the Y/N confirmation (for scripts)")
 	prune := &cobra.Command{
 		Use:   "prune",

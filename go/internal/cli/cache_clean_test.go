@@ -143,6 +143,51 @@ func TestCacheCleanStorageMatchesServerTargets(t *testing.T) {
 	}
 }
 
+func TestCacheCleanStorageTarget(t *testing.T) {
+	all := []string{"cache", "python", "tools", "runtimes"}
+	for _, target := range all {
+		t.Run(target, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("FLASHCLI_HOME", home)
+			t.Setenv("UV_CACHE_DIR", filepath.Join(home, "cache", "uv"))
+			for _, area := range all {
+				writeCacheFile(t, filepath.Join(home, area, "marker.bin"))
+			}
+			bundle := filepath.Join(home, "bundles", "demo", "1.0.0", "flashcli-bundle.json")
+			weights := filepath.Join(home, "models", "demo", "1.0.0", "weights.bin")
+			writeCacheFile(t, bundle)
+			writeCacheFile(t, weights)
+
+			if code := Main([]string{"cache", "clean", "--target", target, "--yes"}); code != 0 {
+				t.Fatalf("exit = %d", code)
+			}
+			if _, err := os.Stat(filepath.Join(home, target)); err == nil {
+				t.Fatalf("target area %s not removed", target)
+			}
+			for _, other := range all {
+				if other == target {
+					continue
+				}
+				if _, err := os.Stat(filepath.Join(home, other)); err != nil {
+					t.Fatalf("area %s removed by target %s: %v", other, target, err)
+				}
+			}
+			for _, p := range []string{bundle, weights} {
+				if _, err := os.Stat(p); err != nil {
+					t.Fatalf("target clean must not touch %s: %v", p, err)
+				}
+			}
+		})
+	}
+}
+
+func TestCacheCleanRejectsUnknownTarget(t *testing.T) {
+	t.Setenv("FLASHCLI_HOME", t.TempDir())
+	if code := Main([]string{"cache", "clean", "--target", "unknown", "--yes"}); code == 0 {
+		t.Fatal("unknown storage target must fail")
+	}
+}
+
 func TestCacheCleanConfirmation(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("FLASHCLI_HOME", home)

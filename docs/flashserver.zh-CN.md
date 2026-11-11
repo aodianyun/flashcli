@@ -199,7 +199,8 @@ GET  /                          内置本地控制台
 
 - `flashcli cache clean --all` 只清理**包缓存**：`UV_CACHE_DIR`、`~/.flashcli/tools/uv`、`~/.flashcli/cache/repo-index`。
 - `flashcli cache clean --storage` 清理**整个存储区域**（`cache`、`python`、`tools`、`runtimes`），与 `/v1/storage/clean` 选择全部目标一致；请先停止常驻模型。
-- `/v1/storage/clean` 可以单独选择这四个区域。
+- `flashcli cache clean --target cache|python|tools|runtimes` 清理单个共享区域；`/v1/storage/clean` 接受同样的四个区域名。
+- 桌面「设置 → 清理缓存」直接对应：下载缓存 = `--target cache`，Python 运行时 = `--target python`，工具 = `--target tools`，模型运行时（全部） = `--target runtimes`。
 - Bundle/权重/单模型运行时清理使用 `/v1/models/clean` 或 `flashcli bundle clean`；两个 cache 清理命令都不会动它们。
 
 请求/响应 schema 以 [openapi.yaml](openapi.yaml) 为准（也通过 `/openapi.yaml` 提供）。

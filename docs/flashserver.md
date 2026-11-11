@@ -208,7 +208,8 @@ Cleanup scopes are intentionally different:
 
 - `flashcli cache clean --all` removes **package caches only**: `UV_CACHE_DIR`, `~/.flashcli/tools/uv`, and `~/.flashcli/cache/repo-index`.
 - `flashcli cache clean --storage` removes **whole storage areas** (`cache`, `python`, `tools`, `runtimes`), matching `/v1/storage/clean` with all targets. Stop resident models first.
-- `/v1/storage/clean` accepts the same four area names individually.
+- `flashcli cache clean --target cache|python|tools|runtimes` removes one shared area; `/v1/storage/clean` accepts the same four area names.
+- Desktop Settings → 清理缓存 maps directly: 下载缓存 = `--target cache`, Python 运行时 = `--target python`, 工具 = `--target tools`, 模型运行时（全部） = `--target runtimes`.
 - Bundle/weights/per-model runtime cleanup uses `/v1/models/clean` or `flashcli bundle clean`; neither cache command touches them.
 
 The authoritative request/response schema is [openapi.yaml](openapi.yaml) (also served at `/openapi.yaml`).

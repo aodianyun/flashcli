@@ -55,7 +55,7 @@ Rules:
 
 - **Do not** add another marker walker, weights-readiness check, directory-size walker, or cleanup path resolver under `go/internal/cli` or `go/internal/server`.
 - Add the behavior once in `host`, then expose it through both frontends. Presentation-only helpers (tables, colors, prompts) stay in the frontend.
-- `flashcli cache clean --all` keeps its package-cache-specific targets (uv, tools, FlashHub index), while `flashcli cache clean --storage` matches `/v1/storage/clean` (all whole areas). Bundle/model/runtime cleanup and disk accounting are shared.
+- `flashcli cache clean --all` keeps its package-cache-specific targets (uv, tools, FlashHub index). Use `--storage` for all whole areas, or `--target cache|python|tools|runtimes` for one area; this matches `/v1/storage/clean`. Bundle/model/runtime cleanup and disk accounting are shared.
 - Tests: `go test ./...`; host tests cover accounting/cleanup, CLI tests exercise `du`, `models list`, and `bundle clean` through the host functions. See [module_layers.md](module_layers.md).
 
 **Protocol cache schema:** the venv fingerprint tracks only manifest `python_dependencies` — it does **not** track the `flashcli-bundle` git ref. When the on-disk cache layout changes (`flashcli_bundle.version.CACHE_SCHEMA_VERSION`), `venv.EnsureProtocolCacheSchema` upgrades `flashcli-bundle` in an existing venv **in place** (`pip install --upgrade --force-reinstall --no-deps`, from the same source) before re-exec, so old venvs keep matching the host's cache paths without a full rebuild (no torch/dependency reinstall).
