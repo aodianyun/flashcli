@@ -14,6 +14,7 @@ import (
 
 	"github.com/aodianyun/flashcli/go/internal/doctor"
 	"github.com/aodianyun/flashcli/go/internal/errs"
+	"github.com/aodianyun/flashcli/go/internal/host"
 	"github.com/aodianyun/flashcli/go/internal/manifest"
 	"github.com/aodianyun/flashcli/go/internal/mirror"
 	"github.com/aodianyun/flashcli/go/internal/native"
@@ -251,10 +252,10 @@ func cacheCmd() *cobra.Command {
 		Use:   "cache",
 		Short: "Cache utilities",
 	}
-	var useUV, useTools, useFlashhub, useAll, yes bool
+	var useUV, useTools, useFlashhub, useAll, useStorage, yes bool
 	clean := &cobra.Command{
 		Use:   "clean",
-		Short: "Remove uv caches, uv binaries, and/or the FlashHub repo-index cache",
+		Short: "Remove package caches or all shared storage areas",
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				return fmt.Errorf("cache clean only removes caches; use `flashcli bundle clean %s` for bundle data", args[0])
@@ -272,8 +273,15 @@ func cacheCmd() *cobra.Command {
 			if useAll || useFlashhub {
 				targets = append(targets, filepath.Join(paths.Cache(), "repo-index"))
 			}
+			if useStorage {
+				for _, name := range host.SharedCacheTargets() {
+					if path, ok := host.SharedCachePath(name); ok {
+						targets = append(targets, path)
+					}
+				}
+			}
 			if len(targets) == 0 {
-				return fmt.Errorf("nothing selected: use --uv, --tools, --flashhub, or --all")
+				return fmt.Errorf("nothing selected: use --uv, --tools, --flashhub, --storage, or --all")
 			}
 			selected, err := confirmCleanup(cmd, targets, yes)
 			if err != nil {
@@ -286,6 +294,7 @@ func cacheCmd() *cobra.Command {
 	clean.Flags().BoolVar(&useTools, "tools", false, "Remove provisioned uv binaries (~/.flashcli/tools/uv)")
 	clean.Flags().BoolVar(&useFlashhub, "flashhub", false, "Remove the FlashHub repo-index cache")
 	clean.Flags().BoolVar(&useAll, "all", false, "Remove the uv cache, uv binaries, and FlashHub repo-index cache")
+	clean.Flags().BoolVar(&useStorage, "storage", false, "Remove all shared storage areas (cache, python, tools, runtimes) like /v1/storage/clean; stop models first")
 	clean.Flags().BoolVarP(&yes, "yes", "y", false, "Skip the Y/N confirmation (for scripts)")
 	prune := &cobra.Command{
 		Use:   "prune",

@@ -204,6 +204,13 @@ GET  /                          embedded local console
 
 Disk accounting and cleanup path selection live in the shared `host` package: `flashcli du` uses the same unique-allocation accounting as `/v1/storage`, `flashcli models list` uses the same model data as `/v1/models`, and `flashcli bundle clean` uses the same ref-path resolver as `/v1/models/clean`.
 
+Cleanup scopes are intentionally different:
+
+- `flashcli cache clean --all` removes **package caches only**: `UV_CACHE_DIR`, `~/.flashcli/tools/uv`, and `~/.flashcli/cache/repo-index`.
+- `flashcli cache clean --storage` removes **whole storage areas** (`cache`, `python`, `tools`, `runtimes`), matching `/v1/storage/clean` with all targets. Stop resident models first.
+- `/v1/storage/clean` accepts the same four area names individually.
+- Bundle/weights/per-model runtime cleanup uses `/v1/models/clean` or `flashcli bundle clean`; neither cache command touches them.
+
 The authoritative request/response schema is [openapi.yaml](openapi.yaml) (also served at `/openapi.yaml`).
 
 There is intentionally no `/v1/infer` endpoint. After `load`, call the returned `endpoint` directly.

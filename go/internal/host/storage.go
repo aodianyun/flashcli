@@ -17,6 +17,20 @@ var sharedCacheTargets = map[string]func() string{
 	"runtimes": paths.Runtimes,
 }
 
+// SharedCacheTargets returns the storage areas accepted by CleanSharedCaches.
+func SharedCacheTargets() []string {
+	return []string{"cache", "python", "tools", "runtimes"}
+}
+
+// SharedCachePath returns the root path for a shared storage target.
+func SharedCachePath(name string) (string, bool) {
+	pathFor, ok := sharedCacheTargets[strings.TrimSpace(name)]
+	if !ok {
+		return "", false
+	}
+	return pathFor(), true
+}
+
 // CleanSharedCaches removes the selected shared caches and returns the unique
 // bytes freed. Model bundles/weights are not touched; use RemoveCachedRef.
 func CleanSharedCaches(targets []string) (int64, error) {

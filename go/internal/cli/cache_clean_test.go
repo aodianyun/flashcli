@@ -74,6 +74,75 @@ func TestCacheCleanAll(t *testing.T) {
 	}
 }
 
+func TestCacheCleanAllStaysPackageScoped(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FLASHCLI_HOME", home)
+	t.Setenv("UV_CACHE_DIR", filepath.Join(home, "uv"))
+	for _, p := range []string{
+		filepath.Join(home, "uv", "marker"),
+		filepath.Join(home, "tools", "uv", "bin", "uv"),
+		filepath.Join(home, "cache", "downloads", "repo-index", "index.json"),
+		filepath.Join(home, "cache", "downloads", "file.bin"),
+		filepath.Join(home, "python", "bin", "python3"),
+		filepath.Join(home, "runtimes", "rt", "torch.bin"),
+		filepath.Join(home, "bundles", "demo", "1.0.0", "flashcli-bundle.json"),
+		filepath.Join(home, "models", "demo", "1.0.0", "weights.bin"),
+	} {
+		writeCacheFile(t, p)
+	}
+	if code := Main([]string{"cache", "clean", "--all", "--yes"}); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	for _, p := range []string{
+		filepath.Join(home, "cache", "downloads", "file.bin"),
+		filepath.Join(home, "python"),
+		filepath.Join(home, "runtimes"),
+		filepath.Join(home, "bundles"),
+		filepath.Join(home, "models"),
+	} {
+		if _, err := os.Stat(p); err != nil {
+			t.Fatalf("--all must keep %s outside package caches: %v", p, err)
+		}
+	}
+}
+
+func TestCacheCleanStorageMatchesServerTargets(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FLASHCLI_HOME", home)
+	t.Setenv("UV_CACHE_DIR", filepath.Join(home, "cache", "uv"))
+	targets := []string{
+		filepath.Join(home, "cache", "downloads", "file.bin"),
+		filepath.Join(home, "python", "bin", "python3"),
+		filepath.Join(home, "tools", "uv", "bin", "uv"),
+		filepath.Join(home, "runtimes", "rt", "torch.bin"),
+	}
+	for _, p := range targets {
+		writeCacheFile(t, p)
+	}
+	bundle := filepath.Join(home, "bundles", "demo", "1.0.0", "flashcli-bundle.json")
+	weights := filepath.Join(home, "models", "demo", "1.0.0", "weights.bin")
+	writeCacheFile(t, bundle)
+	writeCacheFile(t, weights)
+	if code := Main([]string{"cache", "clean", "--storage", "--yes"}); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	for _, p := range []string{
+		filepath.Join(home, "cache"),
+		filepath.Join(home, "python"),
+		filepath.Join(home, "tools"),
+		filepath.Join(home, "runtimes"),
+	} {
+		if _, err := os.Stat(p); err == nil {
+			t.Fatalf("expected storage area %s removed", p)
+		}
+	}
+	for _, p := range []string{bundle, weights} {
+		if _, err := os.Stat(p); err != nil {
+			t.Fatalf("storage clean must not touch %s: %v", p, err)
+		}
+	}
+}
+
 func TestCacheCleanConfirmation(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("FLASHCLI_HOME", home)

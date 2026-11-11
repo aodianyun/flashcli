@@ -195,6 +195,13 @@ GET  /                          内置本地控制台
 
 磁盘统计和清理路径选择位于共享的 `host` 包：`flashcli du` 与 `/v1/storage` 使用同一套唯一分配字节统计，`flashcli models list` 与 `/v1/models` 使用同一份模型数据，`flashcli bundle clean` 与 `/v1/models/clean` 使用同一套 ref 路径解析。
 
+清理范围有意不同：
+
+- `flashcli cache clean --all` 只清理**包缓存**：`UV_CACHE_DIR`、`~/.flashcli/tools/uv`、`~/.flashcli/cache/repo-index`。
+- `flashcli cache clean --storage` 清理**整个存储区域**（`cache`、`python`、`tools`、`runtimes`），与 `/v1/storage/clean` 选择全部目标一致；请先停止常驻模型。
+- `/v1/storage/clean` 可以单独选择这四个区域。
+- Bundle/权重/单模型运行时清理使用 `/v1/models/clean` 或 `flashcli bundle clean`；两个 cache 清理命令都不会动它们。
+
 请求/响应 schema 以 [openapi.yaml](openapi.yaml) 为准（也通过 `/openapi.yaml` 提供）。
 
 不提供 `/v1/infer`。`load` 成功后直接访问返回的 `endpoint`。

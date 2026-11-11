@@ -56,7 +56,7 @@ cd go && go test ./...     # Go host, including shared cache/cleanup contracts
 - Do **not** add a second marker walker, weights-readiness check, directory-size walker, or cleanup path resolver under `go/internal/cli` or `go/internal/server`.
 - Implement new behavior in `host`, then call it from both frontends. Keep only presentation (flags, tables, prompts, HTTP handlers) in the frontend.
 - Add/extend tests in `go/internal/host` and the relevant CLI command tests (`du`, `models list`, `bundle clean`). `go test ./...` must pass.
-- `flashcli cache clean` intentionally keeps package-cache-specific targets (uv, tools, FlashHub index); bundle/model/runtime cleanup and disk accounting remain shared.
+- `flashcli cache clean --all` intentionally keeps package-cache-specific targets (uv, tools, FlashHub index); use `flashcli cache clean --storage` for the whole-area set that `/v1/storage/clean` exposes. Bundle/model/runtime cleanup and disk accounting remain shared.
 
 Architecture rule: [docs/architecture.md](docs/architecture.md) → Shared host services; placement checklist: [docs/module_layers.md](docs/module_layers.md).
 
