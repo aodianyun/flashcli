@@ -40,6 +40,7 @@ RestartApplications=no
 [Files]
 Source: "{#PayloadDir}\flashserver-setup-windows-amd64.exe"; DestDir: "{app}\payload"; DestName: "flashserver-setup.exe"; Flags: ignoreversion
 Source: "{#PayloadDir}\FlashServer.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#PayloadDir}\flashcli-bundle.tar.gz"; DestDir: "{app}\payload"; Flags: ignoreversion
 Source: "{#PayloadDir}\flashcli-linux-amd64"; DestDir: "{app}\payload"; Flags: ignoreversion
 Source: "{#PayloadDir}\flashserver-linux-amd64"; DestDir: "{app}\payload"; Flags: ignoreversion
 Source: "{#PayloadDir}\flashcli-linux-arm64"; DestDir: "{app}\payload"; Flags: ignoreversion skipifsourcedoesntexist

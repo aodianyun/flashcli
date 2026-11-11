@@ -68,6 +68,11 @@ Windows 可能把默认端口 `8790` 保留在 Hyper-V/WinNAT 的排除端口范
 `%LOCALAPPDATA%\FlashServer\api-url.txt`。桌面客户端和安装器最终健康检查都会读取
 该文件，因此客户端、安装器和 API 文档使用同一个端口。
 
+安装包同时携带 `flashcli-bundle` Python 源码。setup 会把它解压到
+`/usr/local/share/flashcli/flashcli-bundle`，并把 `FLASHCLI_BUNDLE_PIP_SPEC`
+写入 `~/.flashcli/install.env`，因此创建 bundle 虚拟环境不依赖 WSL 内的
+`git`/GitHub 访问。
+
 自动化/排障时，`flashserver-setup --progress-file FILE` 会写入 `[n/8]` 行和最后的
 `DONE <code>`（`0` 就绪、`3` 需要重启、`2` 出错）。完整跟踪（含
 `wsl.exe`/`schtasks.exe` 输出）写入 `%USERPROFILE%\.flashcli\logs\setup.log`。

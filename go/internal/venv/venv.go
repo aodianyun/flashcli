@@ -6,16 +6,19 @@
 package venv
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/aodianyun/flashcli/go/internal/errs"
 	"github.com/aodianyun/flashcli/go/internal/manifest"
@@ -47,6 +50,77 @@ func (e ExecRunner) Run(ctx context.Context, argv []string, env []string) error 
 	return nil
 }
 
+// streamRunner runs commands and forwards their output lines to the context
+// progress sink, so `uv` download lines appear in flashserver jobs as well as
+// in the journal.
+type streamRunner struct{ stdio bool }
+
+func (r streamRunner) Run(ctx context.Context, argv []string, env []string) error {
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Env = env
+	out := &lineWriter{ctx: ctx}
+	errOut := &lineWriter{ctx: ctx}
+	if r.stdio {
+		out.out = os.Stdout
+		errOut.out = os.Stderr
+	}
+	cmd.Stdout = out
+	cmd.Stderr = errOut
+	err := cmd.Run()
+	out.Flush()
+	errOut.Flush()
+	if err != nil {
+		return fmt.Errorf("%s: %w", strings.Join(argv, " "), err)
+	}
+	return nil
+}
+
+// lineWriter forwards complete output lines to the progress sink.
+type lineWriter struct {
+	ctx context.Context
+	out io.Writer
+	mu  sync.Mutex
+	buf []byte
+}
+
+func (w *lineWriter) Write(p []byte) (int, error) {
+	if w.out != nil {
+		_, _ = w.out.Write(p)
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.buf = append(w.buf, p...)
+	for {
+		i := bytes.IndexAny(w.buf, "\r\n")
+		if i < 0 {
+			break
+		}
+		line := strings.TrimSpace(string(w.buf[:i]))
+		w.buf = w.buf[i+1:]
+		if line != "" {
+			progress.EmitCtx(w.ctx, "%s", line)
+		}
+	}
+	if len(w.buf) > 4096 {
+		line := strings.TrimSpace(string(w.buf))
+		w.buf = nil
+		if line != "" {
+			progress.EmitCtx(w.ctx, "%s", line)
+		}
+	}
+	return len(p), nil
+}
+
+func (w *lineWriter) Flush() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	line := strings.TrimSpace(string(w.buf))
+	w.buf = nil
+	if line != "" {
+		progress.EmitCtx(w.ctx, "%s", line)
+	}
+}
+
 // Options controls Ensure.
 type Options struct {
 	Force         bool
@@ -75,7 +149,7 @@ func Ensure(ctx context.Context, runtimeID string, m *manifest.Manifest, opt Opt
 		return runtime.VenvPython(runtimeID)
 	}
 	if opt.Runner == nil {
-		opt.Runner = ExecRunner{Stdio: !opt.Quiet}
+		opt.Runner = streamRunner{stdio: !opt.Quiet}
 	}
 	abi, err := m.PythonABI()
 	if err != nil {

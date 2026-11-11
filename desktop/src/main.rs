@@ -402,9 +402,7 @@ impl App {
             self.job_verb = job.verb.clone();
         }
         if !job.message.is_empty() {
-            if let Some(pct) = parse_pct(&job.message) {
-                self.load_pct = Some(pct);
-            }
+            self.load_pct = parse_pct(&job.message);
             self.load_message = job.message.clone();
         }
         if !job.phase.is_empty() {
@@ -731,7 +729,9 @@ impl App {
             });
         });
         ui.add_space(6.0);
+        let page_width = ui.available_width();
         self.load_progress(ui);
+        ui.set_max_width(page_width);
         match self.model_tab {
             ModelTab::Local => self.local_models(ui),
             ModelTab::Hub => self.hub_models(ui),
@@ -745,19 +745,24 @@ impl App {
         }
         ui.add_space(6.0);
         card_frame(ui).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
+            let width = ui.available_width();
+            ui.set_max_width(width);
+            ui.set_width(width);
+            ui.horizontal_wrapped(|ui| {
                 if self.loading {
                     ui.add(egui::Spinner::new().size(14.0));
                     if !self.job_verb.is_empty() {
                         ui.label(egui::RichText::new(&self.job_verb).strong());
                     }
                     if !self.job_ref.is_empty() {
-                        ui.label(
-                            egui::RichText::new(&self.job_ref)
-                                .monospace()
-                                .weak()
-                                .small(),
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(&self.job_ref)
+                                    .monospace()
+                                    .weak()
+                                    .small(),
+                            )
+                            .wrap(),
                         );
                     }
                 } else {
@@ -766,37 +771,60 @@ impl App {
                     } else {
                         green(ui)
                     };
-                    ui.label(egui::RichText::new(&self.load_status).color(color));
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(&self.load_status).color(color))
+                            .wrap(),
+                    );
                     if !self.job_ref.is_empty() {
-                        ui.label(
-                            egui::RichText::new(&self.job_ref)
-                                .monospace()
-                                .weak()
-                                .small(),
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(&self.job_ref)
+                                    .monospace()
+                                    .weak()
+                                    .small(),
+                            )
+                            .wrap(),
                         );
                     }
                 }
             });
             if self.loading {
-                ui.horizontal(|ui| {
+                ui.add_space(2.0);
+                ui.horizontal_wrapped(|ui| {
                     ui.label(
                         egui::RichText::new(&self.load_phase)
                             .strong()
                             .color(accent(ui)),
                     );
                     if !self.load_message.is_empty() {
-                        ui.label(egui::RichText::new(&self.load_message).weak().small());
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(&self.load_message).weak().small(),
+                            )
+                            .wrap(),
+                        );
                     }
                 });
-                let bar = match self.load_pct {
-                    Some(pct) => egui::ProgressBar::new((pct / 100.0).clamp(0.0, 1.0))
-                        .desired_width(progress_width(ui))
-                        .show_percentage(),
-                    None => egui::ProgressBar::new(0.0)
-                        .desired_width(progress_width(ui))
-                        .animate(true),
-                };
-                ui.add(bar);
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    let bar = match self.load_pct {
+                        Some(pct) => egui::ProgressBar::new((pct / 100.0).clamp(0.0, 1.0))
+                            .desired_width(progress_width(ui))
+                            .desired_height(8.0)
+                            .corner_radius(egui::CornerRadius::same(0))
+                            .fill(accent(ui)),
+                        None => egui::ProgressBar::new(0.0)
+                            .desired_width(progress_width(ui))
+                            .desired_height(8.0)
+                            .corner_radius(egui::CornerRadius::same(0))
+                            .fill(accent(ui))
+                            .animate(true),
+                    };
+                    ui.add(bar);
+                    if let Some(pct) = self.load_pct {
+                        ui.label(egui::RichText::new(format!("{pct:.0}%")).small().strong());
+                    }
+                });
             }
         });
     }
@@ -884,12 +912,12 @@ impl App {
             .striped(true)
             .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
             .column(Column::exact(34.0))
-            .column(Column::remainder())
-            .column(Column::exact(86.0))
-            .column(Column::exact(92.0))
-            .column(Column::exact(86.0))
-            .column(Column::exact(76.0))
-            .column(Column::exact(96.0))
+            .column(Column::remainder().at_least(120.0).at_most(360.0))
+            .column(Column::exact(78.0))
+            .column(Column::exact(78.0))
+            .column(Column::exact(78.0))
+            .column(Column::exact(64.0))
+            .column(Column::exact(88.0))
             .header(26.0, |mut header| {
                 header.col(|ui| {
                     let mut all = all_selected;
@@ -926,6 +954,7 @@ impl App {
                         row.col(|ui| {
                             let response = ui.add(
                                 egui::Label::new(egui::RichText::new(&m.name).monospace())
+                                    .truncate()
                                     .sense(egui::Sense::click()),
                             );
                             if response.clicked() {
@@ -2223,7 +2252,7 @@ fn flat_metric(ui: &mut egui::Ui, label: &str, pct: f32, color: egui::Color32) {
 }
 
 fn progress_width(ui: &egui::Ui) -> f32 {
-    let w = ui.available_width();
+    let w = ui.available_width().min(360.0);
     if w.is_finite() && w > 1.0 {
         w
     } else {

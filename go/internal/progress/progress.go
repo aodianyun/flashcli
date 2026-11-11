@@ -85,14 +85,19 @@ func Note(format string, args ...any) {
 	fmt.Fprintf(out, "  • %s\n", fmt.Sprintf(format, args...))
 }
 
+// EmitCtx sends a detail update to a context sink without printing it.
+func EmitCtx(ctx context.Context, format string, args ...any) {
+	if sink := SinkFromContext(ctx); sink != nil {
+		sink(Update{Stage: "note", Detail: fmt.Sprintf(format, args...), Percent: -1})
+	}
+}
+
 // NoteCtx is Note plus a structured update for a context sink. Use it for
 // work that runs inside a flashserver job so the UI sees the same detail.
 func NoteCtx(ctx context.Context, format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	Note("%s", msg)
-	if sink := SinkFromContext(ctx); sink != nil {
-		sink(Update{Stage: "note", Detail: msg, Percent: -1})
-	}
+	EmitCtx(ctx, "%s", msg)
 }
 
 // Warn always prints a warning line to stderr.

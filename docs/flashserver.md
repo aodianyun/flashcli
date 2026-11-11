@@ -72,6 +72,11 @@ In that case setup automatically selects the next free port (`18790`, `28790`,
 final health check read that file, so the client, installer, and API docs all use
 the same selected port.
 
+The installer also ships the `flashcli-bundle` Python source. Setup extracts it
+to `/usr/local/share/flashcli/flashcli-bundle` and writes
+`FLASHCLI_BUNDLE_PIP_SPEC` to `~/.flashcli/install.env`, so creating a bundle
+virtualenv does not need `git` or GitHub access from WSL.
+
 For automation/debugging, `flashserver-setup --progress-file FILE` writes the
 `[n/8]` lines and a final `DONE <code>` (`0` ready, `3` restart required, `2`
 error). The full trace including `wsl.exe`/`schtasks.exe` output is written to

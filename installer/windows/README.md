@@ -50,6 +50,11 @@ and so on, writes the chosen port into the WSL config, and records the Windows
 URL in `%LOCALAPPDATA%\FlashServer\api-url.txt`. The client and installer read
 that file, so no manual port configuration is needed.
 
+The payload also contains `flashcli-bundle.tar.gz`. Setup extracts it under
+`/usr/local/share/flashcli/flashcli-bundle` and writes
+`FLASHCLI_BUNDLE_PIP_SPEC` to `~/.flashcli/install.env`; bundle venv creation no
+longer needs a GitHub clone from WSL.
+
 The installer shows a live progress page and parses the setup progress file
 (`[n/8] step` lines plus a final `DONE <code>`). Exit codes: `0` ready, `3`
 restart required to finish enabling WSL2, `2` error. On exit `3` the client is

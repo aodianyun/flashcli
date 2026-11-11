@@ -58,7 +58,10 @@ func installWSL(ctx context.Context, env Env, opts Options, out io.Writer) error
 		if err := copyToWSL(ctx, opts, resolveBinary(opts.BinDir, "flashcli", "linux", linuxArch), path.Join(binDir, "flashcli")); err != nil {
 			return err
 		}
-		return copyToWSL(ctx, opts, resolveBinary(opts.BinDir, "flashserver", "linux", linuxArch), path.Join(binDir, "flashserver"))
+		if err := copyToWSL(ctx, opts, resolveBinary(opts.BinDir, "flashserver", "linux", linuxArch), path.Join(binDir, "flashserver")); err != nil {
+			return err
+		}
+		return installBundleSource(ctx, opts, &i)
 	}); err != nil {
 		return err
 	}
@@ -266,6 +269,37 @@ func systemdUsable(ctx context.Context, opts Options) bool {
 		return true
 	}
 	return false
+}
+
+// installBundleSource installs the packaged flashcli-bundle source into WSL
+// and points ~/.flashcli/install.env at it. This avoids requiring GitHub/git
+// access from WSL when a bundle venv is created.
+func installBundleSource(ctx context.Context, opts Options, i *installer) error {
+	src := filepath.Join(opts.BinDir, "flashcli-bundle.tar.gz")
+	if _, err := os.Stat(src); err != nil {
+		i.printf("warn: %s not found; bundle venvs fall back to FLASHCLI_INSTALL_REPO\n", src)
+		return nil
+	}
+	const destDir = "/usr/local/share/flashcli"
+	tarPath := path.Join(destDir, "flashcli-bundle.tar.gz")
+	if err := copyToWSL(ctx, opts, src, tarPath); err != nil {
+		return err
+	}
+	extract := "mkdir -p " + shellQuote(destDir) + " && tar -xzf " + shellQuote(tarPath) + " -C " + shellQuote(destDir)
+	if err := wslRoot(ctx, opts, "sh", "-c", extract); err != nil {
+		return fmt.Errorf("extract flashcli-bundle: %w", err)
+	}
+	spec := destDir + "/flashcli-bundle[infer]"
+	envFile := path.Join(opts.Home, "install.env")
+	envLine := "FLASHCLI_BUNDLE_PIP_SPEC=" + spec
+	merge := "mkdir -p " + shellQuote(path.Dir(envFile)) + " && { grep -v '^FLASHCLI_BUNDLE_PIP_SPEC=' " +
+		shellQuote(envFile) + " 2>/dev/null || true; printf '%s\\n' " + shellQuote(envLine) +
+		"; } > " + shellQuote(envFile+".tmp") + " && mv " + shellQuote(envFile+".tmp") + " " + shellQuote(envFile)
+	if err := wslRoot(ctx, opts, "sh", "-c", merge); err != nil {
+		return fmt.Errorf("write install.env: %w", err)
+	}
+	i.printf("bundled flashcli-bundle source: %s\n", spec)
+	return nil
 }
 
 func copyToWSL(ctx context.Context, opts Options, src, dest string) error {

@@ -52,6 +52,25 @@ try {
         if (Test-Path $src) { Copy-Item $src (Join-Path $Payload $name) }
     }
 
+    # Bundle the protocol package source so bundle venvs do not need GitHub.
+    $BundleSrc = Join-Path $Root "flashcli-bundle"
+    if (-not (Test-Path (Join-Path $BundleSrc "pyproject.toml"))) {
+        throw "missing $BundleSrc; run from the repository root"
+    }
+    $BundleStage = Join-Path $Payload "flashcli-bundle"
+    New-Item -ItemType Directory -Force -Path $BundleStage | Out-Null
+    Copy-Item (Join-Path $BundleSrc "pyproject.toml") $BundleStage
+    Copy-Item (Join-Path $BundleSrc "README.md") $BundleStage
+    Copy-Item (Join-Path $BundleSrc "src") (Join-Path $BundleStage "src") -Recurse
+    Remove-Item (Join-Path $BundleStage "src\flashcli_bundle.egg-info") -Recurse -Force -ErrorAction SilentlyContinue
+    Get-ChildItem $BundleStage -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force
+    Get-ChildItem $BundleStage -Recurse -File -Filter "*.pyc" | Remove-Item -Force
+    $Tar = Get-Command tar.exe -ErrorAction SilentlyContinue
+    if (-not $Tar) { throw "tar.exe not found; Windows 10 1803+ or bsdtar is required to package flashcli-bundle" }
+    & $Tar.Source -czf (Join-Path $Payload "flashcli-bundle.tar.gz") -C $Payload "flashcli-bundle"
+    if ($LASTEXITCODE -ne 0) { throw "tar.exe failed with exit code $LASTEXITCODE" }
+    Remove-Item $BundleStage -Recurse -Force
+
     New-Item -ItemType Directory -Force -Path $Out | Out-Null
     & $Iscc.Source "/DAppVersion=$Version" "/DPayloadDir=$Payload" $Iss
     if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
