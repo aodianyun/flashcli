@@ -811,12 +811,12 @@ impl App {
                         Some(pct) => egui::ProgressBar::new((pct / 100.0).clamp(0.0, 1.0))
                             .desired_width(progress_width(ui))
                             .desired_height(8.0)
-                            .corner_radius(egui::CornerRadius::same(0))
+                            .corner_radius(egui::CornerRadius::same(3))
                             .fill(accent(ui)),
                         None => egui::ProgressBar::new(0.0)
                             .desired_width(progress_width(ui))
                             .desired_height(8.0)
-                            .corner_radius(egui::CornerRadius::same(0))
+                            .corner_radius(egui::CornerRadius::same(3))
                             .fill(accent(ui))
                             .animate(true),
                     };
@@ -844,8 +844,22 @@ impl App {
             stat(ui, "本地模型", &self.models.len().to_string());
             stat(ui, "已就绪", &ready.to_string());
             stat(ui, "已加载", &loaded.to_string());
-            stat(ui, "总占用", &fmt_bytes(total_bytes));
+            stat(ui, "模型占用", &fmt_bytes(total_bytes));
         });
+        let shared: Vec<String> = ["runtimes", "python", "tools", "cache"]
+            .iter()
+            .filter_map(|key| {
+                self.storage_sizes
+                    .get(*key)
+                    .map(|bytes| format!("{} {}", storage_label(key), fmt_bytes(*bytes)))
+            })
+            .collect();
+        let mut note = "模型大小 = Bundle + 权重".to_string();
+        if !shared.is_empty() {
+            note.push_str("；共享缓存：");
+            note.push_str(&shared.join(" · "));
+        }
+        ui.label(egui::RichText::new(note).weak().small());
         ui.add_space(4.0);
         let mut clean_request: Option<Vec<String>> = None;
         ui.horizontal(|ui| {
@@ -882,7 +896,11 @@ impl App {
                     .vertical_align(egui::Align::Center)
                     .margin(egui::Margin::symmetric(8, 4)),
             );
-            if ui.button("加载").clicked() {
+            let load_clicked = ui
+                .add_enabled_ui(!self.loading, |ui| ui.button("加载"))
+                .inner
+                .clicked();
+            if load_clicked {
                 let ref_str = self.load_ref.trim().to_string();
                 if !ref_str.is_empty() {
                     spawn_job(self.tx.clone(), ui.ctx().clone(), ref_str, false);
@@ -912,7 +930,7 @@ impl App {
             .striped(true)
             .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
             .column(Column::exact(34.0))
-            .column(Column::remainder().at_least(120.0).at_most(360.0))
+            .column(Column::remainder().at_least(120.0))
             .column(Column::exact(78.0))
             .column(Column::exact(78.0))
             .column(Column::exact(78.0))
@@ -927,7 +945,7 @@ impl App {
                         toggle_all = Some(all);
                     }
                 });
-                for title in ["模型", "Bundle", "权重", "总大小", "状态", "操作"] {
+                for title in ["模型", "Bundle", "权重", "模型大小", "状态", "操作"] {
                     header.col(|ui| {
                         ui.strong(title);
                     });
@@ -987,15 +1005,33 @@ impl App {
                                 }
                             } else if m.ready() {
                                 if m.serve {
-                                    if table_button(ui, "加载").clicked() {
+                                    let active = self.loading
+                                        && self.job_ref == m.name
+                                        && self.job_verb == "加载";
+                                    let label = if active { "加载中…" } else { "加载" };
+                                    let clicked = ui
+                                        .add_enabled_ui(!self.loading, |ui| table_button(ui, label))
+                                        .inner
+                                        .clicked();
+                                    if clicked {
                                         load_request = Some(m.name.clone());
                                     }
                                 } else {
                                     ui.label(egui::RichText::new("—").weak())
                                         .on_hover_text("该 bundle 只声明了 run，不能通过服务加载");
                                 }
-                            } else if table_button(ui, "下载").clicked() {
-                                pull_request = Some(m.name.clone());
+                            } else {
+                                let active = self.loading
+                                    && self.job_ref == m.name
+                                    && self.job_verb == "下载";
+                                let label = if active { "下载中…" } else { "下载" };
+                                let clicked = ui
+                                    .add_enabled_ui(!self.loading, |ui| table_button(ui, label))
+                                    .inner
+                                    .clicked();
+                                if clicked {
+                                    pull_request = Some(m.name.clone());
+                                }
                             }
                         });
                     });
@@ -1224,11 +1260,18 @@ impl App {
                                 ui.label(egui::RichText::new(&v.status).weak().small());
                             });
                             row.col(|ui| {
-                                if table_button(ui, "下载").clicked() {
-                                    load_ref = Some(format!(
-                                        "{}/{}:{}",
-                                        repo.namespace, repo.name, v.version
-                                    ));
+                                let reference =
+                                    format!("{}/{}:{}", repo.namespace, repo.name, v.version);
+                                let active = self.loading
+                                    && self.job_ref == reference
+                                    && self.job_verb == "下载";
+                                let label = if active { "下载中…" } else { "下载" };
+                                let clicked = ui
+                                    .add_enabled_ui(!self.loading, |ui| table_button(ui, label))
+                                    .inner
+                                    .clicked();
+                                if clicked {
+                                    load_ref = Some(reference);
                                 }
                             });
                         });
@@ -1389,7 +1432,14 @@ impl App {
                             ui.ctx().copy_text(model.endpoint.clone());
                         }
                     } else if model.ready() && model.serve {
-                        if primary_button(ui, "加载").clicked() {
+                        let active =
+                            self.loading && self.job_ref == model.name && self.job_verb == "加载";
+                        let label = if active { "加载中…" } else { "加载" };
+                        let clicked = ui
+                            .add_enabled_ui(!self.loading, |ui| primary_button(ui, label))
+                            .inner
+                            .clicked();
+                        if clicked {
                             load = true;
                         }
                     } else if model.ready() {
@@ -1398,8 +1448,17 @@ impl App {
                                 .weak()
                                 .small(),
                         );
-                    } else if button(ui, "下载").clicked() {
-                        pull = true;
+                    } else {
+                        let active =
+                            self.loading && self.job_ref == model.name && self.job_verb == "下载";
+                        let label = if active { "下载中…" } else { "下载" };
+                        let clicked = ui
+                            .add_enabled_ui(!self.loading, |ui| button(ui, label))
+                            .inner
+                            .clicked();
+                        if clicked {
+                            pull = true;
+                        }
                     }
                 });
                 ui.add_space(8.0);

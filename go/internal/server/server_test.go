@@ -293,3 +293,43 @@ func TestInspectBundleVRAM(t *testing.T) {
 		t.Fatalf("MinVRAMMiB = %d", info.MinVRAMMiB)
 	}
 }
+
+type gatePuller struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (p *gatePuller) Pull(ctx context.Context, ref string, opts host.PullOptions) (host.PullResult, error) {
+	select {
+	case p.started <- struct{}{}:
+		<-p.release
+	default:
+	}
+	return host.PullResult{BundleRoot: "/tmp/bundle", Checkpoint: "/tmp/weights"}, nil
+}
+
+func TestPullRejectsConcurrent(t *testing.T) {
+	p := &gatePuller{started: make(chan struct{}), release: make(chan struct{})}
+	s := &Server{Source: fakeSource{}, Puller: p, Jobs: NewJobManager()}
+	post := func() int {
+		req := httptest.NewRequest(http.MethodPost, "/v1/pull", strings.NewReader(`{"ref":"demo:1"}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if code := post(); code != http.StatusAccepted {
+		t.Fatalf("first pull status = %d", code)
+	}
+	<-p.started
+	if code := post(); code != http.StatusConflict {
+		t.Fatalf("concurrent pull status = %d, want 409", code)
+	}
+	close(p.release)
+	for i := 0; i < 100 && s.pullBusy.Load(); i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if code := post(); code != http.StatusAccepted {
+		t.Fatalf("pull after completion status = %d", code)
+	}
+}

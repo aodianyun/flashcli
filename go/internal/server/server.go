@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/aodianyun/flashcli/go/internal/flashhub"
@@ -42,6 +43,8 @@ type Server struct {
 	GPU     func(context.Context) ([]gpu.Device, error)
 	LogDir  string
 	Started time.Time
+
+	pullBusy atomic.Bool
 
 	histMu   sync.Mutex
 	history  []GpuSample

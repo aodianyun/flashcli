@@ -14,6 +14,8 @@ Native desktop client for `flashserver`, built with Rust + [egui/eframe](https:/
 - Destructive actions (stop service, disable auto-start, unload, quit) require confirmation.
 - Live data: WebSocket `/v1/ws` (1 Hz system snapshots + job progress), HTTP polling fallback.
 - Load/download progress shows the bundle ref, current phase (bundle sync, Python runtime, weights), file/byte counts and percentage. Checksum-mismatched downloads are retried.
+- Downloads are serialized; download/load actions are disabled while a job is active and the current row shows "下载中…/加载中…".
+- Model-row size is Bundle + weights; runtime/Python/tools/download cache are shared caches shown in Settings.
 
 ## Build (Windows)
 
