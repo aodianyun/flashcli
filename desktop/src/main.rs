@@ -1174,18 +1174,10 @@ impl App {
                                     logs_request = Some(m.name.clone());
                                     ui.close_menu();
                                 }
-                                if m.loaded && m.serve && ui.button("请求测试").clicked() {
-                                    smoke_request = Some(m.clone());
-                                    ui.close_menu();
-                                }
                                 if m.ready() && !m.serve && ui.button("Run 冒烟测试").clicked()
                                 {
                                     smoke_request = Some(m.clone());
                                     ui.close_menu();
-                                }
-                                if m.ready() && m.serve && !m.loaded {
-                                    ui.add_enabled(false, egui::Button::new("请求测试"))
-                                        .on_disabled_hover_text("先启动模型再进行请求测试");
                                 }
                                 if m.loaded && ui.button("停止").clicked() {
                                     unload_request = Some(m.name.clone());
@@ -1628,16 +1620,6 @@ impl App {
                             kv(ui, "PID", &model.pid.to_string());
                             kv(ui, "启动时间", &model.loaded_at);
                         });
-                    if model.serve {
-                        ui.add_space(8.0);
-                        let enabled = !self.smoke.as_ref().is_some_and(|s| s.running);
-                        if ui
-                            .add_enabled(enabled, egui::Button::new("请求测试"))
-                            .clicked()
-                        {
-                            smoke = true;
-                        }
-                    }
                 }
 
                 if !model.loaded {
@@ -1737,6 +1719,7 @@ impl App {
         let mut close = false;
         let mut copied = false;
         let mut copied_example = false;
+        let mut smoke = false;
         modal_backdrop(ctx, dark, &mut close);
         egui::Window::new("use_model_dialog")
             .title_bar(false)
@@ -1826,6 +1809,9 @@ impl App {
                 ui.separator();
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
+                    if button(ui, "请求测试").clicked() {
+                        smoke = true;
+                    }
                     if button(ui, "打开 API 文档").clicked() {
                         let _ = webbrowser::open(&format!(
                             "{}/docs",
@@ -1847,6 +1833,16 @@ impl App {
         }
         if close {
             self.use_model = None;
+        }
+        if smoke {
+            self.use_model = None;
+            self.smoke = Some(SmokeState {
+                title: format!("请求测试 · {}", model.name),
+                running: true,
+                ok: true,
+                log: "测试运行中…\n".into(),
+            });
+            spawn_smoke(self.tx.clone(), ctx.clone(), model.name.clone());
         }
     }
 
