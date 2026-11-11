@@ -17,8 +17,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	stdruntime "runtime"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/aodianyun/flashcli/go/internal/errs"
 	"github.com/aodianyun/flashcli/go/internal/manifest"
@@ -51,13 +54,19 @@ func (e ExecRunner) Run(ctx context.Context, argv []string, env []string) error 
 }
 
 // streamRunner runs commands and forwards their output lines to the context
-// progress sink, so `uv` download lines appear in flashserver jobs as well as
-// in the journal.
+// progress sink. On Linux it runs interactive installers through `script` so
+// uv emits its download progress bars (it disables them when stderr is a pipe).
 type streamRunner struct{ stdio bool }
 
 func (r streamRunner) Run(ctx context.Context, argv []string, env []string) error {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Env = env
+	if progress.SinkFromContext(ctx) != nil && stdruntime.GOOS == "linux" {
+		if script, err := exec.LookPath("script"); err == nil {
+			cmd = exec.CommandContext(ctx, script, "-qefc", shellJoin(argv), "/dev/null")
+			cmd.Env = append(append([]string{}, env...), "TERM=xterm-256color")
+		}
+	}
 	out := &lineWriter{ctx: ctx}
 	errOut := &lineWriter{ctx: ctx}
 	if r.stdio {
@@ -75,18 +84,106 @@ func (r streamRunner) Run(ctx context.Context, argv []string, env []string) erro
 	return nil
 }
 
-// lineWriter forwards complete output lines to the progress sink.
+func shellJoin(argv []string) string {
+	parts := make([]string, len(argv))
+	for i, a := range argv {
+		parts[i] = "'" + strings.ReplaceAll(a, "'", `'\''`) + "'"
+	}
+	return strings.Join(parts, " ")
+}
+
+var (
+	ansiRe     = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+	byteFracRe = regexp.MustCompile(`([0-9]+(?:\.[0-9]+)?)\s*([KMGTP]i?B)\s*/\s*([0-9]+(?:\.[0-9]+)?)\s*([KMGTP]i?B)`)
+)
+
+func cleanLine(s string) string {
+	s = ansiRe.ReplaceAllString(s, "")
+	s = strings.ReplaceAll(s, "\x1b", "")
+	s = strings.TrimLeftFunc(s, func(r rune) bool {
+		return r == '▸' || r == '•' || (r >= 0x2800 && r <= 0x28FF)
+	})
+	fields := strings.Fields(s)
+	out := fields[:0]
+	for _, f := range fields {
+		if isProgressBar(f) {
+			continue
+		}
+		out = append(out, f)
+	}
+	return strings.Join(out, " ")
+}
+
+func isProgressBar(s string) bool {
+	if len(s) < 2 {
+		return false
+	}
+	for _, r := range s {
+		switch r {
+		case '-', '=', '#', '█', '░', '▰', '▱', '▌', '▐':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func withPercent(s string) string {
+	if strings.Contains(s, "%") {
+		return s
+	}
+	m := byteFracRe.FindStringSubmatch(s)
+	if m == nil {
+		return s
+	}
+	done, total := byteValue(m[1], m[2]), byteValue(m[3], m[4])
+	if total <= 0 {
+		return s
+	}
+	pct := int(done*100/total + 0.5)
+	if pct > 100 {
+		pct = 100
+	}
+	return fmt.Sprintf("%s  %d%%", s, pct)
+}
+
+func byteValue(num, unit string) float64 {
+	v, err := strconv.ParseFloat(num, 64)
+	if err != nil {
+		return 0
+	}
+	switch strings.ToUpper(strings.TrimSpace(unit)) {
+	case "KB":
+		v *= 1000
+	case "MB":
+		v *= 1000 * 1000
+	case "GB":
+		v *= 1000 * 1000 * 1000
+	case "KIB":
+		v *= 1024
+	case "MIB":
+		v *= 1024 * 1024
+	case "GIB":
+		v *= 1024 * 1024 * 1024
+	case "TIB":
+		v *= 1024 * 1024 * 1024 * 1024
+	}
+	return v
+}
+
+// lineWriter forwards complete output lines to the progress sink. Progress
+// bars are throttled so a fast terminal refresh does not flood the job log.
 type lineWriter struct {
 	ctx context.Context
 	out io.Writer
 	mu  sync.Mutex
 	buf []byte
+
+	lastEmit time.Time
+	pending  string
 }
 
 func (w *lineWriter) Write(p []byte) (int, error) {
-	if w.out != nil {
-		_, _ = w.out.Write(p)
-	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.buf = append(w.buf, p...)
@@ -95,30 +192,58 @@ func (w *lineWriter) Write(p []byte) (int, error) {
 		if i < 0 {
 			break
 		}
-		line := strings.TrimSpace(string(w.buf[:i]))
+		raw := string(w.buf[:i])
 		w.buf = w.buf[i+1:]
-		if line != "" {
-			progress.EmitCtx(w.ctx, "%s", line)
-		}
+		w.handleLine(raw)
 	}
 	if len(w.buf) > 4096 {
-		line := strings.TrimSpace(string(w.buf))
+		w.handleLine(string(w.buf))
 		w.buf = nil
-		if line != "" {
-			progress.EmitCtx(w.ctx, "%s", line)
-		}
 	}
 	return len(p), nil
+}
+
+func (w *lineWriter) handleLine(raw string) {
+	line := withPercent(cleanLine(raw))
+	if line == "" {
+		return
+	}
+	force := false
+	for _, marker := range []string{"Downloaded", "Installed", "Resolved", "Building", "Built", "Using Python"} {
+		if strings.Contains(line, marker) {
+			force = true
+			break
+		}
+	}
+	now := time.Now()
+	if !force && now.Sub(w.lastEmit) < 250*time.Millisecond {
+		w.pending = line
+		return
+	}
+	w.lastEmit = now
+	w.pending = ""
+	if w.out != nil {
+		fmt.Fprintln(w.out, line)
+	}
+	progress.EmitCtx(w.ctx, "%s", line)
 }
 
 func (w *lineWriter) Flush() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	line := strings.TrimSpace(string(w.buf))
+	line := withPercent(cleanLine(string(w.buf)))
 	w.buf = nil
-	if line != "" {
-		progress.EmitCtx(w.ctx, "%s", line)
+	if line == "" {
+		line = w.pending
 	}
+	w.pending = ""
+	if line == "" {
+		return
+	}
+	if w.out != nil {
+		fmt.Fprintln(w.out, line)
+	}
+	progress.EmitCtx(w.ctx, "%s", line)
 }
 
 // Options controls Ensure.
