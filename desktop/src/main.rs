@@ -233,6 +233,7 @@ struct SmokeState {
     title: String,
     running: bool,
     ok: bool,
+    cancelled: bool,
     job_id: String,
     log: String,
 }
@@ -287,6 +288,7 @@ pub struct App {
     job_verb: String,
     dialog: Option<DialogState>,
     smoke: Option<SmokeState>,
+    pending_smoke_cancel: bool,
     closing: bool,
     gpu_util: Vec<[f64; 2]>,
     gpu_mem: Vec<[f64; 2]>,
@@ -354,6 +356,7 @@ impl App {
             job_verb: String::new(),
             dialog: None,
             smoke: None,
+            pending_smoke_cancel: false,
             closing: false,
             gpu_util: Vec::new(),
             gpu_mem: Vec::new(),
@@ -362,7 +365,7 @@ impl App {
         }
     }
 
-    fn drain_events(&mut self) {
+    fn drain_events(&mut self, ctx: &egui::Context) {
         while let Ok(ev) = self.rx.try_recv() {
             match ev {
                 Event::System(v) => {
@@ -476,6 +479,7 @@ impl App {
                                 },
                                 running: false,
                                 ok: v["ok"].as_bool().unwrap_or(false),
+                                cancelled: false,
                                 job_id: String::new(),
                                 log,
                             }
@@ -484,6 +488,7 @@ impl App {
                             title: "模型测试".into(),
                             running: false,
                             ok: false,
+                            cancelled: false,
                             job_id: String::new(),
                             log: error,
                         },
@@ -491,7 +496,11 @@ impl App {
                 }
                 Event::SmokeJob(id) => {
                     if let Some(smoke) = self.smoke.as_mut() {
-                        smoke.job_id = id;
+                        smoke.job_id = id.clone();
+                    }
+                    if self.pending_smoke_cancel && !id.is_empty() {
+                        self.pending_smoke_cancel = false;
+                        spawn_cancel_job(ctx.clone(), id);
                     }
                 }
                 Event::Catalog { repos, total } => {
@@ -539,6 +548,7 @@ impl App {
             title: format!("Run 冒烟测试 · {name}"),
             running: true,
             ok: true,
+            cancelled: false,
             job_id: String::new(),
             log: "测试运行中…\n".into(),
         });
@@ -559,6 +569,7 @@ impl App {
                 },
                 running: true,
                 ok: true,
+                cancelled: false,
                 job_id: String::new(),
                 log: String::new(),
             });
@@ -569,14 +580,19 @@ impl App {
                 smoke.log.push_str(&job.message);
                 smoke.log.push('\n');
             }
-            if job.state == "done" || job.phase == "done" {
+            let done = job.state == "done" || job.phase == "done";
+            let failed = job.state == "failed" || job.phase == "failed";
+            if smoke.running && (done || failed) {
                 smoke.running = false;
-                smoke.ok = true;
-                smoke.log.push_str("测试通过\n");
-            } else if job.state == "failed" || job.phase == "failed" {
-                smoke.running = false;
-                smoke.ok = false;
-                smoke.log.push_str("测试失败\n");
+                if smoke.cancelled {
+                    smoke.log.push_str("测试已取消\n");
+                } else if done {
+                    smoke.ok = true;
+                    smoke.log.push_str("测试通过\n");
+                } else {
+                    smoke.ok = false;
+                    smoke.log.push_str("测试失败\n");
+                }
             }
             return;
         }
@@ -1877,6 +1893,7 @@ impl App {
                 title: format!("请求测试 · {}", model.name),
                 running: true,
                 ok: true,
+                cancelled: false,
                 job_id: String::new(),
                 log: "测试运行中…\n".into(),
             });
@@ -2354,6 +2371,9 @@ impl App {
                             )
                             .clicked()
                         {
+                            if smoke.running && !smoke.cancelled {
+                                cancel = true;
+                            }
                             close = true;
                         }
                     });
@@ -2364,8 +2384,14 @@ impl App {
                 if smoke.running {
                     ui.horizontal(|ui| {
                         ui.add(egui::Spinner::new().size(16.0));
-                        ui.label("测试运行中…");
+                        ui.label(if smoke.cancelled {
+                            "正在取消测试…"
+                        } else {
+                            "测试运行中…"
+                        });
                     });
+                } else if smoke.cancelled {
+                    ui.label(egui::RichText::new("测试已取消").weak().strong());
                 } else {
                     let color = if smoke.ok { green(ui) } else { red(ui) };
                     ui.label(
@@ -2394,25 +2420,23 @@ impl App {
                 ui.separator();
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
-                    if smoke.running {
+                    if smoke.running && !smoke.cancelled {
                         if button(ui, "取消测试").clicked() {
                             cancel = true;
                         }
-                    } else if button(ui, "复制日志").clicked() {
-                        copy = true;
+                    } else if !smoke.running {
+                        if button(ui, "复制日志").clicked() {
+                            copy = true;
+                        }
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if button(
-                            ui,
-                            if smoke.running {
-                                "取消并关闭"
-                            } else {
-                                "关闭"
-                            },
-                        )
-                        .clicked()
-                        {
-                            if smoke.running {
+                        let label = if smoke.running && !smoke.cancelled {
+                            "取消并关闭"
+                        } else {
+                            "关闭"
+                        };
+                        if button(ui, label).clicked() {
+                            if smoke.running && !smoke.cancelled {
                                 cancel = true;
                             }
                             close = true;
@@ -2425,11 +2449,13 @@ impl App {
             self.op_note = Some(("测试日志已复制".into(), true, Instant::now()));
         }
         if cancel {
-            if !smoke.job_id.is_empty() {
+            smoke.cancelled = true;
+            smoke.log.push_str("正在取消测试…\n");
+            if smoke.job_id.is_empty() {
+                self.pending_smoke_cancel = true;
+            } else {
                 spawn_cancel_job(ctx.clone(), smoke.job_id.clone());
             }
-            smoke.running = false;
-            smoke.log.push_str("\n正在取消测试…\n");
         }
         if close {
             self.smoke = None;
@@ -2537,7 +2563,7 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.drain_events();
+        self.drain_events(ctx);
         if !self.closing && ctx.input(|i| i.viewport().close_requested()) {
             self.closing = true;
             if let Some(smoke) = &self.smoke {
