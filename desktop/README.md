@@ -16,7 +16,7 @@ Native desktop client for `flashserver`, built with Rust + [egui/eframe](https:/
 - Live data: WebSocket `/v1/ws` (1 Hz system snapshots + job progress), HTTP polling fallback.
 - Start/download progress shows the bundle ref, current phase (bundle sync, Python runtime, weights), file/byte counts and percentage. Checksum-mismatched downloads are retried.
 - Downloads are serialized; download/start actions are disabled while a job is active and the current row shows "下载中…/启动中…".
-- Model-row size is Bundle + weights; runtime/Python/tools/download cache are shared caches shown in Settings.
+- Model-row size is Bundle + weights; weights are shared by `source/repo@revision` and may be repeated across rows, while model totals de-dupe by weights key. Runtime directories are per bundle/version. Runtime/Python/tools/download cache are shared storage areas shown in Settings.
 
 ## Build (Windows)
 

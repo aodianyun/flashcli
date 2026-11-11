@@ -69,6 +69,7 @@ struct ModelRow {
     serve: bool,
     bundle_bytes: f64,
     weights_bytes: f64,
+    weights_key: String,
     loaded: bool,
     endpoint: String,
     pid: i64,
@@ -99,6 +100,25 @@ impl ModelRow {
     fn ready(&self) -> bool {
         self.bundle_ready && self.weights_ready
     }
+}
+
+/// Sum bundle bytes and count each shared weights key once. Two bundle
+/// versions using the same source/repo@revision share one weights directory.
+fn unique_model_bytes(models: &[ModelRow]) -> f64 {
+    let mut seen: HashSet<&str> = HashSet::new();
+    let mut total = 0.0;
+    for model in models {
+        total += model.bundle_bytes;
+        let key = if model.weights_key.is_empty() {
+            model.name.as_str()
+        } else {
+            model.weights_key.as_str()
+        };
+        if seen.insert(key) {
+            total += model.weights_bytes;
+        }
+    }
+    total
 }
 
 #[derive(Clone)]
@@ -840,21 +860,22 @@ impl App {
     }
 
     fn local_models(&mut self, ui: &mut egui::Ui) {
-        let total_bytes: f64 = self.models.iter().map(|m| m.total_bytes()).sum();
+        let total_bytes = unique_model_bytes(&self.models);
         let ready = self.models.iter().filter(|m| m.ready()).count();
         let loaded = self.models.iter().filter(|m| m.loaded).count();
-        let selected_bytes: f64 = self
+        let selected_rows: Vec<ModelRow> = self
             .models
             .iter()
             .filter(|m| self.selected_models.contains(&m.name))
-            .map(|m| m.total_bytes())
-            .sum();
+            .cloned()
+            .collect();
+        let selected_bytes = unique_model_bytes(&selected_rows);
         let selected_count = self.selected_models.len();
         ui.horizontal_wrapped(|ui| {
             stat(ui, "本地模型", &self.models.len().to_string());
             stat(ui, "已就绪", &ready.to_string());
             stat(ui, "已启动", &loaded.to_string());
-            stat(ui, "模型占用", &fmt_bytes(total_bytes));
+            stat(ui, "模型占用(去重)", &fmt_bytes(total_bytes));
         });
         let shared: Vec<String> = ["runtimes", "python", "tools", "cache"]
             .iter()
@@ -864,12 +885,13 @@ impl App {
                     .map(|bytes| format!("{} {}", storage_label(key), fmt_bytes(*bytes)))
             })
             .collect();
-        let mut note = "模型大小 = Bundle + 权重".to_string();
+        let mut note =
+            "模型大小 = Bundle + 权重；权重按 source/repo@revision 共享（行大小可能重复），模型占用已去重；运行时按 bundle/版本独立".to_string();
         if !shared.is_empty() {
-            note.push_str("；共享缓存：");
+            note.push_str("。共享缓存：");
             note.push_str(&shared.join(" · "));
         }
-        ui.label(egui::RichText::new(note).weak().small());
+        ui.add(egui::Label::new(egui::RichText::new(note).weak().small()).wrap());
         ui.add_space(4.0);
         let mut clean_request: Option<Vec<String>> = None;
         ui.horizontal(|ui| {
@@ -2718,6 +2740,7 @@ fn parse_models(v: &Value, system: Option<&Value>) -> Vec<ModelRow> {
                         serve: m["serve"].as_bool().unwrap_or(false),
                         bundle_bytes: m["bundle_bytes"].as_f64().unwrap_or(0.0),
                         weights_bytes: m["weights_bytes"].as_f64().unwrap_or(0.0),
+                        weights_key: m["weights_key"].as_str().unwrap_or("").to_string(),
                         loaded: info.is_some(),
                         endpoint: info.as_ref().map(|i| i.0.clone()).unwrap_or_default(),
                         pid: info.as_ref().map(|i| i.1).unwrap_or(0),
@@ -2810,8 +2833,8 @@ fn storage_label(name: &str) -> &str {
     match name {
         "bundles" => "Bundle",
         "models" => "权重",
-        "runtimes" => "运行时(共享)",
-        "cache" => "下载缓存(共享)",
+        "runtimes" => "模型运行时",
+        "cache" => "下载缓存",
         "tools" => "工具",
         "python" => "Python",
         other => other,

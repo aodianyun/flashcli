@@ -26,6 +26,7 @@ type Model struct {
 	Serve         bool   `json:"serve"`
 	BundleBytes   int64  `json:"bundle_bytes"`
 	WeightsBytes  int64  `json:"weights_bytes"`
+	WeightsKey    string `json:"weights_key,omitempty"`
 	Directory     string `json:"directory"`
 	WeightsSource string `json:"weights_source,omitempty"`
 	WeightsRepo   string `json:"weights_repo,omitempty"`
@@ -71,6 +72,7 @@ func ListModels() ([]Model, error) {
 			Serve:         bundleOK && bundleServes(bundleRoot),
 			BundleBytes:   dirSize(filepath.Join(paths.Bundles(), filepath.FromSlash(key))),
 			WeightsBytes:  dirSize(filepath.Join(paths.Models(), filepath.FromSlash(weightsKey))),
+			WeightsKey:    weightsKey,
 			Directory:     filepath.ToSlash(filepath.Join(paths.Home(), "{bundles,models}", weightsKey)),
 			WeightsSource: source,
 			WeightsRepo:   repo,

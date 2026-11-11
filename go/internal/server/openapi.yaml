@@ -756,6 +756,7 @@ components:
         serve: { type: boolean, description: Bundle declares a serve entry }
         bundle_bytes: { type: integer, format: int64 }
         weights_bytes: { type: integer, format: int64 }
+        weights_key: { type: string, description: Shared source/repo@revision store key }
         directory: { type: string }
         weights_source: { type: string }
         weights_repo: { type: string }
