@@ -8,6 +8,7 @@ import (
 
 	"github.com/aodianyun/flashcli/go/internal/flashhub"
 	"github.com/aodianyun/flashcli/go/internal/paths"
+	"github.com/aodianyun/flashcli/go/internal/runtime"
 )
 
 func writeTestMarker(t *testing.T, key, ref, weightsKey string) string {
@@ -95,5 +96,29 @@ func TestRemoveCachedRefKeepsSharedWeights(t *testing.T) {
 	}
 	if _, err := os.Stat(weightsDir); !os.IsNotExist(err) {
 		t.Fatalf("weights dir still exists: %v", err)
+	}
+}
+
+func TestRemoveCachedRefRemovesRuntime(t *testing.T) {
+	t.Setenv("FLASHCLI_HOME", t.TempDir())
+	bundleDir := writeTestMarker(t, "demo/1", "demo:1", "demo/1")
+	runtimeID := "demo-1-runtime"
+	if err := runtime.WriteMarker(runtimeID, map[string]any{"bundle_root": bundleDir}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runtime.Dir(runtimeID), "torch.bin"), make([]byte, 4096), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rewriteMarker(t, bundleDir, map[string]any{"runtime_id": runtimeID})
+
+	res, err := RemoveCachedRef("demo:1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.FreedBytes < 4096 {
+		t.Fatalf("freed_bytes = %d, want >= 4096", res.FreedBytes)
+	}
+	if _, err := os.Stat(runtime.Dir(runtimeID)); !os.IsNotExist(err) {
+		t.Fatalf("runtime dir still exists: %v", err)
 	}
 }

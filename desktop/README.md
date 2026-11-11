@@ -6,17 +6,17 @@ Native desktop client for `flashserver`, built with Rust + [egui/eframe](https:/
 
 - Overview: GPU environment (driver/CUDA/compute capability/torch/temperature/clocks/power) with a 0-100 utilization/VRAM chart, CPU info with a 0-100 usage chart, and compact two-row service/disk cards (disk title includes the total). A flat status bar shows GPU/VRAM/CPU/RAM percentages.
 - Models: one page for local and FlashHub sources.
-  - Local: bundle/weight readiness, serve capability (run-only bundles are marked "仅 run"), separate bundle and weight sizes, total size, started state, async start with bundle/weight/dependency progress, row actions (使用 / 更多 → 查看信息 / 查看日志 / 停止), and multi-select cache cleanup (all cleanable rows selected by default; started models are skipped). The 使用 dialog shows the model's serve endpoint, OpenAI-compatible curl examples, API docs, model list, and local console.
-  - FlashHub: nothing is listed until you search or pick a category; then browse versions with size/file count and download a version. Start it from the Local tab, which shows "仅 run" and hides the start action for bundles without a serve entry.
+  - Local: bundle/runtime/weight readiness, serve capability (run-only bundles are marked "仅 run"), separate bundle/runtime/weight sizes, total size, ready/started state, async load (bundle/runtime/weights) and start (serve) progress, row actions (使用 / 更多 → 查看信息 / 查看日志 / 停止), and multi-select cache cleanup (all cleanable rows selected by default; started models are skipped). "加载" prepares a model to the ready state; only then can it be started with "启动". The 使用 dialog shows the model's serve endpoint, OpenAI-compatible curl examples, API docs, model list, and local console. The model-detail dialog is informational and only offers start/load; use, logs, and stop remain in the row actions.
+  - FlashHub: nothing is listed until you search or pick a category; then browse versions with size/file count and download a version. Load it from the Local tab, which shows "仅 run" and hides the start action for bundles without a serve entry.
 - Logs: server `journalctl` tail or a specific started model's serve log (返回服务日志 switches back), "清空" for server logs, and "另存为…" saves the full log via a native file dialog.
-- Settings: start/stop the daemon without elevation; enable/disable auto-start (UAC) through `flashserver-setup`; enable domestic mirrors (pip/HuggingFace/GitHub) for new downloads; clean shared caches (download cache, Python, tools, runtimes) with per-item sizing; dark/light theme; API docs; quit.
+- Settings: start/stop the daemon without elevation; enable/disable auto-start (UAC) through `flashserver-setup`; enable domestic mirrors (pip/HuggingFace/GitHub) for new downloads; clean shared caches (download cache, Python, tools) plus optional bulk runtime cleanup with per-item sizing; dark/light theme; API docs; quit.
 - API URL: reads `%LOCALAPPDATA%\FlashServer\api-url.txt` (written by setup when the default port 8790 is reserved) and falls back to `http://127.0.0.1:8790`. The settings page shows the selected address.
 - Copy actions (Serve address, usage example) show a result toast; the usage example is also selectable.
 - Destructive actions (stop service, disable auto-start, stop model, quit) require confirmation.
 - Live data: WebSocket `/v1/ws` (1 Hz system snapshots + job progress), HTTP polling fallback.
-- Start/download progress shows the bundle ref, current phase (bundle sync, Python runtime, weights), file/byte counts and percentage. Checksum-mismatched downloads are retried.
-- Downloads are serialized; download/start actions are disabled while a job is active and the current row shows "下载中…/启动中…".
-- Model-row size is Bundle + weights; weights are shared by `source/repo@revision` and may be repeated across rows, while model totals de-dupe by weights key. Runtime directories are per bundle/version. Runtime/Python/tools/download cache are shared storage areas shown in Settings.
+- Load/start progress shows the bundle ref, current phase (bundle sync, Python runtime/venv, weights for load; serve/health for start), file/byte counts and percentage. Checksum-mismatched downloads are retried. A completed load/start banner disappears after a few seconds.
+- Downloads are serialized; load/download/start actions are disabled while a job is active and the current row shows "加载中…/下载中…/启动中…".
+- Model size is Bundle + per-model runtime + weights. Weights are shared by `source/repo@revision` and may be repeated across rows, while model totals de-dupe by weights key. Runtime directories are per bundle/version. Python/tools/download caches are shared storage areas shown in Settings.
 
 ## Build (Windows)
 

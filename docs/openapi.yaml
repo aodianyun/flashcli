@@ -755,6 +755,8 @@ components:
         weights_cached: { type: boolean }
         serve: { type: boolean, description: Bundle declares a serve entry }
         bundle_bytes: { type: integer, format: int64 }
+        runtime_id: { type: string, description: Per-bundle/version runtime directory id }
+        runtime_bytes: { type: integer, format: int64, description: Allocated bytes of this model's runtime directory }
         weights_bytes: { type: integer, format: int64 }
         weights_key: { type: string, description: Shared source/repo@revision store key }
         directory: { type: string }

@@ -68,6 +68,8 @@ struct ModelRow {
     weights_ready: bool,
     serve: bool,
     bundle_bytes: f64,
+    runtime_id: String,
+    runtime_bytes: f64,
     weights_bytes: f64,
     weights_key: String,
     loaded: bool,
@@ -78,7 +80,7 @@ struct ModelRow {
 
 impl ModelRow {
     fn total_bytes(&self) -> f64 {
-        self.bundle_bytes + self.weights_bytes
+        self.bundle_bytes + self.runtime_bytes + self.weights_bytes
     }
 
     fn status(&self) -> &'static str {
@@ -102,20 +104,48 @@ impl ModelRow {
     }
 }
 
-/// Sum bundle bytes and count each shared weights key once. Two bundle
-/// versions using the same source/repo@revision share one weights directory.
-fn unique_model_bytes(models: &[ModelRow]) -> f64 {
+/// Weights keys used by more than one cached model. Their directories are
+/// shared by `source/repo@revision`.
+fn shared_weights_set(models: &[ModelRow]) -> HashSet<&str> {
     let mut seen: HashSet<&str> = HashSet::new();
+    let mut shared: HashSet<&str> = HashSet::new();
+    for model in models {
+        if model.weights_key.is_empty() {
+            continue;
+        }
+        if !seen.insert(model.weights_key.as_str()) {
+            shared.insert(model.weights_key.as_str());
+        }
+    }
+    shared
+}
+
+/// Sum bundle and per-model runtime bytes, counting each shared weights key
+/// once. Two bundle versions using the same source/repo@revision share one
+/// weights directory; runtime directories are per bundle/version.
+fn unique_model_bytes(models: &[ModelRow]) -> f64 {
+    let mut seen_weights: HashSet<&str> = HashSet::new();
+    let mut seen_runtimes: HashSet<&str> = HashSet::new();
     let mut total = 0.0;
     for model in models {
         total += model.bundle_bytes;
-        let key = if model.weights_key.is_empty() {
+        let weights_key = if model.weights_key.is_empty() {
             model.name.as_str()
         } else {
             model.weights_key.as_str()
         };
-        if seen.insert(key) {
+        if seen_weights.insert(weights_key) {
             total += model.weights_bytes;
+        }
+        if model.runtime_bytes > 0.0 {
+            let runtime_key = if model.runtime_id.is_empty() {
+                model.name.as_str()
+            } else {
+                model.runtime_id.as_str()
+            };
+            if seen_runtimes.insert(runtime_key) {
+                total += model.runtime_bytes;
+            }
         }
     }
     total
@@ -235,6 +265,7 @@ pub struct App {
     models_note: String,
     load_ref: String,
     load_status: String,
+    load_status_at: Option<Instant>,
     loading: bool,
     load_phase: String,
     load_message: String,
@@ -300,6 +331,7 @@ impl App {
             models_note: String::new(),
             load_ref: String::new(),
             load_status: String::new(),
+            load_status_at: None,
             loading: false,
             load_phase: String::new(),
             load_message: String::new(),
@@ -366,6 +398,7 @@ impl App {
                         self.load_pct = None;
                         self.load_message.clear();
                         self.load_status = "服务已停止".into();
+                        self.load_status_at = Some(Instant::now());
                     }
                 }
                 Event::Storage(v) => {
@@ -399,7 +432,10 @@ impl App {
                     };
                 }
                 Event::Autostart(enabled) => self.autostart_known = Some(enabled),
-                Event::Status(text) => self.load_status = text,
+                Event::Status(text) => {
+                    self.load_status = text;
+                    self.load_status_at = Some(Instant::now());
+                }
                 Event::Job(job) => self.apply_job(job),
                 Event::Catalog { repos, total } => {
                     self.hub_repos = repos;
@@ -442,16 +478,19 @@ impl App {
             "running" => {
                 self.loading = true;
                 self.load_status.clear();
+                self.load_status_at = None;
             }
             "done" => {
                 self.loading = false;
                 self.load_pct = Some(100.0);
                 self.load_message.clear();
                 self.load_status = format!("{}完成", job.verb);
+                self.load_status_at = Some(Instant::now());
             }
             "failed" => {
                 self.loading = false;
                 self.load_status = format!("{}失败：{}", job.verb, job.message);
+                self.load_status_at = None;
             }
             _ => {}
         }
@@ -770,8 +809,16 @@ impl App {
     }
 
     fn load_progress(&self, ui: &mut egui::Ui) {
-        if !self.loading && self.load_status.is_empty() {
+        let stale = self
+            .load_status_at
+            .map(|at| at.elapsed() > Duration::from_secs(4))
+            .unwrap_or(false);
+        let expired = stale && !self.load_status.contains("失败");
+        if !self.loading && (self.load_status.is_empty() || expired) {
             return;
+        }
+        if !self.loading && !expired {
+            ui.ctx().request_repaint_after(Duration::from_millis(500));
         }
         ui.add_space(6.0);
         card_frame(ui).show(ui, |ui| {
@@ -877,21 +924,6 @@ impl App {
             stat(ui, "已启动", &loaded.to_string());
             stat(ui, "模型占用(去重)", &fmt_bytes(total_bytes));
         });
-        let shared: Vec<String> = ["runtimes", "python", "tools", "cache"]
-            .iter()
-            .filter_map(|key| {
-                self.storage_sizes
-                    .get(*key)
-                    .map(|bytes| format!("{} {}", storage_label(key), fmt_bytes(*bytes)))
-            })
-            .collect();
-        let mut note =
-            "模型大小 = Bundle + 权重；权重按 source/repo@revision 共享（行大小可能重复），模型占用已去重；运行时按 bundle/版本独立".to_string();
-        if !shared.is_empty() {
-            note.push_str("。共享缓存：");
-            note.push_str(&shared.join(" · "));
-        }
-        ui.add(egui::Label::new(egui::RichText::new(note).weak().small()).wrap());
         ui.add_space(4.0);
         let mut clean_request: Option<Vec<String>> = None;
         ui.horizontal(|ui| {
@@ -929,13 +961,13 @@ impl App {
                     .margin(egui::Margin::symmetric(8, 4)),
             );
             let load_clicked = ui
-                .add_enabled_ui(!self.loading, |ui| ui.button("启动"))
+                .add_enabled_ui(!self.loading, |ui| ui.button("加载"))
                 .inner
                 .clicked();
             if load_clicked {
                 let ref_str = self.load_ref.trim().to_string();
                 if !ref_str.is_empty() {
-                    spawn_job(self.tx.clone(), ui.ctx().clone(), ref_str, false);
+                    spawn_job(self.tx.clone(), ui.ctx().clone(), ref_str, true, "加载");
                 }
             }
         });
@@ -953,6 +985,7 @@ impl App {
             .map(|m| m.name.clone())
             .collect();
         let all_selected = !cleanable.is_empty() && cleanable.iter().all(|r| selected.contains(r));
+        let shared_weights = shared_weights_set(&self.models);
         let mut toggle_all: Option<bool> = None;
         let mut detail_request = None;
         let mut load_request = None;
@@ -965,9 +998,10 @@ impl App {
             .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
             .column(Column::exact(34.0))
             .column(Column::remainder().at_least(120.0))
-            .column(Column::exact(78.0))
-            .column(Column::exact(78.0))
-            .column(Column::exact(78.0))
+            .column(Column::exact(74.0))
+            .column(Column::exact(82.0))
+            .column(Column::exact(104.0))
+            .column(Column::exact(84.0))
             .column(Column::exact(64.0))
             .column(Column::exact(150.0))
             .header(26.0, |mut header| {
@@ -979,7 +1013,8 @@ impl App {
                         toggle_all = Some(all);
                     }
                 });
-                for title in ["模型", "Bundle", "权重", "模型大小", "状态", "操作"] {
+                for title in ["模型", "Bundle", "运行时", "权重", "合计", "状态", "操作"]
+                {
                     header.col(|ui| {
                         ui.strong(title);
                     });
@@ -1004,11 +1039,13 @@ impl App {
                             }
                         });
                         row.col(|ui| {
-                            let response = ui.add(
-                                egui::Label::new(egui::RichText::new(&m.name).monospace())
-                                    .truncate()
-                                    .sense(egui::Sense::click()),
-                            );
+                            let response = ui
+                                .add(
+                                    egui::Label::new(egui::RichText::new(&m.name).monospace())
+                                        .truncate()
+                                        .sense(egui::Sense::click()),
+                                )
+                                .on_hover_text(&m.name);
                             if response.clicked() {
                                 detail_request = Some(m.clone());
                             }
@@ -1017,7 +1054,10 @@ impl App {
                             size_cell(ui, m.bundle_ready, m.bundle_bytes);
                         });
                         row.col(|ui| {
-                            size_cell(ui, m.weights_ready, m.weights_bytes);
+                            runtime_cell(ui, m);
+                        });
+                        row.col(|ui| {
+                            weights_cell(ui, m, shared_weights.contains(m.weights_key.as_str()));
                         });
                         row.col(|ui| {
                             ui.label(fmt_bytes(m.total_bytes()));
@@ -1061,8 +1101,8 @@ impl App {
                             } else {
                                 let active = self.loading
                                     && self.job_ref == m.name
-                                    && self.job_verb == "下载";
-                                let label = if active { "下载中…" } else { "下载" };
+                                    && self.job_verb == "加载";
+                                let label = if active { "加载中…" } else { "加载" };
                                 let clicked = ui
                                     .add_enabled_ui(!self.loading, |ui| table_button(ui, label))
                                     .inner
@@ -1131,7 +1171,7 @@ impl App {
             self.dialog = Some(DialogState {
                 title: "清理模型缓存".into(),
                 message: format!(
-                    "将删除所选 {} 个模型的本地 Bundle、权重和缓存记录（约 {}）。\n清理后需要重新下载才能使用；已加载的模型不会被清理。\n确定清理？",
+                    "将删除所选 {} 个模型的本地 Bundle、运行时、权重和缓存记录（约 {}）。\n与其他模型共享的权重会保留；清理后需要重新加载才能使用；已启动的模型不会被清理。\n确定清理？",
                     refs.len(),
                     fmt_bytes(bytes)
                 ),
@@ -1139,10 +1179,10 @@ impl App {
             });
         }
         if let Some(name) = load_request {
-            spawn_job(self.tx.clone(), ui.ctx().clone(), name, false);
+            spawn_job(self.tx.clone(), ui.ctx().clone(), name, false, "启动");
         }
         if let Some(name) = pull_request {
-            spawn_job(self.tx.clone(), ui.ctx().clone(), name, true);
+            spawn_job(self.tx.clone(), ui.ctx().clone(), name, true, "加载");
         }
         if let Some(name) = unload_request {
             self.dialog = Some(DialogState {
@@ -1348,7 +1388,7 @@ impl App {
                 });
         });
         if let Some(reference) = load_ref {
-            spawn_job(self.tx.clone(), ui.ctx().clone(), reference, true);
+            spawn_job(self.tx.clone(), ui.ctx().clone(), reference, true, "下载");
         }
     }
 
@@ -1384,9 +1424,6 @@ impl App {
         let dark = ctx.style().visuals.dark_mode;
         let mut close = false;
         let mut load = false;
-        let mut use_it = false;
-        let mut open_logs = false;
-        let mut unload = false;
         let mut pull = false;
         modal_backdrop(ctx, dark, &mut close);
         egui::Window::new("model_detail_dialog")
@@ -1444,6 +1481,13 @@ impl App {
                         .color(ui.visuals().weak_text_color()),
                 );
                 ui.add_space(6.0);
+                let runtime_text = if model.runtime_id.is_empty() {
+                    "—".to_string()
+                } else if model.runtime_bytes > 0.0 {
+                    fmt_bytes(model.runtime_bytes)
+                } else {
+                    "未安装".to_string()
+                };
                 egui::Grid::new("model_detail")
                     .num_columns(2)
                     .spacing([18.0, 7.0])
@@ -1458,6 +1502,7 @@ impl App {
                             "权重",
                             &size_text(model.weights_ready, model.weights_bytes),
                         );
+                        kv(ui, "运行时", &runtime_text);
                         kv(ui, "模型大小", &fmt_bytes(model.total_bytes()));
                         kv(
                             ui,
@@ -1469,6 +1514,18 @@ impl App {
                             },
                         );
                     });
+                if !model.runtime_id.is_empty() {
+                    ui.add_space(4.0);
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(format!("runtime: {}", model.runtime_id))
+                                .monospace()
+                                .weak()
+                                .small(),
+                        )
+                        .wrap(),
+                    );
+                }
 
                 if model.loaded {
                     ui.add_space(14.0);
@@ -1487,90 +1544,71 @@ impl App {
                         .show(ui, |ui| {
                             kv(ui, "Endpoint", &model.endpoint);
                             kv(ui, "PID", &model.pid.to_string());
-                            kv(ui, "加载时间", &model.loaded_at);
+                            kv(ui, "启动时间", &model.loaded_at);
                         });
                 }
 
-                ui.add_space(16.0);
-                ui.separator();
-                ui.add_space(10.0);
-                ui.horizontal(|ui| {
-                    if model.loaded {
-                        if button(ui, "使用").clicked() {
-                            use_it = true;
+                if !model.loaded {
+                    ui.add_space(16.0);
+                    ui.separator();
+                    ui.add_space(10.0);
+                    ui.horizontal(|ui| {
+                        if model.ready() && model.serve {
+                            let active = self.loading
+                                && self.job_ref == model.name
+                                && self.job_verb == "启动";
+                            let label = if active { "启动中…" } else { "启动" };
+                            let clicked = ui
+                                .add_enabled_ui(!self.loading, |ui| primary_button(ui, label))
+                                .inner
+                                .clicked();
+                            if clicked {
+                                load = true;
+                            }
+                        } else if model.ready() {
+                            ui.label(
+                                egui::RichText::new("该 bundle 仅支持 flashcli run")
+                                    .weak()
+                                    .small(),
+                            );
+                        } else {
+                            let active = self.loading
+                                && self.job_ref == model.name
+                                && self.job_verb == "加载";
+                            let label = if active { "加载中…" } else { "加载" };
+                            let clicked = ui
+                                .add_enabled_ui(!self.loading, |ui| button(ui, label))
+                                .inner
+                                .clicked();
+                            if clicked {
+                                pull = true;
+                            }
                         }
-                        if button(ui, "日志").clicked() {
-                            open_logs = true;
-                        }
-                        if destructive_button(ui, "停止").clicked() {
-                            unload = true;
-                        }
-                    } else if model.ready() && model.serve {
-                        let active =
-                            self.loading && self.job_ref == model.name && self.job_verb == "启动";
-                        let label = if active { "启动中…" } else { "启动" };
-                        let clicked = ui
-                            .add_enabled_ui(!self.loading, |ui| primary_button(ui, label))
-                            .inner
-                            .clicked();
-                        if clicked {
-                            load = true;
-                        }
-                    } else if model.ready() {
-                        ui.label(
-                            egui::RichText::new("该 bundle 仅支持 flashcli run")
-                                .weak()
-                                .small(),
-                        );
-                    } else {
-                        let active =
-                            self.loading && self.job_ref == model.name && self.job_verb == "下载";
-                        let label = if active { "下载中…" } else { "下载" };
-                        let clicked = ui
-                            .add_enabled_ui(!self.loading, |ui| button(ui, label))
-                            .inner
-                            .clicked();
-                        if clicked {
-                            pull = true;
-                        }
-                    }
-                });
+                    });
+                }
             });
-        if use_it {
-            self.model_detail = None;
-            self.use_model = Some(model.clone());
-        }
-        if open_logs {
-            self.model_detail = None;
-            self.logs_ref = Some(model.name.clone());
-            self.logs_since = None;
-            self.logs_note.clear();
-            self.logs_at = None;
-            self.logs_busy = true;
-            self.tab = Tab::Logs;
-            spawn_logs(self.tx.clone(), ctx.clone(), None, self.logs_ref.clone());
-        }
         if close {
             self.model_detail = None;
         }
-        if unload {
-            self.model_detail = None;
-            self.dialog = Some(DialogState {
-                title: "停止模型".into(),
-                message: format!(
-                    "停止后该模型的推理服务将结束，权重和缓存保留。\n确定停止 {}？",
-                    model.name
-                ),
-                action: Pending::Unload(model.name.clone()),
-            });
-        }
         if load {
             self.model_detail = None;
-            spawn_job(self.tx.clone(), ctx.clone(), model.name.clone(), false);
+            spawn_job(
+                self.tx.clone(),
+                ctx.clone(),
+                model.name.clone(),
+                false,
+                "启动",
+            );
         }
         if pull {
             self.model_detail = None;
-            spawn_job(self.tx.clone(), ctx.clone(), model.name.clone(), true);
+            spawn_job(
+                self.tx.clone(),
+                ctx.clone(),
+                model.name.clone(),
+                true,
+                "加载",
+            );
         }
     }
 
@@ -1886,7 +1924,7 @@ impl App {
                 panel(ui, "存储", |ui| {
                     ui.horizontal(|ui| {
                         ui.label(
-                            egui::RichText::new("共享缓存：运行时 / Python / 工具 / 下载缓存")
+                            egui::RichText::new("共享缓存：Python / 工具 / 下载缓存")
                                 .weak()
                                 .small(),
                         );
@@ -1904,7 +1942,7 @@ impl App {
                                 {
                                     self.cache_dialog = true;
                                     self.cache_selected.clear();
-                                    for key in ["cache", "python", "tools", "runtimes"] {
+                                    for key in ["cache", "python", "tools"] {
                                         self.cache_selected.insert(key.to_string());
                                     }
                                 }
@@ -1987,8 +2025,8 @@ impl App {
             ("tools", "工具", "uv 等下载/运行工具", "~/.flashcli/tools"),
             (
                 "runtimes",
-                "模型运行时",
-                "每个 Bundle 的 venv / torch / CUDA / native 库",
+                "模型运行时（全部）",
+                "按 bundle/版本独立；清理后下次加载会重新安装",
                 "~/.flashcli/runtimes",
             ),
         ];
@@ -2067,7 +2105,7 @@ impl App {
                 ui.label(egui::RichText::new(format!("将释放约 {}", fmt_bytes(total))).strong());
                 ui.label(
                     egui::RichText::new(
-                        "模型 Bundle/权重不受影响；下载缓存与运行时可能通过硬链接共享文件，清理后下次启动模型会重新下载/安装。",
+                        "模型 Bundle/权重不受影响；下载缓存与运行时可能通过硬链接共享文件。清理运行时后，对应模型下次加载会重新安装。",
                     )
                     .weak()
                     .small(),
@@ -2540,6 +2578,31 @@ fn size_cell(ui: &mut egui::Ui, ready: bool, bytes: f64) {
     }
 }
 
+fn runtime_cell(ui: &mut egui::Ui, model: &ModelRow) {
+    if model.runtime_id.is_empty() {
+        ui.label(egui::RichText::new("—").weak().small())
+            .on_hover_text("该模型没有独立运行时目录");
+    } else if model.runtime_bytes > 0.0 {
+        ui.label(fmt_bytes(model.runtime_bytes))
+            .on_hover_text(format!("运行时: {}\n按 bundle/版本独立", model.runtime_id));
+    } else {
+        ui.label(egui::RichText::new("未安装").weak().small())
+            .on_hover_text(format!("运行时: {}\n加载时会创建", model.runtime_id));
+    }
+}
+
+fn weights_cell(ui: &mut egui::Ui, model: &ModelRow, shared: bool) {
+    if !model.weights_ready {
+        ui.label(egui::RichText::new("缺失").color(red(ui)).small());
+        return;
+    }
+    ui.label(fmt_bytes(model.weights_bytes));
+    if shared {
+        ui.label(egui::RichText::new("共享").small().weak())
+            .on_hover_text("多个模型共用同一 source/repo@revision 权重目录");
+    }
+}
+
 fn kv(ui: &mut egui::Ui, key: &str, value: &str) {
     ui.label(egui::RichText::new(key).weak());
     ui.label(value);
@@ -2739,6 +2802,8 @@ fn parse_models(v: &Value, system: Option<&Value>) -> Vec<ModelRow> {
                         weights_ready: m["weights_cached"].as_bool().unwrap_or(false),
                         serve: m["serve"].as_bool().unwrap_or(false),
                         bundle_bytes: m["bundle_bytes"].as_f64().unwrap_or(0.0),
+                        runtime_id: m["runtime_id"].as_str().unwrap_or("").to_string(),
+                        runtime_bytes: m["runtime_bytes"].as_f64().unwrap_or(0.0),
                         weights_bytes: m["weights_bytes"].as_f64().unwrap_or(0.0),
                         weights_key: m["weights_key"].as_str().unwrap_or("").to_string(),
                         loaded: info.is_some(),
@@ -3054,9 +3119,14 @@ fn spawn_action(tx: Sender<Event>, ctx: egui::Context, action: Action) {
     });
 }
 
-fn spawn_job(tx: Sender<Event>, ctx: egui::Context, ref_str: String, pull: bool) {
+fn spawn_job(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    ref_str: String,
+    pull: bool,
+    verb: &'static str,
+) {
     std::thread::spawn(move || {
-        let verb = if pull { "下载" } else { "启动" };
         let endpoint = if pull { "/v1/pull" } else { "/v1/models/load" };
         let event_ref = ref_str.clone();
         let _ = tx.send(Event::Job(JobEvent {

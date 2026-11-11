@@ -13,6 +13,7 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/flashhub"
 	"github.com/aodianyun/flashcli/go/internal/manifest"
 	"github.com/aodianyun/flashcli/go/internal/paths"
+	"github.com/aodianyun/flashcli/go/internal/runtime"
 	"github.com/aodianyun/flashcli/go/internal/weights"
 )
 
@@ -25,6 +26,8 @@ type Model struct {
 	WeightsCached bool   `json:"weights_cached"`
 	Serve         bool   `json:"serve"`
 	BundleBytes   int64  `json:"bundle_bytes"`
+	RuntimeID     string `json:"runtime_id,omitempty"`
+	RuntimeBytes  int64  `json:"runtime_bytes"`
 	WeightsBytes  int64  `json:"weights_bytes"`
 	WeightsKey    string `json:"weights_key,omitempty"`
 	Directory     string `json:"directory"`
@@ -48,6 +51,7 @@ func ListModels() ([]Model, error) {
 	if err != nil {
 		return nil, err
 	}
+	runtimes := readRuntimeIndex()
 	out := make([]Model, 0, len(markers))
 	for _, marker := range markers {
 		key := stringValue(marker["cache_key"])
@@ -63,6 +67,7 @@ func ListModels() ([]Model, error) {
 		bundleOK := bundleRootUsable(bundleRoot)
 		weightsKey := markerWeightsKey(marker, key, bundleRoot)
 		weightsOK, source, repo, rev := weightsInfo(weightsKey, bundleRoot, variant)
+		runtimeID := markerRuntimeID(marker, runtimes)
 		out = append(out, Model{
 			Ref:           ref,
 			CacheKey:      key,
@@ -71,6 +76,8 @@ func ListModels() ([]Model, error) {
 			WeightsCached: weightsOK,
 			Serve:         bundleOK && bundleServes(bundleRoot),
 			BundleBytes:   dirSize(filepath.Join(paths.Bundles(), filepath.FromSlash(key))),
+			RuntimeID:     runtimeID,
+			RuntimeBytes:  runtimeSize(runtimeID),
 			WeightsBytes:  dirSize(filepath.Join(paths.Models(), filepath.FromSlash(weightsKey))),
 			WeightsKey:    weightsKey,
 			Directory:     filepath.ToSlash(filepath.Join(paths.Home(), "{bundles,models}", weightsKey)),
@@ -81,6 +88,70 @@ func ListModels() ([]Model, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CacheKey < out[j].CacheKey })
 	return out, nil
+}
+
+// runtimeIndex maps cached bundles back to their per-bundle runtime directory.
+// Newer bundle markers already contain runtime_id; the index is a fallback for
+// markers written before that field was added.
+type runtimeIndex struct {
+	byBundleRoot map[string]string
+	byRepoURL    map[string]string
+}
+
+func readRuntimeIndex() runtimeIndex {
+	idx := runtimeIndex{byBundleRoot: map[string]string{}, byRepoURL: map[string]string{}}
+	entries, err := os.ReadDir(paths.Runtimes())
+	if err != nil {
+		return idx
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		id := entry.Name()
+		marker := runtime.ReadMarker(id)
+		if marker == nil {
+			continue
+		}
+		if root := stringValue(marker["bundle_root"]); root != "" {
+			idx.byBundleRoot[root] = id
+		}
+		if repo := stringValue(marker["repo_url"]); repo != "" {
+			idx.byRepoURL[repo] = id
+		}
+	}
+	return idx
+}
+
+func markerRuntimeID(marker map[string]any, idx runtimeIndex) string {
+	if id := stringValue(marker["runtime_id"]); id != "" {
+		return id
+	}
+	if id := idx.byBundleRoot[stringValue(marker["bundle_root"])]; id != "" {
+		return id
+	}
+	if id := idx.byRepoURL[stringValue(marker["repo_url"])]; id != "" {
+		return id
+	}
+	bundleRoot := stringValue(marker["bundle_root"])
+	if !bundleRootUsable(bundleRoot) {
+		return ""
+	}
+	m, err := manifest.Load(bundleRoot)
+	if err != nil {
+		return ""
+	}
+	if repo := stringValue(marker["repo_url"]); repo != "" {
+		return runtime.IDFromRepo(repo, m.Name)
+	}
+	return runtime.IDFromPath(bundleRoot, m.Name)
+}
+
+func runtimeSize(runtimeID string) int64 {
+	if runtimeID == "" {
+		return 0
+	}
+	return dirUsage(runtime.Dir(runtimeID), map[fileKey]bool{})
 }
 
 // Storage returns unique allocated disk usage for the local cache areas.

@@ -8,6 +8,7 @@ import (
 
 	"github.com/aodianyun/flashcli/go/internal/flashhub"
 	"github.com/aodianyun/flashcli/go/internal/paths"
+	"github.com/aodianyun/flashcli/go/internal/runtime"
 )
 
 // RemoveResult reports what was removed for one model reference.
@@ -48,8 +49,10 @@ func RemoveCachedRef(ref string) (RemoveResult, error) {
 
 	bundlesRoot := paths.Bundles()
 	modelsRoot := paths.Models()
+	runtimes := readRuntimeIndex()
 	sharedBundles := map[string]bool{}
 	sharedWeights := map[string]bool{}
+	sharedRuntimes := map[string]bool{}
 	for _, marker := range others {
 		key := stringValue(marker["cache_key"])
 		sharedBundles[key] = true
@@ -57,11 +60,15 @@ func RemoveCachedRef(ref string) (RemoveResult, error) {
 		if wk != "" {
 			sharedWeights[wk] = true
 		}
+		if rid := markerRuntimeID(marker, runtimes); rid != "" {
+			sharedRuntimes[rid] = true
+		}
 	}
 
 	res := RemoveResult{Ref: ref, Removed: true}
 	seenBundles := map[string]bool{}
 	seenWeights := map[string]bool{}
+	seenRuntimes := map[string]bool{}
 	for _, marker := range targets {
 		key := stringValue(marker["cache_key"])
 		if key == "" {
@@ -100,6 +107,23 @@ func RemoveCachedRef(ref string) (RemoveResult, error) {
 					}
 				}
 			}
+		}
+
+		runtimeID := markerRuntimeID(marker, runtimes)
+		if runtimeID == "" || seenRuntimes[runtimeID] {
+			continue
+		}
+		seenRuntimes[runtimeID] = true
+		if sharedRuntimes[runtimeID] {
+			continue
+		}
+		runtimeDir := runtime.Dir(runtimeID)
+		if !safeUnder(paths.Runtimes(), runtimeDir) {
+			continue
+		}
+		res.FreedBytes += dirUsage(runtimeDir, map[fileKey]bool{})
+		if err := os.RemoveAll(runtimeDir); err != nil {
+			return res, err
 		}
 	}
 	return res, nil
