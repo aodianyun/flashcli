@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: FlashServer local API
-  version: 1.0.6.2026.11.06
+  version: 1.0.7.20261111
   description: |
     Local, single-user model scheduler API served by `flashserver` on
     `http://localhost:8790`. The daemon manages model lifecycle and GPU-aware
