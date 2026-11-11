@@ -1483,9 +1483,6 @@ impl App {
                         if destructive_button(ui, "卸载").clicked() {
                             unload = true;
                         }
-                        if button(ui, "复制 Endpoint").clicked() {
-                            ui.ctx().copy_text(model.endpoint.clone());
-                        }
                     } else if model.ready() && model.serve {
                         let active =
                             self.loading && self.job_ref == model.name && self.job_verb == "加载";
@@ -1514,13 +1511,6 @@ impl App {
                         if clicked {
                             pull = true;
                         }
-                    }
-                });
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    ui.add_space((ui.available_width() - 96.0).max(0.0));
-                    if button(ui, "关闭").clicked() {
-                        close = true;
                     }
                 });
             });
@@ -1571,6 +1561,8 @@ impl App {
         }
         let dark = ctx.style().visuals.dark_mode;
         let mut close = false;
+        let mut copied = false;
+        let mut copied_example = false;
         modal_backdrop(ctx, dark, &mut close);
         egui::Window::new("use_model_dialog")
             .title_bar(false)
@@ -1614,27 +1606,41 @@ impl App {
                     );
                     if button(ui, "复制地址").clicked() {
                         ui.ctx().copy_text(model.endpoint.clone());
+                        copied = true;
                     }
                 });
                 ui.add_space(12.0);
-                ui.label(
-                    egui::RichText::new("OpenAI 兼容接口")
-                        .size(12.0)
-                        .strong()
-                        .color(ui.visuals().weak_text_color()),
-                );
-                ui.add_space(4.0);
                 let models_url = format!("{}/v1/models", model.endpoint.trim_end_matches('/'));
                 let chat_url = format!(
                     "{}/v1/chat/completions",
                     model.endpoint.trim_end_matches('/')
                 );
-                ui.label(
-                    egui::RichText::new(format!(
-                        "curl {models_url}\n\ncurl {chat_url} -H 'Content-Type: application/json' \\\n  -d '{{\"model\":\"<model-id>\",\"messages\":[{{\"role\":\"user\",\"content\":\"Hello\"}}]}}'"
-                    ))
-                    .monospace()
-                    .small(),
+                let example = format!(
+                    "curl {models_url}\n\ncurl {chat_url} -H 'Content-Type: application/json' \\\n  -d '{{\"model\":\"<model-id>\",\"messages\":[{{\"role\":\"user\",\"content\":\"Hello\"}}]}}'"
+                );
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new("OpenAI 兼容接口")
+                            .size(12.0)
+                            .strong()
+                            .color(ui.visuals().weak_text_color()),
+                    );
+                    ui.with_layout(
+                        egui::Layout::right_to_left(egui::Align::Center),
+                        |ui| {
+                            if button(ui, "复制示例").clicked() {
+                                ui.ctx().copy_text(example.clone());
+                                copied_example = true;
+                            }
+                        },
+                    );
+                });
+                ui.add_space(4.0);
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(&example).monospace().small(),
+                    )
+                    .selectable(true),
                 );
                 ui.add_space(4.0);
                 ui.label(
@@ -1658,16 +1664,13 @@ impl App {
                     if button(ui, "打开本地控制台").clicked() {
                         let _ = webbrowser::open(&format!("{}/", api_base().trim_end_matches('/')));
                     }
-                    ui.with_layout(
-                        egui::Layout::right_to_left(egui::Align::Center),
-                        |ui| {
-                            if button(ui, "关闭").clicked() {
-                                close = true;
-                            }
-                        },
-                    );
                 });
             });
+        if copied_example {
+            self.op_note = Some(("已复制使用示例".into(), true, Instant::now()));
+        } else if copied {
+            self.op_note = Some(("已复制 Serve 地址".into(), true, Instant::now()));
+        }
         if close {
             self.use_model = None;
         }

@@ -11,6 +11,7 @@ Native desktop client for `flashserver`, built with Rust + [egui/eframe](https:/
 - Logs: server `journalctl` tail or a specific loaded model's serve log (返回服务日志 switches back), "清空" for server logs, and "另存为…" saves the full log via a native file dialog.
 - Settings: start/stop the daemon without elevation; enable/disable auto-start (UAC) through `flashserver-setup`; enable domestic mirrors (pip/HuggingFace/GitHub) for new downloads; clean shared caches (download cache, Python, tools, runtimes) with per-item sizing; dark/light theme; API docs; quit.
 - API URL: reads `%LOCALAPPDATA%\FlashServer\api-url.txt` (written by setup when the default port 8790 is reserved) and falls back to `http://127.0.0.1:8790`. The settings page shows the selected address.
+- Copy actions (Serve address, usage example) show a result toast; the usage example is also selectable.
 - Destructive actions (stop service, disable auto-start, unload, quit) require confirmation.
 - Live data: WebSocket `/v1/ws` (1 Hz system snapshots + job progress), HTTP polling fallback.
 - Load/download progress shows the bundle ref, current phase (bundle sync, Python runtime, weights), file/byte counts and percentage. Checksum-mismatched downloads are retried.
