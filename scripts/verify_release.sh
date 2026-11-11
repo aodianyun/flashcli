@@ -19,7 +19,7 @@ REF="flashcli-bundle/pi05_libero:1.0.4"
 SOURCE_DIR=""
 INSTALL_ARGS=()
 
-usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
