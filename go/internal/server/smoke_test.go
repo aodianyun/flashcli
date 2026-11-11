@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -42,16 +43,22 @@ func TestSmokeRunCapturesLog(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "demo.smoke.log")
 	s := &Server{FlashcliBin: bin}
-	res := s.smokeRun(context.Background(), "demo:1", logPath)
-	if !res.OK {
-		t.Fatalf("smoke run failed: %s", res.Log)
+	var mu sync.Mutex
+	lines := []string{}
+	emit := func(_, msg string) {
+		mu.Lock()
+		lines = append(lines, msg)
+		mu.Unlock()
 	}
-	if !strings.Contains(res.Log, "$ "+bin+" run demo:1") {
-		t.Fatalf("missing command in log: %s", res.Log)
+	if err := s.smokeRun(context.Background(), "demo:1", logPath, emit); err != nil {
+		t.Fatal(err)
 	}
 	blob, err := os.ReadFile(logPath)
-	if err != nil || !strings.Contains(string(blob), "exit=<nil>") {
-		t.Fatalf("log file = %q, err=%v", blob, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(blob), "$ "+bin+" run demo:1") || !strings.Contains(string(blob), "exit=<nil>") {
+		t.Fatalf("log file = %q", blob)
 	}
 }
 
@@ -72,11 +79,41 @@ func TestSmokeServeRequest(t *testing.T) {
 
 	logPath := filepath.Join(t.TempDir(), "serve.smoke.log")
 	s := &Server{}
-	res := s.smokeServeRequest(context.Background(), "demo:1", srv.URL, logPath)
-	if !res.OK || res.Status != http.StatusOK {
-		t.Fatalf("smoke serve failed: %+v", res)
+	lines := []string{}
+	emit := func(_, msg string) { lines = append(lines, msg) }
+	if err := s.smokeServeRequest(context.Background(), "demo:1", srv.URL, logPath, emit); err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(res.Log, "model=demo-model") || !strings.Contains(res.Log, "pong") {
-		t.Fatalf("unexpected log: %s", res.Log)
+	blob, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logText := string(blob)
+	if !strings.Contains(logText, "model=demo-model") || !strings.Contains(logText, "pong") {
+		t.Fatalf("unexpected log: %s", logText)
+	}
+	if !strings.Contains(strings.Join(lines, "\n"), "status=200") {
+		t.Fatalf("missing status progress: %v", lines)
+	}
+}
+
+func TestJobCancel(t *testing.T) {
+	jm := NewJobManager()
+	started := make(chan struct{})
+	job := jm.Start(context.Background(), "smoke", "demo:1", func(ctx context.Context, emit func(string, string)) error {
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	<-started
+	if !job.Cancel() {
+		t.Fatal("Cancel returned false")
+	}
+	<-job.done
+	job.mu.Lock()
+	state := job.State
+	job.mu.Unlock()
+	if state != "failed" {
+		t.Fatalf("state = %q, want failed", state)
 	}
 }

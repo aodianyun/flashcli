@@ -197,6 +197,7 @@ enum Event {
     Status(String),
     Job(JobEvent),
     Smoke(Result<Value, String>),
+    SmokeJob(String),
     Catalog { repos: Vec<HubRepo>, total: i64 },
     CatalogTags(Vec<(i64, String)>),
     HubDetail(HubDetail),
@@ -209,6 +210,7 @@ struct JobEvent {
     state: String,
     verb: String,
     reference: String,
+    kind: String,
     authoritative: bool,
 }
 
@@ -217,6 +219,7 @@ enum Pending {
     DisableAutostart,
     Unload(String),
     Clean(Vec<String>),
+    Smoke(String),
     Quit,
 }
 
@@ -230,6 +233,7 @@ struct SmokeState {
     title: String,
     running: bool,
     ok: bool,
+    job_id: String,
     log: String,
 }
 
@@ -470,6 +474,7 @@ impl App {
                                 },
                                 running: false,
                                 ok: v["ok"].as_bool().unwrap_or(false),
+                                job_id: String::new(),
                                 log,
                             }
                         }
@@ -477,9 +482,15 @@ impl App {
                             title: "模型测试".into(),
                             running: false,
                             ok: false,
+                            job_id: String::new(),
                             log: error,
                         },
                     });
+                }
+                Event::SmokeJob(id) => {
+                    if let Some(smoke) = self.smoke.as_mut() {
+                        smoke.job_id = id;
+                    }
                 }
                 Event::Catalog { repos, total } => {
                     self.hub_repos = repos;
@@ -521,7 +532,49 @@ impl App {
         spawn_job(self.tx.clone(), ctx.clone(), ref_str, pull, verb);
     }
 
+    fn start_smoke(&mut self, ctx: &egui::Context, name: String) {
+        self.smoke = Some(SmokeState {
+            title: format!("Run 冒烟测试 · {name}"),
+            running: true,
+            ok: true,
+            job_id: String::new(),
+            log: "测试运行中…\n".into(),
+        });
+        spawn_smoke(self.tx.clone(), ctx.clone(), name);
+    }
+
     fn apply_job(&mut self, job: JobEvent) {
+        if job.kind == "smoke" {
+            let reference = job.reference.clone();
+            let smoke = self.smoke.get_or_insert_with(|| SmokeState {
+                title: if reference.is_empty() {
+                    "模型测试".into()
+                } else {
+                    format!("模型测试 · {reference}")
+                },
+                running: true,
+                ok: true,
+                job_id: String::new(),
+                log: String::new(),
+            });
+            if job.state == "running" {
+                smoke.running = true;
+            }
+            if !job.message.is_empty() {
+                smoke.log.push_str(&job.message);
+                smoke.log.push('\n');
+            }
+            if job.state == "done" || job.phase == "done" {
+                smoke.running = false;
+                smoke.ok = true;
+                smoke.log.push_str("测试通过\n");
+            } else if job.state == "failed" || job.phase == "failed" {
+                smoke.running = false;
+                smoke.ok = false;
+                smoke.log.push_str("测试失败\n");
+            }
+            return;
+        }
         let same_ref = !job.reference.is_empty() && self.job_ref == job.reference;
         if !job.reference.is_empty() {
             self.job_ref = job.reference.clone();
@@ -1167,17 +1220,8 @@ impl App {
                                         load_request = Some(m.name.clone());
                                     }
                                 } else {
-                                    let clicked = ui
-                                        .add_enabled_ui(
-                                            !self.loading
-                                                && !self.smoke.as_ref().is_some_and(|s| s.running),
-                                            |ui| table_button(ui, "Run 测试"),
-                                        )
-                                        .inner
-                                        .clicked();
-                                    if clicked {
-                                        smoke_request = Some(m.clone());
-                                    }
+                                    ui.label(egui::RichText::new("—").weak())
+                                        .on_hover_text("在「更多」中使用 Run 冒烟测试");
                                 }
                             } else {
                                 let active = self.loading
@@ -1248,18 +1292,14 @@ impl App {
             self.use_model = Some(m);
         }
         if let Some(m) = smoke_request {
-            let title = if m.serve {
-                format!("请求测试 · {}", m.name)
-            } else {
-                format!("Run 冒烟测试 · {}", m.name)
-            };
-            self.smoke = Some(SmokeState {
-                title,
-                running: true,
-                ok: true,
-                log: "测试运行中…\n".into(),
+            self.dialog = Some(DialogState {
+                title: "Run 冒烟测试".into(),
+                message: format!(
+                    "将对 {} 执行一次完整 flashcli run 推理。\n\n该操作会加载模型并占用大量 CPU/GPU，可能持续数分钟，期间电脑可能明显卡顿。\n\n确定运行？",
+                    m.name
+                ),
+                action: Pending::Smoke(m.name),
             });
-            spawn_smoke(self.tx.clone(), ui.ctx().clone(), m.name);
         }
         if let Some(refs) = clean_request {
             let bytes: f64 = self
@@ -1525,7 +1565,6 @@ impl App {
         let mut close = false;
         let mut load = false;
         let mut pull = false;
-        let mut smoke = false;
         modal_backdrop(ctx, dark, &mut close);
         egui::Window::new("model_detail_dialog")
             .title_bar(false)
@@ -1672,13 +1711,6 @@ impl App {
                                     .weak()
                                     .small(),
                             );
-                            let enabled = !self.smoke.as_ref().is_some_and(|s| s.running);
-                            if ui
-                                .add_enabled(enabled, egui::Button::new("Run 测试"))
-                                .clicked()
-                            {
-                                smoke = true;
-                            }
                         } else {
                             let active = self.loading
                                 && self.job_ref == model.name
@@ -1705,21 +1737,6 @@ impl App {
         if pull {
             self.model_detail = None;
             self.spawn_job_ui(ctx, model.name.clone(), true, "加载");
-        }
-        if smoke {
-            self.model_detail = None;
-            let title = if model.serve {
-                format!("请求测试 · {}", model.name)
-            } else {
-                format!("Run 冒烟测试 · {}", model.name)
-            };
-            self.smoke = Some(SmokeState {
-                title,
-                running: true,
-                ok: true,
-                log: "测试运行中…\n".into(),
-            });
-            spawn_smoke(self.tx.clone(), ctx.clone(), model.name.clone());
         }
     }
 
@@ -1855,6 +1872,7 @@ impl App {
                 title: format!("请求测试 · {}", model.name),
                 running: true,
                 ok: true,
+                job_id: String::new(),
                 log: "测试运行中…\n".into(),
             });
             spawn_smoke(self.tx.clone(), ctx.clone(), model.name.clone());
@@ -2309,6 +2327,7 @@ impl App {
         let dark = ctx.style().visuals.dark_mode;
         let mut close = false;
         let mut copy = false;
+        let mut cancel = false;
         egui::Window::new("smoke_dialog")
             .title_bar(false)
             .order(egui::Order::Foreground)
@@ -2369,11 +2388,27 @@ impl App {
                 ui.separator();
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
-                    if button(ui, "复制日志").clicked() {
+                    if smoke.running {
+                        if button(ui, "取消测试").clicked() {
+                            cancel = true;
+                        }
+                    } else if button(ui, "复制日志").clicked() {
                         copy = true;
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if button(ui, "关闭").clicked() {
+                        if button(
+                            ui,
+                            if smoke.running {
+                                "取消并关闭"
+                            } else {
+                                "关闭"
+                            },
+                        )
+                        .clicked()
+                        {
+                            if smoke.running {
+                                cancel = true;
+                            }
                             close = true;
                         }
                     });
@@ -2382,6 +2417,13 @@ impl App {
         if copy {
             ctx.copy_text(smoke.log.clone());
             self.op_note = Some(("测试日志已复制".into(), true, Instant::now()));
+        }
+        if cancel {
+            if !smoke.job_id.is_empty() {
+                spawn_cancel_job(ctx.clone(), smoke.job_id.clone());
+            }
+            smoke.running = false;
+            smoke.log.push_str("\n正在取消测试…\n");
         }
         if close {
             self.smoke = None;
@@ -2400,6 +2442,7 @@ impl App {
                 | Pending::DisableAutostart
                 | Pending::Unload(_)
                 | Pending::Clean(_)
+                | Pending::Smoke(_)
         );
         let dark = ctx.style().visuals.dark_mode;
         let mut close = false;
@@ -2474,6 +2517,9 @@ impl App {
                 }
                 Pending::Clean(refs) => {
                     spawn_clean(self.tx.clone(), ctx.clone(), refs);
+                }
+                Pending::Smoke(name) => {
+                    self.start_smoke(ctx, name);
                 }
                 Pending::Quit => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -3128,11 +3174,12 @@ fn start_ws(tx: Sender<Event>, ctx: egui::Context) {
                                             }
                                             "job" => {
                                                 let data = &v["data"];
-                                                let verb = if data["type"].as_str() == Some("pull")
-                                                {
-                                                    "下载"
-                                                } else {
-                                                    "启动"
+                                                let kind =
+                                                    data["type"].as_str().unwrap_or("").to_string();
+                                                let verb = match kind.as_str() {
+                                                    "pull" => "下载",
+                                                    "smoke" => "测试",
+                                                    _ => "启动",
                                                 };
                                                 let _ = tx.send(Event::Job(JobEvent {
                                                     phase: data["event"]["phase"]
@@ -3152,6 +3199,7 @@ fn start_ws(tx: Sender<Event>, ctx: egui::Context) {
                                                         .as_str()
                                                         .unwrap_or("")
                                                         .to_string(),
+                                                    kind,
                                                     authoritative: false,
                                                 }));
                                             }
@@ -3296,12 +3344,14 @@ fn spawn_job(
     std::thread::spawn(move || {
         let endpoint = if pull { "/v1/pull" } else { "/v1/models/load" };
         let event_ref = ref_str.clone();
+        let kind = if pull { "pull" } else { "load" };
         let _ = tx.send(Event::Job(JobEvent {
             phase: "prepare".into(),
             message: format!("提交{verb}任务"),
             state: "running".into(),
             verb: verb.to_string(),
             reference: event_ref.clone(),
+            kind: kind.to_string(),
             authoritative: true,
         }));
         let body = serde_json::json!({ "ref": ref_str, "async": true });
@@ -3319,6 +3369,7 @@ fn spawn_job(
                     state: "failed".into(),
                     verb: verb.to_string(),
                     reference: event_ref,
+                    kind: kind.to_string(),
                     authoritative: true,
                 }));
             }
@@ -3621,11 +3672,36 @@ fn post_json_timeout(path: &str, body: &Value, secs: u64) -> Result<Value, Strin
     }
 }
 
+fn spawn_cancel_job(ctx: egui::Context, job_id: String) {
+    std::thread::spawn(move || {
+        let _ = post_json_timeout(
+            &format!("/v1/jobs/{job_id}/cancel"),
+            &serde_json::json!({}),
+            10,
+        );
+        ctx.request_repaint();
+    });
+}
+
 fn spawn_smoke(tx: Sender<Event>, ctx: egui::Context, ref_str: String) {
     std::thread::spawn(move || {
         let body = serde_json::json!({ "ref": ref_str });
-        let result = post_json_timeout("/v1/models/smoke", &body, 660);
-        let _ = tx.send(Event::Smoke(result));
+        match post_json_timeout("/v1/models/smoke", &body, 20) {
+            Ok(v) if v["job_id"].is_string() => {
+                let _ = tx.send(Event::SmokeJob(
+                    v["job_id"].as_str().unwrap_or("").to_string(),
+                ));
+            }
+            Ok(v) => {
+                let _ = tx.send(Event::Smoke(Err(v["error"]
+                    .as_str()
+                    .unwrap_or("测试任务启动失败")
+                    .to_string())));
+            }
+            Err(e) => {
+                let _ = tx.send(Event::Smoke(Err(e)));
+            }
+        }
         ctx.request_repaint();
     });
 }

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -11,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aodianyun/flashcli/go/internal/host"
@@ -26,20 +28,9 @@ type smokeRequest struct {
 	Ref string `json:"ref"`
 }
 
-type smokeResult struct {
-	Ref        string `json:"ref"`
-	Kind       string `json:"kind"`
-	OK         bool   `json:"ok"`
-	DurationMS int64  `json:"duration_ms"`
-	Status     int    `json:"status,omitempty"`
-	Endpoint   string `json:"endpoint,omitempty"`
-	Log        string `json:"log"`
-	LogPath    string `json:"log_path,omitempty"`
-}
-
-// smokeModel runs a real smoke test for a cached model: `flashcli run <ref>`
-// for run-only bundles, or one OpenAI-compatible chat request for a started
-// serve model. The full output is appended to a log file and returned.
+// smokeModel validates a cached model and starts an async smoke job. Job
+// output is streamed over the existing WebSocket job channel and appended to
+// <ref>.smoke.log.
 func (s *Server) smokeModel(w http.ResponseWriter, r *http.Request) {
 	var req smokeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Ref) == "" {
@@ -67,24 +58,41 @@ func (s *Server) smokeModel(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "model is not ready; load it first"})
 		return
 	}
+	if s.Jobs == nil {
+		writeError(w, http.StatusNotImplemented, fmt.Errorf("job manager is not configured"))
+		return
+	}
 
-	logPath := s.smokeLogPath(refStr)
+	kind := "run"
+	endpoint := ""
 	if model.Serve {
 		if s.Manager == nil {
 			writeError(w, http.StatusNotImplemented, fmt.Errorf("model manager is not configured"))
 			return
 		}
-		endpoint, ok := s.Manager.Endpoint(refStr)
-		if !ok {
+		endpoint, _ = s.Manager.Endpoint(refStr)
+		if endpoint == "" {
 			writeJSON(w, http.StatusConflict, map[string]any{"error": "model is not started; start it first"})
 			return
 		}
-		result := s.smokeServeRequest(r.Context(), refStr, endpoint, logPath)
-		writeJSON(w, http.StatusOK, result)
-		return
+		kind = "serve"
 	}
-	result := s.smokeRun(r.Context(), refStr, logPath)
-	writeJSON(w, http.StatusOK, result)
+
+	logPath := s.smokeLogPath(refStr)
+	job := s.Jobs.Start(context.Background(), "smoke", refStr, func(ctx context.Context, emit func(string, string)) error {
+		emit("smoke", "日志文件: "+logPath)
+		if kind == "serve" {
+			return s.smokeServeRequest(ctx, refStr, endpoint, logPath, emit)
+		}
+		return s.smokeRun(ctx, refStr, logPath, emit)
+	})
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"job_id":   job.ID,
+		"state":    job.State,
+		"kind":     kind,
+		"ref":      refStr,
+		"log_path": logPath,
+	})
 }
 
 func (s *Server) smokeLogPath(refStr string) string {
@@ -99,34 +107,61 @@ func (s *Server) smokeLogPath(refStr string) string {
 	return filepath.Join(dir, name)
 }
 
-func (s *Server) smokeRun(ctx context.Context, refStr, logPath string) smokeResult {
-	start := time.Now()
-	result := smokeResult{Ref: refStr, Kind: "run", LogPath: logPath}
+func (s *Server) smokeRun(ctx context.Context, refStr, logPath string, emit func(string, string)) error {
 	bin, err := resolveFlashcliBin(s.FlashcliBin)
 	if err != nil {
-		result.Log = err.Error()
-		result.DurationMS = time.Since(start).Milliseconds()
-		return result
+		appendSmokeLog(logPath, "启动失败: "+err.Error()+"\n")
+		return err
 	}
 	runCtx, cancel := context.WithTimeout(ctx, smokeRunTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(runCtx, bin, "run", refStr)
+	appendSmokeLog(logPath, fmt.Sprintf("\n=== run smoke %s ===\n$ %s run %s\n", time.Now().Format(time.RFC3339), bin, refStr))
+	var cmd *exec.Cmd
+	if nice, err := exec.LookPath("nice"); err == nil {
+		cmd = exec.CommandContext(runCtx, nice, "-n", "10", bin, "run", refStr)
+	} else {
+		cmd = exec.CommandContext(runCtx, bin, "run", refStr)
+	}
 	cmd.Env = os.Environ()
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-	err = cmd.Run()
-	result.DurationMS = time.Since(start).Milliseconds()
-	result.OK = err == nil
-	result.Log = appendSmokeLog(logPath, fmt.Sprintf(
-		"=== run smoke %s ===\n$ %s run %s\n%s\nexit=%v duration=%dms\n",
-		time.Now().Format(time.RFC3339), bin, refStr, out.String(), err, result.DurationMS))
-	return result
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+	start := time.Now()
+	if err := cmd.Start(); err != nil {
+		appendSmokeLog(logPath, "启动失败: "+err.Error()+"\n")
+		return err
+	}
+	var wg sync.WaitGroup
+	read := func(r io.Reader) {
+		defer wg.Done()
+		scanner := bufio.NewScanner(r)
+		scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+		for scanner.Scan() {
+			line := strings.TrimRight(scanner.Text(), "\r")
+			if line == "" {
+				continue
+			}
+			appendSmokeLog(logPath, line+"\n")
+			emit("smoke", line)
+		}
+	}
+	wg.Add(2)
+	go read(stdout)
+	go read(stderr)
+	err = cmd.Wait()
+	wg.Wait()
+	duration := time.Since(start).Milliseconds()
+	appendSmokeLog(logPath, fmt.Sprintf("exit=%v duration=%dms\n", err, duration))
+	emit("smoke", fmt.Sprintf("exit=%v duration=%dms", err, duration))
+	return err
 }
 
-func (s *Server) smokeServeRequest(ctx context.Context, refStr, endpoint, logPath string) smokeResult {
-	start := time.Now()
-	result := smokeResult{Ref: refStr, Kind: "serve", Endpoint: endpoint, LogPath: logPath}
+func (s *Server) smokeServeRequest(ctx context.Context, refStr, endpoint, logPath string, emit func(string, string)) error {
 	ctx, cancel := context.WithTimeout(ctx, smokeRequestTimeout)
 	defer cancel()
 	client := &http.Client{Timeout: smokeRequestTimeout}
@@ -136,30 +171,34 @@ func (s *Server) smokeServeRequest(ctx context.Context, refStr, endpoint, logPat
 		"messages":   []map[string]string{{"role": "user", "content": "ping"}},
 		"max_tokens": 32,
 	})
+	start := time.Now()
+	appendSmokeLog(logPath, fmt.Sprintf("\n=== serve smoke %s ===\nendpoint=%s model=%s request=%s\n",
+		time.Now().Format(time.RFC3339), endpoint, modelName, body))
+	emit("smoke", fmt.Sprintf("POST %s/v1/chat/completions model=%s", strings.TrimRight(endpoint, "/"), modelName))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		strings.TrimRight(endpoint, "/")+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		result.Log = err.Error()
-		result.DurationMS = time.Since(start).Milliseconds()
-		return result
+		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
-	result.DurationMS = time.Since(start).Milliseconds()
+	duration := time.Since(start).Milliseconds()
 	if err != nil {
-		result.Log = appendSmokeLog(logPath, fmt.Sprintf(
-			"=== serve smoke %s ===\nendpoint=%s model=%s request=%s\nerror=%v duration=%dms\n",
-			time.Now().Format(time.RFC3339), endpoint, modelName, body, err, result.DurationMS))
-		return result
+		appendSmokeLog(logPath, fmt.Sprintf("error=%v duration=%dms\n", err, duration))
+		emit("smoke", fmt.Sprintf("error=%v duration=%dms", err, duration))
+		return err
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, smokeLogLimit))
-	result.Status = resp.StatusCode
-	result.OK = resp.StatusCode >= 200 && resp.StatusCode < 300
-	result.Log = appendSmokeLog(logPath, fmt.Sprintf(
-		"=== serve smoke %s ===\nendpoint=%s model=%s request=%s\nstatus=%d duration=%dms\nresponse=%s\n",
-		time.Now().Format(time.RFC3339), endpoint, modelName, body, resp.StatusCode, result.DurationMS, data))
-	return result
+	appendSmokeLog(logPath, fmt.Sprintf("status=%d duration=%dms\nresponse=%s\n", resp.StatusCode, duration, data))
+	emit("smoke", fmt.Sprintf("status=%d duration=%dms", resp.StatusCode, duration))
+	if len(data) > 0 {
+		emit("smoke", "response="+string(data))
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("serve request returned HTTP %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func serveModelName(ctx context.Context, client *http.Client, endpoint, refStr string) string {
@@ -189,15 +228,11 @@ func serveModelName(ctx context.Context, client *http.Client, endpoint, refStr s
 	return name
 }
 
-func appendSmokeLog(path, entry string) string {
+func appendSmokeLog(path, entry string) {
 	if path != "" {
 		if f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
 			_, _ = io.WriteString(f, entry)
 			_ = f.Close()
 		}
 	}
-	if len(entry) > smokeLogLimit {
-		entry = entry[len(entry)-smokeLogLimit:]
-	}
-	return entry
 }

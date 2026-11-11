@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -27,6 +28,7 @@ type Job struct {
 	done    chan struct{}
 	subs    map[chan Event]struct{}
 	closed  bool
+	cancel  context.CancelFunc
 	onEvent func(state string, ev Event)
 }
 
@@ -155,10 +157,28 @@ func (m *JobManager) Start(ctx context.Context, typ, ref string, run func(contex
 	m.mu.Unlock()
 
 	go func() {
-		err := run(ctx, j.emit)
+		runCtx, cancel := context.WithCancel(ctx)
+		j.mu.Lock()
+		j.cancel = cancel
+		j.mu.Unlock()
+		err := run(runCtx, j.emit)
+		cancel()
 		j.finish(err)
 	}()
 	return j
+}
+
+// Cancel stops a running job. The run function must honor its context.
+func (j *Job) Cancel() bool {
+	j.mu.Lock()
+	cancel := j.cancel
+	closed := j.closed
+	j.mu.Unlock()
+	if closed || cancel == nil {
+		return false
+	}
+	cancel()
+	return true
 }
 
 func (m *JobManager) Get(id string) (*Job, bool) {
@@ -166,4 +186,21 @@ func (m *JobManager) Get(id string) (*Job, bool) {
 	defer m.mu.Unlock()
 	j, ok := m.jobs[id]
 	return j, ok
+}
+
+func (s *Server) cancelJob(w http.ResponseWriter, r *http.Request) {
+	if s.Jobs == nil {
+		writeError(w, http.StatusNotImplemented, context.Canceled)
+		return
+	}
+	j, ok := s.Jobs.Get(r.PathValue("id"))
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "job not found"})
+		return
+	}
+	if !j.Cancel() {
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "job is not running"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"job_id": j.ID, "state": "canceling"})
 }

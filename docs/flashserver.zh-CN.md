@@ -226,7 +226,7 @@ curl http://127.0.0.1:18100/v1/chat/completions ...
 
 `load` 要求 bundle 提供 `serve` 入口（会检查顶层 `entry`、`defaults.entry` 以及各环境条目）。只有 `run` 的 bundle（VLA 策略等）会在启动 serve 进程之前被拒绝，返回 `bundle "..." is run-only (no serve entry)`；这类模型请使用 `flashcli run <ref>`。桌面客户端的 FlashHub 页面只负责下载版本；下载后在“本地”页查看，没有 serve 入口的 bundle 会显示“仅 run”并隐藏加载按钮。
 
-`POST /v1/models/smoke` 对已就绪模型执行真实冒烟测试：run-only 使用 manifest 默认参数执行 `flashcli run <ref>`（需要额外文件如图片的 bundle 会在日志中说明）；已启动的 serve 模型发送一次 OpenAI 兼容 chat 请求（`ping`）。返回 `ok`、`duration_ms`、`log`、`log_path`，桌面「模型」页用日志对话框展示。serve 测试要求模型已启动。
+`POST /v1/models/smoke` 为已就绪模型启动异步冒烟任务：run-only 以低 CPU 优先级（`nice -n 10`）使用 manifest 默认参数执行 `flashcli run <ref>`（需要额外文件如图片的 bundle 会在日志中说明）；已启动的 serve 模型发送一次 OpenAI 兼容 chat 请求（`ping`）。桌面在 run 测试前会二次确认；输出和进度作为 `smoke` 任务通过 `/v1/ws` 实时推送，并追加到 `<ref>.smoke.log`。关闭或取消日志对话框会调用 `POST /v1/jobs/{id}/cancel` 终止任务。serve 测试要求模型已启动。
 
 ## 耗时参考
 

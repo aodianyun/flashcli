@@ -368,6 +368,28 @@ paths:
               schema: { type: string }
         '404':
           $ref: '#/components/responses/Error'
+  /v1/jobs/{id}/cancel:
+    post:
+      summary: Cancel a running job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Cancellation requested
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id: { type: string }
+                  state: { type: string }
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
   /v1/models/load:
     post:
       summary: Load a model
@@ -457,8 +479,8 @@ paths:
                     items: { $ref: '#/components/schemas/CleanResult' }
   /v1/models/smoke:
     post:
-      summary: Run a smoke test for a ready model
-      description: "Run-only bundles execute `flashcli run <ref>`; started serve bundles receive one OpenAI-compatible chat request. The full output is appended to a smoke log and returned."
+      summary: Start a smoke test job for a ready model
+      description: "Run-only bundles execute `flashcli run <ref>`; started serve bundles receive one OpenAI-compatible chat request. Progress/output is streamed as a `smoke` job over /v1/ws and appended to <ref>.smoke.log."
       requestBody:
         required: true
         content:
@@ -469,28 +491,23 @@ paths:
               properties:
                 ref: { type: string }
       responses:
-        '200':
-          description: Smoke result (ok=false still returns 200 with the log)
+        '202':
+          description: Smoke job accepted
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  ref: { type: string }
+                  job_id: { type: string }
+                  state: { type: string }
                   kind: { type: string, enum: [run, serve] }
-                  ok: { type: boolean }
-                  duration_ms: { type: integer, format: int64 }
-                  status: { type: integer }
-                  endpoint: { type: string }
-                  log: { type: string }
+                  ref: { type: string }
                   log_path: { type: string }
         '400':
           $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
         '409':
-          $ref: '#/components/responses/Error'
-        '400':
           $ref: '#/components/responses/Error'
   /v1/logs:
     get:

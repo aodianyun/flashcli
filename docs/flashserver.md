@@ -236,7 +236,7 @@ Add `-H "X-Flashcli-Token: $TOKEN"` only when a token is configured.
 
 `load` requires a bundle with a `serve` entry (checked in top-level `entry`, `defaults.entry`, and per-environment entries). Run-only bundles (VLA policies and similar) are rejected before a serve process is started with `bundle "..." is run-only (no serve entry)`; use `flashcli run <ref>` for those. The desktop client's FlashHub page downloads versions only; the Local tab shows "仅 run" when the bundle has no serve entry and hides the load action.
 
-`POST /v1/models/smoke` runs a real smoke test for a ready model. Run-only bundles execute `flashcli run <ref>` with manifest defaults (bundles that require external files such as images report that in the log); a started serve bundle receives one OpenAI-compatible chat request (`ping`). The response includes `ok`, `duration_ms`, `log`, and `log_path`; the desktop Models page shows the log in a dialog. The serve test requires the model to be started first.
+`POST /v1/models/smoke` starts an async smoke job for a ready model. Run-only bundles execute `flashcli run <ref>` at low CPU priority (`nice -n 10`) with manifest defaults (bundles that require external files such as images report that in the log); a started serve bundle receives one OpenAI-compatible chat request (`ping`). The desktop asks for confirmation before a run smoke test; output/progress stream as a `smoke` job over `/v1/ws` and are appended to `<ref>.smoke.log`. Closing or cancelling the dialog cancels the job (`POST /v1/jobs/{id}/cancel`). The serve test requires the model to be started first.
 
 ## Timing expectations
 

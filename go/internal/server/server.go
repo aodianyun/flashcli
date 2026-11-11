@@ -103,6 +103,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/pull", s.pull)
 	mux.HandleFunc("GET /v1/jobs/{id}", s.job)
 	mux.HandleFunc("GET /v1/jobs/{id}/events", s.jobEvents)
+	mux.HandleFunc("POST /v1/jobs/{id}/cancel", s.cancelJob)
 	mux.HandleFunc("POST /v1/models/load", s.loadModel)
 	mux.HandleFunc("POST /v1/models/unload", s.unloadModel)
 	mux.HandleFunc("POST /v1/models/smoke", s.smokeModel)
