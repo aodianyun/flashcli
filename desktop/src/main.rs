@@ -156,6 +156,7 @@ struct JobEvent {
     message: String,
     state: String,
     verb: String,
+    reference: String,
 }
 
 enum Pending {
@@ -214,6 +215,8 @@ pub struct App {
     load_phase: String,
     load_message: String,
     load_pct: Option<f32>,
+    job_ref: String,
+    job_verb: String,
     dialog: Option<DialogState>,
     gpu_util: Vec<[f64; 2]>,
     gpu_mem: Vec<[f64; 2]>,
@@ -274,6 +277,8 @@ impl App {
             load_phase: String::new(),
             load_message: String::new(),
             load_pct: None,
+            job_ref: String::new(),
+            job_verb: String::new(),
             dialog: None,
             gpu_util: Vec::new(),
             gpu_mem: Vec::new(),
@@ -390,6 +395,12 @@ impl App {
     }
 
     fn apply_job(&mut self, job: JobEvent) {
+        if !job.reference.is_empty() {
+            self.job_ref = job.reference.clone();
+        }
+        if !job.verb.is_empty() {
+            self.job_verb = job.verb.clone();
+        }
         if !job.message.is_empty() {
             if let Some(pct) = parse_pct(&job.message) {
                 self.load_pct = Some(pct);
@@ -738,13 +749,16 @@ impl App {
             ui.horizontal(|ui| {
                 if self.loading {
                     ui.add(egui::Spinner::new().size(14.0));
-                    ui.label(
-                        egui::RichText::new(&self.load_phase)
-                            .strong()
-                            .color(accent(ui)),
-                    );
-                    if !self.load_message.is_empty() {
-                        ui.label(egui::RichText::new(&self.load_message).weak().small());
+                    if !self.job_verb.is_empty() {
+                        ui.label(egui::RichText::new(&self.job_verb).strong());
+                    }
+                    if !self.job_ref.is_empty() {
+                        ui.label(
+                            egui::RichText::new(&self.job_ref)
+                                .monospace()
+                                .weak()
+                                .small(),
+                        );
                     }
                 } else {
                     let color = if self.load_status.contains("失败") {
@@ -753,9 +767,27 @@ impl App {
                         green(ui)
                     };
                     ui.label(egui::RichText::new(&self.load_status).color(color));
+                    if !self.job_ref.is_empty() {
+                        ui.label(
+                            egui::RichText::new(&self.job_ref)
+                                .monospace()
+                                .weak()
+                                .small(),
+                        );
+                    }
                 }
             });
             if self.loading {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new(&self.load_phase)
+                            .strong()
+                            .color(accent(ui)),
+                    );
+                    if !self.load_message.is_empty() {
+                        ui.label(egui::RichText::new(&self.load_message).weak().small());
+                    }
+                });
                 let bar = match self.load_pct {
                     Some(pct) => egui::ProgressBar::new((pct / 100.0).clamp(0.0, 1.0))
                         .desired_width(progress_width(ui))
@@ -2508,6 +2540,10 @@ fn start_ws(tx: Sender<Event>, ctx: egui::Context) {
                                                 .to_string(),
                                             state: data["state"].as_str().unwrap_or("").to_string(),
                                             verb: verb.to_string(),
+                                            reference: data["ref"]
+                                                .as_str()
+                                                .unwrap_or("")
+                                                .to_string(),
                                         }));
                                     }
                                     _ => {}
@@ -2639,11 +2675,13 @@ fn spawn_job(tx: Sender<Event>, ctx: egui::Context, ref_str: String, pull: bool)
     std::thread::spawn(move || {
         let verb = if pull { "下载" } else { "加载" };
         let endpoint = if pull { "/v1/pull" } else { "/v1/models/load" };
+        let event_ref = ref_str.clone();
         let _ = tx.send(Event::Job(JobEvent {
             phase: "prepare".into(),
             message: format!("提交{verb}任务"),
             state: "running".into(),
             verb: verb.to_string(),
+            reference: event_ref.clone(),
         }));
         let body = serde_json::json!({ "ref": ref_str, "async": true });
         match post_json(endpoint, &body) {
@@ -2668,6 +2706,7 @@ fn spawn_job(tx: Sender<Event>, ctx: egui::Context, ref_str: String, pull: bool)
                         message: message.to_string(),
                         state,
                         verb: verb.to_string(),
+                        reference: j["ref"].as_str().unwrap_or(event_ref.as_str()).to_string(),
                     }));
                     ctx.request_repaint();
                     if phase == "done" || phase == "failed" {
@@ -2682,6 +2721,7 @@ fn spawn_job(tx: Sender<Event>, ctx: egui::Context, ref_str: String, pull: bool)
                     message: e,
                     state: "failed".into(),
                     verb: verb.to_string(),
+                    reference: event_ref.clone(),
                 }));
             }
         }

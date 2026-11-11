@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"context"
+
 	"github.com/aodianyun/flashcli/go/internal/host"
 	"github.com/aodianyun/flashcli/go/internal/manifest"
 )
@@ -12,5 +14,5 @@ func preflightBundle(m *manifest.Manifest, root, venvPython string, quiet, autoI
 
 // ensureBundleRuntime delegates to the shared host service.
 func ensureBundleRuntime(m *manifest.Manifest, bundleRoot, version, variant string, quiet, noAutoInstall bool) (string, string, error) {
-	return host.EnsureRuntime(m, bundleRoot, version, variant, quiet, noAutoInstall)
+	return host.EnsureRuntime(context.Background(), m, bundleRoot, version, variant, quiet, noAutoInstall)
 }

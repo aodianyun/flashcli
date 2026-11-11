@@ -353,12 +353,11 @@ func (c *Client) SyncBundle(ctx context.Context, repoURL, bundleDir, runtimeRel 
 		wanted = append(wanted, f)
 		totalBytes += f.Size
 	}
-	st := progress.Start("sync", repoURL)
+	st := progress.StartWithSink("sync", repoURL, progress.SinkFromContext(ctx))
 	st.Totals(len(wanted), totalBytes)
 	for _, f := range wanted {
 		dest := filepath.Join(bundleDir, filepath.FromSlash(f.Path))
 		if err := c.DownloadFile(ctx, f, dest, false, quiet, st.Add); err != nil {
-			st.Done()
 			return nil, err
 		}
 		st.FileDone()

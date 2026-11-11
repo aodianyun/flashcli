@@ -15,6 +15,7 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/native"
 	"github.com/aodianyun/flashcli/go/internal/paths"
 	"github.com/aodianyun/flashcli/go/internal/preflight"
+	"github.com/aodianyun/flashcli/go/internal/progress"
 	"github.com/aodianyun/flashcli/go/internal/ref"
 	"github.com/aodianyun/flashcli/go/internal/runtime"
 	"github.com/aodianyun/flashcli/go/internal/venv"
@@ -25,6 +26,11 @@ import (
 // EnsureBundle resolves a local path or FlashHub ref to a local bundle root,
 // syncing the tree on first use.
 func EnsureBundle(refStr string, quiet, force bool) (root, ver, variant string, err error) {
+	return EnsureBundleContext(context.Background(), refStr, quiet, force)
+}
+
+// EnsureBundleContext is EnsureBundle with cancellation and progress context.
+func EnsureBundleContext(ctx context.Context, refStr string, quiet, force bool) (root, ver, variant string, err error) {
 	body, variant, err := ref.SplitVariant(refStr)
 	if err != nil {
 		return "", "", "", err
@@ -53,7 +59,6 @@ func EnsureBundle(refStr string, quiet, force bool) (root, ver, variant string, 
 	}
 	client := flashhub.NewClient()
 	client.UserAgent = "flashcli/" + version.Version
-	ctx := context.Background()
 	manifestMap, err := client.DownloadManifest(ctx, repoURL, manifestPath, false, quiet)
 	if err != nil {
 		return "", "", "", err
@@ -200,7 +205,7 @@ func PreflightBundle(m *manifest.Manifest, root, venvPython string, quiet, autoI
 }
 
 // EnsureRuntime runs preflight, builds the bundle venv, then validates CUDA.
-func EnsureRuntime(m *manifest.Manifest, bundleRoot, ver, variant string, quiet, noAutoInstall bool) (string, string, error) {
+func EnsureRuntime(ctx context.Context, m *manifest.Manifest, bundleRoot, ver, variant string, quiet, noAutoInstall bool) (string, string, error) {
 	var err error
 	m, err = ApplyEnv(m)
 	if err != nil {
@@ -223,7 +228,7 @@ func EnsureRuntime(m *manifest.Manifest, bundleRoot, ver, variant string, quiet,
 	if envBool("FLASHCLI_SKIP_VENV_SETUP") {
 		return runtimeID, "", nil
 	}
-	python, err := venv.Ensure(context.Background(), runtimeID, m, venv.Options{
+	python, err := venv.Ensure(ctx, runtimeID, m, venv.Options{
 		SkipSetup:     envBool("FLASHCLI_SKIP_VENV_SETUP"),
 		NoAutoInstall: noAutoInstall,
 		Quiet:         quiet,
@@ -244,8 +249,27 @@ func Pull(ctx context.Context, refStr string, opts PullOptions) (PullResult, err
 			opts.Progress(PullEvent{Phase: phase, Message: message, Ref: refStr})
 		}
 	}
-	emit("resolve", "resolving bundle")
-	bundleRoot, ver, variant, err := EnsureBundle(refStr, opts.Quiet, false)
+	emit("resolve", "resolving "+refStr)
+	sink := func(u progress.Update) {
+		if u.Stage == "note" {
+			if u.Detail != "" {
+				emit("runtime", u.Detail)
+			}
+			return
+		}
+		phase := u.Stage
+		if phase == "sync" {
+			phase = "bundle"
+		}
+		if phase == "python" {
+			phase = "runtime"
+		}
+		if msg := formatPullUpdate(u); msg != "" {
+			emit(phase, msg)
+		}
+	}
+	ctx = progress.WithSink(ctx, sink)
+	bundleRoot, ver, variant, err := EnsureBundleContext(ctx, refStr, opts.Quiet, false)
 	if err != nil {
 		return PullResult{}, err
 	}
@@ -260,17 +284,46 @@ func Pull(ctx context.Context, refStr string, opts PullOptions) (PullResult, err
 	if _, err := manifest.ResolveVariant(m, variant); err != nil {
 		return PullResult{}, err
 	}
-	emit("runtime", "preparing runtime")
-	if _, _, err := EnsureRuntime(m, bundleRoot, ver, variant, opts.Quiet, opts.NoAutoInstall); err != nil {
+	emit("runtime", "preparing Python runtime / dependencies")
+	if _, _, err := EnsureRuntime(ctx, m, bundleRoot, ver, variant, opts.Quiet, opts.NoAutoInstall); err != nil {
 		return PullResult{}, err
 	}
+	emit("runtime", "runtime ready")
 	emit("weights", "downloading weights")
 	checkpoint, _, err := weights.PrepareBundle(ctx, m, ver, variant, opts.Quiet, true)
 	if err != nil {
 		return PullResult{}, err
 	}
-	emit("done", checkpoint)
+	emit("done", "ready: "+checkpoint)
 	return PullResult{BundleRoot: bundleRoot, Version: ver, Variant: variant, Checkpoint: checkpoint}, nil
+}
+
+func formatPullUpdate(u progress.Update) string {
+	parts := []string{}
+	if u.Detail != "" && u.Stage != "sync" {
+		parts = append(parts, shorten(u.Detail, 60))
+	}
+	if u.FilesTotal > 0 {
+		parts = append(parts, fmt.Sprintf("%d/%d files", u.FilesDone, u.FilesTotal))
+	}
+	if u.Total > 0 {
+		parts = append(parts, fmt.Sprintf("%s/%s", progress.FormatBytes(u.Written), progress.FormatBytes(u.Total)))
+	}
+	if u.Percent >= 0 && (u.Total > 0 || u.FilesTotal > 0) {
+		parts = append(parts, fmt.Sprintf("%d%%", u.Percent))
+	}
+	if u.Done {
+		parts = append(parts, "done")
+	}
+	return strings.Join(parts, "  ")
+}
+
+func shorten(s string, n int) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= n {
+		return s
+	}
+	return s[:n-3] + "..."
 }
 
 func runtimeRels(m *manifest.Manifest) []string {

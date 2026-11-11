@@ -113,16 +113,16 @@ func Ensure(ctx context.Context, runtimeID string, m *manifest.Manifest, opt Opt
 		}
 	}
 	if !opt.Quiet {
-		progress.Note("venv: creating %s (Python 3.%s, base %s)", venv, abi[1:], basePython)
+		progress.NoteCtx(ctx, "venv: creating %s (Python 3.%s, base %s)", venv, abi[1:], basePython)
 		if _, origin, oerr := FlashcliBundleSpecOrigin(); oerr == nil {
-			progress.Note("venv: flashcli-bundle[infer] from %s", origin)
+			progress.NoteCtx(ctx, "venv: flashcli-bundle[infer] from %s", origin)
 		}
 		if torchPkg, _ := ParseTorchDependency(m.PythonDependencies()["torch"]); torchPkg != "" {
 			idx := "PyPI default index"
 			if torchIndex != "" {
 				idx = mirror.TorchIndexURL(torchIndex)
 			}
-			progress.Note("venv: torch %s from %s", torchPkg, idx)
+			progress.NoteCtx(ctx, "venv: torch %s from %s", torchPkg, idx)
 		}
 	}
 	inst, err := SelectInstaller(ctx, opt)
@@ -131,9 +131,9 @@ func Ensure(ctx context.Context, runtimeID string, m *manifest.Manifest, opt Opt
 	}
 	if !opt.Quiet {
 		if inst.UV != "" {
-			progress.Note("venv: installer uv (%s)", inst.UV)
+			progress.NoteCtx(ctx, "venv: installer uv (%s)", inst.UV)
 		} else {
-			progress.Note("venv: installer pip (FLASHCLI_VENV_BACKEND=pip)")
+			progress.NoteCtx(ctx, "venv: installer pip (FLASHCLI_VENV_BACKEND=pip)")
 		}
 	}
 	if err := os.RemoveAll(venv); err != nil {

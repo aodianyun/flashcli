@@ -41,7 +41,7 @@ func EnsureProtocolCacheSchema(ctx context.Context, python string, opt Options) 
 		return err
 	}
 	if !opt.Quiet {
-		progress.Note("venv: upgrading flashcli-bundle (cache schema %d -> %d) from %s", cur, RequiredCacheSchema, origin)
+		progress.NoteCtx(ctx, "venv: upgrading flashcli-bundle (cache schema %d -> %d) from %s", cur, RequiredCacheSchema, origin)
 	}
 	inst, err := SelectInstaller(ctx, opt)
 	if err != nil {
