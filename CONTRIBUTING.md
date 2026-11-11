@@ -143,18 +143,18 @@ unpublished test/draft releases.
 
 **Host (Go) release checklist:**
 
-1. Bump `[project].version` in `pyproject.toml` on `dev`; commit (`chore(release): bump version to X`).
+1. Bump **both** `[project].version` in `pyproject.toml` and `version` in `desktop/Cargo.toml` on `dev` (desktop uses the three-part prefix, e.g. `1.0.7`); commit (`chore(release): bump version to X`). Packaging fails if they diverge.
 2. Sync `dev` → `main` (squash-and-record, above) so `main` carries the validated commit.
-3. Tag `vX` on the `main` release commit; push the tag.
-4. `bash scripts/release_go.sh --upload` builds and publishes both GitHub and Gitee
-   (target branch defaults to `main`; override with `FLASHCLI_RELEASE_TARGET`).
-5. Build the Windows package on Windows:
+3. On Windows from `main`, build the installer:
    `powershell -ExecutionPolicy Bypass -File scripts/build_windows_package.ps1`
    (client + Go assets + `FlashServer-Setup-<version>.exe`; use `-GoBin` if `go` is not on PATH).
-6. Upload `FlashServer-Setup-<version>.exe` and its SHA256 with the release assets.
-7. Write the release notes per the standard below on **both** platforms.
-8. Verify the published assets in a clean environment:
+4. On Linux/macOS (or Windows Git Bash) from `main`, publish both hosts in one command:
+   `bash scripts/release_go.sh --upload --notes-file <notes.md> --windows-installer dist/windows/FlashServer-Setup-<version>.exe`
+   The script requires a clean `main` equal to `origin/main`, creates/pushes tag `vX` at HEAD, builds the Linux/Windows Go assets, uploads them plus the Windows installer, and fails if either GitHub or Gitee upload fails. Use `FLASHCLI_RELEASE_TARGET` only for a different release branch; `--allow-non-target` is for tests only.
+5. Write release notes per the standard below on **both** platforms. `--notes-file` uses the same body for GitHub and Gitee; if omitted, the script uses a minimal generated note.
+6. Verify the published assets in a clean environment:
    `bash scripts/verify_release.sh --version X` (isolated prefix; add `--mirror` for Gitee).
+7. Sanity-check the published Windows installer name/SHA256 and that `flashcli-linux-{amd64,arm64}` + `flashserver-*` assets are present on both hosts.
 
 - **Bundles**: follow the maintainer checklist below and [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md).
 

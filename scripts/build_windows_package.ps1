@@ -14,6 +14,13 @@ $ClientExe = Join-Path $Root "desktop\target\release\FlashServer.exe"
 $VersionLine = Select-String -Path (Join-Path $Root "pyproject.toml") -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
 if (-not $VersionLine) { throw "cannot read version from pyproject.toml" }
 $Version = $VersionLine.Matches[0].Groups[1].Value
+$CargoLine = Select-String -Path (Join-Path $Root "desktop\Cargo.toml") -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
+if (-not $CargoLine) { throw "cannot read version from desktop/Cargo.toml" }
+$CargoVersion = $CargoLine.Matches[0].Groups[1].Value
+$PyShortVersion = (($Version -split '\.')[0..2] -join '.')
+if ($CargoVersion -ne $PyShortVersion) {
+    throw "desktop/Cargo.toml version $CargoVersion != pyproject version prefix $PyShortVersion; bump both before packaging"
+}
 $LdFlags = "-s -w -X github.com/aodianyun/flashcli/go/internal/version.Version=$Version"
 
 function Require-Command([string]$Name, [string]$Hint) {

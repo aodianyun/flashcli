@@ -60,6 +60,14 @@ for target in ${FLASHCLI_SETUP_WINDOWS_TARGETS:-windows/amd64}; do
       -o "$OUT/$name" ./cmd/flashserver-setup )
 done
 
-( cd "$OUT" && sha256sum flashcli-* flashserver-* > sha256sums.txt )
+if command -v sha256sum >/dev/null 2>&1; then
+  sha_cmd=(sha256sum)
+elif command -v shasum >/dev/null 2>&1; then
+  sha_cmd=(shasum -a 256)
+else
+  echo "error: neither sha256sum nor shasum is available" >&2
+  exit 1
+fi
+( cd "$OUT" && "${sha_cmd[@]}" flashcli-* flashserver-* > sha256sums.txt )
 echo "artifacts in $OUT:"
 ls -1 "$OUT"

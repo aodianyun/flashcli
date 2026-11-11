@@ -27,7 +27,7 @@ bash scripts/verify_release.sh [--version X]  # isolated install + smoke (never 
 ```
 `install.sh` installs the `flashcli` binary (default: latest release assets + sha256; `--from-source` builds with Go) and writes `~/.flashcli/install.env` (bundle venv source: local checkout or repo/ref). Missing OS tools are auto-installed via the package manager. `auto_install.sh` picks GitHub/Gitee by reachability then runs `install.sh`. `flashcli upgrade` self-updates from the same release assets.
 
-**Releases come from `main` only.** Validate `dev` by building from source (`install.sh --from-source --branch dev`, or `build_go.sh` + install the binary) — do **not** cut intermediate releases from `dev`. `release_go.sh` targets `main` (`FLASHCLI_RELEASE_TARGET` overrides). Full checklist: [CONTRIBUTING.md](CONTRIBUTING.md) → Releases.
+**Releases come from `main` only.** Validate `dev` by building from source (`install.sh --from-source --branch dev`, or `build_go.sh` + install the binary) — do **not** cut intermediate releases from `dev`. `release_go.sh --upload` enforces a clean `main` equal to `origin/main`, creates/pushes the tag, and publishes Go assets plus (when passed) the Windows installer; `FLASHCLI_RELEASE_TARGET` overrides the target branch. Full checklist: [CONTRIBUTING.md](CONTRIBUTING.md) → Releases.
 
 ## Tests
 ```bash
@@ -86,4 +86,4 @@ Details: `docs/module_layers.md`, `docs/architecture.md`, `docs/bundle_execution
 - Do not commit secrets/tokens, `dist/`, `build/`, `.native-cache/`, `logs/`, weights, or FlashRT source.
 - `bundles/<name>/README.md` is user-facing (FlashHub); `BUILD.md` is maintainer-facing.
 - Do not commit FlashRT source into this repo; it is a sibling clone used only as build input.
-- Version is single-sourced from root `pyproject.toml [project].version`; `scripts/build_go.sh` injects it into the Go binary via `-ldflags`.
+- Version is single-sourced from root `pyproject.toml [project].version`; `scripts/build_go.sh` injects it into the Go binary via `-ldflags`. The desktop `Cargo.toml` keeps the three-part prefix (for example `1.0.7`) and packaging fails if it does not match.
