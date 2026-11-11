@@ -105,7 +105,7 @@ if (-not $SkipGo) {
                 $previous = $ErrorActionPreference
                 $ErrorActionPreference = "Continue"
                 try {
-                    & go build -trimpath -ldflags $LdFlags -o (Join-Path $GoDist $OutName) ".\cmd\$Cmd"
+                    & go build -trimpath -buildvcs=false -ldflags $LdFlags -o (Join-Path $GoDist $OutName) ".\cmd\$Cmd"
                     $code = $LASTEXITCODE
                 }
                 finally {

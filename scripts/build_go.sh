@@ -37,14 +37,14 @@ for target in ${targets[*]}; do
     name="${cmd}-${goos}-${goarch}"
     echo "building $name ..."
     ( cd "$ROOT/go" && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-        go build -trimpath -ldflags "-s -w -X ${GO_PKG}=${VERSION}" \
+        go build -trimpath -buildvcs=false -ldflags "-s -w -X ${GO_PKG}=${VERSION}" \
         -o "$OUT/$name" "./cmd/$cmd" )
   done
   setup_name="flashserver-setup-${goos}-${goarch}"
   [ "$goos" = "windows" ] && setup_name="${setup_name}.exe"
   echo "building $setup_name ..."
   ( cd "$ROOT/go" && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-      go build -trimpath -ldflags "-s -w -X ${GO_PKG}=${VERSION}" \
+      go build -trimpath -buildvcs=false -ldflags "-s -w -X ${GO_PKG}=${VERSION}" \
       -o "$OUT/$setup_name" ./cmd/flashserver-setup )
 done
 
@@ -56,7 +56,7 @@ for target in ${FLASHCLI_SETUP_WINDOWS_TARGETS:-windows/amd64}; do
   name="flashserver-setup-${goos}-${goarch}.exe"
   echo "building $name ..."
   ( cd "$ROOT/go" && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-      go build -trimpath -ldflags "-s -w -X ${GO_PKG}=${VERSION}" \
+      go build -trimpath -buildvcs=false -ldflags "-s -w -X ${GO_PKG}=${VERSION}" \
       -o "$OUT/$name" ./cmd/flashserver-setup )
 done
 
