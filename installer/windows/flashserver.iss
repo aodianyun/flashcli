@@ -296,7 +296,7 @@ begin
   SetupError := '';
   SetupReboot := False;
   ProgressPath := ExpandConstant('{tmp}\flashserver-progress.txt');
-  LogPath := ExpandConstant('{userprofile}\.flashcli\logs\setup.log');
+  LogPath := GetEnv('USERPROFILE') + '\.flashcli\logs\setup.log';
   DeleteFile(ProgressPath);
 
   ProgressPage.SetText('Preparing the FlashServer environment',
