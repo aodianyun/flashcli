@@ -209,6 +209,7 @@ struct JobEvent {
     state: String,
     verb: String,
     reference: String,
+    authoritative: bool,
 }
 
 enum Pending {
@@ -505,11 +506,21 @@ impl App {
     }
 
     fn apply_job(&mut self, job: JobEvent) {
+        let same_ref = !job.reference.is_empty() && self.job_ref == job.reference;
         if !job.reference.is_empty() {
             self.job_ref = job.reference.clone();
         }
         if !job.verb.is_empty() {
-            self.job_verb = job.verb.clone();
+            // HTTP job polling (authoritative) and WebSocket updates arrive
+            // together. Keep the local verb (加载 vs 下载/启动) and only use
+            // the WS default when no local job has set one.
+            if job.authoritative
+                || self.job_verb.is_empty()
+                || !same_ref
+                || (!self.loading && job.state == "running")
+            {
+                self.job_verb = job.verb.clone();
+            }
         }
         if !job.message.is_empty() {
             self.load_pct = parse_pct(&job.message);
@@ -3155,6 +3166,7 @@ fn start_ws(tx: Sender<Event>, ctx: egui::Context) {
                                                 .as_str()
                                                 .unwrap_or("")
                                                 .to_string(),
+                                            authoritative: false,
                                         }));
                                     }
                                     _ => {}
@@ -3298,6 +3310,7 @@ fn spawn_job(
             state: "running".into(),
             verb: verb.to_string(),
             reference: event_ref.clone(),
+            authoritative: true,
         }));
         let body = serde_json::json!({ "ref": ref_str, "async": true });
         match post_json(endpoint, &body) {
@@ -3323,6 +3336,7 @@ fn spawn_job(
                         state,
                         verb: verb.to_string(),
                         reference: j["ref"].as_str().unwrap_or(event_ref.as_str()).to_string(),
+                        authoritative: true,
                     }));
                     ctx.request_repaint();
                     if phase == "done" || phase == "failed" {
@@ -3338,6 +3352,7 @@ fn spawn_job(
                     state: "failed".into(),
                     verb: verb.to_string(),
                     reference: event_ref.clone(),
+                    authoritative: true,
                 }));
             }
         }
