@@ -51,9 +51,11 @@ def test_build_go_injects_version(tmp_path: Path) -> None:
 def test_installer_scripts_syntax() -> None:
     if shutil.which("sh") is None:
         pytest.skip("sh not available")
-    for script in ["install.sh", "auto_install.sh", "scripts/build_go.sh", "scripts/release_go.sh"]:
+    # POSIX sh scripts (arrays and bash-only syntax are rejected here).
+    for script in ["install.sh", "auto_install.sh"]:
         proc = subprocess.run(["sh", "-n", str(ROOT / script)], capture_output=True, text=True)
         assert proc.returncode == 0, f"{script}: {proc.stderr}"
+    # These declare a bash shebang and use arrays/`[[ ]]`, so validate with bash.
     for script in ["scripts/build_go.sh", "scripts/release_go.sh"]:
         if shutil.which("bash"):
             proc = subprocess.run(["bash", "-n", str(ROOT / script)], capture_output=True, text=True)
