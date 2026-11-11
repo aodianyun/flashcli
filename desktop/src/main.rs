@@ -183,6 +183,7 @@ pub struct App {
     system: Option<Value>,
     models: Vec<ModelRow>,
     model_detail: Option<ModelRow>,
+    use_model: Option<ModelRow>,
     hub_query: String,
     hub_tag: i64,
     hub_tags: Vec<(i64, String)>,
@@ -204,6 +205,7 @@ pub struct App {
     logs_busy: bool,
     logs_at: Option<Instant>,
     logs_since: Option<u64>,
+    logs_ref: Option<String>,
     logs_note: String,
     autostart_known: Option<bool>,
     op_busy: Option<String>,
@@ -246,6 +248,7 @@ impl App {
             system: None,
             models: Vec::new(),
             model_detail: None,
+            use_model: None,
             hub_query: String::new(),
             hub_tag: 0,
             hub_tags: Vec::new(),
@@ -267,6 +270,7 @@ impl App {
             logs_busy: false,
             logs_at: None,
             logs_since: None,
+            logs_ref: None,
             logs_note: String::new(),
             autostart_known: None,
             op_busy: None,
@@ -932,6 +936,8 @@ impl App {
         let mut load_request = None;
         let mut pull_request = None;
         let mut unload_request = None;
+        let mut logs_request = None;
+        let mut use_request: Option<ModelRow> = None;
         TableBuilder::new(ui)
             .striped(true)
             .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
@@ -941,7 +947,7 @@ impl App {
             .column(Column::exact(78.0))
             .column(Column::exact(78.0))
             .column(Column::exact(64.0))
-            .column(Column::exact(88.0))
+            .column(Column::exact(150.0))
             .header(26.0, |mut header| {
                 header.col(|ui| {
                     let mut all = all_selected;
@@ -1006,8 +1012,12 @@ impl App {
                         });
                         row.col(|ui| {
                             if m.loaded {
-                                if table_danger_button(ui, "卸载").clicked() {
-                                    unload_request = Some(m.name.clone());
+                                let clicked = ui
+                                    .add_enabled_ui(!self.loading, |ui| table_button(ui, "使用"))
+                                    .inner
+                                    .clicked();
+                                if clicked {
+                                    use_request = Some(m.clone());
                                 }
                             } else if m.ready() {
                                 if m.serve {
@@ -1039,6 +1049,20 @@ impl App {
                                     pull_request = Some(m.name.clone());
                                 }
                             }
+                            ui.menu_button(egui::RichText::new("更多").size(12.5), |ui| {
+                                if ui.button("查看信息").clicked() {
+                                    detail_request = Some(m.clone());
+                                    ui.close_menu();
+                                }
+                                if ui.button("查看日志").clicked() {
+                                    logs_request = Some(m.name.clone());
+                                    ui.close_menu();
+                                }
+                                if m.loaded && ui.button("卸载").clicked() {
+                                    unload_request = Some(m.name.clone());
+                                    ui.close_menu();
+                                }
+                            });
                         });
                     });
                 }
@@ -1057,6 +1081,23 @@ impl App {
         self.selected_models = selected;
         if let Some(m) = detail_request {
             self.model_detail = Some(m);
+        }
+        if let Some(model) = logs_request {
+            self.logs_ref = Some(model);
+            self.logs_since = None;
+            self.logs_note.clear();
+            self.logs_at = None;
+            self.logs_busy = true;
+            self.tab = Tab::Logs;
+            spawn_logs(
+                self.tx.clone(),
+                ui.ctx().clone(),
+                None,
+                self.logs_ref.clone(),
+            );
+        }
+        if let Some(m) = use_request {
+            self.use_model = Some(m);
         }
         if let Some(refs) = clean_request {
             let bytes: f64 = self
@@ -1321,6 +1362,8 @@ impl App {
         let dark = ctx.style().visuals.dark_mode;
         let mut close = false;
         let mut load = false;
+        let mut use_it = false;
+        let mut open_logs = false;
         let mut unload = false;
         let mut pull = false;
         modal_backdrop(ctx, dark, &mut close);
@@ -1431,6 +1474,12 @@ impl App {
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
                     if model.loaded {
+                        if button(ui, "使用").clicked() {
+                            use_it = true;
+                        }
+                        if button(ui, "日志").clicked() {
+                            open_logs = true;
+                        }
                         if destructive_button(ui, "卸载").clicked() {
                             unload = true;
                         }
@@ -1475,6 +1524,20 @@ impl App {
                     }
                 });
             });
+        if use_it {
+            self.model_detail = None;
+            self.use_model = Some(model.clone());
+        }
+        if open_logs {
+            self.model_detail = None;
+            self.logs_ref = Some(model.name.clone());
+            self.logs_since = None;
+            self.logs_note.clear();
+            self.logs_at = None;
+            self.logs_busy = true;
+            self.tab = Tab::Logs;
+            spawn_logs(self.tx.clone(), ctx.clone(), None, self.logs_ref.clone());
+        }
         if close {
             self.model_detail = None;
         }
@@ -1499,14 +1562,141 @@ impl App {
         }
     }
 
+    fn show_use_dialog(&mut self, ctx: &egui::Context) {
+        let Some(model) = self.use_model.clone() else {
+            return;
+        };
+        if self.dialog.is_some() {
+            return;
+        }
+        let dark = ctx.style().visuals.dark_mode;
+        let mut close = false;
+        modal_backdrop(ctx, dark, &mut close);
+        egui::Window::new("use_model_dialog")
+            .title_bar(false)
+            .order(egui::Order::Foreground)
+            .frame(dialog_frame(dark))
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.set_width(620.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("使用模型").size(17.0).strong());
+                    ui.with_layout(
+                        egui::Layout::right_to_left(egui::Align::Center),
+                        |ui| {
+                            if ui.button("×").clicked() {
+                                close = true;
+                            }
+                        },
+                    );
+                });
+                ui.add_space(4.0);
+                ui.add(
+                    egui::Label::new(egui::RichText::new(&model.name).monospace().weak())
+                        .wrap(),
+                );
+                ui.add_space(12.0);
+                ui.label(
+                    egui::RichText::new("目标 Serve 地址")
+                        .size(12.0)
+                        .strong()
+                        .color(ui.visuals().weak_text_color()),
+                );
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(&model.endpoint).monospace().size(14.0),
+                        )
+                        .wrap(),
+                    );
+                    if button(ui, "复制地址").clicked() {
+                        ui.ctx().copy_text(model.endpoint.clone());
+                    }
+                });
+                ui.add_space(12.0);
+                ui.label(
+                    egui::RichText::new("OpenAI 兼容接口")
+                        .size(12.0)
+                        .strong()
+                        .color(ui.visuals().weak_text_color()),
+                );
+                ui.add_space(4.0);
+                let models_url = format!("{}/v1/models", model.endpoint.trim_end_matches('/'));
+                let chat_url = format!(
+                    "{}/v1/chat/completions",
+                    model.endpoint.trim_end_matches('/')
+                );
+                ui.label(
+                    egui::RichText::new(format!(
+                        "curl {models_url}\n\ncurl {chat_url} -H 'Content-Type: application/json' \\\n  -d '{{\"model\":\"<model-id>\",\"messages\":[{{\"role\":\"user\",\"content\":\"Hello\"}}]}}'"
+                    ))
+                    .monospace()
+                    .small(),
+                );
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new("模型 ID 以 /v1/models 返回值为准")
+                        .weak()
+                        .small(),
+                );
+                ui.add_space(14.0);
+                ui.separator();
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    if button(ui, "打开 API 文档").clicked() {
+                        let _ = webbrowser::open(&format!(
+                            "{}/docs",
+                            model.endpoint.trim_end_matches('/')
+                        ));
+                    }
+                    if button(ui, "打开模型列表").clicked() {
+                        let _ = webbrowser::open(&models_url);
+                    }
+                    if button(ui, "打开本地控制台").clicked() {
+                        let _ = webbrowser::open(&format!("{}/", api_base().trim_end_matches('/')));
+                    }
+                    ui.with_layout(
+                        egui::Layout::right_to_left(egui::Align::Center),
+                        |ui| {
+                            if button(ui, "关闭").clicked() {
+                                close = true;
+                            }
+                        },
+                    );
+                });
+            });
+        if close {
+            self.use_model = None;
+        }
+    }
+
     fn logs_page(&mut self, ui: &mut egui::Ui) {
         let mut clear = false;
         let mut reset = false;
         let mut export = false;
+        let model_log = self.logs_ref.is_some();
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("服务日志").strong());
+            if let Some(model) = self.logs_ref.clone() {
+                ui.label(egui::RichText::new("模型日志").strong());
+                ui.add(
+                    egui::Label::new(egui::RichText::new(&model).monospace().weak().small()).wrap(),
+                );
+                if ui.button("返回服务日志").clicked() {
+                    self.logs_ref = None;
+                    self.logs_since = None;
+                    self.logs_note.clear();
+                    self.logs_at = None;
+                    self.logs_busy = true;
+                    spawn_logs(self.tx.clone(), ui.ctx().clone(), None, None);
+                }
+            } else {
+                ui.label(egui::RichText::new("服务日志").strong());
+            }
             ui.label(
-                egui::RichText::new(if self.logs_since.is_some() {
+                egui::RichText::new(if !model_log && self.logs_since.is_some() {
                     "仅显示清空后的新日志"
                 } else {
                     "最近 300 行"
@@ -1518,11 +1708,13 @@ impl App {
                 if ui.button("另存为…").clicked() {
                     export = true;
                 }
-                if ui.button("清空").clicked() {
-                    clear = true;
-                }
-                if self.logs_since.is_some() && ui.button("最新 300 行").clicked() {
-                    reset = true;
+                if !model_log {
+                    if ui.button("清空").clicked() {
+                        clear = true;
+                    }
+                    if self.logs_since.is_some() && ui.button("最新 300 行").clicked() {
+                        reset = true;
+                    }
                 }
             });
         });
@@ -1544,11 +1736,20 @@ impl App {
         if export {
             if let Some(path) = rfd::FileDialog::new()
                 .set_title("保存完整日志")
-                .set_file_name("flashserver.log")
+                .set_file_name(if self.logs_ref.is_some() {
+                    "model.log"
+                } else {
+                    "flashserver.log"
+                })
                 .add_filter("日志", &["log", "txt"])
                 .save_file()
             {
-                spawn_export_logs(self.tx.clone(), ui.ctx().clone(), path);
+                spawn_export_logs(
+                    self.tx.clone(),
+                    ui.ctx().clone(),
+                    path,
+                    self.logs_ref.clone(),
+                );
             }
         }
         ui.add_space(8.0);
@@ -2041,7 +2242,12 @@ impl eframe::App for App {
                 .unwrap_or(true);
             if due {
                 self.logs_busy = true;
-                spawn_logs(self.tx.clone(), ctx.clone(), self.logs_since);
+                spawn_logs(
+                    self.tx.clone(),
+                    ctx.clone(),
+                    self.logs_since,
+                    self.logs_ref.clone(),
+                );
             }
         }
         let dark = ctx.style().visuals.dark_mode;
@@ -2061,7 +2267,12 @@ impl eframe::App for App {
                         self.tab = tab;
                         if tab == Tab::Logs {
                             self.logs_busy = true;
-                            spawn_logs(self.tx.clone(), ctx.clone(), self.logs_since);
+                            spawn_logs(
+                                self.tx.clone(),
+                                ctx.clone(),
+                                self.logs_since,
+                                self.logs_ref.clone(),
+                            );
                         }
                     }
                     ui.add_space(2.0);
@@ -2149,6 +2360,7 @@ impl eframe::App for App {
             }
         });
 
+        self.show_use_dialog(ctx);
         self.show_cache_dialog(ctx);
         self.show_dialog(ctx);
         self.show_busy_overlay(ctx);
@@ -2427,13 +2639,6 @@ fn table_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
     ui.add_sized(
         [64.0, 25.0],
         egui::Button::new(egui::RichText::new(text).size(12.5)),
-    )
-}
-
-fn table_danger_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
-    ui.add_sized(
-        [64.0, 25.0],
-        egui::Button::new(egui::RichText::new(text).color(red(ui)).size(12.5)),
     )
 }
 
@@ -3030,13 +3235,24 @@ fn spawn_unload(tx: Sender<Event>, ctx: egui::Context, ref_str: String) {
     });
 }
 
-fn spawn_logs(tx: Sender<Event>, ctx: egui::Context, since: Option<u64>) {
+fn spawn_logs(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    since: Option<u64>,
+    model_ref: Option<String>,
+) {
     std::thread::spawn(move || {
-        let mut path = String::from("/v1/logs?kind=server&lines=300");
-        if let Some(since) = since {
-            path.push_str(&format!("&since={since}"));
+        let mut params = vec![("lines", "300".to_string())];
+        if let Some(ref model) = model_ref {
+            params.push(("kind", "model".to_string()));
+            params.push(("ref", model.clone()));
+        } else {
+            params.push(("kind", "server".to_string()));
+            if let Some(since) = since {
+                params.push(("since", since.to_string()));
+            }
         }
-        let text = get_json(&path).map(|v| {
+        let text = get_json_query("/v1/logs", &params).map(|v| {
             v["lines"]
                 .as_array()
                 .map(|lines| {
@@ -3053,16 +3269,23 @@ fn spawn_logs(tx: Sender<Event>, ctx: egui::Context, since: Option<u64>) {
     });
 }
 
-fn spawn_export_logs(tx: Sender<Event>, ctx: egui::Context, path: PathBuf) {
+fn spawn_export_logs(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    path: PathBuf,
+    model_ref: Option<String>,
+) {
     std::thread::spawn(move || {
         let result = (|| -> Result<(), String> {
             let agent = ureq::AgentBuilder::new()
                 .timeout(Duration::from_secs(120))
                 .build();
-            let resp = agent
-                .get(&format!("{}/v1/logs/download?kind=server", api_base()))
-                .call()
-                .map_err(|e| e.to_string())?;
+            let mut request = agent.get(&format!("{}/v1/logs/download", api_base()));
+            request = match &model_ref {
+                Some(model) => request.query("kind", "model").query("ref", model),
+                None => request.query("kind", "server"),
+            };
+            let resp = request.call().map_err(|e| e.to_string())?;
             let mut reader = resp.into_reader();
             let mut file = std::fs::File::create(&path).map_err(|e| e.to_string())?;
             std::io::copy(&mut reader, &mut file).map_err(|e| e.to_string())?;
