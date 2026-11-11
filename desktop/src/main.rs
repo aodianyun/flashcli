@@ -3,6 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use eframe::egui;
@@ -10,7 +11,30 @@ use egui_extras::{Column, TableBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-const BASE: &str = "http://127.0.0.1:8790";
+static API_BASE: OnceLock<String> = OnceLock::new();
+
+/// The setup engine picks a free Windows port when the default 8790 is in a
+/// Hyper-V/WinNAT excluded range and records it here.
+fn api_base() -> &'static str {
+    API_BASE.get_or_init(|| {
+        if let Some(dir) = std::env::var_os("LOCALAPPDATA") {
+            let path = PathBuf::from(dir).join("FlashServer").join("api-url.txt");
+            if let Ok(text) = std::fs::read_to_string(path) {
+                let url = text.trim().trim_end_matches('/');
+                if url.starts_with("http://") || url.starts_with("https://") {
+                    return url.to_string();
+                }
+            }
+        }
+        "http://127.0.0.1:8790".to_string()
+    })
+}
+
+fn api_addr() -> &'static str {
+    api_base()
+        .trim_start_matches("http://")
+        .trim_start_matches("https://")
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tab {
@@ -631,7 +655,8 @@ impl App {
                         &fmt_uptime(sys["uptime_seconds"].as_f64().unwrap_or(0.0)),
                     );
                     pair(ui, "开机启动", autostart_text(self.autostart_state()));
-                    pair(ui, "监听", "8790");
+                    let port = api_addr().rsplit(':').next().unwrap_or("8790");
+                    pair(ui, "监听", port);
                     ui.end_row();
                     pair(
                         ui,
@@ -1435,7 +1460,7 @@ impl App {
                                 "开机启动",
                                 autostart_text(self.autostart_state()),
                             );
-                            kv(ui, "监听地址", "127.0.0.1:8790");
+                            kv(ui, "监听地址", api_addr());
                         });
                     ui.add_space(8.0);
                     let running = self.system.is_some();
@@ -1523,7 +1548,7 @@ impl App {
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
                         if button(ui, "API 文档").clicked() {
-                            let _ = webbrowser::open("http://localhost:8790/docs");
+                            let _ = webbrowser::open(&format!("{}/docs", api_base()));
                         }
                         ui.add_space(8.0);
                         if danger_button(ui, "退出客户端").clicked() {
@@ -2447,7 +2472,14 @@ fn start_http(tx: Sender<Event>, ctx: egui::Context) {
 
 fn start_ws(tx: Sender<Event>, ctx: egui::Context) {
     std::thread::spawn(move || loop {
-        match ewebsock::connect("ws://127.0.0.1:8790/v1/ws", ewebsock::Options::default()) {
+        let ws_url = if let Some(rest) = api_base().strip_prefix("http://") {
+            format!("ws://{rest}/v1/ws")
+        } else if let Some(rest) = api_base().strip_prefix("https://") {
+            format!("wss://{rest}/v1/ws")
+        } else {
+            format!("{}/v1/ws", api_base())
+        };
+        match ewebsock::connect(ws_url, ewebsock::Options::default()) {
             Ok((_sender, receiver)) => loop {
                 let mut closed = false;
                 while let Some(event) = receiver.try_recv() {
@@ -2832,7 +2864,7 @@ fn spawn_export_logs(tx: Sender<Event>, ctx: egui::Context, path: PathBuf) {
                 .timeout(Duration::from_secs(120))
                 .build();
             let resp = agent
-                .get(&format!("{BASE}/v1/logs/download?kind=server"))
+                .get(&format!("{}/v1/logs/download?kind=server", api_base()))
                 .call()
                 .map_err(|e| e.to_string())?;
             let mut reader = resp.into_reader();
@@ -2866,7 +2898,7 @@ fn agent() -> ureq::Agent {
 
 fn get_json(path: &str) -> Option<Value> {
     agent()
-        .get(&format!("{BASE}{path}"))
+        .get(&format!("{}{}", api_base(), path))
         .call()
         .ok()?
         .into_json()
@@ -2877,7 +2909,7 @@ fn get_json_query(path: &str, params: &[(&str, String)]) -> Option<Value> {
     let mut request = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(20))
         .build()
-        .get(&format!("{BASE}{path}"));
+        .get(&format!("{}{}", api_base(), path));
     for (key, value) in params {
         request = request.query(key, value);
     }
@@ -2888,7 +2920,7 @@ fn get_json_timeout(path: &str, secs: u64) -> Option<Value> {
     ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(secs))
         .build()
-        .get(&format!("{BASE}{path}"))
+        .get(&format!("{}{}", api_base(), path))
         .call()
         .ok()?
         .into_json()
@@ -2899,7 +2931,10 @@ fn post_json(path: &str, body: &Value) -> Result<Value, String> {
     let agent = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(60))
         .build();
-    match agent.post(&format!("{BASE}{path}")).send_json(body) {
+    match agent
+        .post(&format!("{}{}", api_base(), path))
+        .send_json(body)
+    {
         Ok(resp) => resp.into_json::<Value>().map_err(|e| e.to_string()),
         Err(ureq::Error::Status(_, resp)) => Err(resp.into_string().unwrap_or_default()),
         Err(e) => Err(e.to_string()),

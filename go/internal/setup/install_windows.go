@@ -41,6 +41,19 @@ func installWSL(ctx context.Context, env Env, opts Options, out io.Writer) error
 	// systemd's default PATH omits the WSL2 driver mount, which hides nvidia-smi
 	// from the service and from bundle subprocesses.
 	opts.PathEnv = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/lib/wsl/lib"
+	if !opts.DryRun {
+		addr, err := selectAddr(opts.Addr)
+		if err != nil {
+			return err
+		}
+		if addr != opts.Addr {
+			i.printf("API address %s is unavailable; using %s\n", opts.Addr, addr)
+		}
+		opts.Addr = addr
+		if err := writeClientAPI(addr); err != nil {
+			return fmt.Errorf("write client API URL: %w", err)
+		}
+	}
 	if err := stepf(out, 4, total, "Installing flashcli/flashserver", func() error {
 		if err := copyToWSL(ctx, opts, resolveBinary(opts.BinDir, "flashcli", "linux", linuxArch), path.Join(binDir, "flashcli")); err != nil {
 			return err
@@ -96,7 +109,7 @@ func installWSL(ctx context.Context, env Env, opts Options, out io.Writer) error
 	if err := stepf(out, 8, total, "Checking health", func() error { return waitHealth(ctx, opts.Addr, opts.Token) }); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "\nFlashServer is running: http://localhost:8790/health\n")
+	fmt.Fprintf(out, "\nFlashServer is running: %s/health\n", clientAPIURL())
 	fmt.Fprintf(out, "Token/config: /etc/flashserver/config.json (inside WSL)\n")
 	return nil
 }
@@ -224,11 +237,35 @@ func ensureSystemd(ctx context.Context, opts Options, i *installer) error {
 		return err
 	}
 	// A changed wsl.conf needs a distro restart before systemd is available.
-	if err := wslRoot(ctx, opts, "systemctl", "is-system-running"); err != nil {
-		_ = exec.CommandContext(ctx, sysExe("wsl.exe"), "--terminate", opts.Distro).Run()
-		time.Sleep(time.Second)
+	// "degraded" means systemd is up (some unit failed), so do not restart for
+	// it: terminating here races the next WSL command on cold-start.
+	if systemdUsable(ctx, opts) {
+		return nil
 	}
-	return nil
+	i.printf("systemd is not running; restarting %s\n", opts.Distro)
+	_ = exec.CommandContext(ctx, sysExe("wsl.exe"), "--terminate", opts.Distro).Run()
+	return waitWSL(ctx, opts)
+}
+
+// systemdUsable reports whether systemd is already running inside the distro.
+// systemctl exits 1 for "degraded" and "starting", which are still usable.
+func systemdUsable(ctx context.Context, opts Options) bool {
+	c, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(c, sysExe("wsl.exe"), "-d", opts.Distro, "-u", "root", "--", "systemctl", "is-system-running")
+	out, err := cmd.Output()
+	state := strings.TrimSpace(string(out))
+	if state != "" {
+		fmt.Fprintf(diag, "systemd state: %s\n", state)
+	}
+	if err == nil {
+		return true
+	}
+	switch state {
+	case "degraded", "starting", "initializing", "maintenance":
+		return true
+	}
+	return false
 }
 
 func copyToWSL(ctx context.Context, opts Options, src, dest string) error {
@@ -236,6 +273,27 @@ func copyToWSL(ctx context.Context, opts Options, src, dest string) error {
 		fmt.Fprintf(os.Stdout, "$ install %s -> %s (WSL %s)\n", src, dest, opts.Distro)
 		return nil
 	}
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if err := copyToWSLOnce(ctx, opts, src, dest); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+		if attempt < 2 {
+			// A cold-starting distro can reject the first invocation.
+			_ = wslRoot(ctx, opts, "true")
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(2 * time.Second):
+			}
+		}
+	}
+	return fmt.Errorf("copy %s -> %s: %w", src, dest, lastErr)
+}
+
+func copyToWSLOnce(ctx context.Context, opts Options, src, dest string) error {
 	f, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("%s: %w", src, err)
@@ -368,6 +426,66 @@ func currentUserQualified() string {
 
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
+// selectAddr picks a Windows loopback port that the WSL localhost relay can
+// bind. Hyper-V/WinNAT can put the default port (8790) in an excluded range,
+// which fails with WSAEACCES even though the Linux daemon is healthy.
+func selectAddr(requested string) (string, error) {
+	host, port, err := net.SplitHostPort(requested)
+	if err != nil {
+		host, port = "127.0.0.1", "8790"
+	}
+	if host != "" && host != "127.0.0.1" && host != "localhost" {
+		return requested, nil
+	}
+	candidates := []string{port}
+	for _, p := range []string{"18790", "28790", "38790", "48790"} {
+		if p != port {
+			candidates = append(candidates, p)
+		}
+	}
+	for _, p := range candidates {
+		ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", p))
+		if err == nil {
+			_ = ln.Close()
+			return net.JoinHostPort("127.0.0.1", p), nil
+		}
+	}
+	return "", fmt.Errorf("no free local API port (tried %s)", strings.Join(candidates, ", "))
+}
+
+// writeClientAPI records the selected URL for the desktop client and the UI
+// installer. The client falls back to 8790 when the file is absent.
+func writeClientAPI(addr string) error {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return err
+	}
+	url := "http://127.0.0.1:" + port
+	dir := os.Getenv("LOCALAPPDATA")
+	if dir == "" {
+		return nil
+	}
+	p := filepath.Join(dir, "FlashServer", "api-url.txt")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(p, []byte(url+"\n"), 0o644)
+}
+
+// clientAPIURL returns the URL written by writeClientAPI (or the default).
+func clientAPIURL() string {
+	dir := os.Getenv("LOCALAPPDATA")
+	if dir != "" {
+		if b, err := os.ReadFile(filepath.Join(dir, "FlashServer", "api-url.txt")); err == nil {
+			s := strings.TrimSpace(string(b))
+			if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
+				return s
+			}
+		}
+	}
+	return "http://localhost:8790"
 }
 
 func exposedAddr(addr string) string {

@@ -235,6 +235,20 @@ begin
   end;
 end;
 
+function ClientAPIURL: String;
+var
+  A: AnsiString;
+  S: String;
+begin
+  Result := 'http://127.0.0.1:8790';
+  if LoadStringFromFile(GetEnv('LOCALAPPDATA') + '\FlashServer\api-url.txt', A) then
+  begin
+    S := Trim(String(A));
+    if (Copy(S, 1, 7) = 'http://') or (Copy(S, 1, 8) = 'https://') then
+      Result := S;
+  end;
+end;
+
 function HealthOK: Boolean;
 var
   ResultCode: Integer;
@@ -242,7 +256,8 @@ var
 begin
   ScriptPath := ExpandConstant('{tmp}\flashserver-health.ps1');
   Script := 'try {' + #13#10 +
-    '  $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 8 ''http://localhost:8790/health''' + #13#10 +
+    '  $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 8 ' + #39 +
+      ClientAPIURL + '/health' + #39 + #13#10 +
     '  if ($r.StatusCode -eq 200) { exit 0 } else { exit 2 }' + #13#10 +
     '} catch { exit 1 }' + #13#10;
   if not SaveStringToFile(ScriptPath, Script, False) then
@@ -431,8 +446,8 @@ begin
       WizardForm.FinishedLabel.Caption :=
         'FlashServer is installed and ready.' + #13#10 + #13#10 +
         'Environment: WSL2 + Ubuntu + systemd service (verified)' + #13#10 +
-        'Health: http://localhost:8790/health' + #13#10 +
-        'API docs: http://localhost:8790/docs'
+        'Health: ' + ClientAPIURL + '/health' + #13#10 +
+        'API docs: ' + ClientAPIURL + '/docs'
     else
       WizardForm.FinishedLabel.Caption :=
         'FlashServer installation needs attention.' + #13#10 + #13#10 +

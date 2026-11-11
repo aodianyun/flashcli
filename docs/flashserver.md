@@ -19,7 +19,8 @@ flashcli serve     → one model process, OpenAI-compatible API
 
 ## Local console
 
-Open `http://localhost:8790/` after installation. The embedded console shows GPU/VRAM, utilization, temperature, clocks, power (when the driver exposes it), CUDA/SM/torch environment, CUDA process memory (native Linux; WSL usually does not expose it), CPU model/cores/load/per-core utilization, RAM/swap, 5-minute GPU and CPU charts, service uptime, cached models, loaded models, logs, and can load/unload models and test chat. It is served by the same binary (no extra assets or Node build). The HTTP contract is published at `/openapi.yaml`, an HTML reference is served at `/docs`, and the source is mirrored in [openapi.yaml](openapi.yaml). Live clients can use `GET /v1/ws` (system snapshot 1 Hz + job progress). `GET /v1/catalog` proxies the public FlashHub catalog (search, categories, versions) and `GET /v1/logs/download` returns the full daemon journal.
+Open `http://localhost:8790/` after installation (the default port; on Windows
+the installer may select a different free port, see "Windows UI installer"). The embedded console shows GPU/VRAM, utilization, temperature, clocks, power (when the driver exposes it), CUDA/SM/torch environment, CUDA process memory (native Linux; WSL usually does not expose it), CPU model/cores/load/per-core utilization, RAM/swap, 5-minute GPU and CPU charts, service uptime, cached models, loaded models, logs, and can load/unload models and test chat. It is served by the same binary (no extra assets or Node build). The HTTP contract is published at `/openapi.yaml`, an HTML reference is served at `/docs`, and the source is mirrored in [openapi.yaml](openapi.yaml). Live clients can use `GET /v1/ws` (system snapshot 1 Hz + job progress). `GET /v1/catalog` proxies the public FlashHub catalog (search, categories, versions) and `GET /v1/logs/download` returns the full daemon journal.
 
 ## Desktop client
 
@@ -31,7 +32,7 @@ The Windows installer ships `FlashServer.exe`, a Rust + egui/eframe desktop clie
 - Destructive actions (stop service, disable auto-start, unload model, quit) ask for confirmation.
 - Service buttons use `wsl.exe` (no UAC). The auto-start toggle calls `flashserver-setup --enable-autostart/--disable-autostart` and therefore prompts for UAC; it does not start or stop the service.
 - Service state and auto-start are independent: stopping never disables auto-start, starting never enables it, and auto-start changes never start/stop the service. Long operations show a modal progress overlay and a result toast.
-- API docs open `http://localhost:8790/docs`.
+- API docs open the configured API URL + `/docs` (the client reads the port from `%LOCALAPPDATA%\FlashServer\api-url.txt`).
 - The code compiles cross-platform; service control is wired for Windows/WSL first, Linux uses `systemctl` (best effort) and macOS has no flashserver backend yet.
 
 ## Windows UI installer
@@ -62,7 +63,14 @@ installer explains that a restart is required, keeps the client closed, and the
 finished page asks you to run Setup again after restarting. The second run is
 idempotent and completes the Ubuntu/service installation. On success the
 finished page means the environment was verified ready, not just that files were
-copied; API docs are at `http://localhost:8790/docs`.
+copied; the installer shows the actual API URL.
+
+Windows can reserve the default port `8790` in a Hyper-V/WinNAT excluded range.
+In that case setup automatically selects the next free port (`18790`, `28790`,
+...), writes `0.0.0.0:<port>` inside WSL, and records the Windows URL in
+`%LOCALAPPDATA%\FlashServer\api-url.txt`. The desktop client and the installer's
+final health check read that file, so the client, installer, and API docs all use
+the same selected port.
 
 For automation/debugging, `flashserver-setup --progress-file FILE` writes the
 `[n/8]` lines and a final `DONE <code>` (`0` ready, `3` restart required, `2`
@@ -79,11 +87,12 @@ virtualization enabled (VT-x/AMD-V); WSL2 cannot start without it.
    page; on a machine without WSL2 the first run may stop at step 1 and ask for a restart.
 3. Restart when asked and run the installer again. It must show steps 1-8 and finish
    with "FlashServer is installed and ready."
-4. Verify the environment independently:
+4. Verify the environment independently (the installer may have selected a port other than 8790):
    ```powershell
    wsl.exe -l -v
    wsl.exe -d Ubuntu -u root systemctl is-active flashserver   # active
-   (Invoke-WebRequest -UseBasicParsing http://localhost:8790/health).StatusCode  # 200
+   $url = (Get-Content "$env:LOCALAPPDATA\FlashServer\api-url.txt").Trim()
+   (Invoke-WebRequest -UseBasicParsing "$url/health").StatusCode  # 200
    ```
 5. Confirm the desktop client opens, the overview shows the service running, and
    auto-start is enabled. Re-running the installer must succeed without duplicating services.
@@ -136,7 +145,7 @@ By default setup downloads the matching `flashcli-linux-<arch>` and `flashserver
 ```
 
 - `max_loaded=0`: admit by GPU memory only.
-- WSL uses `addr=0.0.0.0:8790`, `public_host=localhost`, `serve_host=0.0.0.0` so Windows can reach the WSL services through localhost forwarding.
+- WSL uses `addr=0.0.0.0:8790` by default (setup may choose another port when 8790 is reserved), `public_host=localhost`, `serve_host=0.0.0.0` so Windows can reach the WSL services through localhost forwarding.
 - `token` is optional and absent by default. When set, it protects every API path except `/health`, `/`, `/docs`, `/ui/*`, and `/openapi.yaml`; send `Authorization: Bearer <token>` or `X-Flashcli-Token`.
 
 ## API

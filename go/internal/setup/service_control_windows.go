@@ -94,6 +94,6 @@ func startService(ctx context.Context, env Env, opts Options, out io.Writer) err
 	}
 	_ = writeToWSL(ctx, opts, autostartMarker, []byte("enabled\n"), 0o644)
 	fmt.Fprintln(out, "FlashServer started and auto-start enabled.")
-	fmt.Fprintln(out, "Console: http://localhost:8790/")
+	fmt.Fprintln(out, "Console: "+clientAPIURL()+"/")
 	return nil
 }

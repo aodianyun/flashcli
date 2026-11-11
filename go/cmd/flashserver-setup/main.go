@@ -97,6 +97,7 @@ func run() int {
 	}
 	code := 0
 	if err := setup.Run(ctx, env, opts, out); err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		if errors.Is(err, setup.ErrRebootRequired) {
 			fmt.Fprintln(out, "\nWindows must be restarted before WSL2 can be used.")

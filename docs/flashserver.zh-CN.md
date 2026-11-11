@@ -19,7 +19,7 @@ flashcli serve     → 单模型进程，OpenAI-compatible API
 
 ## 本地控制台
 
-安装后打开 `http://localhost:8790/`。内置控制台展示 GPU/显存、利用率、温度、频率、功耗（驱动提供时）、CUDA/SM/torch 环境、CUDA 进程显存（原生 Linux；WSL 通常不暴露进程列表）、CPU 型号/核心/负载/每核利用率、内存/Swap、GPU 与 CPU 5 分钟曲线、服务运行时长、缓存模型、已加载模型、日志，并支持加载/卸载模型和对话测试。页面随二进制内嵌，不需要额外资源或 Node 构建。HTTP 契约发布在 `/openapi.yaml`，HTML 参考页在 `/docs`，源文件见 [openapi.yaml](openapi.yaml)。实时客户端可用 `GET /v1/ws`（1Hz 系统快照 + 任务进度）。`GET /v1/catalog` 代理 FlashHub 公共目录（搜索、分类、版本），`GET /v1/logs/download` 返回完整服务日志。
+安装后打开 `http://localhost:8790/`（默认端口；Windows 安装器在 8790 被占用/保留时可能选择其他端口，见“Windows UI 安装包”）。内置控制台展示 GPU/显存、利用率、温度、频率、功耗（驱动提供时）、CUDA/SM/torch 环境、CUDA 进程显存（原生 Linux；WSL 通常不暴露进程列表）、CPU 型号/核心/负载/每核利用率、内存/Swap、GPU 与 CPU 5 分钟曲线、服务运行时长、缓存模型、已加载模型、日志，并支持加载/卸载模型和对话测试。页面随二进制内嵌，不需要额外资源或 Node 构建。HTTP 契约发布在 `/openapi.yaml`，HTML 参考页在 `/docs`，源文件见 [openapi.yaml](openapi.yaml)。实时客户端可用 `GET /v1/ws`（1Hz 系统快照 + 任务进度）。`GET /v1/catalog` 代理 FlashHub 公共目录（搜索、分类、版本），`GET /v1/logs/download` 返回完整服务日志。
 
 ## 桌面客户端
 
@@ -31,7 +31,7 @@ Windows 安装包内置 `FlashServer.exe`：Rust + egui/eframe 原生客户端�
 - 破坏性操作（停止服务、禁用开机启动、卸载模型、退出客户端）都会二次确认。
 - 服务启停走 `wsl.exe`，不需要 UAC；开机启动开关调用 `flashserver-setup --enable-autostart/--disable-autostart`，会弹 UAC，且不会启动或停止服务。
 - 服务状态与开机启动完全独立：停止不会禁用自启，启动不会启用自启，自启开关也不会启动/停止服务。耗时操作会显示模态进度遮罩，完成后弹出结果提示。
-- 「API 文档」按钮打开 `http://localhost:8790/docs`。
+- 「API 文档」按钮打开当前 API 地址 + `/docs`（客户端从 `%LOCALAPPDATA%\FlashServer\api-url.txt` 读取端口）。
 - 代码可跨平台编译；服务控制优先 Windows/WSL，Linux 走 `systemctl`（尽力而为），macOS 暂无 flashserver 后端。
 
 ## Windows UI 安装包
@@ -60,7 +60,13 @@ UI 安装包（管理员）
 如果启用 WSL2 需要重启 Windows，setup 会以退出码 **3** 结束。安装包会明确提示
 需要重启，不启动客户端；完成页会要求在重启后再次运行安装包。第二次运行是幂等的，
 会继续完成 Ubuntu/服务安装。成功后的完成页表示环境已通过就绪校验，而不仅是文件复制
-完成；API 文档在 `http://localhost:8790/docs`。
+完成；安装包会显示实际 API 地址。
+
+Windows 可能把默认端口 `8790` 保留在 Hyper-V/WinNAT 的排除端口范围内。此时 setup
+会自动选择下一个可用端口（`18790`、`28790` 等），在 WSL 内写
+`0.0.0.0:<port>`，并把 Windows 侧地址写入
+`%LOCALAPPDATA%\FlashServer\api-url.txt`。桌面客户端和安装器最终健康检查都会读取
+该文件，因此客户端、安装器和 API 文档使用同一个端口。
 
 自动化/排障时，`flashserver-setup --progress-file FILE` 会写入 `[n/8]` 行和最后的
 `DONE <code>`（`0` 就绪、`3` 需要重启、`2` 出错）。完整跟踪（含
@@ -76,11 +82,12 @@ UI 安装包（管理员）
    运行可能停在步骤 1 并提示重启。
 3. 按提示重启后再次运行安装包。必须显示步骤 1-8，并以
    “FlashServer is installed and ready.” 结束。
-4. 独立验证环境：
+4. 独立验证环境（安装器可能选择了 8790 以外的端口）：
    ```powershell
    wsl.exe -l -v
    wsl.exe -d Ubuntu -u root systemctl is-active flashserver   # active
-   (Invoke-WebRequest -UseBasicParsing http://localhost:8790/health).StatusCode  # 200
+   $url = (Get-Content "$env:LOCALAPPDATA\FlashServer\api-url.txt").Trim()
+   (Invoke-WebRequest -UseBasicParsing "$url/health").StatusCode  # 200
    ```
 5. 确认桌面客户端自动打开、总览页显示服务运行、开机启动已启用。再次运行安装包必须成功，
    且不会重复创建服务。
@@ -132,7 +139,7 @@ flashserver-setup.exe
 ```
 
 - `max_loaded=0`：只按显存准入。
-- WSL 使用 `addr=0.0.0.0:8790`、`public_host=localhost`、`serve_host=0.0.0.0`，通过 localhost forwarding 让 Windows 访问 WSL 服务。
+- WSL 默认使用 `addr=0.0.0.0:8790`（8790 被保留时 setup 可能选择其他端口），`public_host=localhost`、`serve_host=0.0.0.0`，通过 localhost forwarding 让 Windows 访问 WSL 服务。
 - `token` 可选，默认不写。设置后除 `/health`、`/`、`/docs`、`/ui/*`、`/openapi.yaml` 外的 API 都需要 `Authorization: Bearer <token>` 或 `X-Flashcli-Token`。
 
 ## API

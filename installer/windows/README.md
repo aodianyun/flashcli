@@ -44,6 +44,12 @@ UI installer (admin)
   → launch FlashServer.exe (desktop client, egui/eframe)
 ```
 
+The API port defaults to `8790`. If Windows has that port in a Hyper-V/WinNAT
+excluded range (bind fails with access denied), setup tries `18790`, `28790`,
+and so on, writes the chosen port into the WSL config, and records the Windows
+URL in `%LOCALAPPDATA%\FlashServer\api-url.txt`. The client and installer read
+that file, so no manual port configuration is needed.
+
 The installer shows a live progress page and parses the setup progress file
 (`[n/8] step` lines plus a final `DONE <code>`). Exit codes: `0` ready, `3`
 restart required to finish enabling WSL2, `2` error. On exit `3` the client is
@@ -64,11 +70,12 @@ virtualization enabled (VT-x/AMD-V).
    stop at step 1 and ask for a restart.
 3. Restart, run the installer again, and confirm steps 1-8 complete with
    "FlashServer is installed and ready."
-4. Verify independently:
+4. Verify independently (the installer may have selected a port other than 8790):
    ```powershell
    wsl.exe -l -v
    wsl.exe -d Ubuntu -u root systemctl is-active flashserver   # active
-   (Invoke-WebRequest -UseBasicParsing http://localhost:8790/health).StatusCode  # 200
+   $url = (Get-Content "$env:LOCALAPPDATA\FlashServer\api-url.txt").Trim()
+   (Invoke-WebRequest -UseBasicParsing "$url/health").StatusCode  # 200
    ```
 5. Confirm the client opens, the overview shows the service running, and
    auto-start is enabled. Re-run the installer to cover the repair path.
