@@ -196,6 +196,7 @@ enum Event {
     Autostart(bool),
     Status(String),
     Job(JobEvent),
+    Smoke(Result<Value, String>),
     Catalog { repos: Vec<HubRepo>, total: i64 },
     CatalogTags(Vec<(i64, String)>),
     HubDetail(HubDetail),
@@ -222,6 +223,13 @@ struct DialogState {
     title: String,
     message: String,
     action: Pending,
+}
+
+struct SmokeState {
+    title: String,
+    running: bool,
+    ok: bool,
+    log: String,
 }
 
 pub struct App {
@@ -273,6 +281,7 @@ pub struct App {
     job_ref: String,
     job_verb: String,
     dialog: Option<DialogState>,
+    smoke: Option<SmokeState>,
     gpu_util: Vec<[f64; 2]>,
     gpu_mem: Vec<[f64; 2]>,
     cpu: Vec<[f64; 2]>,
@@ -339,6 +348,7 @@ impl App {
             job_ref: String::new(),
             job_verb: String::new(),
             dialog: None,
+            smoke: None,
             gpu_util: Vec::new(),
             gpu_mem: Vec::new(),
             cpu: Vec::new(),
@@ -437,6 +447,40 @@ impl App {
                     self.load_status_at = Some(Instant::now());
                 }
                 Event::Job(job) => self.apply_job(job),
+                Event::Smoke(result) => {
+                    self.smoke = Some(match result {
+                        Ok(v) => {
+                            let kind = v["kind"].as_str().unwrap_or("");
+                            let label = match kind {
+                                "run" => "Run 冒烟测试",
+                                "serve" => "请求测试",
+                                _ => "模型测试",
+                            };
+                            let reference = v["ref"].as_str().unwrap_or("");
+                            let mut log = v["log"].as_str().unwrap_or("").to_string();
+                            if let Some(path) = v["log_path"].as_str().filter(|p| !p.is_empty()) {
+                                log.push_str("\n\n日志文件: ");
+                                log.push_str(path);
+                            }
+                            SmokeState {
+                                title: if reference.is_empty() {
+                                    label.to_string()
+                                } else {
+                                    format!("{label} · {reference}")
+                                },
+                                running: false,
+                                ok: v["ok"].as_bool().unwrap_or(false),
+                                log,
+                            }
+                        }
+                        Err(error) => SmokeState {
+                            title: "模型测试".into(),
+                            running: false,
+                            ok: false,
+                            log: error,
+                        },
+                    });
+                }
                 Event::Catalog { repos, total } => {
                     self.hub_repos = repos;
                     self.hub_total = total;
@@ -993,6 +1037,7 @@ impl App {
         let mut unload_request = None;
         let mut logs_request = None;
         let mut use_request: Option<ModelRow> = None;
+        let mut smoke_request: Option<ModelRow> = None;
         TableBuilder::new(ui)
             .striped(true)
             .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
@@ -1095,8 +1140,17 @@ impl App {
                                         load_request = Some(m.name.clone());
                                     }
                                 } else {
-                                    ui.label(egui::RichText::new("—").weak())
-                                        .on_hover_text("该 bundle 只声明了 run，不能通过服务启动");
+                                    let clicked = ui
+                                        .add_enabled_ui(
+                                            !self.loading
+                                                && !self.smoke.as_ref().is_some_and(|s| s.running),
+                                            |ui| table_button(ui, "Run 测试"),
+                                        )
+                                        .inner
+                                        .clicked();
+                                    if clicked {
+                                        smoke_request = Some(m.clone());
+                                    }
                                 }
                             } else {
                                 let active = self.loading
@@ -1119,6 +1173,19 @@ impl App {
                                 if ui.button("查看日志").clicked() {
                                     logs_request = Some(m.name.clone());
                                     ui.close_menu();
+                                }
+                                if m.loaded && m.serve && ui.button("请求测试").clicked() {
+                                    smoke_request = Some(m.clone());
+                                    ui.close_menu();
+                                }
+                                if m.ready() && !m.serve && ui.button("Run 冒烟测试").clicked()
+                                {
+                                    smoke_request = Some(m.clone());
+                                    ui.close_menu();
+                                }
+                                if m.ready() && m.serve && !m.loaded {
+                                    ui.add_enabled(false, egui::Button::new("请求测试"))
+                                        .on_disabled_hover_text("先启动模型再进行请求测试");
                                 }
                                 if m.loaded && ui.button("停止").clicked() {
                                     unload_request = Some(m.name.clone());
@@ -1160,6 +1227,20 @@ impl App {
         }
         if let Some(m) = use_request {
             self.use_model = Some(m);
+        }
+        if let Some(m) = smoke_request {
+            let title = if m.serve {
+                format!("请求测试 · {}", m.name)
+            } else {
+                format!("Run 冒烟测试 · {}", m.name)
+            };
+            self.smoke = Some(SmokeState {
+                title,
+                running: true,
+                ok: true,
+                log: "测试运行中…\n".into(),
+            });
+            spawn_smoke(self.tx.clone(), ui.ctx().clone(), m.name);
         }
         if let Some(refs) = clean_request {
             let bytes: f64 = self
@@ -1425,6 +1506,7 @@ impl App {
         let mut close = false;
         let mut load = false;
         let mut pull = false;
+        let mut smoke = false;
         modal_backdrop(ctx, dark, &mut close);
         egui::Window::new("model_detail_dialog")
             .title_bar(false)
@@ -1546,6 +1628,16 @@ impl App {
                             kv(ui, "PID", &model.pid.to_string());
                             kv(ui, "启动时间", &model.loaded_at);
                         });
+                    if model.serve {
+                        ui.add_space(8.0);
+                        let enabled = !self.smoke.as_ref().is_some_and(|s| s.running);
+                        if ui
+                            .add_enabled(enabled, egui::Button::new("请求测试"))
+                            .clicked()
+                        {
+                            smoke = true;
+                        }
+                    }
                 }
 
                 if !model.loaded {
@@ -1571,6 +1663,13 @@ impl App {
                                     .weak()
                                     .small(),
                             );
+                            let enabled = !self.smoke.as_ref().is_some_and(|s| s.running);
+                            if ui
+                                .add_enabled(enabled, egui::Button::new("Run 测试"))
+                                .clicked()
+                            {
+                                smoke = true;
+                            }
                         } else {
                             let active = self.loading
                                 && self.job_ref == model.name
@@ -1609,6 +1708,21 @@ impl App {
                 true,
                 "加载",
             );
+        }
+        if smoke {
+            self.model_detail = None;
+            let title = if model.serve {
+                format!("请求测试 · {}", model.name)
+            } else {
+                format!("Run 冒烟测试 · {}", model.name)
+            };
+            self.smoke = Some(SmokeState {
+                title,
+                running: true,
+                ok: true,
+                log: "测试运行中…\n".into(),
+            });
+            spawn_smoke(self.tx.clone(), ctx.clone(), model.name.clone());
         }
     }
 
@@ -2177,6 +2291,92 @@ impl App {
             });
     }
 
+    fn show_smoke_dialog(&mut self, ctx: &egui::Context) {
+        let Some(smoke) = self.smoke.as_mut() else {
+            return;
+        };
+        let dark = ctx.style().visuals.dark_mode;
+        let mut close = false;
+        let mut copy = false;
+        egui::Window::new("smoke_dialog")
+            .title_bar(false)
+            .order(egui::Order::Foreground)
+            .frame(dialog_frame(dark))
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .collapsible(false)
+            .resizable(true)
+            .default_width(760.0)
+            .show(ctx, |ui| {
+                ui.set_min_width(640.0);
+                ui.set_max_width(920.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(&smoke.title).size(16.0).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(egui::RichText::new("×").size(18.0))
+                                    .min_size(egui::vec2(28.0, 24.0)),
+                            )
+                            .clicked()
+                        {
+                            close = true;
+                        }
+                    });
+                });
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(8.0);
+                if smoke.running {
+                    ui.horizontal(|ui| {
+                        ui.add(egui::Spinner::new().size(16.0));
+                        ui.label("测试运行中…");
+                    });
+                } else {
+                    let color = if smoke.ok { green(ui) } else { red(ui) };
+                    ui.label(
+                        egui::RichText::new(if smoke.ok {
+                            "测试通过"
+                        } else {
+                            "测试失败"
+                        })
+                        .color(color)
+                        .strong(),
+                    );
+                }
+                ui.add_space(6.0);
+                egui::ScrollArea::vertical()
+                    .max_height(420.0)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::Label::new(egui::RichText::new(&smoke.log).monospace().small())
+                                .selectable(true)
+                                .wrap(),
+                        );
+                    });
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if button(ui, "复制日志").clicked() {
+                        copy = true;
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if button(ui, "关闭").clicked() {
+                            close = true;
+                        }
+                    });
+                });
+            });
+        if copy {
+            ctx.copy_text(smoke.log.clone());
+            self.op_note = Some(("测试日志已复制".into(), true, Instant::now()));
+        }
+        if close {
+            self.smoke = None;
+        }
+    }
+
     fn show_dialog(&mut self, ctx: &egui::Context) {
         let Some(dialog) = self.dialog.as_ref() else {
             return;
@@ -2407,6 +2607,7 @@ impl eframe::App for App {
 
         self.show_use_dialog(ctx);
         self.show_cache_dialog(ctx);
+        self.show_smoke_dialog(ctx);
         self.show_dialog(ctx);
         self.show_busy_overlay(ctx);
         self.show_toast(ctx);
@@ -3425,8 +3626,12 @@ fn get_json_timeout(path: &str, secs: u64) -> Option<Value> {
 }
 
 fn post_json(path: &str, body: &Value) -> Result<Value, String> {
+    post_json_timeout(path, body, 60)
+}
+
+fn post_json_timeout(path: &str, body: &Value, secs: u64) -> Result<Value, String> {
     let agent = ureq::AgentBuilder::new()
-        .timeout(Duration::from_secs(60))
+        .timeout(Duration::from_secs(secs))
         .build();
     match agent
         .post(&format!("{}{}", api_base(), path))
@@ -3436,6 +3641,15 @@ fn post_json(path: &str, body: &Value) -> Result<Value, String> {
         Err(ureq::Error::Status(_, resp)) => Err(resp.into_string().unwrap_or_default()),
         Err(e) => Err(e.to_string()),
     }
+}
+
+fn spawn_smoke(tx: Sender<Event>, ctx: egui::Context, ref_str: String) {
+    std::thread::spawn(move || {
+        let body = serde_json::json!({ "ref": ref_str });
+        let result = post_json_timeout("/v1/models/smoke", &body, 660);
+        let _ = tx.send(Event::Smoke(result));
+        ctx.request_repaint();
+    });
 }
 
 #[cfg(windows)]

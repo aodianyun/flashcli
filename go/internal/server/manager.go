@@ -405,8 +405,8 @@ type FlashcliLauncher struct {
 	ExtraEnv   []string
 }
 
-func (l FlashcliLauncher) Start(ctx context.Context, refStr string, port int) (ServeProcess, error) {
-	bin := strings.TrimSpace(l.Bin)
+func resolveFlashcliBin(bin string) (string, error) {
+	bin = strings.TrimSpace(bin)
 	if bin == "" {
 		bin = strings.TrimSpace(os.Getenv("FLASHCLI_BIN"))
 	}
@@ -414,8 +414,16 @@ func (l FlashcliLauncher) Start(ctx context.Context, refStr string, port int) (S
 		var err error
 		bin, err = exec.LookPath("flashcli")
 		if err != nil {
-			return nil, fmt.Errorf("flashcli binary not found (set FLASHCLI_BIN): %w", err)
+			return "", fmt.Errorf("flashcli binary not found (set FLASHCLI_BIN): %w", err)
 		}
+	}
+	return bin, nil
+}
+
+func (l FlashcliLauncher) Start(ctx context.Context, refStr string, port int) (ServeProcess, error) {
+	bin, err := resolveFlashcliBin(l.Bin)
+	if err != nil {
+		return nil, err
 	}
 	hostAddr := l.Host
 	if hostAddr == "" {

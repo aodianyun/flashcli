@@ -455,6 +455,41 @@ paths:
                   results:
                     type: array
                     items: { $ref: '#/components/schemas/CleanResult' }
+  /v1/models/smoke:
+    post:
+      summary: Run a smoke test for a ready model
+      description: "Run-only bundles execute `flashcli run <ref>`; started serve bundles receive one OpenAI-compatible chat request. The full output is appended to a smoke log and returned."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ref]
+              properties:
+                ref: { type: string }
+      responses:
+        '200':
+          description: Smoke result (ok=false still returns 200 with the log)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ref: { type: string }
+                  kind: { type: string, enum: [run, serve] }
+                  ok: { type: boolean }
+                  duration_ms: { type: integer, format: int64 }
+                  status: { type: integer }
+                  endpoint: { type: string }
+                  log: { type: string }
+                  log_path: { type: string }
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
         '400':
           $ref: '#/components/responses/Error'
   /v1/logs:

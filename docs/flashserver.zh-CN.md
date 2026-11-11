@@ -181,6 +181,7 @@ GET  /v1/jobs/{id}
 GET  /v1/jobs/{id}/events
 POST /v1/models/load            {"ref":"...","async":true} → job_id（或 endpoint/pid/state）
 POST /v1/models/unload          {"ref":"..."}
+POST /v1/models/smoke           {"ref":"..."} run-only 冒烟测试 / 已启动 serve 请求测试
 POST /v1/models/clean           {"refs":[...]} 清理本地 Bundle/权重
 POST /v1/storage/clean          {"targets":["cache"]} 清理共享缓存（不含模型数据）
 GET  /v1/catalog                ?q=&tag=&sort=updated|downloads&page=&page_size=
@@ -224,6 +225,8 @@ curl http://127.0.0.1:18100/v1/chat/completions ...
 只有配置了 token 时才需要加 `-H "X-Flashcli-Token: $TOKEN"`。
 
 `load` 要求 bundle 提供 `serve` 入口（会检查顶层 `entry`、`defaults.entry` 以及各环境条目）。只有 `run` 的 bundle（VLA 策略等）会在启动 serve 进程之前被拒绝，返回 `bundle "..." is run-only (no serve entry)`；这类模型请使用 `flashcli run <ref>`。桌面客户端的 FlashHub 页面只负责下载版本；下载后在“本地”页查看，没有 serve 入口的 bundle 会显示“仅 run”并隐藏加载按钮。
+
+`POST /v1/models/smoke` 对已就绪模型执行真实冒烟测试：run-only 执行 `flashcli run <ref>`；已启动的 serve 模型发送一次 OpenAI 兼容 chat 请求（`ping`）。返回 `ok`、`duration_ms`、`log`、`log_path`，桌面「模型」页用日志对话框展示。serve 测试要求模型已启动。
 
 ## 耗时参考
 

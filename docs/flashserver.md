@@ -191,6 +191,7 @@ GET  /v1/jobs/{id}
 GET  /v1/jobs/{id}/events
 POST /v1/models/load            {"ref":"...","async":true} → job_id (or endpoint/pid/state)
 POST /v1/models/unload          {"ref":"..."}
+POST /v1/models/smoke           {"ref":"..."} run-only smoke test or started-serve request test
 POST /v1/models/clean           {"refs":[...]} remove local bundle/weight caches
 POST /v1/storage/clean          {"targets":["cache"]} remove shared cache (not model data)
 GET  /v1/catalog                ?q=&tag=&sort=updated|downloads&page=&page_size=
@@ -234,6 +235,8 @@ curl http://127.0.0.1:18100/v1/chat/completions ...
 Add `-H "X-Flashcli-Token: $TOKEN"` only when a token is configured.
 
 `load` requires a bundle with a `serve` entry (checked in top-level `entry`, `defaults.entry`, and per-environment entries). Run-only bundles (VLA policies and similar) are rejected before a serve process is started with `bundle "..." is run-only (no serve entry)`; use `flashcli run <ref>` for those. The desktop client's FlashHub page downloads versions only; the Local tab shows "仅 run" when the bundle has no serve entry and hides the load action.
+
+`POST /v1/models/smoke` runs a real smoke test for a ready model. Run-only bundles execute `flashcli run <ref>`; a started serve bundle receives one OpenAI-compatible chat request (`ping`). The response includes `ok`, `duration_ms`, `log`, and `log_path`; the desktop Models page shows the log in a dialog. The serve test requires the model to be started first.
 
 ## Timing expectations
 
