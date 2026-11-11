@@ -196,7 +196,7 @@ curl http://127.0.0.1:18100/v1/chat/completions ...
 
 Add `-H "X-Flashcli-Token: $TOKEN"` only when a token is configured.
 
-`load` requires a bundle with a `serve` entry. Run-only bundles (VLA policies and similar) are rejected immediately with the bundle's own error, for example `bundle "pi05_libero" does not support serve`; use `flashcli run <ref>` for those.
+`load` requires a bundle with a `serve` entry (checked in top-level `entry`, `defaults.entry`, and per-environment entries). Run-only bundles (VLA policies and similar) are rejected before a serve process is started with `bundle "..." is run-only (no serve entry)`; use `flashcli run <ref>` for those. The desktop client's FlashHub page downloads versions only; the Local tab shows "仅 run" when the bundle has no serve entry and hides the load action.
 
 ## Timing expectations
 

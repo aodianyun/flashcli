@@ -138,6 +138,18 @@ func (f *fakeLauncher) Start(_ context.Context, ref string, port int) (ServeProc
 
 func fakeInspect(string) (BundleInfo, error) { return BundleInfo{}, nil }
 
+func TestLoadRejectsRunOnly(t *testing.T) {
+	m := NewManagerWithOptions(&fakeLauncher{}, ManagerOptions{
+		Inspect: func(string) (BundleInfo, error) {
+			return BundleInfo{Name: "demo", RunOnly: true}, nil
+		},
+	})
+	_, err := m.Load(context.Background(), "demo:1")
+	if err == nil || !strings.Contains(err.Error(), "run-only") {
+		t.Fatalf("load error = %v, want run-only", err)
+	}
+}
+
 func TestLoadUnload(t *testing.T) {
 	l := &fakeLauncher{}
 	m := NewManagerWithOptions(l, ManagerOptions{Inspect: fakeInspect})

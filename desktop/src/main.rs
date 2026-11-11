@@ -1163,7 +1163,7 @@ impl App {
                                 ui.label(egui::RichText::new(&v.status).weak().small());
                             });
                             row.col(|ui| {
-                                if table_button(ui, "加载").clicked() {
+                                if table_button(ui, "下载").clicked() {
                                     load_ref = Some(format!(
                                         "{}/{}:{}",
                                         repo.namespace, repo.name, v.version
@@ -1175,7 +1175,7 @@ impl App {
                 });
         });
         if let Some(reference) = load_ref {
-            spawn_job(self.tx.clone(), ui.ctx().clone(), reference, false);
+            spawn_job(self.tx.clone(), ui.ctx().clone(), reference, true);
         }
     }
 
@@ -2327,7 +2327,7 @@ fn parse_models(v: &Value, system: Option<&Value>) -> Vec<ModelRow> {
                         name,
                         bundle_ready: m["bundle_cached"].as_bool().unwrap_or(false),
                         weights_ready: m["weights_cached"].as_bool().unwrap_or(false),
-                        serve: m["serve"].as_bool().unwrap_or(true),
+                        serve: m["serve"].as_bool().unwrap_or(false),
                         bundle_bytes: m["bundle_bytes"].as_f64().unwrap_or(0.0),
                         weights_bytes: m["weights_bytes"].as_f64().unwrap_or(0.0),
                         loaded: info.is_some(),

@@ -139,6 +139,13 @@ func (m *Manager) load(ctx context.Context, refStr string, progress func(phase, 
 	if err != nil {
 		return InstanceInfo{}, err
 	}
+	if bundle.RunOnly {
+		name := bundle.Name
+		if name == "" {
+			name = refStr
+		}
+		return InstanceInfo{}, fmt.Errorf("bundle %q is run-only (no serve entry); use `flashcli run %s`", name, refStr)
+	}
 	m.mu.Lock()
 	if err := m.checkCapacityLocked(ctx, bundle); err != nil {
 		m.mu.Unlock()
@@ -318,6 +325,8 @@ func (m *Manager) checkCapacityLocked(ctx context.Context, b BundleInfo) error {
 
 // BundleInfo is the admission metadata read from a bundle manifest.
 type BundleInfo struct {
+	Name       string
+	RunOnly    bool
 	MinVRAMMiB int64
 }
 
@@ -345,7 +354,11 @@ func inspectBundle(refStr string) (BundleInfo, error) {
 	if err != nil {
 		return BundleInfo{}, err
 	}
-	return BundleInfo{MinVRAMMiB: minVRAMMiB(m)}, nil
+	return BundleInfo{
+		Name:       m.Name,
+		RunOnly:    m.EntryFor("serve", variant) == nil,
+		MinVRAMMiB: minVRAMMiB(m),
+	}, nil
 }
 
 func minVRAMMiB(m *manifest.Manifest) int64 {

@@ -190,7 +190,7 @@ curl http://127.0.0.1:18100/v1/chat/completions ...
 
 只有配置了 token 时才需要加 `-H "X-Flashcli-Token: $TOKEN"`。
 
-`load` 要求 bundle 提供 `serve` 入口。只有 `run` 的 bundle（VLA 策略等）会被立即拒绝，并返回 bundle 自身的原因，例如 `bundle "pi05_libero" does not support serve`；这类模型请使用 `flashcli run <ref>`。
+`load` 要求 bundle 提供 `serve` 入口（会检查顶层 `entry`、`defaults.entry` 以及各环境条目）。只有 `run` 的 bundle（VLA 策略等）会在启动 serve 进程之前被拒绝，返回 `bundle "..." is run-only (no serve entry)`；这类模型请使用 `flashcli run <ref>`。桌面客户端的 FlashHub 页面只负责下载版本；下载后在“本地”页查看，没有 serve 入口的 bundle 会显示“仅 run”并隐藏加载按钮。
 
 ## 耗时参考
 

@@ -36,6 +36,14 @@ func TestBundleServes(t *testing.T) {
 	if bundleServes(dir) {
 		t.Fatal("run-only bundle reported as serve")
 	}
+	write(`{"defaults":{"entry":{"run":{"module":"run"}}}}`)
+	if bundleServes(dir) {
+		t.Fatal("run-only defaults.entry reported as serve")
+	}
+	write(`{"defaults":{"entry":{"run":{"module":"run"},"serve":{"module":"serve"}}}}`)
+	if !bundleServes(dir) {
+		t.Fatal("defaults.entry serve entry not detected")
+	}
 	write(`{"environments":{"sm89-cu124-linux-x86_64-py312":{"entry":{"run":{},"serve":{}}}}}`)
 	if !bundleServes(dir) {
 		t.Fatal("environment serve entry not detected")

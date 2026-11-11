@@ -157,7 +157,10 @@ func bundleServes(root string) bool {
 		return false
 	}
 	var doc struct {
-		Entry        map[string]json.RawMessage `json:"entry"`
+		Entry    map[string]json.RawMessage `json:"entry"`
+		Defaults struct {
+			Entry map[string]json.RawMessage `json:"entry"`
+		} `json:"defaults"`
 		Environments map[string]struct {
 			Entry map[string]json.RawMessage `json:"entry"`
 		} `json:"environments"`
@@ -166,6 +169,9 @@ func bundleServes(root string) bool {
 		return false
 	}
 	if _, ok := doc.Entry["serve"]; ok {
+		return true
+	}
+	if _, ok := doc.Defaults.Entry["serve"]; ok {
 		return true
 	}
 	for _, env := range doc.Environments {
