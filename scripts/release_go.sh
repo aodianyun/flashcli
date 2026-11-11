@@ -104,10 +104,9 @@ if [ -z "$WINDOWS_INSTALLER" ] && [ -n "${FLASHCLI_WINDOWS_INSTALLER:-}" ]; then
 fi
 if [ -n "$WINDOWS_INSTALLER" ]; then
   [ -f "$WINDOWS_INSTALLER" ] || die "Windows installer not found: $WINDOWS_INSTALLER"
-  case "$(basename "$WINDOWS_INSTALLER")" in
-    FlashServer-Setup-*.exe) ;;
-    *) die "Windows installer must be named FlashServer-Setup-<version>.exe" ;;
-  esac
+  expected_installer="FlashServer-Setup-${VERSION}.exe"
+  [ "$(basename "$WINDOWS_INSTALLER")" = "$expected_installer" ] \
+    || die "Windows installer must be named $expected_installer"
   ASSETS+=("$WINDOWS_INSTALLER")
   if command -v sha256sum >/dev/null 2>&1; then
     echo "Windows installer sha256: $(sha256sum "$WINDOWS_INSTALLER" | awk '{print $1}')"
