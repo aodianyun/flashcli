@@ -5,7 +5,7 @@
 #   bash scripts/release_go.sh
 #   bash scripts/release_go.sh --upload
 #   bash scripts/release_go.sh --upload --notes-file dist/release-notes.md \
-#     --windows-installer dist/windows/flashserver-setup-windows-amd64.exe
+#     --windows-installer dist/windows/flashserver-setup-windows-amd64-v<version>.exe
 #   FLASHCLI_GO_TARGETS="linux/amd64" bash scripts/release_go.sh
 #
 # Publishing (--upload):
@@ -19,7 +19,7 @@
 # Options:
 #   --upload                     Publish to GitHub + Gitee after building.
 #   --notes-file FILE            Release notes body (Markdown) for both hosts.
-#   --windows-installer FILE     Include flashserver-setup-windows-amd64.exe as an asset.
+#   --windows-installer FILE     Include flashserver-setup-windows-amd64-v<version>.exe as an asset.
 #   --allow-non-target           Allow publishing from a branch other than the target.
 #
 # Environment:
@@ -28,10 +28,10 @@
 #   FLASHCLI_ALLOW_NON_TARGET=1  Same as --allow-non-target.
 #   PYTHON_BIN                   Python for JSON helpers (default python3/python).
 #
-# Artifacts (dist/go/):
-#   flashcli-<os>-<arch>          (raw binary; consumed by install.sh)
-#   flashserver-<os>-<arch>       (resident scheduler)
-#   flashserver-setup-windows-amd64.exe (UI installer when supplied; otherwise the CLI setup binary)
+# Artifacts (dist/release/):
+#   flashcli-<os>-<arch>-v<version>          (raw binary; consumed by install.sh)
+#   flashserver-<os>-<arch>-v<version>       (resident scheduler)
+#   flashserver-setup-<os>-<arch>-v<version> (installer)
 #   sha256sums.txt
 set -euo pipefail
 
@@ -99,17 +99,23 @@ STAGE="${FLASHCLI_RELEASE_STAGE:-$ROOT/dist/release}"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
 
-WIN_ASSET="flashserver-setup-windows-amd64.exe"
+WIN_ASSET="flashserver-setup-windows-amd64-v${VERSION}.exe"
+versioned_asset() {
+  case "$1" in
+    *.exe) printf '%s-v%s.exe\n' "${1%.exe}" "$VERSION" ;;
+    *) printf '%s-v%s\n' "$1" "$VERSION" ;;
+  esac
+}
 if [ -z "$WINDOWS_INSTALLER" ] && [ -n "${FLASHCLI_WINDOWS_INSTALLER:-}" ]; then
   WINDOWS_INSTALLER="$FLASHCLI_WINDOWS_INSTALLER"
 fi
 for f in "$OUT"/flashcli-* "$OUT"/flashserver-*; do
   [ -f "$f" ] || continue
   name="$(basename "$f")"
-  if [ -n "$WINDOWS_INSTALLER" ] && [ "$name" = "$WIN_ASSET" ]; then
+  if [ -n "$WINDOWS_INSTALLER" ] && [ "$name" = "flashserver-setup-windows-amd64.exe" ]; then
     continue
   fi
-  cp "$f" "$STAGE/$name"
+  cp "$f" "$STAGE/$(versioned_asset "$name")"
 done
 if [ -n "$WINDOWS_INSTALLER" ]; then
   [ -f "$WINDOWS_INSTALLER" ] || die "Windows installer not found: $WINDOWS_INSTALLER"

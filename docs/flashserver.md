@@ -53,13 +53,13 @@ The toggle writes `~/.flashcli/mirror.env` and applies to new downloads without 
 Windows users should use the UI installer rather than the CLI:
 
 ```text
-flashserver-setup-windows-amd64.exe
+flashserver-setup-windows-amd64-v<version>.exe
 ```
 
 It runs elevated and drives `flashserver-setup` behind a live progress page
 (`Step N of 8`, with the current phase) instead of a silent wait. The release
-asset keeps the standard OS/arch name; the version is in the release tag and
-installer metadata:
+asset keeps the standard OS/arch name plus a version suffix; the version is
+also in the release tag and installer metadata:
 
 ```text
 UI installer (admin)
@@ -103,7 +103,7 @@ Use a Windows 10 2004+/Windows 11 x64 VM with internet access and nested
 virtualization enabled (VT-x/AMD-V); WSL2 cannot start without it.
 
 1. Confirm the VM is clean: `wsl.exe --status` fails and `wsl.exe -l -v` lists no Ubuntu.
-2. Run `flashserver-setup-windows-amd64.exe`. The wizard must show the setup progress
+2. Run `flashserver-setup-windows-amd64-v<version>.exe`. The wizard must show the setup progress
    page; on a machine without WSL2 the first run may stop at step 1 and ask for a restart.
 3. Restart when asked and run the installer again. It must show steps 1-8 and finish
    with "FlashServer is installed and ready."

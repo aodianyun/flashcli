@@ -52,6 +52,14 @@ func TestReplace(t *testing.T) {
 	}
 }
 
+func TestAssetNameIncludesVersion(t *testing.T) {
+	got := AssetName("linux", "amd64", "v1.0.7.20261111")
+	want := "flashcli-linux-amd64-v1.0.7.20261111"
+	if got != want {
+		t.Fatalf("AssetName = %q, want %q", got, want)
+	}
+}
+
 func TestReleaseURL(t *testing.T) {
 	got := ReleaseURL("https://example.com/dl/", "v1.2.3", "flashcli-linux-amd64")
 	want := "https://example.com/dl/v1.2.3/flashcli-linux-amd64"

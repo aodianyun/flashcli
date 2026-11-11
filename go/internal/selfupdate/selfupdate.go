@@ -16,9 +16,9 @@ import (
 	"strings"
 )
 
-// AssetName is the release artifact filename for a platform.
-func AssetName(goos, goarch string) string {
-	return fmt.Sprintf("flashcli-%s-%s", goos, goarch)
+// AssetName is the release artifact filename for a platform and version.
+func AssetName(goos, goarch, version string) string {
+	return fmt.Sprintf("flashcli-%s-%s-v%s", goos, goarch, strings.TrimPrefix(strings.TrimSpace(version), "v"))
 }
 
 // ParseChecksums parses "<hex>  <name>" lines (sha256sum format).

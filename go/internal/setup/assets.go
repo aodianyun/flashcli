@@ -115,7 +115,8 @@ func downloadAssets(ctx context.Context, opts *Options, names []string, dir stri
 		return fmt.Errorf("download %s: %w (use --bin-dir or --release-version)", sumsURL, err)
 	}
 	sums := selfupdate.ParseChecksums(string(sumsBlob))
-	for _, name := range names {
+	for _, baseName := range names {
+		name := versionedAssetName(baseName, ver)
 		url := selfupdate.ReleaseURL(base, ver, name)
 		if _, err := fmt.Fprintf(out, "download %s\n", url); err != nil {
 			return err
@@ -131,9 +132,17 @@ func downloadAssets(ctx context.Context, opts *Options, names []string, dir stri
 		if err := selfupdate.Verify(data, want); err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, name), data, 0o755); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, baseName), data, 0o755); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// versionedAssetName appends the release version before the extension:
+// flashcli-linux-amd64-v1.0.7.20261111.
+func versionedAssetName(name, ver string) string {
+	ver = strings.TrimPrefix(strings.TrimSpace(ver), "v")
+	ext := filepath.Ext(name)
+	return strings.TrimSuffix(name, ext) + "-v" + ver + ext
 }

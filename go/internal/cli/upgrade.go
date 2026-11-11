@@ -73,7 +73,7 @@ func upgradeCmd() *cobra.Command {
 				return nil
 			}
 
-			asset := selfupdate.AssetName(goruntime.GOOS, goruntime.GOARCH)
+			asset := ""
 			want := strings.TrimSpace(sha256Hex)
 			url := downloadURL
 			if url == "" {
@@ -85,6 +85,7 @@ func upgradeCmd() *cobra.Command {
 						return err
 					}
 				}
+				asset = selfupdate.AssetName(goruntime.GOOS, goruntime.GOARCH, ver)
 				url = selfupdate.ReleaseURL(base, ver, asset)
 				if want == "" {
 					sumsURL := selfupdate.ReleaseURL(base, ver, checksumsAsset)

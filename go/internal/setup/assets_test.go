@@ -31,12 +31,12 @@ func TestEnsureAssetBinariesLocal(t *testing.T) {
 }
 
 func TestEnsureAssetBinariesDownload(t *testing.T) {
-	assets := map[string][]byte{
-		"flashcli-linux-amd64":    []byte("cli"),
-		"flashserver-linux-amd64": []byte("server"),
+	remote := map[string][]byte{
+		"flashcli-linux-amd64-v1.0.0":    []byte("cli"),
+		"flashserver-linux-amd64-v1.0.0": []byte("server"),
 	}
 	var sums string
-	for name, data := range assets {
+	for name, data := range remote {
 		sum := sha256.Sum256(data)
 		sums += hex.EncodeToString(sum[:]) + "  " + name + "\n"
 	}
@@ -46,7 +46,7 @@ func TestEnsureAssetBinariesDownload(t *testing.T) {
 			return
 		}
 		name := filepath.Base(r.URL.Path)
-		data, ok := assets[name]
+		data, ok := remote[name]
 		if !ok {
 			http.NotFound(w, r)
 			return
@@ -67,7 +67,11 @@ func TestEnsureAssetBinariesDownload(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cleanup()
-	for name, want := range assets {
+	local := map[string][]byte{
+		"flashcli-linux-amd64":    []byte("cli"),
+		"flashserver-linux-amd64": []byte("server"),
+	}
+	for name, want := range local {
 		got, err := os.ReadFile(filepath.Join(opts.BinDir, name))
 		if err != nil {
 			t.Fatal(err)

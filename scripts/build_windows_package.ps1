@@ -156,7 +156,7 @@ if (-not (Test-Path $Installer)) { throw "missing $Installer" }
 Write-Host "[3/3] Windows installer ..."
 & $Installer -DistDir "dist\go" -OutDir $OutDir
 
-$setup = Get-ChildItem (Join-Path $Root $OutDir) -Filter "flashserver-setup-windows-amd64.exe" -File |
+$setup = Get-ChildItem (Join-Path $Root $OutDir) -Filter "flashserver-setup-windows-amd64-v$Version.exe" -File |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $setup) { throw "installer output not found in $OutDir" }
 

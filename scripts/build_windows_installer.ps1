@@ -81,7 +81,7 @@ try {
     New-Item -ItemType Directory -Force -Path $Out | Out-Null
     & $Iscc.Source "/DAppVersion=$Version" "/DPayloadDir=$Payload" $Iss
     if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
-    Get-ChildItem -Path $Out -Filter "flashserver-setup-windows-amd64.exe" | Select-Object Name, Length
+    Get-ChildItem -Path $Out -Filter "flashserver-setup-windows-amd64-v*.exe" | Select-Object Name, Length
 } finally {
     Remove-Item -Recurse -Force $Payload -ErrorAction SilentlyContinue
 }
