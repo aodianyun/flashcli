@@ -176,11 +176,14 @@ publish_github() {
   if command -v gh >/dev/null 2>&1; then
     echo "GitHub: gh release ${TAG} ..."
     if gh release view "$TAG" >/dev/null 2>&1; then
-      gh release upload "$TAG" "${ASSETS[@]}" --clobber
-      gh release edit "$TAG" --title "flashcli ${VERSION}" "${notes_args[@]}"
+      gh release upload "$TAG" "${ASSETS[@]}" --clobber \
+        || { echo "error: gh release upload failed for $TAG" >&2; return 1; }
+      gh release edit "$TAG" --title "flashcli ${VERSION}" "${notes_args[@]}" \
+        || { echo "error: gh release edit failed for $TAG" >&2; return 1; }
     else
       gh release create "$TAG" "${ASSETS[@]}" \
-        --title "flashcli ${VERSION}" "${notes_args[@]}"
+        --title "flashcli ${VERSION}" "${notes_args[@]}" \
+        || { echo "error: gh release create failed for $TAG" >&2; return 1; }
     fi
     echo "[ok] GitHub ${TAG}"
     return 0
