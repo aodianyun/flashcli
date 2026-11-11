@@ -457,6 +457,7 @@ impl App {
                 }
                 Event::Job(job) => self.apply_job(job),
                 Event::Smoke(result) => {
+                    self.pending_smoke_cancel = false;
                     self.smoke = Some(match result {
                         Ok(v) => {
                             let kind = v["kind"].as_str().unwrap_or("");
@@ -544,6 +545,7 @@ impl App {
     }
 
     fn start_smoke(&mut self, ctx: &egui::Context, name: String) {
+        self.pending_smoke_cancel = false;
         self.smoke = Some(SmokeState {
             title: format!("Run 冒烟测试 · {name}"),
             running: true,
@@ -1889,6 +1891,7 @@ impl App {
         }
         if smoke {
             self.use_model = None;
+            self.pending_smoke_cancel = false;
             self.smoke = Some(SmokeState {
                 title: format!("请求测试 · {}", model.name),
                 running: true,
