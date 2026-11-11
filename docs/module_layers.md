@@ -22,6 +22,13 @@ both       → flashcli_bundle/ (protocol, dependencies = [])
 
 **Re-export is not a reason to add protocol code.** Thin re-exports exist only for stable import paths. If only one layer needs the logic, implement it in that layer.
 
+Within the Go host there is one more required split:
+
+| Used by | Lives in | Do not put in |
+|---------|----------|---------------|
+| **Both** `flashcli` CLI and `flashserver` — cache discovery, weights key/readiness, runtime IDs/paths, disk accounting, ref-path resolution, cleanup | `go/internal/host` | `go/internal/cli`, `go/internal/server` |
+| **One frontend only** — flag parsing, rendering, HTTP handlers, process spawning | `go/internal/cli` or `go/internal/server` | `go/internal/host` |
+
 **Model-specific logic is never host-only.** The forward pass, preprocessing/postprocessing, modality shapes/dtypes, and option→port mapping/defaults belong to the bundle: a Python `entry`, or — for native kinds — the model-runtime `.so` plus the manifest `native` declarations / runtime port descriptors. `go/internal/` carries only **model-agnostic protocol plumbing** (e.g. building ABI payloads for ports the bundle declares). Hardcoding a model's constants, shapes, or preprocessing in the host is a bug.
 
 **Protocol must not contain** (even with `dependencies = []`):
@@ -75,6 +82,7 @@ Command tree, FlashHub sync, weight download, preflight, venv, and backend dispa
 
 | Package | Role |
 |---------|------|
+| `host` | **Shared cache/runtime service layer** for both the CLI and flashserver: markers, bundle usability/serve capability, weights key/readiness, per-bundle runtime paths/sizes, disk accounting, ref-path resolution, cleanup |
 | `cli` | User-facing commands (`run`/`serve`/`pull`/`bundle`/`models`/`cache`/`doctor`/`du`/`upgrade`/`version`) |
 | `ref`, `flashhub` | Ref parsing, FlashHub index + tree sync |
 | `weights` | HF/ModelScope download, cache, `post_pull`, `extra_pull` |
@@ -103,6 +111,7 @@ Bundle venv entry: `python -m flashcli_bundle.infer run|serve`.
 
 - **Protocol** `flashcli-bundle/pyproject.toml` keeps `dependencies = []`; the infer extra includes the serve stack and excludes `huggingface_hub`.
 - **Execution ABI / host parity** is enforced by `tests/conformance/` (command-surface parity, Py↔Go execution-ABI agreement, re-exec/native backends).
+- **Shared host logic** is enforced by `go/internal/host` tests plus `go/internal/cli` tests for `du`, `models list`, and `bundle clean`, which exercise the same host functions used by flashserver. Do not add another marker walker, weights-readiness check, size walker, or cleanup path resolver to `cli`/`server`; add it to `host` and test both frontends.
 - **Go host** packages are checked by `go test ./...` (manifest/native/preflight/weights/venv/backends).
 - The Python host (`src/flashcli/`) was removed; do not reintroduce host-only code under `flashcli_bundle/`.
 

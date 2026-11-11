@@ -14,7 +14,6 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/ref"
 	"github.com/aodianyun/flashcli/go/internal/runtime"
 	"github.com/aodianyun/flashcli/go/internal/venv"
-	"github.com/aodianyun/flashcli/go/internal/weights"
 )
 
 func failed(cmd *cobra.Command, err error) error {
@@ -131,9 +130,5 @@ func allDataPaths() []string {
 }
 
 func refCacheKey(p ref.Parsed) string {
-	version := p.Version
-	if p.Local || version == "" {
-		version = "local"
-	}
-	return weights.TreeKey(p.Name, version)
+	return host.RefCacheKey(p)
 }

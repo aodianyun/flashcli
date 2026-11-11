@@ -206,6 +206,10 @@ func sharedCacheKeys(others []map[string]any) (bundles, modelWeights, runtimes m
 		}
 		if runtimeID := markerRuntimeID(marker, rtIndex); runtimeID != "" {
 			runtimes[runtimeID] = true
+		} else if refName := stringValue(marker["ref"]); refName != "" {
+			if runtimeID, ok := findRuntimeForRef(refName); ok {
+				runtimes[runtimeID] = true
+			}
 		}
 	}
 	return bundles, modelWeights, runtimes
@@ -217,6 +221,11 @@ func canonicalCacheKey(refArg string) (string, bool) {
 		return "", false
 	}
 	return refCacheKey(p), true
+}
+
+// RefCacheKey returns the canonical cache key for a parsed ref.
+func RefCacheKey(p ref.Parsed) string {
+	return refCacheKey(p)
 }
 
 // refCacheKey mirrors the CLI/protocol cache key for a parsed ref.
@@ -280,6 +289,11 @@ func findRuntimeForRef(refArg string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// ExistingPaths returns the unique paths that currently exist.
+func ExistingPaths(paths []string) []string {
+	return existingCachePaths(paths)
 }
 
 func existingCachePaths(paths []string) []string {

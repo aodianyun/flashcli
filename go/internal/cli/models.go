@@ -47,23 +47,9 @@ func weightsCachedFor(p ref.Parsed, refStr string) bool {
 	rel := "checkpoint"
 	m, err := loadManifestForRef(refStr, p)
 	if err == nil {
-		key = weights.CacheKeyFor(m, ver)
 		weightsKey := weights.StoreKeyFor(m, ver)
-		if m.FormatVersion >= 4 {
-			rel = ""
-		}
-		main, r, _, specErr := weights.ManifestSpecs(m, p.Variant)
-		if specErr != nil {
-			// Legacy local markers can predate variants and omit @variant;
-			// fall back to the model marker for that ambiguous case.
-			dir := filepath.Join(paths.Models(), filepath.FromSlash(key), filepath.FromSlash(rel))
-			return markerCheckpointCached(dir)
-		}
-		if r != "" {
-			rel = r
-		}
-		dir := filepath.Join(paths.Models(), filepath.FromSlash(weightsKey), filepath.FromSlash(rel))
-		return weights.IsCached(dir, main)
+		cached, _, _, _ := host.WeightsInfo(m, weightsKey, p.Variant)
+		return cached
 	}
 	// Keep a marker-only fallback for offline/foreign caches whose manifest
 	// cannot be loaded here; readiness is unavailable in that case.
@@ -133,47 +119,7 @@ func weightsCachedFromMarker(m map[string]any) bool {
 	if key == "" || key == "<nil>" {
 		return false
 	}
-	br := strOf(m["bundle_root"])
-	if !bundleRootUsable(br) {
-		return false
-	}
-	man, err := manifest.Load(br)
-	if err != nil {
-		return false
-	}
-	weightsKey := key
-	if keyFromMarker := strOf(m["weights_key"]); keyFromMarker != "" {
-		weightsKey = keyFromMarker
-	} else if man.FormatVersion >= 4 {
-		weightsKey = weights.StoreKeyFor(man, "")
-	}
-	main, rel, _, err := weights.ManifestSpecs(man, strOf(m["variant"]))
-	if err != nil {
-		// Legacy local markers can predate variants and omit @variant; fall
-		// back to the model marker only for that ambiguous case.
-		if strOf(m["variant"]) != "" {
-			return false
-		}
-		dir := filepath.Join(paths.Models(), filepath.FromSlash(weightsKey), "checkpoint")
-		return markerCheckpointCached(dir)
-	}
-	if rel == "" && man.FormatVersion < 4 {
-		rel = "checkpoint"
-	}
-	dir := filepath.Join(paths.Models(), filepath.FromSlash(weightsKey), filepath.FromSlash(rel))
-	return weights.IsCached(dir, main)
-}
-
-func markerCheckpointCached(dir string) bool {
-	if _, err := os.Stat(filepath.Join(dir, ".flashcli_download.incomplete")); err == nil {
-		return false
-	}
-	cp, ok := weights.ReadMarker(dir)
-	if !ok {
-		return false
-	}
-	info, err := os.Stat(cp)
-	return err == nil && info.IsDir()
+	return host.WeightsCachedForMarker(m, key)
 }
 
 func modelsEnvsFromMarker(out interface{ Write([]byte) (int, error) }, refStr string, marker map[string]any, gpu *preflight.GpuInfo) {

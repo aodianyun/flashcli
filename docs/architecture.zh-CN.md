@@ -16,6 +16,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 4. **固定 Python ABI** — 每个 bundle 一个 venv（`python_abi`）；CLI 准备完成后 **re-exec** 进 bundle venv。
 5. **单一 Go 主机** — 主机为 `go/` 静态二进制；bundle venv 仅 pip **`flashcli-bundle[infer]`**（protocol + infer）。
 6. **一条命令** — `flashcli run <preset>` 串联：sync → 依赖 → 权重（主机缺失则下载）→ `post_pull` → bundle venv 内离线推理。
+7. **单一 host 缓存层** — `go/internal/host` 是缓存发现、权重 key/就绪判断、runtime ID/路径、磁盘统计、ref 路径解析和清理的唯一实现。`flashcli` 与 `flashserver` 只是前端：解析输入、调用 `host`、格式化/传输结果；不得各自重写这些检查。
 
 ### 模块放哪（必读）
 
@@ -34,6 +35,27 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 | 推理栈（torch、transformers…） | `~/.flashcli/runtimes/<id>/venv/` | `flashcli-bundle.json` → `python_dependencies` |
 
 **依赖隔离：** 主机除 `flashcli-bundle[infer]` 与 manifest `python_dependencies` 外不向 bundle venv 安装任何东西。权重下载仅在**主机**执行；bundle infer 子进程只解析缓存或 bundle 本地路径（`HF_HUB_OFFLINE=1`）。
+
+## 共用 host 服务（CLI + flashserver）
+
+`flashcli`（CLI）与 `flashserver`（常驻服务）是同一份磁盘状态的两个前端。所有缓存相关判断都在 **`go/internal/host`**，前端不得重复实现：
+
+| 能力 | 共享 API | CLI | flashserver |
+|------|----------|-----|-------------|
+| 缓存区域 + 唯一分配字节 | `host.Storage()` | `flashcli du` | `GET /v1/storage` |
+| 缓存模型、大小、就绪、运行时字节 | `host.ListModels()` | `flashcli models list` | `GET /v1/models` |
+| Bundle 可用性 / serve 能力 | `host.BundleRootUsable`、`host.ListModels` | `models list/show` | `/v1/models` |
+| 权重 key + 就绪 | `host.MarkerWeightsKey`、`host.WeightsInfo`、`host.WeightsCachedForMarker` | `models list/show` | `/v1/models` |
+| 规范 ref/cache key | `host.RefCacheKey` | ref 解析 | 清理/API ref |
+| 清理路径选择 | `host.RefPaths`、`RuntimePaths`、`OrphanPaths`、`AllDataPaths` | `flashcli bundle clean` | `/v1/models/clean`、`/v1/storage/clean` |
+| 删除模型缓存 | `host.RemoveCachedRef` | `bundle clean` 语义 | `/v1/models/clean` |
+
+规则：
+
+- **禁止**在 `go/internal/cli` 或 `go/internal/server` 再写 marker 遍历、权重就绪判断、目录大小遍历、清理路径解析。
+- 新行为只在 `host` 实现一次，再由两个前端暴露；表格、颜色、提示等纯展示逻辑留在前端。
+- `flashcli cache clean` 保留其包缓存专用目标（uv、tools、FlashHub index），与 `/v1/storage/clean`（整区域）不是同一操作；bundle/模型/运行时清理与磁盘统计是共享的。
+- 测试：`go test ./...`；host 测试覆盖统计/清理，CLI 测试通过 host 函数覆盖 `du`、`models list`、`bundle clean`。详见 [module_layers.zh-CN.md](module_layers.zh-CN.md)。
 
 **协议缓存 schema：** venv 的 fingerprint 只跟踪 manifest `python_dependencies`，**不跟踪** `flashcli-bundle` 的 git ref。当磁盘缓存布局变化（`flashcli_bundle.version.CACHE_SCHEMA_VERSION`）时，`venv.EnsureProtocolCacheSchema` 会在 re-exec 前把已有 venv 里的 `flashcli-bundle` **就地升级**（`pip install --upgrade --force-reinstall --no-deps`，来源不变），使旧 venv 无需整体重建即可与主机缓存路径保持一致（不重装 torch/依赖）。
 

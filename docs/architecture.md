@@ -16,6 +16,7 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 4. **Fixed Python ABI** — one venv per bundle (`python_abi`); CLI **re-execs** into that venv after prepare.
 5. **Single Go host** — the host is a static Go binary; bundle venvs pip-install **`flashcli-bundle[infer]`** (never a host `flashcli` package).
 6. **One command** — `flashcli run <ref>` chains sync → deps → weights (host download if missing) → `post_pull` → offline inference in bundle venv.
+7. **One host cache layer** — `go/internal/host` is the single implementation of cache discovery, weights key/readiness, runtime IDs/paths, disk accounting, ref-path resolution, and cleanup. `flashcli` and `flashserver` are frontends: they parse input, call `host`, and format/transport results. They must not reimplement these checks.
 
 ### Where modules live (required reading)
 
@@ -35,6 +36,27 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 | Bundle venv infer entrypoint | Same bundle venv | `python -m flashcli_bundle.infer` — **no** host package |
 
 **Dependency isolation:** the host never installs into the bundle venv except `flashcli-bundle[infer]` and manifest `python_dependencies`. Weight download runs on the **host** only; the bundle infer subprocess resolves cached or bundle-local paths only (`HF_HUB_OFFLINE=1`).
+
+## Shared host services (CLI + flashserver)
+
+`flashcli` (CLI) and `flashserver` (resident daemon) are two frontends over the same on-disk state. All cache-facing decisions live in **`go/internal/host`**; the frontends must not duplicate them:
+
+| Capability | Shared API | CLI use | flashserver use |
+|------------|------------|---------|-----------------|
+| Cache areas + unique allocated bytes | `host.Storage()` | `flashcli du` | `GET /v1/storage` |
+| Cached models, sizes, readiness, runtime bytes | `host.ListModels()` | `flashcli models list` | `GET /v1/models` |
+| Bundle usability / serve capability | `host.BundleRootUsable`, `host.ListModels` | `models list/show` | `/v1/models` |
+| Weights key + readiness | `host.MarkerWeightsKey`, `host.WeightsInfo`, `host.WeightsCachedForMarker` | `models list/show` | `/v1/models` |
+| Canonical ref/cache key | `host.RefCacheKey` | ref resolution | cleanup/API refs |
+| Cleanup path selection | `host.RefPaths`, `RuntimePaths`, `OrphanPaths`, `AllDataPaths` | `flashcli bundle clean` | `/v1/models/clean`, `/v1/storage/clean` |
+| Remove model cache | `host.RemoveCachedRef` | `bundle clean` semantics | `/v1/models/clean` |
+
+Rules:
+
+- **Do not** add another marker walker, weights-readiness check, directory-size walker, or cleanup path resolver under `go/internal/cli` or `go/internal/server`.
+- Add the behavior once in `host`, then expose it through both frontends. Presentation-only helpers (tables, colors, prompts) stay in the frontend.
+- `flashcli cache clean` keeps its package-cache-specific targets (uv, tools, FlashHub index); it is not the same operation as `/v1/storage/clean` (whole areas). Bundle/model/runtime cleanup and disk accounting are shared.
+- Tests: `go test ./...`; host tests cover accounting/cleanup, CLI tests exercise `du`, `models list`, and `bundle clean` through the host functions. See [module_layers.md](module_layers.md).
 
 **Protocol cache schema:** the venv fingerprint tracks only manifest `python_dependencies` — it does **not** track the `flashcli-bundle` git ref. When the on-disk cache layout changes (`flashcli_bundle.version.CACHE_SCHEMA_VERSION`), `venv.EnsureProtocolCacheSchema` upgrades `flashcli-bundle` in an existing venv **in place** (`pip install --upgrade --force-reinstall --no-deps`, from the same source) before re-exec, so old venvs keep matching the host's cache paths without a full rebuild (no torch/dependency reinstall).
 

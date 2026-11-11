@@ -46,7 +46,19 @@ Run tests:
 pytest tests/              # unit/integration (default; excludes tests/bench)
 pytest tests/bench/        # bench script helpers (scripts/bench_*.py)
 pytest tests/ tests/bench/ # full suite including bench
+cd go && go test ./...     # Go host, including shared cache/cleanup contracts
 ```
+
+### Shared host code (CLI + flashserver)
+
+`flashcli` and `flashserver` are frontends over the same cache. Cache discovery, weights key/readiness, runtime IDs/paths, disk accounting, ref-path resolution, and cleanup **must** live in `go/internal/host` and be reused by both.
+
+- Do **not** add a second marker walker, weights-readiness check, directory-size walker, or cleanup path resolver under `go/internal/cli` or `go/internal/server`.
+- Implement new behavior in `host`, then call it from both frontends. Keep only presentation (flags, tables, prompts, HTTP handlers) in the frontend.
+- Add/extend tests in `go/internal/host` and the relevant CLI command tests (`du`, `models list`, `bundle clean`). `go test ./...` must pass.
+- `flashcli cache clean` intentionally keeps package-cache-specific targets (uv, tools, FlashHub index); bundle/model/runtime cleanup and disk accounting remain shared.
+
+Architecture rule: [docs/architecture.md](docs/architecture.md) → Shared host services; placement checklist: [docs/module_layers.md](docs/module_layers.md).
 
 ## Git workflow
 

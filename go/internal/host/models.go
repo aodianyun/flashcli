@@ -288,6 +288,16 @@ func weightsInfo(weightsKey, bundleRoot, variant string) (bool, string, string, 
 	if err != nil {
 		return false, "", "", ""
 	}
+	return WeightsInfo(m, weightsKey, variant)
+}
+
+// WeightsInfo reports whether a bundle's weights are ready in the shared store
+// and returns their source/repo/revision. Both the CLI and flashserver use this
+// function so cache readiness cannot diverge.
+func WeightsInfo(m *manifest.Manifest, weightsKey, variant string) (bool, string, string, string) {
+	if m == nil {
+		return false, "", "", ""
+	}
 	spec, rel, _, err := weights.ManifestSpecs(m, variant)
 	if err != nil {
 		if variant == "" {
@@ -303,6 +313,18 @@ func weightsInfo(weightsKey, bundleRoot, variant string) (bool, string, string, 
 		return true, spec.Source, spec.Repo, spec.Revision
 	}
 	return false, spec.Source, spec.Repo, spec.Revision
+}
+
+// WeightsCachedForMarker reports weights readiness for a cached bundle marker.
+func WeightsCachedForMarker(marker map[string]any, fallbackKey string) bool {
+	key := stringValue(marker["cache_key"])
+	if key == "" {
+		key = fallbackKey
+	}
+	bundleRoot := stringValue(marker["bundle_root"])
+	weightsKey := markerWeightsKey(marker, key, bundleRoot)
+	cached, _, _, _ := weightsInfo(weightsKey, bundleRoot, stringValue(marker["variant"]))
+	return cached
 }
 
 func markerCached(dir string) bool {
