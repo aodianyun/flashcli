@@ -1387,7 +1387,7 @@ impl App {
                             "权重",
                             &size_text(model.weights_ready, model.weights_bytes),
                         );
-                        kv(ui, "总大小", &fmt_bytes(model.total_bytes()));
+                        kv(ui, "模型大小", &fmt_bytes(model.total_bytes()));
                         kv(
                             ui,
                             "服务",
