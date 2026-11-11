@@ -23,7 +23,7 @@ flashcli serve     → 单模型进程，OpenAI-compatible API
 
 ## 桌面客户端
 
-Windows 安装包内置 `FlashServer.exe`：Rust + egui/eframe 原生客户端（不使用 WebView，启动无黑色控制台窗口），包含概览（卡片布局的 GPU/CPU 环境信息与 0-100 曲线、两行紧凑的服务/磁盘卡片、底部 GPU/显存/CPU/内存扁平状态条）、模型（本地缓存 + 按需搜索的 FlashHub 目录/分类/版本、Bundle/运行时/权重分开显示大小、就绪与启动状态、异步加载/启动进度、行操作“使用/更多（查看信息、查看日志、停止）”、多选缓存清理）、日志（`journalctl` 服务日志或指定模型的 serve 日志，支持返回服务日志、清空和原生“另存为”）、设置（服务启停、开机启动、国内镜像、共享缓存清理、主题、API 文档）。“使用”对话框显示目标 Serve 地址、OpenAI 兼容 curl 示例、API 文档、模型列表和本地控制台入口。模型详情只展示信息并提供启动/加载，使用/日志/停止仍保留在行操作中。通过 WebSocket（`/v1/ws`）接收实时数据，HTTP 轮询兜底。加载进度（Bundle 同步、Python 运行时/venv、权重）和启动进度（serve 进程/健康检查）会显示 bundle 引用、当前阶段、文件/字节数和百分比；校验失败的下载会自动重试。下载串行执行：有任务进行中时客户端禁用加载/下载/启动按钮，重复 `/v1/pull` 返回 HTTP 409。「加载」会把 Bundle、Python 运行时/venv 和权重准备到就绪状态；就绪后才能「启动」，「停止」会结束该模型的 serve 进程。模型大小 = Bundle + 该模型运行时 + 权重；权重按 `source/repo@revision` 存储，可能被多个 bundle 版本共享（合计按权重 key 去重），而每个 bundle/版本有独立的运行时目录。Python/工具/下载缓存属于共享缓存，在设置中统计和清理；模型运行时也可在设置中批量清理，或随模型一起删除。
+Windows 安装包内置 `FlashServer.exe`：Rust + egui/eframe 原生客户端（不使用 WebView，启动无黑色控制台窗口），包含概览（卡片布局的 GPU/CPU 环境信息与 0-100 曲线、两行紧凑的服务/磁盘卡片、底部 GPU/显存/CPU/内存扁平状态条）、模型（本地缓存 + 按需搜索的 FlashHub 目录/分类/版本、Bundle/运行时/权重分开显示大小、就绪与启动状态、异步加载/启动进度、行操作“使用/更多（查看信息、查看日志、停止）”、多选缓存清理）、日志（`journalctl` 服务日志或指定模型的 serve 日志，支持返回服务日志、清空和原生“另存为”）、设置（服务启停、开机启动、国内镜像、共享缓存清理、主题、API 文档）。“使用”对话框显示目标 Serve 地址、OpenAI 兼容 curl 示例、API 文档、模型列表和本地控制台入口。模型详情只展示信息并提供启动/加载，使用/日志/停止仍保留在行操作中。通过 WebSocket（`/v1/ws`）接收实时数据，HTTP 轮询兜底。加载进度（Bundle 同步、Python 运行时/venv、权重）和启动进度（serve 进程/健康检查）会显示 bundle 引用、当前阶段、文件/字节数和百分比；校验失败的下载会自动重试。下载串行执行：有任务进行中时客户端禁用加载/下载/启动按钮，重复 `/v1/pull` 返回 HTTP 409。「加载」会把 Bundle、Python 运行时/venv 和权重准备到就绪状态；就绪后才能「启动」，「停止」会结束该模型的 serve 进程。模型大小 = Bundle + 该模型运行时 + 权重；权重按 `source/repo@revision` 存储，可能被多个 bundle 版本共享（合计按权重 key 去重），而每个 bundle/版本有独立的运行时目录。设置中只统计/清理共享缓存（下载缓存 + 基础 Python + uv）；模型 Bundle/权重/运行时在「模型」页清理。
 
 - 源码：`desktop/`；构建：`cargo build --release`（Rust MSVC 工具链，`cargo` 需在 PATH）。产物：`desktop/target/release/FlashServer.exe`（约 4.7MB）。
 - 内存：约 110~125MB 工作集（GPU 上下文 + 中文字体 + egui 存储）。
@@ -181,7 +181,7 @@ GET  /v1/jobs/{id}/events
 POST /v1/models/load            {"ref":"...","async":true} → job_id（或 endpoint/pid/state）
 POST /v1/models/unload          {"ref":"..."}
 POST /v1/models/clean           {"refs":[...]} 清理本地 Bundle/权重
-POST /v1/storage/clean          {"targets":["cache","python","tools","runtimes"]}
+POST /v1/storage/clean          {"targets":["cache"]} 清理共享缓存（不含模型数据）
 GET  /v1/catalog                ?q=&tag=&sort=updated|downloads&page=&page_size=
 GET  /v1/catalog/tags
 GET  /v1/catalog/{id}           仓库详情 + 版本列表
@@ -191,17 +191,22 @@ GET  /openapi.yaml              OpenAPI 3.1 契约
 GET  /                          内置本地控制台
 ```
 
-`/v1/models/clean` 会跳过已启动/正在启动的模型，并保留与其他模型共享的权重；`/v1/storage/clean` 在有模型常驻/启动时拒绝清理 `runtimes`；两者都返回释放字节数。
+`/v1/models/clean` 按 ref 清理模型相关数据：Bundle、运行时，以及没有其他引用时的权重；仍被其他缓存 ref 引用的共享权重/运行时保留（按剩余 bundle marker 计数）。`/v1/storage/clean` 只清理**共享缓存**（下载缓存、基础 Python、uv），不会删除 Bundle/权重/运行时。两者都返回释放字节数。
 
 磁盘统计和清理路径选择位于共享的 `host` 包：`flashcli du` 与 `/v1/storage` 使用同一套唯一分配字节统计，`flashcli models list` 与 `/v1/models` 使用同一份模型数据，`flashcli bundle clean` 与 `/v1/models/clean` 使用同一套 ref 路径解析。
 
-清理范围有意不同：
+清理职责：
 
-- `flashcli cache clean --all` 只清理**包缓存**：`UV_CACHE_DIR`、`~/.flashcli/tools/uv`、`~/.flashcli/cache/repo-index`。
-- `flashcli cache clean --storage` 清理**整个存储区域**（`cache`、`python`、`tools`、`runtimes`），与 `/v1/storage/clean` 选择全部目标一致；请先停止常驻模型。
-- `flashcli cache clean --target cache|python|tools|runtimes` 清理单个共享区域；`/v1/storage/clean` 接受同样的四个区域名。
-- 桌面「设置 → 清理缓存」直接对应：下载缓存 = `--target cache`，Python 运行时 = `--target python`，工具 = `--target tools`，模型运行时（全部） = `--target runtimes`。
-- Bundle/权重/单模型运行时清理使用 `/v1/models/clean` 或 `flashcli bundle clean`；两个 cache 清理命令都不会动它们。
+- **共享缓存** —— `~/.flashcli/cache`（下载/uv/FlashHub index）、`~/.flashcli/python`（基础解释器）、`~/.flashcli/tools`（uv）。可重新下载，不含模型数据。
+  - CLI：`flashcli cache clean`
+  - API：`POST /v1/storage/clean {"targets":["cache"]}`
+- **模型数据** —— Bundle、权重（按 `source/repo@revision` 共享）和每个 bundle 的运行时。
+  - CLI：`flashcli bundle clean <ref> --all`（单个 ref）、`flashcli bundle clean`（全部运行时）、`flashcli bundle clean --all`（全部 Bundle/权重/运行时）
+  - API：`POST /v1/models/clean {"refs":[...]}`
+  - 共享权重/运行时在还有其他缓存 ref 引用时保留；删除单个 ref 只是去掉它的 marker/引用。
+- 桌面「设置 → 清理缓存」只清理共享缓存；模型相关清理在「模型」页多选清理，对应 `/v1/models/clean`。
+
+旧 API 目标 `python`/`tools` 仍作为缓存子区域接受；`runtimes` 会被拒绝，请使用模型清理。
 
 请求/响应 schema 以 [openapi.yaml](openapi.yaml) 为准（也通过 `/openapi.yaml` 提供）。
 

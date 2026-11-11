@@ -24,7 +24,7 @@ the installer may select a different free port, see "Windows UI installer"). The
 
 ## Desktop client
 
-The Windows installer ships `FlashServer.exe`, a Rust + egui/eframe desktop client (no WebView, no console window): overview (card layout with GPU/CPU environment and 0-100 charts, compact two-row service/disk cards, flat GPU/VRAM/CPU/RAM status bar), models (local cache plus on-demand FlashHub search/categories/versions, separate Bundle/runtime/weight sizes, ready and started states, async load/start progress, row actions for info/model logs/use/start/stop, and multi-select cache cleanup), logs (`journalctl` tail or per-model serve logs with clear and native Save-As), and settings (service start/stop, auto-start, domestic-mirror toggle, shared-cache cleanup with per-item sizes, theme, API docs). It talks to the daemon over WebSocket (`/v1/ws`) with HTTP polling as fallback. Load progress (bundle sync, Python runtime/venv, weights) and start progress (serve process/health) show the bundle ref, phase, file/byte counts and percentage; downloads retry on checksum mismatch. Downloads are serialized: the client disables load/download/start actions while a job is active, and a concurrent `/v1/pull` returns HTTP 409. "加载" prepares the bundle, Python runtime/venv and weights to a ready state; only a ready model can be started with "启动", and "停止" ends its serve process. Model size is Bundle + per-model runtime + weights; weights are stored by `source/repo@revision` and may be shared across bundle versions (the total de-dupes by weights key), while each bundle/version has its own runtime directory. Python/tools/download caches are shared storage areas listed in Settings; runtime directories can also be bulk-cleaned there, or removed with the model.
+The Windows installer ships `FlashServer.exe`, a Rust + egui/eframe desktop client (no WebView, no console window): overview (card layout with GPU/CPU environment and 0-100 charts, compact two-row service/disk cards, flat GPU/VRAM/CPU/RAM status bar), models (local cache plus on-demand FlashHub search/categories/versions, separate Bundle/runtime/weight sizes, ready and started states, async load/start progress, row actions for info/model logs/use/start/stop, and multi-select cache cleanup), logs (`journalctl` tail or per-model serve logs with clear and native Save-As), and settings (service start/stop, auto-start, domestic-mirror toggle, shared-cache cleanup with per-item sizes, theme, API docs). It talks to the daemon over WebSocket (`/v1/ws`) with HTTP polling as fallback. Load progress (bundle sync, Python runtime/venv, weights) and start progress (serve process/health) show the bundle ref, phase, file/byte counts and percentage; downloads retry on checksum mismatch. Downloads are serialized: the client disables load/download/start actions while a job is active, and a concurrent `/v1/pull` returns HTTP 409. "加载" prepares the bundle, Python runtime/venv and weights to a ready state; only a ready model can be started with "启动", and "停止" ends its serve process. Model size is Bundle + per-model runtime + weights; weights are stored by `source/repo@revision` and may be shared across bundle versions (the total de-dupes by weights key), while each bundle/version has its own runtime directory. Settings groups the shared cache (downloads + base Python + uv); model bundles/weights/runtimes are cleaned from the Models page.
 
 - Source: `desktop/`; build with `cargo build --release` (Rust MSVC toolchain; put `cargo` on PATH). Output: `desktop/target/release/FlashServer.exe` (~4.7 MB).
 - Memory: ~110-125 MB working set (GPU context + CJK font + egui stores).
@@ -190,7 +190,7 @@ GET  /v1/jobs/{id}/events
 POST /v1/models/load            {"ref":"...","async":true} → job_id (or endpoint/pid/state)
 POST /v1/models/unload          {"ref":"..."}
 POST /v1/models/clean           {"refs":[...]} remove local bundle/weight caches
-POST /v1/storage/clean          {"targets":["cache","python","tools","runtimes"]}
+POST /v1/storage/clean          {"targets":["cache"]} remove shared cache (not model data)
 GET  /v1/catalog                ?q=&tag=&sort=updated|downloads&page=&page_size=
 GET  /v1/catalog/tags
 GET  /v1/catalog/{id}           repository detail + versions
@@ -200,17 +200,22 @@ GET  /openapi.yaml              OpenAPI 3.1 contract
 GET  /                          embedded local console
 ```
 
-`/v1/models/clean` refuses loaded/in-flight refs and keeps weights shared with another cached ref. `/v1/storage/clean` refuses `runtimes` while models are resident/loading; both return freed bytes.
+`/v1/models/clean` removes model-related cache per ref: the bundle, its runtime, and weights when no other cached ref uses them. Shared weights/runtime are reference-counted by the remaining bundle markers and are kept. `/v1/storage/clean` removes only the **shared cache** (download cache, base Python, uv); it never touches bundle/weight/runtime data. Both return freed bytes.
 
 Disk accounting and cleanup path selection live in the shared `host` package: `flashcli du` uses the same unique-allocation accounting as `/v1/storage`, `flashcli models list` uses the same model data as `/v1/models`, and `flashcli bundle clean` uses the same ref-path resolver as `/v1/models/clean`.
 
-Cleanup scopes are intentionally different:
+Cleanup responsibilities:
 
-- `flashcli cache clean --all` removes **package caches only**: `UV_CACHE_DIR`, `~/.flashcli/tools/uv`, and `~/.flashcli/cache/repo-index`.
-- `flashcli cache clean --storage` removes **whole storage areas** (`cache`, `python`, `tools`, `runtimes`), matching `/v1/storage/clean` with all targets. Stop resident models first.
-- `flashcli cache clean --target cache|python|tools|runtimes` removes one shared area; `/v1/storage/clean` accepts the same four area names.
-- Desktop Settings → 清理缓存 maps directly: 下载缓存 = `--target cache`, Python 运行时 = `--target python`, 工具 = `--target tools`, 模型运行时（全部） = `--target runtimes`.
-- Bundle/weights/per-model runtime cleanup uses `/v1/models/clean` or `flashcli bundle clean`; neither cache command touches them.
+- **Shared cache** — `~/.flashcli/cache` (downloads/uv/FlashHub index), `~/.flashcli/python` (base interpreter), `~/.flashcli/tools` (uv). Re-downloadable; no model data.
+  - CLI: `flashcli cache clean`
+  - API: `POST /v1/storage/clean {"targets":["cache"]}`
+- **Model data** — bundle, weights (shared by `source/repo@revision`), and the per-bundle runtime.
+  - CLI: `flashcli bundle clean <ref> --all` (one ref), `flashcli bundle clean` (all runtimes), `flashcli bundle clean --all` (all bundles/weights/runtimes)
+  - API: `POST /v1/models/clean {"refs":[...]}`
+  - Shared weights/runtime are kept while another cached ref still references them; removing one ref only drops its marker/reference.
+- Desktop Settings → 清理缓存 cleans the shared cache only. Model-related cleanup is in the Models page (multi-select cleanup), which maps to `/v1/models/clean`.
+
+Legacy API targets `python` and `tools` are still accepted as cache sub-areas; `runtimes` is rejected (use model cleanup).
 
 The authoritative request/response schema is [openapi.yaml](openapi.yaml) (also served at `/openapi.yaml`).
 

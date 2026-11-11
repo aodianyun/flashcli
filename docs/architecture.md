@@ -55,7 +55,7 @@ Rules:
 
 - **Do not** add another marker walker, weights-readiness check, directory-size walker, or cleanup path resolver under `go/internal/cli` or `go/internal/server`.
 - Add the behavior once in `host`, then expose it through both frontends. Presentation-only helpers (tables, colors, prompts) stay in the frontend.
-- `flashcli cache clean --all` keeps its package-cache-specific targets (uv, tools, FlashHub index). Use `--storage` for all whole areas, or `--target cache|python|tools|runtimes` for one area; this matches `/v1/storage/clean`. Bundle/model/runtime cleanup and disk accounting are shared.
+- `flashcli cache clean` removes the shared cache group (`cache` + base Python + uv), matching `/v1/storage/clean {"targets":["cache"]}`. Model data/runtimes use `flashcli bundle clean` / `/v1/models/clean`; shared weights/runtime are reference-counted and kept. Disk accounting and ref-path selection are shared in `host`.
 - Tests: `go test ./...`; host tests cover accounting/cleanup, CLI tests exercise `du`, `models list`, and `bundle clean` through the host functions. See [module_layers.md](module_layers.md).
 
 **Protocol cache schema:** the venv fingerprint tracks only manifest `python_dependencies` — it does **not** track the `flashcli-bundle` git ref. When the on-disk cache layout changes (`flashcli_bundle.version.CACHE_SCHEMA_VERSION`), `venv.EnsureProtocolCacheSchema` upgrades `flashcli-bundle` in an existing venv **in place** (`pip install --upgrade --force-reinstall --no-deps`, from the same source) before re-exec, so old venvs keep matching the host's cache paths without a full rebuild (no torch/dependency reinstall).
@@ -178,15 +178,17 @@ sha256 verification into `~/.flashcli/tools/uv/<version>/`.
   environments where uv cannot run; the default `uv` fails clearly if uv is
   unavailable. Native bundles do not need uv.
 - After a venv is created it is offline-usable (uv is only needed when
-  installing); `flashcli cache clean [--uv|--tools|--flashhub|--all]` removes the
-  uv cache, provisioned binaries, and/or the FlashHub repo-index cache without
-  touching existing venvs; `--all` selects all three. `flashcli cache prune`
-  prunes unreachable uv cache objects (conservative; `cache clean` fully clears).
+  installing). `flashcli cache clean` removes only the shared cache
+  (`~/.flashcli/cache`, base Python, uv tools) and does not touch existing
+  venvs, bundles, or weights. `flashcli cache prune` prunes unreachable uv
+  cache objects (conservative; `cache clean` fully clears the cache group).
 - `flashcli bundle clean <ref>` removes only that ref's runtime; add `--all` to
-  also remove its bundle tree and weights. `flashcli bundle clean` removes all
-  runtimes; `flashcli bundle clean --all` resets all runtimes, bundles, and
-  models. Every mode prints the affected paths and asks `Continue? [y/N]`;
-  `--yes` skips the prompt for scripts.
+  also remove its bundle tree and weights. Shared weights/runtime stay while
+  another cached ref references them (the remaining bundle markers are the
+  reference count). `flashcli bundle clean` removes all runtimes;
+  `flashcli bundle clean --all` resets all runtimes, bundles, and models.
+  Every mode prints the affected paths and asks `Continue? [y/N]`; `--yes`
+  skips the prompt for scripts.
 - `flashcli bundle clean --orphans` removes stale bundle/model cache entries
   whose preset marker `bundle_root` no longer exists, plus runtime dirs with no
   valid bundle root. Valid caches are untouched; use it after deleting a local

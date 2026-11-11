@@ -1924,7 +1924,7 @@ impl App {
                 panel(ui, "存储", |ui| {
                     ui.horizontal(|ui| {
                         ui.label(
-                            egui::RichText::new("共享缓存：Python / 工具 / 下载缓存")
+                            egui::RichText::new("共享缓存：下载缓存 / Python / uv 工具")
                                 .weak()
                                 .small(),
                         );
@@ -1942,9 +1942,7 @@ impl App {
                                 {
                                     self.cache_dialog = true;
                                     self.cache_selected.clear();
-                                    for key in ["cache", "python", "tools"] {
-                                        self.cache_selected.insert(key.to_string());
-                                    }
+                                    self.cache_selected.insert("cache".to_string());
                                 }
                             },
                         );
@@ -2004,36 +2002,13 @@ impl App {
             return;
         }
         let dark = ctx.style().visuals.dark_mode;
-        let loaded = self
-            .system
-            .as_ref()
-            .map(|s| s["loaded_count"].as_i64().unwrap_or(0) > 0)
-            .unwrap_or(false);
-        let targets = [
-            (
-                "cache",
-                "下载缓存",
-                "uv / pip / FlashHub 下载与索引缓存",
-                "~/.flashcli/cache",
-            ),
-            (
-                "python",
-                "Python 运行时",
-                "独立 CPython 解释器与标准库",
-                "~/.flashcli/python",
-            ),
-            ("tools", "工具", "uv 等下载/运行工具", "~/.flashcli/tools"),
-            (
-                "runtimes",
-                "模型运行时（全部）",
-                "按 bundle/版本独立；清理后下次加载会重新安装",
-                "~/.flashcli/runtimes",
-            ),
-        ];
+        let targets = [(
+            "cache",
+            "共享缓存",
+            "下载缓存 / Python 基础解释器 / uv 工具；清理后下次加载会重新下载",
+            "~/.flashcli/{cache,python,tools}",
+        )];
         let mut selected = self.cache_selected.clone();
-        if loaded {
-            selected.remove("runtimes");
-        }
         let mut close = false;
         let mut confirm = false;
         modal_backdrop(ctx, dark, &mut close);
@@ -2067,11 +2042,9 @@ impl App {
                 ui.add_space(6.0);
                 for &(key, label, description, path) in &targets {
                     let size = self.storage_sizes.get(key).copied().unwrap_or(0.0);
-                    let locked = key == "runtimes" && loaded;
                     let mut checked = selected.contains(key);
                     ui.horizontal(|ui| {
-                        let response =
-                            ui.add_enabled(!locked, egui::Checkbox::new(&mut checked, ""));
+                        let response = ui.add(egui::Checkbox::new(&mut checked, ""));
                         if response.changed() {
                             if checked {
                                 selected.insert(key.to_string());
@@ -2086,13 +2059,6 @@ impl App {
                             ui.label(fmt_bytes(size));
                         });
                     });
-                    if locked {
-                        ui.label(
-                            egui::RichText::new("已启动模型，先停止才能清理运行时")
-                                .weak()
-                                .small(),
-                        );
-                    }
                 }
                 ui.add_space(10.0);
                 ui.separator();
@@ -2105,7 +2071,7 @@ impl App {
                 ui.label(egui::RichText::new(format!("将释放约 {}", fmt_bytes(total))).strong());
                 ui.label(
                     egui::RichText::new(
-                        "模型 Bundle/权重不受影响；下载缓存与运行时可能通过硬链接共享文件。清理运行时后，对应模型下次加载会重新安装。",
+                        "模型 Bundle/权重/运行时不受影响；共享缓存与运行时可能通过硬链接共享文件，实际释放量可能小于显示值。清理后下次加载会重新下载缓存。",
                     )
                     .weak()
                     .small(),
@@ -2899,7 +2865,7 @@ fn storage_label(name: &str) -> &str {
         "bundles" => "Bundle",
         "models" => "权重",
         "runtimes" => "模型运行时",
-        "cache" => "下载缓存",
+        "cache" => "共享缓存",
         "tools" => "工具",
         "python" => "Python",
         other => other,

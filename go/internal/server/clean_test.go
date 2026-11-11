@@ -172,3 +172,16 @@ func TestCleanModelsKeepsSharedRuntimeAndWeights(t *testing.T) {
 		t.Fatalf("shared runtime removed: %v", err)
 	}
 }
+
+func TestCleanStorageRejectsModelTargets(t *testing.T) {
+	s := &Server{}
+	for _, target := range []string{"runtimes", "all"} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/v1/storage/clean",
+			strings.NewReader(`{"targets":["`+target+`"]}`))
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s: status=%d body=%s", target, rec.Code, rec.Body.String())
+		}
+	}
+}

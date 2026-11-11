@@ -9,47 +9,59 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/paths"
 )
 
-// shared cache targets that the UI may remove.
-var sharedCacheTargets = map[string]func() string{
-	"cache":    func() string { return filepath.Join(paths.Home(), "cache") },
-	"python":   func() string { return filepath.Join(paths.Home(), "python") },
-	"tools":    func() string { return filepath.Join(paths.Home(), "tools") },
-	"runtimes": paths.Runtimes,
-}
-
-// SharedCacheTargets returns the storage areas accepted by CleanSharedCaches.
+// SharedCacheTargets are the user-facing shared cache cleanup targets. Model
+// runtimes are intentionally excluded: they are cleaned by bundle/model
+// cleanup (host.RemoveCachedRef / flashcli bundle clean).
 func SharedCacheTargets() []string {
-	return []string{"cache", "python", "tools", "runtimes"}
+	return []string{"cache"}
 }
 
-// SharedCachePath returns the root path for a shared storage target.
-func SharedCachePath(name string) (string, bool) {
-	pathFor, ok := sharedCacheTargets[strings.TrimSpace(name)]
-	if !ok {
-		return "", false
+// SharedCachePaths returns the filesystem roots removed by a logical target.
+// `cache` groups re-downloadable tooling: download cache, base Python, and uv.
+// Model runtimes are not part of this group.
+func SharedCachePaths(name string) ([]string, bool) {
+	switch strings.TrimSpace(name) {
+	case "cache":
+		return []string{
+			filepath.Join(paths.Home(), "cache"),
+			filepath.Join(paths.Home(), "python"),
+			filepath.Join(paths.Home(), "tools"),
+		}, true
+	// Legacy API targets kept for compatibility with older clients.
+	case "python":
+		return []string{filepath.Join(paths.Home(), "python")}, true
+	case "tools":
+		return []string{filepath.Join(paths.Home(), "tools")}, true
 	}
-	return pathFor(), true
+	return nil, false
 }
 
-// CleanSharedCaches removes the selected shared caches and returns the unique
-// bytes freed. Model bundles/weights are not touched; use RemoveCachedRef.
+// CleanSharedCaches removes the selected shared storage areas and returns the
+// unique bytes freed. Model bundles/weights are not touched; use
+// RemoveCachedRef for those.
 func CleanSharedCaches(targets []string) (int64, error) {
-	seen := map[string]bool{}
+	seenTarget := map[string]bool{}
+	seenPath := map[string]bool{}
 	var pathsToRemove []string
 	for _, target := range targets {
 		target = strings.TrimSpace(target)
 		if target == "" {
 			continue
 		}
-		pathFor, ok := sharedCacheTargets[target]
+		if seenTarget[target] {
+			continue
+		}
+		targetPaths, ok := SharedCachePaths(target)
 		if !ok {
 			return 0, fmt.Errorf("unknown cache target %q", target)
 		}
-		if seen[target] {
-			continue
+		seenTarget[target] = true
+		for _, path := range targetPaths {
+			if !seenPath[path] {
+				seenPath[path] = true
+				pathsToRemove = append(pathsToRemove, path)
+			}
 		}
-		seen[target] = true
-		pathsToRemove = append(pathsToRemove, pathFor())
 	}
 	if len(pathsToRemove) == 0 {
 		return 0, fmt.Errorf("targets is required")

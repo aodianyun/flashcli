@@ -54,7 +54,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 
 - **禁止**在 `go/internal/cli` 或 `go/internal/server` 再写 marker 遍历、权重就绪判断、目录大小遍历、清理路径解析。
 - 新行为只在 `host` 实现一次，再由两个前端暴露；表格、颜色、提示等纯展示逻辑留在前端。
-- `flashcli cache clean --all` 保留其包缓存专用目标（uv、tools、FlashHub index）；`--storage` 对应全部整区域，`--target cache|python|tools|runtimes` 对应单个区域，与 `/v1/storage/clean` 一致。bundle/模型/运行时清理与磁盘统计是共享的。
+- `flashcli cache clean` 只清理共享缓存（`cache` + 基础 Python + uv），对应 `/v1/storage/clean {"targets":["cache"]}`。模型数据/运行时使用 `flashcli bundle clean` / `/v1/models/clean`；共享权重/运行时按引用保留。磁盘统计和 ref 路径选择在 `host` 共享。
 - 测试：`go test ./...`；host 测试覆盖统计/清理，CLI 测试通过 host 函数覆盖 `du`、`models list`、`bundle clean`。详见 [module_layers.zh-CN.md](module_layers.zh-CN.md)。
 
 **协议缓存 schema：** venv 的 fingerprint 只跟踪 manifest `python_dependencies`，**不跟踪** `flashcli-bundle` 的 git ref。当磁盘缓存布局变化（`flashcli_bundle.version.CACHE_SCHEMA_VERSION`）时，`venv.EnsureProtocolCacheSchema` 会在 re-exec 前把已有 venv 里的 `flashcli-bundle` **就地升级**（`pip install --upgrade --force-reinstall --no-deps`，来源不变），使旧 venv 无需整体重建即可与主机缓存路径保持一致（不重装 torch/依赖）。
@@ -154,8 +154,8 @@ bundle venv 默认用 **uv** 创建与安装（仍保持每模型隔离）。uv 
 - `uv venv --python <base> --seed` 建 venv；`uv pip install --python …` 安装 `flashcli-bundle[infer]`、torch 与 manifest 依赖。协议升级与 CUDA userland 安装也走同一安装器。
 - `UV_CACHE_DIR` 默认 `~/.flashcli/cache/uv`（与 `runtimes/` 同文件系统，uv 用**硬链接**共享 wheel，torch/CUDA 重层只存一份）；`UV_LINK_MODE=hardlink`。
 - `FLASHCLI_VENV_BACKEND=pip` 是显式逃生口（已弃用）；默认 `uv` 在不可用时明确报错。native bundle 不需要 uv。
-- venv 建好后即可离线使用（uv 只在安装时需要）；`flashcli cache clean [--uv|--tools|--flashhub|--all]` 可清理 uv 缓存、已供给二进制和/或 FlashHub repo-index 缓存，不影响已建 venv；`--all` 三者全选；`flashcli cache prune` 清理 uv 中不可达的缓存对象（较保守；`cache clean` 才会全部清空）。`flashcli du` 按区域显示 bundles、models、runtimes、cache、tools、python 的 apparent 占用。
-- `flashcli bundle clean <ref>` 只删该 ref 的 runtime；加 `--all` 同时删其 bundle 树和权重。`flashcli bundle clean` 删除所有 runtime；`flashcli bundle clean --all` 重置全部 runtime、bundles 和 models。所有模式先打印受影响路径并询问 `Continue? [y/N]`；脚本用 `--yes` 跳过确认。
+- venv 建好后即可离线使用（uv 只在安装时需要）；`flashcli cache clean` 只清理共享缓存（`~/.flashcli/cache`、基础 Python、uv 工具），不影响已建 venv、Bundle 和权重；`flashcli cache prune` 清理 uv 中不可达的缓存对象（较保守；`cache clean` 才全部清空）。`flashcli du` 显示 bundles、models、runtimes、cache（含 Python/工具）的唯一分配占用。
+- `flashcli bundle clean <ref>` 只删该 ref 的 runtime；加 `--all` 同时删其 bundle 树和权重。共享权重/运行时在还有其他缓存 ref 引用时保留（剩余 bundle marker 即引用计数）。`flashcli bundle clean` 删除所有 runtime；`flashcli bundle clean --all` 重置全部 runtime、bundles 和 models。所有模式先打印受影响路径并询问 `Continue? [y/N]`；脚本用 `--yes` 跳过确认。
 - `flashcli bundle clean --orphans` 清理 preset marker 的 `bundle_root` 已失效的 bundle/model 缓存，以及没有有效 bundle root 的 runtime；有效缓存不动。删除本地 bundle 或测试缓存后使用。
 
 ## 本机目录

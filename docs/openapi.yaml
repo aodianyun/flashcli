@@ -232,7 +232,8 @@ paths:
           $ref: '#/components/responses/Error'
   /v1/storage:
     get:
-      summary: Disk usage per cache area (unique allocated bytes)
+      summary: Disk usage (unique allocated bytes)
+      description: "Areas: `bundles`, `models`, `runtimes`, and `cache` (download cache + base Python + uv tools grouped together)."
       responses:
         '200':
           description: Storage areas
@@ -275,8 +276,8 @@ paths:
           $ref: '#/components/responses/Error'
   /v1/storage/clean:
     post:
-      summary: Remove shared caches (download cache, Python, tools, runtimes)
-      description: Runtimes cannot be removed while a model is loaded or loading.
+      summary: Remove the shared cache
+      description: "`cache` removes the download cache, base Python, and uv tools. Model bundles/weights/runtimes are removed per ref via /v1/models/clean. Legacy `python`/`tools` targets are accepted for older clients."
       requestBody:
         required: true
         content:
@@ -289,7 +290,7 @@ paths:
                   type: array
                   items:
                     type: string
-                    enum: [cache, python, tools, runtimes]
+                    enum: [cache]
       responses:
         '200':
           description: Removed
@@ -428,8 +429,8 @@ paths:
           $ref: '#/components/responses/Error'
   /v1/models/clean:
     post:
-      summary: Remove local bundle/weights caches for models
-      description: Loaded or in-flight models are skipped; weights shared with another cached ref are kept.
+      summary: Remove local bundle/weights/runtime cache for models
+      description: "Loaded or in-flight models are skipped. Shared weights/runtime stay while another cached ref still references them (remaining bundle markers are the reference count)."
       requestBody:
         required: true
         content:

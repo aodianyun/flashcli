@@ -128,7 +128,7 @@ func TestBundleCleanAllData(t *testing.T) {
 	mustStat(t, paths.Bundles(), false)
 	mustStat(t, repoIndex, true) // bundle clean no longer touches FlashHub cache
 
-	if code := Main([]string{"cache", "clean", "--flashhub", "--yes"}); code != 0 {
+	if code := Main([]string{"cache", "clean", "--yes"}); code != 0 {
 		t.Fatalf("cache clean exit = %d", code)
 	}
 	mustStat(t, repoIndex, false)

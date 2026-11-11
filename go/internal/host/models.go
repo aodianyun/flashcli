@@ -168,12 +168,22 @@ func Storage() []Area {
 		{"tools", filepath.Join(paths.Home(), "tools")},
 		{"python", filepath.Join(paths.Home(), "python")},
 	}
-	out := make([]Area, 0, len(items))
+	bytes := map[string]int64{}
 	seen := map[fileKey]bool{}
 	for _, item := range items {
-		out = append(out, Area{Name: item.name, Path: filepath.ToSlash(item.path), Bytes: dirUsage(item.path, seen)})
+		bytes[item.name] = dirUsage(item.path, seen)
 	}
-	return out
+	cacheRoot := filepath.Join(paths.Home(), "cache")
+	return []Area{
+		{Name: "bundles", Path: filepath.ToSlash(paths.Bundles()), Bytes: bytes["bundles"]},
+		{Name: "models", Path: filepath.ToSlash(paths.Models()), Bytes: bytes["models"]},
+		{Name: "runtimes", Path: filepath.ToSlash(paths.Runtimes()), Bytes: bytes["runtimes"]},
+		{
+			Name:  "cache",
+			Path:  filepath.ToSlash(cacheRoot),
+			Bytes: bytes["cache"] + bytes["tools"] + bytes["python"],
+		},
+	}
 }
 
 func readMarkers() ([]map[string]any, error) {
