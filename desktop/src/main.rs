@@ -82,7 +82,7 @@ impl ModelRow {
 
     fn status(&self) -> &'static str {
         if self.loaded {
-            "已加载"
+            "已启动"
         } else if self.bundle_ready && self.weights_ready {
             if self.serve {
                 "就绪"
@@ -686,7 +686,7 @@ impl App {
                             "未开启"
                         },
                     );
-                    pair(ui, "已加载", &loaded);
+                    pair(ui, "已启动", &loaded);
                     pair(ui, "版本", env!("CARGO_PKG_VERSION"));
                     ui.end_row();
                 });
@@ -853,7 +853,7 @@ impl App {
         ui.horizontal_wrapped(|ui| {
             stat(ui, "本地模型", &self.models.len().to_string());
             stat(ui, "已就绪", &ready.to_string());
-            stat(ui, "已加载", &loaded.to_string());
+            stat(ui, "已启动", &loaded.to_string());
             stat(ui, "模型占用", &fmt_bytes(total_bytes));
         });
         let shared: Vec<String> = ["runtimes", "python", "tools", "cache"]
@@ -907,7 +907,7 @@ impl App {
                     .margin(egui::Margin::symmetric(8, 4)),
             );
             let load_clicked = ui
-                .add_enabled_ui(!self.loading, |ui| ui.button("加载"))
+                .add_enabled_ui(!self.loading, |ui| ui.button("启动"))
                 .inner
                 .clicked();
             if load_clicked {
@@ -919,7 +919,7 @@ impl App {
         });
         ui.add_space(8.0);
         if self.models.is_empty() {
-            ui.label("本地还没有缓存模型。切到「FlashHub」搜索并加载。");
+            ui.label("本地还没有缓存模型。切到「FlashHub」搜索并下载。");
             return;
         }
 
@@ -978,7 +978,7 @@ impl App {
                                 }
                             }
                             if m.loaded {
-                                response.on_disabled_hover_text("先卸载才能清理");
+                                response.on_disabled_hover_text("先停止才能清理");
                             }
                         });
                         row.col(|ui| {
@@ -1023,8 +1023,8 @@ impl App {
                                 if m.serve {
                                     let active = self.loading
                                         && self.job_ref == m.name
-                                        && self.job_verb == "加载";
-                                    let label = if active { "加载中…" } else { "加载" };
+                                        && self.job_verb == "启动";
+                                    let label = if active { "启动中…" } else { "启动" };
                                     let clicked = ui
                                         .add_enabled_ui(!self.loading, |ui| table_button(ui, label))
                                         .inner
@@ -1034,7 +1034,7 @@ impl App {
                                     }
                                 } else {
                                     ui.label(egui::RichText::new("—").weak())
-                                        .on_hover_text("该 bundle 只声明了 run，不能通过服务加载");
+                                        .on_hover_text("该 bundle 只声明了 run，不能通过服务启动");
                                 }
                             } else {
                                 let active = self.loading
@@ -1058,7 +1058,7 @@ impl App {
                                     logs_request = Some(m.name.clone());
                                     ui.close_menu();
                                 }
-                                if m.loaded && ui.button("卸载").clicked() {
+                                if m.loaded && ui.button("停止").clicked() {
                                     unload_request = Some(m.name.clone());
                                     ui.close_menu();
                                 }
@@ -1124,9 +1124,9 @@ impl App {
         }
         if let Some(name) = unload_request {
             self.dialog = Some(DialogState {
-                title: "卸载模型".into(),
+                title: "停止模型".into(),
                 message: format!(
-                    "卸载后该模型的推理服务会停止，权重和缓存保留。\n确定卸载 {name}？"
+                    "停止后该模型的推理服务将结束，权重和缓存保留。\n确定停止 {name}？"
                 ),
                 action: Pending::Unload(name),
             });
@@ -1402,7 +1402,7 @@ impl App {
                 );
                 ui.add_space(6.0);
                 let (status_color, status) = if model.loaded {
-                    (green(ui), "已加载")
+                    (green(ui), "已启动")
                 } else if model.ready() && model.serve {
                     (green(ui), "就绪")
                 } else if model.ready() {
@@ -1480,13 +1480,13 @@ impl App {
                         if button(ui, "日志").clicked() {
                             open_logs = true;
                         }
-                        if destructive_button(ui, "卸载").clicked() {
+                        if destructive_button(ui, "停止").clicked() {
                             unload = true;
                         }
                     } else if model.ready() && model.serve {
                         let active =
-                            self.loading && self.job_ref == model.name && self.job_verb == "加载";
-                        let label = if active { "加载中…" } else { "加载" };
+                            self.loading && self.job_ref == model.name && self.job_verb == "启动";
+                        let label = if active { "启动中…" } else { "启动" };
                         let clicked = ui
                             .add_enabled_ui(!self.loading, |ui| primary_button(ui, label))
                             .inner
@@ -1534,9 +1534,9 @@ impl App {
         if unload {
             self.model_detail = None;
             self.dialog = Some(DialogState {
-                title: "卸载模型".into(),
+                title: "停止模型".into(),
                 message: format!(
-                    "卸载后该模型的推理服务会停止，权重和缓存保留。\n确定卸载 {}？",
+                    "停止后该模型的推理服务将结束，权重和缓存保留。\n确定停止 {}？",
                     model.name
                 ),
                 action: Pending::Unload(model.name.clone()),
@@ -1800,7 +1800,7 @@ impl App {
                             if danger_button(ui, "停止服务").clicked() {
                                 self.dialog = Some(DialogState {
                                     title: "停止服务".into(),
-                                    message: "停止后正在加载/运行的模型会中断，已加载模型将不可用。\n确定停止？".into(),
+                                    message: "停止后正在启动/运行的模型会中断，已启动模型将不可用。\n确定停止？".into(),
                                     action: Pending::StopService,
                                 });
                             }
@@ -1851,7 +1851,7 @@ impl App {
                         );
                     } else if self.loading {
                         ui.label(
-                            egui::RichText::new("下载/加载进行中，完成后再修改镜像设置。")
+                            egui::RichText::new("下载/启动进行中，完成后再修改镜像设置。")
                                 .weak()
                                 .small(),
                         );
@@ -1950,10 +1950,25 @@ impl App {
             .map(|s| s["loaded_count"].as_i64().unwrap_or(0) > 0)
             .unwrap_or(false);
         let targets = [
-            ("cache", "下载缓存", "uv / pip / FlashHub 索引"),
-            ("python", "Python 运行时", "共享解释器与标准库"),
-            ("tools", "工具", "uv 等下载工具"),
-            ("runtimes", "模型运行时", "torch / CUDA，下次加载会重新安装"),
+            (
+                "cache",
+                "下载缓存",
+                "uv / pip / FlashHub 下载与索引缓存",
+                "~/.flashcli/cache",
+            ),
+            (
+                "python",
+                "Python 运行时",
+                "独立 CPython 解释器与标准库",
+                "~/.flashcli/python",
+            ),
+            ("tools", "工具", "uv 等下载/运行工具", "~/.flashcli/tools"),
+            (
+                "runtimes",
+                "模型运行时",
+                "每个 Bundle 的 venv / torch / CUDA / native 库",
+                "~/.flashcli/runtimes",
+            ),
         ];
         let mut selected = self.cache_selected.clone();
         if loaded {
@@ -1990,7 +2005,7 @@ impl App {
                 ui.add_space(12.0);
                 ui.label("选择要删除的共享缓存：");
                 ui.add_space(6.0);
-                for &(key, label, description) in &targets {
+                for &(key, label, description, path) in &targets {
                     let size = self.storage_sizes.get(key).copied().unwrap_or(0.0);
                     let locked = key == "runtimes" && loaded;
                     let mut checked = selected.contains(key);
@@ -2004,7 +2019,8 @@ impl App {
                                 selected.remove(key);
                             }
                         }
-                        ui.label(egui::RichText::new(label).strong());
+                        ui.label(egui::RichText::new(label).strong())
+                            .on_hover_text(format!("路径: {path}"));
                         ui.label(egui::RichText::new(description).weak().small());
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.label(fmt_bytes(size));
@@ -2012,7 +2028,7 @@ impl App {
                     });
                     if locked {
                         ui.label(
-                            egui::RichText::new("已加载模型，先卸载才能清理运行时")
+                            egui::RichText::new("已启动模型，先停止才能清理运行时")
                                 .weak()
                                 .small(),
                         );
@@ -2023,13 +2039,13 @@ impl App {
                 ui.add_space(10.0);
                 let total: f64 = targets
                     .iter()
-                    .filter(|(key, _, _)| selected.contains(*key))
-                    .map(|(key, _, _)| self.storage_sizes.get(*key).copied().unwrap_or(0.0))
+                    .filter(|(key, _, _, _)| selected.contains(*key))
+                    .map(|(key, _, _, _)| self.storage_sizes.get(*key).copied().unwrap_or(0.0))
                     .sum();
                 ui.label(egui::RichText::new(format!("将释放约 {}", fmt_bytes(total))).strong());
                 ui.label(
                     egui::RichText::new(
-                        "模型 Bundle/权重不受影响；运行时删除后会在下次加载模型时重新下载/安装。",
+                        "模型 Bundle/权重不受影响；下载缓存与运行时可能通过硬链接共享文件，清理后下次启动模型会重新下载/安装。",
                     )
                     .weak()
                     .small(),
@@ -2871,7 +2887,7 @@ fn start_ws(tx: Sender<Event>, ctx: egui::Context) {
                                         let verb = if data["type"].as_str() == Some("pull") {
                                             "下载"
                                         } else {
-                                            "加载"
+                                            "启动"
                                         };
                                         let _ = tx.send(Event::Job(JobEvent {
                                             phase: data["event"]["phase"]
@@ -3017,7 +3033,7 @@ fn spawn_action(tx: Sender<Event>, ctx: egui::Context, action: Action) {
 
 fn spawn_job(tx: Sender<Event>, ctx: egui::Context, ref_str: String, pull: bool) {
     std::thread::spawn(move || {
-        let verb = if pull { "下载" } else { "加载" };
+        let verb = if pull { "下载" } else { "启动" };
         let endpoint = if pull { "/v1/pull" } else { "/v1/models/load" };
         let event_ref = ref_str.clone();
         let _ = tx.send(Event::Job(JobEvent {
@@ -3230,8 +3246,8 @@ fn spawn_unload(tx: Sender<Event>, ctx: egui::Context, ref_str: String) {
     std::thread::spawn(move || {
         let body = serde_json::json!({ "ref": ref_str });
         let status = match post_json("/v1/models/unload", &body) {
-            Ok(_) => "已卸载".to_string(),
-            Err(e) => format!("卸载失败：{e}"),
+            Ok(_) => "已停止".to_string(),
+            Err(e) => format!("停止失败：{e}"),
         };
         let _ = tx.send(Event::Status(status));
         ctx.request_repaint();

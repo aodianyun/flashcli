@@ -23,12 +23,12 @@ flashcli serve     → 单模型进程，OpenAI-compatible API
 
 ## 桌面客户端
 
-Windows 安装包内置 `FlashServer.exe`：Rust + egui/eframe 原生客户端（不使用 WebView，启动无黑色控制台窗口），包含概览（卡片布局的 GPU/CPU 环境信息与 0-100 曲线、两行紧凑的服务/磁盘卡片、底部 GPU/显存/CPU/内存扁平状态条）、模型（本地缓存 + 按需搜索的 FlashHub 目录/分类/版本、Bundle 与权重分开显示大小、加载状态、异步加载进度、行操作“使用/更多（查看信息、查看日志、卸载）”、多选缓存清理）、日志（`journalctl` 服务日志或指定模型的 serve 日志，支持返回服务日志、清空和原生“另存为”）、设置（服务启停、开机启动、国内镜像、共享缓存清理、主题、API 文档）。“使用”对话框显示目标 Serve 地址、OpenAI 兼容 curl 示例、API 文档、模型列表和本地控制台入口。通过 WebSocket（`/v1/ws`）接收实时数据，HTTP 轮询兜底。加载/下载进度会显示 bundle 引用、当前阶段（Bundle 同步、Python 运行时、权重）、文件/字节数和百分比；校验失败的下载会自动重试。下载串行执行：有任务进行中时客户端禁用下载/加载按钮，重复 `/v1/pull` 返回 HTTP 409。模型行大小只包含 Bundle + 权重；运行时/Python/工具/下载缓存属于共享缓存，在设置中统计和清理。
+Windows 安装包内置 `FlashServer.exe`：Rust + egui/eframe 原生客户端（不使用 WebView，启动无黑色控制台窗口），包含概览（卡片布局的 GPU/CPU 环境信息与 0-100 曲线、两行紧凑的服务/磁盘卡片、底部 GPU/显存/CPU/内存扁平状态条）、模型（本地缓存 + 按需搜索的 FlashHub 目录/分类/版本、Bundle 与权重分开显示大小、启动状态、异步启动进度、行操作“使用/更多（查看信息、查看日志、停止）”、多选缓存清理）、日志（`journalctl` 服务日志或指定模型的 serve 日志，支持返回服务日志、清空和原生“另存为”）、设置（服务启停、开机启动、国内镜像、共享缓存清理、主题、API 文档）。“使用”对话框显示目标 Serve 地址、OpenAI 兼容 curl 示例、API 文档、模型列表和本地控制台入口。通过 WebSocket（`/v1/ws`）接收实时数据，HTTP 轮询兜底。启动/下载进度会显示 bundle 引用、当前阶段（Bundle 同步、Python 运行时、权重）、文件/字节数和百分比；校验失败的下载会自动重试。下载串行执行：有任务进行中时客户端禁用下载/启动按钮，重复 `/v1/pull` 返回 HTTP 409。模型行大小只包含 Bundle + 权重；运行时/Python/工具/下载缓存属于共享缓存，在设置中统计和清理。
 
 - 源码：`desktop/`；构建：`cargo build --release`（Rust MSVC 工具链，`cargo` 需在 PATH）。产物：`desktop/target/release/FlashServer.exe`（约 4.7MB）。
 - 内存：约 110~125MB 工作集（GPU 上下文 + 中文字体 + egui 存储）。
 - 主题：默认深色，可在设置中切换或用 `Ctrl+T`；保存在 `%LOCALAPPDATA%\FlashServer\settings.json`。
-- 破坏性操作（停止服务、禁用开机启动、卸载模型、退出客户端）都会二次确认。
+- 破坏性操作（停止服务、禁用开机启动、停止模型、退出客户端）都会二次确认。
 - 服务启停走 `wsl.exe`，不需要 UAC；开机启动开关调用 `flashserver-setup --enable-autostart/--disable-autostart`，会弹 UAC，且不会启动或停止服务。
 - 服务状态与开机启动完全独立：停止不会禁用自启，启动不会启用自启，自启开关也不会启动/停止服务。耗时操作会显示模态进度遮罩，完成后弹出结果提示。
 - 「API 文档」按钮打开当前 API 地址 + `/docs`（客户端从 `%LOCALAPPDATA%\FlashServer\api-url.txt` 读取端口）。
@@ -44,7 +44,7 @@ Windows 安装包内置 `FlashServer.exe`：Rust + egui/eframe 原生客户端�
 - FlashCLI 源码回退：`https://gitee.com/aodiansoft/flashcli.git`
 - PyTorch wheel：SJTU 镜像（`mirror.TorchIndexURL`）
 
-开关会写入 `~/.flashcli/mirror.env`，对新下载立即生效，不需要重启服务；`GET /v1/mirror` 返回当前状态。与 `install.sh --mirror` 使用同一组端点，不会修改 apt 源。服务停止或有下载/加载任务时，桌面设置中的开关不可用。
+开关会写入 `~/.flashcli/mirror.env`，对新下载立即生效，不需要重启服务；`GET /v1/mirror` 返回当前状态。与 `install.sh --mirror` 使用同一组端点，不会修改 apt 源。服务停止或有下载/启动任务时，桌面设置中的开关不可用。
 
 ## Windows UI 安装包
 
@@ -164,10 +164,10 @@ flashserver-setup.exe
 ```text
 GET  /health
 GET  /v1/version
-GET  /v1/models                 本地缓存模型 + 已加载实例 + serve 能力
+GET  /v1/models                 本地缓存模型 + 已启动实例 + serve 能力
 GET  /v1/models/loaded
 GET  /v1/storage                各区域唯一分配字节（硬链接只计一次）
-GET  /v1/resources              GPU、已加载模型、槽位
+GET  /v1/resources              GPU、已启动模型、槽位
 GET  /v1/system                 OS/WSL/GPU/驱动/CUDA/SM/torch/CPU/内存/运行时长
 GET  /v1/logs                   ?kind=server|model&ref=...&lines=N&since=unix
 GET  /v1/logs/download          完整服务/模型日志附件
@@ -191,7 +191,7 @@ GET  /openapi.yaml              OpenAPI 3.1 契约
 GET  /                          内置本地控制台
 ```
 
-`/v1/models/clean` 会跳过已加载/正在加载的模型，并保留与其他模型共享的权重；`/v1/storage/clean` 在有模型常驻/加载时拒绝清理 `runtimes`；两者都返回释放字节数。
+`/v1/models/clean` 会跳过已启动/正在启动的模型，并保留与其他模型共享的权重；`/v1/storage/clean` 在有模型常驻/启动时拒绝清理 `runtimes`；两者都返回释放字节数。
 
 请求/响应 schema 以 [openapi.yaml](openapi.yaml) 为准（也通过 `/openapi.yaml` 提供）。
 
@@ -229,7 +229,7 @@ Windows 11 + 已有 WSL2 Ubuntu、RTX 4060 8GB、约 100 Mbit/s 网络下的参�
 
 以下情况 `load` 返回 `409 RESOURCE_EXHAUSTED`：
 
-- `max_loaded > 0` 且已加载/正在加载数量达到上限；
+- `max_loaded > 0` 且已启动/正在启动数量达到上限；
 - bundle 声明了 `resources.min_vram_mib`，且空闲显存减去 `min_free_vram_mib` 后不足。
 
 bundle 应声明实测显存：

@@ -24,13 +24,13 @@ the installer may select a different free port, see "Windows UI installer"). The
 
 ## Desktop client
 
-The Windows installer ships `FlashServer.exe`, a Rust + egui/eframe desktop client (no WebView, no console window): overview (card layout with GPU/CPU environment and 0-100 charts, compact two-row service/disk cards, flat GPU/VRAM/CPU/RAM status bar), models (local cache plus on-demand FlashHub search/categories/versions, separate bundle/weight sizes, loaded state, async load progress, row actions for info/model logs/use/unload, and multi-select cache cleanup), logs (`journalctl` tail or per-model serve logs with clear and native Save-As), and settings (service start/stop, auto-start, domestic-mirror toggle, shared-cache cleanup with per-item sizes, theme, API docs). It talks to the daemon over WebSocket (`/v1/ws`) with HTTP polling as fallback. Load/download progress shows the bundle ref, phase (bundle sync, Python runtime, weights), file/byte counts and percentage; downloads retry on checksum mismatch. Downloads are serialized: the client disables download/load actions while a job is active, and a concurrent `/v1/pull` returns HTTP 409. Model-row size is Bundle + weights only; runtime/Python/tools/download cache are shared and listed in Settings.
+The Windows installer ships `FlashServer.exe`, a Rust + egui/eframe desktop client (no WebView, no console window): overview (card layout with GPU/CPU environment and 0-100 charts, compact two-row service/disk cards, flat GPU/VRAM/CPU/RAM status bar), models (local cache plus on-demand FlashHub search/categories/versions, separate bundle/weight sizes, started state, async start progress, row actions for info/model logs/use/stop, and multi-select cache cleanup), logs (`journalctl` tail or per-model serve logs with clear and native Save-As), and settings (service start/stop, auto-start, domestic-mirror toggle, shared-cache cleanup with per-item sizes, theme, API docs). It talks to the daemon over WebSocket (`/v1/ws`) with HTTP polling as fallback. Start/download progress shows the bundle ref, phase (bundle sync, Python runtime, weights), file/byte counts and percentage; downloads retry on checksum mismatch. Downloads are serialized: the client disables download/start actions while a job is active, and a concurrent `/v1/pull` returns HTTP 409. Model-row size is Bundle + weights only; runtime/Python/tools/download cache are shared and listed in Settings.
 
 - Source: `desktop/`; build with `cargo build --release` (Rust MSVC toolchain; put `cargo` on PATH). Output: `desktop/target/release/FlashServer.exe` (~4.7 MB).
 - Memory: ~110-125 MB working set (GPU context + CJK font + egui stores).
 - Theme: dark by default, switched in Settings or with `Ctrl+T`; saved to `%LOCALAPPDATA%\FlashServer\settings.json`.
 - Domestic mirrors: Settings → 下载源 enables pip (Aliyun), HuggingFace (`hf-mirror.com`), GitHub (`gh-proxy.com`) and the Gitee `flashcli` repo. It writes `~/.flashcli/mirror.env` and applies to new downloads immediately; apt sources are not changed.
-- Destructive actions (stop service, disable auto-start, unload model, quit) ask for confirmation.
+- Destructive actions (stop service, disable auto-start, stop model, quit) ask for confirmation.
 - Service buttons use `wsl.exe` (no UAC). The auto-start toggle calls `flashserver-setup --enable-autostart/--disable-autostart` and therefore prompts for UAC; it does not start or stop the service.
 - Service state and auto-start are independent: stopping never disables auto-start, starting never enables it, and auto-start changes never start/stop the service. Long operations show a modal progress overlay and a result toast.
 - API docs open the configured API URL + `/docs` (the client reads the port from `%LOCALAPPDATA%\FlashServer\api-url.txt`).
@@ -46,7 +46,7 @@ Settings → 下载源 (or `POST /v1/mirror {"enabled":true}`) enables China-fri
 - FlashCLI source fallback: `https://gitee.com/aodiansoft/flashcli.git`
 - PyTorch wheels: SJTU mirror (`mirror.TorchIndexURL`)
 
-The toggle writes `~/.flashcli/mirror.env` and applies to new downloads without restarting the service. `GET /v1/mirror` returns the current state. This is the same endpoint set as `install.sh --mirror`; it does not rewrite apt sources. The desktop setting is disabled while the service is stopped or a download/load job is running.
+The toggle writes `~/.flashcli/mirror.env` and applies to new downloads without restarting the service. `GET /v1/mirror` returns the current state. This is the same endpoint set as `install.sh --mirror`; it does not rewrite apt sources. The desktop setting is disabled while the service is stopped or a download/start job is running.
 
 ## Windows UI installer
 
