@@ -127,6 +127,7 @@ if (-not $SkipGo) {
     foreach ($arch in @("amd64", "arm64")) {
         Build-Go "linux" $arch "flashcli" "flashcli-linux-$arch"
         Build-Go "linux" $arch "flashserver" "flashserver-linux-$arch"
+        Build-Go "linux" $arch "flashserver-setup" "flashserver-setup-linux-$arch"
     }
     Build-Go "windows" "amd64" "flashserver-setup" "flashserver-setup-windows-amd64.exe"
 
@@ -135,6 +136,8 @@ if (-not $SkipGo) {
         "flashcli-linux-arm64",
         "flashserver-linux-amd64",
         "flashserver-linux-arm64",
+        "flashserver-setup-linux-amd64",
+        "flashserver-setup-linux-arm64",
         "flashserver-setup-windows-amd64.exe"
     )
     $lines = foreach ($name in $assets) {
