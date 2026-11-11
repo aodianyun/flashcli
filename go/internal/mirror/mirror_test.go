@@ -2,6 +2,7 @@ package mirror
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -102,5 +103,35 @@ func TestPipExtraArgs(t *testing.T) {
 	want := []string{"--index-url", "https://mirror/simple/", "--trusted-host", "mirror"}
 	if len(got) != 4 || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] || got[3] != want[3] {
 		t.Fatalf("PipExtraArgs = %v", got)
+	}
+}
+
+func TestSetEnabled(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FLASHCLI_HOME", home)
+	unset(t, "FLASHCLI_USE_MIRROR", "FLASHCLI_NO_MIRROR", "PIP_INDEX_URL", "PIP_TRUSTED_HOST", "HF_ENDPOINT", "FLASHCLI_PREFER_HF_MIRROR", "FLASHCLI_GIT_PROXY", "FLASHCLI_INSTALL_REPO", "GOPROXY", "GOSUMDB")
+	reset()
+
+	if err := SetEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+	if !Enabled() {
+		t.Fatal("mirror should be enabled")
+	}
+	if os.Getenv("PIP_INDEX_URL") != DefaultPipIndexURL || os.Getenv("HF_ENDPOINT") != DefaultHFEndpoint {
+		t.Fatalf("env not applied: pip=%q hf=%q", os.Getenv("PIP_INDEX_URL"), os.Getenv("HF_ENDPOINT"))
+	}
+	if _, err := os.Stat(filepath.Join(home, EnvFile)); err != nil {
+		t.Fatalf("mirror.env missing: %v", err)
+	}
+
+	if err := SetEnabled(false); err != nil {
+		t.Fatal(err)
+	}
+	if Enabled() {
+		t.Fatal("mirror should be disabled")
+	}
+	if os.Getenv("PIP_INDEX_URL") != "" || os.Getenv("HF_ENDPOINT") != "" {
+		t.Fatalf("env not cleared: pip=%q hf=%q", os.Getenv("PIP_INDEX_URL"), os.Getenv("HF_ENDPOINT"))
 	}
 }

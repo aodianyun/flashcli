@@ -34,6 +34,18 @@ Windows 安装包内置 `FlashServer.exe`：Rust + egui/eframe 原生客户端�
 - 「API 文档」按钮打开当前 API 地址 + `/docs`（客户端从 `%LOCALAPPDATA%\FlashServer\api-url.txt` 读取端口）。
 - 代码可跨平台编译；服务控制优先 Windows/WSL，Linux 走 `systemctl`（尽力而为），macOS 暂无 flashserver 后端。
 
+## 国内镜像
+
+设置 → 下载源（或 `POST /v1/mirror {"enabled":true}`）会为 bundle 准备和权重下载启用国内镜像：
+
+- pip：`https://mirrors.aliyun.com/pypi/simple/`
+- HuggingFace：`https://hf-mirror.com`
+- GitHub：`https://gh-proxy.com/`
+- FlashCLI 源码回退：`https://gitee.com/aodiansoft/flashcli.git`
+- PyTorch wheel：SJTU 镜像（`mirror.TorchIndexURL`）
+
+开关会写入 `~/.flashcli/mirror.env`，对新下载立即生效，不需要重启服务；`GET /v1/mirror` 返回当前状态。与 `install.sh --mirror` 使用同一组端点，不会修改 apt 源。服务停止或有下载/加载任务时，桌面设置中的开关不可用。
+
 ## Windows UI 安装包
 
 Windows 用户应优先使用 UI 安装包，而不是命令行：

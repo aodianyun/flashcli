@@ -92,6 +92,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/catalog/tags", s.catalogTags)
 	mux.HandleFunc("GET /v1/catalog/{id}", s.catalogRepo)
 	mux.HandleFunc("GET /v1/storage", s.storage)
+	mux.HandleFunc("GET /v1/mirror", s.mirrorStatus)
+	mux.HandleFunc("POST /v1/mirror", s.setMirror)
 	mux.HandleFunc("GET /v1/resources", s.resources)
 	mux.HandleFunc("GET /v1/gpu", s.gpuStatus)
 	mux.HandleFunc("GET /v1/gpu/history", s.gpuHistory)

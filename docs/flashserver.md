@@ -24,16 +24,29 @@ the installer may select a different free port, see "Windows UI installer"). The
 
 ## Desktop client
 
-The Windows installer ships `FlashServer.exe`, a Rust + egui/eframe desktop client (no WebView, no console window): overview (card layout with GPU/CPU environment and 0-100 charts, compact two-row service/disk cards, flat GPU/VRAM/CPU/RAM status bar), models (local cache plus on-demand FlashHub search/categories/versions, separate bundle/weight sizes, loaded state, async load progress, row details with unload, and multi-select cache cleanup), logs (`journalctl` tail with clear and native Save-As), and settings (service start/stop, auto-start, shared-cache cleanup with per-item sizes, theme, API docs). It talks to the daemon over WebSocket (`/v1/ws`) with HTTP polling as fallback. Load/download progress shows the bundle ref, phase (bundle sync, Python runtime, weights), file/byte counts and percentage; downloads retry on checksum mismatch. Downloads are serialized: the client disables download/load actions while a job is active, and a concurrent `/v1/pull` returns HTTP 409. Model-row size is Bundle + weights only; runtime/Python/tools/download cache are shared and listed in Settings.
+The Windows installer ships `FlashServer.exe`, a Rust + egui/eframe desktop client (no WebView, no console window): overview (card layout with GPU/CPU environment and 0-100 charts, compact two-row service/disk cards, flat GPU/VRAM/CPU/RAM status bar), models (local cache plus on-demand FlashHub search/categories/versions, separate bundle/weight sizes, loaded state, async load progress, row details with unload, and multi-select cache cleanup), logs (`journalctl` tail with clear and native Save-As), and settings (service start/stop, auto-start, domestic-mirror toggle, shared-cache cleanup with per-item sizes, theme, API docs). It talks to the daemon over WebSocket (`/v1/ws`) with HTTP polling as fallback. Load/download progress shows the bundle ref, phase (bundle sync, Python runtime, weights), file/byte counts and percentage; downloads retry on checksum mismatch. Downloads are serialized: the client disables download/load actions while a job is active, and a concurrent `/v1/pull` returns HTTP 409. Model-row size is Bundle + weights only; runtime/Python/tools/download cache are shared and listed in Settings.
 
 - Source: `desktop/`; build with `cargo build --release` (Rust MSVC toolchain; put `cargo` on PATH). Output: `desktop/target/release/FlashServer.exe` (~4.7 MB).
 - Memory: ~110-125 MB working set (GPU context + CJK font + egui stores).
 - Theme: dark by default, switched in Settings or with `Ctrl+T`; saved to `%LOCALAPPDATA%\FlashServer\settings.json`.
+- Domestic mirrors: Settings → 下载源 enables pip (Aliyun), HuggingFace (`hf-mirror.com`), GitHub (`gh-proxy.com`) and the Gitee `flashcli` repo. It writes `~/.flashcli/mirror.env` and applies to new downloads immediately; apt sources are not changed.
 - Destructive actions (stop service, disable auto-start, unload model, quit) ask for confirmation.
 - Service buttons use `wsl.exe` (no UAC). The auto-start toggle calls `flashserver-setup --enable-autostart/--disable-autostart` and therefore prompts for UAC; it does not start or stop the service.
 - Service state and auto-start are independent: stopping never disables auto-start, starting never enables it, and auto-start changes never start/stop the service. Long operations show a modal progress overlay and a result toast.
 - API docs open the configured API URL + `/docs` (the client reads the port from `%LOCALAPPDATA%\FlashServer\api-url.txt`).
 - The code compiles cross-platform; service control is wired for Windows/WSL first, Linux uses `systemctl` (best effort) and macOS has no flashserver backend yet.
+
+## Domestic mirrors
+
+Settings → 下载源 (or `POST /v1/mirror {"enabled":true}`) enables China-friendly endpoints for bundle preparation and weight downloads:
+
+- pip: `https://mirrors.aliyun.com/pypi/simple/`
+- HuggingFace: `https://hf-mirror.com`
+- GitHub: `https://gh-proxy.com/`
+- FlashCLI source fallback: `https://gitee.com/aodiansoft/flashcli.git`
+- PyTorch wheels: SJTU mirror (`mirror.TorchIndexURL`)
+
+The toggle writes `~/.flashcli/mirror.env` and applies to new downloads without restarting the service. `GET /v1/mirror` returns the current state. This is the same endpoint set as `install.sh --mirror`; it does not rewrite apt sources. The desktop setting is disabled while the service is stopped or a download/load job is running.
 
 ## Windows UI installer
 
@@ -161,6 +174,8 @@ GET  /v1/version
 GET  /v1/models                 cached models + loaded instances + serve capability
 GET  /v1/models/loaded
 GET  /v1/storage                unique allocated bytes per area (hardlinks counted once)
+GET  /v1/mirror                 domestic mirror state and endpoints
+POST /v1/mirror                 enable/disable domestic mirrors for new downloads
 GET  /v1/resources              GPU, loaded models, slot counts
 GET  /v1/system                 OS/WSL/GPU/driver/CUDA/SM/torch/CPU/RAM/uptime
 GET  /v1/logs                   ?kind=server|model&ref=...&lines=N&since=unix

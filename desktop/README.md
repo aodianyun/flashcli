@@ -9,7 +9,7 @@ Native desktop client for `flashserver`, built with Rust + [egui/eframe](https:/
   - Local: bundle/weight readiness, serve capability (run-only bundles are marked "仅 run"), separate bundle and weight sizes, total size, loaded state, async load with bundle/weight/dependency progress, row details (endpoint/PID/loaded time, unload, copy endpoint), and multi-select cache cleanup (all cleanable rows selected by default; loaded models are skipped).
   - FlashHub: nothing is listed until you search or pick a category; then browse versions with size/file count and download a version. Load it from the Local tab, which shows "仅 run" and hides the load action for bundles without a serve entry.
 - Logs: `journalctl` tail (last 300 lines, refreshed every second), "清空" switches to new entries only, "另存为…" saves the full log via a native file dialog.
-- Settings: start/stop the daemon without elevation; enable/disable auto-start (UAC) through `flashserver-setup`; clean shared caches (download cache, Python, tools, runtimes) with per-item sizing; dark/light theme; API docs; quit.
+- Settings: start/stop the daemon without elevation; enable/disable auto-start (UAC) through `flashserver-setup`; enable domestic mirrors (pip/HuggingFace/GitHub) for new downloads; clean shared caches (download cache, Python, tools, runtimes) with per-item sizing; dark/light theme; API docs; quit.
 - API URL: reads `%LOCALAPPDATA%\FlashServer\api-url.txt` (written by setup when the default port 8790 is reserved) and falls back to `http://127.0.0.1:8790`. The settings page shows the selected address.
 - Destructive actions (stop service, disable auto-start, unload, quit) require confirmation.
 - Live data: WebSocket `/v1/ws` (1 Hz system snapshots + job progress), HTTP polling fallback.

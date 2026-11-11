@@ -136,6 +136,7 @@ enum Event {
     ServiceDown,
     Models(Value),
     Storage(Value),
+    Mirror(Value),
     Logs(Option<String>),
     LogsNote(String),
     CleanNote(String),
@@ -196,6 +197,7 @@ pub struct App {
     storage_total: f64,
     storage_sizes: HashMap<String, f64>,
     storage_note: String,
+    mirror_enabled: Option<bool>,
     cache_dialog: bool,
     cache_selected: HashSet<String>,
     logs: String,
@@ -258,6 +260,7 @@ impl App {
             storage_total: 0.0,
             storage_sizes: HashMap::new(),
             storage_note: String::new(),
+            mirror_enabled: None,
             cache_dialog: false,
             cache_selected: HashSet::new(),
             logs: String::new(),
@@ -346,6 +349,9 @@ impl App {
                     self.storage = areas;
                     self.storage_total = total;
                     self.storage_sizes = sizes;
+                }
+                Event::Mirror(v) => {
+                    self.mirror_enabled = v["enabled"].as_bool();
                 }
                 Event::Logs(text) => {
                     if let Some(text) = text {
@@ -1613,6 +1619,44 @@ impl App {
                 });
 
                 ui.add_space(10.0);
+                panel(ui, "下载源", |ui| {
+                    let state = self.mirror_enabled;
+                    let can_edit = self.system.is_some() && state.is_some() && !self.loading;
+                    let mut checked = state.unwrap_or(false);
+                    let changed = ui
+                        .add_enabled_ui(can_edit, |ui| {
+                            ui.checkbox(&mut checked, "使用国内镜像（pip / HuggingFace / GitHub）")
+                        })
+                        .inner
+                        .changed();
+                    if changed {
+                        spawn_set_mirror(self.tx.clone(), ui.ctx().clone(), checked);
+                    }
+                    ui.label(
+                        egui::RichText::new(
+                            "pip 使用阿里云，HuggingFace 使用 hf-mirror，GitHub 使用 gh-proxy / Gitee；修改后新下载立即生效。",
+                        )
+                        .weak()
+                        .small(),
+                    );
+                    if self.system.is_none() {
+                        ui.label(
+                            egui::RichText::new("服务未运行，无法读取或修改镜像设置。")
+                                .weak()
+                                .small(),
+                        );
+                    } else if self.loading {
+                        ui.label(
+                            egui::RichText::new("下载/加载进行中，完成后再修改镜像设置。")
+                                .weak()
+                                .small(),
+                        );
+                    } else if state.is_none() {
+                        ui.label(egui::RichText::new("正在读取镜像设置…").weak().small());
+                    }
+                });
+
+                ui.add_space(10.0);
                 panel(ui, "存储", |ui| {
                     ui.horizontal(|ui| {
                         ui.label(
@@ -2585,6 +2629,10 @@ fn start_http(tx: Sender<Event>, ctx: egui::Context) {
                 let _ = tx.send(Event::Storage(v));
                 ctx.request_repaint();
             }
+            if let Some(v) = get_json("/v1/mirror") {
+                let _ = tx.send(Event::Mirror(v));
+                ctx.request_repaint();
+            }
             std::thread::sleep(Duration::from_secs(2));
         }
     });
@@ -2945,6 +2993,26 @@ fn spawn_storage_clean(tx: Sender<Event>, ctx: egui::Context, targets: Vec<Strin
         let _ = tx.send(Event::StorageNote(note));
         if let Some(v) = get_json("/v1/storage") {
             let _ = tx.send(Event::Storage(v));
+        }
+        ctx.request_repaint();
+    });
+}
+
+fn spawn_set_mirror(tx: Sender<Event>, ctx: egui::Context, enabled: bool) {
+    std::thread::spawn(move || {
+        let body = serde_json::json!({ "enabled": enabled });
+        match post_json("/v1/mirror", &body) {
+            Ok(v) => {
+                let _ = tx.send(Event::Mirror(v));
+                let _ = tx.send(Event::OpDone(Ok(if enabled {
+                    "已启用国内镜像".into()
+                } else {
+                    "已禁用国内镜像".into()
+                })));
+            }
+            Err(e) => {
+                let _ = tx.send(Event::OpDone(Err(format!("镜像设置失败：{e}"))));
+            }
         }
         ctx.request_repaint();
     });

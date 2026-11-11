@@ -244,6 +244,35 @@ paths:
                   areas:
                     type: array
                     items: { $ref: '#/components/schemas/StorageArea' }
+  /v1/mirror:
+    get:
+      summary: Domestic mirror settings
+      responses:
+        '200':
+          description: Current mirror state and endpoints
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MirrorState' }
+    post:
+      summary: Enable or disable domestic mirrors
+      description: Writes or removes ~/.flashcli/mirror.env and applies it to new downloads.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+      responses:
+        '200':
+          description: Updated mirror state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MirrorState' }
+        '500':
+          $ref: '#/components/responses/Error'
   /v1/storage/clean:
     post:
       summary: Remove shared caches (download cache, Python, tools, runtimes)
@@ -569,6 +598,14 @@ components:
       type: object
       properties:
         error: { type: string }
+    MirrorState:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        pip_index_url: { type: string }
+        hf_endpoint: { type: string }
+        git_proxy: { type: string }
+        install_repo: { type: string }
     CleanResult:
       type: object
       properties:

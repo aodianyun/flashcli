@@ -333,3 +333,26 @@ func TestPullRejectsConcurrent(t *testing.T) {
 		t.Fatalf("pull after completion status = %d", code)
 	}
 }
+func TestMirrorAPI(t *testing.T) {
+	t.Setenv("FLASHCLI_HOME", t.TempDir())
+	s := &Server{}
+	call := func(method, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "/v1/mirror", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+		return rec
+	}
+	if rec := call(http.MethodGet, ""); rec.Code != http.StatusOK {
+		t.Fatalf("GET status = %d", rec.Code)
+	}
+	if rec := call(http.MethodPost, `{"enabled":true}`); rec.Code != http.StatusOK {
+		t.Fatalf("POST enable status = %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := call(http.MethodGet, ""); !strings.Contains(rec.Body.String(), `"enabled":true`) {
+		t.Fatalf("GET after enable = %s", rec.Body.String())
+	}
+	if rec := call(http.MethodPost, `{"enabled":false}`); rec.Code != http.StatusOK {
+		t.Fatalf("POST disable status = %d", rec.Code)
+	}
+}

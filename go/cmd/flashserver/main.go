@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"syscall"
 
+	"github.com/aodianyun/flashcli/go/internal/mirror"
 	"github.com/aodianyun/flashcli/go/internal/server"
 	"github.com/aodianyun/flashcli/go/internal/version"
 )
@@ -50,6 +51,9 @@ func main() {
 	if cfg.Addr == "" {
 		cfg.Addr = "127.0.0.1:8790"
 	}
+	// Apply ~/.flashcli/mirror.env (or install.sh --mirror defaults) before any
+	// bundle/weight download uses PIP_INDEX_URL / HF_ENDPOINT.
+	mirror.Apply()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
