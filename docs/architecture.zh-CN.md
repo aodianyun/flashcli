@@ -47,7 +47,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 | Bundle 可用性 / serve 能力 | `host.BundleRootUsable`、`host.ListModels` | `models list/show` | `/v1/models` |
 | 权重 key + 就绪 | `host.MarkerWeightsKey`、`host.WeightsInfo`、`host.WeightsCachedForMarker` | `models list/show` | `/v1/models` |
 | 规范 ref/cache key | `host.RefCacheKey` | ref 解析 | 清理/API ref |
-| 清理路径选择 | `host.RefPaths`、`RuntimePaths`、`OrphanPaths`、`AllDataPaths` | `flashcli bundle clean` | `/v1/models/clean`、`/v1/storage/clean` |
+| 清理路径选择 + 删除 | `host.RefPaths`、`host.RuntimePaths`、`host.OrphanPaths`、`host.AllDataPaths`、`host.SharedCachePaths`、`host.RemovePaths` | `flashcli bundle clean`、`flashcli cache clean` | `/v1/models/clean`、`/v1/storage/clean` |
 | 删除模型缓存 | `host.RemoveCachedRef` | `bundle clean` 语义 | `/v1/models/clean` |
 
 规则：

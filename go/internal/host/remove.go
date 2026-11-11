@@ -54,19 +54,11 @@ func RemoveCachedRef(ref string) (RemoveResult, error) {
 		}
 	}
 
-	before := storageTotal()
-	for _, path := range RefPaths(ref, true) {
-		if !safeUnder(paths.Home(), path) {
-			return res, fmt.Errorf("refusing to remove %s", path)
-		}
-		if err := os.RemoveAll(path); err != nil {
-			return res, err
-		}
+	freed, err := RemovePaths(RefPaths(ref, true))
+	if err != nil {
+		return res, err
 	}
-	res.FreedBytes = before - storageTotal()
-	if res.FreedBytes < 0 {
-		res.FreedBytes = 0
-	}
+	res.FreedBytes = freed
 	return res, nil
 }
 

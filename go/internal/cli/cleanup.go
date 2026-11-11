@@ -3,7 +3,6 @@ package cli
 import (
 	"bufio"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -50,10 +49,13 @@ func existingPaths(paths []string) []string {
 }
 
 func removePaths(cmd *cobra.Command, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	if _, err := host.RemovePaths(paths); err != nil {
+		return failed(cmd, err)
+	}
 	for _, p := range paths {
-		if err := os.RemoveAll(p); err != nil {
-			return failed(cmd, err)
-		}
 		fmt.Fprintf(cmd.OutOrStdout(), "Removed %s\n", p)
 	}
 	return nil

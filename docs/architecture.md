@@ -48,7 +48,7 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 | Bundle usability / serve capability | `host.BundleRootUsable`, `host.ListModels` | `models list/show` | `/v1/models` |
 | Weights key + readiness | `host.MarkerWeightsKey`, `host.WeightsInfo`, `host.WeightsCachedForMarker` | `models list/show` | `/v1/models` |
 | Canonical ref/cache key | `host.RefCacheKey` | ref resolution | cleanup/API refs |
-| Cleanup path selection | `host.RefPaths`, `RuntimePaths`, `OrphanPaths`, `AllDataPaths` | `flashcli bundle clean` | `/v1/models/clean`, `/v1/storage/clean` |
+| Cleanup path selection + removal | `host.RefPaths`, `host.RuntimePaths`, `host.OrphanPaths`, `host.AllDataPaths`, `host.SharedCachePaths`, `host.RemovePaths` | `flashcli bundle clean`, `flashcli cache clean` | `/v1/models/clean`, `/v1/storage/clean` |
 | Remove model cache | `host.RemoveCachedRef` | `bundle clean` semantics | `/v1/models/clean` |
 
 Rules:

@@ -66,6 +66,12 @@ func CleanSharedCaches(targets []string) (int64, error) {
 	if len(pathsToRemove) == 0 {
 		return 0, fmt.Errorf("targets is required")
 	}
+	return RemovePaths(pathsToRemove)
+}
+
+// RemovePaths removes cache paths under FLASHCLI_HOME and returns the unique
+// bytes freed. Both flashcli and flashserver use this for cleanup.
+func RemovePaths(pathsToRemove []string) (int64, error) {
 	before := storageTotal()
 	for _, path := range pathsToRemove {
 		if !safeUnder(paths.Home(), path) {
