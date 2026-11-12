@@ -295,4 +295,14 @@ The desktop client exposes the same actions; stopping/starting the daemon itself
 sudo flashserver-setup --uninstall
 ```
 
-Removes the service, config, and flashserver binary. Keeps `FLASHCLI_HOME`, bundles, and model weights. Windows uninstall is wired through the UI installer; WSL distro and model caches are kept.
+Removes the service, config, and `flashserver` binary. Keeps `FLASHCLI_HOME` (bundles, weights, runtimes, caches), the WSL distro, and the desktop settings.
+
+Optional cleanup flags:
+
+| Flag | Removes |
+|---|---|
+| `--purge-models` | `FLASHCLI_HOME` (bundles, weights, runtimes, caches) and the extracted `flashcli-bundle` source |
+| `--remove-cli` | `/usr/local/bin/flashcli` |
+| `--purge-settings` | desktop client settings (`%LOCALAPPDATA%\FlashServer`) |
+
+The Windows UI uninstaller shows these as three checkboxes before removing files; a silent uninstall keeps everything. Uninstalling while a model is loading or starting stops the service and its jobs first (load/download state resumes from the cache on the next install).

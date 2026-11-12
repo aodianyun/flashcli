@@ -35,6 +35,9 @@ type Options struct {
 	ReleaseBase      string
 	ReleaseAPI       string
 	Uninstall        bool
+	PurgeModels      bool
+	RemoveCLI        bool
+	PurgeSettings    bool
 	StopService      bool
 	StartService     bool
 	EnableAutostart  bool

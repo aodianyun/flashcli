@@ -62,6 +62,11 @@ Payload contents: `flashserver-setup.exe` (the WSL setup engine),
 pair and the network checksum file are not bundled; setup only downloads when
 the matching `--bin-dir` assets are absent.
 
+Uninstall asks three optional cleanup checkboxes (model caches, the `flashcli`
+CLI, client settings) and passes them to `flashserver-setup --uninstall`
+(`--purge-models`, `--remove-cli`, `--purge-settings`). Silent uninstall keeps
+all data.
+
 The installer shows a live progress page and parses the setup progress file
 (`[n/8] step` lines plus a final `DONE <code>`). Exit codes: `0` ready, `3`
 restart required to finish enabling WSL2, `2` error. On exit `3` the client is

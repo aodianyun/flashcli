@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func uninstallLinux(ctx context.Context, env Env, opts Options, out io.Writer) error {
@@ -20,6 +21,18 @@ func uninstallLinux(ctx context.Context, env Env, opts Options, out io.Writer) e
 	_ = i.run(ctx, "systemctl", "daemon-reload")
 	_ = os.Remove(opts.ConfigPath)
 	_ = os.Remove(filepath.Join(opts.Prefix, "bin", "flashserver"))
-	i.printf("removed flashserver service/config/binary; kept %s and model caches\n", opts.Home)
+	if opts.RemoveCLI {
+		_ = os.Remove(filepath.Join(opts.Prefix, "bin", "flashcli"))
+	}
+	if opts.PurgeModels && strings.HasPrefix(opts.Home, "/") && opts.Home != "/" {
+		i.printf("remove model caches %s\n", opts.Home)
+		_ = os.RemoveAll(opts.Home)
+		_ = os.RemoveAll("/usr/local/share/flashcli")
+	}
+	if opts.PurgeModels {
+		i.printf("removed flashserver service/config/binary and model caches\n")
+	} else {
+		i.printf("removed flashserver service/config/binary; kept %s and model caches\n", opts.Home)
+	}
 	return nil
 }

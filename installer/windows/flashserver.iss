@@ -57,14 +57,105 @@ Filename: "{app}\FlashServer.exe"; Description: "Launch FlashServer"; Flags: pos
 
 [UninstallRun]
 Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM FlashServer.exe"; Flags: runhidden; RunOnceId: "StopFlashServerClient"
-Filename: "{app}\payload\flashserver-setup.exe"; Parameters: "--uninstall"; RunOnceId: "RemoveFlashServerService"; Flags: waituntilterminated runhidden
+Filename: "{app}\payload\flashserver-setup.exe"; Parameters: "--uninstall{code:GetPurgeArgs}"; RunOnceId: "RemoveFlashServerService"; Flags: waituntilterminated runhidden
 
 [Code]
 var
+  PurgeModels: Boolean;
+  RemoveCLI: Boolean;
+  PurgeSettings: Boolean;
   SetupOK: Boolean;
   SetupReboot: Boolean;
   SetupError: String;
   ProgressPage: TOutputProgressWizardPage;
+
+// Extra arguments for `flashserver-setup --uninstall`, decided by the
+// checkboxes shown before the uninstall starts.
+function GetPurgeArgs(Param: String): String;
+begin
+  Result := '';
+  if PurgeModels then
+    Result := Result + ' --purge-models';
+  if RemoveCLI then
+    Result := Result + ' --remove-cli';
+  if PurgeSettings then
+    Result := Result + ' --purge-settings';
+end;
+
+// The Inno uninstaller has no wizard pages, so show a small custom form with
+// the optional cleanup choices. Defaults keep all data.
+procedure ShowUninstallOptions;
+var
+  Form: TSetupForm;
+  Title: TNewStaticText;
+  CbModels, CbCli, CbSettings: TCheckBox;
+  Btn: TButton;
+begin
+  Form := CreateCustomForm();
+  try
+    Form.Caption := 'FlashServer 卸载选项';
+    Form.ClientWidth := ScaleX(540);
+    Form.ClientHeight := ScaleY(232);
+    Form.Position := poScreenCenter;
+    Form.BorderStyle := bsDialog;
+
+    Title := TNewStaticText.Create(Form);
+    Title.Parent := Form;
+    Title.Left := ScaleX(16);
+    Title.Top := ScaleY(14);
+    Title.Width := ScaleX(508);
+    Title.Caption := '默认保留模型缓存和设置。勾选以下项目会在卸载时一并删除：';
+
+    CbModels := TCheckBox.Create(Form);
+    CbModels.Parent := Form;
+    CbModels.Left := ScaleX(16);
+    CbModels.Top := ScaleY(50);
+    CbModels.Width := ScaleX(508);
+    CbModels.Caption := '模型缓存、权重和运行环境（~/.flashcli，不可恢复）';
+    CbModels.Checked := False;
+
+    CbCli := TCheckBox.Create(Form);
+    CbCli.Parent := Form;
+    CbCli.Left := ScaleX(16);
+    CbCli.Top := ScaleY(84);
+    CbCli.Width := ScaleX(508);
+    CbCli.Caption := 'flashcli 命令行（/usr/local/bin/flashcli）';
+    CbCli.Checked := False;
+
+    CbSettings := TCheckBox.Create(Form);
+    CbSettings.Parent := Form;
+    CbSettings.Left := ScaleX(16);
+    CbSettings.Top := ScaleY(118);
+    CbSettings.Width := ScaleX(508);
+    CbSettings.Caption := '客户端设置（%LOCALAPPDATA%\FlashServer）';
+    CbSettings.Checked := False;
+
+    Btn := TButton.Create(Form);
+    Btn.Parent := Form;
+    Btn.Caption := '继续卸载';
+    Btn.ModalResult := mrOk;
+    Btn.Default := True;
+    Btn.Left := ScaleX(408);
+    Btn.Top := ScaleY(184);
+    Btn.Width := ScaleX(116);
+    Btn.Height := ScaleY(30);
+
+    Form.ShowModal;
+    PurgeModels := CbModels.Checked;
+    RemoveCLI := CbCli.Checked;
+    PurgeSettings := CbSettings.Checked;
+  finally
+    Form.Free;
+  end;
+end;
+
+function InitializeUninstall: Boolean;
+begin
+  Result := True;
+  if UninstallSilent() then
+    Exit;
+  ShowUninstallOptions;
+end;
 
 function SetupReady: Boolean;
 begin
