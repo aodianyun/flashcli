@@ -95,6 +95,19 @@ begin
   ProgressCancelled := True;
 end;
 
+{ Keep the progress bar and Cancel button on the bottom row, right-aligned. }
+procedure LayoutProgressPage;
+begin
+  ProgressPage.ProgressBar.Top :=
+    ProgressPage.Msg1Label.Parent.Height - ProgressPage.ProgressBar.Height - ScaleY(16);
+  ProgressPage.ProgressBar.Width :=
+    ProgressPage.Msg1Label.Width - ProgressCancelButton.Width - ScaleX(24);
+  ProgressCancelButton.Left :=
+    ProgressPage.ProgressBar.Left + ProgressPage.ProgressBar.Width + ScaleX(12);
+  ProgressCancelButton.Top := ProgressPage.ProgressBar.Top +
+    (ProgressPage.ProgressBar.Height - ProgressCancelButton.Height) div 2;
+end;
+
 // Removing the distro already removes the model cache and the CLI inside it,
 // so those options are forced on and disabled.
 procedure SyncDistroDependent;
@@ -537,6 +550,7 @@ begin
   ProgressPage.Msg2Label.Visible := False;
   ProgressPage.SetProgress(0, 800);
   ProgressPage.Show;
+  LayoutProgressPage;
   ProgressCancelButton.Visible := True;
   try
     Started := Exec(
@@ -706,10 +720,9 @@ begin
   ProgressCancelButton.Caption := 'Cancel';
   ProgressCancelButton.Width := ScaleX(88);
   ProgressCancelButton.Height := ScaleY(26);
-  ProgressCancelButton.Left := (ProgressPage.Msg1Label.Width - ProgressCancelButton.Width) div 2;
-  ProgressCancelButton.Top := ProgressPage.ProgressBar.Top - ProgressCancelButton.Height - ScaleY(6);
   ProgressCancelButton.OnClick := @ProgressCancelClick;
   ProgressCancelButton.Visible := False;
+  LayoutProgressPage;
 
   WSLDirPage := CreateInputDirPage(wpSelectDir,
     'WSL data directory',
