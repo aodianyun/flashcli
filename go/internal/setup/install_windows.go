@@ -259,19 +259,29 @@ func moveDistro(ctx context.Context, opts Options, i *installer) error {
 		i.printf("warn: create %s: %v\n", filepath.Dir(abs), err)
 		return nil
 	}
-	_ = exec.CommandContext(ctx, sysExe("wsl.exe"), "--terminate", opts.Distro).Run()
-	cmd := exec.CommandContext(ctx, sysExe("wsl.exe"), "--manage", opts.Distro, "--move", abs)
-	cmd.Stdout = diag
-	cmd.Stderr = diag
-	if err := cmd.Run(); err != nil {
-		i.printf("warn: move WSL distro to %s failed (%v); keeping the default location\n", abs, err)
-		return nil
+	// The VHDX stays locked for a while after the distro is stopped, so
+	// --move fails with ERROR_SHARING_VIOLATION. Shut WSL down and retry.
+	i.printf("stopping WSL before moving the distro\n")
+	_ = exec.CommandContext(ctx, sysExe("wsl.exe"), "--shutdown").Run()
+	var lastErr error
+	for attempt := 1; attempt <= 6; attempt++ {
+		time.Sleep(time.Duration(attempt+2) * time.Second)
+		cmd := exec.CommandContext(ctx, sysExe("wsl.exe"), "--manage", opts.Distro, "--move", abs)
+		cmd.Stdout = diag
+		cmd.Stderr = diag
+		if err := cmd.Run(); err == nil {
+			i.printf("moved WSL distro %s to %s\n", opts.Distro, abs)
+			return nil
+		} else {
+			lastErr = err
+		}
 	}
-	i.printf("moved WSL distro %s to %s\n", opts.Distro, abs)
+	i.printf("warn: move WSL distro to %s failed (%v); keeping the default location\n", abs, lastErr)
 	return nil
 }
 
-func ensureSystemd(ctx context.Context, opts Options, i *installer) error {	script := "grep -q '^systemd=true' /etc/wsl.conf 2>/dev/null || printf '[boot]\\nsystemd=true\\n' >> /etc/wsl.conf"
+func ensureSystemd(ctx context.Context, opts Options, i *installer) error {
+	script := "grep -q '^systemd=true' /etc/wsl.conf 2>/dev/null || printf '[boot]\\nsystemd=true\\n' >> /etc/wsl.conf"
 	if opts.DryRun {
 		i.printf("$ wsl.exe -d %s -u root -- sh -c %q\n", opts.Distro, script)
 		return nil
