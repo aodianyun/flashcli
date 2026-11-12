@@ -240,6 +240,7 @@ enum Event {
     ModelOptions { reference: String, result: Result<Value, String> },
     ModelOptionsSaved { reference: String, result: Result<Value, String>, start: bool },
     WslApplied(Result<String, String>),
+    Health(bool),
 }
 
 struct JobEvent {
@@ -338,6 +339,7 @@ pub struct App {
     gpu_mem: Vec<[f64; 2]>,
     cpu: Vec<[f64; 2]>,
     x: f64,
+    health_at: Instant,
 }
 
 impl App {
@@ -413,6 +415,7 @@ impl App {
             gpu_mem: Vec::new(),
             cpu: Vec::new(),
             x: 0.0,
+            health_at: Instant::now(),
         }
     }
 
@@ -601,6 +604,27 @@ impl App {
                         Ok(message) => (message, true, Instant::now()),
                         Err(error) => (error, false, Instant::now()),
                     });
+                }
+                Event::Health(up) => {
+                    if !up {
+                        if self.system.is_some() {
+                            self.system = None;
+                            for model in &mut self.models {
+                                model.loaded = false;
+                                model.endpoint.clear();
+                                model.pid = 0;
+                                model.loaded_at.clear();
+                            }
+                            self.sync_model_selection();
+                        }
+                        if self.loading {
+                            self.loading = false;
+                            self.load_pct = None;
+                            self.load_message.clear();
+                        }
+                    } else if self.system.is_none() {
+                        spawn_system_refresh(self.tx.clone(), ctx.clone());
+                    }
                 }
                 Event::Smoke(result) => {
                     self.pending_smoke_cancel = false;
@@ -3156,6 +3180,10 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.drain_events(ctx);
+        if self.health_at.elapsed() >= Duration::from_secs(5) {
+            self.health_at = Instant::now();
+            spawn_health(self.tx.clone(), ctx.clone());
+        }
         if !self.closing && ctx.input(|i| i.viewport().close_requested()) {
             self.closing = true;
             if let Some(smoke) = &self.smoke {
@@ -4179,6 +4207,26 @@ fn spawn_set_mirror(tx: Sender<Event>, ctx: egui::Context, enabled: bool) {
     });
 }
 
+fn spawn_health(tx: Sender<Event>, ctx: egui::Context) {
+    std::thread::spawn(move || {
+        let up = get_json_timeout("/health", 2).is_some();
+        let _ = tx.send(Event::Health(up));
+        ctx.request_repaint();
+    });
+}
+
+fn spawn_system_refresh(tx: Sender<Event>, ctx: egui::Context) {
+    std::thread::spawn(move || {
+        if let Some(sys) = get_json("/v1/system") {
+            let _ = tx.send(Event::System(sys));
+        }
+        if let Some(models) = get_json("/v1/models") {
+            let _ = tx.send(Event::Models(models));
+        }
+        ctx.request_repaint();
+    });
+}
+
 fn spawn_unload(tx: Sender<Event>, ctx: egui::Context, ref_str: String) {
     std::thread::spawn(move || {
         let body = serde_json::json!({ "ref": ref_str });
@@ -4697,10 +4745,10 @@ fn run_elevated_ps1(script: &str) -> Result<(), String> {
     std::fs::write(&path, script).map_err(|e| e.to_string())?;
     let quoted = path.to_string_lossy().replace('\'', "''");
     let cmd = format!(
-        "Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','{quoted}'"
+        "Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File','{quoted}'"
     );
-    let status = std::process::Command::new("powershell.exe")
-        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &cmd])
+    let status = hidden_command("powershell.exe")
+        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", &cmd])
         .status()
         .map_err(|e| e.to_string())?;
     if status.success() {
@@ -4710,21 +4758,81 @@ fn run_elevated_ps1(script: &str) -> Result<(), String> {
     }
 }
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+/// Start a console program without flashing a console window in the GUI app.
+fn hidden_command(program: &str) -> std::process::Command {
+    #[allow(unused_mut)]
+    let mut cmd = std::process::Command::new(program);
+    #[cfg(windows)]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    cmd
+}
+
+fn api_healthy() -> bool {
+    get_json_timeout("/health", 2).is_some()
+}
+
+fn service_active() -> bool {
+    hidden_command("wsl.exe")
+        .args(["-d", "Ubuntu", "-u", "root", "systemctl", "is-active", "flashserver"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "active")
+        .unwrap_or(false)
+}
+
 fn apply_wsl(cfg: &WslConfig, restart_service: bool, ports: &str) -> Result<String, String> {
     save_wslconfig(cfg)?;
-    let _ = std::process::Command::new("wsl.exe")
-        .arg("--shutdown")
-        .status();
+    let _ = hidden_command("wsl.exe").arg("--shutdown").status();
     std::thread::sleep(Duration::from_secs(3));
     if restart_service {
-        let output = std::process::Command::new("wsl.exe")
-            .args(["-d", "Ubuntu", "-u", "root", "systemctl", "start", "flashserver"])
-            .output()
-            .map_err(|e| format!("启动 FlashServer 失败：{e}"))?;
-        if !output.status.success() {
-            let _ = std::process::Command::new("wsl.exe")
+        let mut started = false;
+        for _ in 0..5 {
+            let output = hidden_command("wsl.exe")
+                .args(["-d", "Ubuntu", "-u", "root", "systemctl", "start", "flashserver"])
+                .output();
+            if output.map(|o| o.status.success()).unwrap_or(false) {
+                started = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_secs(2));
+        }
+        if !started {
+            let _ = hidden_command("wsl.exe")
                 .args(["-d", "Ubuntu", "-u", "root", "true"])
                 .status();
+        }
+    }
+    if cfg.mirrored && restart_service {
+        let mut healthy = false;
+        for _ in 0..8 {
+            if api_healthy() {
+                healthy = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_secs(2));
+        }
+        if !healthy {
+            if service_active() {
+                // The API is unreachable under mirrored networking. Do not leave
+                // the user with a dead local service: restore NAT automatically.
+                let mut revert = cfg.clone();
+                revert.mirrored = false;
+                let _ = save_wslconfig(&revert);
+                let _ = hidden_command("wsl.exe").arg("--shutdown").status();
+                std::thread::sleep(Duration::from_secs(3));
+                let _ = hidden_command("wsl.exe")
+                    .args(["-d", "Ubuntu", "-u", "root", "systemctl", "start", "flashserver"])
+                    .status();
+                return Err(
+                    "WSL 镜像网络在当前 WSL 版本下无法访问 FlashServer API，已自动回滚到 NAT。模型仍可在本机 localhost 使用；局域网访问请使用端口代理或升级/降级 WSL。"
+                        .to_string(),
+                );
+            }
+            return Err(
+                "WSL 已重启，但 FlashServer 服务未启动；请查看 journalctl -u flashserver。".to_string(),
+            );
         }
     }
     let mut warning = String::new();
