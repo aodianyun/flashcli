@@ -473,13 +473,11 @@ var
   LastStep: Integer;
   LastText: String;
   WSLArgs: String;
-  StartTick: Cardinal;
   Elapsed, LastElapsed: Integer;
 begin
   Result := False;
   SetupError := '';
   SetupReboot := False;
-  StartTick := GetTickCount;
   LastElapsed := -1;
   ProgressPath := ExpandConstant('{tmp}\flashserver-progress.txt');
   LogPath := GetEnv('USERPROFILE') + '\.flashcli\logs\setup.log';
@@ -513,7 +511,7 @@ begin
           DoneCode, ProgressLog);
         if HasDone then
           Break;
-        Elapsed := Integer((GetTickCount - StartTick) div 1000);
+        Elapsed := Attempts div 4;
         if (Step > 0) and (Total > 0) then
         begin
           if (Step <> LastStep) or (StepText <> LastText) or
