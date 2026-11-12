@@ -1,4 +1,4 @@
-; FlashServer Windows UI installer (Inno Setup 6+).
+﻿; FlashServer Windows UI installer (Inno Setup 6+).
 ;
 ; Build on Windows after scripts/build_go.sh has produced dist/go:
 ;   powershell -ExecutionPolicy Bypass -File scripts/build_windows_installer.ps1
