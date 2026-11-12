@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/aodianyun/flashcli/go/internal/paths"
 	"github.com/aodianyun/flashcli/go/internal/setup"
@@ -69,16 +70,11 @@ func run() int {
 	if logFile != nil {
 		out = io.MultiWriter(os.Stdout, logFile)
 	}
-	var progressFile *os.File
 	if *progressPath != "" {
-		f, err := os.Create(*progressPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "warn: progress file: %v\n", err)
-		} else {
-			progressFile = f
-			defer progressFile.Close()
-			out = io.MultiWriter(out, progressFile)
-		}
+		// The installer reads this file while setup runs. Reopen/close on
+		// every write so its reader never hits a sharing lock.
+		_ = os.Remove(*progressPath)
+		out = io.MultiWriter(out, &appendFile{path: *progressPath})
 	}
 	fmt.Fprintf(out, "flashserver-setup %s\n", version.Version)
 	fmt.Fprintf(out, "System: %s/%s, WSL: %v, backend: %s\n", env.OS, env.Arch, env.WSL, backend)
@@ -90,9 +86,8 @@ func run() int {
 		steps, err := setup.Plan(env, opts.Backend)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			if progressFile != nil {
-				fmt.Fprintf(progressFile, "DONE 2\n")
-				_ = progressFile.Sync()
+			if *progressPath != "" {
+				fmt.Fprintf(out, "DONE 2\n")
 			}
 			return 2
 		}
@@ -113,11 +108,31 @@ func run() int {
 			code = 2
 		}
 	}
-	if progressFile != nil {
-		fmt.Fprintf(progressFile, "DONE %d\n", code)
-		_ = progressFile.Sync()
+	if *progressPath != "" {
+		fmt.Fprintf(out, "DONE %d\n", code)
 	}
 	return code
+}
+
+// appendFile writes each chunk by opening, appending and closing the file so
+// another process (the installer UI) can read it at any time.
+type appendFile struct {
+	path string
+	mu   sync.Mutex
+}
+
+func (w *appendFile) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	f, err := os.OpenFile(w.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return len(p), nil
+	}
+	n, werr := f.Write(p)
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	return n, werr
 }
 
 // openSetupLog writes the full setup trace (including WSL/schtasks output) so
