@@ -482,7 +482,10 @@ func cudaTagFromEnv() string {
 }
 
 var nvccReleaseRe = regexp.MustCompile(`release\s+([0-9]+)\.([0-9]+)`)
-var smiCudaRe = regexp.MustCompile(`CUDA Version:\s*([0-9]+)\.([0-9]+)`)
+
+// nvidia-smi reports either "CUDA Version: 12.8" (older drivers) or
+// "CUDA UMD Version: 13.3" (610+).
+var smiCudaRe = regexp.MustCompile(`(?i)CUDA(?:\s+UMD)?\s+Version:\s*([0-9]+)\.([0-9]+)`)
 
 func detectCudaTagFromNvcc() string {
 	path, err := exec.LookPath("nvcc")
@@ -509,7 +512,13 @@ func detectCudaTagFromNvidiaSmi() string {
 	if err != nil {
 		return ""
 	}
-	m := smiCudaRe.FindStringSubmatch(string(out))
+	return parseCudaTagFromSmi(string(out))
+}
+
+// parseCudaTagFromSmi extracts the driver's maximum CUDA version from the
+// nvidia-smi banner.
+func parseCudaTagFromSmi(out string) string {
+	m := smiCudaRe.FindStringSubmatch(out)
 	if m == nil {
 		return ""
 	}

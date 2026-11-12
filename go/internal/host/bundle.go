@@ -70,7 +70,10 @@ func EnsureBundleContext(ctx context.Context, refStr string, quiet, force bool) 
 	if _, err := manifest.ResolveVariant(m, variant); err != nil {
 		return "", "", "", err
 	}
-	envKey := ResolveEnvKey(m)
+	envKey, err := resolveEnvKey(m)
+	if err != nil {
+		return "", "", "", fmt.Errorf("bundle %q has no runtime environment for this machine: %w", m.Name, err)
+	}
 	if envKey == "" {
 		return "", "", "", fmt.Errorf("bundle %q has no runtime environment for this machine", m.Name)
 	}
@@ -141,12 +144,18 @@ func WriteLocalMarkers(m *manifest.Manifest, root, variant string) (string, erro
 // ResolveEnvKey resolves the runtime cell for the current host. It supports v4
 // exact matches, explicit fallback blocks, and FLASHCLI_RUNTIME_ENV_KEY.
 func ResolveEnvKey(m *manifest.Manifest) string {
-	hostKey := preflight.HostEnvKey(preflight.DetectGPU(), m.PythonABIOrEmpty())
-	key, err := m.ResolveEnvKey(hostKey)
+	key, err := resolveEnvKey(m)
 	if err != nil {
 		return ""
 	}
 	return key
+}
+
+// resolveEnvKey is ResolveEnvKey with the selection error preserved so callers
+// can report why a bundle cannot run here (wrong SM, driver too old, ...).
+func resolveEnvKey(m *manifest.Manifest) (string, error) {
+	hostKey := preflight.HostEnvKey(preflight.DetectGPU(), m.PythonABIOrEmpty())
+	return m.ResolveEnvKey(hostKey)
 }
 
 // ApplyEnv applies the selected v4 environment overlay. v3 manifests are
@@ -155,7 +164,10 @@ func ApplyEnv(m *manifest.Manifest) (*manifest.Manifest, error) {
 	if m.FormatVersion < manifest.FormatVersionV4 {
 		return m, nil
 	}
-	key := ResolveEnvKey(m)
+	key, err := resolveEnvKey(m)
+	if err != nil {
+		return nil, fmt.Errorf("bundle %q has no runtime environment for this host: %w", m.Name, err)
+	}
 	if key == "" {
 		return nil, fmt.Errorf("bundle %q has no runtime environment for this host", m.Name)
 	}

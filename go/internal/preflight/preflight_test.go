@@ -45,6 +45,21 @@ func TestScoreEnvKeyMatch(t *testing.T) {
 	}
 }
 
+func TestParseCudaTagFromSmi(t *testing.T) {
+	cases := map[string]string{
+		"| NVIDIA-SMI 610.57.01  KMD Version: 610.88  CUDA UMD Version: 13.3 |": "130",
+		"| NVIDIA-SMI 550.54    Driver Version: 550.54  CUDA Version: 12.4 |":   "124",
+		"| NVIDIA-SMI 580.95    Driver Version: 580.95  CUDA Version: 12.8 |":   "128",
+		"| NVIDIA-SMI 595.99    Driver Version: 595.99  CUDA Version: 13.0 |":   "130",
+		"no CUDA banner here": "",
+	}
+	for line, want := range cases {
+		if got := parseCudaTagFromSmi(line); got != want {
+			t.Errorf("parseCudaTagFromSmi(%q) = %q, want %q", line, got, want)
+		}
+	}
+}
+
 func TestResolveRuntimeEnvKey(t *testing.T) {
 	runtimeMap := map[string]string{
 		"sm89-cu124-linux-x86_64-py312":  "runtime/sm89-cu124-linux-x86_64-py312",
