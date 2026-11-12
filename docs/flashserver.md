@@ -160,7 +160,8 @@ the VHDX: clean up with `flashcli du` / `flashcli cache clean` /
 (`wsl --manage <distro> --set-sparse true`, or `diskpart` compact).
 
 **Restricted networks.** When `wsl --install` cannot reach the Microsoft Store
-or GitHub, setup downloads the official Ubuntu 24.04 cloud rootfs (Tsinghua and
+or GitHub (or hangs for two minutes with no progress), setup downloads the
+official Ubuntu 24.04 cloud rootfs (Tsinghua and
 USTC mirrors first, then `cloud-images.ubuntu.com`) and imports it into the
 selected directory with `wsl --import`. `--distro-rootfs FILE` uses a local
 rootfs tarball instead (offline installs).

@@ -16,6 +16,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/aodianyun/flashcli/go/internal/version"
 )
 
 func installWSL(ctx context.Context, env Env, opts Options, out io.Writer) error {
@@ -213,13 +215,19 @@ func ensureDistro(ctx context.Context, opts Options, i *installer) error {
 		return nil
 	}
 	i.printf("installing Ubuntu with wsl --install (this may take several minutes)\n")
-	if err := i.run(ctx, sysExe("wsl.exe"), "--install", "-d", opts.Distro, "--no-launch"); err != nil {
+	installCtx, cancelInstall := context.WithTimeout(ctx, 2*time.Minute)
+	err := i.run(installCtx, sysExe("wsl.exe"), "--install", "-d", opts.Distro, "--no-launch")
+	cancelInstall()
+	if err != nil {
 		if !wslStatusOK(ctx) {
 			return fmt.Errorf("%w: WSL2 must be restarted before %s can be used (%v)", ErrRebootRequired, opts.Distro, err)
 		}
-		// Store/GitHub downloads are blocked on some networks. Fall back to
-		// the official Ubuntu cloud rootfs, which is imported directly.
-		i.printf("wsl --install failed (%v); importing the Ubuntu rootfs instead\n", err)
+		// Store/GitHub downloads can hang with no traffic. Cap the wait and
+		// fall back to the official Ubuntu cloud rootfs, imported directly.
+		i.printf("wsl --install failed or timed out after 2 minutes (%v); importing the Ubuntu rootfs instead\n", err)
+		if wslRoot(ctx, opts, "true") == nil {
+			return nil
+		}
 		if ierr := importDistroRootfs(ctx, opts, i); ierr != nil {
 			return fmt.Errorf("install WSL distro %s: %w (rootfs import: %v)", opts.Distro, err, ierr)
 		}
@@ -307,12 +315,20 @@ func downloadUbuntuRootfs(ctx context.Context, i *installer) (string, func(), er
 	var lastErr error
 	for _, base := range ubuntuRootfsBases {
 		url := strings.TrimRight(base, "/") + "/" + ubuntuRootfsName
-		i.printf("download Ubuntu rootfs: %s\n", url)
-		if err := fetchRootfs(ctx, client, url, dest, i); err == nil {
-			return dest, cleanup, nil
-		} else {
-			lastErr = err
-			i.printf("warn: download failed: %v\n", err)
+		for attempt := 1; attempt <= 2; attempt++ {
+			i.printf("download Ubuntu rootfs: %s\n", url)
+			if err := fetchRootfs(ctx, client, url, dest, i); err == nil {
+				return dest, cleanup, nil
+			} else {
+				lastErr = err
+				i.printf("warn: download failed: %v\n", err)
+			}
+			select {
+			case <-ctx.Done():
+				cleanup()
+				return "", nil, ctx.Err()
+			case <-time.After(time.Second):
+			}
 		}
 	}
 	cleanup()
@@ -324,6 +340,8 @@ func fetchRootfs(ctx context.Context, client *http.Client, url, dest string, i *
 	if err != nil {
 		return err
 	}
+	req.Header.Set("User-Agent", "flashcli/"+version.Version)
+	req.Header.Set("Accept", "*/*")
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
