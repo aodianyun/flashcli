@@ -55,10 +55,6 @@ Name: "{autodesktop}\FlashServer"; Filename: "{app}\FlashServer.exe"; Tasks: des
 [Run]
 Filename: "{app}\FlashServer.exe"; Description: "Launch FlashServer"; Flags: postinstall nowait skipifsilent; Check: SetupReady
 
-[UninstallRun]
-Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM FlashServer.exe"; Flags: runhidden; RunOnceId: "StopFlashServerClient"
-Filename: "{app}\payload\flashserver-setup.exe"; Parameters: "--uninstall{code:GetPurgeArgs}"; RunOnceId: "RemoveFlashServerService"; Flags: waituntilterminated runhidden
-
 [Code]
 var
   PurgeModels: Boolean;
@@ -155,6 +151,27 @@ begin
   if UninstallSilent() then
     Exit;
   ShowUninstallOptions;
+end;
+
+// [UninstallRun] constants are expanded at install time, so the setup engine
+// (and its dynamic cleanup flags) must be started here, at uninstall time.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ResultCode: Integer;
+  Args: String;
+begin
+  if CurUninstallStep <> usUninstall then
+    Exit;
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM FlashServer.exe', '',
+    SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Args := '--uninstall' + GetPurgeArgs('');
+  if not Exec(ExpandConstant('{app}\payload\flashserver-setup.exe'), Args,
+      ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    MsgBox('Could not start flashserver-setup.exe.', mbError, MB_OK)
+  else if ResultCode <> 0 then
+    MsgBox('flashserver-setup --uninstall exited with code ' +
+      IntToStr(ResultCode) + '.' + #13#10#13#10 +
+      'See %USERPROFILE%\.flashcli\logs\setup.log.', mbError, MB_OK);
 end;
 
 function SetupReady: Boolean;
