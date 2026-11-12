@@ -55,6 +55,13 @@ The payload also contains `flashcli-bundle.tar.gz`. Setup extracts it under
 `FLASHCLI_BUNDLE_PIP_SPEC` to `~/.flashcli/install.env`; bundle venv creation no
 longer needs a GitHub clone from WSL.
 
+Payload contents: `flashserver-setup.exe` (the WSL setup engine),
+`flashcli-linux-amd64`, `flashserver-linux-amd64`, and
+`flashcli-bundle.tar.gz`. The installer is x64-only
+(`ArchitecturesAllowed=x64`) and WSL2 on x64 Windows is amd64, so the arm64
+pair and the network checksum file are not bundled; setup only downloads when
+the matching `--bin-dir` assets are absent.
+
 The installer shows a live progress page and parses the setup progress file
 (`[n/8] step` lines plus a final `DONE <code>`). Exit codes: `0` ready, `3`
 restart required to finish enabling WSL2, `2` error. On exit `3` the client is

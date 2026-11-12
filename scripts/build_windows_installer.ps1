@@ -48,12 +48,13 @@ try {
         throw "missing $ClientExe; run 'cargo build --release' in desktop/ first"
     }
     Copy-Item $ClientExe (Join-Path $Payload "FlashServer.exe")
+    # Only amd64 Linux binaries are shipped: the installer is x64-only
+    # (ArchitecturesAllowed=x64) and WSL2 on x64 Windows is amd64. Setup picks
+    # flashcli-linux-<arch>/flashserver-linux-<arch> from this directory, so no
+    # arm64 pair (or network checksum file) is needed.
     foreach ($name in @(
         "flashcli-linux-amd64",
-        "flashserver-linux-amd64",
-        "flashcli-linux-arm64",
-        "flashserver-linux-arm64",
-        "sha256sums.txt"
+        "flashserver-linux-amd64"
     )) {
         $src = Join-Path $Dist $name
         if (Test-Path $src) { Copy-Item $src (Join-Path $Payload $name) }
