@@ -64,6 +64,7 @@ var
   SetupReboot: Boolean;
   SetupError: String;
   ProgressPage: TOutputProgressWizardPage;
+  WSLDirPage: TInputDirWizardPage;
 
 // Extra arguments for `flashserver-setup --uninstall`, decided by the
 // checkboxes shown before the uninstall starts.
@@ -418,6 +419,7 @@ var
   StepDone, HasDone, Started, Ready, LastDone: Boolean;
   LastStep: Integer;
   LastText: String;
+  WSLArgs: String;
 begin
   Result := False;
   SetupError := '';
@@ -425,6 +427,9 @@ begin
   ProgressPath := ExpandConstant('{tmp}\flashserver-progress.txt');
   LogPath := GetEnv('USERPROFILE') + '\.flashcli\logs\setup.log';
   DeleteFile(ProgressPath);
+  WSLArgs := '';
+  if Trim(WSLDirPage.Values[0]) <> '' then
+    WSLArgs := ' --wsl-dir "' + WSLDirPage.Values[0] + '"';
 
   ProgressPage.SetText('Preparing the FlashServer environment',
     'Checking WSL2 and Ubuntu. On a new PC this can take several minutes.');
@@ -433,7 +438,7 @@ begin
   try
     Started := Exec(
       ExpandConstant('{app}\payload\flashserver-setup.exe'),
-      '--backend wsl --bin-dir "' + ExpandConstant('{app}\payload') + '"' +
+      '--backend wsl --bin-dir "' + ExpandConstant('{app}\payload') + '"' + WSLArgs +
         ' --progress-file "' + ProgressPath + '"',
       ExpandConstant('{app}'), SW_HIDE, ewNoWait, ResultCode);
     if not Started then
@@ -543,11 +548,22 @@ procedure InitializeWizard;
 begin
   ProgressPage := CreateOutputProgressPage('Setting up FlashServer',
     'FlashServer runs inside WSL2. Setup installs Ubuntu and the resident service.');
+  WSLDirPage := CreateInputDirPage(wpSelectDir,
+    'WSL data directory',
+    'Where should the Ubuntu virtual disk live?',
+    'FlashServer runs inside WSL2. The Ubuntu disk holds model weights and runtimes, so choose a drive with at least 30 GB free. The default follows the installation drive; leave it unchanged to keep the WSL default.',
+    False, '');
+  WSLDirPage.Add('WSL data directory (leave empty for the WSL default):');
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
 begin
-  if CurPageID = wpFinished then
+  if CurPageID = WSLDirPage.ID then
+  begin
+    if Trim(WSLDirPage.Values[0]) = '' then
+      WSLDirPage.Values[0] := ExtractFileDrive(WizardDirValue) + '\FlashServerWSL';
+  end
+  else if CurPageID = wpFinished then
   begin
     if SetupReboot then
       WizardForm.FinishedLabel.Caption :=

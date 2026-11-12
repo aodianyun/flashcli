@@ -31,6 +31,9 @@ func installWSL(ctx context.Context, env Env, opts Options, out io.Writer) error
 	if err := stepf(out, 2, total, "Preparing Ubuntu", func() error { return ensureDistro(ctx, opts, &i) }); err != nil {
 		return err
 	}
+	if err := moveDistro(ctx, opts, &i); err != nil {
+		return err
+	}
 	if err := stepf(out, 3, total, "Enabling systemd", func() error { return ensureSystemd(ctx, opts, &i) }); err != nil {
 		return err
 	}
@@ -230,8 +233,45 @@ func ensureDistro(ctx context.Context, opts Options, i *installer) error {
 	return fmt.Errorf("WSL distro %s did not become available; complete the WSL install (a reboot may be required) and rerun", opts.Distro)
 }
 
-func ensureSystemd(ctx context.Context, opts Options, i *installer) error {
-	script := "grep -q '^systemd=true' /etc/wsl.conf 2>/dev/null || printf '[boot]\\nsystemd=true\\n' >> /etc/wsl.conf"
+// moveDistro relocates the WSL distro's virtual disk when --wsl-dir is set.
+// WSL has no install-time location flag, so install it first and move it while
+// the distro is stopped. A failure is a warning: the service still works from
+// the default location.
+func moveDistro(ctx context.Context, opts Options, i *installer) error {
+	target := strings.TrimSpace(opts.WSLDir)
+	if target == "" {
+		return nil
+	}
+	abs, err := filepath.Abs(target)
+	if err != nil {
+		i.printf("warn: invalid WSL directory %q: %v\n", target, err)
+		return nil
+	}
+	if opts.DryRun {
+		i.printf("$ wsl.exe --terminate %s && wsl.exe --manage %s --move %s\n", opts.Distro, opts.Distro, abs)
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(abs, "ext4.vhdx")); err == nil {
+		i.printf("WSL distro already at %s\n", abs)
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		i.printf("warn: create %s: %v\n", filepath.Dir(abs), err)
+		return nil
+	}
+	_ = exec.CommandContext(ctx, sysExe("wsl.exe"), "--terminate", opts.Distro).Run()
+	cmd := exec.CommandContext(ctx, sysExe("wsl.exe"), "--manage", opts.Distro, "--move", abs)
+	cmd.Stdout = diag
+	cmd.Stderr = diag
+	if err := cmd.Run(); err != nil {
+		i.printf("warn: move WSL distro to %s failed (%v); keeping the default location\n", abs, err)
+		return nil
+	}
+	i.printf("moved WSL distro %s to %s\n", opts.Distro, abs)
+	return nil
+}
+
+func ensureSystemd(ctx context.Context, opts Options, i *installer) error {	script := "grep -q '^systemd=true' /etc/wsl.conf 2>/dev/null || printf '[boot]\\nsystemd=true\\n' >> /etc/wsl.conf"
 	if opts.DryRun {
 		i.printf("$ wsl.exe -d %s -u root -- sh -c %q\n", opts.Distro, script)
 		return nil

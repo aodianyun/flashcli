@@ -138,6 +138,8 @@ flashserver-setup.exe
 `flashserver.service`，并创建 `flashserver-wsl` 登录任务。没有 WSL2 的机器第一次
 运行可能需要重启一次 Windows，之后再次运行 setup。
 
+**磁盘位置。** 模型权重和 bundle 运行时都在 Ubuntu 虚拟磁盘（`ext4.vhdx`）里，默认位于系统盘，常见占用 20–40 GB。`--wsl-dir DIR` 会把发行版迁移到其他 NTFS 盘（WSL 没有安装时指定路径的参数，setup 会先安装，再在发行版停止时执行 `wsl --manage <distro> --move DIR`）。UI 安装包新增“WSL 数据目录”页面，默认跟随安装盘：`<安装盘>:\FlashServerWSL`。之后删除数据**不会**自动缩小 VHDX：先用 `flashcli du` / `flashcli cache clean` / `flashcli bundle clean` 清理，再关闭 WSL 并压缩磁盘（`wsl --manage <distro> --set-sparse true`，或用 `diskpart` compact）。
+
 默认会下载匹配的 `flashcli-linux-<arch>` 和 `flashserver-linux-<arch>` release assets，并校验 `sha256sums.txt`。也可以用 `--bin-dir DIR` 使用本地资产，或用 `--release-version` / `--release-base` 固定 release 来源。
 
 `--backend` 默认是 `auto`（Linux 为 `native`，Windows 为 `wsl`），通常不需要手动指定。`--dry-run` 只打印安装计划，不修改主机。`--no-service` 只安装二进制和配置，适用于容器或没有运行 systemd 的环境（之后手动运行 `flashserver --config ...`）。

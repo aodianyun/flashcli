@@ -39,6 +39,7 @@ func run() int {
 	flag.BoolVar(&opts.PurgeModels, "purge-models", false, "with --uninstall: also delete FLASHCLI_HOME (bundles, weights, runtimes, caches)")
 	flag.BoolVar(&opts.RemoveCLI, "remove-cli", false, "with --uninstall: also delete the flashcli binary")
 	flag.BoolVar(&opts.PurgeSettings, "purge-settings", false, "with --uninstall: also delete the desktop client settings")
+	flag.StringVar(&opts.WSLDir, "wsl-dir", "", "with --backend wsl: move the Ubuntu distro to this directory (NTFS drive)")
 	flag.BoolVar(&opts.StopService, "stop-service", false, "stop the service and disable auto-start")
 	flag.BoolVar(&opts.StartService, "start-service", false, "enable auto-start and start the service")
 	flag.BoolVar(&opts.EnableAutostart, "enable-autostart", false, "enable auto-start without starting the service")

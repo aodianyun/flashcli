@@ -69,6 +69,14 @@ all data. The setup engine runs from `CurUninstallStepChanged` because
 `[UninstallRun]` constants are expanded at install time; `--purge-settings`
 also removes `%USERPROFILE%\.flashcli` (setup logs) after setup exits.
 
+The install wizard also asks for a **WSL data directory** (default
+`<installation drive>:\FlashServerWSL`) and passes it as `--wsl-dir`. Model
+weights and runtimes live inside the Ubuntu `ext4.vhdx`, so this is the knob
+for keeping C: free; the engine installs Ubuntu and then moves it with
+`wsl --manage Ubuntu --move`. The VHDX does not shrink when files are deleted
+later; compact it with `wsl --manage Ubuntu --set-sparse true` (WSL 2.0+) or
+`diskpart` after `wsl --shutdown`.
+
 The installer shows a live progress page and parses the setup progress file
 (`[n/8] step` lines plus a final `DONE <code>`). Exit codes: `0` ready, `3`
 restart required to finish enabling WSL2, `2` error. On exit `3` the client is

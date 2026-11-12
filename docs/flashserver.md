@@ -146,6 +146,17 @@ binaries inside WSL, registers `flashserver.service`, and creates the
 `flashserver-wsl` logon task. A first run on a machine with no WSL2 may require
 one Windows restart; run setup again afterwards.
 
+**Disk location.** Model weights and bundle runtimes live inside the Ubuntu
+virtual disk (`ext4.vhdx`), which defaults to the system drive and typically
+grows to 20–40 GB. `--wsl-dir DIR` moves the distro to another NTFS drive
+(WSL has no install-time location flag, so setup installs it and then runs
+`wsl --manage <distro> --move DIR` while the distro is stopped). The UI
+installer adds a "WSL data directory" page and defaults it to
+`<installation drive>:\FlashServerWSL`. Deleting data later does **not** shrink
+the VHDX: clean up with `flashcli du` / `flashcli cache clean` /
+`flashcli bundle clean`, then shut WSL down and compact the disk
+(`wsl --manage <distro> --set-sparse true`, or `diskpart` compact).
+
 By default setup downloads the matching `flashcli-linux-<arch>` and `flashserver-linux-<arch>` release assets and verifies `sha256sums.txt`. Use `--bin-dir DIR` to consume local release assets instead, or `--release-version` / `--release-base` to pin a release source.
 
 `--backend` defaults to `auto` (`native` on Linux, `wsl` on Windows) and normally does not need to be specified. `--dry-run` prints the platform plan without changing the host. `--no-service` installs binaries and config only; use it in containers or hosts without an active systemd (start `flashserver --config ...` manually).
