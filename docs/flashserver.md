@@ -273,11 +273,11 @@ desktop's **Models → model detail → 参数** dialog renders these fields tog
 with a host and port:
 
 - `host`: `0.0.0.0` binds all interfaces, `127.0.0.1` is local-only.
-- `port`: `0` uses a free port in `18000-18999`; a fixed port is allowed.
+- `port`: `0` uses any free port; a fixed port is allowed and checked for
+  conflicts. Host-level `host`/`ip`/`port` entries in `serve_options` are
+  represented by the host/port fields and are not added twice.
 - Option values: empty means the bundle default; non-empty values are appended
-  as `--flag value` to `flashcli serve`. Host-level `host`/`ip`/`port` entries
-  in `serve_options` are represented by the host/port fields and are not added
-  twice.
+  as `--flag value` to `flashcli serve`.
 - Settings are stored server-side in
   `$FLASHCLI_HOME/flashserver/serve-options.json`, so the CLI/API and desktop
   see the same values. Saving while a model is loaded requires unload + start.
@@ -288,8 +288,9 @@ requires WSL mirrored networking and a firewall rule:
 
 1. Desktop **Settings → WSL 资源 → 局域网访问（WSL 镜像网络）** writes
    `[wsl2] networkingMode=mirrored` to `%USERPROFILE%\.wslconfig`.
-2. The client asks for UAC and allows inbound TCP `18000-18999` for the
-   Private/Domain profiles.
+2. The client asks for UAC and allows the configured inbound TCP ports
+   (default: all TCP ports; e.g. `18000-18999`) for the Private/Domain
+   profiles.
 3. Applying WSL settings restarts WSL (`wsl --shutdown`) and starts
    `flashserver` again; running models are interrupted.
 
@@ -301,6 +302,30 @@ The same panel edits `memory`, `processors`, and `swap` in `.wslconfig`.
 Empty values use WSL defaults (memory 50% of Windows RAM, all logical CPUs,
 swap 25% of memory). These settings apply to every WSL2 distro and require a
 WSL restart. Mirrored networking requires Windows 11 22H2+ and a recent WSL.
+
+## Inspecting startup parameters inside WSL
+
+Enter the distro and inspect the actual child process:
+
+```bash
+wsl -d Ubuntu
+ps -ef | grep '[f]lashcli.*serve'
+# /proc/<pid>/cmdline separates arguments with NUL
+cat /proc/<pid>/cmdline | tr '\0' ' '; echo
+ss -lntp | grep <port>
+cat /root/.flashcli/flashserver/serve-options.json
+journalctl -u flashserver -n 100 --no-pager
+```
+
+The service runs as root, so its `FLASHCLI_HOME` is normally
+`/root/.flashcli`. If a different `--home` was used, read `Environment=` from
+`/etc/systemd/system/flashserver.service`. From Windows, the same checks work
+without an interactive shell:
+
+```powershell
+wsl -d Ubuntu -- ps -ef
+wsl -d Ubuntu -- ss -lntp
+```
 
 ## Timing expectations
 

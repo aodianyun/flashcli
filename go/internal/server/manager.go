@@ -427,11 +427,6 @@ func numberFromAny(v any) (int64, bool) {
 	}
 }
 
-const (
-	servePortMin = 18000
-	servePortMax = 18999
-)
-
 // portAvailable reports whether a TCP port can be bound on all interfaces.
 func portAvailable(port int) bool {
 	ln, err := net.Listen("tcp", "0.0.0.0:"+strconv.Itoa(port))
@@ -442,14 +437,9 @@ func portAvailable(port int) bool {
 	return true
 }
 
-// freePort prefers the documented 18000-18999 range (covered by the Windows
-// firewall rule) and falls back to an ephemeral port when the range is busy.
+// freePort asks the OS for any free TCP port. Explicit user ports are checked
+// with portAvailable before launch.
 func freePort() (int, error) {
-	for p := servePortMin; p <= servePortMax; p++ {
-		if portAvailable(p) {
-			return p, nil
-		}
-	}
 	ln, err := net.Listen("tcp", "0.0.0.0:0")
 	if err != nil {
 		return 0, err

@@ -243,19 +243,40 @@ curl http://127.0.0.1:18100/v1/chat/completions ...
 每个模型的启动参数来源是 bundle 的 `serve_options`（`flashcli-bundle.json`，包含 v4 环境 overlay）。桌面 **模型 → 详情 → 参数** 会渲染这些字段，并提供监听地址和端口：
 
 - `host`：`0.0.0.0` 监听所有网卡，`127.0.0.1` 仅本机。
-- `port`：`0` 使用 `18000-18999` 内的空闲端口；也可以固定端口。
+- `port`：`0` 使用任意空闲端口；也可以固定端口，固定端口会先检查占用。
 - 参数值留空表示使用 bundle 默认值；非空值会作为 `--flag value` 追加到 `flashcli serve`。`serve_options` 里的 host/ip/port 由上面的监听地址/端口字段表示，不会重复追加。
 - 配置保存在服务端的 `$FLASHCLI_HOME/flashserver/serve-options.json`，CLI/API 与桌面读取同一份；模型运行中保存后需要停止再启动才生效。
 
 Windows 的 localhost 转发会让 `host=0.0.0.0` 在 Windows 本机可通过 `http://localhost:<port>` 访问。局域网/公网还需要 WSL 镜像网络和防火墙：
 
 1. 桌面 **设置 → WSL 资源 → 局域网访问（WSL 镜像网络）** 会在 `%USERPROFILE%\.wslconfig` 写入 `[wsl2] networkingMode=mirrored`。
-2. 客户端请求 UAC，放行 Private/Domain 配置文件的 TCP `18000-18999` 入站。
+2. 客户端请求 UAC，按设置放行 Private/Domain 的 TCP 入站端口（留空 = 所有 TCP 端口，例如 `18000-18999`）。
 3. 应用设置会重启 WSL（`wsl --shutdown`）并重新启动 `flashserver`；正在运行的模型会中断。
 
 防火墙规则只使用 Private/Domain 配置文件。公网访问还需要额外的 Public 规则和路由器端口映射；模型 API 默认无认证，请勿直接暴露到公网。
 
 同一面板可修改 `.wslconfig` 的 `memory`、`processors`、`swap`。留空使用 WSL 默认值（内存为 Windows 总内存 50%、全部逻辑 CPU、Swap 为内存 25%）。这些设置影响所有 WSL2 发行版，且需要重启 WSL。镜像网络需要 Windows 11 22H2+ 和较新的 WSL。
+
+## 在 WSL 内查看启动参数
+
+进入发行版查看实际子进程：
+
+```bash
+wsl -d Ubuntu
+ps -ef | grep '[f]lashcli.*serve'
+# /proc/<pid>/cmdline 用 NUL 分隔参数
+cat /proc/<pid>/cmdline | tr '\0' ' '; echo
+ss -lntp | grep <port>
+cat /root/.flashcli/flashserver/serve-options.json
+journalctl -u flashserver -n 100 --no-pager
+```
+
+服务以 root 运行，`FLASHCLI_HOME` 通常是 `/root/.flashcli`。如果安装时用了别的 `--home`，查看 `/etc/systemd/system/flashserver.service` 的 `Environment=`。也可以直接从 Windows 执行：
+
+```powershell
+wsl -d Ubuntu -- ps -ef
+wsl -d Ubuntu -- ss -lntp
+```
 
 ## 耗时参考
 

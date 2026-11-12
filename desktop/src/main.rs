@@ -179,6 +179,8 @@ struct HubDetail {
 #[derive(Default, Serialize, Deserialize)]
 struct Settings {
     dark: bool,
+    #[serde(default)]
+    wsl_ports: String,
 }
 
 #[derive(Clone)]
@@ -325,7 +327,9 @@ pub struct App {
     dialog: Option<DialogState>,
     options_dialog: Option<OptionsDialog>,
     wsl: WslConfig,
+    wsl_ports: String,
     wsl_pending: Option<WslConfig>,
+    wsl_pending_ports: String,
     smoke: Option<SmokeState>,
     pending_smoke_cancel: bool,
     closing: bool,
@@ -340,6 +344,7 @@ impl App {
         install_fonts(&cc.egui_ctx);
         let settings = load_settings();
         let dark = settings.dark;
+        let wsl_ports = settings.wsl_ports.clone();
         apply_theme(&cc.egui_ctx, dark);
 
         let (tx, rx) = channel();
@@ -397,7 +402,9 @@ impl App {
             dialog: None,
             options_dialog: None,
             wsl,
+            wsl_ports,
             wsl_pending: None,
+            wsl_pending_ports: String::new(),
             smoke: None,
             pending_smoke_cancel: false,
             closing: false,
@@ -2010,7 +2017,7 @@ impl App {
                         ui.label("端口");
                         ui.add(
                             egui::TextEdit::singleline(&mut dlg.port)
-                                .hint_text("0 = 自动（18000-18999）")
+                                .hint_text("0 = 自动（任意空闲端口）")
                                 .desired_width(220.0),
                         );
                         ui.end_row();
@@ -2511,6 +2518,13 @@ impl App {
                                     .desired_width(220.0),
                             );
                             ui.end_row();
+                            ui.label("防火墙端口");
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.wsl_ports)
+                                    .hint_text("留空 = 所有 TCP 端口；如 18000-18999")
+                                    .desired_width(220.0),
+                            );
+                            ui.end_row();
                         });
                     ui.add_space(4.0);
                     ui.checkbox(
@@ -2518,10 +2532,12 @@ impl App {
                         "局域网访问（WSL 镜像网络，host=0.0.0.0 可通过本机 IP 访问）",
                     );
                     ui.label(
-                        egui::RichText::new(if self.wsl.mirrored {
-                            "需要 Windows 11 22H2+；应用时会请求管理员权限放行 TCP 18000-18999（Private/Domain）。"
-                        } else {
+                        egui::RichText::new(if !self.wsl.mirrored {
                             "默认 NAT：模型只在 Windows 本机 localhost 可达；局域网访问请勾选上面的选项（公网还需 Public 规则和路由器映射）。"
+                        } else if self.wsl_ports.trim().is_empty() {
+                            "未设置端口范围：应用时会放行所有 TCP 端口（Private/Domain），仅建议在受信网络使用。"
+                        } else {
+                            "应用时会放行输入的 TCP 端口范围（Private/Domain）。"
                         })
                         .weak()
                         .small(),
@@ -2545,27 +2561,36 @@ impl App {
                     if !valid_wsl_size(&self.wsl.memory)
                         || !valid_wsl_size(&self.wsl.swap)
                         || !valid_processors(&self.wsl.processors)
+                        || !valid_firewall_ports(&self.wsl_ports)
                     {
                         self.op_note = Some((
-                            "WSL 资源格式无效：内存/Swap 用 16GB / 8GB / 0，CPU 核心为 1-256 的整数".into(),
+                            "WSL 资源格式无效：内存/Swap 用 16GB / 8GB / 0，CPU 核心为 1-256，防火墙端口用 18000-18999 / 8000,8001".into(),
                             false,
                             Instant::now(),
                         ));
-                    } else if service_running {
-                        self.wsl_pending = Some(self.wsl.clone());
-                        self.dialog = Some(DialogState {
-                            title: "重启 WSL".into(),
-                            message: "应用 WSL 资源/网络设置需要重启 WSL，正在运行的模型会中断。\n完成后 FlashServer 会自动启动。\n确定继续？".into(),
-                            action: Pending::ApplyWsl,
-                        });
                     } else {
-                        self.op_busy = Some("正在应用 WSL 配置…".into());
-                        spawn_apply_wsl(
-                            self.tx.clone(),
-                            ui.ctx().clone(),
-                            self.wsl.clone(),
-                            false,
-                        );
+                        save_settings(&Settings {
+                            dark: self.dark,
+                            wsl_ports: self.wsl_ports.clone(),
+                        });
+                        if service_running {
+                            self.wsl_pending = Some(self.wsl.clone());
+                            self.wsl_pending_ports = self.wsl_ports.trim().to_string();
+                            self.dialog = Some(DialogState {
+                                title: "重启 WSL".into(),
+                                message: "应用 WSL 资源/网络设置需要重启 WSL，正在运行的模型会中断。\n完成后 FlashServer 会自动启动。\n确定继续？".into(),
+                                action: Pending::ApplyWsl,
+                            });
+                        } else {
+                            self.op_busy = Some("正在应用 WSL 配置…".into());
+                            spawn_apply_wsl(
+                                self.tx.clone(),
+                                ui.ctx().clone(),
+                                self.wsl.clone(),
+                                false,
+                                self.wsl_ports.trim().to_string(),
+                            );
+                        }
                     }
                 }
 
@@ -2680,7 +2705,10 @@ impl App {
         if self.dark != dark {
             self.dark = dark;
             apply_theme(ctx, dark);
-            save_settings(&Settings { dark });
+            save_settings(&Settings {
+                dark,
+                wsl_ports: self.wsl_ports.clone(),
+            });
         }
     }
 
@@ -3078,7 +3106,9 @@ impl App {
                 Pending::ApplyWsl => {
                     if let Some(cfg) = self.wsl_pending.take() {
                         self.op_busy = Some("正在重启 WSL…".into());
-                        spawn_apply_wsl(self.tx.clone(), ctx.clone(), cfg, true);
+                        self.system = None;
+                        let ports = self.wsl_pending_ports.clone();
+                        spawn_apply_wsl(self.tx.clone(), ctx.clone(), cfg, true, ports);
                     }
                 }
                 Pending::Quit => {
@@ -4087,19 +4117,30 @@ fn spawn_storage_clean(tx: Sender<Event>, ctx: egui::Context, targets: Vec<Strin
 fn spawn_set_mirror(tx: Sender<Event>, ctx: egui::Context, enabled: bool) {
     std::thread::spawn(move || {
         let body = serde_json::json!({ "enabled": enabled });
-        match post_json("/v1/mirror", &body) {
-            Ok(v) => {
-                let _ = tx.send(Event::Mirror(v));
-                let _ = tx.send(Event::OpDone(Ok(if enabled {
-                    "已启用国内镜像".into()
-                } else {
-                    "已禁用国内镜像".into()
-                })));
-            }
-            Err(e) => {
-                let _ = tx.send(Event::OpDone(Err(format!("镜像设置失败：{e}"))));
+        let mut last_error = String::new();
+        for attempt in 0..6 {
+            match post_json_timeout("/v1/mirror", &body, 15) {
+                Ok(v) => {
+                    let _ = tx.send(Event::Mirror(v));
+                    let _ = tx.send(Event::OpDone(Ok(if enabled {
+                        "已启用国内镜像".into()
+                    } else {
+                        "已禁用国内镜像".into()
+                    })));
+                    ctx.request_repaint();
+                    return;
+                }
+                Err(e) => {
+                    last_error = e;
+                    if attempt < 5 {
+                        std::thread::sleep(Duration::from_secs(2));
+                    }
+                }
             }
         }
+        let _ = tx.send(Event::OpDone(Err(format!(
+            "镜像设置失败（已重试 6 次）：{last_error}"
+        ))));
         ctx.request_repaint();
     });
 }
@@ -4530,6 +4571,30 @@ fn valid_processors(value: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn valid_firewall_ports(value: &str) -> bool {
+    let value = value.trim();
+    if value.is_empty() {
+        return true;
+    }
+    for part in value.split(',') {
+        let part = part.trim();
+        if part.is_empty() {
+            return false;
+        }
+        if let Some((a, b)) = part.split_once('-') {
+            let (Ok(a), Ok(b)) = (a.trim().parse::<u16>(), b.trim().parse::<u16>()) else {
+                return false;
+            };
+            if a == 0 || b == 0 || a > b {
+                return false;
+            }
+        } else if part.parse::<u16>().map(|p| p == 0).unwrap_or(true) {
+            return false;
+        }
+    }
+    true
+}
+
 fn update_wslconfig(text: &str, cfg: &WslConfig) -> String {
     let sep = if text.contains("\r\n") { "\r\n" } else { "\n" };
     let mut managed = Vec::new();
@@ -4610,7 +4675,7 @@ fn run_elevated_ps1(script: &str) -> Result<(), String> {
     }
 }
 
-fn apply_wsl(cfg: &WslConfig, restart_service: bool) -> Result<String, String> {
+fn apply_wsl(cfg: &WslConfig, restart_service: bool, ports: &str) -> Result<String, String> {
     save_wslconfig(cfg)?;
     let _ = std::process::Command::new("wsl.exe")
         .arg("--shutdown")
@@ -4629,10 +4694,17 @@ fn apply_wsl(cfg: &WslConfig, restart_service: bool) -> Result<String, String> {
     }
     let mut warning = String::new();
     if cfg.mirrored {
-        let script = "$ErrorActionPreference='Stop'\n\
+        let local_ports = if ports.trim().is_empty() {
+            "Any".to_string()
+        } else {
+            ports.trim().replace(' ', "")
+        };
+        let script = format!(
+            "$ErrorActionPreference='Stop'\n\
 Remove-NetFirewallRule -DisplayName 'FlashServer models' -ErrorAction SilentlyContinue\n\
-New-NetFirewallRule -DisplayName 'FlashServer models' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 18000-18999 -Profile Private,Domain | Out-Null\n";
-        if let Err(err) = run_elevated_ps1(script) {
+New-NetFirewallRule -DisplayName 'FlashServer models' -Direction Inbound -Action Allow -Protocol TCP -LocalPort {local_ports} -Profile Private,Domain | Out-Null\n"
+        );
+        if let Err(err) = run_elevated_ps1(&script) {
             warning = format!("；局域网防火墙规则未更新：{err}");
         }
     }
@@ -4643,9 +4715,15 @@ New-NetFirewallRule -DisplayName 'FlashServer models' -Direction Inbound -Action
     }
 }
 
-fn spawn_apply_wsl(tx: Sender<Event>, ctx: egui::Context, cfg: WslConfig, restart_service: bool) {
+fn spawn_apply_wsl(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    cfg: WslConfig,
+    restart_service: bool,
+    ports: String,
+) {
     std::thread::spawn(move || {
-        let result = apply_wsl(&cfg, restart_service);
+        let result = apply_wsl(&cfg, restart_service, &ports);
         let _ = tx.send(Event::WslApplied(result));
         ctx.request_repaint();
     });
@@ -4664,7 +4742,7 @@ fn load_settings() -> Settings {
     settings_path()
         .and_then(|p| std::fs::read_to_string(p).ok())
         .and_then(|s| serde_json::from_str(s.trim_start_matches('\u{feff}')).ok())
-        .unwrap_or(Settings { dark: true })
+        .unwrap_or(Settings { dark: true, wsl_ports: String::new() })
 }
 
 fn save_settings(s: &Settings) {
