@@ -123,14 +123,24 @@ func installWSL(ctx context.Context, env Env, opts Options, out io.Writer) error
 	return nil
 }
 
-// stepf prints a friendly progress line and reports the outcome.
+// stepf prints a friendly progress line and reports the outcome. The step is
+// announced and completed on separate lines so the installer can show the
+// detailed output that follows while the step is still running.
 func stepf(out io.Writer, n, total int, name string, fn func() error) error {
-	fmt.Fprintf(out, "[%d/%d] %-28s ", n, total, name)
-	if err := fn(); err != nil {
-		fmt.Fprintln(out, "FAILED")
+	activeStep.mu.Lock()
+	activeStep.name = name
+	activeStep.since = time.Now()
+	activeStep.mu.Unlock()
+	fmt.Fprintf(out, "[%d/%d] %s ...\n", n, total, name)
+	err := fn()
+	activeStep.mu.Lock()
+	activeStep.name = ""
+	activeStep.mu.Unlock()
+	if err != nil {
+		fmt.Fprintf(out, "[%d/%d] %s ... FAILED\n", n, total, name)
 		return err
 	}
-	fmt.Fprintln(out, "ok")
+	fmt.Fprintf(out, "[%d/%d] %s ... ok\n", n, total, name)
 	return nil
 }
 
@@ -149,7 +159,7 @@ func ensureWSL(ctx context.Context, opts Options, i *installer) error {
 	}
 
 	enableCtx, cancel := context.WithTimeout(ctx, 20*time.Minute)
-	wslErr := i.run(enableCtx, sysExe("wsl.exe"), "--install", "--no-distribution")
+	wslErr := i.runDiag(enableCtx, sysExe("wsl.exe"), "--install", "--no-distribution")
 	cancel()
 	if wslErr != nil {
 		// Older Windows 10 builds do not know --no-distribution (or --install).
@@ -214,9 +224,9 @@ func ensureDistro(ctx context.Context, opts Options, i *installer) error {
 		i.printf("$ wsl.exe --install -d %s\n", opts.Distro)
 		return nil
 	}
-	i.printf("installing Ubuntu with wsl --install (this may take several minutes)\n")
-	installCtx, cancelInstall := context.WithTimeout(ctx, 2*time.Minute)
-	err := i.run(installCtx, sysExe("wsl.exe"), "--install", "-d", opts.Distro, "--no-launch")
+	i.printf("\ninstalling Ubuntu with wsl --install (this may take up to 90 seconds)\n")
+	installCtx, cancelInstall := context.WithTimeout(ctx, 90*time.Second)
+	err := i.runDiag(installCtx, sysExe("wsl.exe"), "--install", "-d", opts.Distro, "--no-launch")
 	cancelInstall()
 	if err != nil {
 		if !wslStatusOK(ctx) {
@@ -224,7 +234,7 @@ func ensureDistro(ctx context.Context, opts Options, i *installer) error {
 		}
 		// Store/GitHub downloads can hang with no traffic. Cap the wait and
 		// fall back to the official Ubuntu cloud rootfs, imported directly.
-		i.printf("wsl --install failed or timed out after 2 minutes (%v); importing the Ubuntu rootfs instead\n", err)
+		i.printf("\nwsl --install failed or timed out after 90 seconds (%v); importing the Ubuntu rootfs instead\n", err)
 		if wslRoot(ctx, opts, "true") == nil {
 			return nil
 		}
@@ -292,7 +302,7 @@ func importDistroRootfs(ctx context.Context, opts Options, i *installer) error {
 	}
 	defer cleanup()
 
-	i.printf("import Ubuntu rootfs into %s\n", abs)
+	i.printf("\nimport Ubuntu rootfs into %s\n", abs)
 	cmd := exec.CommandContext(ctx, sysExe("wsl.exe"), "--import", opts.Distro, abs, rootfs, "--version", "2")
 	cmd.Stdout = diag
 	cmd.Stderr = diag
@@ -316,7 +326,7 @@ func downloadUbuntuRootfs(ctx context.Context, i *installer) (string, func(), er
 	for _, base := range ubuntuRootfsBases {
 		url := strings.TrimRight(base, "/") + "/" + ubuntuRootfsName
 		for attempt := 1; attempt <= 2; attempt++ {
-			i.printf("download Ubuntu rootfs: %s\n", url)
+			i.printf("\ndownload Ubuntu rootfs: %s\n", url)
 			if err := fetchRootfs(ctx, client, url, dest, i); err == nil {
 				return dest, cleanup, nil
 			} else {

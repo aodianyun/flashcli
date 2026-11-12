@@ -56,6 +56,9 @@ Name: "{autodesktop}\FlashServer"; Filename: "{app}\FlashServer.exe"; Tasks: des
 Filename: "{app}\FlashServer.exe"; Description: "Launch FlashServer"; Flags: postinstall nowait skipifsilent; Check: SetupReady
 
 [Code]
+const
+  CrLf = #13#10;
+
 var
   PurgeModels: Boolean;
   RemoveCLI: Boolean;
@@ -65,6 +68,9 @@ var
   SetupReboot: Boolean;
   SetupError: String;
   ProgressPage: TOutputProgressWizardPage;
+  ProgressCancelButton: TNewButton;
+  ProgressCancelled: Boolean;
+  SetupRunning: Boolean;
   WSLDirPage: TInputDirWizardPage;
   UninstallForm: TSetupForm;
   CbAll, CbModels, CbCli, CbSettings, CbDistro: TCheckBox;
@@ -82,6 +88,11 @@ begin
     Result := Result + ' --purge-settings';
   if PurgeDistro then
     Result := Result + ' --purge-distro';
+end;
+
+procedure ProgressCancelClick(Sender: TObject);
+begin
+  ProgressCancelled := True;
 end;
 
 // Removing the distro already removes the model cache and the CLI inside it,
@@ -222,14 +233,15 @@ begin
     else if ResultCode <> 0 then
       MsgBox('flashserver-setup --uninstall exited with code ' +
         IntToStr(ResultCode) + '.' + #13#10#13#10 +
-        'See %USERPROFILE%\.flashcli\logs\setup.log.', mbError, MB_OK);
+        'See ' + ExpandConstant('{localappdata}') + '\FlashServer\logs\setup.log.', mbError, MB_OK);
   end
   else if (CurUninstallStep = usPostUninstall) and PurgeSettings then
   begin
-    // Setup has exited by now, so its setup.log is closed and the whole
-    // Windows-side state can go (client settings are removed by setup).
-    if GetEnv('USERPROFILE') <> '' then
-      DelTree(GetEnv('USERPROFILE') + '\.flashcli', True, True, True);
+    // Setup has exited by now, so its setup.log is closed and the Windows-side
+    // client state can go. Model caches (~/.flashcli) are controlled by
+    // --purge-models and must not be removed here.
+    if GetEnv('LOCALAPPDATA') <> '' then
+      DelTree(GetEnv('LOCALAPPDATA') + '\FlashServer', True, True, True);
   end;
 end;
 
@@ -248,39 +260,67 @@ begin
   Result := Copy(S, 1, I);
 end;
 
-{ Returns the last non-empty line that is not a step header or the DONE marker,
-  so long WSL downloads can show their own progress text. }
-function IsDetailLine(const Value: String): Boolean;
+{ Keeps only printable ASCII. Windows tools such as wsl.exe emit UTF-16LE,
+  which would otherwise show up as spaced-out garbage in the log view. }
+function CleanProgressLine(const Value: String): String;
 var
-  T: String;
-begin
-  T := Trim(Value);
-  Result := (T <> '') and (T[1] <> '[') and (Copy(T, 1, 5) <> 'DONE ') and
-    (Copy(T, 1, 17) <> 'flashserver-setup') and
-    (Copy(T, 1, 7) <> 'System:') and (Copy(T, 1, 4) <> 'Log:') and
-    (Copy(T, 1, 15) <> 'Windows must be');
-end;
-
-function LastDetailLine(const S: String): String;
-var
-  I, StartPos: Integer;
-  T: String;
+  I: Integer;
+  C: Char;
 begin
   Result := '';
-  StartPos := 1;
-  for I := 1 to Length(S) do
+  for I := 1 to Length(Value) do
   begin
-    if (S[I] = #10) or (S[I] = #13) then
-    begin
-      T := Trim(Copy(S, StartPos, I - StartPos));
-      if IsDetailLine(T) then
-        Result := T;
-      StartPos := I + 1;
-    end;
+    C := Value[I];
+    if (C >= ' ') and (C <= '~') then
+      Result := Result + C;
   end;
-  T := Trim(Copy(S, StartPos, Length(S) - StartPos + 1));
-  if IsDetailLine(T) then
-    Result := T;
+  Result := Trim(Result);
+end;
+
+function IsProgressNoise(const Value: String): Boolean;
+begin
+  Result := (Value = '') or (Copy(Value, 1, 17) = 'flashserver-setup') or
+    (Copy(Value, 1, 7) = 'System:') or (Copy(Value, 1, 4) = 'Log:') or
+    (Copy(Value, 1, 15) = 'Windows must be') or (Copy(Value, 1, 5) = 'DONE ');
+end;
+
+{ Returns the last MaxLines useful lines of the progress file. }
+procedure AddProgressLine(Lines: TStringList; const Raw: String; MaxLines: Integer);
+var
+  T: String;
+begin
+  T := CleanProgressLine(Raw);
+  if IsProgressNoise(T) then
+    Exit;
+  if Length(T) > 120 then
+    T := Copy(T, 1, 117) + '...';
+  Lines.Add(T);
+  while Lines.Count > MaxLines do
+    Lines.Delete(0);
+end;
+
+{ Returns the last MaxLines useful lines of the progress file. }
+function ProgressTail(const S: String; MaxLines: Integer): String;
+var
+  I, StartPos: Integer;
+  Lines: TStringList;
+begin
+  Lines := TStringList.Create;
+  try
+    StartPos := 1;
+    for I := 1 to Length(S) do
+    begin
+      if (S[I] = #10) or (S[I] = #13) then
+      begin
+        AddProgressLine(Lines, Copy(S, StartPos, I - StartPos), MaxLines);
+        StartPos := I + 1;
+      end;
+    end;
+    AddProgressLine(Lines, Copy(S, StartPos, Length(S) - StartPos + 1), MaxLines);
+    Result := Lines.Text;
+  finally
+    Lines.Free;
+  end;
 end;
 
 { Parses the last "[n/total] step ... ok" line and the final "DONE <code>"
@@ -337,6 +377,9 @@ begin
           begin
             StepText := TrimRight(Copy(StepText, 1, Length(StepText) - 7));
           end;
+          if (Length(StepText) >= 4) and
+             (Copy(StepText, Length(StepText) - 3, 4) = ' ...') then
+            StepText := TrimRight(Copy(StepText, 1, Length(StepText) - 4));
           I := N;
           Continue;
         end;
@@ -365,7 +408,7 @@ end;
 
 function LoadProgress(const Path: String; var Step, Total: Integer;
   var StepText: String; var StepDone, HasDone: Boolean;
-  var DoneCode: Integer; var LastLog: String): Boolean;
+  var DoneCode: Integer; var LogText: String): Boolean;
 var
   S: String;
   A: AnsiString;
@@ -376,13 +419,13 @@ begin
   StepDone := False;
   HasDone := False;
   DoneCode := -1;
-  LastLog := '';
+  LogText := '';
   Result := LoadStringFromFile(Path, A);
   if Result then
   begin
     S := A;
     ParseProgress(S, Step, Total, StepText, StepDone, HasDone, DoneCode);
-    LastLog := LastDetailLine(S);
+    LogText := ProgressTail(S, 7);
   end;
 end;
 
@@ -478,18 +521,23 @@ begin
   Result := False;
   SetupError := '';
   SetupReboot := False;
+  SetupRunning := False;
+  ProgressCancelled := False;
   LastElapsed := -1;
   ProgressPath := ExpandConstant('{tmp}\flashserver-progress.txt');
-  LogPath := GetEnv('USERPROFILE') + '\.flashcli\logs\setup.log';
+  LogPath := ExpandConstant('{localappdata}') + '\FlashServer\logs\setup.log';
   DeleteFile(ProgressPath);
   WSLArgs := '';
   if Trim(WSLDirPage.Values[0]) <> '' then
     WSLArgs := ' --wsl-dir "' + WSLDirPage.Values[0] + '"';
 
-  ProgressPage.SetText('Preparing the FlashServer environment',
-    'Checking WSL2 and Ubuntu. On a new PC this can take several minutes.');
+  ProgressPage.Msg1Label.Caption :=
+    'Preparing the FlashServer environment' + #13#10#13#10 +
+    'Checking WSL2 and Ubuntu. On a new PC this can take several minutes.';
+  ProgressPage.Msg2Label.Visible := False;
   ProgressPage.SetProgress(0, 800);
   ProgressPage.Show;
+  ProgressCancelButton.Visible := True;
   try
     Started := Exec(
       ExpandConstant('{app}\payload\flashserver-setup.exe'),
@@ -500,6 +548,7 @@ begin
       SetupError := 'Could not start flashserver-setup.exe.'
     else
     begin
+      SetupRunning := True;
       Attempts := 0;
       LastStep := 0;
       LastText := '';
@@ -509,6 +558,15 @@ begin
       begin
         LoadProgress(ProgressPath, Step, Total, StepText, StepDone, HasDone,
           DoneCode, ProgressLog);
+        if ProgressCancelled then
+        begin
+          SetupError := 'Setup was cancelled.';
+          Exec(ExpandConstant('{sys}\taskkill.exe'),
+            '/F /T /IM flashserver-setup.exe', '', SW_HIDE,
+            ewWaitUntilTerminated, ResultCode);
+          SetupRunning := False;
+          Break;
+        end;
         if HasDone then
           Break;
         Elapsed := Attempts div 4;
@@ -524,25 +582,28 @@ begin
             else
               Detail := Detail + ' (' + IntToStr(Elapsed) + 's)';
             if ProgressLog <> '' then
-              ProgressPage.SetText(Detail, Copy(ProgressLog, 1, 160))
+              ProgressPage.Msg1Label.Caption := Detail + #13#10#13#10 + ProgressLog
             else
-              ProgressPage.SetText(Detail,
-                'This can take several minutes on first install.');
-            if StepDone then
-              ProgressPage.SetProgress(Step * 100, Total * 100)
-            else
-              ProgressPage.SetProgress((Step - 1) * 100 + 50, Total * 100);
+              ProgressPage.Msg1Label.Caption := Detail + #13#10#13#10 +
+                'This can take several minutes on first install.';
             LastStep := Step;
             LastText := StepText;
             LastDone := StepDone;
             LastLog := ProgressLog;
             LastElapsed := Elapsed;
           end;
+          if StepDone then
+            ProgressPage.SetProgress(Step * 100, Total * 100)
+          else
+            ProgressPage.SetProgress((Step - 1) * 100 + 50, Total * 100);
         end
         else if Elapsed <> LastElapsed then
         begin
-          ProgressPage.SetText('Preparing the FlashServer environment',
-            'Starting the setup engine... ' + IntToStr(Elapsed) + 's (log: ' + LogPath + ')');
+          ProgressPage.Msg1Label.Caption :=
+            'Preparing the FlashServer environment (' + IntToStr(Elapsed) + 's)' + CrLf +
+            CrLf + 'Starting the setup engine...' + CrLf +
+            'Log: ' + LogPath;
+          ProgressPage.SetProgress(0, 800);
           LastElapsed := Elapsed;
         end;
         Sleep(250);
@@ -553,14 +614,16 @@ begin
           Break;
         end;
       end;
+      if HasDone then
+        SetupRunning := False;
 
       if SetupError = '' then
       begin
         if DoneCode = 3 then
         begin
           SetupReboot := True;
-          ProgressPage.SetText('Restart required',
-            'WSL2 was enabled. Restart Windows, then run Setup again.');
+          ProgressPage.Msg1Label.Caption := 'Restart required' + #13#10#13#10 +
+            'WSL2 was enabled. Restart Windows, then run Setup again.';
           ProgressPage.SetProgress(800, 800);
           Sleep(1500);
         end
@@ -569,14 +632,14 @@ begin
             IntToStr(DoneCode) + ').'
         else
         begin
-          ProgressPage.SetText('Verifying the FlashServer environment',
-            'Checking the systemd service and the local API...');
+          ProgressPage.Msg1Label.Caption := 'Verifying the FlashServer environment' +
+            CrLf + CrLf + 'Checking the systemd service and the local API...';
           ProgressPage.SetProgress(800, 800);
           Ready := VerifyReady;
           if Ready then
           begin
-            ProgressPage.SetText('FlashServer is ready',
-              'The service is active and http://localhost:8790/health responds.');
+            ProgressPage.Msg1Label.Caption := 'FlashServer is ready' + #13#10#13#10 +
+              'The service is active and http://localhost:8790/health responds.';
             ProgressPage.SetProgress(800, 800);
             Sleep(700);
             Result := True;
@@ -588,9 +651,12 @@ begin
       end;
     end;
   finally
+    ProgressCancelButton.Visible := False;
     ProgressPage.Hide;
   end;
 
+  if ProgressCancelled then
+    Abort;
   if SetupReboot then
     MsgBox('WSL2 has been enabled, but Windows must be restarted before Ubuntu can be installed.' + #13#10#13#10 +
       'Restart the computer, then run FlashServer Setup again to finish the installation.',
@@ -612,10 +678,39 @@ begin
     SetupOK := RunEnvironmentSetup;
 end;
 
+{ Kill the setup engine if the wizard is closed or cancelled while it runs. }
+procedure DeinitializeSetup;
+var
+  ResultCode: Integer;
+begin
+  if SetupRunning then
+    Exec(ExpandConstant('{sys}\taskkill.exe'),
+      '/F /T /IM flashserver-setup.exe', '', SW_HIDE,
+      ewWaitUntilTerminated, ResultCode);
+end;
+
 procedure InitializeWizard;
 begin
   ProgressPage := CreateOutputProgressPage('Setting up FlashServer',
     'FlashServer runs inside WSL2. Setup installs Ubuntu and the resident service.');
+  { The stock output page has two one-line labels. Turn the first one into a
+    multi-line log view and move the progress bar below it. }
+  ProgressPage.Msg1Label.AutoSize := False;
+  ProgressPage.Msg1Label.WordWrap := True;
+  ProgressPage.Msg1Label.Height := ScaleY(170);
+  ProgressPage.Msg2Label.Visible := False;
+  ProgressPage.ProgressBar.Top := ScaleY(178);
+
+  ProgressCancelButton := TNewButton.Create(WizardForm);
+  ProgressCancelButton.Parent := ProgressPage.Msg1Label.Parent;
+  ProgressCancelButton.Caption := 'Cancel';
+  ProgressCancelButton.Width := ScaleX(88);
+  ProgressCancelButton.Height := ScaleY(26);
+  ProgressCancelButton.Left := (ProgressPage.Msg1Label.Width - ProgressCancelButton.Width) div 2;
+  ProgressCancelButton.Top := ProgressPage.ProgressBar.Top - ProgressCancelButton.Height - ScaleY(6);
+  ProgressCancelButton.OnClick := @ProgressCancelClick;
+  ProgressCancelButton.Visible := False;
+
   WSLDirPage := CreateInputDirPage(wpSelectDir,
     'WSL data directory',
     'Where should the Ubuntu virtual disk live?',
@@ -647,7 +742,7 @@ begin
     else
       WizardForm.FinishedLabel.Caption :=
         'FlashServer installation needs attention.' + #13#10 + #13#10 +
-        'Check %USERPROFILE%\.flashcli\logs\setup.log and run the installer again.';
+        'Check ' + ExpandConstant('{localappdata}') + '\FlashServer\logs\setup.log and run the installer again.';
   end;
 end;
 

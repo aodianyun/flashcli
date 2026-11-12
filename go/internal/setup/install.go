@@ -10,6 +10,8 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 )
 
 // ErrRebootRequired reports that Windows must be restarted before WSL2 can be
@@ -54,6 +56,8 @@ func Run(ctx context.Context, env Env, opts Options, out io.Writer) error {
 	if opts.DryRun {
 		return nil
 	}
+	stopHeartbeat := startHeartbeat(out, 15*time.Second)
+	defer stopHeartbeat()
 	if opts.Uninstall {
 		return uninstall(ctx, env, opts, out)
 	}
@@ -128,6 +132,41 @@ type installer struct {
 	out  io.Writer
 }
 
+// activeStep tracks the step currently running so the heartbeat can explain a
+// long quiet period (for example while `wsl --install` waits on the Store).
+var activeStep struct {
+	mu    sync.Mutex
+	name  string
+	since time.Time
+}
+
+// startHeartbeat periodically writes a line to out while a step is active.
+// The returned function stops the goroutine. Callers must serialize writes to
+// out (the setup command uses a mutex-protected writer).
+func startHeartbeat(out io.Writer, interval time.Duration) func() {
+	done := make(chan struct{})
+	var once sync.Once
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				activeStep.mu.Lock()
+				name, since := activeStep.name, activeStep.since
+				activeStep.mu.Unlock()
+				if name == "" {
+					continue
+				}
+				fmt.Fprintf(out, "  %s: still working (%ds)\n", name, int(time.Since(since).Seconds()))
+			}
+		}
+	}()
+	return func() { once.Do(func() { close(done) }) }
+}
+
 // diag receives child-process output (wsl.exe, schtasks.exe). It defaults to
 // discard so the user-facing output stays clean; main redirects it to a log.
 var diag io.Writer = io.Discard
@@ -151,6 +190,20 @@ func (i installer) run(ctx context.Context, name string, args ...string) error {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdout = i.out
 	cmd.Stderr = i.out
+	return cmd.Run()
+}
+
+// runDiag is like run but sends child output to the diagnostic log instead of
+// the progress stream. Windows tools (notably wsl.exe) emit UTF-16LE, which
+// would otherwise show up as spaced-out garbage in the installer's log view.
+func (i installer) runDiag(ctx context.Context, name string, args ...string) error {
+	if i.opts.DryRun {
+		i.printf("$ %s %s\n", name, strings.Join(args, " "))
+		return nil
+	}
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Stdout = diag
+	cmd.Stderr = diag
 	return cmd.Run()
 }
 

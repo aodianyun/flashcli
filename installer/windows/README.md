@@ -44,6 +44,11 @@ UI installer (admin)
   → launch FlashServer.exe (desktop client, egui/eframe)
 ```
 
+The progress page streams the setup engine's recent lines (current step, a
+heartbeat during long WSL waits, and Ubuntu rootfs download progress) and has a
+Cancel button. Cancelling or closing the wizard stops the setup engine with
+`taskkill`.
+
 The API port defaults to `8790`. If Windows has that port in a Hyper-V/WinNAT
 excluded range (bind fails with access denied), setup tries `18790`, `28790`,
 and so on, writes the chosen port into the WSL config, and records the Windows
@@ -73,8 +78,9 @@ and frees the space immediately, but everything inside Ubuntu is lost. The
 other options only free space inside the VHDX (use `diskpart compact` or move
 the distro to reclaim it). The setup engine runs from
 `CurUninstallStepChanged` because `[UninstallRun]` constants are expanded at
-install time; `--purge-settings` also removes `%USERPROFILE%\.flashcli` (setup
-logs) after setup exits.
+install time; `--purge-settings` removes `%LOCALAPPDATA%\FlashServer` (client
+settings and `logs\setup.log`) after setup exits. Model caches in
+`%USERPROFILE%\.flashcli` are only removed by `--purge-models`.
 
 The install wizard also asks for a **WSL data directory** (default: a sibling of
 the install directory, e.g. `D:\software\FlashServerWSL` when installing to

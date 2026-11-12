@@ -95,7 +95,8 @@ virtualenv does not need `git` or GitHub access from WSL.
 For automation/debugging, `flashserver-setup --progress-file FILE` writes the
 `[n/8]` lines and a final `DONE <code>` (`0` ready, `3` restart required, `2`
 error). The full trace including `wsl.exe`/`schtasks.exe` output is written to
-`%USERPROFILE%\.flashcli\logs\setup.log`.
+`%LOCALAPPDATA%\FlashServer\logs\setup.log` (WSL/CLI logs remain under
+`~/.flashcli/logs`).
 
 ### Clean Windows VM check
 
@@ -104,7 +105,9 @@ virtualization enabled (VT-x/AMD-V); WSL2 cannot start without it.
 
 1. Confirm the VM is clean: `wsl.exe --status` fails and `wsl.exe -l -v` lists no Ubuntu.
 2. Run `flashserver-setup-windows-amd64-v<version>.exe`. The wizard must show the setup progress
-   page; on a machine without WSL2 the first run may stop at step 1 and ask for a restart.
+   page with a live log (current step, heartbeat, and rootfs download progress); on a machine
+   without WSL2 the first run may stop at step 1 and ask for a restart. The progress page has a
+   Cancel button.
 3. Restart when asked and run the installer again. It must show steps 1-8 and finish
    with "FlashServer is installed and ready."
 4. Verify the environment independently (the installer may have selected a port other than 8790):
@@ -323,7 +326,7 @@ Optional cleanup flags:
 |---|---|
 | `--purge-models` | `FLASHCLI_HOME` (bundles, weights, runtimes, caches) and the extracted `flashcli-bundle` source |
 | `--remove-cli` | `/usr/local/bin/flashcli` |
-| `--purge-settings` | desktop client settings (`%LOCALAPPDATA%\FlashServer`); the Windows UI uninstaller also removes `%USERPROFILE%\.flashcli` (setup logs) |
+| `--purge-settings` | desktop client settings and the Windows setup log (`%LOCALAPPDATA%\FlashServer`) |
 | `--purge-distro` | the Ubuntu WSL distro and its `ext4.vhdx` (frees the whole virtual disk; all data inside is lost; WSL only) |
 
-The Windows UI uninstaller shows these as three checkboxes before removing files; a silent uninstall keeps everything. Uninstalling while a model is loading or starting stops the service and its jobs first (load/download state resumes from the cache on the next install).
+The Windows UI uninstaller shows a select-all option plus model-cache, CLI, client-settings, and distro checkboxes before removing files; a silent uninstall keeps everything. Uninstalling while a model is loading or starting stops the service and its jobs first (load/download state resumes from the cache on the next install).

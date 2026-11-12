@@ -76,6 +76,8 @@ func run() int {
 		_ = os.Remove(*progressPath)
 		out = io.MultiWriter(out, &appendFile{path: *progressPath})
 	}
+	// The heartbeat goroutine and the main setup goroutine both write here.
+	out = &syncWriter{w: out}
 	fmt.Fprintf(out, "flashserver-setup %s\n", version.Version)
 	fmt.Fprintf(out, "System: %s/%s, WSL: %v, backend: %s\n", env.OS, env.Arch, env.WSL, backend)
 	if logFile != nil {
@@ -121,6 +123,18 @@ type appendFile struct {
 	mu   sync.Mutex
 }
 
+// syncWriter serializes writes from the setup goroutine and its heartbeat.
+type syncWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (w *syncWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.w.Write(p)
+}
+
 func (w *appendFile) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -136,9 +150,14 @@ func (w *appendFile) Write(p []byte) (int, error) {
 }
 
 // openSetupLog writes the full setup trace (including WSL/schtasks output) so
-// the UI installer and support can diagnose failures.
+// the UI installer and support can diagnose failures. Windows keeps all
+// Windows-side state under %LOCALAPPDATA%\FlashServer; the Linux setup and
+// flashcli continue to use $FLASHCLI_HOME/logs.
 func openSetupLog() *os.File {
 	dir := filepath.Join(paths.Home(), "logs")
+	if base := os.Getenv("LOCALAPPDATA"); base != "" {
+		dir = filepath.Join(base, "FlashServer", "logs")
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil
 	}

@@ -88,7 +88,8 @@ Windows 可能把默认端口 `8790` 保留在 Hyper-V/WinNAT 的排除端口范
 
 自动化/排障时，`flashserver-setup --progress-file FILE` 会写入 `[n/8]` 行和最后的
 `DONE <code>`（`0` 就绪、`3` 需要重启、`2` 出错）。完整跟踪（含
-`wsl.exe`/`schtasks.exe` 输出）写入 `%USERPROFILE%\.flashcli\logs\setup.log`。
+`wsl.exe`/`schtasks.exe` 输出）写入 `%LOCALAPPDATA%\FlashServer\logs\setup.log`
+（WSL/CLI 日志仍在 `~/.flashcli/logs`）。
 
 ### 干净 Windows 虚拟机验证
 
@@ -96,8 +97,9 @@ Windows 可能把默认端口 `8790` 保留在 Hyper-V/WinNAT 的排除端口范
 （VT-x/AMD-V）；没有嵌套虚拟化时 WSL2 无法启动。
 
 1. 确认虚拟机是干净的：`wsl.exe --status` 失败，`wsl.exe -l -v` 中没有 Ubuntu。
-2. 运行 `flashserver-setup-windows-amd64-v<version>.exe`。向导必须显示安装进度页；没有 WSL2 时第一次
-   运行可能停在步骤 1 并提示重启。
+2. 运行 `flashserver-setup-windows-amd64-v<version>.exe`。向导必须显示安装进度页，并实时显示日志
+   （当前步骤、心跳和 rootfs 下载进度）；没有 WSL2 时第一次运行可能停在步骤 1 并提示重启。
+   进度页提供 Cancel 按钮，可随时取消。
 3. 按提示重启后再次运行安装包。必须显示步骤 1-8，并以
    “FlashServer is installed and ready.” 结束。
 4. 独立验证环境（安装器可能选择了 8790 以外的端口）：
@@ -297,7 +299,7 @@ sudo flashserver-setup --uninstall
 |---|---|
 | `--purge-models` | `FLASHCLI_HOME`（bundle、权重、运行时、缓存）以及解压出的 `flashcli-bundle` 源码 |
 | `--remove-cli` | `/usr/local/bin/flashcli` |
-| `--purge-settings` | 桌面客户端设置（`%LOCALAPPDATA%\FlashServer`）；Windows UI 卸载器还会删除 `%USERPROFILE%\.flashcli`（安装日志） |
+| `--purge-settings` | 桌面客户端设置和 Windows 安装日志（`%LOCALAPPDATA%\FlashServer`） |
 | `--purge-distro` | Ubuntu WSL 发行版及其 `ext4.vhdx`（释放整个虚拟磁盘；Ubuntu 内所有数据丢失；仅 WSL） |
 
-Windows UI 卸载器会在删除文件前用三个勾选项询问；静默卸载默认全部保留。若卸载时模型正在加载或启动，会先停止服务和相关任务（下载/加载状态保留在缓存中，下次安装可继续）。
+Windows UI 卸载器会在删除文件前提供“全选”以及模型缓存、CLI、客户端设置、发行版四个勾选项；静默卸载默认全部保留。若卸载时模型正在加载或启动，会先停止服务和相关任务（下载/加载状态保留在缓存中，下次安装可继续）。
