@@ -186,20 +186,29 @@ func TestResolveEnvironmentTable(t *testing.T) {
 			want:     "cpu",
 		},
 		{
-			name: "single cell with a different CUDA tag still fits the SM",
+			name: "a runtime for a newer CUDA than the driver is rejected",
 			keys: []string{"sm86-cu130-linux-x86_64-py312"},
 			host: EnvKey{
 				PlatformTail: "sm86-cu128", OSName: "linux", Arch: "x86_64",
 				PythonMinor: "312", SM: "86", CudaTag: "128",
 			},
-			want: "sm86-cu130-linux-x86_64-py312",
+			wantErr: "newer NVIDIA driver",
+		},
+		{
+			name: "an older CUDA cell runs on a newer driver",
+			keys: []string{"sm86-cu124-linux-x86_64-py312"},
+			host: EnvKey{
+				PlatformTail: "sm86-cu128", OSName: "linux", Arch: "x86_64",
+				PythonMinor: "312", SM: "86", CudaTag: "128",
+			},
+			want: "sm86-cu124-linux-x86_64-py312",
 		},
 		{
 			name: "a different SM is never a loose match",
 			keys: []string{"sm89-cu130-linux-x86_64-py312"},
 			host: EnvKey{
-				PlatformTail: "sm86-cu128", OSName: "linux", Arch: "x86_64",
-				PythonMinor: "312", SM: "86", CudaTag: "128",
+				PlatformTail: "sm86-cu130", OSName: "linux", Arch: "x86_64",
+				PythonMinor: "312", SM: "86", CudaTag: "130",
 			},
 			wantErr: "no environment matches",
 		},
