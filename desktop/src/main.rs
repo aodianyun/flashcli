@@ -205,6 +205,7 @@ struct OptionsDialog {
     saving: bool,
     error: String,
     restart_required: bool,
+    start_after_save: bool,
 }
 
 #[derive(Clone, Default)]
@@ -237,7 +238,7 @@ enum Event {
     HubDetail(HubDetail),
     HubError(String),
     ModelOptions { reference: String, result: Result<Value, String> },
-    ModelOptionsSaved { reference: String, result: Result<Value, String> },
+    ModelOptionsSaved { reference: String, result: Result<Value, String>, start: bool },
     WslApplied(Result<String, String>),
 }
 
@@ -547,9 +548,10 @@ impl App {
                         }
                     }
                 }
-                Event::ModelOptionsSaved { reference, result } => {
+                Event::ModelOptionsSaved { reference, result, start } => {
                     let mut close = false;
                     let mut note: Option<(String, bool, Instant)> = None;
+                    let mut start_ref: Option<String> = None;
                     if let Some(dlg) = self.options_dialog.as_mut() {
                         if dlg.reference == reference {
                             dlg.saving = false;
@@ -557,15 +559,24 @@ impl App {
                                 Ok(v) => {
                                     let restart =
                                         v["restart_required"].as_bool().unwrap_or(false);
-                                    note = Some((
-                                        if restart {
-                                            "启动参数已保存；模型正在运行，停止并重新启动后生效。".to_string()
-                                        } else {
-                                            "启动参数已保存，下次启动生效。".to_string()
-                                        },
-                                        true,
-                                        Instant::now(),
-                                    ));
+                                    if start {
+                                        note = Some((
+                                            "启动参数已保存，正在启动…".to_string(),
+                                            true,
+                                            Instant::now(),
+                                        ));
+                                        start_ref = Some(reference.clone());
+                                    } else {
+                                        note = Some((
+                                            if restart {
+                                                "启动参数已保存；模型正在运行，停止并重新启动后生效。".to_string()
+                                            } else {
+                                                "启动参数已保存，下次启动生效。".to_string()
+                                            },
+                                            true,
+                                            Instant::now(),
+                                        ));
+                                    }
                                     close = true;
                                 }
                                 Err(err) => dlg.error = err,
@@ -577,6 +588,10 @@ impl App {
                     }
                     if note.is_some() {
                         self.op_note = note;
+                    }
+                    if let Some(reference) = start_ref {
+                        self.model_detail = None;
+                        self.spawn_job_ui(ctx, reference, false, "启动");
                     }
                 }
                 Event::WslApplied(result) => {
@@ -1489,7 +1504,7 @@ impl App {
             });
         }
         if let Some(name) = load_request {
-            self.spawn_job_ui(ui.ctx(), name, false, "启动");
+            self.open_model_options(ui.ctx(), name, true);
         }
         if let Some(name) = pull_request {
             self.spawn_job_ui(ui.ctx(), name, true, "加载");
@@ -1938,11 +1953,11 @@ impl App {
         }
         if load {
             self.model_detail = None;
-            self.spawn_job_ui(ctx, model.name.clone(), false, "启动");
+            self.open_model_options(ctx, model.name.clone(), true);
         }
         if options {
             self.model_detail = None;
-            self.open_model_options(ctx, model.name.clone());
+            self.open_model_options(ctx, model.name.clone(), false);
         }
         if pull {
             self.model_detail = None;
@@ -2031,7 +2046,7 @@ impl App {
                     if mirrored {
                         ui.label(
                             egui::RichText::new(
-                                "已开启 WSL 镜像网络：局域网可通过 Windows 本机 IP 访问；防火墙已放行 18000-18999（Private/Domain）。公网还需路由器映射和 Public 规则。",
+                                "已开启 WSL 镜像网络：局域网可通过 Windows 本机 IP 访问；防火墙端口由设置中的“防火墙端口”决定。公网还需路由器映射和 Public 规则。",
                             )
                             .color(green(ui))
                             .small(),
@@ -2097,15 +2112,28 @@ impl App {
                     });
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
-                    if ui
+                    if dlg.start_after_save {
+                        if ui
+                            .add_enabled(!dlg.saving, egui::Button::new("使用默认值启动"))
+                            .clicked()
+                        {
+                            reset = true;
+                            save = true;
+                        }
+                    } else if ui
                         .add_enabled(!dlg.saving, egui::Button::new("恢复默认"))
                         .clicked()
                     {
                         reset = true;
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let label = if dlg.start_after_save {
+                            "保存并启动"
+                        } else {
+                            "保存"
+                        };
                         if ui
-                            .add_enabled_ui(!dlg.saving, |ui| primary_button(ui, "保存"))
+                            .add_enabled_ui(!dlg.saving, |ui| primary_button(ui, label))
                             .inner
                             .clicked()
                         {
@@ -2113,7 +2141,11 @@ impl App {
                         }
                         if dlg.saving {
                             ui.spinner();
-                            ui.label("保存中…");
+                            ui.label(if dlg.start_after_save {
+                                "保存并启动…"
+                            } else {
+                                "保存中…"
+                            });
                         }
                     });
                 });
@@ -2157,12 +2189,13 @@ impl App {
                 dlg.host.trim().to_string(),
                 port,
                 values,
+                dlg.start_after_save,
             );
         }
         self.options_dialog = Some(dlg);
     }
 
-    fn open_model_options(&mut self, ctx: &egui::Context, reference: String) {
+    fn open_model_options(&mut self, ctx: &egui::Context, reference: String, start_after_save: bool) {
         self.options_dialog = Some(OptionsDialog {
             reference: reference.clone(),
             host: String::new(),
@@ -2174,6 +2207,7 @@ impl App {
             saving: false,
             error: String::new(),
             restart_required: false,
+            start_after_save,
         });
         spawn_model_options(self.tx.clone(), ctx.clone(), reference);
     }
@@ -4316,16 +4350,17 @@ fn spawn_save_model_options(
     host: String,
     port: u16,
     options: HashMap<String, String>,
+    start: bool,
 ) {
     std::thread::spawn(move || {
         let body = serde_json::json!({
-            "ref": reference,
+            "ref": reference.clone(),
             "host": host,
             "port": port,
             "options": options,
         });
         let result = put_json_timeout("/v1/models/options", &body, 20);
-        let _ = tx.send(Event::ModelOptionsSaved { reference, result });
+        let _ = tx.send(Event::ModelOptionsSaved { reference, result, start });
         ctx.request_repaint();
     });
 }
