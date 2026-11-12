@@ -13,6 +13,23 @@ import (
 
 func uninstallWSL(ctx context.Context, env Env, opts Options, out io.Writer) error {
 	i := installer{env: env, opts: opts, out: out}
+
+	if opts.PurgeDistro {
+		// No need to start the distro: unregister removes the whole virtual
+		// disk (and with it every model/weight/runtime inside).
+		i.printf("remove WSL distro %s and its virtual disk (all data inside is lost)\n", opts.Distro)
+		_ = exec.CommandContext(ctx, sysExe("wsl.exe"), "--terminate", opts.Distro).Run()
+		cmd := exec.CommandContext(ctx, sysExe("wsl.exe"), "--unregister", opts.Distro)
+		cmd.Stdout = diag
+		cmd.Stderr = diag
+		if err := cmd.Run(); err != nil {
+			i.printf("warn: wsl --unregister %s: %v\n", opts.Distro, err)
+		}
+		removeWindowsUninstallArtifacts(ctx, &i, opts)
+		i.printf("removed WSL distro %s; its virtual disk was deleted\n", opts.Distro)
+		return nil
+	}
+
 	// A cold WSL service can reject the first invocations; wait until the
 	// distro answers before removing anything.
 	if err := waitWSL(ctx, opts); err != nil {
@@ -55,12 +72,21 @@ func uninstallWSL(ctx context.Context, env Env, opts Options, out io.Writer) err
 			i.printf("warn: remove flashcli: %v\n", err)
 		}
 	}
-	if opts.PurgeSettings {
-		dir := filepath.Join(os.Getenv("LOCALAPPDATA"), "FlashServer")
-		if err := os.RemoveAll(dir); err != nil {
-			i.printf("warn: remove %s: %v\n", dir, err)
-		}
+	removeWindowsUninstallArtifacts(ctx, &i, opts)
+	kept := "kept WSL distro " + opts.Distro
+	if opts.PurgeModels {
+		kept += ", removed model caches"
+	} else {
+		kept += ", kept model caches"
 	}
+	i.printf("removed flashserver service/config/binary; %s\n", kept)
+	return nil
+}
+
+// removeWindowsUninstallArtifacts clears the per-user logon task, the
+// keepalive helper and (optionally) the desktop settings. The WSL-side files
+// are handled by the caller.
+func removeWindowsUninstallArtifacts(ctx context.Context, i *installer, opts Options) {
 	task := "flashserver-wsl"
 	i.printf("remove Windows logon task %s\n", task)
 	cmd := exec.CommandContext(ctx, sysExe("schtasks.exe"), "/Delete", "/F", "/TN", task)
@@ -70,12 +96,10 @@ func uninstallWSL(ctx context.Context, env Env, opts Options, out io.Writer) err
 		i.printf("logon task removal returned: %v\n", err)
 	}
 	_ = os.Remove(filepath.Join(os.Getenv("LOCALAPPDATA"), "FlashServer", "wsl-keepalive.vbs"))
-	kept := "kept WSL distro " + opts.Distro
-	if opts.PurgeModels {
-		kept += ", removed model caches"
-	} else {
-		kept += ", kept model caches"
+	if opts.PurgeSettings {
+		dir := filepath.Join(os.Getenv("LOCALAPPDATA"), "FlashServer")
+		if err := os.RemoveAll(dir); err != nil {
+			i.printf("warn: remove %s: %v\n", dir, err)
+		}
 	}
-	i.printf("removed flashserver service/config/binary; %s\n", kept)
-	return nil
 }

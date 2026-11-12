@@ -38,6 +38,7 @@ type Options struct {
 	PurgeModels      bool
 	RemoveCLI        bool
 	PurgeSettings    bool
+	PurgeDistro      bool
 	WSLDir           string
 	StopService      bool
 	StartService     bool

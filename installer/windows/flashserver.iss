@@ -60,6 +60,7 @@ var
   PurgeModels: Boolean;
   RemoveCLI: Boolean;
   PurgeSettings: Boolean;
+  PurgeDistro: Boolean;
   SetupOK: Boolean;
   SetupReboot: Boolean;
   SetupError: String;
@@ -77,6 +78,8 @@ begin
     Result := Result + ' --remove-cli';
   if PurgeSettings then
     Result := Result + ' --purge-settings';
+  if PurgeDistro then
+    Result := Result + ' --purge-distro';
 end;
 
 // The Inno uninstaller has no wizard pages, so show a small custom form with
@@ -85,14 +88,14 @@ procedure ShowUninstallOptions;
 var
   Form: TSetupForm;
   Title: TNewStaticText;
-  CbModels, CbCli, CbSettings: TCheckBox;
+  CbModels, CbCli, CbSettings, CbDistro: TCheckBox;
   Btn: TButton;
 begin
   Form := CreateCustomForm();
   try
     Form.Caption := 'FlashServer 卸载选项';
     Form.ClientWidth := ScaleX(540);
-    Form.ClientHeight := ScaleY(232);
+    Form.ClientHeight := ScaleY(276);
     Form.Position := poScreenCenter;
     Form.BorderStyle := bsDialog;
 
@@ -127,13 +130,21 @@ begin
     CbSettings.Caption := '客户端设置（%LOCALAPPDATA%\FlashServer）';
     CbSettings.Checked := False;
 
+    CbDistro := TCheckBox.Create(Form);
+    CbDistro.Parent := Form;
+    CbDistro.Left := ScaleX(16);
+    CbDistro.Top := ScaleY(152);
+    CbDistro.Width := ScaleX(508);
+    CbDistro.Caption := '删除 Ubuntu 发行版及虚拟磁盘（释放 VHDX 空间，Ubuntu 内所有数据丢失）';
+    CbDistro.Checked := False;
+
     Btn := TButton.Create(Form);
     Btn.Parent := Form;
     Btn.Caption := '继续卸载';
     Btn.ModalResult := mrOk;
     Btn.Default := True;
     Btn.Left := ScaleX(408);
-    Btn.Top := ScaleY(184);
+    Btn.Top := ScaleY(226);
     Btn.Width := ScaleX(116);
     Btn.Height := ScaleY(30);
 
@@ -141,6 +152,7 @@ begin
     PurgeModels := CbModels.Checked;
     RemoveCLI := CbCli.Checked;
     PurgeSettings := CbSettings.Checked;
+    PurgeDistro := CbDistro.Checked;
   finally
     Form.Free;
   end;

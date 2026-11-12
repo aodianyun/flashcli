@@ -62,12 +62,17 @@ Payload contents: `flashserver-setup.exe` (the WSL setup engine),
 pair and the network checksum file are not bundled; setup only downloads when
 the matching `--bin-dir` assets are absent.
 
-Uninstall asks three optional cleanup checkboxes (model caches, the `flashcli`
-CLI, client settings) and passes them to `flashserver-setup --uninstall`
-(`--purge-models`, `--remove-cli`, `--purge-settings`). Silent uninstall keeps
-all data. The setup engine runs from `CurUninstallStepChanged` because
-`[UninstallRun]` constants are expanded at install time; `--purge-settings`
-also removes `%USERPROFILE%\.flashcli` (setup logs) after setup exits.
+Uninstall asks four optional cleanup checkboxes (model caches, the `flashcli`
+CLI, client settings, and the whole Ubuntu distro) and passes them to
+`flashserver-setup --uninstall` (`--purge-models`, `--remove-cli`,
+`--purge-settings`, `--purge-distro`). Silent uninstall keeps all data.
+`--purge-distro` runs `wsl --unregister Ubuntu`: it deletes the virtual disk
+and frees the space immediately, but everything inside Ubuntu is lost. The
+other options only free space inside the VHDX (use `diskpart compact` or move
+the distro to reclaim it). The setup engine runs from
+`CurUninstallStepChanged` because `[UninstallRun]` constants are expanded at
+install time; `--purge-settings` also removes `%USERPROFILE%\.flashcli` (setup
+logs) after setup exits.
 
 The install wizard also asks for a **WSL data directory** (default
 `<installation drive>:\FlashServerWSL`) and passes it as `--wsl-dir`. Model
