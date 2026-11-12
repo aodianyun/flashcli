@@ -36,6 +36,11 @@ func (s *Server) catalogRepos(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, err)
 		return
 	}
+	if repos == nil {
+		// Empty search results must serialize as [] so clients can tell
+		// "no matches" apart from a failed request.
+		repos = []flashhub.Repository{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"repos":     repos,
 		"total":     total,
@@ -53,6 +58,9 @@ func (s *Server) catalogTags(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err)
 		return
+	}
+	if tags == nil {
+		tags = []flashhub.Tag{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tags": tags})
 }

@@ -92,6 +92,9 @@ func (c *Client) ListTags(ctx context.Context) ([]Tag, error) {
 	if err := c.catalogGet(ctx, WebAPIBase()+"/tags", &tags); err != nil {
 		return nil, err
 	}
+	if tags == nil {
+		tags = []Tag{}
+	}
 	return tags, nil
 }
 
@@ -127,6 +130,11 @@ func (c *Client) ListRepositories(ctx context.Context, search string, tagID int,
 	if err := c.catalogGet(ctx, u.String(), &out); err != nil {
 		return nil, 0, err
 	}
+	if out.List == nil {
+		// The API returns "list": null for no matches; keep the JSON contract
+		// stable ([] instead of null) for clients.
+		out.List = []Repository{}
+	}
 	for i := range out.List {
 		normalizeRepo(&out.List[i])
 	}
@@ -159,6 +167,9 @@ func (c *Client) ListVersions(ctx context.Context, id, page, pageSize int) ([]Ve
 	var out versionList
 	if err := c.catalogGet(ctx, u, &out); err != nil {
 		return nil, 0, err
+	}
+	if out.List == nil {
+		out.List = []Version{}
 	}
 	return out.List, out.Total, nil
 }

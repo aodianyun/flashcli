@@ -52,6 +52,38 @@ func TestCatalogListAndVersions(t *testing.T) {
 	}
 }
 
+func TestCatalogEmptyListIsNotAnError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/repositories":
+			fmt.Fprint(w, `{"code":0,"message":"success","data":{"list":null,"total":0,"page":1,"page_size":20}}`)
+		case "/tags":
+			fmt.Fprint(w, `{"code":0,"data":null}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	t.Setenv("FLASHCLI_FLASHHUB_WEB_API", srv.URL)
+
+	ctx := context.Background()
+	c := NewClient()
+	repos, total, err := c.ListRepositories(ctx, "spark_x26_1p7b", 1, "updated", 1, 20)
+	if err != nil {
+		t.Fatalf("empty result must not be an error: %v", err)
+	}
+	if repos == nil {
+		t.Fatal("empty result must be an empty slice, not nil (JSON null)")
+	}
+	if total != 0 || len(repos) != 0 {
+		t.Fatalf("repos=%d total=%d", len(repos), total)
+	}
+	tags, err := c.ListTags(ctx)
+	if err != nil || tags == nil {
+		t.Fatalf("tags=%v err=%v", tags, err)
+	}
+}
+
 func TestCatalogAPIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"code":500,"message":"boom"}`)
