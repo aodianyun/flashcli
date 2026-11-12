@@ -221,11 +221,74 @@ func ResolveEnvironment(keys []string, matches map[string]map[string]any, host E
 		}
 	}
 	if !found {
-		return "", fmt.Errorf("no environment matches host %q", host.Name())
+		return resolveEnvironmentLoose(keys, host)
 	}
 	if len(ties) > 1 {
 		sort.Strings(ties)
 		return "", fmt.Errorf("ambiguous fallback environments for host %q: %s", host.Name(), strings.Join(ties, ", "))
+	}
+	return best.key, nil
+}
+
+// resolveEnvironmentLoose accepts a bundle that ships exactly one runtime cell
+// for this SM/OS/arch/Python but a different CUDA tag. The CUDA segment in the
+// key describes the userland the bundle ships, not a hard host requirement
+// (the driver decides whether those binaries can run), so exact-key and match
+// blocks are still preferred and this is only a last resort.
+func resolveEnvironmentLoose(keys []string, host EnvKey) (string, error) {
+	type candidate struct {
+		key    string
+		family bool
+		tag    string
+	}
+	var all []candidate
+	for _, key := range keys {
+		artifact, err := ParseEnvKey(key)
+		if err != nil {
+			continue
+		}
+		if artifact.OSName != host.OSName || artifact.Arch != host.Arch ||
+			artifact.PythonMinor != host.PythonMinor || artifact.SM != host.SM {
+			continue
+		}
+		all = append(all, candidate{
+			key:    key,
+			family: cudaFamily(artifact.CudaTag) == cudaFamily(host.CudaTag),
+			tag:    artifact.CudaTag,
+		})
+	}
+	if len(all) == 0 {
+		return "", fmt.Errorf("no environment matches host %q", host.Name())
+	}
+	if len(all) == 1 {
+		return all[0].key, nil
+	}
+	// Prefer the same CUDA major family, then the newest tag within it.
+	pool := all
+	var sameFamily []candidate
+	for _, c := range all {
+		if c.family {
+			sameFamily = append(sameFamily, c)
+		}
+	}
+	if len(sameFamily) > 0 {
+		pool = sameFamily
+	}
+	best := pool[0]
+	for _, c := range pool[1:] {
+		if c.tag > best.tag {
+			best = c
+		}
+	}
+	var ties []string
+	for _, c := range pool {
+		if c.tag == best.tag {
+			ties = append(ties, c.key)
+		}
+	}
+	if len(ties) > 1 {
+		sort.Strings(ties)
+		return "", fmt.Errorf("ambiguous environments for host %q: %s", host.Name(), strings.Join(ties, ", "))
 	}
 	return best.key, nil
 }
