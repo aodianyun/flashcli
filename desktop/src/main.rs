@@ -744,8 +744,22 @@ impl App {
                 .num_columns(2)
                 .spacing([14.0, 4.0])
                 .show(ui, |ui| {
-                    kv(ui, "驱动", gpu["driver_version"].as_str().unwrap_or("—"));
-                    kv(ui, "CUDA", sys["cuda_version"].as_str().unwrap_or("—"));
+                    let driver = gpu["driver_version"].as_str().unwrap_or("—");
+                    let cuda = sys["cuda_version"].as_str().unwrap_or("—");
+                    kv(ui, "驱动 / CUDA", &format!("{driver} · CUDA {cuda}"));
+                    let mem_total = gpu["memory_total_bytes"].as_f64().unwrap_or(0.0);
+                    let mem_used = gpu["memory_used_bytes"].as_f64().unwrap_or(0.0);
+                    let vram = if mem_total > 0.0 {
+                        format!(
+                            "{} / {} ({:.0}%)",
+                            fmt_bytes(mem_used),
+                            fmt_bytes(mem_total),
+                            mem_used / mem_total * 100.0
+                        )
+                    } else {
+                        "—".to_string()
+                    };
+                    kv(ui, "显存", &vram);
                     let sm = sys["sm"].as_str().unwrap_or("");
                     let cap = gpu["compute_cap"].as_str().unwrap_or("");
                     let sm_text = if sm.is_empty() {
@@ -1141,6 +1155,7 @@ impl App {
         let mut logs_request = None;
         let mut use_request: Option<ModelRow> = None;
         let mut smoke_request: Option<ModelRow> = None;
+        let list_height = ui.available_height().max(220.0);
         TableBuilder::new(ui)
             .striped(true)
             .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
@@ -1152,6 +1167,7 @@ impl App {
             .column(Column::exact(84.0))
             .column(Column::exact(64.0))
             .column(Column::exact(150.0))
+            .max_scroll_height(list_height)
             .header(26.0, |mut header| {
                 header.col(|ui| {
                     let mut all = all_selected;
@@ -1422,6 +1438,16 @@ impl App {
         }
 
         let mut selected = None;
+        // Fill the blank area below the filters; keep room for the version
+        // panel when a repository is selected.
+        let list_height = {
+            let available = ui.available_height().max(220.0);
+            if self.hub_detail.is_some() {
+                (available * 0.45).clamp(200.0, 520.0)
+            } else {
+                available
+            }
+        };
         TableBuilder::new(ui)
             .id_salt("hub_repos")
             .striped(true)
@@ -1431,7 +1457,7 @@ impl App {
             .column(Column::exact(100.0))
             .column(Column::exact(56.0))
             .column(Column::exact(64.0))
-            .max_scroll_height(320.0)
+            .max_scroll_height(list_height)
             .header(26.0, |mut header| {
                 for title in ["仓库", "模型", "分类", "版本", "下载"] {
                     header.col(|ui| {
@@ -1500,6 +1526,7 @@ impl App {
                 ui.label("该仓库没有公开版本。");
                 return;
             }
+            let versions_height = (ui.available_height() - 8.0).max(120.0);
             TableBuilder::new(ui)
                 .id_salt("hub_versions")
                 .striped(true)
@@ -1509,6 +1536,7 @@ impl App {
                 .column(Column::exact(70.0))
                 .column(Column::exact(110.0))
                 .column(Column::remainder())
+                .max_scroll_height(versions_height)
                 .header(24.0, |mut header| {
                     for title in ["版本", "Bundle 大小", "文件", "状态", "操作"] {
                         header.col(|ui| {
@@ -3908,6 +3936,18 @@ fn save_settings(s: &Settings) {
 }
 
 fn apply_theme(ctx: &egui::Context, dark: bool) {
+    // Pin the preference so egui never falls back to the OS theme; the custom
+    // visuals below must be written to the theme that is actually active.
+    let theme = if dark {
+        egui::Theme::Dark
+    } else {
+        egui::Theme::Light
+    };
+    ctx.set_theme(if dark {
+        egui::ThemePreference::Dark
+    } else {
+        egui::ThemePreference::Light
+    });
     let mut visuals = if dark {
         egui::Visuals::dark()
     } else {
@@ -3988,8 +4028,8 @@ fn apply_theme(ctx: &egui::Context, dark: bool) {
     style
         .text_styles
         .insert(egui::TextStyle::Monospace, egui::FontId::monospace(13.0));
-    ctx.set_style(style);
-    ctx.set_visuals(visuals);
+    ctx.set_style_of(theme, style);
+    ctx.set_visuals_of(theme, visuals);
 }
 
 fn install_fonts(ctx: &egui::Context) {
