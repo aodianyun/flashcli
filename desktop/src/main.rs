@@ -1496,7 +1496,14 @@ impl App {
                 }
             });
         if let Some(id) = selected {
-            self.select_hub(id, ui.ctx());
+            if self.hub_selected == Some(id) {
+                // Clicking the selected repository again collapses its
+                // version panel and returns to the full list.
+                self.hub_selected = None;
+                self.hub_detail = None;
+            } else {
+                self.select_hub(id, ui.ctx());
+            }
         }
 
         let Some(detail) = self.hub_detail.clone() else {
@@ -1512,6 +1519,7 @@ impl App {
         };
         ui.add_space(10.0);
         let mut load_ref = None;
+        let mut close_detail = false;
         panel(ui, "版本", |ui| {
             ui.horizontal(|ui| {
                 ui.label(
@@ -1520,6 +1528,11 @@ impl App {
                         .strong(),
                 );
                 ui.label(egui::RichText::new(&repo.model_name).weak().small());
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("关闭").on_hover_text("收起版本列表").clicked() {
+                        close_detail = true;
+                    }
+                });
             });
             ui.add_space(4.0);
             if detail.versions.is_empty() {
@@ -1578,6 +1591,10 @@ impl App {
                     }
                 });
         });
+        if close_detail {
+            self.hub_selected = None;
+            self.hub_detail = None;
+        }
         if let Some(reference) = load_ref {
             self.spawn_job_ui(ui.ctx(), reference, true, "下载");
         }
@@ -3466,7 +3483,7 @@ fn spawn_catalog(tx: Sender<Event>, ctx: egui::Context, query: String, tag: Opti
             params.push(("tag", tag.to_string()));
         }
         match get_json_query("/v1/catalog", &params) {
-            Some(v) if v["repos"].is_array() => {
+            Some(v) if v["repos"].is_array() || v["repos"].is_null() => {
                 let (repos, total) = parse_catalog(&v);
                 let _ = tx.send(Event::Catalog { repos, total });
             }
