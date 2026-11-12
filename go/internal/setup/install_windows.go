@@ -212,6 +212,7 @@ func ensureDistro(ctx context.Context, opts Options, i *installer) error {
 		i.printf("$ wsl.exe --install -d %s\n", opts.Distro)
 		return nil
 	}
+	i.printf("installing Ubuntu with wsl --install (this may take several minutes)\n")
 	if err := i.run(ctx, sysExe("wsl.exe"), "--install", "-d", opts.Distro, "--no-launch"); err != nil {
 		if !wslStatusOK(ctx) {
 			return fmt.Errorf("%w: WSL2 must be restarted before %s can be used (%v)", ErrRebootRequired, opts.Distro, err)

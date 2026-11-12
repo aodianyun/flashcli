@@ -473,10 +473,14 @@ var
   LastStep: Integer;
   LastText: String;
   WSLArgs: String;
+  StartTick: Cardinal;
+  Elapsed, LastElapsed: Integer;
 begin
   Result := False;
   SetupError := '';
   SetupReboot := False;
+  StartTick := GetTickCount;
+  LastElapsed := -1;
   ProgressPath := ExpandConstant('{tmp}\flashserver-progress.txt');
   LogPath := GetEnv('USERPROFILE') + '\.flashcli\logs\setup.log';
   DeleteFile(ProgressPath);
@@ -509,26 +513,39 @@ begin
           DoneCode, ProgressLog);
         if HasDone then
           Break;
-        if (Step > 0) and (Total > 0) and
-           ((Step <> LastStep) or (StepText <> LastText) or
-            (StepDone <> LastDone) or (ProgressLog <> LastLog)) then
+        Elapsed := Integer((GetTickCount - StartTick) div 1000);
+        if (Step > 0) and (Total > 0) then
         begin
-          Detail := 'Step ' + IntToStr(Step) + ' of ' + IntToStr(Total) + ': ' + StepText;
-          if StepDone then
-            Detail := Detail + ' (done)';
-          if ProgressLog <> '' then
-            ProgressPage.SetText(Detail, Copy(ProgressLog, 1, 160))
-          else
-            ProgressPage.SetText(Detail,
-              'This can take several minutes on first install.');
-          if StepDone then
-            ProgressPage.SetProgress(Step * 100, Total * 100)
-          else
-            ProgressPage.SetProgress((Step - 1) * 100 + 50, Total * 100);
-          LastStep := Step;
-          LastText := StepText;
-          LastDone := StepDone;
-          LastLog := ProgressLog;
+          if (Step <> LastStep) or (StepText <> LastText) or
+             (StepDone <> LastDone) or (ProgressLog <> LastLog) or
+             (Elapsed <> LastElapsed) then
+          begin
+            Detail := 'Step ' + IntToStr(Step) + ' of ' + IntToStr(Total) + ': ' + StepText;
+            if StepDone then
+              Detail := Detail + ' (done)'
+            else
+              Detail := Detail + ' (' + IntToStr(Elapsed) + 's)';
+            if ProgressLog <> '' then
+              ProgressPage.SetText(Detail, Copy(ProgressLog, 1, 160))
+            else
+              ProgressPage.SetText(Detail,
+                'This can take several minutes on first install.');
+            if StepDone then
+              ProgressPage.SetProgress(Step * 100, Total * 100)
+            else
+              ProgressPage.SetProgress((Step - 1) * 100 + 50, Total * 100);
+            LastStep := Step;
+            LastText := StepText;
+            LastDone := StepDone;
+            LastLog := ProgressLog;
+            LastElapsed := Elapsed;
+          end;
+        end
+        else if Elapsed <> LastElapsed then
+        begin
+          ProgressPage.SetText('Preparing the FlashServer environment',
+            'Starting the setup engine... ' + IntToStr(Elapsed) + 's (log: ' + LogPath + ')');
+          LastElapsed := Elapsed;
         end;
         Sleep(250);
         Inc(Attempts);
