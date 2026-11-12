@@ -66,6 +66,8 @@ var
   SetupError: String;
   ProgressPage: TOutputProgressWizardPage;
   WSLDirPage: TInputDirWizardPage;
+  UninstallForm: TSetupForm;
+  CbAll, CbModels, CbCli, CbSettings, CbDistro: TCheckBox;
 
 // Extra arguments for `flashserver-setup --uninstall`, decided by the
 // checkboxes shown before the uninstall starts.
@@ -82,79 +84,115 @@ begin
     Result := Result + ' --purge-distro';
 end;
 
+// Removing the distro already removes the model cache and the CLI inside it,
+// so those options are forced on and disabled.
+procedure SyncDistroDependent;
+begin
+  CbModels.Enabled := not CbDistro.Checked;
+  CbCli.Enabled := not CbDistro.Checked;
+  if CbDistro.Checked then
+  begin
+    CbModels.Checked := True;
+    CbCli.Checked := True;
+  end;
+end;
+
+procedure DistroOptionClick(Sender: TObject);
+begin
+  SyncDistroDependent;
+end;
+
+procedure SelectAllClick(Sender: TObject);
+begin
+  CbModels.Checked := CbAll.Checked;
+  CbCli.Checked := CbAll.Checked;
+  CbSettings.Checked := CbAll.Checked;
+  CbDistro.Checked := CbAll.Checked;
+  SyncDistroDependent;
+end;
+
 // The Inno uninstaller has no wizard pages, so show a small custom form with
 // the optional cleanup choices. Defaults keep all data.
 procedure ShowUninstallOptions;
 var
-  Form: TSetupForm;
   Title: TNewStaticText;
-  CbModels, CbCli, CbSettings, CbDistro: TCheckBox;
   Btn: TButton;
 begin
-  Form := CreateCustomForm();
+  UninstallForm := CreateCustomForm();
   try
-    Form.Caption := 'FlashServer 卸载选项';
-    Form.ClientWidth := ScaleX(540);
-    Form.ClientHeight := ScaleY(276);
-    Form.Position := poScreenCenter;
-    Form.BorderStyle := bsDialog;
+    UninstallForm.Caption := 'FlashServer 卸载选项';
+    UninstallForm.ClientWidth := ScaleX(540);
+    UninstallForm.ClientHeight := ScaleY(304);
+    UninstallForm.Position := poScreenCenter;
+    UninstallForm.BorderStyle := bsDialog;
 
-    Title := TNewStaticText.Create(Form);
-    Title.Parent := Form;
+    Title := TNewStaticText.Create(UninstallForm);
+    Title.Parent := UninstallForm;
     Title.Left := ScaleX(16);
     Title.Top := ScaleY(14);
     Title.Width := ScaleX(508);
     Title.Caption := '默认保留模型缓存和设置。勾选以下项目会在卸载时一并删除：';
 
-    CbModels := TCheckBox.Create(Form);
-    CbModels.Parent := Form;
+    CbAll := TCheckBox.Create(UninstallForm);
+    CbAll.Parent := UninstallForm;
+    CbAll.Left := ScaleX(16);
+    CbAll.Top := ScaleY(46);
+    CbAll.Width := ScaleX(508);
+    CbAll.Caption := '全选（删除所有 FlashServer 数据）';
+    CbAll.Checked := False;
+    CbAll.OnClick := @SelectAllClick;
+
+    CbModels := TCheckBox.Create(UninstallForm);
+    CbModels.Parent := UninstallForm;
     CbModels.Left := ScaleX(16);
-    CbModels.Top := ScaleY(50);
+    CbModels.Top := ScaleY(80);
     CbModels.Width := ScaleX(508);
     CbModels.Caption := '模型缓存、权重和运行环境（~/.flashcli，不可恢复）';
     CbModels.Checked := False;
 
-    CbCli := TCheckBox.Create(Form);
-    CbCli.Parent := Form;
+    CbCli := TCheckBox.Create(UninstallForm);
+    CbCli.Parent := UninstallForm;
     CbCli.Left := ScaleX(16);
-    CbCli.Top := ScaleY(84);
+    CbCli.Top := ScaleY(114);
     CbCli.Width := ScaleX(508);
     CbCli.Caption := 'flashcli 命令行（/usr/local/bin/flashcli）';
     CbCli.Checked := False;
 
-    CbSettings := TCheckBox.Create(Form);
-    CbSettings.Parent := Form;
+    CbSettings := TCheckBox.Create(UninstallForm);
+    CbSettings.Parent := UninstallForm;
     CbSettings.Left := ScaleX(16);
-    CbSettings.Top := ScaleY(118);
+    CbSettings.Top := ScaleY(148);
     CbSettings.Width := ScaleX(508);
     CbSettings.Caption := '客户端设置（%LOCALAPPDATA%\FlashServer）';
     CbSettings.Checked := False;
 
-    CbDistro := TCheckBox.Create(Form);
-    CbDistro.Parent := Form;
+    CbDistro := TCheckBox.Create(UninstallForm);
+    CbDistro.Parent := UninstallForm;
     CbDistro.Left := ScaleX(16);
-    CbDistro.Top := ScaleY(152);
+    CbDistro.Top := ScaleY(182);
     CbDistro.Width := ScaleX(508);
     CbDistro.Caption := '删除 Ubuntu 发行版及虚拟磁盘（释放 VHDX 空间，Ubuntu 内所有数据丢失）';
     CbDistro.Checked := False;
+    CbDistro.OnClick := @DistroOptionClick;
+    SyncDistroDependent;
 
-    Btn := TButton.Create(Form);
-    Btn.Parent := Form;
+    Btn := TButton.Create(UninstallForm);
+    Btn.Parent := UninstallForm;
     Btn.Caption := '继续卸载';
     Btn.ModalResult := mrOk;
     Btn.Default := True;
     Btn.Left := ScaleX(408);
-    Btn.Top := ScaleY(226);
+    Btn.Top := ScaleY(254);
     Btn.Width := ScaleX(116);
     Btn.Height := ScaleY(30);
 
-    Form.ShowModal;
+    UninstallForm.ShowModal;
     PurgeModels := CbModels.Checked;
     RemoveCLI := CbCli.Checked;
     PurgeSettings := CbSettings.Checked;
     PurgeDistro := CbDistro.Checked;
   finally
-    Form.Free;
+    UninstallForm.Free;
   end;
 end;
 
@@ -187,9 +225,12 @@ begin
         'See %USERPROFILE%\.flashcli\logs\setup.log.', mbError, MB_OK);
   end
   else if (CurUninstallStep = usPostUninstall) and PurgeSettings then
+  begin
     // Setup has exited by now, so its setup.log is closed and the whole
     // Windows-side state can go (client settings are removed by setup).
-    DelTree(ExpandConstant('{userprofile}\.flashcli'), True, True, True);
+    if GetEnv('USERPROFILE') <> '' then
+      DelTree(GetEnv('USERPROFILE') + '\.flashcli', True, True, True);
+  end;
 end;
 
 function SetupReady: Boolean;

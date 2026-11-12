@@ -65,7 +65,9 @@ the matching `--bin-dir` assets are absent.
 Uninstall asks four optional cleanup checkboxes (model caches, the `flashcli`
 CLI, client settings, and the whole Ubuntu distro) and passes them to
 `flashserver-setup --uninstall` (`--purge-models`, `--remove-cli`,
-`--purge-settings`, `--purge-distro`). Silent uninstall keeps all data.
+`--purge-settings`, `--purge-distro`). A select-all checkbox toggles all four;
+selecting the distro forces (and disables) the model/CLI options because they
+live inside it. Silent uninstall keeps all data.
 `--purge-distro` runs `wsl --unregister Ubuntu`: it deletes the virtual disk
 and frees the space immediately, but everything inside Ubuntu is lost. The
 other options only free space inside the VHDX (use `diskpart compact` or move
