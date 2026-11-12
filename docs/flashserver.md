@@ -151,8 +151,10 @@ virtual disk (`ext4.vhdx`), which defaults to the system drive and typically
 grows to 20–40 GB. `--wsl-dir DIR` moves the distro to another NTFS drive
 (WSL has no install-time location flag, so setup installs it and then runs
 `wsl --manage <distro> --move DIR` while the distro is stopped). The UI
-installer adds a "WSL data directory" page and defaults it to
-`<installation drive>:\FlashServerWSL`. Deleting data later does **not** shrink
+installer adds a "WSL data directory" page and defaults it to a sibling of the
+installation directory (`<install dir parent>\FlashServerWSL`: installing to
+`D:\software\FlashServer` defaults to `D:\software\FlashServerWSL`). Deleting
+data later does **not** shrink
 the VHDX: clean up with `flashcli du` / `flashcli cache clean` /
 `flashcli bundle clean`, then shut WSL down and compact the disk
 (`wsl --manage <distro> --set-sparse true`, or `diskpart` compact).

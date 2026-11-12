@@ -604,7 +604,7 @@ begin
   WSLDirPage := CreateInputDirPage(wpSelectDir,
     'WSL data directory',
     'Where should the Ubuntu virtual disk live?',
-    'FlashServer runs inside WSL2. The Ubuntu disk holds model weights and runtimes, so choose a drive with at least 30 GB free. The default follows the installation drive; leave it unchanged to keep the WSL default.',
+    'FlashServer runs inside WSL2. The Ubuntu disk holds model weights and runtimes, so choose a drive with at least 30 GB free. The default is a sibling of the installation directory (FlashServerWSL); leave it empty to keep the WSL default.',
     False, '');
   WSLDirPage.Add('WSL data directory (leave empty for the WSL default):');
 end;
@@ -614,7 +614,7 @@ begin
   if CurPageID = WSLDirPage.ID then
   begin
     if Trim(WSLDirPage.Values[0]) = '' then
-      WSLDirPage.Values[0] := ExtractFileDrive(WizardDirValue) + '\FlashServerWSL';
+      WSLDirPage.Values[0] := AddBackslash(ExtractFileDir(WizardDirValue)) + 'FlashServerWSL';
   end
   else if CurPageID = wpFinished then
   begin
