@@ -153,6 +153,7 @@ unpublished test/draft releases.
 4. On Linux/macOS (or Windows Git Bash) from `main`, publish both hosts in one command:
    `bash scripts/release_go.sh --upload --notes-file <notes.md> --windows-installer dist/windows/flashserver-setup-windows-amd64-v<version>.exe`
    The script requires a clean `main` equal to `origin/main`, creates/pushes tag `vX` at HEAD, builds the Linux/Windows Go assets, uploads them plus the Windows installer, and fails if either GitHub or Gitee upload fails. Use `FLASHCLI_RELEASE_TARGET` only for a different release branch; `--allow-non-target` is for tests only.
+   The Linux assets are reproducible; the Inno Setup installer is **not** byte-reproducible, so put its final SHA256 into the notes **after** the last installer build and do not rebuild it afterwards.
 5. Write release notes per the standard below on **both** platforms. `--notes-file` uses the same body for GitHub and Gitee; if omitted, the script uses a minimal generated note.
 6. Verify the published assets in a clean environment:
    `bash scripts/verify_release.sh --version X` (isolated prefix; add `--mirror` for Gitee).
