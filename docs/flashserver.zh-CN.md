@@ -244,7 +244,7 @@ curl http://127.0.0.1:18100/v1/chat/completions ...
 
 - `host`：`0.0.0.0` 监听所有网卡，`127.0.0.1` 仅本机。
 - `port`：`0` 使用 `18000-18999` 内的空闲端口；也可以固定端口。
-- 参数值留空表示使用 bundle 默认值；非空值会作为 `--flag value` 追加到 `flashcli serve`。
+- 参数值留空表示使用 bundle 默认值；非空值会作为 `--flag value` 追加到 `flashcli serve`。`serve_options` 里的 host/ip/port 由上面的监听地址/端口字段表示，不会重复追加。
 - 配置保存在服务端的 `$FLASHCLI_HOME/flashserver/serve-options.json`，CLI/API 与桌面读取同一份；模型运行中保存后需要停止再启动才生效。
 
 Windows 的 localhost 转发会让 `host=0.0.0.0` 在 Windows 本机可通过 `http://localhost:<port>` 访问。局域网/公网还需要 WSL 镜像网络和防火墙：
@@ -252,6 +252,8 @@ Windows 的 localhost 转发会让 `host=0.0.0.0` 在 Windows 本机可通过 `h
 1. 桌面 **设置 → WSL 资源 → 局域网访问（WSL 镜像网络）** 会在 `%USERPROFILE%\.wslconfig` 写入 `[wsl2] networkingMode=mirrored`。
 2. 客户端请求 UAC，放行 Private/Domain 配置文件的 TCP `18000-18999` 入站。
 3. 应用设置会重启 WSL（`wsl --shutdown`）并重新启动 `flashserver`；正在运行的模型会中断。
+
+防火墙规则只使用 Private/Domain 配置文件。公网访问还需要额外的 Public 规则和路由器端口映射；模型 API 默认无认证，请勿直接暴露到公网。
 
 同一面板可修改 `.wslconfig` 的 `memory`、`processors`、`swap`。留空使用 WSL 默认值（内存为 Windows 总内存 50%、全部逻辑 CPU、Swap 为内存 25%）。这些设置影响所有 WSL2 发行版，且需要重启 WSL。镜像网络需要 Windows 11 22H2+ 和较新的 WSL。
 

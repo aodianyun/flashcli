@@ -2024,7 +2024,7 @@ impl App {
                     if mirrored {
                         ui.label(
                             egui::RichText::new(
-                                "已开启 WSL 镜像网络：局域网/公网可通过 Windows 本机 IP 访问；防火墙已放行 18000-18999（Private/Domain）。",
+                                "已开启 WSL 镜像网络：局域网可通过 Windows 本机 IP 访问；防火墙已放行 18000-18999（Private/Domain）。公网还需路由器映射和 Public 规则。",
                             )
                             .color(green(ui))
                             .small(),
@@ -2032,7 +2032,7 @@ impl App {
                     } else {
                         ui.label(
                             egui::RichText::new(
-                                "当前 WSL 为 NAT 模式：0.0.0.0 仅 Windows 本机 localhost 可达。局域网/公网 IP 访问请在“设置 → WSL 资源”开启局域网访问。",
+                                "当前 WSL 为 NAT 模式：0.0.0.0 仅 Windows 本机 localhost 可达。局域网 IP 访问请在“设置 → WSL 资源”开启局域网访问；公网还需额外放行 Public。",
                             )
                             .color(egui::Color32::from_rgb(215, 186, 125))
                             .small(),
@@ -2521,7 +2521,7 @@ impl App {
                         egui::RichText::new(if self.wsl.mirrored {
                             "需要 Windows 11 22H2+；应用时会请求管理员权限放行 TCP 18000-18999（Private/Domain）。"
                         } else {
-                            "默认 NAT：模型只在 Windows 本机 localhost 可达；局域网/公网请勾选上面的选项。"
+                            "默认 NAT：模型只在 Windows 本机 localhost 可达；局域网访问请勾选上面的选项（公网还需 Public 规则和路由器映射）。"
                         })
                         .weak()
                         .small(),

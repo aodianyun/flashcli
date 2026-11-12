@@ -275,7 +275,9 @@ with a host and port:
 - `host`: `0.0.0.0` binds all interfaces, `127.0.0.1` is local-only.
 - `port`: `0` uses a free port in `18000-18999`; a fixed port is allowed.
 - Option values: empty means the bundle default; non-empty values are appended
-  as `--flag value` to `flashcli serve`.
+  as `--flag value` to `flashcli serve`. Host-level `host`/`ip`/`port` entries
+  in `serve_options` are represented by the host/port fields and are not added
+  twice.
 - Settings are stored server-side in
   `$FLASHCLI_HOME/flashserver/serve-options.json`, so the CLI/API and desktop
   see the same values. Saving while a model is loaded requires unload + start.
@@ -290,6 +292,10 @@ requires WSL mirrored networking and a firewall rule:
    Private/Domain profiles.
 3. Applying WSL settings restarts WSL (`wsl --shutdown`) and starts
    `flashserver` again; running models are interrupted.
+
+The firewall rule uses the Private/Domain profiles. Access from the public
+internet additionally needs a Public profile rule and router port forwarding;
+do not expose the model API without authentication.
 
 The same panel edits `memory`, `processors`, and `swap` in `.wslconfig`.
 Empty values use WSL defaults (memory 50% of Windows RAM, all logical CPUs,
