@@ -215,6 +215,9 @@ GET  /v1/jobs/{id}/events
 POST /v1/jobs/{id}/cancel        cancel a running job (smoke/download/load)
 POST /v1/models/load            {"ref":"...","async":true} → job_id (or endpoint/pid/state)
 POST /v1/models/unload          {"ref":"..."}
+GET  /v1/models/options         ?ref=... manifest serve_options + saved host/port/values
+PUT  /v1/models/options         {"ref":"...","host":"0.0.0.0","port":0,"options":{...}}
+DELETE /v1/models/options       ?ref=... reset to bundle/server defaults
 POST /v1/models/smoke           {"ref":"..."} run-only smoke test or started-serve request test
 POST /v1/models/clean           {"refs":[...]} remove local bundle/weight caches
 POST /v1/storage/clean          {"targets":["cache"]} remove shared cache (not model data)
@@ -261,6 +264,37 @@ Add `-H "X-Flashcli-Token: $TOKEN"` only when a token is configured.
 `load` requires a bundle with a `serve` entry (checked in top-level `entry`, `defaults.entry`, and per-environment entries). Run-only bundles (VLA policies and similar) are rejected before a serve process is started with `bundle "..." is run-only (no serve entry)`; use `flashcli run <ref>` for those. The desktop client's FlashHub page downloads versions only; the Local tab shows "仅 run" when the bundle has no serve entry and hides the load action.
 
 `POST /v1/models/smoke` starts an async smoke job for a ready model. Run-only bundles execute `flashcli run <ref>` at low CPU priority (`nice -n 10`) with manifest defaults (bundles that require external files such as images report that in the log); a started serve bundle receives one OpenAI-compatible chat request (`ping`). The desktop asks for confirmation before a run smoke test; output/progress stream as a `smoke` job over `/v1/ws` and are appended to `<ref>.smoke.log`. Closing or cancelling the dialog, or quitting the client, cancels the job (`POST /v1/jobs/{id}/cancel`); the server also stops the job when its timeout expires. The serve test requires the model to be started first.
+
+## Startup parameters and WSL resources
+
+A bundle's `serve_options` (from `flashcli-bundle.json`, including v4
+environment overlays) is the source for per-model startup parameters. The
+desktop's **Models → model detail → 参数** dialog renders these fields together
+with a host and port:
+
+- `host`: `0.0.0.0` binds all interfaces, `127.0.0.1` is local-only.
+- `port`: `0` uses a free port in `18000-18999`; a fixed port is allowed.
+- Option values: empty means the bundle default; non-empty values are appended
+  as `--flag value` to `flashcli serve`.
+- Settings are stored server-side in
+  `$FLASHCLI_HOME/flashserver/serve-options.json`, so the CLI/API and desktop
+  see the same values. Saving while a model is loaded requires unload + start.
+
+Windows localhost forwarding makes `host=0.0.0.0` reachable at
+`http://localhost:<port>` on the Windows host. LAN/public access additionally
+requires WSL mirrored networking and a firewall rule:
+
+1. Desktop **Settings → WSL 资源 → 局域网访问（WSL 镜像网络）** writes
+   `[wsl2] networkingMode=mirrored` to `%USERPROFILE%\.wslconfig`.
+2. The client asks for UAC and allows inbound TCP `18000-18999` for the
+   Private/Domain profiles.
+3. Applying WSL settings restarts WSL (`wsl --shutdown`) and starts
+   `flashserver` again; running models are interrupted.
+
+The same panel edits `memory`, `processors`, and `swap` in `.wslconfig`.
+Empty values use WSL defaults (memory 50% of Windows RAM, all logical CPUs,
+swap 25% of memory). These settings apply to every WSL2 distro and require a
+WSL restart. Mirrored networking requires Windows 11 22H2+ and a recent WSL.
 
 ## Timing expectations
 

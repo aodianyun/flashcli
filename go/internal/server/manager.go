@@ -18,6 +18,7 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/host"
 	"github.com/aodianyun/flashcli/go/internal/manifest"
 	"github.com/aodianyun/flashcli/go/internal/ref"
+	"github.com/aodianyun/flashcli/go/internal/serveopts"
 )
 
 // ErrResourceExhausted indicates that loading another model would exceed the
@@ -41,6 +42,19 @@ type Launcher interface {
 	Start(context.Context, string, int) (ServeProcess, error)
 }
 
+// LoadOptions carries the per-model host, port and manifest serve flags.
+type LoadOptions struct {
+	Host  string
+	Port  int
+	Flags []string
+}
+
+// OptionLauncher is implemented by launchers that accept per-model options.
+// The plain Launcher interface remains for tests and simple launchers.
+type OptionLauncher interface {
+	StartWithOptions(context.Context, string, LoadOptions) (ServeProcess, error)
+}
+
 // ManagerOptions controls model admission.
 type ManagerOptions struct {
 	// MaxLoaded is the maximum number of resident models. Zero means only the
@@ -52,6 +66,8 @@ type ManagerOptions struct {
 	GPU func(context.Context) ([]gpu.Device, error)
 	// Inspect reads a bundle's admission metadata. Nil uses inspectBundle.
 	Inspect func(string) (BundleInfo, error)
+	// ServeSettings stores per-model host/port/serve options. Nil disables them.
+	ServeSettings *serveSettingsStore
 }
 
 // Manager owns resident serve processes.
@@ -158,11 +174,33 @@ func (m *Manager) load(ctx context.Context, refStr string, progress func(phase, 
 		m.pending--
 		m.mu.Unlock()
 	}()
-	port, err := freePort()
+	settings := ModelServeSettings{}
+	if m.opts.ServeSettings != nil {
+		settings = m.opts.ServeSettings.Get(refStr)
+	}
+	host := strings.TrimSpace(settings.Host)
+	port := settings.Port
+	if port > 0 {
+		if !portAvailable(port) {
+			return InstanceInfo{}, fmt.Errorf("serve port %d is already in use", port)
+		}
+	} else {
+		var err error
+		port, err = freePort()
+		if err != nil {
+			return InstanceInfo{}, err
+		}
+	}
+	flags, err := serveopts.Flags(bundle.ServeOptions, settings.Options)
 	if err != nil {
 		return InstanceInfo{}, err
 	}
-	proc, err := m.launcher.Start(ctx, refStr, port)
+	var proc ServeProcess
+	if ol, ok := m.launcher.(OptionLauncher); ok {
+		proc, err = ol.StartWithOptions(ctx, refStr, LoadOptions{Host: host, Port: port, Flags: flags})
+	} else {
+		proc, err = m.launcher.Start(ctx, refStr, port)
+	}
 	if err != nil {
 		return InstanceInfo{}, err
 	}
@@ -325,9 +363,10 @@ func (m *Manager) checkCapacityLocked(ctx context.Context, b BundleInfo) error {
 
 // BundleInfo is the admission metadata read from a bundle manifest.
 type BundleInfo struct {
-	Name       string
-	RunOnly    bool
-	MinVRAMMiB int64
+	Name         string
+	RunOnly      bool
+	MinVRAMMiB   int64
+	ServeOptions []serveopts.Spec
 }
 
 func inspectBundle(refStr string) (BundleInfo, error) {
@@ -355,9 +394,10 @@ func inspectBundle(refStr string) (BundleInfo, error) {
 		return BundleInfo{}, err
 	}
 	return BundleInfo{
-		Name:       m.Name,
-		RunOnly:    m.EntryFor("serve", variant) == nil,
-		MinVRAMMiB: minVRAMMiB(m),
+		Name:         m.Name,
+		RunOnly:      m.EntryFor("serve", variant) == nil,
+		MinVRAMMiB:   minVRAMMiB(m),
+		ServeOptions: serveopts.FromManifest(m, variant),
 	}, nil
 }
 
@@ -387,8 +427,30 @@ func numberFromAny(v any) (int64, bool) {
 	}
 }
 
+const (
+	servePortMin = 18000
+	servePortMax = 18999
+)
+
+// portAvailable reports whether a TCP port can be bound on all interfaces.
+func portAvailable(port int) bool {
+	ln, err := net.Listen("tcp", "0.0.0.0:"+strconv.Itoa(port))
+	if err != nil {
+		return false
+	}
+	_ = ln.Close()
+	return true
+}
+
+// freePort prefers the documented 18000-18999 range (covered by the Windows
+// firewall rule) and falls back to an ephemeral port when the range is busy.
 func freePort() (int, error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	for p := servePortMin; p <= servePortMax; p++ {
+		if portAvailable(p) {
+			return p, nil
+		}
+	}
+	ln, err := net.Listen("tcp", "0.0.0.0:0")
 	if err != nil {
 		return 0, err
 	}
@@ -421,19 +483,32 @@ func resolveFlashcliBin(bin string) (string, error) {
 }
 
 func (l FlashcliLauncher) Start(ctx context.Context, refStr string, port int) (ServeProcess, error) {
+	return l.StartWithOptions(ctx, refStr, LoadOptions{Port: port})
+}
+
+func (l FlashcliLauncher) StartWithOptions(ctx context.Context, refStr string, opts LoadOptions) (ServeProcess, error) {
 	bin, err := resolveFlashcliBin(l.Bin)
 	if err != nil {
 		return nil, err
 	}
-	hostAddr := l.Host
+	hostAddr := strings.TrimSpace(opts.Host)
+	if hostAddr == "" {
+		hostAddr = l.Host
+	}
 	if hostAddr == "" {
 		hostAddr = "127.0.0.1"
 	}
 	publicHost := l.PublicHost
 	if publicHost == "" {
-		publicHost = hostAddr
+		if hostAddr == "0.0.0.0" || hostAddr == "::" || hostAddr == "[::]" {
+			publicHost = "127.0.0.1"
+		} else {
+			publicHost = hostAddr
+		}
 	}
-	cmd := exec.Command(bin, "serve", refStr, "--host", hostAddr, "--port", strconv.Itoa(port))
+	args := []string{"serve", refStr, "--host", hostAddr, "--port", strconv.Itoa(opts.Port)}
+	args = append(args, opts.Flags...)
+	cmd := exec.Command(bin, args...)
 	cmd.Env = append(os.Environ(), l.ExtraEnv...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
@@ -455,8 +530,8 @@ func (l FlashcliLauncher) Start(ctx context.Context, refStr string, port int) (S
 		return nil, err
 	}
 	p := &flashcliProcess{
-		ref: refStr, cmd: cmd, port: port, logPath: logPath,
-		endpoint: "http://" + publicHost + ":" + strconv.Itoa(port),
+		ref: refStr, cmd: cmd, port: opts.Port, logPath: logPath,
+		endpoint: "http://" + publicHost + ":" + strconv.Itoa(opts.Port),
 		client:   &http.Client{Timeout: 5 * time.Second},
 		done:     make(chan struct{}),
 	}

@@ -425,6 +425,60 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+  /v1/models/options:
+    get:
+      summary: Read manifest serve options and saved values
+      description: |
+        Returns the bundle's `serve_options` (from `flashcli-bundle.json`),
+        the saved host/port values, and whether a restart is required because
+        the model is currently loaded.
+      parameters:
+        - name: ref
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Serve options and saved values
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModelOptions' }
+        '400': { $ref: '#/components/responses/Error' }
+    put:
+      summary: Save startup parameters for a model
+      description: |
+        Empty option values use the bundle default. Saving while the model is
+        loaded does not change the running process; unload and start again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModelOptionsInput' }
+      responses:
+        '200':
+          description: Saved values
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModelOptions' }
+        '400': { $ref: '#/components/responses/Error' }
+    delete:
+      summary: Reset startup parameters for a model
+      parameters:
+        - name: ref
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Reset to bundle/server defaults
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ref: { type: string }
+                  state: { type: string, const: defaults }
+        '400': { $ref: '#/components/responses/Error' }
   /v1/models/unload:
     post:
       summary: Unload a model
@@ -824,6 +878,38 @@ components:
         endpoint: { type: string }
         pid: { type: integer }
         loaded_at: { type: string, format: date-time }
+    ServeOption:
+      type: object
+      properties:
+        name: { type: string }
+        flag: { type: string }
+        type: { type: string, enum: [string, integer, float, boolean] }
+        default: {}
+        help: { type: string }
+        phase: { type: string }
+        value: { type: string, description: Saved value; empty uses the bundle default }
+    ModelOptions:
+      type: object
+      properties:
+        ref: { type: string }
+        host: { type: string }
+        default_host: { type: string }
+        public_host: { type: string }
+        port: { type: integer, description: Fixed port, 0 = automatic }
+        restart_required: { type: boolean }
+        options:
+          type: array
+          items: { $ref: '#/components/schemas/ServeOption' }
+    ModelOptionsInput:
+      type: object
+      required: [ref]
+      properties:
+        ref: { type: string }
+        host: { type: string, description: '0.0.0.0 for all interfaces, 127.0.0.1 for local only' }
+        port: { type: integer, description: Fixed port, 0 = automatic }
+        options:
+          type: object
+          additionalProperties: { type: string }
     StorageArea:
       type: object
       properties:

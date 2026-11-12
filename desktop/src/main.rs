@@ -181,6 +181,38 @@ struct Settings {
     dark: bool,
 }
 
+#[derive(Clone)]
+struct ServeOption {
+    name: String,
+    flag: String,
+    kind: String,
+    default: String,
+    value: String,
+    help: String,
+}
+
+#[derive(Clone)]
+struct OptionsDialog {
+    reference: String,
+    host: String,
+    default_host: String,
+    public_host: String,
+    port: String,
+    options: Vec<ServeOption>,
+    loading: bool,
+    saving: bool,
+    error: String,
+    restart_required: bool,
+}
+
+#[derive(Clone, Default)]
+struct WslConfig {
+    memory: String,
+    processors: String,
+    swap: String,
+    mirrored: bool,
+}
+
 enum Event {
     System(Value),
     ServiceDown,
@@ -202,6 +234,9 @@ enum Event {
     CatalogTags(Vec<(i64, String)>),
     HubDetail(HubDetail),
     HubError(String),
+    ModelOptions { reference: String, result: Result<Value, String> },
+    ModelOptionsSaved { reference: String, result: Result<Value, String> },
+    WslApplied(Result<String, String>),
 }
 
 struct JobEvent {
@@ -220,6 +255,7 @@ enum Pending {
     Unload(String),
     Clean(Vec<String>),
     Smoke(String),
+    ApplyWsl,
     Quit,
 }
 
@@ -287,6 +323,9 @@ pub struct App {
     job_ref: String,
     job_verb: String,
     dialog: Option<DialogState>,
+    options_dialog: Option<OptionsDialog>,
+    wsl: WslConfig,
+    wsl_pending: Option<WslConfig>,
     smoke: Option<SmokeState>,
     pending_smoke_cancel: bool,
     closing: bool,
@@ -305,6 +344,7 @@ impl App {
 
         let (tx, rx) = channel();
         start_ws(tx.clone(), cc.egui_ctx.clone());
+        let wsl = load_wslconfig();
 
         Self {
             rx,
@@ -355,6 +395,9 @@ impl App {
             job_ref: String::new(),
             job_verb: String::new(),
             dialog: None,
+            options_dialog: None,
+            wsl,
+            wsl_pending: None,
             smoke: None,
             pending_smoke_cancel: false,
             closing: false,
@@ -456,6 +499,87 @@ impl App {
                     self.load_status_at = Some(Instant::now());
                 }
                 Event::Job(job) => self.apply_job(job),
+                Event::ModelOptions { reference, result } => {
+                    if let Some(dlg) = self.options_dialog.as_mut() {
+                        if dlg.reference == reference {
+                            match result {
+                                Ok(v) => {
+                                    dlg.loading = false;
+                                    dlg.error.clear();
+                                    dlg.host = v["host"].as_str().unwrap_or("").to_string();
+                                    dlg.default_host =
+                                        v["default_host"].as_str().unwrap_or("127.0.0.1").to_string();
+                                    dlg.public_host =
+                                        v["public_host"].as_str().unwrap_or("").to_string();
+                                    let port = v["port"].as_i64().unwrap_or(0);
+                                    dlg.port = if port > 0 { port.to_string() } else { "0".to_string() };
+                                    dlg.restart_required =
+                                        v["restart_required"].as_bool().unwrap_or(false);
+                                    dlg.options = v["options"]
+                                        .as_array()
+                                        .map(|items| {
+                                            items
+                                                .iter()
+                                                .map(|o| ServeOption {
+                                                    name: o["name"].as_str().unwrap_or("").to_string(),
+                                                    flag: o["flag"].as_str().unwrap_or("").to_string(),
+                                                    kind: o["type"].as_str().unwrap_or("string").to_string(),
+                                                    default: json_text(&o["default"]),
+                                                    value: o["value"].as_str().unwrap_or("").to_string(),
+                                                    help: o["help"].as_str().unwrap_or("").to_string(),
+                                                })
+                                                .collect()
+                                        })
+                                        .unwrap_or_default();
+                                }
+                                Err(err) => {
+                                    dlg.loading = false;
+                                    dlg.error = err;
+                                }
+                            }
+                        }
+                    }
+                }
+                Event::ModelOptionsSaved { reference, result } => {
+                    let mut close = false;
+                    let mut note: Option<(String, bool, Instant)> = None;
+                    if let Some(dlg) = self.options_dialog.as_mut() {
+                        if dlg.reference == reference {
+                            dlg.saving = false;
+                            match result {
+                                Ok(v) => {
+                                    let restart =
+                                        v["restart_required"].as_bool().unwrap_or(false);
+                                    note = Some((
+                                        if restart {
+                                            "启动参数已保存；模型正在运行，停止并重新启动后生效。".to_string()
+                                        } else {
+                                            "启动参数已保存，下次启动生效。".to_string()
+                                        },
+                                        true,
+                                        Instant::now(),
+                                    ));
+                                    close = true;
+                                }
+                                Err(err) => dlg.error = err,
+                            }
+                        }
+                    }
+                    if close {
+                        self.options_dialog = None;
+                    }
+                    if note.is_some() {
+                        self.op_note = note;
+                    }
+                }
+                Event::WslApplied(result) => {
+                    self.op_busy = None;
+                    self.wsl = load_wslconfig();
+                    self.op_note = Some(match result {
+                        Ok(message) => (message, true, Instant::now()),
+                        Err(error) => (error, false, Instant::now()),
+                    });
+                }
                 Event::Smoke(result) => {
                     self.pending_smoke_cancel = false;
                     self.smoke = Some(match result {
@@ -1633,6 +1757,7 @@ impl App {
         let mut close = false;
         let mut load = false;
         let mut pull = false;
+        let mut options = false;
         modal_backdrop(ctx, dark, &mut close);
         egui::Window::new("model_detail_dialog")
             .title_bar(false)
@@ -1773,6 +1898,12 @@ impl App {
                             if clicked {
                                 load = true;
                             }
+                            if ui
+                                .add_enabled(!self.loading, egui::Button::new("参数"))
+                                .clicked()
+                            {
+                                options = true;
+                            }
                         } else if model.ready() {
                             ui.label(
                                 egui::RichText::new("该 bundle 仅支持 flashcli run")
@@ -1802,10 +1933,242 @@ impl App {
             self.model_detail = None;
             self.spawn_job_ui(ctx, model.name.clone(), false, "启动");
         }
+        if options {
+            self.model_detail = None;
+            self.open_model_options(ctx, model.name.clone());
+        }
         if pull {
             self.model_detail = None;
             self.spawn_job_ui(ctx, model.name.clone(), true, "加载");
         }
+    }
+
+    fn show_options_dialog(&mut self, ctx: &egui::Context) {
+        let Some(mut dlg) = self.options_dialog.take() else {
+            return;
+        };
+        let dark = ctx.style().visuals.dark_mode;
+        let mirrored = self.wsl.mirrored;
+        let mut close = false;
+        let mut save = false;
+        let mut reset = false;
+        modal_backdrop(ctx, dark, &mut close);
+        egui::Window::new("model_options_dialog")
+            .title_bar(false)
+            .order(egui::Order::Foreground)
+            .frame(dialog_frame(dark))
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.set_width(640.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("启动参数").size(16.0).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(egui::RichText::new("×").size(18.0))
+                                    .min_size(egui::vec2(28.0, 24.0)),
+                            )
+                            .clicked()
+                        {
+                            close = true;
+                        }
+                    });
+                });
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new(&dlg.reference)
+                        .monospace()
+                        .weak()
+                        .small(),
+                );
+                ui.add_space(8.0);
+                if dlg.loading {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label("正在读取 bundle 的 serve_options…");
+                    });
+                    return;
+                }
+                if !dlg.error.is_empty() {
+                    ui.label(egui::RichText::new(&dlg.error).color(red(ui)));
+                    ui.add_space(6.0);
+                }
+                egui::Grid::new("serve_host_grid")
+                    .num_columns(2)
+                    .spacing([12.0, 6.0])
+                    .show(ui, |ui| {
+                        ui.label("监听地址");
+                        let host_hint = dlg.default_host.clone();
+                        ui.add(
+                            egui::TextEdit::singleline(&mut dlg.host)
+                                .hint_text(host_hint)
+                                .desired_width(220.0),
+                        );
+                        ui.end_row();
+                        ui.label("端口");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut dlg.port)
+                                .hint_text("0 = 自动（18000-18999）")
+                                .desired_width(220.0),
+                        );
+                        ui.end_row();
+                    });
+                ui.label(
+                    egui::RichText::new("0.0.0.0 = 所有网卡；127.0.0.1 = 仅本机。")
+                        .weak()
+                        .small(),
+                );
+                if dlg.host.trim() == "0.0.0.0" {
+                    if mirrored {
+                        ui.label(
+                            egui::RichText::new(
+                                "已开启 WSL 镜像网络：局域网/公网可通过 Windows 本机 IP 访问；防火墙已放行 18000-18999（Private/Domain）。",
+                            )
+                            .color(green(ui))
+                            .small(),
+                        );
+                    } else {
+                        ui.label(
+                            egui::RichText::new(
+                                "当前 WSL 为 NAT 模式：0.0.0.0 仅 Windows 本机 localhost 可达。局域网/公网 IP 访问请在“设置 → WSL 资源”开启局域网访问。",
+                            )
+                            .color(egui::Color32::from_rgb(215, 186, 125))
+                            .small(),
+                        );
+                    }
+                }
+                if dlg.restart_required {
+                    ui.label(
+                        egui::RichText::new("模型正在运行：保存后需停止并重新启动才会生效。")
+                            .color(egui::Color32::from_rgb(215, 186, 125))
+                            .small(),
+                    );
+                }
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(6.0);
+                egui::ScrollArea::vertical()
+                    .max_height(330.0)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        if dlg.options.is_empty() {
+                            ui.label("该 bundle 未声明 serve_options。");
+                        }
+                        for opt in &mut dlg.options {
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new(&opt.name).strong());
+                                ui.label(
+                                    egui::RichText::new(format!("--{}", opt.flag))
+                                        .monospace()
+                                        .weak()
+                                        .small(),
+                                );
+                                ui.label(
+                                    egui::RichText::new(format!("({})", opt.kind))
+                                        .weak()
+                                        .small(),
+                                );
+                            });
+                            if !opt.help.is_empty() {
+                                ui.label(egui::RichText::new(&opt.help).weak().small());
+                            }
+                            let hint = if opt.default.is_empty() {
+                                "留空 = bundle 默认值".to_string()
+                            } else {
+                                format!("留空 = 默认：{}", opt.default)
+                            };
+                            let width = ui.available_width();
+                            ui.add(
+                                egui::TextEdit::singleline(&mut opt.value)
+                                    .hint_text(hint)
+                                    .desired_width(width),
+                            );
+                            ui.add_space(6.0);
+                        }
+                    });
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .add_enabled(!dlg.saving, egui::Button::new("恢复默认"))
+                        .clicked()
+                    {
+                        reset = true;
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add_enabled_ui(!dlg.saving, |ui| primary_button(ui, "保存"))
+                            .inner
+                            .clicked()
+                        {
+                            save = true;
+                        }
+                        if dlg.saving {
+                            ui.spinner();
+                            ui.label("保存中…");
+                        }
+                    });
+                });
+            });
+        if close {
+            self.options_dialog = None;
+            return;
+        }
+        if reset {
+            dlg.host = dlg.default_host.clone();
+            dlg.port = "0".to_string();
+            for opt in &mut dlg.options {
+                opt.value.clear();
+            }
+        }
+        if save {
+            let port = match dlg.port.trim() {
+                "" | "0" => 0u16,
+                text => match text.parse::<u16>() {
+                    Ok(p) => p,
+                    Err(_) => {
+                        dlg.error = "端口必须是 0-65535 的整数（0 = 自动）".to_string();
+                        self.options_dialog = Some(dlg);
+                        return;
+                    }
+                },
+            };
+            let mut values = HashMap::new();
+            for opt in &dlg.options {
+                let value = opt.value.trim();
+                if !value.is_empty() {
+                    values.insert(opt.name.clone(), value.to_string());
+                }
+            }
+            dlg.saving = true;
+            dlg.error.clear();
+            spawn_save_model_options(
+                self.tx.clone(),
+                ctx.clone(),
+                dlg.reference.clone(),
+                dlg.host.trim().to_string(),
+                port,
+                values,
+            );
+        }
+        self.options_dialog = Some(dlg);
+    }
+
+    fn open_model_options(&mut self, ctx: &egui::Context, reference: String) {
+        self.options_dialog = Some(OptionsDialog {
+            reference: reference.clone(),
+            host: String::new(),
+            default_host: "0.0.0.0".to_string(),
+            public_host: String::new(),
+            port: "0".to_string(),
+            options: Vec::new(),
+            loading: true,
+            saving: false,
+            error: String::new(),
+            restart_required: false,
+        });
+        spawn_model_options(self.tx.clone(), ctx.clone(), reference);
     }
 
     fn show_use_dialog(&mut self, ctx: &egui::Context) {
@@ -2094,6 +2457,117 @@ impl App {
                         }
                     });
                 });
+
+                ui.add_space(10.0);
+                let wsl_now = self
+                    .system
+                    .as_ref()
+                    .map(|sys| {
+                        let cpu = &sys["cpu"];
+                        format!(
+                            "当前 WSL：{} 线程 / {} 内存",
+                            cpu["threads"].as_i64().unwrap_or(0),
+                            fmt_bytes(cpu["mem_total_bytes"].as_f64().unwrap_or(0.0))
+                        )
+                    })
+                    .unwrap_or_else(|| "服务未运行，无法读取当前 WSL 资源。".to_string());
+                let wsl_path = wslconfig_path()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default();
+                let service_running = self.system.is_some();
+                let mut apply_wsl = false;
+                panel(ui, "WSL 资源", |ui| {
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "全局配置 {}（影响所有 WSL2 发行版）",
+                            wsl_path
+                        ))
+                        .weak()
+                        .small(),
+                    );
+                    ui.add_space(4.0);
+                    egui::Grid::new("wsl_resource_rows")
+                        .num_columns(2)
+                        .spacing([14.0, 6.0])
+                        .show(ui, |ui| {
+                            ui.label("内存上限");
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.wsl.memory)
+                                    .hint_text("默认：物理内存 50%（如 16GB）")
+                                    .desired_width(220.0),
+                            );
+                            ui.end_row();
+                            ui.label("CPU 核心");
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.wsl.processors)
+                                    .hint_text("默认：全部逻辑处理器")
+                                    .desired_width(220.0),
+                            );
+                            ui.end_row();
+                            ui.label("Swap");
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.wsl.swap)
+                                    .hint_text("默认：内存的 25%（0 关闭）")
+                                    .desired_width(220.0),
+                            );
+                            ui.end_row();
+                        });
+                    ui.add_space(4.0);
+                    ui.checkbox(
+                        &mut self.wsl.mirrored,
+                        "局域网访问（WSL 镜像网络，host=0.0.0.0 可通过本机 IP 访问）",
+                    );
+                    ui.label(
+                        egui::RichText::new(if self.wsl.mirrored {
+                            "需要 Windows 11 22H2+；应用时会请求管理员权限放行 TCP 18000-18999（Private/Domain）。"
+                        } else {
+                            "默认 NAT：模型只在 Windows 本机 localhost 可达；局域网/公网请勾选上面的选项。"
+                        })
+                        .weak()
+                        .small(),
+                    );
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
+                        if ui.button("应用并重启 WSL").clicked() {
+                            apply_wsl = true;
+                        }
+                        ui.label(egui::RichText::new(&wsl_now).weak().small());
+                    });
+                    ui.label(
+                        egui::RichText::new(
+                            "修改后需要重启 WSL 才生效；正在运行的模型会中断。留空表示使用 WSL 默认值。",
+                        )
+                        .weak()
+                        .small(),
+                    );
+                });
+                if apply_wsl {
+                    if !valid_wsl_size(&self.wsl.memory)
+                        || !valid_wsl_size(&self.wsl.swap)
+                        || !valid_processors(&self.wsl.processors)
+                    {
+                        self.op_note = Some((
+                            "WSL 资源格式无效：内存/Swap 用 16GB / 8GB / 0，CPU 核心为 1-256 的整数".into(),
+                            false,
+                            Instant::now(),
+                        ));
+                    } else if service_running {
+                        self.wsl_pending = Some(self.wsl.clone());
+                        self.dialog = Some(DialogState {
+                            title: "重启 WSL".into(),
+                            message: "应用 WSL 资源/网络设置需要重启 WSL，正在运行的模型会中断。\n完成后 FlashServer 会自动启动。\n确定继续？".into(),
+                            action: Pending::ApplyWsl,
+                        });
+                    } else {
+                        self.op_busy = Some("正在应用 WSL 配置…".into());
+                        spawn_apply_wsl(
+                            self.tx.clone(),
+                            ui.ctx().clone(),
+                            self.wsl.clone(),
+                            false,
+                        );
+                    }
+                }
 
                 ui.add_space(10.0);
                 panel(ui, "下载源", |ui| {
@@ -2601,6 +3075,12 @@ impl App {
                 Pending::Smoke(name) => {
                     self.start_smoke(ctx, name);
                 }
+                Pending::ApplyWsl => {
+                    if let Some(cfg) = self.wsl_pending.take() {
+                        self.op_busy = Some("正在重启 WSL…".into());
+                        spawn_apply_wsl(self.tx.clone(), ctx.clone(), cfg, true);
+                    }
+                }
                 Pending::Quit => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
@@ -2757,6 +3237,7 @@ impl eframe::App for App {
         self.show_use_dialog(ctx);
         self.show_cache_dialog(ctx);
         self.show_smoke_dialog(ctx);
+        self.show_options_dialog(ctx);
         self.show_dialog(ctx);
         self.show_busy_overlay(ctx);
         self.show_toast(ctx);
@@ -3750,6 +4231,20 @@ fn post_json(path: &str, body: &Value) -> Result<Value, String> {
     post_json_timeout(path, body, 60)
 }
 
+fn put_json_timeout(path: &str, body: &Value, secs: u64) -> Result<Value, String> {
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(secs))
+        .build();
+    match agent
+        .put(&format!("{}{}", api_base(), path))
+        .send_json(body)
+    {
+        Ok(resp) => resp.into_json::<Value>().map_err(|e| e.to_string()),
+        Err(ureq::Error::Status(_, resp)) => Err(resp.into_string().unwrap_or_default()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 fn post_json_timeout(path: &str, body: &Value, secs: u64) -> Result<Value, String> {
     let agent = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(secs))
@@ -3762,6 +4257,36 @@ fn post_json_timeout(path: &str, body: &Value, secs: u64) -> Result<Value, Strin
         Err(ureq::Error::Status(_, resp)) => Err(resp.into_string().unwrap_or_default()),
         Err(e) => Err(e.to_string()),
     }
+}
+
+fn spawn_model_options(tx: Sender<Event>, ctx: egui::Context, reference: String) {
+    std::thread::spawn(move || {
+        let result = get_json_query("/v1/models/options", &[("ref", reference.clone())])
+            .ok_or_else(|| "读取启动参数失败：服务不可用".to_string());
+        let _ = tx.send(Event::ModelOptions { reference, result });
+        ctx.request_repaint();
+    });
+}
+
+fn spawn_save_model_options(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    reference: String,
+    host: String,
+    port: u16,
+    options: HashMap<String, String>,
+) {
+    std::thread::spawn(move || {
+        let body = serde_json::json!({
+            "ref": reference,
+            "host": host,
+            "port": port,
+            "options": options,
+        });
+        let result = put_json_timeout("/v1/models/options", &body, 20);
+        let _ = tx.send(Event::ModelOptionsSaved { reference, result });
+        ctx.request_repaint();
+    });
 }
 
 fn spawn_cancel_job(ctx: egui::Context, job_id: String) {
@@ -3923,6 +4448,207 @@ fn setup_bin() -> Option<String> {
         }
     }
     None
+}
+
+// ---------- WSL config / startup options ----------
+
+fn json_text(v: &Value) -> String {
+    if v.is_null() {
+        String::new()
+    } else if let Some(s) = v.as_str() {
+        s.to_string()
+    } else {
+        v.to_string()
+    }
+}
+
+fn wslconfig_path() -> Option<PathBuf> {
+    if let Some(home) = std::env::var_os("USERPROFILE") {
+        return Some(PathBuf::from(home).join(".wslconfig"));
+    }
+    std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".wslconfig"))
+}
+
+fn load_wslconfig() -> WslConfig {
+    wslconfig_path()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .map(|text| parse_wslconfig(&text))
+        .unwrap_or_default()
+}
+
+fn parse_wslconfig(text: &str) -> WslConfig {
+    let mut cfg = WslConfig::default();
+    let mut in_wsl2 = false;
+    for line in text.lines() {
+        let t = line.trim();
+        if t.starts_with('[') {
+            in_wsl2 = t.eq_ignore_ascii_case("[wsl2]");
+            continue;
+        }
+        if !in_wsl2 {
+            continue;
+        }
+        let Some((key, value)) = t.split_once('=') else {
+            continue;
+        };
+        let value = value.trim().trim_matches('"').to_string();
+        match key.trim().to_ascii_lowercase().as_str() {
+            "memory" => cfg.memory = value,
+            "processors" => cfg.processors = value,
+            "swap" => cfg.swap = value,
+            "networkingmode" => cfg.mirrored = value.eq_ignore_ascii_case("mirrored"),
+            _ => {}
+        }
+    }
+    cfg
+}
+
+fn valid_wsl_size(value: &str) -> bool {
+    let value = value.trim();
+    if value.is_empty() {
+        return true;
+    }
+    let digits = value
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect::<String>();
+    if digits.is_empty() {
+        return false;
+    }
+    let unit = value[digits.len()..].trim().to_ascii_uppercase();
+    matches!(unit.as_str(), "" | "B" | "KB" | "MB" | "GB" | "TB")
+}
+
+fn valid_processors(value: &str) -> bool {
+    let value = value.trim();
+    if value.is_empty() {
+        return true;
+    }
+    value
+        .parse::<u32>()
+        .map(|n| n > 0 && n <= 256)
+        .unwrap_or(false)
+}
+
+fn update_wslconfig(text: &str, cfg: &WslConfig) -> String {
+    let sep = if text.contains("\r\n") { "\r\n" } else { "\n" };
+    let mut managed = Vec::new();
+    if !cfg.memory.trim().is_empty() {
+        managed.push(format!("memory={}", cfg.memory.trim()));
+    }
+    if !cfg.processors.trim().is_empty() {
+        managed.push(format!("processors={}", cfg.processors.trim()));
+    }
+    if !cfg.swap.trim().is_empty() {
+        managed.push(format!("swap={}", cfg.swap.trim()));
+    }
+    if cfg.mirrored {
+        managed.push("networkingMode=mirrored".to_string());
+    }
+    let keys = ["memory", "processors", "swap", "networkingmode"];
+    let mut out: Vec<String> = Vec::new();
+    let mut in_wsl2 = false;
+    let mut seen = false;
+    for line in text.lines() {
+        let t = line.trim();
+        if t.starts_with('[') {
+            in_wsl2 = t.eq_ignore_ascii_case("[wsl2]");
+            out.push(line.to_string());
+            if in_wsl2 {
+                out.extend(managed.iter().cloned());
+                seen = true;
+            }
+            continue;
+        }
+        if in_wsl2 {
+            let key = t
+                .split_once('=')
+                .map(|(k, _)| k)
+                .unwrap_or("")
+                .trim()
+                .to_ascii_lowercase();
+            if keys.contains(&key.as_str()) {
+                continue;
+            }
+        }
+        out.push(line.to_string());
+    }
+    if !seen && !managed.is_empty() {
+        if !out.is_empty() && !out.last().map(|l| l.trim().is_empty()).unwrap_or(false) {
+            out.push(String::new());
+        }
+        out.push("[wsl2]".to_string());
+        out.extend(managed);
+    }
+    let mut result = out.join(sep);
+    result.push_str(sep);
+    result
+}
+
+fn save_wslconfig(cfg: &WslConfig) -> Result<(), String> {
+    let path = wslconfig_path().ok_or_else(|| "找不到 USERPROFILE，无法写入 .wslconfig".to_string())?;
+    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    let updated = update_wslconfig(&text, cfg);
+    std::fs::write(&path, updated).map_err(|e| format!("写入 {} 失败：{e}", path.display()))
+}
+
+fn run_elevated_ps1(script: &str) -> Result<(), String> {
+    let path = std::env::temp_dir().join("flashserver-wsl-firewall.ps1");
+    std::fs::write(&path, script).map_err(|e| e.to_string())?;
+    let quoted = path.to_string_lossy().replace('\'', "''");
+    let cmd = format!(
+        "Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','{quoted}'"
+    );
+    let status = std::process::Command::new("powershell.exe")
+        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &cmd])
+        .status()
+        .map_err(|e| e.to_string())?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err("需要管理员权限（UAC）才能更新 Windows 防火墙规则".to_string())
+    }
+}
+
+fn apply_wsl(cfg: &WslConfig, restart_service: bool) -> Result<String, String> {
+    save_wslconfig(cfg)?;
+    let _ = std::process::Command::new("wsl.exe")
+        .arg("--shutdown")
+        .status();
+    std::thread::sleep(Duration::from_secs(3));
+    if restart_service {
+        let output = std::process::Command::new("wsl.exe")
+            .args(["-d", "Ubuntu", "-u", "root", "systemctl", "start", "flashserver"])
+            .output()
+            .map_err(|e| format!("启动 FlashServer 失败：{e}"))?;
+        if !output.status.success() {
+            let _ = std::process::Command::new("wsl.exe")
+                .args(["-d", "Ubuntu", "-u", "root", "true"])
+                .status();
+        }
+    }
+    let mut warning = String::new();
+    if cfg.mirrored {
+        let script = "$ErrorActionPreference='Stop'\n\
+Remove-NetFirewallRule -DisplayName 'FlashServer models' -ErrorAction SilentlyContinue\n\
+New-NetFirewallRule -DisplayName 'FlashServer models' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 18000-18999 -Profile Private,Domain | Out-Null\n";
+        if let Err(err) = run_elevated_ps1(script) {
+            warning = format!("；局域网防火墙规则未更新：{err}");
+        }
+    }
+    if restart_service {
+        Ok(format!("WSL 已重启，FlashServer 服务已启动{warning}"))
+    } else {
+        Ok(format!("WSL 配置已应用{warning}"))
+    }
+}
+
+fn spawn_apply_wsl(tx: Sender<Event>, ctx: egui::Context, cfg: WslConfig, restart_service: bool) {
+    std::thread::spawn(move || {
+        let result = apply_wsl(&cfg, restart_service);
+        let _ = tx.send(Event::WslApplied(result));
+        ctx.request_repaint();
+    });
 }
 
 // ---------- settings / fonts / theme ----------

@@ -188,6 +188,9 @@ GET  /v1/jobs/{id}/events
 POST /v1/jobs/{id}/cancel        取消正在运行的任务（smoke/下载/加载）
 POST /v1/models/load            {"ref":"...","async":true} → job_id（或 endpoint/pid/state）
 POST /v1/models/unload          {"ref":"..."}
+GET  /v1/models/options         ?ref=... manifest serve_options + 已保存 host/port/参数
+PUT  /v1/models/options         {"ref":"...","host":"0.0.0.0","port":0,"options":{...}}
+DELETE /v1/models/options       ?ref=... 恢复 bundle/服务端默认值
 POST /v1/models/smoke           {"ref":"..."} run-only 冒烟测试 / 已启动 serve 请求测试
 POST /v1/models/clean           {"refs":[...]} 清理本地 Bundle/权重
 POST /v1/storage/clean          {"targets":["cache"]} 清理共享缓存（不含模型数据）
@@ -234,6 +237,23 @@ curl http://127.0.0.1:18100/v1/chat/completions ...
 `load` 要求 bundle 提供 `serve` 入口（会检查顶层 `entry`、`defaults.entry` 以及各环境条目）。只有 `run` 的 bundle（VLA 策略等）会在启动 serve 进程之前被拒绝，返回 `bundle "..." is run-only (no serve entry)`；这类模型请使用 `flashcli run <ref>`。桌面客户端的 FlashHub 页面只负责下载版本；下载后在“本地”页查看，没有 serve 入口的 bundle 会显示“仅 run”并隐藏加载按钮。
 
 `POST /v1/models/smoke` 为已就绪模型启动异步冒烟任务：run-only 以低 CPU 优先级（`nice -n 10`）使用 manifest 默认参数执行 `flashcli run <ref>`（需要额外文件如图片的 bundle 会在日志中说明）；已启动的 serve 模型发送一次 OpenAI 兼容 chat 请求（`ping`）。桌面在 run 测试前会二次确认；输出和进度作为 `smoke` 任务通过 `/v1/ws` 实时推送，并追加到 `<ref>.smoke.log`。关闭或取消日志对话框、或退出客户端都会调用 `POST /v1/jobs/{id}/cancel` 终止任务，服务端也会在任务超时后停止。serve 测试要求模型已启动。
+
+## 启动参数与 WSL 资源
+
+每个模型的启动参数来源是 bundle 的 `serve_options`（`flashcli-bundle.json`，包含 v4 环境 overlay）。桌面 **模型 → 详情 → 参数** 会渲染这些字段，并提供监听地址和端口：
+
+- `host`：`0.0.0.0` 监听所有网卡，`127.0.0.1` 仅本机。
+- `port`：`0` 使用 `18000-18999` 内的空闲端口；也可以固定端口。
+- 参数值留空表示使用 bundle 默认值；非空值会作为 `--flag value` 追加到 `flashcli serve`。
+- 配置保存在服务端的 `$FLASHCLI_HOME/flashserver/serve-options.json`，CLI/API 与桌面读取同一份；模型运行中保存后需要停止再启动才生效。
+
+Windows 的 localhost 转发会让 `host=0.0.0.0` 在 Windows 本机可通过 `http://localhost:<port>` 访问。局域网/公网还需要 WSL 镜像网络和防火墙：
+
+1. 桌面 **设置 → WSL 资源 → 局域网访问（WSL 镜像网络）** 会在 `%USERPROFILE%\.wslconfig` 写入 `[wsl2] networkingMode=mirrored`。
+2. 客户端请求 UAC，放行 Private/Domain 配置文件的 TCP `18000-18999` 入站。
+3. 应用设置会重启 WSL（`wsl --shutdown`）并重新启动 `flashserver`；正在运行的模型会中断。
+
+同一面板可修改 `.wslconfig` 的 `memory`、`processors`、`swap`。留空使用 WSL 默认值（内存为 Windows 总内存 50%、全部逻辑 CPU、Swap 为内存 25%）。这些设置影响所有 WSL2 发行版，且需要重启 WSL。镜像网络需要 Windows 11 22H2+ 和较新的 WSL。
 
 ## 耗时参考
 

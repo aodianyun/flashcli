@@ -33,17 +33,20 @@ func (defaultSource) Storage(context.Context) ([]host.Area, error) { return host
 // Server is the local flashserver daemon. It schedules models; inference runs
 // in separate `flashcli serve` processes.
 type Server struct {
-	Addr        string
-	Token       string
-	Source      Source
-	Puller      Puller
-	Catalog     CatalogSource
-	Jobs        *JobManager
-	Manager     *Manager
-	FlashcliBin string
-	GPU         func(context.Context) ([]gpu.Device, error)
-	LogDir      string
-	Started     time.Time
+	Addr          string
+	Token         string
+	Source        Source
+	Puller        Puller
+	Catalog       CatalogSource
+	Jobs          *JobManager
+	Manager       *Manager
+	FlashcliBin   string
+	GPU           func(context.Context) ([]gpu.Device, error)
+	LogDir        string
+	Started       time.Time
+	ServeHost     string
+	PublicHost    string
+	ServeSettings *serveSettingsStore
 
 	pullBusy atomic.Bool
 
@@ -66,15 +69,17 @@ func New(addr string) *Server {
 		addr = "127.0.0.1:8790"
 	}
 	gpuProbe := gpu.Probe
+	store := newServeSettingsStore("")
 	return &Server{
-		Addr:    addr,
-		Source:  defaultSource{},
-		Puller:  hostPuller{},
-		Catalog: flashhub.NewClient(),
-		Jobs:    NewJobManager(),
-		Manager: NewManagerWithOptions(FlashcliLauncher{}, ManagerOptions{GPU: gpuProbe}),
-		GPU:     gpuProbe,
-		Started: time.Now(),
+		Addr:          addr,
+		Source:        defaultSource{},
+		Puller:        hostPuller{},
+		Catalog:       flashhub.NewClient(),
+		Jobs:          NewJobManager(),
+		Manager:       NewManagerWithOptions(FlashcliLauncher{}, ManagerOptions{GPU: gpuProbe, ServeSettings: store}),
+		GPU:           gpuProbe,
+		Started:       time.Now(),
+		ServeSettings: store,
 	}
 }
 
@@ -106,6 +111,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/jobs/{id}/cancel", s.cancelJob)
 	mux.HandleFunc("POST /v1/models/load", s.loadModel)
 	mux.HandleFunc("POST /v1/models/unload", s.unloadModel)
+	mux.HandleFunc("GET /v1/models/options", s.getModelOptions)
+	mux.HandleFunc("PUT /v1/models/options", s.putModelOptions)
+	mux.HandleFunc("DELETE /v1/models/options", s.deleteModelOptions)
 	mux.HandleFunc("POST /v1/models/smoke", s.smokeModel)
 	mux.HandleFunc("POST /v1/models/clean", s.cleanModels)
 	mux.HandleFunc("POST /v1/storage/clean", s.cleanStorage)
