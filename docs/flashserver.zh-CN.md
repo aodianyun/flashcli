@@ -142,7 +142,7 @@ flashserver-setup.exe
 
 **磁盘位置。** 模型权重和 bundle 运行时都在 Ubuntu 虚拟磁盘（`ext4.vhdx`）里，默认位于系统盘，常见占用 20–40 GB。`--wsl-dir DIR` 会把发行版迁移到其他 NTFS 盘（WSL 没有安装时指定路径的参数，setup 会先安装，再在发行版停止时执行 `wsl --manage <distro> --move DIR`）。UI 安装包新增“WSL 数据目录”页面，默认与安装目录同级：`<安装目录的父目录>\FlashServerWSL`（例如安装到 `D:\software\FlashServer` 时默认 `D:\software\FlashServerWSL`）。之后删除数据**不会**自动缩小 VHDX：先用 `flashcli du` / `flashcli cache clean` / `flashcli bundle clean` 清理，再关闭 WSL 并压缩磁盘（`wsl --manage <distro> --set-sparse true`，或用 `diskpart` compact）。
 
-**受限网络。** 当 `wsl --install` 无法访问 Microsoft Store 或 GitHub（或两分钟没有进度）时，setup 会自动从清华/中科大镜像（其次 `cloud-images.ubuntu.com`）下载 Ubuntu 24.04 官方 cloud rootfs，并用 `wsl --import` 导入到所选目录；也可以用 `--distro-rootfs FILE` 指定本地 rootfs 压缩包（离线安装）。
+**受限网络。** 当 `wsl --install` 无法访问 Microsoft Store 或 GitHub（或 90 秒没有进度）时，setup 会自动从清华/中科大镜像（其次 `cloud-images.ubuntu.com`）下载 Ubuntu 24.04 官方 cloud rootfs，并用 `wsl --import` 导入到所选目录；也可以用 `--distro-rootfs FILE` 指定本地 rootfs 压缩包（离线安装）。
 
 默认会下载匹配的 `flashcli-linux-<arch>` 和 `flashserver-linux-<arch>` release assets，并校验 `sha256sums.txt`。也可以用 `--bin-dir DIR` 使用本地资产，或用 `--release-version` / `--release-base` 固定 release 来源。
 
