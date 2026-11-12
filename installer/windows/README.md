@@ -65,7 +65,9 @@ the matching `--bin-dir` assets are absent.
 Uninstall asks three optional cleanup checkboxes (model caches, the `flashcli`
 CLI, client settings) and passes them to `flashserver-setup --uninstall`
 (`--purge-models`, `--remove-cli`, `--purge-settings`). Silent uninstall keeps
-all data.
+all data. The setup engine runs from `CurUninstallStepChanged` because
+`[UninstallRun]` constants are expanded at install time; `--purge-settings`
+also removes `%USERPROFILE%\.flashcli` (setup logs) after setup exits.
 
 The installer shows a live progress page and parses the setup progress file
 (`[n/8] step` lines plus a final `DONE <code>`). Exit codes: `0` ready, `3`

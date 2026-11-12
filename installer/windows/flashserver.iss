@@ -160,18 +160,23 @@ var
   ResultCode: Integer;
   Args: String;
 begin
-  if CurUninstallStep <> usUninstall then
-    Exit;
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM FlashServer.exe', '',
-    SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Args := '--uninstall' + GetPurgeArgs('');
-  if not Exec(ExpandConstant('{app}\payload\flashserver-setup.exe'), Args,
-      ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-    MsgBox('Could not start flashserver-setup.exe.', mbError, MB_OK)
-  else if ResultCode <> 0 then
-    MsgBox('flashserver-setup --uninstall exited with code ' +
-      IntToStr(ResultCode) + '.' + #13#10#13#10 +
-      'See %USERPROFILE%\.flashcli\logs\setup.log.', mbError, MB_OK);
+  if CurUninstallStep = usUninstall then
+  begin
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM FlashServer.exe', '',
+      SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Args := '--uninstall' + GetPurgeArgs('');
+    if not Exec(ExpandConstant('{app}\payload\flashserver-setup.exe'), Args,
+        ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      MsgBox('Could not start flashserver-setup.exe.', mbError, MB_OK)
+    else if ResultCode <> 0 then
+      MsgBox('flashserver-setup --uninstall exited with code ' +
+        IntToStr(ResultCode) + '.' + #13#10#13#10 +
+        'See %USERPROFILE%\.flashcli\logs\setup.log.', mbError, MB_OK);
+  end
+  else if (CurUninstallStep = usPostUninstall) and PurgeSettings then
+    // Setup has exited by now, so its setup.log is closed and the whole
+    // Windows-side state can go (client settings are removed by setup).
+    DelTree(ExpandConstant('{userprofile}\.flashcli'), True, True, True);
 end;
 
 function SetupReady: Boolean;

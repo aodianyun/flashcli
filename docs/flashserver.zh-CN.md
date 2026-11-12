@@ -293,6 +293,6 @@ sudo flashserver-setup --uninstall
 |---|---|
 | `--purge-models` | `FLASHCLI_HOME`（bundle、权重、运行时、缓存）以及解压出的 `flashcli-bundle` 源码 |
 | `--remove-cli` | `/usr/local/bin/flashcli` |
-| `--purge-settings` | 桌面客户端设置（`%LOCALAPPDATA%\FlashServer`） |
+| `--purge-settings` | 桌面客户端设置（`%LOCALAPPDATA%\FlashServer`）；Windows UI 卸载器还会删除 `%USERPROFILE%\.flashcli`（安装日志） |
 
 Windows UI 卸载器会在删除文件前用三个勾选项询问；静默卸载默认全部保留。若卸载时模型正在加载或启动，会先停止服务和相关任务（下载/加载状态保留在缓存中，下次安装可继续）。
