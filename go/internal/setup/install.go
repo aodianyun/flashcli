@@ -40,6 +40,7 @@ type Options struct {
 	PurgeSettings    bool
 	PurgeDistro      bool
 	WSLDir           string
+	DistroRootfs     string
 	StopService      bool
 	StartService     bool
 	EnableAutostart  bool

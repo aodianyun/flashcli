@@ -159,6 +159,12 @@ the VHDX: clean up with `flashcli du` / `flashcli cache clean` /
 `flashcli bundle clean`, then shut WSL down and compact the disk
 (`wsl --manage <distro> --set-sparse true`, or `diskpart` compact).
 
+**Restricted networks.** When `wsl --install` cannot reach the Microsoft Store
+or GitHub, setup downloads the official Ubuntu 24.04 cloud rootfs (Tsinghua and
+USTC mirrors first, then `cloud-images.ubuntu.com`) and imports it into the
+selected directory with `wsl --import`. `--distro-rootfs FILE` uses a local
+rootfs tarball instead (offline installs).
+
 By default setup downloads the matching `flashcli-linux-<arch>` and `flashserver-linux-<arch>` release assets and verifies `sha256sums.txt`. Use `--bin-dir DIR` to consume local release assets instead, or `--release-version` / `--release-base` to pin a release source.
 
 `--backend` defaults to `auto` (`native` on Linux, `wsl` on Windows) and normally does not need to be specified. `--dry-run` prints the platform plan without changing the host. `--no-service` installs binaries and config only; use it in containers or hosts without an active systemd (start `flashserver --config ...` manually).

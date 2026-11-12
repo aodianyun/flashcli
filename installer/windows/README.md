@@ -78,7 +78,11 @@ logs) after setup exits.
 
 The install wizard also asks for a **WSL data directory** (default: a sibling of
 the install directory, e.g. `D:\software\FlashServerWSL` when installing to
-`D:\software\FlashServer`) and passes it as `--wsl-dir`. Model
+`D:\software\FlashServer`) and passes it as `--wsl-dir`. If `wsl --install`
+cannot reach the Microsoft Store/GitHub, setup downloads the official Ubuntu
+24.04 cloud rootfs (Tsinghua/USTC mirrors, then cloud-images.ubuntu.com) and
+imports it; `--distro-rootfs FILE` selects a local tarball for offline
+installs. Model
 weights and runtimes live inside the Ubuntu `ext4.vhdx`, so this is the knob
 for keeping C: free; the engine installs Ubuntu and then moves it with
 `wsl --manage Ubuntu --move`. The VHDX does not shrink when files are deleted

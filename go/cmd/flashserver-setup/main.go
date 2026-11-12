@@ -41,6 +41,7 @@ func run() int {
 	flag.BoolVar(&opts.PurgeSettings, "purge-settings", false, "with --uninstall: also delete the desktop client settings")
 	flag.BoolVar(&opts.PurgeDistro, "purge-distro", false, "with --uninstall (WSL): unregister the Ubuntu distro and delete its virtual disk (all data inside is lost)")
 	flag.StringVar(&opts.WSLDir, "wsl-dir", "", "with --backend wsl: move the Ubuntu distro to this directory (NTFS drive)")
+	flag.StringVar(&opts.DistroRootfs, "distro-rootfs", "", "with --backend wsl: import this Ubuntu rootfs tarball instead of downloading the distro")
 	flag.BoolVar(&opts.StopService, "stop-service", false, "stop the service and disable auto-start")
 	flag.BoolVar(&opts.StartService, "start-service", false, "enable auto-start and start the service")
 	flag.BoolVar(&opts.EnableAutostart, "enable-autostart", false, "enable auto-start without starting the service")

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path"
@@ -215,7 +216,13 @@ func ensureDistro(ctx context.Context, opts Options, i *installer) error {
 		if !wslStatusOK(ctx) {
 			return fmt.Errorf("%w: WSL2 must be restarted before %s can be used (%v)", ErrRebootRequired, opts.Distro, err)
 		}
-		return fmt.Errorf("install WSL distro %s: %w", opts.Distro, err)
+		// Store/GitHub downloads are blocked on some networks. Fall back to
+		// the official Ubuntu cloud rootfs, which is imported directly.
+		i.printf("wsl --install failed (%v); importing the Ubuntu rootfs instead\n", err)
+		if ierr := importDistroRootfs(ctx, opts, i); ierr != nil {
+			return fmt.Errorf("install WSL distro %s: %w (rootfs import: %v)", opts.Distro, err, ierr)
+		}
+		return nil
 	}
 	for deadline := time.Now().Add(10 * time.Minute); time.Now().Before(deadline); {
 		if err := wslRoot(ctx, opts, "true"); err == nil {
@@ -230,7 +237,134 @@ func ensureDistro(ctx context.Context, opts Options, i *installer) error {
 	if !wslStatusOK(ctx) {
 		return fmt.Errorf("%w: restart Windows, then run Setup again to finish installing %s", ErrRebootRequired, opts.Distro)
 	}
-	return fmt.Errorf("WSL distro %s did not become available; complete the WSL install (a reboot may be required) and rerun", opts.Distro)
+	i.printf("WSL distro %s did not become available; importing the Ubuntu rootfs instead\n", opts.Distro)
+	if ierr := importDistroRootfs(ctx, opts, i); ierr != nil {
+		return fmt.Errorf("WSL distro %s did not become available (rootfs import: %v)", opts.Distro, ierr)
+	}
+	return nil
+}
+
+const ubuntuRootfsName = "noble-server-cloudimg-amd64-root.tar.xz"
+
+// ubuntuRootfsBases are tried in order; the first two are China mirrors.
+var ubuntuRootfsBases = []string{
+	"https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cloud-images/noble/current",
+	"https://mirrors.ustc.edu.cn/ubuntu-cloud-images/noble/current",
+	"https://cloud-images.ubuntu.com/noble/current",
+}
+
+// importDistroRootfs registers the distro from an Ubuntu rootfs tarball. It is
+// the fallback for networks where `wsl --install` cannot reach the Store or
+// GitHub. WSL accepts the official .tar.xz directly.
+func importDistroRootfs(ctx context.Context, opts Options, i *installer) error {
+	target := strings.TrimSpace(opts.WSLDir)
+	if target == "" {
+		target = filepath.Join(os.Getenv("LOCALAPPDATA"), "wsl", opts.Distro)
+	}
+	abs, err := filepath.Abs(target)
+	if err != nil {
+		return fmt.Errorf("invalid WSL directory %q: %w", target, err)
+	}
+	if entries, err := os.ReadDir(abs); err == nil && len(entries) > 0 {
+		return fmt.Errorf("target directory %s is not empty", abs)
+	}
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		return fmt.Errorf("create %s: %w", filepath.Dir(abs), err)
+	}
+
+	rootfs := strings.TrimSpace(opts.DistroRootfs)
+	cleanup := func() {}
+	if rootfs == "" {
+		path, done, err := downloadUbuntuRootfs(ctx, i)
+		if err != nil {
+			return err
+		}
+		rootfs, cleanup = path, done
+	}
+	defer cleanup()
+
+	i.printf("import Ubuntu rootfs into %s\n", abs)
+	cmd := exec.CommandContext(ctx, sysExe("wsl.exe"), "--import", opts.Distro, abs, rootfs, "--version", "2")
+	cmd.Stdout = diag
+	cmd.Stderr = diag
+	if err := cmd.Run(); err != nil {
+		_ = os.RemoveAll(abs)
+		return fmt.Errorf("wsl --import %s: %w", abs, err)
+	}
+	i.printf("imported WSL distro %s (Ubuntu 24.04 rootfs)\n", opts.Distro)
+	return nil
+}
+
+func downloadUbuntuRootfs(ctx context.Context, i *installer) (string, func(), error) {
+	dir, err := os.MkdirTemp("", "flashserver-ubuntu-rootfs-*")
+	if err != nil {
+		return "", nil, err
+	}
+	cleanup := func() { _ = os.RemoveAll(dir) }
+	dest := filepath.Join(dir, ubuntuRootfsName)
+	client := &http.Client{}
+	var lastErr error
+	for _, base := range ubuntuRootfsBases {
+		url := strings.TrimRight(base, "/") + "/" + ubuntuRootfsName
+		i.printf("download Ubuntu rootfs: %s\n", url)
+		if err := fetchRootfs(ctx, client, url, dest, i); err == nil {
+			return dest, cleanup, nil
+		} else {
+			lastErr = err
+			i.printf("warn: download failed: %v\n", err)
+		}
+	}
+	cleanup()
+	return "", nil, fmt.Errorf("download Ubuntu rootfs: %w", lastErr)
+}
+
+func fetchRootfs(ctx context.Context, client *http.Client, url, dest string, i *installer) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	f, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	total := resp.ContentLength
+	var written, lastReport int64
+	buf := make([]byte, 1<<20)
+	for {
+		n, rerr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, werr := f.Write(buf[:n]); werr != nil {
+				return werr
+			}
+			written += int64(n)
+			if total > 0 && written-lastReport >= 32<<20 {
+				lastReport = written
+				i.printf("download Ubuntu rootfs: %d/%d MiB\n", written>>20, total>>20)
+			}
+		}
+		if rerr == io.EOF {
+			break
+		}
+		if rerr != nil {
+			return rerr
+		}
+	}
+	if total > 0 && written != total {
+		return fmt.Errorf("incomplete download (%d/%d bytes)", written, total)
+	}
+	if written < 100<<20 {
+		return fmt.Errorf("downloaded rootfs is too small (%d bytes)", written)
+	}
+	return nil
 }
 
 // moveDistro relocates the WSL distro's virtual disk when --wsl-dir is set.
