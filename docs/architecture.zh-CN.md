@@ -118,6 +118,14 @@ sequenceDiagram
 
 **Bundle 解析顺序**：本地 positional path（含 `flashcli-bundle.json` 的目录）> 已 sync 的 bundle 缓存（`bundles/<cache-key>/` 下 preset marker）；FlashHub ref 由 `bundle sync` 同步。
 
+**Runtime cell 选择**（`flashcli` 与 `flashserver` 共用）：
+
+1. 本机的精确 `environments` key（`sm<sm>-cu<cuda>-<os>-<arch>-py<abi>`）；
+2. environment 上显式的 `match` 块（可以忽略 CUDA tag）；
+3. 按分数兜底（`preflight.ScoreEnvKeyMatch`），只在 SM/OS/arch/Python 一致的 cell 中选，并优先同一 CUDA 大版本。
+
+宿主 key 的 CUDA 以**驱动能力**（`nvidia-smi`）优先，其次才是本机安装的 `nvcc`。要求比驱动更新的 CUDA 的 cell 会被直接拒绝（不会等到 `dlopen` 才失败）；SM 不一致的 cell 永远不会被选中。
+
 ## 权重缓存：下载完整性 vs 就绪（离线保证）
 
 两项独立检查，刻意分开：

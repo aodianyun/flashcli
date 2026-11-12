@@ -27,7 +27,7 @@ Windows 安装包内置 `FlashServer.exe`：Rust + egui/eframe 原生客户端�
 
 - 源码：`desktop/`；构建：`cargo build --release`（Rust MSVC 工具链，`cargo` 需在 PATH）。产物：`desktop/target/release/FlashServer.exe`（约 4.7MB）。
 - 内存：约 110~125MB 工作集（GPU 上下文 + 中文字体 + egui 存储）。
-- 主题：默认深色，可在设置中切换或用 `Ctrl+T`；保存在 `%LOCALAPPDATA%\FlashServer\settings.json`。
+- 主题：默认深色，可在设置中切换或用 `Ctrl+T`；启动时会直接应用已保存的主题（不受 Windows 应用主题影响），保存在 `%LOCALAPPDATA%\FlashServer\settings.json`。
 - 破坏性操作（停止服务、禁用开机启动、停止模型、退出客户端）都会二次确认。
 - 服务启停走 `wsl.exe`，不需要 UAC；开机启动开关调用 `flashserver-setup --enable-autostart/--disable-autostart`，会弹 UAC，且不会启动或停止服务。
 - 服务状态与开机启动完全独立：停止不会禁用自启，启动不会启用自启，自启开关也不会启动/停止服务。耗时操作会显示模态进度遮罩，完成后弹出结果提示。

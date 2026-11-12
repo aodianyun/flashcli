@@ -148,6 +148,8 @@ unpublished test/draft releases.
 3. On Windows from `main`, build the installer:
    `powershell -ExecutionPolicy Bypass -File scripts/build_windows_package.ps1`
    (client + Go assets + `flashserver-setup-windows-amd64-v<version>.exe`; use `-GoBin` if `go` is not on PATH).
+   To embed exactly the published binaries (or when Go is not installed on Windows), build them first with
+   `bash scripts/build_go.sh` and pass `-SkipGo`; Go builds are reproducible (`-buildvcs=false`).
 4. On Linux/macOS (or Windows Git Bash) from `main`, publish both hosts in one command:
    `bash scripts/release_go.sh --upload --notes-file <notes.md> --windows-installer dist/windows/flashserver-setup-windows-amd64-v<version>.exe`
    The script requires a clean `main` equal to `origin/main`, creates/pushes tag `vX` at HEAD, builds the Linux/Windows Go assets, uploads them plus the Windows installer, and fails if either GitHub or Gitee upload fails. Use `FLASHCLI_RELEASE_TARGET` only for a different release branch; `--allow-non-target` is for tests only.

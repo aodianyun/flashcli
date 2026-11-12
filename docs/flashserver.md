@@ -28,7 +28,7 @@ The Windows installer ships `FlashServer.exe`, a Rust + egui/eframe desktop clie
 
 - Source: `desktop/`; build with `cargo build --release` (Rust MSVC toolchain; put `cargo` on PATH). Output: `desktop/target/release/FlashServer.exe` (~4.7 MB).
 - Memory: ~110-125 MB working set (GPU context + CJK font + egui stores).
-- Theme: dark by default, switched in Settings or with `Ctrl+T`; saved to `%LOCALAPPDATA%\FlashServer\settings.json`.
+- Theme: dark by default, switched in Settings or with `Ctrl+T`; the saved choice is applied at startup (independent of the Windows app theme) and stored in `%LOCALAPPDATA%\FlashServer\settings.json`.
 - Domestic mirrors: Settings → 下载源 enables pip (Aliyun), HuggingFace (`hf-mirror.com`), GitHub (`gh-proxy.com`) and the Gitee `flashcli` repo. It writes `~/.flashcli/mirror.env` and applies to new downloads immediately; apt sources are not changed.
 - Destructive actions (stop service, disable auto-start, stop model, quit) ask for confirmation.
 - Service buttons use `wsl.exe` (no UAC). The auto-start toggle calls `flashserver-setup --enable-autostart/--disable-autostart` and therefore prompts for UAC; it does not start or stop the service.

@@ -119,6 +119,18 @@ sequenceDiagram
 
 **Resolution order**: local positional path (directory with `flashcli-bundle.json`) > synced bundle cache (preset marker under `bundles/<cache-key>/`); FlashHub refs are synced via `bundle sync`.
 
+**Runtime cell selection** (shared by `flashcli` and `flashserver`):
+
+1. exact `environments` key for this host (`sm<sm>-cu<cuda>-<os>-<arch>-py<abi>`);
+2. explicit `match` blocks on an environment (they may ignore the CUDA tag);
+3. scored fallback (`preflight.ScoreEnvKeyMatch`) over cells that agree on
+   SM/OS/arch/Python, preferring the same CUDA family.
+
+The host key uses the **driver's** CUDA capability (`nvidia-smi`) before the
+installed `nvcc`. A cell that requires a newer CUDA than the driver reports is
+rejected instead of failing later at `dlopen`, and a cell for a different SM is
+never selected.
+
 ## Weights cache: completeness vs readiness (offline guarantee)
 
 Two independent checks, deliberately separated:
