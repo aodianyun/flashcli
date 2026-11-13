@@ -43,7 +43,7 @@ sudo flashserver-setup
 | 参数 | 说明 |
 |---|---|
 | `--backend auto\|native\|wsl` | 默认 `auto`（Linux 用 native，Windows 用 WSL） |
-| `--bin-dir DIR` | 使用本地 `flashcli-*` / `flashserver-*` 资产，不联网下载 |
+| `--bin-dir DIR` | 使用本地未加版本号的构建产物（`flashcli` / `flashserver` 或 `flashcli-<os>-<arch>`），不联网下载 |
 | `--wsl-dir DIR` | 把 WSL 发行版迁移到其他 NTFS 盘 |
 | `--distro-rootfs FILE` | 导入本地 rootfs 压缩包（离线安装） |
 | `--progress-file FILE` | 机器可读的 `[n/8]` 行 + `DONE <code>`（0 就绪、3 需重启、2 出错） |

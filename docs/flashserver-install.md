@@ -47,7 +47,7 @@ checks `/health`.
 | Flag | Purpose |
 |---|---|
 | `--backend auto\|native\|wsl` | Default `auto` (native on Linux, WSL on Windows) |
-| `--bin-dir DIR` | Use local `flashcli-*` / `flashserver-*` assets instead of downloading |
+| `--bin-dir DIR` | Use local unversioned build outputs (`flashcli` / `flashserver` or `flashcli-<os>-<arch>`) instead of downloading |
 | `--wsl-dir DIR` | Move the WSL distro to another NTFS drive |
 | `--distro-rootfs FILE` | Import a local rootfs tarball (offline) |
 | `--progress-file FILE` | Machine-readable `[n/8]` lines + `DONE <code>` (0 ready, 3 restart, 2 error) |

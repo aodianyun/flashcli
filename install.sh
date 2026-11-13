@@ -1,7 +1,7 @@
 #!/bin/sh
 # flashcli installer — installs the Go host binary (`flashcli`).
 #
-# Default: download release assets (flashcli-<os>-<arch> + sha256sums.txt).
+# Default: download release assets (flashcli-<os>-<arch>-v<version> + sha256sums.txt).
 #   -> requires only curl/wget + a sha256 tool (+ ca-certificates). No Go.
 # Source:  pass --from-source (or --source-dir DIR) to clone + build with Go.
 #   -> requires git + Go (auto-installed when possible).

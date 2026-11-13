@@ -52,7 +52,8 @@ cd go && go test ./...     # Go host, including shared cache/cleanup contracts
 ### Binaries and the desktop client
 
 `bash scripts/build_go.sh` builds three commands into `dist/go/` (version from
-`pyproject.toml`):
+`pyproject.toml`). Release assets are renamed to `<name>-v<version>` by
+`scripts/release_go.sh`:
 
 | Binary | What it is |
 |--------|------------|
@@ -207,6 +208,10 @@ Concise; **Features** and **Fixes** only. Bold the key terms. Same text on GitHu
 ## Assets
 - `flashcli-linux-amd64-v<version>` sha256 `<…>`
 - `flashcli-linux-arm64-v<version>` sha256 `<…>`
+- `flashserver-linux-amd64-v<version>` sha256 `<…>`
+- `flashserver-linux-arm64-v<version>` sha256 `<…>`
+- `flashserver-setup-linux-amd64-v<version>` sha256 `<…>`
+- `flashserver-setup-linux-arm64-v<version>` sha256 `<…>`
 - `flashserver-setup-windows-amd64-v<version>.exe` sha256 `<…>`
 
 **Full Changelog**: <compare or commits link>

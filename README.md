@@ -47,7 +47,7 @@ curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh 
 ```
 
 `install.sh` installs the `flashcli` binary: by default it downloads
-`flashcli-<os>-<arch>` + `sha256sums.txt` from the latest release (no Go needed),
+`flashcli-<os>-<arch>-v<version>` + `sha256sums.txt` from the latest release (no Go needed),
 verifies sha256, and writes `~/.flashcli/install.env`. Pass `--from-source` to
 clone or update the checkout under `~/.flashcli/src` (override with
 `--source-dir` / `FLASHCLI_CLONE_DIR`) and build with Go instead. Missing system
