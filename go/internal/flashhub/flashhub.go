@@ -171,7 +171,15 @@ func parseIndex(blob []byte, repoURL string) (*Index, error) {
 		path := pathFromDownloadURL(e.DownloadURL)
 		if path != "" && e.FileName != "" {
 			if idx := strings.LastIndex(path, "/"); idx >= 0 {
+				parent := path[:idx]
 				path = path[:idx+1] + e.FileName
+				// FlashHub's newer CDN layout stores a file at
+				// "<logical path>/<name>", where <logical path> already ends
+				// with <name>, so the URL repeats the filename. Collapse the
+				// duplicate instead of creating "<name>/<name>" on disk.
+				if filepath.Base(parent) == e.FileName {
+					path = parent
+				}
 			} else {
 				path = e.FileName
 			}
