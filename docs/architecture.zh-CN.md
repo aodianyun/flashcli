@@ -59,6 +59,32 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 
 **协议缓存 schema：** venv 的 fingerprint 只跟踪 manifest `python_dependencies`，**不跟踪** `flashcli-bundle` 的 git ref。当磁盘缓存布局变化（`flashcli_bundle.version.CACHE_SCHEMA_VERSION`）时，`venv.EnsureProtocolCacheSchema` 会在 re-exec 前把已有 venv 里的 `flashcli-bundle` **就地升级**（`pip install --upgrade --force-reinstall --no-deps`，来源不变），使旧 venv 无需整体重建即可与主机缓存路径保持一致（不重装 torch/依赖）。
 
+## 本地服务栈（desktop、`flashserver`、`flashserver-setup`）
+
+三者一起发布，且都不重复实现缓存逻辑：它们调用 `flashcli` 或上文共享的 `host` 函数。
+
+| 组件 | 源码 | 职责 |
+|------|------|------|
+| `flashserver` | `go/cmd/flashserver`、`go/internal/server` | 常驻调度器 + 本地控制台：模型加载/启动/停止、按 GPU 准入、任务队列、每模型 serve 日志、`GET /health`、`/docs`、`/openapi.yaml`；内嵌控制台页面（`go/internal/server/web`，可用 `FLASHCLI_WEB_DIR` 覆盖） |
+| `flashserver-setup` | `go/cmd/flashserver-setup`、`go/internal/setup` | 安装后端：Linux 写 `/etc/flashserver/config.json` + `flashserver.service`；Windows 导入 `flashserver_ubuntu` WSL2 发行版、启用 systemd 与国内镜像、创建登录任务与模型防火墙规则。另有 `--start-service` / `--stop-service`、`--enable-autostart` / `--disable-autostart`、`--uninstall`（`--purge-*`）、`--dry-run`、供 UI 读取的 `--progress-file` |
+| 桌面客户端 | `desktop/`（Rust，egui/eframe） | Windows GUI：只调用守护进程的 HTTP API 与 `/v1/ws`，通过 `wsl.exe` / `systemctl` 启停服务，不直接读缓存内部 |
+
+```mermaid
+flowchart LR
+  subgraph WIN[Windows 安装包]
+    ISS["flashserver-setup-windows-amd64-v&lt;version&gt;.exe<br/>Inno Setup"] --> CLIENT[FlashServer.exe]
+    ISS --> SETUP[flashserver-setup.exe]
+  end
+  CLIENT -- "HTTP + /v1/ws" --> SRV["flashserver :8790"]
+  CLIENT -- UAC --> SETUP
+  SETUP -- "systemd 单元 / WSL 发行版 + 登录任务" --> SRV
+  SRV -- "re-exec / serve" --> CLI[flashcli]
+  CLI --> HOST[(~/.flashcli)]
+  SRV --> HOST
+```
+
+`flashserver` 不导入任何 Python infer 代码：它通过运行 `flashcli` 来准备并服务模型，因此两个前端共用同一套缓存实现。其状态位于 `$FLASHCLI_HOME/flashserver/`（`serve-options.json`、每模型 serve 日志）。HTTP 契约见 [openapi.yaml](openapi.yaml)，面向用户的行为见 [flashserver.zh-CN.md](flashserver.zh-CN.md)。
+
 **Re-exec 命令**（在 bundle venv 内）：
 
 ```text

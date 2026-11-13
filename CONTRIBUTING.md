@@ -49,6 +49,30 @@ pytest tests/ tests/bench/ # full suite including bench
 cd go && go test ./...     # Go host, including shared cache/cleanup contracts
 ```
 
+### Binaries and the desktop client
+
+`bash scripts/build_go.sh` builds three commands into `dist/go/` (version from
+`pyproject.toml`):
+
+| Binary | What it is |
+|--------|------------|
+| `flashcli-<os>-<arch>` | CLI: pull/run/serve/models/cache/… |
+| `flashserver-<os>-<arch>` | Resident scheduler + local console (`127.0.0.1:8790`, `docs/openapi.yaml`) |
+| `flashserver-setup-<os>-<arch>` | Installer backend: Linux systemd, Windows WSL2 distro/task/firewall |
+
+The desktop client lives in `desktop/` (Rust, egui/eframe) and only uses the
+daemon's HTTP API; see [desktop/README.md](desktop/README.md). Build the Windows
+package (client + Go assets + Inno Setup, requires Rust MSVC and Inno Setup 6):
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts/build_windows_package.ps1
+# reuse already-built Go assets: add -SkipGo
+```
+
+Layout: `go/cmd/{flashcli,flashserver,flashserver-setup}` (entrypoints),
+`go/internal/server` (daemon API + embedded console), `go/internal/setup`
+(installers), `installer/windows/` (Inno Setup script).
+
 ### Shared host code (CLI + flashserver)
 
 `flashcli` and `flashserver` are frontends over the same cache. Cache discovery, weights key/readiness, runtime IDs/paths, disk accounting, ref-path resolution, and cleanup **must** live in `go/internal/host` and be reused by both.

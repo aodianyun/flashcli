@@ -60,6 +60,37 @@ Rules:
 
 **Protocol cache schema:** the venv fingerprint tracks only manifest `python_dependencies` — it does **not** track the `flashcli-bundle` git ref. When the on-disk cache layout changes (`flashcli_bundle.version.CACHE_SCHEMA_VERSION`), `venv.EnsureProtocolCacheSchema` upgrades `flashcli-bundle` in an existing venv **in place** (`pip install --upgrade --force-reinstall --no-deps`, from the same source) before re-exec, so old venvs keep matching the host's cache paths without a full rebuild (no torch/dependency reinstall).
 
+## Local service stack (desktop, `flashserver`, `flashserver-setup`)
+
+Three components ship together. None of them duplicates cache logic: they call
+`flashcli` or the shared `host` functions described above.
+
+| Component | Source | Role |
+|-----------|--------|------|
+| `flashserver` | `go/cmd/flashserver`, `go/internal/server` | Resident scheduler and local console: model load / start / stop, GPU-aware admission, job queue, per-model serve logs, `GET /health`, `/docs`, `/openapi.yaml`; embeds the console UI (`go/internal/server/web`; `FLASHCLI_WEB_DIR` overrides it) |
+| `flashserver-setup` | `go/cmd/flashserver-setup`, `go/internal/setup` | Installer backend: Linux writes `/etc/flashserver/config.json` + `flashserver.service`; Windows imports the `flashserver_ubuntu` WSL2 distro, enables systemd and mirrors, and creates the logon task + model firewall rule. Also `--start-service` / `--stop-service`, `--enable-autostart` / `--disable-autostart`, `--uninstall` (`--purge-*`), `--dry-run`, `--progress-file` for the UI |
+| Desktop client | `desktop/` (Rust, egui/eframe) | Windows GUI: talks only to the daemon's HTTP API and `/v1/ws`, and starts/stops the service through `wsl.exe` / `systemctl`; it never reads cache internals |
+
+```mermaid
+flowchart LR
+  subgraph WIN[Windows package]
+    ISS["flashserver-setup-windows-amd64-v&lt;version&gt;.exe<br/>Inno Setup"] --> CLIENT[FlashServer.exe]
+    ISS --> SETUP[flashserver-setup.exe]
+  end
+  CLIENT -- "HTTP + /v1/ws" --> SRV["flashserver :8790"]
+  CLIENT -- UAC --> SETUP
+  SETUP -- "systemd unit / WSL distro + logon task" --> SRV
+  SRV -- "re-exec / serve" --> CLI[flashcli]
+  CLI --> HOST[(~/.flashcli)]
+  SRV --> HOST
+```
+
+`flashserver` never imports Python infer code: it prepares and serves models by
+running `flashcli`, so both frontends share one cache implementation. Its state
+lives under `$FLASHCLI_HOME/flashserver/` (`serve-options.json`, per-model serve
+logs). The HTTP contract is [openapi.yaml](openapi.yaml); user-facing behavior is
+[flashserver.md](flashserver.md).
+
 **Re-exec command** (inside bundle venv):
 
 ```text

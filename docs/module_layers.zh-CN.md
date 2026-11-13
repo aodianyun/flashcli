@@ -91,7 +91,15 @@ Go 主机**不** import Python infer 包；它以子进程启动（或驱动原�
 | `venv`、`pythonprovision` | bundle venv 创建 + 基础 Python 供应 |
 | `inferexec`、`nativeexec`、`nativeabi` | 执行后端（`entry.kind`） |
 | `manifest` | manifest 解析 + 校验 |
+| `server` | `flashserver` HTTP API（`docs/openapi.yaml`）+ `/v1/ws` 状态流、模型生命周期/任务、内嵌控制台（`go/internal/server/web`） |
+| `setup` | `flashserver-setup`：Linux systemd 单元、Windows `flashserver_ubuntu` WSL2 发行版 + 登录任务 + 防火墙规则、卸载/清理 |
+| `serveopts`、`gpu`、`system`、`progress`、`mirror` | 已保存的每模型 serve 参数、nvidia-smi 遥测、宿主能力探测、任务进度、镜像环境 |
 | `paths`、`runtime`、`selfupdate`、`postpull`、`version`、`errs` | 支撑 |
+
+`go/cmd/` 下的二进制只做参数解析与组装：`flashcli`（CLI）、`flashserver`
+（守护进程 + 控制台）、`flashserver-setup`（Windows 安装包使用的安装后端）。
+桌面客户端（`desktop/`，Rust/egui）在 Go 模块之外，只通过 HTTP API 通信
+（见 [architecture.zh-CN.md](architecture.zh-CN.md#本地服务栈desktopflashserverflashserver-setup)）。
 
 ## Infer 模块（`flashcli_bundle/infer/`）
 

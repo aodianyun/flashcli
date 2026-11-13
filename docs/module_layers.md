@@ -90,7 +90,16 @@ Command tree, FlashHub sync, weight download, preflight, venv, and backend dispa
 | `venv`, `pythonprovision` | Bundle venv creation + base Python provisioning |
 | `inferexec`, `nativeexec`, `nativeabi` | Execution backends (`entry.kind`) |
 | `manifest` | Manifest parse + validation |
+| `server` | `flashserver` HTTP API (`docs/openapi.yaml`) + `/v1/ws` state stream, model lifecycle/jobs, embedded console (`go/internal/server/web`) |
+| `setup` | `flashserver-setup`: Linux systemd unit, Windows `flashserver_ubuntu` WSL2 distro + logon task + firewall rule, uninstall/purge |
+| `serveopts`, `gpu`, `system`, `progress`, `mirror` | Saved per-model serve options, nvidia-smi telemetry, host capability probes, job progress, mirror env |
 | `paths`, `runtime`, `selfupdate`, `postpull`, `version`, `errs` | Support |
+
+Binaries under `go/cmd/` only parse flags and wire these packages:
+`flashcli` (CLI), `flashserver` (daemon + console), `flashserver-setup`
+(installer backend used by the Windows package). The desktop client
+(`desktop/`, Rust/egui) is outside the Go module and speaks only the HTTP API
+([architecture.md](architecture.md#local-service-stack-desktop-flashserver-flashserver-setup)).
 
 ## Infer modules (`flashcli_bundle/infer/`)
 
