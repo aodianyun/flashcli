@@ -61,10 +61,11 @@ curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
 
 ```bash
 git clone https://github.com/aodianyun/flashcli.git && cd flashcli
-bash scripts/build_go.sh        # 构建 go/ → dist/go/flashcli-<os>-<arch>
+bash scripts/build_go.sh
 ```
 
-host 是静态 Go 二进制（无 Python host）。bundle venv 仍按需安装
+构建目标、测试与打包见 [CONTRIBUTING.md](CONTRIBUTING.md#binaries-and-the-desktop-client)。
+host 是静态 Go 二进制（无 Python host）；bundle venv 仍按需安装
 `flashcli-bundle[infer]`（源码：[flashcli-bundle/](flashcli-bundle/)）。
 
 ### 预检
@@ -88,33 +89,25 @@ curl -N http://127.0.0.1:8000/v1/chat/completions \
 
 首次运行会同步 FlashHub runtime、创建 bundle venv、安装 torch 栈并拉取权重。各模型的专属参数、默认值与示例见各 bundle [README](bundles/README.zh-CN.md)。
 
-**本地开发 bundle**（从 FlashRT 重建，非 FlashHub）：
+**本地开发 bundle**（从 FlashRT 重建，非 FlashHub）——构建步骤见
+[bundles/README.zh-CN.md](bundles/README.zh-CN.md) 及各 bundle 的 `BUILD.md`：
 
 ```bash
-bash bundles/pi05_libero/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
 flashcli run bundles/pi05_libero --prompt "pick up the red block"
 ```
 
 ### 本地服务（`flashserver`）
 
-`flashserver` 是桌面客户端背后的常驻调度器：保持模型常驻，在本机
-`http://127.0.0.1:8790` 提供控制台 API（`/health`、`/docs`、`/openapi.yaml`），
-并通过 `/v1/ws` 推送状态。
+把模型作为常驻本地服务运行，带浏览器控制台、HTTP API 和 Windows 桌面客户端：
 
 ```bash
-flashserver --addr 127.0.0.1:8790 --token <token>   # 前台守护进程
-flashserver-setup                                   # 安装二进制 + 服务
-flashserver-setup --backend wsl --wsl-dir D:\FlashServerWSL
-flashserver-setup --uninstall --purge-models
+flashserver-setup                      # 安装二进制 + 服务（systemd / WSL2）
 ```
 
-`flashserver-setup` 是两个平台的安装后端：Linux 写入 `flashserver.service`
-systemd 单元；Windows 导入专用的 `flashserver_ubuntu` WSL2 发行版（已有
-FlashServer 配置的旧 `Ubuntu` 直接复用），启用国内镜像，并创建登录任务和模型
-防火墙规则。两个二进制都作为 release 资产发布（`flashserver-<os>-<arch>`、
-`flashserver-setup-<os>-<arch>`），
-`flashserver-setup-windows-amd64-v<version>.exe` 则把 setup 与桌面客户端一起
-打包。详见 [flashserver.zh-CN.md](docs/flashserver.zh-CN.md)。
+然后打开 `http://localhost:8790/`。概述：[docs/flashserver.zh-CN.md](docs/flashserver.zh-CN.md) ·
+安装运维：[docs/flashserver-install.zh-CN.md](docs/flashserver-install.zh-CN.md) ·
+桌面客户端：[docs/flashserver-desktop.zh-CN.md](docs/flashserver-desktop.zh-CN.md) ·
+API：[docs/flashserver-api.zh-CN.md](docs/flashserver-api.zh-CN.md)。
 
 ---
 

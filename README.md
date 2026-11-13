@@ -65,10 +65,11 @@ curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
 
 ```bash
 git clone https://github.com/aodianyun/flashcli.git && cd flashcli
-bash scripts/build_go.sh        # builds go/ → dist/go/flashcli-<os>-<arch>
+bash scripts/build_go.sh
 ```
 
-The host is a static Go binary (no Python host). Bundle venvs still get
+Build targets, tests, and packaging: [CONTRIBUTING.md](CONTRIBUTING.md#binaries-and-the-desktop-client).
+The host is a static Go binary (no Python host); bundle venvs still get
 `flashcli-bundle[infer]` on demand (source: [flashcli-bundle/](flashcli-bundle/)).
 
 ### Preflight
@@ -92,34 +93,26 @@ curl -N http://127.0.0.1:8000/v1/chat/completions \
 
 First run syncs the FlashHub runtime, creates the bundle venv, installs the torch stack, and pulls weights. The host records the expected weight file set before downloading, resumes interrupted downloads, and verifies it offline on later runs. Model-specific flags, defaults, and examples are in each bundle [README](bundles/README.md).
 
-**Local dev bundle** (rebuilt from FlashRT, not FlashHub):
+**Local dev bundle** (rebuilt from FlashRT, not FlashHub) — build steps are in
+[bundles/README.md](bundles/README.md) and each bundle's `BUILD.md`:
 
 ```bash
-bash bundles/pi05_libero/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
 flashcli run bundles/pi05_libero --prompt "pick up the red block"
 ```
 
 ### Local server (`flashserver`)
 
-`flashserver` is the resident scheduler behind the desktop client: it keeps
-models loaded, serves the local console API on `http://127.0.0.1:8790`
-(`/health`, `/docs`, `/openapi.yaml`), and streams state over `/v1/ws`.
+Run models as a resident local service with a browser console, HTTP API, and a
+Windows desktop client:
 
 ```bash
-flashserver --addr 127.0.0.1:8790 --token <token>   # foreground daemon
-flashserver-setup                                   # install binaries + service
-flashserver-setup --backend wsl --wsl-dir D:\FlashServerWSL
-flashserver-setup --uninstall --purge-models
+flashserver-setup                      # install binaries + service (systemd / WSL2)
 ```
 
-`flashserver-setup` is the installer backend on both platforms: Linux writes a
-`flashserver.service` systemd unit; Windows imports a dedicated
-`flashserver_ubuntu` WSL2 distro (a legacy `Ubuntu` with a FlashServer config is
-reused), enables domestic mirrors, and creates the logon task and model firewall
-rule. Both binaries ship as release assets (`flashserver-<os>-<arch>`,
-`flashserver-setup-<os>-<arch>`), and
-`flashserver-setup-windows-amd64-v<version>.exe` bundles setup with the desktop
-client. Details: [flashserver.md](docs/flashserver.md).
+Then open `http://localhost:8790/`. Overview: [docs/flashserver.md](docs/flashserver.md) ·
+install/ops: [docs/flashserver-install.md](docs/flashserver-install.md) ·
+desktop client: [docs/flashserver-desktop.md](docs/flashserver-desktop.md) ·
+API: [docs/flashserver-api.md](docs/flashserver-api.md).
 
 ---
 

@@ -12,7 +12,10 @@ every file to its audience and content.
 |------|----------|---------|
 | [../README.md](../README.md) | users | Install, `run`/`serve`, news, doc entry points |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | contributors | Layout, dev setup, binaries/desktop build, git workflow, release checklist + notes standard |
-| [flashserver.md](flashserver.md) | users / integrators | `flashserver`, `flashserver-setup`, desktop client: install, API, startup parameters, lifecycle, troubleshooting |
+| [flashserver.md](flashserver.md) | users | **Start here** for the local service: overview, diagram, quick start, doc index |
+| [flashserver-install.md](flashserver-install.md) | users / admins | Install, config, ports, disk, lifecycle, uninstall, troubleshooting |
+| [flashserver-desktop.md](flashserver-desktop.md) | users | Desktop client features, model lifecycle, startup parameters, LAN access |
+| [flashserver-api.md](flashserver-api.md) | integrators | API endpoint index and examples; schema in [openapi.yaml](openapi.yaml) |
 | [openapi.yaml](openapi.yaml) | integrators | **Authoritative** HTTP contract (also served at `/openapi.yaml`) |
 | [environment.md](environment.md) | users | Environment variables the Go host reads, mirrors, cache paths |
 | [model_bundle_standard.md](model_bundle_standard.md) | integrators | Preset ref syntax + end-user runtime flow |
@@ -31,9 +34,10 @@ Chinese mirrors use the same names with a `.zh-CN.md` suffix.
 - **End user** — root README (install, `run`/`serve`) → the bundle page on
   [FlashHub](https://flashhub.top) (ref, model options) → [environment.md](environment.md)
   for mirrors and cache locations.
-- **Local-service user** — root README → [flashserver.md](flashserver.md)
-  (installer, desktop client, API, startup parameters) → [openapi.yaml](openapi.yaml)
-  when integrating.
+- **Local-service user** — root README → [flashserver.md](flashserver.md) →
+  [flashserver-install.md](flashserver-install.md) (deployment) /
+  [flashserver-desktop.md](flashserver-desktop.md) (client) →
+  [flashserver-api.md](flashserver-api.md) + [openapi.yaml](openapi.yaml) when integrating.
 - **Integrator** — [model_bundle_standard.md](model_bundle_standard.md) (refs) →
   [openapi.yaml](openapi.yaml) (HTTP) → [environment.md](environment.md).
 - **Bundle author** — [bundle_publish_standard.md](bundle_publish_standard.md) →
