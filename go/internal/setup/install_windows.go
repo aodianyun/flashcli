@@ -45,6 +45,18 @@ func wslNamedExists(ctx context.Context, name string) bool {
 	return exec.CommandContext(c, sysExe("wsl.exe"), "-d", name, "-u", "root", "--", "true").Run() == nil
 }
 
+// wslDistroRegistered checks `wsl -l -q` without starting the distro.
+func wslDistroRegistered(ctx context.Context, name string) bool {
+	c, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(c, sysExe("wsl.exe"), "-l", "-q").Output()
+	if err != nil {
+		return false
+	}
+	text := strings.ToLower(string(normalizeDiagnostic(out)))
+	return strings.Contains(text, strings.ToLower(name))
+}
+
 func wslNamedHasConfig(ctx context.Context, name, config string) bool {
 	c, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -288,6 +300,17 @@ func ensureDistro(ctx context.Context, opts Options, i *installer) error {
 		i.printf("$ wsl.exe --install -d %s\n", opts.Distro)
 		return nil
 	}
+	if wslDistroRegistered(ctx, opts.Distro) {
+		// The name exists but the distro did not answer after the cold-start
+		// retries. Try a clean terminate before giving up; never import the
+		// same name (WSL returns a generic 0xffffffff).
+		_ = exec.CommandContext(ctx, sysExe("wsl.exe"), "--terminate", opts.Distro).Run()
+		time.Sleep(3 * time.Second)
+		if err := wslRoot(ctx, opts, "true"); err == nil {
+			return nil
+		}
+		return fmt.Errorf("WSL distro %q is registered but cannot start; run `wsl -d %s -u root true` to inspect it, or export/unregister it before reinstalling", opts.Distro, opts.Distro)
+	}
 	// flashserver_ubuntu is not a Microsoft Store distro name; import the
 	// official Ubuntu rootfs directly under the dedicated name.
 	if opts.Distro == "flashserver_ubuntu" {
@@ -353,6 +376,9 @@ func importDistroRootfs(ctx context.Context, opts Options, i *installer) error {
 	abs, err := filepath.Abs(target)
 	if err != nil {
 		return fmt.Errorf("invalid WSL directory %q: %w", target, err)
+	}
+	if wslDistroRegistered(ctx, opts.Distro) {
+		return fmt.Errorf("WSL distro %q is already registered but did not start; run `wsl -d %s -u root true`, then retry (or choose another --distro name)", opts.Distro, opts.Distro)
 	}
 	if entries, err := os.ReadDir(abs); err == nil && len(entries) > 0 {
 		return fmt.Errorf("target directory %s is not empty", abs)
