@@ -150,7 +150,11 @@ refactor(weights): share cache-key resolution between pull and run
 ### Merging
 
 - PRs target `dev` and must pass `go test ./...`, `pytest tests/` (protocol/infer + conformance), and `gofmt -w .` clean.
-- Feature branch → `dev`: prefer **squash merge** (one logical commit) or **rebase** for a clean linear history; avoid merge-commit noise.
+- Feature branch → `dev`: choose by commit quality.
+  - **Rebase (default)** when the branch is already a series of logical Conventional Commits: `git rebase dev` on the branch, then fast-forward `dev` (or GitHub "Rebase and merge"). Authorship and messages are preserved, history stays linear, and the branch can be deleted afterwards without losing anything.
+  - **Squash** when the branch is exploratory (WIP/fixup commits, repeated rewrites of the same code): `dev` then gets one commit that summarizes the change.
+  - Do **not** create `--no-ff` merge commits on `dev` (no merge bubbles). Rebase the feature branch onto `dev` instead of merging `dev` into it, and re-push with `--force-with-lease`.
+  - Do not force-push `dev` once it is shared; replace a commit you just pushed by mistake only with `--force-with-lease`.
 - `dev` → `main`: **squash-and-record** (see above) — `main` gets one linear squash commit per sync, and `dev` records it with `git merge -s ours main`. Do not `--no-ff` merge or rely on fast-forward, and do not push directly to `main` for routine work.
 - Squash commit summary: `chore(sync): squash merge dev into main` (or a concise `type(scope): …` describing the release).
 
