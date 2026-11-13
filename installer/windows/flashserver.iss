@@ -537,28 +537,6 @@ begin
   end;
 end;
 
-function HealthOK: Boolean;
-var
-  ResultCode: Integer;
-  ScriptPath, Script: String;
-begin
-  ScriptPath := ExpandConstant('{tmp}\flashserver-health.ps1');
-  Script := 'try {' + #13#10 +
-    '  $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 8 ' + #39 +
-      ClientAPIURL + '/health' + #39 + #13#10 +
-    '  if ($r.StatusCode -eq 200) { exit 0 } else { exit 2 }' + #13#10 +
-    '} catch { exit 1 }' + #13#10;
-  if not SaveStringToFile(ScriptPath, Script, False) then
-  begin
-    Result := False;
-    Exit;
-  end;
-  Result := Exec(
-    ExpandConstant('{sysnative}\WindowsPowerShell\v1.0\powershell.exe'),
-    '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ScriptPath + '"',
-    '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
-end;
-
 function WSLDistroName: String;
 var
   A: AnsiString;
@@ -573,39 +551,11 @@ begin
   end;
 end;
 
-function ServiceActive: Boolean;
-var
-  ResultCode: Integer;
-begin
-  Result := Exec(ExpandConstant('{sysnative}\wsl.exe'),
-    '-d "' + WSLDistroName + '" -u root systemctl is-active flashserver',
-    '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
-end;
-
-{ Independently confirms the environment is ready: the systemd unit is active
-  and the HTTP API answers /health. The setup engine already waits for health,
-  so this is a short final gate (and catches a service that died right after). }
-function VerifyReady: Boolean;
-var
-  I: Integer;
-begin
-  Result := False;
-  for I := 1 to 8 do
-  begin
-    if ServiceActive and HealthOK then
-    begin
-      Result := True;
-      Exit;
-    end;
-    Sleep(1500);
-  end;
-end;
-
 function RunEnvironmentSetup: Boolean;
 var
   ResultCode, Step, Total, DoneCode, Attempts: Integer;
   StepText, Detail, ProgressPath, LogPath, ProgressLog, LastLog: String;
-  StepDone, HasDone, Started, Ready, LastDone: Boolean;
+  StepDone, HasDone, Started, LastDone: Boolean;
   LastStep: Integer;
   LastText: String;
   WSLArgs: String;
