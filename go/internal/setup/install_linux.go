@@ -20,7 +20,7 @@ func resolveDistro(_ context.Context, _ Env, opts Options) Options { return opts
 
 func installLinux(ctx context.Context, env Env, opts Options, out io.Writer) error {
 	i := installer{env: env, opts: opts, out: out}
-	if !opts.DryRun && os.Geteuid() != 0 {
+	if !opts.DryRun && geteuid() != 0 {
 		return fmt.Errorf("native installation requires root; rerun with sudo")
 	}
 	binDir := filepath.Join(opts.Prefix, "bin")

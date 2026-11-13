@@ -5238,3 +5238,6 @@ fn main() -> eframe::Result<()> {
         Box::new(|cc| Ok(Box::new(App::new(cc)))),
     )
 }
+
+#[cfg(test)]
+mod tests;

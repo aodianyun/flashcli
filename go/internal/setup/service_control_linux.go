@@ -9,10 +9,12 @@ import (
 	"os"
 )
 
-const autostartMarker = "/etc/flashserver/autostart"
+// autostartMarker records the last auto-start action; a variable so tests can
+// point it at a temporary file.
+var autostartMarker = "/etc/flashserver/autostart"
 
 func stopService(ctx context.Context, env Env, opts Options, out io.Writer) error {
-	if os.Geteuid() != 0 {
+	if geteuid() != 0 {
 		return fmt.Errorf("service control requires root; rerun with sudo")
 	}
 	i := installer{env: env, opts: opts, out: out}
@@ -26,7 +28,7 @@ func stopService(ctx context.Context, env Env, opts Options, out io.Writer) erro
 }
 
 func enableAutostart(ctx context.Context, env Env, opts Options, out io.Writer) error {
-	if os.Geteuid() != 0 {
+	if geteuid() != 0 {
 		return fmt.Errorf("service control requires root; rerun with sudo")
 	}
 	i := installer{env: env, opts: opts, out: out}
@@ -39,7 +41,7 @@ func enableAutostart(ctx context.Context, env Env, opts Options, out io.Writer) 
 }
 
 func disableAutostart(ctx context.Context, env Env, opts Options, out io.Writer) error {
-	if os.Geteuid() != 0 {
+	if geteuid() != 0 {
 		return fmt.Errorf("service control requires root; rerun with sudo")
 	}
 	i := installer{env: env, opts: opts, out: out}
@@ -52,7 +54,7 @@ func disableAutostart(ctx context.Context, env Env, opts Options, out io.Writer)
 }
 
 func startService(ctx context.Context, env Env, opts Options, out io.Writer) error {
-	if os.Geteuid() != 0 {
+	if geteuid() != 0 {
 		return fmt.Errorf("service control requires root; rerun with sudo")
 	}
 	i := installer{env: env, opts: opts, out: out}

@@ -136,6 +136,10 @@ type installer struct {
 	out  io.Writer
 }
 
+// geteuid is os.Geteuid behind a variable so tests can exercise the root-only
+// install/service paths without running as root.
+var geteuid = os.Geteuid
+
 // mirrorEnvContent enables the domestic mirrors by default. The desktop's
 // mirror toggle removes/rewrites this file later.
 func mirrorEnvContent() []byte {
