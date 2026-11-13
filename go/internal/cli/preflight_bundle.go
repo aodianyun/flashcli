@@ -2,113 +2,17 @@ package cli
 
 import (
 	"context"
-	"path/filepath"
-	"sort"
-	"strings"
 
-	"github.com/aodianyun/flashcli/go/internal/cuda"
-	"github.com/aodianyun/flashcli/go/internal/errs"
-	"github.com/aodianyun/flashcli/go/internal/hostabi"
+	"github.com/aodianyun/flashcli/go/internal/host"
 	"github.com/aodianyun/flashcli/go/internal/manifest"
-	"github.com/aodianyun/flashcli/go/internal/native"
-	"github.com/aodianyun/flashcli/go/internal/preflight"
-	"github.com/aodianyun/flashcli/go/internal/runtime"
-	"github.com/aodianyun/flashcli/go/internal/venv"
-	"github.com/aodianyun/flashcli/go/internal/weights"
 )
 
-// preflightBundle resolves the host runtime env key and validates the selected
-// native cell (+ host ABI, and CUDA userland when a venv interpreter is given).
-// Mirrors flashcli.bundle.preflight.run_preflight + ensure_runtime_from_*.
+// preflightBundle delegates to the shared host service.
 func preflightBundle(m *manifest.Manifest, root, venvPython string, quiet, autoInstall bool) (string, error) {
-	if envBool("FLASHCLI_SKIP_PREFLIGHT") {
-		return resolveEnvKey(m), nil
-	}
-	abi := m.PythonABIOrEmpty()
-	hostKey := preflight.HostEnvKey(preflight.DetectGPU(), abi)
-	envKey, err := m.ResolveEnvKey(hostKey)
-	if err != nil || envKey == "" {
-		return "", errs.Envf("Bundle %q does not support this machine's runtime environment %q. Supported: %s", m.Name, hostKey, strings.Join(m.EnvironmentKeys(), ", "))
-	}
-	rel := m.RuntimeMap()[envKey]
-	if rel == "" {
-		return envKey, nil
-	}
-	dir := filepath.Join(root, filepath.FromSlash(rel))
-	if !native.HasNativeArtifacts(dir) {
-		// A declared runtime directory may be a pure-Python environment root;
-		// no native artifacts are required when the entry does not use them.
-		return envKey, nil
-	}
-	if err := ensureELFInspector(quiet, autoInstall); err != nil {
-		return "", err
-	}
-	if len(native.DiscoverModuleBases(dir, "")) == 0 && !hasSubstrateSO(dir) {
-		return "", errs.Envf("Bundle %s has native files under %s for environment %q but none are recognized. Check the .so filename/build tag.", root, rel, envKey)
-	}
-	if err := hostabi.Ensure(native.NativeSOPaths(dir, ""), quiet); err != nil {
-		return "", err
-	}
-	if venvPython != "" {
-		if parsed, perr := preflight.ParseEnvKey(envKey); perr == nil && parsed.CudaTag != "" {
-			if err := cuda.Ensure(context.Background(), venvPython, parsed.CudaTag, quiet, autoInstall, nil); err != nil {
-				return "", err
-			}
-		}
-	}
-	return envKey, nil
+	return host.PreflightBundle(m, root, venvPython, quiet, autoInstall)
 }
 
-func hasSubstrateSO(dir string) bool {
-	matches, _ := filepath.Glob(filepath.Join(dir, "substrate", "*.so"))
-	return len(matches) > 0
-}
-
-func sortedKeys(m map[string]string) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
-// ensureBundleRuntime runs preflight, builds the bundle venv, then runs the
-// CUDA userland check. Used by pull / bundle sync (mirrors prepare_bundle_runtime).
+// ensureBundleRuntime delegates to the shared host service.
 func ensureBundleRuntime(m *manifest.Manifest, bundleRoot, version, variant string, quiet, noAutoInstall bool) (string, string, error) {
-	var err error
-	m, err = applyEnv(m)
-	if err != nil {
-		return "", "", err
-	}
-	runtimeID := runtime.IDFromPath(bundleRoot, m.Name)
-	if version != "local" {
-		if marker := runtime.ReadPresetMarker(weights.CacheKeyFor(m, version)); marker != nil {
-			if rid := strOf(marker["runtime_id"]); rid != "" {
-				runtimeID = rid
-			}
-		}
-	}
-	if _, err := preflightBundle(m, bundleRoot, "", quiet, !noAutoInstall); err != nil {
-		return "", "", err
-	}
-	if !m.NeedsPythonVenv() {
-		// Native-only bundle: no Python venv / CUDA-userland venv step.
-		return runtimeID, "", nil
-	}
-	if envBool("FLASHCLI_SKIP_VENV_SETUP") {
-		return runtimeID, "", nil
-	}
-	python, err := venv.Ensure(context.Background(), runtimeID, m, venv.Options{
-		SkipSetup:     envBool("FLASHCLI_SKIP_VENV_SETUP"),
-		NoAutoInstall: noAutoInstall,
-		Quiet:         quiet,
-	})
-	if err != nil {
-		return "", "", err
-	}
-	if _, err := preflightBundle(m, bundleRoot, python, quiet, !noAutoInstall); err != nil {
-		return "", "", err
-	}
-	return runtimeID, python, nil
+	return host.EnsureRuntime(context.Background(), m, bundleRoot, version, variant, quiet, noAutoInstall)
 }

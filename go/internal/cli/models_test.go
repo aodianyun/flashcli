@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/aodianyun/flashcli/go/internal/host"
 )
 
 func cliOutput(t *testing.T, args ...string) string {
@@ -172,7 +174,7 @@ func TestModelsListShowsUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := cliOutput(t, "models", "list")
-	for _, want := range []string{"BUNDLE SIZE", "WEIGHTS SIZE", "2.0 KiB"} {
+	for _, want := range []string{"BUNDLE SIZE", "RUNTIME", "WEIGHTS SIZE", "2.0 KiB"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in output:\n%s", want, out)
 		}
@@ -183,9 +185,43 @@ func TestDUUsage(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("FLASHCLI_HOME", home)
 	out := cliOutput(t, "du")
-	for _, want := range []string{"Disk usage (apparent size)", "bundles", "models", "runtimes", "total"} {
+	for _, want := range []string{"Disk usage (unique allocated)", "bundles", "models", "runtimes", "total"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in output:\n%s", want, out)
+		}
+	}
+}
+
+func TestDUUsageMatchesHostStorage(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FLASHCLI_HOME", home)
+	for _, area := range []string{"bundles", "models", "runtimes", "cache", "tools", "python"} {
+		dir := filepath.Join(home, area, "sample")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "payload.bin"), make([]byte, 4096), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out := cliOutput(t, "du")
+	lines := strings.Split(out, "\n")
+	for _, area := range host.Storage() {
+		want := humanSize(area.Bytes)
+		found := false
+		for _, line := range lines {
+			fields := strings.Fields(line)
+			if len(fields) < 2 || fields[0] != area.Name {
+				continue
+			}
+			found = true
+			actual := strings.Join(fields[1:], " ")
+			if actual != want {
+				t.Fatalf("%s = %s, want %s (host.Storage)\n%s", area.Name, actual, want, out)
+			}
+		}
+		if !found {
+			t.Fatalf("missing %s in du output:\n%s", area.Name, out)
 		}
 	}
 }

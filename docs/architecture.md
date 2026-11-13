@@ -16,6 +16,7 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 4. **Fixed Python ABI** — one venv per bundle (`python_abi`); CLI **re-execs** into that venv after prepare.
 5. **Single Go host** — the host is a static Go binary; bundle venvs pip-install **`flashcli-bundle[infer]`** (never a host `flashcli` package).
 6. **One command** — `flashcli run <ref>` chains sync → deps → weights (host download if missing) → `post_pull` → offline inference in bundle venv.
+7. **One host cache layer** — `go/internal/host` is the single implementation of cache discovery, weights key/readiness, runtime IDs/paths, disk accounting, ref-path resolution, and cleanup. `flashcli` and `flashserver` are frontends: they parse input, call `host`, and format/transport results. They must not reimplement these checks.
 
 ### Where modules live (required reading)
 
@@ -36,7 +37,59 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 
 **Dependency isolation:** the host never installs into the bundle venv except `flashcli-bundle[infer]` and manifest `python_dependencies`. Weight download runs on the **host** only; the bundle infer subprocess resolves cached or bundle-local paths only (`HF_HUB_OFFLINE=1`).
 
+## Shared host services (CLI + flashserver)
+
+`flashcli` (CLI) and `flashserver` (resident daemon) are two frontends over the same on-disk state. All cache-facing decisions live in **`go/internal/host`**; the frontends must not duplicate them:
+
+| Capability | Shared API | CLI use | flashserver use |
+|------------|------------|---------|-----------------|
+| Cache areas + unique allocated bytes | `host.Storage()` | `flashcli du` | `GET /v1/storage` |
+| Cached models, sizes, readiness, runtime bytes | `host.ListModels()` | `flashcli models list` | `GET /v1/models` |
+| Bundle usability / serve capability | `host.BundleRootUsable`, `host.ListModels` | `models list/show` | `/v1/models` |
+| Weights key + readiness | `host.MarkerWeightsKey`, `host.WeightsInfo`, `host.WeightsCachedForMarker` | `models list/show` | `/v1/models` |
+| Canonical ref/cache key | `host.RefCacheKey` | ref resolution | cleanup/API refs |
+| Cleanup path selection + removal | `host.RefPaths`, `host.RuntimePaths`, `host.OrphanPaths`, `host.AllDataPaths`, `host.SharedCachePaths`, `host.RemovePaths` | `flashcli bundle clean`, `flashcli cache clean` | `/v1/models/clean`, `/v1/storage/clean` |
+| Remove model cache | `host.RemoveCachedRef` | `bundle clean` semantics | `/v1/models/clean` |
+
+Rules:
+
+- **Do not** add another marker walker, weights-readiness check, directory-size walker, or cleanup path resolver under `go/internal/cli` or `go/internal/server`.
+- Add the behavior once in `host`, then expose it through both frontends. Presentation-only helpers (tables, colors, prompts) stay in the frontend.
+- `flashcli cache clean` removes the shared cache group (`cache` + base Python + uv), matching `/v1/storage/clean {"targets":["cache"]}`. Model data/runtimes use `flashcli bundle clean` / `/v1/models/clean`; shared weights/runtime are reference-counted and kept. Disk accounting and ref-path selection are shared in `host`.
+- Tests: `go test ./...`; host tests cover accounting/cleanup, CLI tests exercise `du`, `models list`, and `bundle clean` through the host functions. See [module_layers.md](module_layers.md).
+
 **Protocol cache schema:** the venv fingerprint tracks only manifest `python_dependencies` — it does **not** track the `flashcli-bundle` git ref. When the on-disk cache layout changes (`flashcli_bundle.version.CACHE_SCHEMA_VERSION`), `venv.EnsureProtocolCacheSchema` upgrades `flashcli-bundle` in an existing venv **in place** (`pip install --upgrade --force-reinstall --no-deps`, from the same source) before re-exec, so old venvs keep matching the host's cache paths without a full rebuild (no torch/dependency reinstall).
+
+## Local service stack (desktop, `flashserver`, `flashserver-setup`)
+
+Three components ship together. None of them duplicates cache logic: they call
+`flashcli` or the shared `host` functions described above.
+
+| Component | Source | Role |
+|-----------|--------|------|
+| `flashserver` | `go/cmd/flashserver`, `go/internal/server` | Resident scheduler and local console: model load / start / stop, GPU-aware admission, job queue, per-model serve logs, `GET /health`, `/docs`, `/openapi.yaml`; embeds the console UI (`go/internal/server/web`; `FLASHCLI_WEB_DIR` overrides it) |
+| `flashserver-setup` | `go/cmd/flashserver-setup`, `go/internal/setup` | Installer backend: Linux writes `/etc/flashserver/config.json` + `flashserver.service`; Windows imports the `flashserver_ubuntu` WSL2 distro, enables systemd and mirrors, and creates the logon task + model firewall rule. Also `--start-service` / `--stop-service`, `--enable-autostart` / `--disable-autostart`, `--uninstall` (`--purge-*`), `--dry-run`, `--progress-file` for the UI |
+| Desktop client | `desktop/` (Rust, egui/eframe) | Windows GUI: talks only to the daemon's HTTP API and `/v1/ws`, and starts/stops the service through `wsl.exe` / `systemctl`; it never reads cache internals |
+
+```mermaid
+flowchart LR
+  subgraph WIN[Windows package]
+    ISS["flashserver-setup-windows-amd64-v&lt;version&gt;.exe<br/>Inno Setup"] --> CLIENT[FlashServer.exe]
+    ISS --> SETUP[flashserver-setup.exe]
+  end
+  CLIENT -- "HTTP + /v1/ws" --> SRV["flashserver :8790"]
+  CLIENT -- UAC --> SETUP
+  SETUP -- "systemd unit / WSL distro + logon task" --> SRV
+  SRV -- "re-exec / serve" --> CLI[flashcli]
+  CLI --> HOST[(~/.flashcli)]
+  SRV --> HOST
+```
+
+`flashserver` never imports Python infer code: it prepares and serves models by
+running `flashcli`, so both frontends share one cache implementation. Its state
+lives under `$FLASHCLI_HOME/flashserver/` (`serve-options.json`, per-model serve
+logs). The HTTP contract is [openapi.yaml](openapi.yaml); user-facing behavior is
+[flashserver.md](flashserver.md).
 
 **Re-exec command** (inside bundle venv):
 
@@ -97,6 +150,18 @@ sequenceDiagram
 
 **Resolution order**: local positional path (directory with `flashcli-bundle.json`) > synced bundle cache (preset marker under `bundles/<cache-key>/`); FlashHub refs are synced via `bundle sync`.
 
+**Runtime cell selection** (shared by `flashcli` and `flashserver`):
+
+1. exact `environments` key for this host (`sm<sm>-cu<cuda>-<os>-<arch>-py<abi>`);
+2. explicit `match` blocks on an environment (they may ignore the CUDA tag);
+3. scored fallback (`preflight.ScoreEnvKeyMatch`) over cells that agree on
+   SM/OS/arch/Python, preferring the same CUDA family.
+
+The host key uses the **driver's** CUDA capability (`nvidia-smi`) before the
+installed `nvcc`. A cell that requires a newer CUDA than the driver reports is
+rejected instead of failing later at `dlopen`, and a cell for a different SM is
+never selected.
+
 ## Weights cache: completeness vs readiness (offline guarantee)
 
 Two independent checks, deliberately separated:
@@ -156,15 +221,17 @@ sha256 verification into `~/.flashcli/tools/uv/<version>/`.
   environments where uv cannot run; the default `uv` fails clearly if uv is
   unavailable. Native bundles do not need uv.
 - After a venv is created it is offline-usable (uv is only needed when
-  installing); `flashcli cache clean [--uv|--tools|--flashhub|--all]` removes the
-  uv cache, provisioned binaries, and/or the FlashHub repo-index cache without
-  touching existing venvs; `--all` selects all three. `flashcli cache prune`
-  prunes unreachable uv cache objects (conservative; `cache clean` fully clears).
+  installing). `flashcli cache clean` removes only the shared cache
+  (`~/.flashcli/cache`, base Python, uv tools) and does not touch existing
+  venvs, bundles, or weights. `flashcli cache prune` prunes unreachable uv
+  cache objects (conservative; `cache clean` fully clears the cache group).
 - `flashcli bundle clean <ref>` removes only that ref's runtime; add `--all` to
-  also remove its bundle tree and weights. `flashcli bundle clean` removes all
-  runtimes; `flashcli bundle clean --all` resets all runtimes, bundles, and
-  models. Every mode prints the affected paths and asks `Continue? [y/N]`;
-  `--yes` skips the prompt for scripts.
+  also remove its bundle tree and weights. Shared weights/runtime stay while
+  another cached ref references them (the remaining bundle markers are the
+  reference count). `flashcli bundle clean` removes all runtimes;
+  `flashcli bundle clean --all` resets all runtimes, bundles, and models.
+  Every mode prints the affected paths and asks `Continue? [y/N]`; `--yes`
+  skips the prompt for scripts.
 - `flashcli bundle clean --orphans` removes stale bundle/model cache entries
   whose preset marker `bundle_root` no longer exists, plus runtime dirs with no
   valid bundle root. Valid caches are untouched; use it after deleting a local

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -177,5 +178,46 @@ func TestResolveBasePythonChecksABI(t *testing.T) {
 	py310 := write("python3.10", "3.10")
 	if got, err := ResolveBasePython("310"); err != nil || got != py310 {
 		t.Fatalf("ResolveBasePython(310) = %q, %v; want %q", got, err, py310)
+	}
+}
+
+func TestLineWriterPercent(t *testing.T) {
+	line := withPercent(cleanLine("\x1b[2Ktorch 123.4 MiB/732.8 MiB"))
+	if !strings.Contains(line, "17%") {
+		t.Fatalf("line = %q", line)
+	}
+	if strings.Contains(line, "\x1b") {
+		t.Fatalf("ansi not stripped: %q", line)
+	}
+	if got := shellJoin([]string{"uv", "pip install", "a'b"}); got != `'uv' 'pip install' 'a'\''b'` {
+		t.Fatalf("shellJoin = %q", got)
+	}
+}
+func TestStreamRunnerPTYPercent(t *testing.T) {
+	if _, err := exec.LookPath("script"); err != nil {
+		t.Skip("script not installed")
+	}
+	var updates []string
+	ctx := progress.WithSink(context.Background(), func(u progress.Update) {
+		updates = append(updates, u.Detail)
+	})
+	err := (streamRunner{}).Run(ctx, []string{"sh", "-c", `printf '\033[2Ktorch 123.4 MiB/732.8 MiB\r'`}, os.Environ())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range updates {
+		if strings.Contains(u, "17%") {
+			return
+		}
+	}
+	t.Fatalf("no percent update: %v", updates)
+}
+func TestCleanProgressLine(t *testing.T) {
+	line := withPercent(cleanLine("\x1b[2K? Preparing packages... (0/1) torch ------------------------------ 38.58 MiB/732.78 MiB"))
+	if strings.Contains(line, "---") {
+		t.Fatalf("bar not stripped: %q", line)
+	}
+	if !strings.Contains(line, "5%") || !strings.Contains(line, "torch") {
+		t.Fatalf("line = %q", line)
 	}
 }

@@ -1,0 +1,940 @@
+openapi: 3.1.0
+info:
+  title: FlashServer local API
+  version: 1.0.7.20261113
+  description: |
+    Local, single-user model scheduler API served by `flashserver` on
+    `http://localhost:8790`. The daemon manages model lifecycle and GPU-aware
+    admission; inference runs in `flashcli serve` child processes and is served
+    from each model's own `endpoint`.
+
+    Authentication is disabled by default. When the configuration contains a
+    `token`, every endpoint except `/health`, `/`, `/ui/*`, `/openapi.yaml`
+    requires `X-Flashcli-Token: <token>` or `Authorization: Bearer <token>`.
+servers:
+  - url: http://localhost:8790
+security:
+  - token: []
+  - {}
+paths:
+  /health:
+    get:
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: Daemon is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, version]
+                properties:
+                  status: { type: string, const: ok }
+                  version: { type: string }
+  /v1/version:
+    get:
+      summary: Daemon version
+      responses:
+        '200':
+          description: Version payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version: { type: string }
+  /v1/system:
+    get:
+      summary: System and GPU inventory
+      responses:
+        '200':
+          description: System information
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SystemInfo' }
+  /v1/gpu:
+    get:
+      summary: GPU devices and CUDA processes
+      responses:
+        '200':
+          description: GPU inventory
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [devices]
+                properties:
+                  devices:
+                    type: array
+                    items: { $ref: '#/components/schemas/GpuDevice' }
+                  processes:
+                    type: array
+                    items: { $ref: '#/components/schemas/GpuProcess' }
+        '503':
+          $ref: '#/components/responses/Error'
+  /v1/gpu/history:
+    get:
+      summary: Recent GPU telemetry samples
+      parameters:
+        - name: seconds
+          in: query
+          schema: { type: integer, minimum: 10, maximum: 900, default: 300 }
+      responses:
+        '200':
+          description: Telemetry history (oldest first)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  samples:
+                    type: array
+                    items: { $ref: '#/components/schemas/GpuSample' }
+  /v1/system/history:
+    get:
+      summary: Recent GPU + CPU telemetry samples (alias of /v1/gpu/history)
+      parameters:
+        - name: seconds
+          in: query
+          schema: { type: integer, minimum: 10, maximum: 900, default: 300 }
+      responses:
+        '200':
+          description: Telemetry history (oldest first)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  samples:
+                    type: array
+                    items: { $ref: '#/components/schemas/GpuSample' }
+  /v1/resources:
+    get:
+      summary: Admission view used by the scheduler
+      responses:
+        '200':
+          description: GPU + loaded models + slot counts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Resources' }
+  /v1/models:
+    get:
+      summary: Cached models and loaded instances
+      responses:
+        '200':
+          description: Model cache
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  models:
+                    type: array
+                    items: { $ref: '#/components/schemas/Model' }
+                  loaded:
+                    type: array
+                    items: { $ref: '#/components/schemas/LoadedModel' }
+  /v1/models/loaded:
+    get:
+      summary: Loaded model instances
+      responses:
+        '200':
+          description: Loaded models
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  models:
+                    type: array
+                    items: { $ref: '#/components/schemas/LoadedModel' }
+  /v1/catalog:
+    get:
+      summary: Search the public FlashHub catalog
+      parameters:
+        - name: q
+          in: query
+          description: Repository name search
+          schema: { type: string }
+        - name: tag
+          in: query
+          description: Tag id from /v1/catalog/tags
+          schema: { type: integer }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [updated, downloads] }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Catalog page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  repos:
+                    type: array
+                    items: { $ref: '#/components/schemas/CatalogRepository' }
+                  total: { type: integer }
+                  page: { type: integer }
+                  page_size: { type: integer }
+        '502':
+          $ref: '#/components/responses/Error'
+  /v1/catalog/tags:
+    get:
+      summary: FlashHub repository categories
+      responses:
+        '200':
+          description: Tags
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tags:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+                        name_cn: { type: string }
+  /v1/catalog/{id}:
+    get:
+      summary: One FlashHub repository with its versions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Repository and versions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  repo: { $ref: '#/components/schemas/CatalogRepository' }
+                  versions:
+                    type: array
+                    items: { $ref: '#/components/schemas/CatalogVersion' }
+                  total: { type: integer }
+        '400':
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
+  /v1/storage:
+    get:
+      summary: Disk usage (unique allocated bytes)
+      description: "Areas: `bundles`, `models`, `runtimes`, and `cache` (download cache + base Python + uv tools grouped together)."
+      responses:
+        '200':
+          description: Storage areas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  areas:
+                    type: array
+                    items: { $ref: '#/components/schemas/StorageArea' }
+  /v1/mirror:
+    get:
+      summary: Domestic mirror settings
+      responses:
+        '200':
+          description: Current mirror state and endpoints
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MirrorState' }
+    post:
+      summary: Enable or disable domestic mirrors
+      description: Writes or removes ~/.flashcli/mirror.env and applies it to new downloads.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+      responses:
+        '200':
+          description: Updated mirror state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MirrorState' }
+        '500':
+          $ref: '#/components/responses/Error'
+  /v1/storage/clean:
+    post:
+      summary: Remove the shared cache
+      description: "`cache` removes the download cache, base Python, and uv tools. Model bundles/weights/runtimes are removed per ref via /v1/models/clean. Legacy `python`/`tools` targets are accepted for older clients."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targets]
+              properties:
+                targets:
+                  type: array
+                  items:
+                    type: string
+                    enum: [cache]
+      responses:
+        '200':
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  freed_bytes: { type: integer, format: int64 }
+                  targets:
+                    type: array
+                    items: { type: string }
+        '400':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Models are loaded; runtimes cannot be removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+  /v1/pull:
+    post:
+      summary: Download a bundle/weights asynchronously
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ref]
+              properties:
+                ref: { type: string }
+      responses:
+        '202':
+          description: Pull job accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobRef' }
+        '409':
+          description: Another download is already running
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /v1/jobs/{id}:
+    get:
+      summary: Job state and events
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Job
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Job' }
+        '404':
+          $ref: '#/components/responses/Error'
+  /v1/jobs/{id}/events:
+    get:
+      summary: Job progress as Server-Sent Events
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: SSE stream (`event: progress`, JSON Event payloads)
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '404':
+          $ref: '#/components/responses/Error'
+  /v1/jobs/{id}/cancel:
+    post:
+      summary: Cancel a running job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Cancellation requested
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id: { type: string }
+                  state: { type: string }
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+  /v1/models/load:
+    post:
+      summary: Load a model
+      description: |
+        Requires a bundle with a `serve` entry. Run-only bundles are rejected
+        immediately with the bundle's own error message. With `"async": true`
+        the request returns a job id to poll via `/v1/jobs/{id}`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ref]
+              properties:
+                ref: { type: string, example: 'flashcli-bundle/qwen3_8b_nvfp4:1.0.0' }
+                async: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Model ready (synchronous mode)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoadedModel' }
+        '202':
+          description: Load job accepted (async mode)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobRef' }
+        '400':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Resource exhausted (slot limit or free VRAM)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /v1/models/options:
+    get:
+      summary: Read manifest serve options and saved values
+      description: |
+        Returns the bundle's `serve_options` (from `flashcli-bundle.json`),
+        the saved host/port values, and whether a restart is required because
+        the model is currently loaded.
+      parameters:
+        - name: ref
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Serve options and saved values
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModelOptions' }
+        '400': { $ref: '#/components/responses/Error' }
+    put:
+      summary: Save startup parameters for a model
+      description: |
+        Empty option values use the bundle default. Saving while the model is
+        loaded does not change the running process; unload and start again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModelOptionsInput' }
+      responses:
+        '200':
+          description: Saved values
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModelOptions' }
+        '400': { $ref: '#/components/responses/Error' }
+    delete:
+      summary: Reset startup parameters for a model
+      parameters:
+        - name: ref
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Reset to bundle/server defaults
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ref: { type: string }
+                  state: { type: string, const: defaults }
+        '400': { $ref: '#/components/responses/Error' }
+  /v1/models/unload:
+    post:
+      summary: Unload a model
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ref]
+              properties:
+                ref: { type: string }
+      responses:
+        '200':
+          description: Unloaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ref: { type: string }
+                  state: { type: string, const: unloaded }
+        '400':
+          $ref: '#/components/responses/Error'
+  /v1/models/clean:
+    post:
+      summary: Remove local bundle/weights/runtime cache for models
+      description: "Loaded or in-flight models are skipped. Shared weights/runtime stay while another cached ref still references them (remaining bundle markers are the reference count)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refs]
+              properties:
+                refs:
+                  type: array
+                  maxItems: 100
+                  items: { type: string }
+      responses:
+        '200':
+          description: Per-ref cleanup result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  freed_bytes: { type: integer, format: int64 }
+                  results:
+                    type: array
+                    items: { $ref: '#/components/schemas/CleanResult' }
+  /v1/models/smoke:
+    post:
+      summary: Start a smoke test job for a ready model
+      description: "Run-only bundles execute `flashcli run <ref>`; started serve bundles receive one OpenAI-compatible chat request. Progress/output is streamed as a `smoke` job over /v1/ws and appended to <ref>.smoke.log."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ref]
+              properties:
+                ref: { type: string }
+      responses:
+        '202':
+          description: Smoke job accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id: { type: string }
+                  state: { type: string }
+                  kind: { type: string, enum: [run, serve] }
+                  ref: { type: string }
+                  log_path: { type: string }
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+  /v1/logs:
+    get:
+      summary: Tail daemon or per-model logs
+      parameters:
+        - name: kind
+          in: query
+          schema: { type: string, enum: [server, model], default: server }
+        - name: ref
+          in: query
+          description: Required when kind=model
+          schema: { type: string }
+        - name: lines
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 2000, default: 200 }
+        - name: since
+          in: query
+          description: Unix seconds; only return entries newer than this time
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: Log lines (oldest first)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  kind: { type: string }
+                  ref: { type: string }
+                  lines:
+                    type: array
+                    items: { type: string }
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+  /v1/logs/download:
+    get:
+      summary: Download the full daemon or per-model log
+      parameters:
+        - name: kind
+          in: query
+          schema: { type: string, enum: [server, model], default: server }
+        - name: ref
+          in: query
+          description: Required when kind=model
+          schema: { type: string }
+      responses:
+        '200':
+          description: Plain-text log attachment
+          content:
+            text/plain:
+              schema: { type: string }
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+  /v1/ui/chat:
+    post:
+      summary: Console helper that forwards one chat completion
+      description: |
+        Same-origin helper used by the local console so browser clients do not
+        need CORS on model servers. External clients should call the loaded
+        model's `endpoint` directly.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ref, body]
+              properties:
+                ref: { type: string }
+                body: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Streaming or non-streaming completion passthrough
+        '404':
+          $ref: '#/components/responses/Error'
+  /v1/ws:
+    get:
+      summary: Live WebSocket stream (system snapshots + job progress)
+      description: |
+        Upgrades to WebSocket. The server sends `hello`, then a `system`
+        snapshot once per second and `job` progress messages for pull/load
+        jobs. When a token is configured, pass `?token=...` because browsers
+        cannot set headers on WebSocket handshakes.
+      parameters:
+        - name: token
+          in: query
+          schema: { type: string }
+      responses:
+        '101':
+          description: Switching protocols
+        '401':
+          $ref: '#/components/responses/Error'
+  /docs:
+    get:
+      summary: Interactive HTML API reference
+      security: []
+      responses:
+        '200':
+          description: HTML API reference
+          content:
+            text/html:
+              schema: { type: string }
+  /openapi.yaml:
+    get:
+      summary: This OpenAPI document
+      security: []
+      responses:
+        '200':
+          description: OpenAPI 3.1 YAML
+          content:
+            application/yaml:
+              schema: { type: string }
+  /:
+    get:
+      summary: Embedded local web console
+      security: []
+      responses:
+        '200':
+          description: HTML console
+          content:
+            text/html:
+              schema: { type: string }
+components:
+  securitySchemes:
+    token:
+      type: apiKey
+      in: header
+      name: X-Flashcli-Token
+  responses:
+    Error:
+      description: Error payload
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+    MirrorState:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        pip_index_url: { type: string }
+        hf_endpoint: { type: string }
+        git_proxy: { type: string }
+        install_repo: { type: string }
+    CleanResult:
+      type: object
+      properties:
+        ref: { type: string }
+        removed: { type: boolean }
+        freed_bytes: { type: integer, format: int64 }
+        skipped: { type: string }
+        shared_bundle: { type: boolean }
+        shared_weights: { type: boolean }
+    CatalogVersion:
+      type: object
+      properties:
+        id: { type: integer }
+        version: { type: string }
+        size: { type: integer, format: int64 }
+        file_count: { type: integer }
+        release_status: { type: string }
+        status: { type: string }
+        created_at: { type: string, format: date-time }
+    CatalogRepository:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        namespace: { type: string, example: flashcli-bundle }
+        model_name: { type: string }
+        version_count: { type: integer }
+        downloads: { type: integer }
+        latest_version: { type: string }
+        updated_at: { type: string, format: date-time }
+        tags:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              name: { type: string }
+              name_cn: { type: string }
+    GpuDevice:
+      type: object
+      required: [index, name, memory_total_bytes, memory_used_bytes, memory_free_bytes]
+      properties:
+        index: { type: integer }
+        name: { type: string }
+        memory_total_bytes: { type: integer, format: int64 }
+        memory_used_bytes: { type: integer, format: int64 }
+        memory_free_bytes: { type: integer, format: int64 }
+        utilization_gpu_pct: { type: integer }
+        utilization_memory_pct: { type: integer }
+        temperature_c: { type: integer }
+        power_draw_w: { type: number }
+        power_limit_w: { type: number }
+        fan_speed_pct: { type: integer }
+        clock_graphics_mhz: { type: integer }
+        clock_memory_mhz: { type: integer }
+        driver_version: { type: string }
+        persistence_mode: { type: string }
+        compute_mode: { type: string }
+        compute_cap: { type: string, example: '8.9' }
+    GpuProcess:
+      type: object
+      properties:
+        pid: { type: integer }
+        name: { type: string }
+        memory_bytes: { type: integer, format: int64 }
+    GpuSample:
+      type: object
+      properties:
+        time: { type: string, format: date-time }
+        cpu_usage_pct: { type: number }
+        devices:
+          type: array
+          items:
+            type: object
+            properties:
+              index: { type: integer }
+              utilization_gpu_pct: { type: integer }
+              memory_used_bytes: { type: integer, format: int64 }
+              temperature_c: { type: integer }
+              power_draw_w: { type: number }
+    SystemInfo:
+      type: object
+      properties:
+        version: { type: string }
+        protocol_version: { type: integer }
+        runtime_abi_version: { type: integer }
+        exec_protocol_version: { type: integer }
+        os: { type: string }
+        arch: { type: string }
+        wsl: { type: boolean }
+        auth: { type: boolean }
+        autostart: { type: string, enum: [enabled, disabled, unknown] }
+        hostname: { type: string }
+        kernel: { type: string }
+        driver_version: { type: string }
+        cuda_version: { type: string, example: '13.1' }
+        cuda_tag: { type: string, example: 'cu130' }
+        sm: { type: string, example: '89' }
+        torch_index: { type: string, example: 'cu130' }
+        started_at: { type: string, format: date-time }
+        uptime_seconds: { type: integer, format: int64 }
+        loaded_count: { type: integer }
+        max_loaded: { type: integer }
+        gpu:
+          type: array
+          items: { $ref: '#/components/schemas/GpuDevice' }
+        gpu_error: { type: string }
+        cpu: { $ref: '#/components/schemas/CpuInfo' }
+    CpuInfo:
+      type: object
+      properties:
+        model: { type: string }
+        threads: { type: integer }
+        cores: { type: integer }
+        mhz: { type: number }
+        usage_pct: { type: number }
+        per_core_pct:
+          type: array
+          items: { type: number }
+        load1: { type: number }
+        load5: { type: number }
+        load15: { type: number }
+        mem_total_bytes: { type: integer, format: int64 }
+        mem_used_bytes: { type: integer, format: int64 }
+        mem_available_bytes: { type: integer, format: int64 }
+        swap_total_bytes: { type: integer, format: int64 }
+        swap_used_bytes: { type: integer, format: int64 }
+    Resources:
+      type: object
+      properties:
+        gpu:
+          type: array
+          items: { $ref: '#/components/schemas/GpuDevice' }
+        gpu_error: { type: string }
+        loaded:
+          type: array
+          items: { $ref: '#/components/schemas/LoadedModel' }
+        loaded_count: { type: integer }
+        max_loaded: { type: integer }
+    Model:
+      type: object
+      properties:
+        ref: { type: string }
+        cache_key: { type: string }
+        variant: { type: string }
+        bundle_cached: { type: boolean }
+        weights_cached: { type: boolean }
+        serve: { type: boolean, description: Bundle declares a serve entry }
+        bundle_bytes: { type: integer, format: int64 }
+        runtime_id: { type: string, description: Per-bundle/version runtime directory id }
+        runtime_bytes: { type: integer, format: int64, description: Allocated bytes of this model's runtime directory }
+        weights_bytes: { type: integer, format: int64 }
+        weights_key: { type: string, description: Shared source/repo@revision store key }
+        directory: { type: string }
+        weights_source: { type: string }
+        weights_repo: { type: string }
+        weights_revision: { type: string }
+    LoadedModel:
+      type: object
+      properties:
+        ref: { type: string }
+        state: { type: string, enum: [ready] }
+        endpoint: { type: string }
+        pid: { type: integer }
+        loaded_at: { type: string, format: date-time }
+    ServeOption:
+      type: object
+      properties:
+        name: { type: string }
+        flag: { type: string }
+        type: { type: string, enum: [string, integer, float, boolean] }
+        default: {}
+        help: { type: string }
+        phase: { type: string }
+        value: { type: string, description: Saved value; empty uses the bundle default }
+    ModelOptions:
+      type: object
+      properties:
+        ref: { type: string }
+        host: { type: string }
+        default_host: { type: string }
+        public_host: { type: string }
+        port: { type: integer, description: Fixed port, 0 = automatic }
+        restart_required: { type: boolean }
+        options:
+          type: array
+          items: { $ref: '#/components/schemas/ServeOption' }
+    ModelOptionsInput:
+      type: object
+      required: [ref]
+      properties:
+        ref: { type: string }
+        host: { type: string, description: '0.0.0.0 for all interfaces, 127.0.0.1 for local only' }
+        port: { type: integer, description: Fixed port, 0 = automatic }
+        options:
+          type: object
+          additionalProperties: { type: string }
+    StorageArea:
+      type: object
+      properties:
+        name: { type: string }
+        path: { type: string }
+        bytes: { type: integer, format: int64 }
+    JobRef:
+      type: object
+      properties:
+        job_id: { type: string }
+        state: { type: string }
+    Job:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [pull, load] }
+        ref: { type: string }
+        state: { type: string, enum: [running, done, failed] }
+        error: { type: string }
+        events:
+          type: array
+          items: { $ref: '#/components/schemas/Event' }
+    Event:
+      type: object
+      properties:
+        time: { type: string, format: date-time }
+        phase: { type: string }
+        message: { type: string }

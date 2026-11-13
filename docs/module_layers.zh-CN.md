@@ -33,6 +33,13 @@
 
 **Re-export 不是放 protocol 的理由：** host/infer 的薄 re-export 仅为稳定 import 路径；若逻辑只在一层使用，应直接放在该层。
 
+Go host 内部还有一条必须遵守的拆分：
+
+| 使用方 | 放哪里 | 不要放 |
+|--------|--------|--------|
+| **`flashcli` CLI 与 `flashserver` 都用** —— 缓存发现、权重 key/就绪判断、runtime ID/路径、磁盘统计、ref 路径解析、清理 | `go/internal/host` | `go/internal/cli`、`go/internal/server` |
+| **仅一个前端用** —— 参数解析、渲染、HTTP handler、进程启动 | `go/internal/cli` 或 `go/internal/server` | `go/internal/host` |
+
 **模型专属逻辑绝不放在 host：** 前向、预处理/后处理、模态形状/dtype、option→端口映射与默认值都属于 bundle——Python `entry`，或（native kind）model-runtime `.so` + manifest `native` 声明/运行时 port 描述符。`go/internal/` 只承载**与模型无关的协议管道**（例如按 bundle 声明的端口构造 ABI 载荷）。在 host 里写死某模型的常量、形状或预处理即为缺陷。
 
 **Host 专有代码**位于 `go/internal/`（Go）。示例：`weights`（HF/ModelScope 下载、`post_pull`）、`flashhub`（sync）、`venv`/`pythonprovision`、`inferexec`/`nativeexec`/`nativeabi`、`cli`。
@@ -76,6 +83,7 @@ Go 主机**不** import Python infer 包；它以子进程启动（或驱动原�
 
 | 包 | 职责 |
 |----|------|
+| `host` | **CLI 与 flashserver 共用的缓存/运行时服务层**：marker、bundle 可用性/serve 能力、权重 key/就绪、每 bundle 运行时路径/大小、磁盘统计、ref 路径解析、清理 |
 | `cli` | 面向用户的命令（`run`/`serve`/`pull`/`bundle`/`models`/`cache`/`doctor`/`du`/`upgrade`/`version`） |
 | `ref`、`flashhub` | ref 解析、FlashHub index + 树同步 |
 | `weights` | HF/ModelScope 下载、缓存、`post_pull`、`extra_pull` |
@@ -83,7 +91,15 @@ Go 主机**不** import Python infer 包；它以子进程启动（或驱动原�
 | `venv`、`pythonprovision` | bundle venv 创建 + 基础 Python 供应 |
 | `inferexec`、`nativeexec`、`nativeabi` | 执行后端（`entry.kind`） |
 | `manifest` | manifest 解析 + 校验 |
+| `server` | `flashserver` HTTP API（`docs/openapi.yaml`）+ `/v1/ws` 状态流、模型生命周期/任务、内嵌控制台（`go/internal/server/web`） |
+| `setup` | `flashserver-setup`：Linux systemd 单元、Windows `flashserver_ubuntu` WSL2 发行版 + 登录任务 + 防火墙规则、卸载/清理 |
+| `serveopts`、`gpu`、`system`、`progress`、`mirror` | 已保存的每模型 serve 参数、nvidia-smi 遥测、宿主能力探测、任务进度、镜像环境 |
 | `paths`、`runtime`、`selfupdate`、`postpull`、`version`、`errs` | 支撑 |
+
+`go/cmd/` 下的二进制只做参数解析与组装：`flashcli`（CLI）、`flashserver`
+（守护进程 + 控制台）、`flashserver-setup`（Windows 安装包使用的安装后端）。
+桌面客户端（`desktop/`，Rust/egui）在 Go 模块之外，只通过 HTTP API 通信
+（见 [architecture.zh-CN.md](architecture.zh-CN.md#本地服务栈desktopflashserverflashserver-setup)）。
 
 ## Infer 模块（`flashcli_bundle/infer/`）
 
@@ -105,6 +121,7 @@ bundle venv 入口：`python -m flashcli_bundle.infer run|serve`。
 - **Protocol** `flashcli-bundle/pyproject.toml` 保持 `dependencies = []`；infer extra 含 serve 栈、不含 `huggingface_hub`。
 - **执行 ABI / host 对等**由 `tests/conformance/` 强制（命令面对等、Py↔Go execution ABI 一致、re-exec/原生 backend）。
 - **Go host** 由 `go test ./...` 覆盖。
+- **共享 host 逻辑**由 `go/internal/host` 测试 + `go/internal/cli` 的 `du`/`models list`/`bundle clean` 测试强制，这些测试走 flashserver 同一套 host 函数。禁止在 `cli`/`server` 再写 marker 遍历、权重就绪判断、大小遍历或清理路径解析；新逻辑放进 `host` 并同时覆盖两个前端。
 - Python host（`src/flashcli/`）已移除；不要重新把 host 专有代码放回 `flashcli_bundle/`。
 
 详见 [architecture.zh-CN.md](architecture.zh-CN.md)。

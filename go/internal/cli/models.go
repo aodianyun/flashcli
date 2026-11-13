@@ -2,9 +2,7 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -14,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/aodianyun/flashcli/go/internal/flashhub"
+	"github.com/aodianyun/flashcli/go/internal/host"
 	"github.com/aodianyun/flashcli/go/internal/manifest"
 	"github.com/aodianyun/flashcli/go/internal/paths"
 	"github.com/aodianyun/flashcli/go/internal/preflight"
@@ -36,28 +35,7 @@ func modelsCmd() *cobra.Command {
 
 // bundleMarkers lists preset markers under Bundles().
 func bundleMarkers() []map[string]any {
-	root := paths.Bundles()
-	var out []map[string]any
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || d.Name() != flashhub.MarkerName {
-			return nil
-		}
-		blob, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return nil
-		}
-		var data map[string]any
-		if json.Unmarshal(blob, &data) != nil {
-			return nil
-		}
-		rel, relErr := filepath.Rel(root, filepath.Dir(path))
-		if relErr == nil {
-			data["cache_key"] = filepath.ToSlash(rel)
-		}
-		out = append(out, data)
-		return nil
-	})
-	return out
+	return host.Markers()
 }
 
 func weightsCachedFor(p ref.Parsed, refStr string) bool {
@@ -69,23 +47,9 @@ func weightsCachedFor(p ref.Parsed, refStr string) bool {
 	rel := "checkpoint"
 	m, err := loadManifestForRef(refStr, p)
 	if err == nil {
-		key = weights.CacheKeyFor(m, ver)
 		weightsKey := weights.StoreKeyFor(m, ver)
-		if m.FormatVersion >= 4 {
-			rel = ""
-		}
-		main, r, _, specErr := weights.ManifestSpecs(m, p.Variant)
-		if specErr != nil {
-			// Legacy local markers can predate variants and omit @variant;
-			// fall back to the model marker for that ambiguous case.
-			dir := filepath.Join(paths.Models(), filepath.FromSlash(key), filepath.FromSlash(rel))
-			return markerCheckpointCached(dir)
-		}
-		if r != "" {
-			rel = r
-		}
-		dir := filepath.Join(paths.Models(), filepath.FromSlash(weightsKey), filepath.FromSlash(rel))
-		return weights.IsCached(dir, main)
+		cached, _, _, _ := host.WeightsInfo(m, weightsKey, p.Variant)
+		return cached
 	}
 	// Keep a marker-only fallback for offline/foreign caches whose manifest
 	// cannot be loaded here; readiness is unavailable in that case.
@@ -101,39 +65,33 @@ func weightsCachedFor(p ref.Parsed, refStr string) bool {
 func modelsListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
-		Short: "List locally synced bundles with bundle/weights disk usage",
+		Short: "List locally synced bundles with bundle/runtime/weights disk usage",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
-			markers := bundleMarkers()
-			if len(markers) == 0 {
+			models, err := host.ListModels()
+			if err != nil {
+				return err
+			}
+			if len(models) == 0 {
 				fmt.Fprintln(out, "No cached presets. Run flashcli run <ref> or flashcli bundle sync <ref>.")
 				return nil
 			}
-			sort.Slice(markers, func(i, j int) bool {
-				return fmt.Sprint(markers[i]["cache_key"]) < fmt.Sprint(markers[j]["cache_key"])
-			})
 			w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "REF\tBUNDLE\tBUNDLE SIZE\tWEIGHTS\tWEIGHTS SIZE\tDIR")
-			for _, m := range markers {
-				cacheKey := fmt.Sprint(m["cache_key"])
-				refName := strOf(m["ref"])
-				if refName == "" {
-					refName = cacheKey
-				}
+			fmt.Fprintln(w, "REF\tBUNDLE\tBUNDLE SIZE\tRUNTIME\tRUNTIME SIZE\tWEIGHTS\tWEIGHTS SIZE\tDIR")
+			for _, model := range models {
 				bundleState := "missing"
-				if bundleRootUsable(strOf(m["bundle_root"])) {
+				if model.BundleCached {
 					bundleState = "cached"
 				}
 				weightsState := "missing"
-				if weightsCachedFromMarker(m) {
+				if model.WeightsCached {
 					weightsState = "cached"
 				}
-				bundleSize := dirSize(filepath.Join(paths.Bundles(), filepath.FromSlash(cacheKey)))
-				weightsKey := markerWeightsKey(m, cacheKey)
-				weightsSize := dirSize(filepath.Join(paths.Models(), filepath.FromSlash(weightsKey)))
-				dir := filepath.ToSlash(filepath.Join(cacheRootDisplay(), "models", filepath.FromSlash(weightsKey)))
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-					refName, bundleState, humanSize(bundleSize), weightsState, humanSize(weightsSize), dir)
+				dir := filepath.ToSlash(filepath.Join(cacheRootDisplay(), "models", filepath.FromSlash(model.WeightsKey)))
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+					model.Ref, bundleState, humanSize(model.BundleBytes),
+					model.RuntimeID, humanSize(model.RuntimeBytes),
+					weightsState, humanSize(model.WeightsBytes), dir)
 			}
 			return w.Flush()
 		},
@@ -141,18 +99,7 @@ func modelsListCmd() *cobra.Command {
 }
 
 func markerWeightsKey(marker map[string]any, fallback string) string {
-	if key := strOf(marker["weights_key"]); key != "" {
-		return key
-	}
-	br := strOf(marker["bundle_root"])
-	if !bundleRootUsable(br) {
-		return fallback
-	}
-	man, err := manifest.Load(br)
-	if err != nil || man.FormatVersion < 4 {
-		return fallback
-	}
-	return weights.StoreKeyFor(man, "")
+	return host.MarkerWeightsKey(marker, fallback, strOf(marker["bundle_root"]))
 }
 
 func cacheRootDisplay() string {
@@ -164,15 +111,7 @@ func cacheRootDisplay() string {
 }
 
 func bundleRootUsable(root string) bool {
-	if strings.TrimSpace(root) == "" {
-		return false
-	}
-	info, err := os.Stat(root)
-	if err != nil || !info.IsDir() {
-		return false
-	}
-	_, err = manifest.Load(root)
-	return err == nil
+	return host.BundleRootUsable(root)
 }
 
 func weightsCachedFromMarker(m map[string]any) bool {
@@ -180,47 +119,7 @@ func weightsCachedFromMarker(m map[string]any) bool {
 	if key == "" || key == "<nil>" {
 		return false
 	}
-	br := strOf(m["bundle_root"])
-	if !bundleRootUsable(br) {
-		return false
-	}
-	man, err := manifest.Load(br)
-	if err != nil {
-		return false
-	}
-	weightsKey := key
-	if keyFromMarker := strOf(m["weights_key"]); keyFromMarker != "" {
-		weightsKey = keyFromMarker
-	} else if man.FormatVersion >= 4 {
-		weightsKey = weights.StoreKeyFor(man, "")
-	}
-	main, rel, _, err := weights.ManifestSpecs(man, strOf(m["variant"]))
-	if err != nil {
-		// Legacy local markers can predate variants and omit @variant; fall
-		// back to the model marker only for that ambiguous case.
-		if strOf(m["variant"]) != "" {
-			return false
-		}
-		dir := filepath.Join(paths.Models(), filepath.FromSlash(weightsKey), "checkpoint")
-		return markerCheckpointCached(dir)
-	}
-	if rel == "" && man.FormatVersion < 4 {
-		rel = "checkpoint"
-	}
-	dir := filepath.Join(paths.Models(), filepath.FromSlash(weightsKey), filepath.FromSlash(rel))
-	return weights.IsCached(dir, main)
-}
-
-func markerCheckpointCached(dir string) bool {
-	if _, err := os.Stat(filepath.Join(dir, ".flashcli_download.incomplete")); err == nil {
-		return false
-	}
-	cp, ok := weights.ReadMarker(dir)
-	if !ok {
-		return false
-	}
-	info, err := os.Stat(cp)
-	return err == nil && info.IsDir()
+	return host.WeightsCachedForMarker(m, key)
 }
 
 func modelsEnvsFromMarker(out interface{ Write([]byte) (int, error) }, refStr string, marker map[string]any, gpu *preflight.GpuInfo) {

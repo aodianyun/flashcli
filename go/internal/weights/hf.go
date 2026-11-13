@@ -240,7 +240,7 @@ func hfDownloadOnce(ctx context.Context, base string, spec Spec, dest string, he
 	if err := prepareDest(dest, quiet, spec); err != nil {
 		return err
 	}
-	st := progress.Start("weights", spec.Repo)
+	st := progress.StartWithSink("weights", spec.Repo, progress.SinkFromContext(ctx))
 	var _totalBytes int64
 	for _, f := range selected {
 		_totalBytes += f.Size
@@ -251,7 +251,6 @@ func hfDownloadOnce(ctx context.Context, base string, spec Spec, dest string, he
 		target := dest + string(os.PathSeparator) + strings.ReplaceAll(f.Path, "/", string(os.PathSeparator))
 		err := downloadFileWithResume(ctx, hfResolveURL(base, spec.Repo, rev, f.Path), target, f.Size, headers, st.Add)
 		if err != nil {
-			st.Done()
 			return err
 		}
 		st.FileDone()

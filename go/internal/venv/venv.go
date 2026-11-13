@@ -6,16 +6,22 @@
 package venv
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	stdruntime "runtime"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/aodianyun/flashcli/go/internal/errs"
 	"github.com/aodianyun/flashcli/go/internal/manifest"
@@ -47,6 +53,199 @@ func (e ExecRunner) Run(ctx context.Context, argv []string, env []string) error 
 	return nil
 }
 
+// streamRunner runs commands and forwards their output lines to the context
+// progress sink. On Linux it runs interactive installers through `script` so
+// uv emits its download progress bars (it disables them when stderr is a pipe).
+type streamRunner struct{ stdio bool }
+
+func (r streamRunner) Run(ctx context.Context, argv []string, env []string) error {
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Env = env
+	if progress.SinkFromContext(ctx) != nil && stdruntime.GOOS == "linux" {
+		if script, err := exec.LookPath("script"); err == nil {
+			cmd = exec.CommandContext(ctx, script, "-qefc", shellJoin(argv), "/dev/null")
+			cmd.Env = append(append([]string{}, env...), "TERM=xterm-256color")
+		}
+	}
+	out := &lineWriter{ctx: ctx}
+	errOut := &lineWriter{ctx: ctx}
+	if r.stdio {
+		out.out = os.Stdout
+		errOut.out = os.Stderr
+	}
+	cmd.Stdout = out
+	cmd.Stderr = errOut
+	err := cmd.Run()
+	out.Flush()
+	errOut.Flush()
+	if err != nil {
+		return fmt.Errorf("%s: %w", strings.Join(argv, " "), err)
+	}
+	return nil
+}
+
+func shellJoin(argv []string) string {
+	parts := make([]string, len(argv))
+	for i, a := range argv {
+		parts[i] = "'" + strings.ReplaceAll(a, "'", `'\''`) + "'"
+	}
+	return strings.Join(parts, " ")
+}
+
+var (
+	ansiRe     = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+	byteFracRe = regexp.MustCompile(`([0-9]+(?:\.[0-9]+)?)\s*([KMGTP]i?B)\s*/\s*([0-9]+(?:\.[0-9]+)?)\s*([KMGTP]i?B)`)
+)
+
+func cleanLine(s string) string {
+	s = ansiRe.ReplaceAllString(s, "")
+	s = strings.ReplaceAll(s, "\x1b", "")
+	s = strings.TrimLeftFunc(s, func(r rune) bool {
+		return r == '▸' || r == '•' || (r >= 0x2800 && r <= 0x28FF)
+	})
+	fields := strings.Fields(s)
+	out := fields[:0]
+	for _, f := range fields {
+		if isProgressBar(f) {
+			continue
+		}
+		out = append(out, f)
+	}
+	return strings.Join(out, " ")
+}
+
+func isProgressBar(s string) bool {
+	if len(s) < 2 {
+		return false
+	}
+	for _, r := range s {
+		switch r {
+		case '-', '=', '#', '█', '░', '▰', '▱', '▌', '▐':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func withPercent(s string) string {
+	if strings.Contains(s, "%") {
+		return s
+	}
+	m := byteFracRe.FindStringSubmatch(s)
+	if m == nil {
+		return s
+	}
+	done, total := byteValue(m[1], m[2]), byteValue(m[3], m[4])
+	if total <= 0 {
+		return s
+	}
+	pct := int(done*100/total + 0.5)
+	if pct > 100 {
+		pct = 100
+	}
+	return fmt.Sprintf("%s  %d%%", s, pct)
+}
+
+func byteValue(num, unit string) float64 {
+	v, err := strconv.ParseFloat(num, 64)
+	if err != nil {
+		return 0
+	}
+	switch strings.ToUpper(strings.TrimSpace(unit)) {
+	case "KB":
+		v *= 1000
+	case "MB":
+		v *= 1000 * 1000
+	case "GB":
+		v *= 1000 * 1000 * 1000
+	case "KIB":
+		v *= 1024
+	case "MIB":
+		v *= 1024 * 1024
+	case "GIB":
+		v *= 1024 * 1024 * 1024
+	case "TIB":
+		v *= 1024 * 1024 * 1024 * 1024
+	}
+	return v
+}
+
+// lineWriter forwards complete output lines to the progress sink. Progress
+// bars are throttled so a fast terminal refresh does not flood the job log.
+type lineWriter struct {
+	ctx context.Context
+	out io.Writer
+	mu  sync.Mutex
+	buf []byte
+
+	lastEmit time.Time
+	pending  string
+}
+
+func (w *lineWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.buf = append(w.buf, p...)
+	for {
+		i := bytes.IndexAny(w.buf, "\r\n")
+		if i < 0 {
+			break
+		}
+		raw := string(w.buf[:i])
+		w.buf = w.buf[i+1:]
+		w.handleLine(raw)
+	}
+	if len(w.buf) > 4096 {
+		w.handleLine(string(w.buf))
+		w.buf = nil
+	}
+	return len(p), nil
+}
+
+func (w *lineWriter) handleLine(raw string) {
+	line := withPercent(cleanLine(raw))
+	if line == "" {
+		return
+	}
+	force := false
+	for _, marker := range []string{"Downloaded", "Installed", "Resolved", "Building", "Built", "Using Python"} {
+		if strings.Contains(line, marker) {
+			force = true
+			break
+		}
+	}
+	now := time.Now()
+	if !force && now.Sub(w.lastEmit) < 250*time.Millisecond {
+		w.pending = line
+		return
+	}
+	w.lastEmit = now
+	w.pending = ""
+	if w.out != nil {
+		fmt.Fprintln(w.out, line)
+	}
+	progress.EmitCtx(w.ctx, "%s", line)
+}
+
+func (w *lineWriter) Flush() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	line := withPercent(cleanLine(string(w.buf)))
+	w.buf = nil
+	if line == "" {
+		line = w.pending
+	}
+	w.pending = ""
+	if line == "" {
+		return
+	}
+	if w.out != nil {
+		fmt.Fprintln(w.out, line)
+	}
+	progress.EmitCtx(w.ctx, "%s", line)
+}
+
 // Options controls Ensure.
 type Options struct {
 	Force         bool
@@ -75,7 +274,7 @@ func Ensure(ctx context.Context, runtimeID string, m *manifest.Manifest, opt Opt
 		return runtime.VenvPython(runtimeID)
 	}
 	if opt.Runner == nil {
-		opt.Runner = ExecRunner{Stdio: !opt.Quiet}
+		opt.Runner = streamRunner{stdio: !opt.Quiet}
 	}
 	abi, err := m.PythonABI()
 	if err != nil {
@@ -113,16 +312,16 @@ func Ensure(ctx context.Context, runtimeID string, m *manifest.Manifest, opt Opt
 		}
 	}
 	if !opt.Quiet {
-		progress.Note("venv: creating %s (Python 3.%s, base %s)", venv, abi[1:], basePython)
+		progress.NoteCtx(ctx, "venv: creating %s (Python 3.%s, base %s)", venv, abi[1:], basePython)
 		if _, origin, oerr := FlashcliBundleSpecOrigin(); oerr == nil {
-			progress.Note("venv: flashcli-bundle[infer] from %s", origin)
+			progress.NoteCtx(ctx, "venv: flashcli-bundle[infer] from %s", origin)
 		}
 		if torchPkg, _ := ParseTorchDependency(m.PythonDependencies()["torch"]); torchPkg != "" {
 			idx := "PyPI default index"
 			if torchIndex != "" {
 				idx = mirror.TorchIndexURL(torchIndex)
 			}
-			progress.Note("venv: torch %s from %s", torchPkg, idx)
+			progress.NoteCtx(ctx, "venv: torch %s from %s", torchPkg, idx)
 		}
 	}
 	inst, err := SelectInstaller(ctx, opt)
@@ -131,9 +330,9 @@ func Ensure(ctx context.Context, runtimeID string, m *manifest.Manifest, opt Opt
 	}
 	if !opt.Quiet {
 		if inst.UV != "" {
-			progress.Note("venv: installer uv (%s)", inst.UV)
+			progress.NoteCtx(ctx, "venv: installer uv (%s)", inst.UV)
 		} else {
-			progress.Note("venv: installer pip (FLASHCLI_VENV_BACKEND=pip)")
+			progress.NoteCtx(ctx, "venv: installer pip (FLASHCLI_VENV_BACKEND=pip)")
 		}
 	}
 	if err := os.RemoveAll(venv); err != nil {

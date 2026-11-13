@@ -128,7 +128,7 @@ func TestBundleCleanAllData(t *testing.T) {
 	mustStat(t, paths.Bundles(), false)
 	mustStat(t, repoIndex, true) // bundle clean no longer touches FlashHub cache
 
-	if code := Main([]string{"cache", "clean", "--flashhub", "--yes"}); code != 0 {
+	if code := Main([]string{"cache", "clean", "--yes"}); code != 0 {
 		t.Fatalf("cache clean exit = %d", code)
 	}
 	mustStat(t, repoIndex, false)
@@ -392,4 +392,51 @@ func TestBundleCleanV4SharedWeightsKept(t *testing.T) {
 		t.Fatalf("second clean exit = %d", code)
 	}
 	mustStat(t, storeDir, false)
+}
+
+func TestBundleCleanKeepsSharedRuntime(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FLASHCLI_HOME", home)
+	rootA := filepath.Join(paths.Bundles(), "a", "1.0.0")
+	rootB := filepath.Join(paths.Bundles(), "b", "1.0.0")
+	for _, root := range []string{rootA, rootB} {
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeBundle(t, root)
+	}
+	sharedRuntime := "shared-runtime"
+	for _, item := range []struct {
+		key  string
+		ref  string
+		root string
+	}{
+		{"a/1.0.0", "flashcli-bundle/a:1.0.0", rootA},
+		{"b/1.0.0", "flashcli-bundle/b:1.0.0", rootB},
+	} {
+		dir := filepath.Join(paths.Bundles(), filepath.FromSlash(item.key))
+		blob, _ := json.Marshal(map[string]any{
+			"ref": item.ref, "cache_key": item.key, "bundle_root": item.root,
+			"runtime_id": sharedRuntime,
+		})
+		if err := os.WriteFile(filepath.Join(dir, ".flashcli_bundle.json"), blob, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := runtime.WriteMarker(sharedRuntime, map[string]any{"runtime_id": sharedRuntime, "bundle_root": rootA}); err != nil {
+		t.Fatal(err)
+	}
+	runtimeDir := runtime.Dir(sharedRuntime)
+	if err := os.WriteFile(filepath.Join(runtimeDir, "torch.bin"), make([]byte, 4096), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if code := Main([]string{"bundle", "clean", "flashcli-bundle/a:1.0.0", "--all", "--yes"}); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if _, err := os.Stat(runtimeDir); err != nil {
+		t.Fatalf("shared runtime removed: %v", err)
+	}
+	mustStat(t, rootA, false)
+	mustStat(t, rootB, true)
 }

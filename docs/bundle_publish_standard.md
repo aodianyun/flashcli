@@ -194,6 +194,7 @@ Script contracts:
 | `environments` | yes | Non-empty env-key → platform overrides; `runtime` is required for native entries and optional for pure-Python/CPU environments |
 | `build` | generated | FlashRT/build provenance; written into `dist/` by pack |
 | `system` | optional | System capabilities required at runtime (see §3.4.1) |
+| `resources` | optional | Measured VRAM footprint for flashserver admission (see §3.4.2) |
 | `runtime_abi_version` | conditional | Required for `native-abi`; must be **1** |
 | `exec_protocol_version` | conditional | Required for `native-exec`; must be **1** |
 | `variants` / `backends` / `entries` | forbidden | v4 has one model and one implementation; split bundles instead |
@@ -283,6 +284,23 @@ Rules:
 - `run` / `serve` check these capabilities in the bundle context. Missing capabilities
   fail with the distro package mapping, or are installed automatically when the host is
   root and `FLASHCLI_AUTO_INSTALL_SYSTEM` permits it.
+
+### 3.4.2 `defaults.resources` (optional, flashserver)
+
+Declares the measured runtime footprint used by `flashserver` model admission.
+
+```json
+"resources": {
+  "min_vram_mib": 12288
+}
+```
+
+- `min_vram_mib`: minimum free GPU memory required to start the model.
+- A v4 environment overlay may override the value.
+- `flashserver` rejects a load with `409 RESOURCE_EXHAUSTED` when free VRAM minus
+  the configured safety margin is insufficient.
+- Bundles without this field are admitted by the flashserver slot limit only.
+- Values must reflect measured peak usage for the bundle's declared runtime.
 
 ### 3.5 `defaults.env`
 

@@ -2,25 +2,46 @@
 
 <p align="right"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
 
-## By role
+This directory holds the user, integrator, and maintainer docs. Start with the
+root [README](../README.md) for install + `run`/`serve`; the table below maps
+every file to its audience and content.
 
-- **End users** — install and run presets: [../README.md](../README.md), then each bundle [README](../bundles/README.md). Mirrors and cache paths: [environment.md](environment.md).
-- **Integrators** — pin preset refs from [FlashHub](https://flashhub.top): [model_bundle_standard.md](model_bundle_standard.md).
-- **External bundle authors** — publish to FlashHub: [bundle_publish_standard.md](bundle_publish_standard.md) (+ [flashcli-bundle/README.md](../flashcli-bundle/README.md)); execution backends: [bundle_execution_abi.md](bundle_execution_abi.md).
-- **Maintainers** — build/release bundles: [bundle_builder_guide.md](bundle_builder_guide.md) · [runtime-matrix.md](runtime-matrix.md).
-- **Contributors / architecture** — [architecture.md](architecture.md), [module_layers.md](module_layers.md); rules: [../CONTRIBUTING.md](../CONTRIBUTING.md).
+## Doc map
 
-## Doc index
-
-| Doc | Audience | Purpose |
-|-----|----------|---------|
-| [bundle_publish_standard.md](bundle_publish_standard.md) | external authors | **Authoritative** manifest, entry, `.so`, FlashHub layout |
-| [bundle_execution_abi.md](bundle_execution_abi.md) | external authors | `entry.kind` backends, native process / `.so` contracts, conformance |
+| File | Audience | Content |
+|------|----------|---------|
+| [../README.md](../README.md) | users | Install, `run`/`serve`, news, doc entry points |
+| [../CONTRIBUTING.md](../CONTRIBUTING.md) | contributors | Layout, dev setup, binaries/desktop build, git workflow, release checklist + notes standard |
+| [flashserver.md](flashserver.md) | users | **Start here** for the local service: overview, diagram, quick start, doc index |
+| [flashserver-install.md](flashserver-install.md) | users / admins | Install, config, ports, disk, lifecycle, uninstall, troubleshooting |
+| [flashserver-desktop.md](flashserver-desktop.md) | users | Desktop client features, model lifecycle, startup parameters, LAN access |
+| [flashserver-api.md](flashserver-api.md) | integrators | API endpoint index and examples; schema in [openapi.yaml](openapi.yaml) |
+| [openapi.yaml](openapi.yaml) | integrators | **Authoritative** HTTP contract (also served at `/openapi.yaml`) |
+| [environment.md](environment.md) | users | Environment variables the Go host reads, mirrors, cache paths |
 | [model_bundle_standard.md](model_bundle_standard.md) | integrators | Preset ref syntax + end-user runtime flow |
-| [environment.md](environment.md) | users | Environment variables, mirrors, cache paths |
-| [architecture.md](architecture.md) | contributors | Runtime flow, core principles, host vs bundle |
-| [module_layers.md](module_layers.md) | contributors | Host / infer / protocol package boundaries |
-| [bundle_builder_guide.md](bundle_builder_guide.md) | maintainers | Build, matrix release, FlashHub upload |
+| [bundle_publish_standard.md](bundle_publish_standard.md) | bundle authors | **Authoritative** manifest, entry, `.so`, FlashHub layout |
+| [bundle_execution_abi.md](bundle_execution_abi.md) | bundle authors | `entry.kind` backends, native process / `.so` contracts, conformance |
+| [architecture.md](architecture.md) | contributors | Runtime flow, local service stack, host vs bundle, caches, directory layout |
+| [module_layers.md](module_layers.md) | contributors | Host / infer / protocol ownership and the Go package map |
+| [bundle_builder_guide.md](bundle_builder_guide.md) | maintainers | Bundle build, multi-CUDA matrix release, FlashHub upload |
 | [runtime-matrix.md](runtime-matrix.md) | maintainers | SM × CUDA × Python release matrix |
 
-Per-bundle commands and build docs: [`bundles/`](../bundles/README.md).
+Per-bundle commands, options, and build docs: [`bundles/`](../bundles/README.md).
+Chinese mirrors use the same names with a `.zh-CN.md` suffix.
+
+## Reading paths
+
+- **End user** — root README (install, `run`/`serve`) → the bundle page on
+  [FlashHub](https://flashhub.top) (ref, model options) → [environment.md](environment.md)
+  for mirrors and cache locations.
+- **Local-service user** — root README → [flashserver.md](flashserver.md) →
+  [flashserver-install.md](flashserver-install.md) (deployment) /
+  [flashserver-desktop.md](flashserver-desktop.md) (client) →
+  [flashserver-api.md](flashserver-api.md) + [openapi.yaml](openapi.yaml) when integrating.
+- **Integrator** — [model_bundle_standard.md](model_bundle_standard.md) (refs) →
+  [openapi.yaml](openapi.yaml) (HTTP) → [environment.md](environment.md).
+- **Bundle author** — [bundle_publish_standard.md](bundle_publish_standard.md) →
+  [bundle_execution_abi.md](bundle_execution_abi.md) →
+  [bundle_builder_guide.md](bundle_builder_guide.md).
+- **Maintainer / contributor** — [architecture.md](architecture.md) →
+  [module_layers.md](module_layers.md) → [../CONTRIBUTING.md](../CONTRIBUTING.md).

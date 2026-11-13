@@ -45,6 +45,21 @@ func TestScoreEnvKeyMatch(t *testing.T) {
 	}
 }
 
+func TestParseCudaTagFromSmi(t *testing.T) {
+	cases := map[string]string{
+		"| NVIDIA-SMI 610.57.01  KMD Version: 610.88  CUDA UMD Version: 13.3 |": "130",
+		"| NVIDIA-SMI 550.54    Driver Version: 550.54  CUDA Version: 12.4 |":   "124",
+		"| NVIDIA-SMI 580.95    Driver Version: 580.95  CUDA Version: 12.8 |":   "128",
+		"| NVIDIA-SMI 595.99    Driver Version: 595.99  CUDA Version: 13.0 |":   "130",
+		"no CUDA banner here": "",
+	}
+	for line, want := range cases {
+		if got := parseCudaTagFromSmi(line); got != want {
+			t.Errorf("parseCudaTagFromSmi(%q) = %q, want %q", line, got, want)
+		}
+	}
+}
+
 func TestResolveRuntimeEnvKey(t *testing.T) {
 	runtimeMap := map[string]string{
 		"sm89-cu124-linux-x86_64-py312":  "runtime/sm89-cu124-linux-x86_64-py312",
@@ -184,6 +199,42 @@ func TestResolveEnvironmentTable(t *testing.T) {
 			override: "cpu",
 			host:     host,
 			want:     "cpu",
+		},
+		{
+			name: "a runtime for a newer CUDA than the driver is rejected",
+			keys: []string{"sm86-cu130-linux-x86_64-py312"},
+			host: EnvKey{
+				PlatformTail: "sm86-cu128", OSName: "linux", Arch: "x86_64",
+				PythonMinor: "312", SM: "86", CudaTag: "128",
+			},
+			wantErr: "newer NVIDIA driver",
+		},
+		{
+			name: "an older CUDA cell runs on a newer driver",
+			keys: []string{"sm86-cu124-linux-x86_64-py312"},
+			host: EnvKey{
+				PlatformTail: "sm86-cu128", OSName: "linux", Arch: "x86_64",
+				PythonMinor: "312", SM: "86", CudaTag: "128",
+			},
+			want: "sm86-cu124-linux-x86_64-py312",
+		},
+		{
+			name: "a different SM is never a loose match",
+			keys: []string{"sm89-cu130-linux-x86_64-py312"},
+			host: EnvKey{
+				PlatformTail: "sm86-cu130", OSName: "linux", Arch: "x86_64",
+				PythonMinor: "312", SM: "86", CudaTag: "130",
+			},
+			wantErr: "no environment matches",
+		},
+		{
+			name: "same CUDA family wins over a newer major",
+			keys: []string{"sm86-cu124-linux-x86_64-py312", "sm86-cu130-linux-x86_64-py312"},
+			host: EnvKey{
+				PlatformTail: "sm86-cu128", OSName: "linux", Arch: "x86_64",
+				PythonMinor: "312", SM: "86", CudaTag: "128",
+			},
+			want: "sm86-cu124-linux-x86_64-py312",
 		},
 		{
 			name: "no match",

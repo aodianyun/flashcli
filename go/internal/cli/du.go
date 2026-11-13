@@ -2,11 +2,10 @@ package cli
 
 import (
 	"fmt"
-	"io/fs"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
+	"github.com/aodianyun/flashcli/go/internal/host"
 	"github.com/aodianyun/flashcli/go/internal/paths"
 )
 
@@ -23,39 +22,13 @@ func duCmd() *cobra.Command {
 }
 
 func printDiskUsage(out interface{ Write([]byte) (int, error) }) {
-	items := []struct {
-		name string
-		path string
-	}{
-		{"bundles", paths.Bundles()},
-		{"models", paths.Models()},
-		{"runtimes", paths.Runtimes()},
-		{"cache", filepath.Join(paths.Home(), "cache")},
-		{"tools", filepath.Join(paths.Home(), "tools")},
-		{"python", filepath.Join(paths.Home(), "python")},
-	}
-	fmt.Fprintf(out, "Disk usage (apparent size) at %s:\n", paths.Home())
+	fmt.Fprintf(out, "Disk usage (unique allocated) at %s:\n", paths.Home())
 	var total int64
-	for _, item := range items {
-		size := dirSize(item.path)
-		total += size
-		fmt.Fprintf(out, "  %-10s %s\n", item.name, humanSize(size))
+	for _, area := range host.Storage() {
+		total += area.Bytes
+		fmt.Fprintf(out, "  %-10s %s\n", area.Name, humanSize(area.Bytes))
 	}
 	fmt.Fprintf(out, "  %-10s %s\n", "total", humanSize(total))
-}
-
-func dirSize(root string) int64 {
-	var total int64
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
-		}
-		if info, err := d.Info(); err == nil {
-			total += info.Size()
-		}
-		return nil
-	})
-	return total
 }
 
 func humanSize(n int64) string {

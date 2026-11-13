@@ -16,6 +16,8 @@ Thank you for contributing. This project is intended for open source on GitHub. 
 flashcli/
 ├── flashcli-bundle/        # Bundle protocol + infer package (flashcli_bundle)
 ├── go/                     # Host CLI (Go binary; no model forward passes)
+├── desktop/                # egui/eframe desktop client + Windows installer source
+├── installer/windows/      # Inno Setup installer source
 ├── bundles/                  # Model bundle sources + release-matrix.env
 ├── scripts/                  # Shared release pipeline
 └── docs/                     # User-facing documentation (maintainer docs: see CONTRIBUTING)
@@ -44,7 +46,44 @@ Run tests:
 pytest tests/              # unit/integration (default; excludes tests/bench)
 pytest tests/bench/        # bench script helpers (scripts/bench_*.py)
 pytest tests/ tests/bench/ # full suite including bench
+cd go && go test ./...     # Go host, including shared cache/cleanup contracts
 ```
+
+### Binaries and the desktop client
+
+`bash scripts/build_go.sh` builds three commands into `dist/go/` (version from
+`pyproject.toml`). Release assets are renamed to `<name>-v<version>` by
+`scripts/release_go.sh`:
+
+| Binary | What it is |
+|--------|------------|
+| `flashcli-<os>-<arch>` | CLI: pull/run/serve/models/cache/… |
+| `flashserver-<os>-<arch>` | Resident scheduler + local console (`127.0.0.1:8790`, `docs/openapi.yaml`) |
+| `flashserver-setup-<os>-<arch>` | Installer backend: Linux systemd, Windows WSL2 distro/task/firewall |
+
+The desktop client lives in `desktop/` (Rust, egui/eframe) and only uses the
+daemon's HTTP API; see [desktop/README.md](desktop/README.md). Build the Windows
+package (client + Go assets + Inno Setup, requires Rust MSVC and Inno Setup 6):
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts/build_windows_package.ps1
+# reuse already-built Go assets: add -SkipGo
+```
+
+Layout: `go/cmd/{flashcli,flashserver,flashserver-setup}` (entrypoints),
+`go/internal/server` (daemon API + embedded console), `go/internal/setup`
+(installers), `installer/windows/` (Inno Setup script).
+
+### Shared host code (CLI + flashserver)
+
+`flashcli` and `flashserver` are frontends over the same cache. Cache discovery, weights key/readiness, runtime IDs/paths, disk accounting, ref-path resolution, and cleanup **must** live in `go/internal/host` and be reused by both.
+
+- Do **not** add a second marker walker, weights-readiness check, directory-size walker, or cleanup path resolver under `go/internal/cli` or `go/internal/server`.
+- Implement new behavior in `host`, then call it from both frontends. Keep only presentation (flags, tables, prompts, HTTP handlers) in the frontend.
+- Add/extend tests in `go/internal/host` and the relevant CLI command tests (`du`, `models list`, `bundle clean`). `go test ./...` must pass.
+- `flashcli cache clean` removes only the shared cache group (downloads, base Python, uv) and matches `/v1/storage/clean {"targets":["cache"]}`. Model bundles/weights/runtimes belong to `flashcli bundle clean` / `/v1/models/clean`; shared weights/runtime stay while another cached ref references them.
+
+Architecture rule: [docs/architecture.md](docs/architecture.md) → Shared host services; placement checklist: [docs/module_layers.md](docs/module_layers.md).
 
 ## Git workflow
 
@@ -112,7 +151,11 @@ refactor(weights): share cache-key resolution between pull and run
 ### Merging
 
 - PRs target `dev` and must pass `go test ./...`, `pytest tests/` (protocol/infer + conformance), and `gofmt -w .` clean.
-- Feature branch → `dev`: prefer **squash merge** (one logical commit) or **rebase** for a clean linear history; avoid merge-commit noise.
+- Feature branch → `dev`: choose by commit quality.
+  - **Rebase (default)** when the branch is already a series of logical Conventional Commits: `git rebase dev` on the branch, then fast-forward `dev` (or GitHub "Rebase and merge"). Authorship and messages are preserved, history stays linear, and the branch can be deleted afterwards without losing anything.
+  - **Squash** when the branch is exploratory (WIP/fixup commits, repeated rewrites of the same code): `dev` then gets one commit that summarizes the change.
+  - Do **not** create `--no-ff` merge commits on `dev` (no merge bubbles). Rebase the feature branch onto `dev` instead of merging `dev` into it, and re-push with `--force-with-lease`.
+  - Do not force-push `dev` once it is shared; replace a commit you just pushed by mistake only with `--force-with-lease`.
 - `dev` → `main`: **squash-and-record** (see above) — `main` gets one linear squash commit per sync, and `dev` records it with `git merge -s ours main`. Do not `--no-ff` merge or rely on fast-forward, and do not push directly to `main` for routine work.
 - Squash commit summary: `chore(sync): squash merge dev into main` (or a concise `type(scope): …` describing the release).
 
@@ -129,14 +172,21 @@ unpublished test/draft releases.
 
 **Host (Go) release checklist:**
 
-1. Bump `[project].version` in `pyproject.toml` on `dev`; commit (`chore(release): bump version to X`).
+1. Bump **both** `[project].version` in `pyproject.toml` and `version` in `desktop/Cargo.toml` on `dev` (desktop uses the three-part prefix, e.g. `1.0.7`); commit (`chore(release): bump version to X`). Packaging fails if they diverge.
 2. Sync `dev` → `main` (squash-and-record, above) so `main` carries the validated commit.
-3. Tag `vX` on the `main` release commit; push the tag.
-4. `bash scripts/release_go.sh --upload` builds and publishes both GitHub and Gitee
-   (target branch defaults to `main`; override with `FLASHCLI_RELEASE_TARGET`).
-5. Write the release notes per the standard below on **both** platforms.
+3. On Windows from `main`, build the installer:
+   `powershell -ExecutionPolicy Bypass -File scripts/build_windows_package.ps1`
+   (client + Go assets + `flashserver-setup-windows-amd64-v<version>.exe`; use `-GoBin` if `go` is not on PATH).
+   To embed exactly the published binaries (or when Go is not installed on Windows), build them first with
+   `bash scripts/build_go.sh` and pass `-SkipGo`; Go builds are reproducible (`-buildvcs=false`).
+4. On Linux/macOS (or Windows Git Bash) from `main`, publish both hosts in one command:
+   `bash scripts/release_go.sh --upload --notes-file <notes.md> --windows-installer dist/windows/flashserver-setup-windows-amd64-v<version>.exe`
+   The script requires a clean `main` equal to `origin/main`, creates/pushes tag `vX` at HEAD, builds the Linux/Windows Go assets, uploads them plus the Windows installer, and fails if either GitHub or Gitee upload fails. Use `FLASHCLI_RELEASE_TARGET` only for a different release branch; `--allow-non-target` is for tests only.
+   The Linux assets are reproducible; the Inno Setup installer is **not** byte-reproducible, so put its final SHA256 into the notes **after** the last installer build and do not rebuild it afterwards.
+5. Write release notes per the standard below on **both** platforms. `--notes-file` uses the same body for GitHub and Gitee; if omitted, the script uses a minimal generated note.
 6. Verify the published assets in a clean environment:
    `bash scripts/verify_release.sh --version X` (isolated prefix; add `--mirror` for Gitee).
+7. Sanity-check the published Windows installer name/SHA256 and that `flashcli-linux-{amd64,arm64}` + `flashserver-*` assets are present on both hosts.
 
 - **Bundles**: follow the maintainer checklist below and [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md).
 
@@ -156,8 +206,13 @@ Concise; **Features** and **Fixes** only. Bold the key terms. Same text on GitHu
 - **<area>**: <what was broken → fixed>
 
 ## Assets
-- `flashcli-linux-amd64` sha256 `<…>`
-- `flashcli-linux-arm64` sha256 `<…>`
+- `flashcli-linux-amd64-v<version>` sha256 `<…>`
+- `flashcli-linux-arm64-v<version>` sha256 `<…>`
+- `flashserver-linux-amd64-v<version>` sha256 `<…>`
+- `flashserver-linux-arm64-v<version>` sha256 `<…>`
+- `flashserver-setup-linux-amd64-v<version>` sha256 `<…>`
+- `flashserver-setup-linux-arm64-v<version>` sha256 `<…>`
+- `flashserver-setup-windows-amd64-v<version>.exe` sha256 `<…>`
 
 **Full Changelog**: <compare or commits link>
 ```

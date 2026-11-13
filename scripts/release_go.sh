@@ -2,20 +2,36 @@
 # Build and (optionally) publish flashcli-go release artifacts.
 #
 # Usage:
-#   bash scripts/release_go.sh                 # build artifacts + sha256sums
-#   bash scripts/release_go.sh --upload        # build, ensure tag, publish GitHub + Gitee
+#   bash scripts/release_go.sh
+#   bash scripts/release_go.sh --upload
+#   bash scripts/release_go.sh --upload --notes-file dist/release-notes.md \
+#     --windows-installer dist/windows/flashserver-setup-windows-amd64-v<version>.exe
 #   FLASHCLI_GO_TARGETS="linux/amd64" bash scripts/release_go.sh
 #
 # Publishing (--upload):
-#   1. Ensure tag v<version> exists locally and is pushed to origin (GitHub).
-#   2. GitHub release: `gh` if available, else GitHub API with GITHUB_TOKEN/GH_TOKEN.
-#   3. Gitee release: Gitee OpenAPI with GITEE_TOKEN (personal access token);
-#      the tag is created on Gitee if missing (mirror syncs git but not release
-#      attachments, and tags may lag).
+#   1. Require a clean worktree and HEAD == origin/<target> (default main).
+#   2. Ensure tag v<version> exists at HEAD and is pushed (creates it if needed).
+#   3. GitHub release: `gh` if available, else GitHub API with GITHUB_TOKEN/GH_TOKEN.
+#   4. Gitee release: Gitee OpenAPI with GITEE_TOKEN; the tag is created on Gitee
+#      if missing (mirror syncs git but not release attachments).
 # Repo overrides: GITEE_REPO (default aodiansoft/flashcli), GH_REPO (default aodianyun/flashcli).
 #
-# Artifacts (dist/go/):
-#   flashcli-<os>-<arch>   (raw binaries; consumed by install.sh)
+# Options:
+#   --upload                     Publish to GitHub + Gitee after building.
+#   --notes-file FILE            Release notes body (Markdown) for both hosts.
+#   --windows-installer FILE     Include flashserver-setup-windows-amd64-v<version>.exe as an asset.
+#   --allow-non-target           Allow publishing from a branch other than the target.
+#
+# Environment:
+#   FLASHCLI_RELEASE_TARGET      Target branch (default main).
+#   FLASHCLI_WINDOWS_INSTALLER   Same as --windows-installer.
+#   FLASHCLI_ALLOW_NON_TARGET=1  Same as --allow-non-target.
+#   PYTHON_BIN                   Python for JSON helpers (default python3/python).
+#
+# Artifacts (dist/release/):
+#   flashcli-<os>-<arch>-v<version>          (raw binary; consumed by install.sh)
+#   flashserver-<os>-<arch>-v<version>       (resident scheduler)
+#   flashserver-setup-<os>-<arch>-v<version> (installer)
 #   sha256sums.txt
 set -euo pipefail
 
@@ -23,84 +39,213 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="${FLASHCLI_GO_DIST:-$ROOT/dist/go}"
 GH_REPO="${GH_REPO:-aodianyun/flashcli}"
 GITEE_REPO="${GITEE_REPO:-aodiansoft/flashcli}"
+TARGET="${FLASHCLI_RELEASE_TARGET:-main}"
 UPLOAD=0
-for arg in "$@"; do
-  case "$arg" in
-    --upload) UPLOAD=1 ;;
-    -h|--help) echo "usage: release_go.sh [--upload]"; exit 0 ;;
-    *) echo "unknown option: $arg" >&2; exit 2 ;;
+ALLOW_NON_TARGET="${FLASHCLI_ALLOW_NON_TARGET:-0}"
+NOTES_FILE=""
+WINDOWS_INSTALLER="${FLASHCLI_WINDOWS_INSTALLER:-}"
+
+die() { echo "error: $*" >&2; exit 1; }
+
+usage() {
+  sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --upload) UPLOAD=1; shift ;;
+    --notes-file) NOTES_FILE="${2:-}"; shift 2 ;;
+    --windows-installer) WINDOWS_INSTALLER="${2:-}"; shift 2 ;;
+    --allow-non-target) ALLOW_NON_TARGET=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) die "unknown option: $1" ;;
   esac
 done
 
+PY_BIN="${PYTHON_BIN:-}"
+if [ -z "$PY_BIN" ]; then
+  for candidate in python3 python; do
+    if command -v "$candidate" >/dev/null 2>&1; then PY_BIN="$candidate"; break; fi
+  done
+fi
+
+VERSION="$(sed -n 's/^[[:space:]]*version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
+  "$ROOT/pyproject.toml" | head -1)"
+[ -n "$VERSION" ] || die "cannot read version from pyproject.toml"
+TAG="v${VERSION}"
+
+if [ "$UPLOAD" = "1" ]; then
+  echo "release version: ${VERSION}"
+  echo "release target:  ${TARGET}"
+  [ -z "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ] \
+    || die "working tree is not clean; commit or stash changes before publishing"
+  branch="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)"
+  if [ "$branch" != "$TARGET" ] && [ "$ALLOW_NON_TARGET" != "1" ]; then
+    die "current branch is '$branch', expected '$TARGET' (use FLASHCLI_ALLOW_NON_TARGET=1 only for tests)"
+  fi
+  if git -C "$ROOT" fetch -q origin "$TARGET" 2>/dev/null; then
+    if [ "$ALLOW_NON_TARGET" != "1" ] && \
+       [ "$(git -C "$ROOT" rev-parse HEAD)" != "$(git -C "$ROOT" rev-parse "origin/${TARGET}")" ]; then
+      die "HEAD is not equal to origin/${TARGET}; push the release commit first"
+    fi
+  elif [ "$ALLOW_NON_TARGET" != "1" ]; then
+    die "cannot fetch origin/${TARGET}; refusing to release an unverified branch"
+  fi
+fi
+
 bash "$ROOT/scripts/build_go.sh" "$OUT"
 
-VERSION="$(python3 - "$ROOT/pyproject.toml" <<'PY'
-import re, sys
-text = open(sys.argv[1], encoding="utf-8").read()
-m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
-print(m.group(1) if m else "")
-PY
-)"
-TAG="v${VERSION}"
-# Releases are cut from the stable branch; override with FLASHCLI_RELEASE_TARGET
-# (e.g. a release branch). Never point a published release at dev.
-TARGET="${FLASHCLI_RELEASE_TARGET:-main}"
-echo "release version: ${VERSION}"
-echo "release target:  ${TARGET}"
+STAGE="${FLASHCLI_RELEASE_STAGE:-$ROOT/dist/release}"
+rm -rf "$STAGE"
+mkdir -p "$STAGE"
 
-_json_id() { python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true; }
+WIN_ASSET="flashserver-setup-windows-amd64-v${VERSION}.exe"
+versioned_asset() {
+  case "$1" in
+    *.exe) printf '%s-v%s.exe\n' "${1%.exe}" "$VERSION" ;;
+    *) printf '%s-v%s\n' "$1" "$VERSION" ;;
+  esac
+}
+if [ -z "$WINDOWS_INSTALLER" ] && [ -n "${FLASHCLI_WINDOWS_INSTALLER:-}" ]; then
+  WINDOWS_INSTALLER="$FLASHCLI_WINDOWS_INSTALLER"
+fi
+for f in "$OUT"/flashcli-* "$OUT"/flashserver-*; do
+  [ -f "$f" ] || continue
+  name="$(basename "$f")"
+  if [ -n "$WINDOWS_INSTALLER" ] && [ "$name" = "flashserver-setup-windows-amd64.exe" ]; then
+    continue
+  fi
+  cp "$f" "$STAGE/$(versioned_asset "$name")"
+done
+if [ -n "$WINDOWS_INSTALLER" ]; then
+  [ -f "$WINDOWS_INSTALLER" ] || die "Windows installer not found: $WINDOWS_INSTALLER"
+  [ "$(basename "$WINDOWS_INSTALLER")" = "$WIN_ASSET" ] \
+    || die "Windows installer must be named $WIN_ASSET"
+  cp "$WINDOWS_INSTALLER" "$STAGE/$WIN_ASSET"
+  if command -v sha256sum >/dev/null 2>&1; then
+    echo "Windows installer sha256: $(sha256sum "$STAGE/$WIN_ASSET" | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    echo "Windows installer sha256: $(shasum -a 256 "$STAGE/$WIN_ASSET" | awk '{print $1}')"
+  fi
+fi
+
+if command -v sha256sum >/dev/null 2>&1; then
+  sha_cmd=(sha256sum)
+elif command -v shasum >/dev/null 2>&1; then
+  sha_cmd=(shasum -a 256)
+else
+  die "neither sha256sum nor shasum is available"
+fi
+( cd "$STAGE" && "${sha_cmd[@]}" flashcli-* flashserver-* > sha256sums.txt )
+
+ASSETS=()
+for f in "$STAGE"/flashcli-* "$STAGE"/flashserver-* "$STAGE"/sha256sums.txt; do
+  [ -f "$f" ] && ASSETS+=("$f")
+done
+[ "${#ASSETS[@]}" -gt 0 ] || die "no release assets found in $STAGE"
+
+NOTES_BODY="flashcli-go ${VERSION} (static binaries + sha256sums)"
+if [ -n "$NOTES_FILE" ]; then
+  [ -f "$NOTES_FILE" ] || die "notes file not found: $NOTES_FILE"
+  NOTES_BODY="$(cat "$NOTES_FILE")"
+fi
+
+_json_id() {
+  "$PY_BIN" -c "import sys,json;print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true
+}
+
+_json_release_body() {
+  "$PY_BIN" - "$TAG" "$VERSION" "$TARGET" "$NOTES_BODY" <<'PY'
+import json, sys
+tag, version, target, body = sys.argv[1:5]
+print(json.dumps({
+    "tag_name": tag,
+    "target_commitish": target,
+    "name": f"flashcli {version}",
+    "body": body,
+}))
+PY
+}
 
 ensure_tag() {
-  if git -C "$ROOT" ls-remote --tags origin "refs/tags/$TAG" 2>/dev/null | grep -q "refs/tags/$TAG$"; then
-    echo "[i] tag $TAG already on origin"
-    git -C "$ROOT" rev-parse -q --verify "refs/tags/$TAG" >/dev/null \
-      || git -C "$ROOT" fetch -q origin "refs/tags/$TAG:refs/tags/$TAG" 2>/dev/null || true
-    return 0
-  fi
-  if ! git -C "$ROOT" rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
-    git -C "$ROOT" tag "$TAG"
+  local head remote_head
+  head="$(git -C "$ROOT" rev-parse HEAD)"
+  if git -C "$ROOT" rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+    local local_head
+    local_head="$(git -C "$ROOT" rev-parse "refs/tags/$TAG^{}")"
+    [ "$local_head" = "$head" ] || die "tag $TAG points to $local_head, not HEAD $head"
+  else
+    git -C "$ROOT" tag "$TAG" "$head"
     echo "[i] created local tag $TAG"
   fi
-  if git -C "$ROOT" push origin "$TAG" >/dev/null 2>&1; then
-    echo "[ok] pushed tag $TAG to origin"
-  else
-    echo "[i] tag push skipped (no push access)"
+
+  if git -C "$ROOT" ls-remote --tags origin "refs/tags/$TAG" 2>/dev/null | grep -q "refs/tags/$TAG$"; then
+    remote_head="$(git -C "$ROOT" ls-remote --tags origin "refs/tags/$TAG^{}" 2>/dev/null | awk '{print $1}')"
+    if [ -z "$remote_head" ]; then
+      remote_head="$(git -C "$ROOT" ls-remote --tags origin "refs/tags/$TAG" 2>/dev/null | awk '{print $1}')"
+    fi
+    [ "$remote_head" = "$head" ] || die "remote tag $TAG points to $remote_head, not HEAD $head"
+    echo "[i] tag $TAG already on origin"
+    return 0
   fi
+
+  git -C "$ROOT" push origin "$TAG" \
+    || die "failed to push tag $TAG; publish requires the tag on origin"
+  echo "[ok] pushed tag $TAG to origin"
 }
 
 publish_github() {
+  local notes_args=()
+  if [ -n "$NOTES_FILE" ]; then
+    notes_args=(--notes-file "$NOTES_FILE")
+  else
+    notes_args=(--notes "$NOTES_BODY")
+  fi
   if command -v gh >/dev/null 2>&1; then
     echo "GitHub: gh release ${TAG} ..."
-    gh release create "$TAG" "$OUT"/flashcli-* "$OUT"/sha256sums.txt \
-      --title "flashcli ${VERSION}" \
-      --notes "flashcli-go ${VERSION} (static binaries + sha256sums)" \
-      || gh release upload "$TAG" "$OUT"/flashcli-* "$OUT"/sha256sums.txt --clobber
+    if gh release view "$TAG" >/dev/null 2>&1; then
+      gh release upload "$TAG" "${ASSETS[@]}" --clobber \
+        || { echo "error: gh release upload failed for $TAG" >&2; return 1; }
+      gh release edit "$TAG" --title "flashcli ${VERSION}" "${notes_args[@]}" \
+        || { echo "error: gh release edit failed for $TAG" >&2; return 1; }
+    else
+      gh release create "$TAG" "${ASSETS[@]}" \
+        --title "flashcli ${VERSION}" "${notes_args[@]}" \
+        || { echo "error: gh release create failed for $TAG" >&2; return 1; }
+    fi
     echo "[ok] GitHub ${TAG}"
     return 0
   fi
-  tok="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+  local tok="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
   if [ -z "$tok" ]; then
     echo "[i] gh not found and GITHUB_TOKEN/GH_TOKEN unset — skipping GitHub upload"
     return 0
   fi
-  api="https://api.github.com/repos/${GH_REPO}"
+  local api="https://api.github.com/repos/${GH_REPO}"
+  local rid
   rid="$(curl -sS -H "Authorization: token ${tok}" "${api}/releases/tags/${TAG}" | _json_id)"
   if [ -z "$rid" ]; then
+    local payload
+    payload="$(_json_release_body)"
+    local resp code body
     resp="$(curl -sS -w $'\n%{http_code}' -X POST -H "Authorization: token ${tok}" \
       -H "Accept: application/vnd.github+json" "${api}/releases" \
-      -d "{\"tag_name\":\"${TAG}\",\"target_commitish\":\"${TARGET}\",\"name\":\"flashcli ${VERSION}\",\"body\":\"flashcli-go ${VERSION} (static binaries + sha256sums)\"}")"
+      --data-binary "$payload")"
     code="$(printf '%s' "$resp" | tail -n1)"; body="$(printf '%s' "$resp" | sed '$d')"
     rid="$(printf '%s' "$body" | _json_id)"
     if [ -z "$rid" ]; then
-      echo "[!] GitHub create release failed (HTTP ${code}): ${body}" >&2
+      echo "error: GitHub create release failed (HTTP ${code}): ${body}" >&2
       return 1
     fi
   fi
-  for f in "$OUT"/flashcli-linux-amd64 "$OUT"/flashcli-linux-arm64 "$OUT"/sha256sums.txt; do
-    [ -f "$f" ] || continue
-    curl -sS -X POST -H "Authorization: token ${tok}" -H "Content-Type: application/octet-stream" \
-      --data-binary "@${f}" "https://uploads.github.com/repos/${GH_REPO}/releases/${rid}/assets?name=$(basename "$f")" >/dev/null \
-      && echo "  [ok] github <= $(basename "$f")" || echo "  [!] github upload failed: $(basename "$f")" >&2
+  local f
+  for f in "${ASSETS[@]}"; do
+    if ! curl -sS -X POST -H "Authorization: token ${tok}" -H "Content-Type: application/octet-stream" \
+      --data-binary "@${f}" "https://uploads.github.com/repos/${GH_REPO}/releases/${rid}/assets?name=$(basename "$f")" >/dev/null; then
+      echo "error: GitHub upload failed: $(basename "$f")" >&2
+      return 1
+    fi
+    echo "  [ok] github <= $(basename "$f")"
   done
   echo "[ok] GitHub ${TAG}"
 }
@@ -112,16 +257,15 @@ publish_gitee() {
   fi
   case "${GITEE_TOKEN}" in
     ghp_*|github_pat_*)
-      echo "[!] GITEE_TOKEN looks like a *GitHub* token. Use a Gitee personal access token" >&2
-      echo "    (https://gitee.com/profile/personal_access_tokens)." >&2
+      echo "error: GITEE_TOKEN looks like a GitHub token; use a Gitee personal access token" >&2
       return 1 ;;
   esac
-  api="https://gitee.com/api/v5/repos/${GITEE_REPO}"
-
-  # Ensure the tag exists on Gitee. Gitee has no single-tag GET; create and
-  # treat "already exists" as success.
-  echo "Gitee: ensuring tag ${TAG} ..."
+  local api="https://gitee.com/api/v5/repos/${GITEE_REPO}"
+  local sha
   sha="$(git -C "$ROOT" rev-parse "refs/tags/$TAG")"
+
+  echo "Gitee: ensuring tag ${TAG} ..."
+  local resp code body
   resp="$(curl -sS -w $'\n%{http_code}' -X POST "${api}/tags" \
     -d "access_token=${GITEE_TOKEN}" -d "tag_name=${TAG}" -d "refs=${sha}" -d "message=flashcli ${VERSION}")"
   code="$(printf '%s' "$resp" | tail -n1)"; body="$(printf '%s' "$resp" | sed '$d')"
@@ -130,46 +274,53 @@ publish_gitee() {
   elif printf '%s' "$body" | grep -qiE '已存在|already exists|exist'; then
     echo "[i] Gitee tag ${TAG} already exists"
   else
-    echo "[!] Gitee create tag failed (HTTP ${code}): ${body}" >&2
-    echo "    - ensure commit ${sha} exists on Gitee (repo sync), and GITEE_TOKEN is a Gitee token." >&2
+    echo "error: Gitee create tag failed (HTTP ${code}): ${body}" >&2
     return 1
   fi
 
+  local rid
   rid="$(curl -sS "${api}/releases/tags/${TAG}?access_token=${GITEE_TOKEN}" | _json_id)"
   if [ -z "$rid" ]; then
     echo "Gitee: creating release ${TAG} ..."
-    resp="$(curl -sS -w $'\n%{http_code}' -X POST "${api}/releases" \
-      -d "access_token=${GITEE_TOKEN}" -d "tag_name=${TAG}" \
-      -d "name=flashcli ${VERSION}" -d "body=flashcli-go ${VERSION} (static binaries + sha256sums)" \
-      -d "target_commitish=${TARGET}")"
+    local body_args=(-d "access_token=${GITEE_TOKEN}" -d "tag_name=${TAG}" -d "name=flashcli ${VERSION}" -d "target_commitish=${TARGET}")
+    if [ -n "$NOTES_FILE" ]; then
+      body_args+=(--data-urlencode "body@${NOTES_FILE}")
+    else
+      body_args+=(--data-urlencode "body=${NOTES_BODY}")
+    fi
+    resp="$(curl -sS -w $'\n%{http_code}' -X POST "${api}/releases" "${body_args[@]}")"
     code="$(printf '%s' "$resp" | tail -n1)"; body="$(printf '%s' "$resp" | sed '$d')"
     rid="$(printf '%s' "$body" | _json_id)"
     if [ -z "$rid" ]; then
-      echo "[!] Gitee create release failed (HTTP ${code}): ${body}" >&2
+      echo "error: Gitee create release failed (HTTP ${code}): ${body}" >&2
       return 1
     fi
   fi
 
-  for f in "$OUT"/flashcli-linux-amd64 "$OUT"/flashcli-linux-arm64 "$OUT"/sha256sums.txt; do
-    [ -f "$f" ] || continue
+  local f
+  for f in "${ASSETS[@]}"; do
     resp="$(curl -sS -w $'\n%{http_code}' -X POST "${api}/releases/${rid}/attach_files" \
       -F "access_token=${GITEE_TOKEN}" -F "file=@${f}")"
     code="$(printf '%s' "$resp" | tail -n1)"
     if [ "$code" = "201" ] || [ "$code" = "200" ]; then
       echo "  [ok] gitee <= $(basename "$f")"
     else
-      echo "  [!] gitee upload failed for $(basename "$f") (HTTP ${code}): $(printf '%s' "$resp" | sed '$d')" >&2
+      echo "error: Gitee upload failed for $(basename "$f") (HTTP ${code}): $(printf '%s' "$resp" | sed '$d')" >&2
+      return 1
     fi
   done
   echo "[ok] Gitee ${TAG} (${GITEE_REPO})"
 }
 
 if [ "$UPLOAD" = "1" ]; then
+  [ -n "$PY_BIN" ] || die "python3/python is required for release API helpers"
   ensure_tag
-  publish_github || true
-  publish_gitee || true
+  failed=0
+  publish_github || failed=1
+  publish_gitee || failed=1
+  [ "$failed" = "0" ] || die "one or more release uploads failed"
 else
-  echo "[ok] artifacts in $OUT"
+  echo "[ok] release assets in $STAGE"
   echo "    publish: GITHUB_TOKEN=... GITEE_TOKEN=... bash scripts/release_go.sh --upload"
   echo "    (or: gh auth login; GITEE_TOKEN=<gitee-token> bash scripts/release_go.sh --upload)"
 fi

@@ -2,9 +2,52 @@ package progress
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 )
+
+func TestSinkUpdates(t *testing.T) {
+	SetQuiet(true)
+	defer SetQuiet(false)
+
+	var updates []Update
+	ctx := WithSink(context.Background(), func(u Update) {
+		updates = append(updates, u)
+	})
+	st := StartWithSink("weights", "repo/x", SinkFromContext(ctx))
+	st.Totals(2, 100)
+	st.Add(50)
+	st.FileDone()
+	st.Add(50)
+	st.FileDone()
+	st.Done()
+
+	if len(updates) < 3 {
+		t.Fatalf("updates=%v", updates)
+	}
+	if updates[0].Total != 100 || updates[0].Stage != "weights" {
+		t.Fatalf("first update = %+v", updates[0])
+	}
+	last := updates[len(updates)-1]
+	if last.Percent != 100 || !last.Done {
+		t.Fatalf("last update = %+v", last)
+	}
+}
+
+func TestNoteCtxSink(t *testing.T) {
+	SetQuiet(true)
+	defer SetQuiet(false)
+
+	var got string
+	ctx := WithSink(context.Background(), func(u Update) {
+		got = u.Detail
+	})
+	NoteCtx(ctx, "venv: installing torch %s", "cu130")
+	if !strings.Contains(got, "installing torch") {
+		t.Fatalf("note sink = %q", got)
+	}
+}
 
 func TestFormatBytes(t *testing.T) {
 	cases := map[int64]string{

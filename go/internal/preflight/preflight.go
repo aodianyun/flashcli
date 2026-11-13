@@ -129,10 +129,13 @@ func DetectGPU() *GpuInfo {
 	}
 	cuda := cudaTagFromEnv()
 	if cuda == "" {
-		cuda = detectCudaTagFromNvcc()
+		// The env key describes what this machine can run, so prefer the
+		// driver's CUDA capability over the locally installed toolkit (nvcc
+		// is often whatever PyTorch ships and lags the driver).
+		cuda = detectCudaTagFromNvidiaSmi()
 	}
 	if cuda == "" {
-		cuda = detectCudaTagFromNvidiaSmi()
+		cuda = detectCudaTagFromNvcc()
 	}
 	if cuda == "" {
 		if sm == "120" || sm == "110" {
@@ -221,13 +224,82 @@ func ResolveEnvironment(keys []string, matches map[string]map[string]any, host E
 		}
 	}
 	if !found {
-		return "", fmt.Errorf("no environment matches host %q", host.Name())
+		return resolveEnvironmentLoose(keys, host)
 	}
 	if len(ties) > 1 {
 		sort.Strings(ties)
 		return "", fmt.Errorf("ambiguous fallback environments for host %q: %s", host.Name(), strings.Join(ties, ", "))
 	}
 	return best.key, nil
+}
+
+// resolveEnvironmentLoose scores the declared cells when no exact key or
+// explicit match block fits. A cell must agree on SM/OS/arch/Python (never run
+// an sm89 binary on an sm86 GPU) and must not require a newer CUDA than the
+// driver supports; the remaining cells are ranked with ScoreEnvKeyMatch so the
+// same scoring rules as the v3 resolver apply here too.
+func resolveEnvironmentLoose(keys []string, host EnvKey) (string, error) {
+	bestScore := 0
+	bestKey := ""
+	var ties []string
+	var tooNew []string
+	for _, key := range keys {
+		artifact, err := ParseEnvKey(key)
+		if err != nil {
+			continue
+		}
+		if artifact.SM != host.SM || artifact.OSName != host.OSName ||
+			artifact.Arch != host.Arch || artifact.PythonMinor != host.PythonMinor {
+			continue
+		}
+		if !cudaCompatible(artifact.CudaTag, host.CudaTag) {
+			tooNew = append(tooNew, key)
+			continue
+		}
+		score := ScoreEnvKeyMatch(artifact, host)
+		switch {
+		case score > bestScore:
+			bestScore = score
+			bestKey = key
+			ties = []string{key}
+		case score == bestScore && score > 0:
+			ties = append(ties, key)
+		}
+	}
+	if bestScore > 0 {
+		if len(ties) == 1 {
+			return bestKey, nil
+		}
+		sort.Strings(ties)
+		return "", fmt.Errorf("ambiguous environments for host %q: %s", host.Name(), strings.Join(ties, ", "))
+	}
+	if len(tooNew) > 0 {
+		sort.Strings(tooNew)
+		return "", fmt.Errorf(
+			"bundle runtime requires a newer NVIDIA driver (host CUDA %s, cells: %s)",
+			host.CudaTag, strings.Join(tooNew, ", "))
+	}
+	return "", fmt.Errorf("no environment matches host %q", host.Name())
+}
+
+// cudaCompatible reports whether a runtime cell's CUDA userland can load on a
+// driver with the given capability tag. Tags are "<major><minor>" (124, 128,
+// 130), so a numeric comparison works; newer cells need a newer driver.
+func cudaCompatible(cell, host string) bool {
+	cell = strings.TrimSpace(cell)
+	host = strings.TrimSpace(host)
+	if cell == "" || host == "" {
+		return true
+	}
+	c, err := strconv.Atoi(cell)
+	if err != nil {
+		return true
+	}
+	h, err := strconv.Atoi(host)
+	if err != nil {
+		return true
+	}
+	return c <= h
 }
 
 func matchHost(match map[string]any, host EnvKey) bool {
@@ -383,7 +455,7 @@ func ScoreEnvKeyMatch(artifact, host EnvKey) int {
 
 // TorchIndexForTag maps a CUDA tag to a PyTorch wheel index name.
 func TorchIndexForTag(tag string) string {
-	if tag == "128" || tag == "130" {
+	if strings.HasPrefix(tag, "13") || tag == "128" {
 		return "cu128"
 	}
 	return "cu124"
@@ -410,7 +482,10 @@ func cudaTagFromEnv() string {
 }
 
 var nvccReleaseRe = regexp.MustCompile(`release\s+([0-9]+)\.([0-9]+)`)
-var smiCudaRe = regexp.MustCompile(`CUDA Version:\s*([0-9]+)\.([0-9]+)`)
+
+// nvidia-smi reports either "CUDA Version: 12.8" (older drivers) or
+// "CUDA UMD Version: 13.3" (610+).
+var smiCudaRe = regexp.MustCompile(`(?i)CUDA(?:\s+UMD)?\s+Version:\s*([0-9]+)\.([0-9]+)`)
 
 func detectCudaTagFromNvcc() string {
 	path, err := exec.LookPath("nvcc")
@@ -437,7 +512,13 @@ func detectCudaTagFromNvidiaSmi() string {
 	if err != nil {
 		return ""
 	}
-	m := smiCudaRe.FindStringSubmatch(string(out))
+	return parseCudaTagFromSmi(string(out))
+}
+
+// parseCudaTagFromSmi extracts the driver's maximum CUDA version from the
+// nvidia-smi banner.
+func parseCudaTagFromSmi(out string) string {
+	m := smiCudaRe.FindStringSubmatch(out)
 	if m == nil {
 		return ""
 	}

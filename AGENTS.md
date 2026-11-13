@@ -6,6 +6,8 @@ flashcli is the host CLI that distributes and runs FlashRT **Model Bundles**. It
 - `go/` — the host (module `github.com/aodianyun/flashcli/go`): `cmd/flashcli` + `internal/*`. The Python host (`src/flashcli/`) was **removed**; do not reintroduce it.
 - `flashcli-bundle/` — protocol + infer package (`flashcli_bundle`); separate `pyproject.toml`, `dependencies = []`, not on PyPI. Installed into bundle venvs as `flashcli-bundle[infer]`.
 - `bundles/<name>/` — bundle **sources** only; published artifacts live on FlashHub, not in git.
+- `desktop/` — egui/eframe desktop client.
+- `installer/windows/` — Inno Setup installer (built by `scripts/build_windows_package.ps1`).
 - `scripts/` — build/release pipeline · `docs/` — authoritative specs · `tests/` — pytest.
 
 ## Dev setup
@@ -19,12 +21,13 @@ Distribution:
 ```bash
 bash install.sh [--mirror]          # one-click host install (build-from-source, else release assets)
 bash scripts/build_go.sh [OUT]      # cross-compile + sha256sums (version from pyproject)
+powershell -ExecutionPolicy Bypass -File scripts/build_windows_package.ps1  # client + Go + Windows installer
 bash scripts/release_go.sh [--upload]  # build, optionally publish to GitHub + Gitee
 bash scripts/verify_release.sh [--version X]  # isolated install + smoke (never touches host state)
 ```
 `install.sh` installs the `flashcli` binary (default: latest release assets + sha256; `--from-source` builds with Go) and writes `~/.flashcli/install.env` (bundle venv source: local checkout or repo/ref). Missing OS tools are auto-installed via the package manager. `auto_install.sh` picks GitHub/Gitee by reachability then runs `install.sh`. `flashcli upgrade` self-updates from the same release assets.
 
-**Releases come from `main` only.** Validate `dev` by building from source (`install.sh --from-source --branch dev`, or `build_go.sh` + install the binary) — do **not** cut intermediate releases from `dev`. `release_go.sh` targets `main` (`FLASHCLI_RELEASE_TARGET` overrides). Full checklist: [CONTRIBUTING.md](CONTRIBUTING.md) → Releases.
+**Releases come from `main` only.** Validate `dev` by building from source (`install.sh --from-source --branch dev`, or `build_go.sh` + install the binary) — do **not** cut intermediate releases from `dev`. `release_go.sh --upload` enforces a clean `main` equal to `origin/main`, creates/pushes the tag, and publishes Go assets plus (when passed) the Windows installer; `FLASHCLI_RELEASE_TARGET` overrides the target branch. Full checklist: [CONTRIBUTING.md](CONTRIBUTING.md) → Releases.
 
 ## Tests
 ```bash
@@ -42,12 +45,21 @@ Python tests only cover `flashcli_bundle` (protocol/infer) + conformance now; in
 - `tests/conformance/test_command_parity.py` — the Go command tree must cover the expected surface (`PYTHON_COMMANDS` = the historical contract checklist) and list Go-only commands in `GO_ONLY_COMMANDS`.
 - `tests/conformance/test_go_parity.py` — execution-ABI validation agreement across fixtures.
 
+## flashserver (resident scheduler + local console)
+- `go/cmd/flashserver` (daemon), `go/cmd/flashserver-setup` (installer backend), `go/internal/server` (HTTP API + console), `go/internal/setup` (Linux/WSL install), `go/internal/gpu` (nvidia-smi telemetry).
+- The console is embedded from `go/internal/server/web` (`go:embed`); no Node build. API auth is **off by default** (local single-user); `--token` enables `X-Flashcli-Token`/Bearer. `FLASHCLI_WEB_DIR` overrides assets for development.
+- `docs/openapi.yaml` is the authoritative HTTP contract and is served at `/openapi.yaml`. A copy lives at `go/internal/server/openapi.yaml`; `TestOpenAPISpecInSync` fails if they drift — copy the docs file after editing.
+- Windows UI installer: `installer/windows/flashserver.iss` + `scripts/build_windows_installer.ps1` (needs Inno Setup 6). It consumes `dist/go` produced by `scripts/build_go.sh` / a local build.
+- WSL: the setup writes a per-user `ONLOGON` task with a hidden `sleep infinity` keepalive (WSL `vmIdleTimeout` stops the distro otherwise). Service PATH includes `/usr/lib/wsl/lib` for `nvidia-smi`.
+- Go tests for `server`, `cuda`, `nativeabi`, `nativeexec` only build/run on Linux (purego); on Windows run them in WSL, e.g. `cd go && /usr/local/go/bin/go test ./...`.
+
 ## Architecture invariants
 - Protocol `flashcli-bundle` keeps `dependencies = []` — no fastapi/uvicorn/torch/`huggingface_hub` there.
 - The Go host never imports Python infer code; it re-execs `python -m flashcli_bundle.infer` (or drives a native backend). Never prepend host site-packages/PYTHONPATH.
 - Bundle venvs get `flashcli-bundle[infer]` + manifest `python_dependencies` only; resolution source is `FLASHCLI_BUNDLE_PIP_SPEC` / local `flashcli-bundle/` / `FLASHCLI_INSTALL_REPO`+`REF` (see `go/internal/venv/spec.go`).
 - Bundle venvs are created/installed with **uv** by default (`go/internal/uv`, `venv.SelectInstaller`). uv is **not shipped**: it is resolved from `FLASHCLI_UV_BIN`/PATH/provisioned, else downloaded from the PyPI index (sha256) with a GitHub release fallback into `~/.flashcli/tools/uv/<version>/`. `UV_CACHE_DIR` defaults under `$FLASHCLI_HOME/cache/uv` (same FS as `runtimes/` → hardlinks share torch/CUDA). `FLASHCLI_VENV_BACKEND=pip` is a deprecated escape hatch; native bundles need no uv.
 - The host is a **generic, model-agnostic driver**: no model-specific logic (forward, preprocessing/postprocessing, modality shapes/dtypes, option→port mapping/defaults) outside the bundle. Python bundles own it in `entry`; native bundles declare it in the manifest `native` block + runtime port descriptors. Never hardcode a model's constants/shapes/preprocessing in `go/`.
+- **CLI and flashserver share one cache layer:** cache discovery, weights key/readiness, runtime IDs/paths, disk accounting, ref-path resolution, and cleanup live in `go/internal/host` and are called by both `go/internal/cli` and `go/internal/server`. Do not duplicate marker walkers, size walkers, readiness checks, or cleanup path resolvers in either frontend. See `docs/architecture.md` → Shared host services.
 - Manifest `protocol_version` must equal `flashcli_bundle.version.PROTOCOL_VERSION` (currently `1`); native kinds add `runtime_abi_version` / `exec_protocol_version` = `1`.
 - **Weights: download completeness ≠ bundle readiness.** The host owns download completeness: it writes `.flashcli_download.json` (expected remote `path`+`size`) **before** transferring, keeps it on failure (resume), and marks in-progress downloads with `.flashcli_download.incomplete`; `pull` re-lists. The bundle owns readiness via `flashcli-bundle.json` (`allow_patterns`/`require_any_patterns`/`require_norm_stats`). Never encode model-specific filenames in `go/`.
 - **Offline guarantee:** `run`/`serve` are local-first — a complete manifest or a legacy cache (no manifest, no incomplete marker) that satisfies bundle readiness is accepted **without network**; network is used only when artifacts are missing, on an explicit `flashcli pull` (forces remote verification), or for a protocol `CACHE_SCHEMA_VERSION` upgrade. Once preparation succeeds, later runs must work offline. A present-but-incomplete manifest is never accepted; an interrupted download resumes from the recorded expected set.
@@ -74,4 +86,4 @@ Details: `docs/module_layers.md`, `docs/architecture.md`, `docs/bundle_execution
 - Do not commit secrets/tokens, `dist/`, `build/`, `.native-cache/`, `logs/`, weights, or FlashRT source.
 - `bundles/<name>/README.md` is user-facing (FlashHub); `BUILD.md` is maintainer-facing.
 - Do not commit FlashRT source into this repo; it is a sibling clone used only as build input.
-- Version is single-sourced from root `pyproject.toml [project].version`; `scripts/build_go.sh` injects it into the Go binary via `-ldflags`.
+- Version is single-sourced from root `pyproject.toml [project].version`; `scripts/build_go.sh` injects it into the Go binary via `-ldflags`. The desktop `Cargo.toml` keeps the three-part prefix (for example `1.0.7`) and packaging fails if it does not match.

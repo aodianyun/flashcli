@@ -37,8 +37,8 @@ if [ -f "$H/bundles/qwen_nvfp4/1.0.1/.flashcli_bundle.json" ]; then
   ck "R1 tree key variant-less: bundles/qwen_nvfp4/1.0.1" "true"
   ck "R2 weights base variant-less: models/qwen_nvfp4/1.0.1/checkpoint/qwen3" \
      "[ -d '$H/models/qwen_nvfp4/1.0.1/checkpoint/qwen3' ]"
-  ck "R3 local readiness (models list): @qwen3 weights:cached" \
-     "printf '%s' \"\$LIST\" | grep -q 'qwen_nvfp4:1.0.1@qwen3.*weights:cached'"
+  ck "R3 local readiness (models list): @qwen3 bundle+weights cached" \
+     "printf '%s' \"\$LIST\" | grep -q 'qwen_nvfp4:1.0.1.*cached.*cached'"
   ck "R4 multi-variant without @variant errors locally" \
      "flashcli run flashcli-bundle/qwen_nvfp4:1.0.1 --prompt x 2>&1 | grep -qi 'add @variant'"
   wd36=$(python3 -c "import json;print(json.load(open('$H/bundles/qwen_nvfp4/1.0.1/flashcli-bundle.json'))['variants']['qwen36']['weights_dir'])" 2>/dev/null)
@@ -48,8 +48,8 @@ else
 fi
 if [ -f "$H/bundles/pi05_libero/1.0.4/.flashcli_bundle.json" ]; then
   ck "R6 single-variant tree key: bundles/pi05_libero/1.0.4" "true"
-  ck "R7 local readiness: pi05_libero:1.0.4 weights:cached" \
-     "printf '%s' \"\$LIST\" | grep -q 'pi05_libero:1.0.4.*weights:cached'"
+  ck "R7 local readiness: pi05_libero:1.0.4 bundle+weights cached" \
+     "printf '%s' \"\$LIST\" | grep -q 'pi05_libero:1.0.4.*cached.*cached'"
 else
   skip "REMOTE pi05_libero:1.0.4 not synced"
 fi
@@ -63,8 +63,8 @@ if [ -n "$PROTO_PY" ] && [ -f "$LOCAL_SRC/flashcli-bundle.json" ]; then
      "[ -f '$H/bundles/$ID/local/.flashcli_bundle.json' ]"
   ck "L2 protocol reads the host-written marker" \
      "PYTHONPATH='${FLASHC_LB:-/app/flashcli/flashcli-bundle/src}' '$PROTO_PY' -c \"from pathlib import Path;from flashcli_bundle.preset_ref import resolve_local_bundle_preset;from flashcli_bundle.marker import read_preset_marker;import sys;sys.exit(0 if read_preset_marker(resolve_local_bundle_preset(Path('$LOCAL_SRC'),None)) else 1)\""
-  ck "L3 local readiness: pi05_libero_nexus weights:cached" \
-     "printf '%s' \"\$LIST\" | grep -qE '^pi05_libero_nexus .*weights:cached'"
+  ck "L3 local readiness: pi05_libero_nexus bundle+weights cached" \
+     "printf '%s' \"\$LIST\" | grep -qE 'pi05_libero_nexus .*cached.*cached'"
   ln -sfn "$LOCAL_SRC" /tmp/.flashcli_cache_link.$$
   ID2=$(PYTHONPATH="${FLASHC_LB:-/app/flashcli/flashcli-bundle/src}" "$PROTO_PY" \
         -c "from pathlib import Path;from flashcli_bundle.preset_ref import local_bundle_id;print(local_bundle_id(Path('/tmp/.flashcli_cache_link.$$')))" 2>/dev/null)

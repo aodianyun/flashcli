@@ -69,3 +69,35 @@ func TestUpgradeRequiresChecksumUnlessInsecure(t *testing.T) {
 		t.Fatalf("insecure install exit = %d", code)
 	}
 }
+
+func TestReleaseDefaultsFollowMirrorMode(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FLASHCLI_HOME", home)
+	t.Setenv("FLASHCLI_USE_MIRROR", "1")
+	t.Setenv("FLASHCLI_NO_MIRROR", "")
+	base, api := releaseDefaults()
+	if base != giteeReleaseBase || api != giteeReleaseAPI {
+		t.Fatalf("mirror defaults = %q %q", base, api)
+	}
+
+	t.Setenv("FLASHCLI_USE_MIRROR", "")
+	t.Setenv("FLASHCLI_NO_MIRROR", "1")
+	base, api = releaseDefaults()
+	if base != defaultReleaseBase || api != defaultReleaseAPI {
+		t.Fatalf("non-mirror defaults = %q %q", base, api)
+	}
+}
+
+func TestReleaseDefaultsUseMirrorEnvFile(t *testing.T) {
+	home := t.TempDir()
+	if err := os.WriteFile(filepath.Join(home, "mirror.env"), []byte("FLASHCLI_USE_MIRROR=1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FLASHCLI_HOME", home)
+	t.Setenv("FLASHCLI_USE_MIRROR", "")
+	t.Setenv("FLASHCLI_NO_MIRROR", "")
+	base, api := releaseDefaults()
+	if base != giteeReleaseBase || api != giteeReleaseAPI {
+		t.Fatalf("mirror.env defaults = %q %q", base, api)
+	}
+}

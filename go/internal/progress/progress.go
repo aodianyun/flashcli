@@ -8,6 +8,7 @@
 package progress
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +16,42 @@ import (
 	"sync"
 	"time"
 )
+
+// Update is one structured progress update for embedders (flashserver jobs).
+// Percent is -1 when the total is not known yet.
+type Update struct {
+	Stage      string
+	Detail     string
+	Percent    int
+	Written    int64
+	Total      int64
+	FilesDone  int
+	FilesTotal int
+	Done       bool
+}
+
+// Sink receives progress updates. It must not block for long.
+type Sink func(Update)
+
+type sinkKey struct{}
+
+// WithSink attaches a progress sink to ctx. Packages that already take a
+// context (bundle sync and weights download) report structured progress.
+func WithSink(ctx context.Context, sink Sink) context.Context {
+	if ctx == nil || sink == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, sinkKey{}, sink)
+}
+
+// SinkFromContext returns the sink attached by WithSink, if any.
+func SinkFromContext(ctx context.Context) Sink {
+	if ctx == nil {
+		return nil
+	}
+	sink, _ := ctx.Value(sinkKey{}).(Sink)
+	return sink
+}
 
 var (
 	mu    sync.Mutex
@@ -46,6 +83,21 @@ func Note(format string, args ...any) {
 	mu.Lock()
 	defer mu.Unlock()
 	fmt.Fprintf(out, "  • %s\n", fmt.Sprintf(format, args...))
+}
+
+// EmitCtx sends a detail update to a context sink without printing it.
+func EmitCtx(ctx context.Context, format string, args ...any) {
+	if sink := SinkFromContext(ctx); sink != nil {
+		sink(Update{Stage: "note", Detail: fmt.Sprintf(format, args...), Percent: -1})
+	}
+}
+
+// NoteCtx is Note plus a structured update for a context sink. Use it for
+// work that runs inside a flashserver job so the UI sees the same detail.
+func NoteCtx(ctx context.Context, format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	Note("%s", msg)
+	EmitCtx(ctx, "%s", msg)
 }
 
 // Warn always prints a warning line to stderr.
@@ -83,11 +135,20 @@ type Stage struct {
 	last       time.Time
 	lastPct    int
 	done       bool
+
+	sink    Sink
+	sinkPct int
+	sinkAt  time.Time
 }
 
 // Start begins a stage and prints its header line.
 func Start(name, detail string) *Stage {
-	s := &Stage{name: name, detail: detail, start: time.Now(), last: time.Now()}
+	return StartWithSink(name, detail, nil)
+}
+
+// StartWithSink begins a stage and also forwards structured updates to sink.
+func StartWithSink(name, detail string, sink Sink) *Stage {
+	s := &Stage{name: name, detail: detail, start: time.Now(), last: time.Now(), sink: sink, sinkPct: -1}
 	if IsQuiet() {
 		return s
 	}
@@ -114,6 +175,7 @@ func (s *Stage) Totals(files int, bytes int64) {
 	s.totalBytes = bytes
 	s.smu.Unlock()
 	s.render(false)
+	s.emit(true)
 }
 
 // Add records bytes transferred (current file).
@@ -125,6 +187,7 @@ func (s *Stage) Add(n int) {
 	s.written += int64(n)
 	s.smu.Unlock()
 	s.render(false)
+	s.emit(false)
 }
 
 // FileDone marks one file complete.
@@ -136,6 +199,7 @@ func (s *Stage) FileDone() {
 	s.filesDone++
 	s.smu.Unlock()
 	s.render(false)
+	s.emit(false)
 }
 
 // Done finishes the stage with a concise summary.
@@ -144,6 +208,7 @@ func (s *Stage) Done() {
 		return
 	}
 	s.done = true
+	s.emit(true)
 	if IsQuiet() {
 		return
 	}
@@ -161,6 +226,35 @@ func (s *Stage) Done() {
 		summary = fmt.Sprintf("%d file(s), %s", files, summary)
 	}
 	fmt.Fprintf(out, "✓ %s  %s  (%s)\n", s.name, summary, elapsed.Round(time.Second))
+}
+
+func (s *Stage) emit(force bool) {
+	if s == nil || s.sink == nil {
+		return
+	}
+	s.smu.Lock()
+	written, total := s.written, s.totalBytes
+	filesDone, filesTotal := s.filesDone, s.filesTotal
+	pct := -1
+	if total > 0 {
+		pct = int(written * 100 / total)
+	} else if filesTotal > 0 {
+		pct = filesDone * 100 / filesTotal
+	}
+	if !force && pct == s.sinkPct && time.Since(s.sinkAt) < time.Second {
+		s.smu.Unlock()
+		return
+	}
+	s.sinkPct = pct
+	s.sinkAt = time.Now()
+	detail := s.detail
+	s.smu.Unlock()
+	s.sink(Update{
+		Stage: s.name, Detail: detail, Percent: pct,
+		Written: written, Total: total,
+		FilesDone: filesDone, FilesTotal: filesTotal,
+		Done: s.done,
+	})
 }
 
 func (s *Stage) render(final bool) {

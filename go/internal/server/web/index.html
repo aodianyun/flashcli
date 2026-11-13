@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FlashServer</title>
+  <link rel="stylesheet" href="/ui/app.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">⚡</span>
+      <div>
+        <strong>FlashServer</strong>
+        <span class="sub" id="version">—</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span class="pill" id="status-pill"><span class="dot"></span><span data-i18n="status.checking">检查中</span></span>
+      <button class="ghost" id="btn-lang" title="Language">EN</button>
+      <button class="ghost" id="btn-refresh" title="Refresh">⟳</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="overview" data-i18n="tab.overview">概览</button>
+    <button class="tab" data-tab="models" data-i18n="tab.models">模型</button>
+    <button class="tab" data-tab="loaded" data-i18n="tab.loaded">已加载</button>
+    <button class="tab" data-tab="chat" data-i18n="tab.chat">对话测试</button>
+    <button class="tab" data-tab="logs" data-i18n="tab.logs">日志</button>
+    <button class="tab" data-tab="about" data-i18n="tab.about">关于</button>
+  </nav>
+
+  <main>
+    <section class="panel active" id="panel-overview">
+      <div class="overview">
+        <div class="col-main">
+          <article class="card">
+            <h3 data-i18n="ov.gpu">算力资源</h3>
+            <div id="gpu-list" class="gpu-list"></div>
+            <canvas id="gpu-chart" class="gpu-chart" height="64"></canvas>
+            <div class="chart-legend">
+              <span><i class="sw util"></i><span data-i18n="ov.util">利用率</span></span>
+              <span><i class="sw mem"></i><span data-i18n="ov.memFull">全卡显存</span></span>
+            </div>
+            <h4 class="subhead" data-i18n="ov.procs">进程占用</h4>
+            <div id="gpu-procs" class="gpu-procs"></div>
+          </article>
+
+          <article class="card">
+            <h3><span data-i18n="ov.cpu">处理器</span> <span id="cpu-model" class="muted" style="font-weight:400"></span></h3>
+            <div class="cpu-head">
+              <div class="metric"><span class="value" id="cpu-usage">—</span><span class="muted" data-i18n="cpu.usage">利用率</span></div>
+              <div class="metric"><span class="value" id="cpu-load">—</span><span class="muted" data-i18n="cpu.load">负载 1/5/15</span></div>
+              <div class="metric"><span class="value" id="cpu-cores">—</span><span class="muted" data-i18n="cpu.cores">核心 / 线程</span></div>
+            </div>
+            <div class="bar"><span id="cpu-bar"></span></div>
+            <div id="cpu-cores-list" class="core-grid"></div>
+            <canvas id="cpu-chart" class="gpu-chart" height="48"></canvas>
+            <div class="chart-legend">
+              <span><i class="sw cpu"></i><span data-i18n="cpu.chart">CPU 近 5 分钟</span></span>
+            </div>
+            <div class="mem-block">
+              <div class="mem-line"><span data-i18n="cpu.mem">内存</span><span id="mem-text">—</span></div>
+              <div class="bar"><span id="mem-bar"></span></div>
+              <div class="mem-line"><span data-i18n="cpu.swap">Swap</span><span id="swap-text">—</span></div>
+              <div class="bar"><span id="swap-bar"></span></div>
+            </div>
+          </article>
+        </div>
+
+        <div class="col-side">
+          <article class="card">
+            <h3 data-i18n="ov.service">服务状态</h3>
+            <dl class="kv" id="service-info"></dl>
+          </article>
+          <article class="card">
+            <h3 data-i18n="ov.storage">磁盘占用</h3>
+            <div id="storage-list"></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-models">
+      <div class="card">
+        <div class="card-head">
+          <h3 data-i18n="md.cached">本地模型</h3>
+          <span class="muted" id="models-hint"></span>
+        </div>
+        <div class="loadbar">
+          <input id="load-ref" placeholder="flashcli-bundle/<name>:<version>" spellcheck="false">
+          <button class="primary" id="btn-load" data-i18n="md.load">加载模型</button>
+        </div>
+        <div id="load-job" class="job hidden"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+            <tr>
+              <th data-i18n="md.ref">引用</th>
+              <th data-i18n="md.bundle">Bundle</th>
+              <th data-i18n="md.weights">权重</th>
+              <th data-i18n="md.size">大小</th>
+              <th data-i18n="md.source">来源</th>
+              <th></th>
+            </tr>
+            </thead>
+            <tbody id="models-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-loaded">
+      <div class="card">
+        <div class="card-head">
+          <h3 data-i18n="ld.title">已加载模型</h3>
+          <span class="muted" id="loaded-hint"></span>
+        </div>
+        <div id="loaded-list" class="loaded-list"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-chat">
+      <div class="card chat-card">
+        <div class="card-head">
+          <h3 data-i18n="chat.title">对话测试</h3>
+          <select id="chat-model"></select>
+        </div>
+        <div id="chat-log" class="chat-log"></div>
+        <div class="chat-input">
+          <textarea id="chat-text" rows="2" placeholder="Say hello..."></textarea>
+          <button class="primary" id="btn-send" data-i18n="chat.send">发送</button>
+        </div>
+        <div class="chat-meta">
+          <label><span data-i18n="chat.maxTokens">最大 tokens</span> <input id="chat-max-tokens" type="number" value="128" min="1"></label>
+          <label><span data-i18n="chat.temp">温度</span> <input id="chat-temp" type="number" value="0" step="0.1" min="0"></label>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-logs">
+      <div class="card">
+        <div class="card-head">
+          <h3 data-i18n="log.title">日志</h3>
+          <div class="row">
+            <select id="log-kind">
+              <option value="server" data-i18n="log.server">服务</option>
+              <option value="model" data-i18n="log.model">模型</option>
+            </select>
+            <select id="log-ref" class="hidden"></select>
+            <label class="inline"><input type="checkbox" id="log-auto" checked> <span data-i18n="log.auto">自动刷新</span></label>
+          </div>
+        </div>
+        <pre id="log-view" class="log-view"></pre>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-about">
+      <div class="card">
+        <h3 data-i18n="ab.title">系统信息</h3>
+        <dl class="kv" id="about-info"></dl>
+        <p class="muted" data-i18n="ab.api">API 文档：/v1/* 接口为本地 HTTP API，健康检查 /health。</p>
+        <p><a class="link" href="/openapi.yaml" target="_blank">OpenAPI 3.1</a> · <a class="link" href="/health" target="_blank">/health</a></p>
+      </div>
+    </section>
+  </main>
+
+  <div id="toasts" class="toasts"></div>
+</div>
+<script>window.FLASHSERVER_TOKEN = "__FLASHCLI_TOKEN__";</script>
+<script src="/ui/app.js"></script>
+</body>
+</html>

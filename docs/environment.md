@@ -33,6 +33,7 @@ lives under `~/.flashcli/src` unless overridden.
 | `FLASHCLI_SKIP_CUDA_USERLAND` | `0` | Skip `libcublas`/`libcudart` probing/install (host CUDA userland). |
 | `FLASHCLI_SKIP_NATIVE_HOST_ABI` | `0` | Skip host glibc/libstdc++ (`GLIBC_`/`GLIBCXX_`) gate against the selected `.so`. |
 | `FLASHCLI_SKIP_PREFLIGHT` | `0` | Skip env-key + native cell + host ABI + CUDA preflight (debug only). |
+| `FLASHCLI_WEB_DIR` | unset | Serve `flashserver` console assets from this directory instead of the embedded copy (development/customization). |
 | `FLASHCLI_AUTO_INSTALL_SYSTEM` | `auto` | Install declared bundle system capabilities (`c-compiler`, `cxx-compiler`, `python-headers`) only as root; `never` disables. |
 
 `run`/`serve`/`pull`/`bundle sync` match the host GPU against manifest `runtime` keys, verify the
@@ -97,8 +98,8 @@ uv installer (Python bundle venvs; uv is **not** shipped, provisioned on demand)
 
 Provisioning prefers the configured PyPI index (wheel) and falls back to the
 GitHub release tarball. Provisioned uv lives in
-`$FLASHCLI_HOME/tools/uv/<version>/uv`; remove it with
-`flashcli cache clean --tools` (or `--all` for cache + tools + FlashHub repo-index; `--flashhub` for repo-index only);
+`$FLASHCLI_HOME/tools/uv/<version>/uv`; `flashcli cache clean` removes the whole
+shared-cache group (downloads, base Python, and provisioned uv);
 `flashcli cache prune` prunes unused cache entries.
 
 Standalone Python provisioning (when the bundle `python_abi` is missing):
@@ -118,13 +119,14 @@ Standalone Python provisioning (when the bundle `python_abi` is missing):
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `FLASHCLI_QUIET` | `0` | Less output from `run`/`serve`/`pull`/`sync`. |
-| `FLASHCLI_GO_RELEASE_BASE` / `FLASHCLI_GO_RELEASE_API` | GitHub releases | Override for `flashcli upgrade` (e.g. Gitee). |
+| `FLASHCLI_GO_RELEASE_BASE` / `FLASHCLI_GO_RELEASE_API` | GitHub releases; Gitee when mirror mode is on | Override for `flashcli upgrade` (e.g. Gitee). |
 
 ## Mirrors (China-friendly)
 
-`install.sh --mirror` writes `~/.flashcli/mirror.env`; the Go host loads it at
-startup (`mirror.Apply`), so it applies to bundle venv pip, HF weight downloads,
-and GitHub downloads.
+`install.sh --mirror` and the Windows/Linux FlashServer setup write
+`~/.flashcli/mirror.env` by default; the Go host loads it at startup
+(`mirror.Apply`), so it applies to bundle venv pip, HF weight downloads, and
+GitHub downloads. The desktop toggle rewrites/removes the same file.
 
 | Variable | Default | Description |
 |----------|---------|-------------|

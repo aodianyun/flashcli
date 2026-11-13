@@ -26,6 +26,7 @@ Ref 语法：`flashcli-bundle/<name>:<version>`（FlashHub）或 `bundles/<name>
 
 | 月份 | 亮点 |
 |------|------|
+| **2026-11** | **FlashServer** —— 常驻调度器 + 本地控制台、`/v1/ws` 实时状态、按模型启动参数；专用 `flashserver_ubuntu` WSL2 发行版与 Windows 安装包；`cache clean` / `bundle clean` 拆分，CLI 与服务共用 host 层 |
 | **2026-10** | **Go-only host** —— 单个静态二进制（Python host 已移除）；**native-exec** / **native-abi** 后端让 bundle **无需 Python** 即可运行；同步的 bundle 树与权重缓存**在 environments 间共享** |
 | **2026-06** | **Qwen3.6 对话服务**达到生产可用 —— 回复更快（遇结束符即停）、真流式输出、更长单次生成，HTTP 与推理安装更省心 |
 | **2026-05** | **Blackwell（SM120）Qwen NVFP4** 上架 FlashHub —— 一条命令 `run` / OpenAI 兼容 `serve`；可复现的多环境发布包 |
@@ -46,7 +47,7 @@ curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh 
 ```
 
 `install.sh` 安装 `flashcli` 二进制：默认从最新 release 下载
-`flashcli-<os>-<arch>` + `sha256sums.txt`（无需 Go），校验 sha256，并写入
+`flashcli-<os>-<arch>-v<version>` + `sha256sums.txt`（无需 Go），校验 sha256，并写入
 `~/.flashcli/install.env`。加 `--from-source` 则改为 clone 后用 Go 构建。缺失的系统工具
 （curl/wget、sha256、git）在 root 下会经系统包管理器自动安装。
 
@@ -60,10 +61,11 @@ curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
 
 ```bash
 git clone https://github.com/aodianyun/flashcli.git && cd flashcli
-bash scripts/build_go.sh        # 构建 go/ → dist/go/flashcli-<os>-<arch>
+bash scripts/build_go.sh
 ```
 
-host 是静态 Go 二进制（无 Python host）。bundle venv 仍按需安装
+构建目标、测试与打包见 [CONTRIBUTING.md](CONTRIBUTING.md#binaries-and-the-desktop-client)。
+host 是静态 Go 二进制（无 Python host）；bundle venv 仍按需安装
 `flashcli-bundle[infer]`（源码：[flashcli-bundle/](flashcli-bundle/)）。
 
 ### 预检
@@ -87,12 +89,25 @@ curl -N http://127.0.0.1:8000/v1/chat/completions \
 
 首次运行会同步 FlashHub runtime、创建 bundle venv、安装 torch 栈并拉取权重。各模型的专属参数、默认值与示例见各 bundle [README](bundles/README.zh-CN.md)。
 
-**本地开发 bundle**（从 FlashRT 重建，非 FlashHub）：
+**本地开发 bundle**（从 FlashRT 重建，非 FlashHub）——构建步骤见
+[bundles/README.zh-CN.md](bundles/README.zh-CN.md) 及各 bundle 的 `BUILD.md`：
 
 ```bash
-bash bundles/pi05_libero/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
 flashcli run bundles/pi05_libero --prompt "pick up the red block"
 ```
+
+### 本地服务（`flashserver`）
+
+把模型作为常驻本地服务运行，带浏览器控制台、HTTP API 和 Windows 桌面客户端：
+
+```bash
+flashserver-setup                      # 安装二进制 + 服务（systemd / WSL2）
+```
+
+然后打开 `http://localhost:8790/`。概述：[docs/flashserver.zh-CN.md](docs/flashserver.zh-CN.md) ·
+安装运维：[docs/flashserver-install.zh-CN.md](docs/flashserver-install.zh-CN.md) ·
+桌面客户端：[docs/flashserver-desktop.zh-CN.md](docs/flashserver-desktop.zh-CN.md) ·
+API：[docs/flashserver-api.zh-CN.md](docs/flashserver-api.zh-CN.md)。
 
 ---
 
@@ -103,6 +118,7 @@ flashcli run bundles/pi05_libero --prompt "pick up the red block"
 | **终端用户** | 本 README（安装 + 运行）→ bundle [README](bundles/README.zh-CN.md) → [environment.zh-CN.md](docs/environment.zh-CN.md) |
 | **集成方** | [FlashHub](https://flashhub.top) → [model_bundle_standard.zh-CN.md](docs/model_bundle_standard.zh-CN.md) —— preset ref 语法 |
 | **Bundle 作者** | [bundle_publish_standard.zh-CN.md](docs/bundle_publish_standard.zh-CN.md) → [flashcli-bundle/README.md](flashcli-bundle/README.md) |
+| **桌面 / 本地服务** | [flashserver.zh-CN.md](docs/flashserver.zh-CN.md) —— Windows 安装包、桌面客户端、本地控制台、HTTP API（[openapi.yaml](docs/openapi.yaml)） |
 
 host、bundle venv 与 FlashHub 同步的工作方式：[architecture.zh-CN.md](docs/architecture.zh-CN.md)。完整索引：[docs/README.zh-CN.md](docs/README.zh-CN.md)。
 

@@ -1,7 +1,7 @@
 #!/bin/sh
 # flashcli installer — installs the Go host binary (`flashcli`).
 #
-# Default: download release assets (flashcli-<os>-<arch> + sha256sums.txt).
+# Default: download release assets (flashcli-<os>-<arch>-v<version> + sha256sums.txt).
 #   -> requires only curl/wget + a sha256 tool (+ ca-certificates). No Go.
 # Source:  pass --from-source (or --source-dir DIR) to clone + build with Go.
 #   -> requires git + Go (auto-installed when possible).
@@ -342,20 +342,21 @@ install_release() {
   fi
   [ -n "$VERSION" ] || die "could not resolve a release version (pass --version or use --from-source)"
   info "installing flashcli $VERSION from release assets"
+  release_asset="${asset}-v${VERSION}"
   tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-  fetch_retry "${base}/v${VERSION}/${asset}" "$tmp/$asset" 3 \
+  fetch_retry "${base}/v${VERSION}/${release_asset}" "$tmp/$release_asset" 3 \
     || { warn "falling back to alternate release host: ${alt_base}"; \
-         fetch_retry "${alt_base}/v${VERSION}/${asset}" "$tmp/$asset" 3; } \
-    || die "could not download release asset ${asset} (tried ${base} and ${alt_base}; publish it for this source, or use --from-source)"
+         fetch_retry "${alt_base}/v${VERSION}/${release_asset}" "$tmp/$release_asset" 3; } \
+    || die "could not download release asset ${release_asset} (tried ${base} and ${alt_base}; publish it for this source, or use --from-source)"
   fetch_retry "${base}/v${VERSION}/sha256sums.txt" "$tmp/sha256sums.txt" 3 \
     || { warn "falling back to alternate release host: ${alt_base}"; \
          fetch_retry "${alt_base}/v${VERSION}/sha256sums.txt" "$tmp/sha256sums.txt" 3; } \
     || die "could not download sha256sums.txt (tried ${base} and ${alt_base})"
-  want="$(awk -v a="$asset" '$2==a {print $1}' "$tmp/sha256sums.txt" | head -1)"
-  [ -n "$want" ] || die "$asset not listed in sha256sums.txt"
-  have="$($SHA "$tmp/$asset" | awk '{print $1}')"
-  [ "$have" = "$want" ] || die "checksum mismatch for $asset (have $have, want $want)"
-  install -m 0755 "$tmp/$asset" "$INSTALL_DIR/flashcli"
+  want="$(awk -v a="$release_asset" '$2==a {print $1}' "$tmp/sha256sums.txt" | head -1)"
+  [ -n "$want" ] || die "$release_asset not listed in sha256sums.txt"
+  have="$($SHA "$tmp/$release_asset" | awk '{print $1}')"
+  [ "$have" = "$want" ] || die "checksum mismatch for $release_asset (have $have, want $want)"
+  install -m 0755 "$tmp/$release_asset" "$INSTALL_DIR/flashcli"
   info "installed $INSTALL_DIR/flashcli ($VERSION)"
 }
 

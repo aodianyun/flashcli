@@ -26,6 +26,7 @@ Ref syntax: `flashcli-bundle/<name>:<version>` (FlashHub) or `bundles/<name>` (l
 
 | Month | What's new |
 |-------|------------|
+| **2026-11** | **FlashServer** — resident scheduler with a local console, live `/v1/ws` state, and per-model startup parameters; a dedicated `flashserver_ubuntu` WSL2 distro plus a Windows installer; `cache clean` / `bundle clean` split and a host layer shared by the CLI and the daemon |
 | **2026-10** | **Go-only host** — one static binary (the Python host is gone); **native-exec** / **native-abi** backends run bundles **without Python**; the synced bundle tree and weights cache are **shared across environments** |
 | **2026-06** | Production-grade **Qwen3.6 chat serving** — faster real-world replies (early stop on end-of-text), true streaming, longer outputs, and a lighter install path for HTTP + inference |
 | **2026-05** | **Qwen NVFP4 on Blackwell (SM120)** on FlashHub — one-command `run` and OpenAI-compatible `serve`; reproducible multi-env release bundles |
@@ -46,7 +47,7 @@ curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh 
 ```
 
 `install.sh` installs the `flashcli` binary: by default it downloads
-`flashcli-<os>-<arch>` + `sha256sums.txt` from the latest release (no Go needed),
+`flashcli-<os>-<arch>-v<version>` + `sha256sums.txt` from the latest release (no Go needed),
 verifies sha256, and writes `~/.flashcli/install.env`. Pass `--from-source` to
 clone or update the checkout under `~/.flashcli/src` (override with
 `--source-dir` / `FLASHCLI_CLONE_DIR`) and build with Go instead. Missing system
@@ -64,10 +65,11 @@ curl -fsSL https://cli.flashhub.top/flashcli/auto_install.sh | sh
 
 ```bash
 git clone https://github.com/aodianyun/flashcli.git && cd flashcli
-bash scripts/build_go.sh        # builds go/ → dist/go/flashcli-<os>-<arch>
+bash scripts/build_go.sh
 ```
 
-The host is a static Go binary (no Python host). Bundle venvs still get
+Build targets, tests, and packaging: [CONTRIBUTING.md](CONTRIBUTING.md#binaries-and-the-desktop-client).
+The host is a static Go binary (no Python host); bundle venvs still get
 `flashcli-bundle[infer]` on demand (source: [flashcli-bundle/](flashcli-bundle/)).
 
 ### Preflight
@@ -91,12 +93,26 @@ curl -N http://127.0.0.1:8000/v1/chat/completions \
 
 First run syncs the FlashHub runtime, creates the bundle venv, installs the torch stack, and pulls weights. The host records the expected weight file set before downloading, resumes interrupted downloads, and verifies it offline on later runs. Model-specific flags, defaults, and examples are in each bundle [README](bundles/README.md).
 
-**Local dev bundle** (rebuilt from FlashRT, not FlashHub):
+**Local dev bundle** (rebuilt from FlashRT, not FlashHub) — build steps are in
+[bundles/README.md](bundles/README.md) and each bundle's `BUILD.md`:
 
 ```bash
-bash bundles/pi05_libero/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
 flashcli run bundles/pi05_libero --prompt "pick up the red block"
 ```
+
+### Local server (`flashserver`)
+
+Run models as a resident local service with a browser console, HTTP API, and a
+Windows desktop client:
+
+```bash
+flashserver-setup                      # install binaries + service (systemd / WSL2)
+```
+
+Then open `http://localhost:8790/`. Overview: [docs/flashserver.md](docs/flashserver.md) ·
+install/ops: [docs/flashserver-install.md](docs/flashserver-install.md) ·
+desktop client: [docs/flashserver-desktop.md](docs/flashserver-desktop.md) ·
+API: [docs/flashserver-api.md](docs/flashserver-api.md).
 
 ---
 
@@ -107,6 +123,7 @@ flashcli run bundles/pi05_libero --prompt "pick up the red block"
 | **End user** | This README (install + run) → bundle [README](bundles/README.md) → [environment.md](docs/environment.md) |
 | **Integrator** | [FlashHub](https://flashhub.top) → [model_bundle_standard.md](docs/model_bundle_standard.md) — preset ref syntax |
 | **Bundle author** | [bundle_publish_standard.md](docs/bundle_publish_standard.md) → [flashcli-bundle/README.md](flashcli-bundle/README.md) |
+| **Desktop / local server** | [flashserver.md](docs/flashserver.md) — Windows installer, desktop client, local console, HTTP API ([openapi.yaml](docs/openapi.yaml)) |
 
 How the host, bundle venv, and FlashHub sync work: [architecture.md](docs/architecture.md). Full index: [docs/README.md](docs/README.md).
 

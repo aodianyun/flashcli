@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlashServer API</title>
+<style>
+  :root { color-scheme: light dark; --bg:#f7f8fa; --panel:#fff; --text:#202124; --muted:#5f6368; --line:#e3e5e8; --code:#f1f3f4; --accent:#1a73e8; --get:#1a73e8; --post:#188038; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1e1e1e; --panel:#252526; --text:#cccccc; --muted:#8a8a8a; --line:#3c3c3c; --code:#2d2d30; --accent:#3794ff; --get:#3794ff; --post:#4ec9b0; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.65 "Segoe UI","Microsoft YaHei",system-ui,sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 32px 24px 80px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin-bottom: 24px; }
+  nav { display:flex; flex-wrap:wrap; gap:8px 14px; margin: 0 0 24px; font-size:13px; }
+  nav a { color: var(--accent); text-decoration:none; }
+  nav a:hover { text-decoration: underline; }
+  section.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; margin-bottom: 16px; }
+  h2 { font-size: 15px; margin: 0 0 12px; }
+  h3 { font-size: 13px; margin: 18px 0 6px; color: var(--muted); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; }
+  tr:last-child td { border-bottom: 0; }
+  code, pre { font-family: Consolas, ui-monospace, monospace; }
+  code { background: var(--code); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code); padding: 13px 14px; border-radius: 8px; overflow: auto; font-size: 12.5px; line-height:1.55; margin: 6px 0 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .tag { display:inline-block; font-size: 11px; padding: 1px 6px; border:1px solid var(--line); border-radius: 4px; color: var(--muted); }
+  .method { display:inline-block; min-width:44px; text-align:center; font-family:Consolas,monospace; font-size:11px; font-weight:700; padding:2px 6px; border-radius:4px; color:#fff; margin-right:6px; }
+  .method.get { background: var(--get); }
+  .method.post { background: var(--post); }
+  .method.ws { background: #8e44ad; }
+  .api { border-top: 1px solid var(--line); padding-top: 18px; margin-top: 18px; }
+  .api:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+  .api h2 { font-size: 14px; display:flex; align-items:center; gap:2px; margin-bottom: 6px; }
+  .path { font-family:Consolas,monospace; font-weight:600; }
+  .desc { color: var(--muted); margin: 0 0 8px; }
+  .params th:nth-child(1), .params td:nth-child(1) { width: 150px; }
+  .params th:nth-child(2), .params td:nth-child(2) { width: 90px; }
+  .note { border-left: 3px solid var(--accent); padding: 6px 12px; background: var(--code); border-radius: 0 6px 6px 0; color: var(--muted); font-size: 13px; margin: 10px 0 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>FlashServer API</h1>
+  <div class="sub">本地模型调度服务 · <code>http://localhost:8790</code> · 权威契约：<a href="/openapi.yaml">openapi.yaml</a></div>
+
+  <nav>
+    <a href="#basics">基础</a>
+    <a href="#system">系统与模型</a>
+    <a href="#jobs">加载与任务</a>
+    <a href="#catalog">FlashHub 目录</a>
+    <a href="#logs">日志</a>
+    <a href="#ws">WebSocket</a>
+    <a href="#infer">推理</a>
+    <a href="#overview">端点总览</a>
+  </nav>
+
+  <section class="card" id="basics">
+    <h2>基础约定</h2>
+    <table class="params">
+      <tr><th>项目</th><th>值</th><th>说明</th></tr>
+      <tr><td>Base URL</td><td><code>http://localhost:8790</code></td><td>默认仅监听本机回环地址。</td></tr>
+      <tr><td>Content-Type</td><td><code>application/json</code></td><td>所有 POST 请求体为 JSON。</td></tr>
+      <tr><td>鉴权</td><td>默认关闭</td><td>开启后需要 <code>X-Flashcli-Token: &lt;token&gt;</code> 或 <code>Authorization: Bearer &lt;token&gt;</code>；<code>/health</code>、<code>/docs</code>、<code>/openapi.yaml</code>、<code>/</code> 不需要。</td></tr>
+      <tr><td>错误格式</td><td><code>{"error":"..."}</code></td><td>HTTP 4xx/5xx 时返回。</td></tr>
+    </table>
+    <h3>错误示例</h3>
+    <pre>HTTP/1.1 400 Bad Request
+Content-Type: application/json
+
+{"error":"ref is required"}</pre>
+  </section>
+
+  <section class="card" id="system">
+    <h2>系统与模型</h2>
+
+    <div class="api">
+      <h2><span class="method get">GET</span><span class="path">/health</span></h2>
+      <p class="desc">存活检查，用于 setup 和监控。</p>
+      <pre>{"status":"ok"}</pre>
+    </div>
+
+    <div class="api">
+      <h2><span class="method get">GET</span><span class="path">/v1/system</span></h2>
+      <p class="desc">服务、GPU/CPU、CUDA/SM/torch、已加载模型等实时快照。</p>
+      <h3>响应示例</h3>
+      <pre>{
+  "version": "1.0.6.2026.11.06",
+  "os": "linux", "arch": "amd64", "wsl": true,
+  "auth": false, "autostart": "enabled",
+  "started_at": "2026-11-10T02:30:55Z", "uptime_seconds": 128,
+  "cuda_version": "13.3", "sm": "89", "torch_index": "cu124",
+  "gpu": [{
+    "index": 0, "name": "NVIDIA GeForce RTX 4060",
+    "memory_total_bytes": 8585740288,
+    "memory_used_bytes": 1827667968,
+    "utilization_gpu_pct": 12,
+    "temperature_c": 36, "power_limit_w": 115, "fan_speed_pct": 0,
+    "clock_graphics_mhz": 210, "clock_memory_mhz": 810,
+    "driver_version": "610.88", "compute_cap": "8.9"
+  }],
+  "cpu": {
+    "model": "AMD Ryzen 7 5700X 8-Core Processor",
+    "cores": 8, "threads": 16, "mhz": 3400,
+    "usage_pct": 6.2, "load1": 1.3, "load5": 1.5, "load15": 1.2,
+    "mem_total_bytes": 33608581120, "mem_used_bytes": 1213284352,
+    "swap_total_bytes": 8589934592, "swap_used_bytes": 0
+  },
+  "loaded_count": 0, "max_loaded": 0, "loaded": []
+}</pre>
+    </div>
+
+    <div class="api">
+      <h2><span class="method get">GET</span><span class="path">/v1/models</span></h2>
+      <p class="desc">本地缓存的模型与 bundle/权重就绪状态。<code>serve</code> 表示 bundle 是否声明了 serve 入口。</p>
+      <h3>响应示例</h3>
+      <pre>{
+  "models": [{
+    "ref": "flashcli-bundle/qwen3_8b_nvfp4:1.0.6",
+    "cache_key": "qwen3_8b_nvfp4/1.0.6",
+    "bundle_cached": true, "weights_cached": true, "serve": true,
+    "bundle_bytes": 190862747, "weights_bytes": 7473129719,
+    "weights_source": "modelscope",
+    "weights_repo": "Qwen/Qwen3-8B", "weights_revision": "main"
+  }],
+  "loaded": [{
+    "ref": "flashcli-bundle/qwen3_8b_nvfp4:1.0.6",
+    "state": "ready", "endpoint": "http://127.0.0.1:49152",
+    "pid": 12345, "loaded_at": "2026-11-10T02:31:40Z"
+  }]
+}</pre>
+    </div>
+
+    <div class="api">
+      <h2><span class="method get">GET</span><span class="path">/v1/storage</span></h2>
+      <p class="desc">各缓存目录占用（唯一分配字节，硬链接只计一次）。</p>
+      <pre>{
+  "areas": [
+    {"name":"bundles","path":"/root/.flashcli/bundles","bytes":0},
+    {"name":"models","path":"/root/.flashcli/models","bytes":0},
+    {"name":"runtimes","path":"/root/.flashcli/runtimes","bytes":6196068352},
+    {"name":"cache","path":"/root/.flashcli/cache","bytes":30916608}
+  ]
+}</pre>
+    </div>
+
+    <div class="api">
+      <h2><span class="method post">POST</span><span class="path">/v1/storage/clean</span></h2>
+      <p class="desc">删除共享缓存：下载缓存、Python 运行时、工具、模型运行时。模型 Bundle/权重不受影响。</p>
+      <h3>请求参数</h3>
+      <table class="params">
+        <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+        <tr><td><code>targets</code></td><td>string[]</td><td><code>cache</code> / <code>python</code> / <code>tools</code> / <code>runtimes</code>。</td></tr>
+      </table>
+      <h3>请求示例</h3>
+      <pre>{"targets":["cache","python","tools","runtimes"]}</pre>
+      <h3>响应示例</h3>
+      <pre>{"freed_bytes":6196068352,"targets":["cache","python","tools","runtimes"]}</pre>
+      <div class="note">有已加载或正在加载的模型时，<code>runtimes</code> 会返回 409；运行时删除后下次加载模型会重新下载/安装。</div>
+    </div>
+  </section>
+
+  <section class="card" id="jobs">
+    <h2>加载与任务</h2>
+
+    <div class="api">
+      <h2><span class="method post">POST</span><span class="path">/v1/models/load</span></h2>
+      <p class="desc">加载模型并启动推理服务。FlashHub 引用在首次加载时自动拉取 bundle/权重。</p>
+      <h3>请求参数</h3>
+      <table class="params">
+        <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+        <tr><td><code>ref</code></td><td>string</td><td>必填。如 <code>flashcli-bundle/qwen3_8b_nvfp4:1.0.6</code>。</td></tr>
+        <tr><td><code>async</code></td><td>bool</td><td>默认 <code>true</code>，返回 <code>job_id</code>。</td></tr>
+      </table>
+      <h3>请求示例</h3>
+      <pre>curl -X POST http://localhost:8790/v1/models/load \
+  -H 'Content-Type: application/json' \
+  -d '{"ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.6","async":true}'</pre>
+      <h3>响应示例（202）</h3>
+      <pre>{"job_id":"load-1","state":"running"}</pre>
+    </div>
+
+    <div class="api">
+      <h2><span class="method get">GET</span><span class="path">/v1/jobs/{id}</span></h2>
+      <p class="desc">查询任务状态和事件历史。<code>events[].phase</code> 常见值：<code>resolve</code>、<code>runtime</code>、<code>weights</code>、<code>progress</code>、<code>done</code>、<code>failed</code>。</p>
+      <pre>{
+  "id": "load-1", "type": "load",
+  "ref": "flashcli-bundle/qwen3_8b_nvfp4:1.0.6",
+  "state": "running",
+  "events": [
+    {"time":"2026-11-10T02:31:02Z","phase":"resolve","message":"resolving bundle"},
+    {"time":"2026-11-10T02:31:10Z","phase":"weights","message":"downloading 42%"},
+    {"time":"2026-11-10T02:31:20Z","phase":"progress","message":"loading weights"}
+  ]
+}</pre>
+    </div>
+
+    <div class="api">
+      <h2><span class="method get">GET</span><span class="path">/v1/jobs/{id}/events</span></h2>
+      <p class="desc">任务进度 SSE 流；事件结束时连接关闭。</p>
+      <pre>event: progress
+data: {"time":"2026-11-10T02:31:10Z","phase":"weights","message":"downloading 42%"}
+
+event: progress
+data: {"time":"2026-11-10T02:31:20Z","phase":"progress","message":"loading weights"}
+
+event: done
+data: {"time":"2026-11-10T02:31:26Z","phase":"done"}</pre>
+    </div>
+
+    <div class="api">
+      <h2><span class="method post">POST</span><span class="path">/v1/models/unload</span></h2>
+      <p class="desc">停止推理服务并释放进程；权重缓存保留。</p>
+      <pre>{"ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.6"}</pre>
+      <pre>{"ok":true}</pre>
+    </div>
+
+    <div class="api">
+      <h2><span class="method post">POST</span><span class="path">/v1/models/clean</span></h2>
+      <p class="desc">删除本地 Bundle、权重和缓存记录。已加载或正在加载的模型会跳过；与其他模型共享的权重会保留。</p>
+      <h3>请求示例</h3>
+      <pre>{"refs":["flashcli-bundle/qwen3_8b_nvfp4:1.0.6","flashserver-smoke"]}</pre>
+      <h3>响应示例</h3>
+      <pre>{
+  "freed_bytes": 7663992466,
+  "results": [
+    {"ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.6","removed":true,"freed_bytes":7663992466},
+    {"ref":"flashserver-smoke","removed":false,"skipped":"loaded"}
+  ]
+}</pre>
+    </div>
+
+    <div class="api">
+      <h2><span class="method post">POST</span><span class="path">/v1/pull</span></h2>
+      <p class="desc">异步下载 bundle、运行时和权重，不启动推理服务。</p>
+      <pre>{"ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.6"}</pre>
+      <pre>{"job_id":"pull-1","state":"running"}</pre>
+    </div>
+  </section>
+
+  <section class="card" id="catalog">
+    <h2>FlashHub 目录</h2>
+
+    <div class="api">
+      <h2><span class="method get">GET</span><span class="path">/v1/catalog</span></h2>
+      <p class="desc">代理公共 FlashHub 仓库搜索。</p>
+      <h3>查询参数</h3>
+      <table class="params">
+        <tr><th>参数</th><th>类型</th><th>说明</th></tr>
+        <tr><td><code>q</code></td><td>string</td><td>按仓库名搜索，如 <code>pi05</code>。</td></tr>
+        <tr><td><code>tag</code></td><td>int</td><td>分类 id，来自 <code>/v1/catalog/tags</code>。</td></tr>
+        <tr><td><code>sort</code></td><td>string</td><td><code>updated</code>（默认）或 <code>downloads</code>。</td></tr>
+        <tr><td><code>page</code></td><td>int</td><td>从 1 开始。</td></tr>
+        <tr><td><code>page_size</code></td><td>int</td><td>默认 20，最大 100。</td></tr>
+      </table>
+      <h3>响应示例</h3>
+      <pre>{
+  "repos": [{
+    "id": 5,
+    "namespace": "flashcli-bundle",
+    "name": "pi05_libero",
+    "model_name": "lerobot/pi05_libero_finetuned_v044",
+    "version_count": 4, "downloads": 136,
+    "updated_at": "2026-11-10T10:13:44.023Z",
+    "tags": [{"id":1,"name":"VLA","name_cn":"VLA"}]
+  }],
+  "total": 2, "page": 1, "page_size": 20
+}</pre>
+    </div>
+
+    <div class="api">
+      <h2><span class="method get">GET</span><span class="path">/v1/catalog/tags</span></h2>
+      <p class="desc">仓库分类，用于筛选。</p>
+      <pre>{"tags":[{"id":1,"name":"VLA","name_cn":"VLA"},{"id":2,"name":"LLM","name_cn":"LLM"}]}</pre>
+    </div>
+
+    <div class="api">
+      <h2><span class="method get">GET</span><span class="path">/v1/catalog/{id}</span></h2>
+      <p class="desc">仓库详情和全部公开版本。加载某个版本用 <code>{namespace}/{name}:{version}</code>。</p>
+      <pre>{
+  "repo": {
+    "id": 5, "namespace": "flashcli-bundle", "name": "pi05_libero",
+    "model_name": "lerobot/pi05_libero_finetuned_v044",
+    "version_count": 4, "latest_version": "1.0.6",
+    "tags": [{"id":1,"name":"VLA","name_cn":"VLA"}]
+  },
+  "versions": [
+    {"id":100,"version":"1.0.6","size":124604375,"file_count":43,"release_status":"pre-release","status":"public"},
+    {"id":26,"version":"1.0.4","size":471834099,"file_count":52,"release_status":"released","status":"public"}
+  ],
+  "total": 4
+}</pre>
+    </div>
+  </section>
+
+  <section class="card" id="logs">
+    <h2>日志</h2>
+
+    <div class="api">
+      <h2><span class="method get">GET</span><span class="path">/v1/logs</span></h2>
+      <p class="desc">读取服务或模型日志（服务日志来自 <code>journalctl -u flashserver</code>）。</p>
+      <h3>查询参数</h3>
+      <table class="params">
+        <tr><th>参数</th><th>类型</th><th>说明</th></tr>
+        <tr><td><code>kind</code></td><td>string</td><td><code>server</code>（默认）或 <code>model</code>。</td></tr>
+        <tr><td><code>ref</code></td><td>string</td><td><code>kind=model</code> 时必填。</td></tr>
+        <tr><td><code>lines</code></td><td>int</td><td>默认 200，最大 2000。</td></tr>
+        <tr><td><code>since</code></td><td>int</td><td>Unix 秒；只返回该时间之后的服务日志（用于清空后只看新日志）。</td></tr>
+      </table>
+      <pre>{
+  "kind": "server",
+  "lines": [
+    "2026-11-10T10:30:55+08:00 lin-homepc systemd[1]: Started flashserver.service",
+    "2026-11-10T10:30:55+08:00 lin-homepc flashserver[224521]: listening on http://0.0.0.0:8790"
+  ]
+}</pre>
+    </div>
+
+    <div class="api">
+      <h2><span class="method get">GET</span><span class="path">/v1/logs/download</span></h2>
+      <p class="desc">完整日志附件（<code>text/plain</code>，<code>Content-Disposition: attachment</code>）。参数同上；<code>kind=model</code> 时需要 <code>ref</code>。</p>
+      <pre>curl -o flashserver.log 'http://localhost:8790/v1/logs/download?kind=server'</pre>
+    </div>
+  </section>
+
+  <section class="card" id="ws">
+    <h2>WebSocket</h2>
+    <div class="api">
+      <h2><span class="method ws">WS</span><span class="path">/v1/ws</span></h2>
+      <p class="desc">1 Hz 系统快照 + 任务进度。客户端重连后会自动收到新的快照。</p>
+      <h3>系统快照</h3>
+      <pre>{"type":"system","data":{
+  "uptime_seconds":128,
+  "gpu":[{"name":"NVIDIA GeForce RTX 4060","utilization_gpu_pct":12,"memory_used_bytes":1827667968,"memory_total_bytes":8585740288}],
+  "cpu":{"usage_pct":6.2,"mem_used_bytes":1213284352,"mem_total_bytes":33608581120},
+  "loaded":[], "loaded_count":0
+}}</pre>
+      <h3>任务进度</h3>
+      <pre>{"type":"job","data":{
+  "id":"load-1","type":"load","ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.6",
+  "state":"running",
+  "event":{"time":"2026-11-10T02:31:10Z","phase":"weights","message":"downloading 42%"}
+}}</pre>
+    </div>
+  </section>
+
+  <section class="card" id="infer">
+    <h2>推理</h2>
+    <div class="api">
+      <h2><span class="method post">POST</span><span class="path">{endpoint}/v1/chat/completions</span></h2>
+      <p class="desc">模型进程提供 OpenAI 兼容接口。endpoint 来自加载响应或 <code>/v1/models/loaded</code>，不要写死端口。</p>
+      <pre>curl http://127.0.0.1:49152/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "qwen3",
+    "messages": [{"role":"user","content":"Hello"}],
+    "stream": true
+  }'</pre>
+      <div class="note">推理 API 由 bundle 自己实现；能力（流式、工具调用、视觉输入等）取决于模型与 bundle。</div>
+    </div>
+  </section>
+
+  <section class="card" id="overview">
+    <h2>端点总览</h2>
+    <table>
+      <tr><th>方法</th><th>路径</th><th>说明</th></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/health</code></td><td>存活检查</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/system</code></td><td>系统、GPU/CPU/内存、CUDA/SM/torch、开机启动</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/models</code></td><td>缓存模型、bundle/权重状态、serve 能力、已加载实例</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/models/loaded</code></td><td>已加载实例</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/storage</code></td><td>缓存目录占用</td></tr>
+      <tr><td><span class="tag">POST</span></td><td><code>/v1/storage/clean</code></td><td>清理共享缓存（运行时/Python/工具/下载）</td></tr>
+      <tr><td><span class="tag">POST</span></td><td><code>/v1/models/load</code></td><td>加载模型（异步任务）</td></tr>
+      <tr><td><span class="tag">POST</span></td><td><code>/v1/models/unload</code></td><td>卸载模型</td></tr>
+      <tr><td><span class="tag">POST</span></td><td><code>/v1/models/clean</code></td><td>清理本地模型缓存（多选）</td></tr>
+      <tr><td><span class="tag">POST</span></td><td><code>/v1/pull</code></td><td>下载 bundle/权重（异步任务）</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/jobs/{id}</code></td><td>任务状态与事件</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/jobs/{id}/events</code></td><td>任务进度 SSE</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/catalog</code></td><td>FlashHub 仓库搜索</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/catalog/tags</code></td><td>FlashHub 分类</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/catalog/{id}</code></td><td>仓库详情 + 版本列表</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/logs</code></td><td>服务/模型日志</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/logs/download</code></td><td>完整日志附件</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/ws</code></td><td>WebSocket：系统快照 + 任务进度</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/openapi.yaml</code></td><td>OpenAPI 3.1 契约</td></tr>
+    </table>
+  </section>
+</main>
+</body>
+</html>

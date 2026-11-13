@@ -193,6 +193,7 @@ flashcli run flashcli-bundle/qwen3_8b_nvfp4:1.0.0
 | `defaults` | 是 | 所有环境共享的模型配置 |
 | `environments` | 是 | 非空 env key → 平台覆盖；native entry 必须有 `runtime`，纯 Python/CPU 环境可省略 |
 | `build` | 生成 | FlashRT/构建溯源；由 pack 写入 `dist/` |
+| `resources` | 可选 | flashserver 调度使用的实测显存占用（见 §3.4.2） |
 | `runtime_abi_version` | 条件 | `native-abi` 必填，固定 **1** |
 | `exec_protocol_version` | 条件 | `native-exec` 必填，固定 **1** |
 | `variants` / `backends` / `entries` | 禁止 | v4 一个模型一个实现；拆分 bundle |
@@ -280,6 +281,22 @@ environment 定义 `python_dependencies` 时整体替换 defaults。
 - `flashcli models show <ref>` 只显示状态，不安装。
 - `run` / `serve` 在 bundle 上下文检查；缺失时给出系统包映射，或在 root 且
   `FLASHCLI_AUTO_INSTALL_SYSTEM` 允许时自动安装。
+
+### 3.4.2 `defaults.resources`（可选，flashserver）
+
+声明 `flashserver` 调度模型时使用的实测运行时资源占用。
+
+```json
+"resources": {
+  "min_vram_mib": 12288
+}
+```
+
+- `min_vram_mib`：启动模型所需的最小空闲显存。
+- v4 environment overlay 可以覆盖该值。
+- 空闲显存减去配置的安全余量不足时，`flashserver` 返回 `409 RESOURCE_EXHAUSTED`。
+- 未声明该字段的 bundle 只按 flashserver 槽位限制准入。
+- 数值应来自该 bundle 声明 runtime 的实测峰值。
 
 ### 3.5 `defaults.env`
 

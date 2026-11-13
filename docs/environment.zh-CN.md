@@ -31,6 +31,7 @@ serve。未列出的变量**无效**。布尔开关：`1`、`true`、`yes`、`on
 | `FLASHCLI_SKIP_CUDA_USERLAND` | `0` | 跳过 `libcublas`/`libcudart` 探测/安装。 |
 | `FLASHCLI_SKIP_NATIVE_HOST_ABI` | `0` | 跳过针对所选 `.so` 的 glibc/libstdc++（`GLIBC_`/`GLIBCXX_`）门禁。 |
 | `FLASHCLI_SKIP_PREFLIGHT` | `0` | 跳过 env key + native cell + host ABI + CUDA 预检（仅调试）。 |
+| `FLASHCLI_WEB_DIR` | 未设置 | `flashserver` 控制台从该目录读取静态资源，替代内嵌副本（开发/定制）。 |
 | `FLASHCLI_AUTO_INSTALL_SYSTEM` | `auto` | 仅 root 下安装 bundle 声明的系统能力（`c-compiler`、`cxx-compiler`、`python-headers`）；`never` 禁用。 |
 
 `run`/`serve`/`pull`/`bundle sync` 会把本机 GPU 与 manifest `runtime` 匹配、校验所选 cell 的
@@ -92,8 +93,8 @@ uv 安装器（Python bundle venv；uv **不随包发布**，按需供给）：
 | `UV_INDEX_URL` | `PIP_INDEX_URL` | uv 使用的 PyPI 索引（未设时取 `PIP_INDEX_URL`）。 |
 
 供给优先使用配置的 PyPI 索引（wheel），失败回退 GitHub Release 的 tarball。
-已供给的 uv 位于 `$FLASHCLI_HOME/tools/uv/<version>/uv`；用
-`flashcli cache clean --tools`（或 `--all` 同时清缓存 + FlashHub repo-index；`--flashhub` 只清 repo-index）删除；
+已供给的 uv 位于 `$FLASHCLI_HOME/tools/uv/<version>/uv`；`flashcli cache clean`
+会删除整个共享缓存组（下载缓存、基础 Python 和已供给的 uv）；
 `flashcli cache prune` 清理未使用的缓存项。
 
 Standalone Python 自动供给（当 bundle `python_abi` 缺失）：
@@ -113,12 +114,13 @@ Standalone Python 自动供给（当 bundle `python_abi` 缺失）：
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `FLASHCLI_QUIET` | `0` | 减少 `run`/`serve`/`pull`/`sync` 输出。 |
-| `FLASHCLI_GO_RELEASE_BASE` / `FLASHCLI_GO_RELEASE_API` | GitHub releases | `flashcli upgrade` 覆盖（如 Gitee）。 |
+| `FLASHCLI_GO_RELEASE_BASE` / `FLASHCLI_GO_RELEASE_API` | GitHub releases；镜像模式开启时为 Gitee | `flashcli upgrade` 覆盖（如 Gitee）。 |
 
 ## 镜像（国内友好）
 
-`install.sh --mirror` 会写 `~/.flashcli/mirror.env`；Go host 启动时加载（`mirror.Apply`），
-因此对 bundle venv 的 pip、HF 权重下载、GitHub 下载一并生效。
+`install.sh --mirror` 和 Windows/Linux FlashServer setup 默认写入
+`~/.flashcli/mirror.env`；Go host 启动时加载（`mirror.Apply`），因此对 bundle
+venv 的 pip、HF 权重下载、GitHub 下载一并生效。桌面开关会重写或删除同一文件。
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|

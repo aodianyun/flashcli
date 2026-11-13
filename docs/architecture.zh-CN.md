@@ -16,6 +16,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 4. **固定 Python ABI** — 每个 bundle 一个 venv（`python_abi`）；CLI 准备完成后 **re-exec** 进 bundle venv。
 5. **单一 Go 主机** — 主机为 `go/` 静态二进制；bundle venv 仅 pip **`flashcli-bundle[infer]`**（protocol + infer）。
 6. **一条命令** — `flashcli run <preset>` 串联：sync → 依赖 → 权重（主机缺失则下载）→ `post_pull` → bundle venv 内离线推理。
+7. **单一 host 缓存层** — `go/internal/host` 是缓存发现、权重 key/就绪判断、runtime ID/路径、磁盘统计、ref 路径解析和清理的唯一实现。`flashcli` 与 `flashserver` 只是前端：解析输入、调用 `host`、格式化/传输结果；不得各自重写这些检查。
 
 ### 模块放哪（必读）
 
@@ -35,7 +36,54 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 
 **依赖隔离：** 主机除 `flashcli-bundle[infer]` 与 manifest `python_dependencies` 外不向 bundle venv 安装任何东西。权重下载仅在**主机**执行；bundle infer 子进程只解析缓存或 bundle 本地路径（`HF_HUB_OFFLINE=1`）。
 
+## 共用 host 服务（CLI + flashserver）
+
+`flashcli`（CLI）与 `flashserver`（常驻服务）是同一份磁盘状态的两个前端。所有缓存相关判断都在 **`go/internal/host`**，前端不得重复实现：
+
+| 能力 | 共享 API | CLI | flashserver |
+|------|----------|-----|-------------|
+| 缓存区域 + 唯一分配字节 | `host.Storage()` | `flashcli du` | `GET /v1/storage` |
+| 缓存模型、大小、就绪、运行时字节 | `host.ListModels()` | `flashcli models list` | `GET /v1/models` |
+| Bundle 可用性 / serve 能力 | `host.BundleRootUsable`、`host.ListModels` | `models list/show` | `/v1/models` |
+| 权重 key + 就绪 | `host.MarkerWeightsKey`、`host.WeightsInfo`、`host.WeightsCachedForMarker` | `models list/show` | `/v1/models` |
+| 规范 ref/cache key | `host.RefCacheKey` | ref 解析 | 清理/API ref |
+| 清理路径选择 + 删除 | `host.RefPaths`、`host.RuntimePaths`、`host.OrphanPaths`、`host.AllDataPaths`、`host.SharedCachePaths`、`host.RemovePaths` | `flashcli bundle clean`、`flashcli cache clean` | `/v1/models/clean`、`/v1/storage/clean` |
+| 删除模型缓存 | `host.RemoveCachedRef` | `bundle clean` 语义 | `/v1/models/clean` |
+
+规则：
+
+- **禁止**在 `go/internal/cli` 或 `go/internal/server` 再写 marker 遍历、权重就绪判断、目录大小遍历、清理路径解析。
+- 新行为只在 `host` 实现一次，再由两个前端暴露；表格、颜色、提示等纯展示逻辑留在前端。
+- `flashcli cache clean` 只清理共享缓存（`cache` + 基础 Python + uv），对应 `/v1/storage/clean {"targets":["cache"]}`。模型数据/运行时使用 `flashcli bundle clean` / `/v1/models/clean`；共享权重/运行时按引用保留。磁盘统计和 ref 路径选择在 `host` 共享。
+- 测试：`go test ./...`；host 测试覆盖统计/清理，CLI 测试通过 host 函数覆盖 `du`、`models list`、`bundle clean`。详见 [module_layers.zh-CN.md](module_layers.zh-CN.md)。
+
 **协议缓存 schema：** venv 的 fingerprint 只跟踪 manifest `python_dependencies`，**不跟踪** `flashcli-bundle` 的 git ref。当磁盘缓存布局变化（`flashcli_bundle.version.CACHE_SCHEMA_VERSION`）时，`venv.EnsureProtocolCacheSchema` 会在 re-exec 前把已有 venv 里的 `flashcli-bundle` **就地升级**（`pip install --upgrade --force-reinstall --no-deps`，来源不变），使旧 venv 无需整体重建即可与主机缓存路径保持一致（不重装 torch/依赖）。
+
+## 本地服务栈（desktop、`flashserver`、`flashserver-setup`）
+
+三者一起发布，且都不重复实现缓存逻辑：它们调用 `flashcli` 或上文共享的 `host` 函数。
+
+| 组件 | 源码 | 职责 |
+|------|------|------|
+| `flashserver` | `go/cmd/flashserver`、`go/internal/server` | 常驻调度器 + 本地控制台：模型加载/启动/停止、按 GPU 准入、任务队列、每模型 serve 日志、`GET /health`、`/docs`、`/openapi.yaml`；内嵌控制台页面（`go/internal/server/web`，可用 `FLASHCLI_WEB_DIR` 覆盖） |
+| `flashserver-setup` | `go/cmd/flashserver-setup`、`go/internal/setup` | 安装后端：Linux 写 `/etc/flashserver/config.json` + `flashserver.service`；Windows 导入 `flashserver_ubuntu` WSL2 发行版、启用 systemd 与国内镜像、创建登录任务与模型防火墙规则。另有 `--start-service` / `--stop-service`、`--enable-autostart` / `--disable-autostart`、`--uninstall`（`--purge-*`）、`--dry-run`、供 UI 读取的 `--progress-file` |
+| 桌面客户端 | `desktop/`（Rust，egui/eframe） | Windows GUI：只调用守护进程的 HTTP API 与 `/v1/ws`，通过 `wsl.exe` / `systemctl` 启停服务，不直接读缓存内部 |
+
+```mermaid
+flowchart LR
+  subgraph WIN[Windows 安装包]
+    ISS["flashserver-setup-windows-amd64-v&lt;version&gt;.exe<br/>Inno Setup"] --> CLIENT[FlashServer.exe]
+    ISS --> SETUP[flashserver-setup.exe]
+  end
+  CLIENT -- "HTTP + /v1/ws" --> SRV["flashserver :8790"]
+  CLIENT -- UAC --> SETUP
+  SETUP -- "systemd 单元 / WSL 发行版 + 登录任务" --> SRV
+  SRV -- "re-exec / serve" --> CLI[flashcli]
+  CLI --> HOST[(~/.flashcli)]
+  SRV --> HOST
+```
+
+`flashserver` 不导入任何 Python infer 代码：它通过运行 `flashcli` 来准备并服务模型，因此两个前端共用同一套缓存实现。其状态位于 `$FLASHCLI_HOME/flashserver/`（`serve-options.json`、每模型 serve 日志）。HTTP 契约见 [openapi.yaml](openapi.yaml)，面向用户的行为见 [flashserver.zh-CN.md](flashserver.zh-CN.md)。
 
 **Re-exec 命令**（在 bundle venv 内）：
 
@@ -96,6 +144,14 @@ sequenceDiagram
 
 **Bundle 解析顺序**：本地 positional path（含 `flashcli-bundle.json` 的目录）> 已 sync 的 bundle 缓存（`bundles/<cache-key>/` 下 preset marker）；FlashHub ref 由 `bundle sync` 同步。
 
+**Runtime cell 选择**（`flashcli` 与 `flashserver` 共用）：
+
+1. 本机的精确 `environments` key（`sm<sm>-cu<cuda>-<os>-<arch>-py<abi>`）；
+2. environment 上显式的 `match` 块（可以忽略 CUDA tag）；
+3. 按分数兜底（`preflight.ScoreEnvKeyMatch`），只在 SM/OS/arch/Python 一致的 cell 中选，并优先同一 CUDA 大版本。
+
+宿主 key 的 CUDA 以**驱动能力**（`nvidia-smi`）优先，其次才是本机安装的 `nvcc`。要求比驱动更新的 CUDA 的 cell 会被直接拒绝（不会等到 `dlopen` 才失败）；SM 不一致的 cell 永远不会被选中。
+
 ## 权重缓存：下载完整性 vs 就绪（离线保证）
 
 两项独立检查，刻意分开：
@@ -132,8 +188,8 @@ bundle venv 默认用 **uv** 创建与安装（仍保持每模型隔离）。uv 
 - `uv venv --python <base> --seed` 建 venv；`uv pip install --python …` 安装 `flashcli-bundle[infer]`、torch 与 manifest 依赖。协议升级与 CUDA userland 安装也走同一安装器。
 - `UV_CACHE_DIR` 默认 `~/.flashcli/cache/uv`（与 `runtimes/` 同文件系统，uv 用**硬链接**共享 wheel，torch/CUDA 重层只存一份）；`UV_LINK_MODE=hardlink`。
 - `FLASHCLI_VENV_BACKEND=pip` 是显式逃生口（已弃用）；默认 `uv` 在不可用时明确报错。native bundle 不需要 uv。
-- venv 建好后即可离线使用（uv 只在安装时需要）；`flashcli cache clean [--uv|--tools|--flashhub|--all]` 可清理 uv 缓存、已供给二进制和/或 FlashHub repo-index 缓存，不影响已建 venv；`--all` 三者全选；`flashcli cache prune` 清理 uv 中不可达的缓存对象（较保守；`cache clean` 才会全部清空）。`flashcli du` 按区域显示 bundles、models、runtimes、cache、tools、python 的 apparent 占用。
-- `flashcli bundle clean <ref>` 只删该 ref 的 runtime；加 `--all` 同时删其 bundle 树和权重。`flashcli bundle clean` 删除所有 runtime；`flashcli bundle clean --all` 重置全部 runtime、bundles 和 models。所有模式先打印受影响路径并询问 `Continue? [y/N]`；脚本用 `--yes` 跳过确认。
+- venv 建好后即可离线使用（uv 只在安装时需要）；`flashcli cache clean` 只清理共享缓存（`~/.flashcli/cache`、基础 Python、uv 工具），不影响已建 venv、Bundle 和权重；`flashcli cache prune` 清理 uv 中不可达的缓存对象（较保守；`cache clean` 才全部清空）。`flashcli du` 显示 bundles、models、runtimes、cache（含 Python/工具）的唯一分配占用。
+- `flashcli bundle clean <ref>` 只删该 ref 的 runtime；加 `--all` 同时删其 bundle 树和权重。共享权重/运行时在还有其他缓存 ref 引用时保留（剩余 bundle marker 即引用计数）。`flashcli bundle clean` 删除所有 runtime；`flashcli bundle clean --all` 重置全部 runtime、bundles 和 models。所有模式先打印受影响路径并询问 `Continue? [y/N]`；脚本用 `--yes` 跳过确认。
 - `flashcli bundle clean --orphans` 清理 preset marker 的 `bundle_root` 已失效的 bundle/model 缓存，以及没有有效 bundle root 的 runtime；有效缓存不动。删除本地 bundle 或测试缓存后使用。
 
 ## 本机目录

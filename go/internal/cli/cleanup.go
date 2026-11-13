@@ -3,11 +3,12 @@ package cli
 import (
 	"bufio"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/aodianyun/flashcli/go/internal/host"
 )
 
 // confirmCleanup prints the exact paths that will be removed and asks for
@@ -42,27 +43,19 @@ func confirmCleanup(cmd *cobra.Command, paths []string, yes bool) ([]string, err
 }
 
 func existingPaths(paths []string) []string {
-	seen := map[string]bool{}
-	out := make([]string, 0, len(paths))
-	for _, p := range paths {
-		if p == "" || seen[p] {
-			continue
-		}
-		if _, err := os.Stat(p); err != nil {
-			continue
-		}
-		seen[p] = true
-		out = append(out, p)
-	}
+	out := host.ExistingPaths(paths)
 	sort.Strings(out)
 	return out
 }
 
 func removePaths(cmd *cobra.Command, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	if _, err := host.RemovePaths(paths); err != nil {
+		return failed(cmd, err)
+	}
 	for _, p := range paths {
-		if err := os.RemoveAll(p); err != nil {
-			return failed(cmd, err)
-		}
 		fmt.Fprintf(cmd.OutOrStdout(), "Removed %s\n", p)
 	}
 	return nil

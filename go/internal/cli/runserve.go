@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/aodianyun/flashcli/go/internal/cuda"
+	"github.com/aodianyun/flashcli/go/internal/host"
 	"github.com/aodianyun/flashcli/go/internal/inferexec"
 	"github.com/aodianyun/flashcli/go/internal/manifest"
 	"github.com/aodianyun/flashcli/go/internal/nativeabi"
@@ -268,37 +269,11 @@ func runNativeABI(m *manifest.Manifest, entry *manifest.EntrySpec, root, version
 	return nil
 }
 
-// resolveWeights prepares weights + manifest/post-pull env. When --checkpoint is
-// given the cache download is skipped.
+// resolveWeights delegates to the shared host weight preparation.
 func resolveWeights(m *manifest.Manifest, abs, version, variant string, quiet bool, hf hostFlags) (string, map[string]string, []string, error) {
-	mainSpec, _, extraSpecs, err := weights.ManifestSpecs(m, variant)
+	checkpoint, extra, env, err := host.ResolveWeights(context.Background(), m, abs, version, variant, quiet, hf.Checkpoint)
 	if err != nil {
 		return "", nil, nil, err
-	}
-	checkpoint := ""
-	var env map[string]string
-	switch {
-	case hf.Checkpoint != "":
-		checkpoint, err = filepath.Abs(hf.Checkpoint)
-		if err != nil {
-			return "", nil, nil, err
-		}
-		if _, statErr := os.Stat(checkpoint); statErr != nil {
-			return "", nil, nil, fmt.Errorf("Checkpoint not found: %s", checkpoint)
-		}
-		env = weights.EnvMap(m, variant)
-	case envBool("FLASHCLI_SKIP_WEIGHTS"):
-		env = weights.EnvMap(m, variant)
-	default:
-		checkpoint, env, err = weights.PrepareBundle(context.Background(), m, version, variant, quiet, false)
-		if err != nil {
-			return "", nil, nil, err
-		}
-	}
-	_ = mainSpec
-	extra := map[string]string{}
-	for key, ex := range extraSpecs {
-		extra[key] = weights.ExtraWeightDest(checkpoint, abs, key, ex)
 	}
 	return checkpoint, extra, mapEnv(env), nil
 }

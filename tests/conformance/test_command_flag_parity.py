@@ -10,7 +10,12 @@ Required flags:
   bundle clean    --all --orphans --yes
   bundle validate --skip-abi-probe
   bundle install  --force --quiet/-q
+  cache clean     --yes
   root            --version/-V
+
+`cache clean` lost `--uv/--tools/--flashhub/--all` on purpose: it now clears the
+whole shared-cache group (downloads, base Python, uv) and model data moved to
+`bundle clean`, so finer-grained cache targets no longer exist.
 """
 
 from __future__ import annotations
@@ -25,7 +30,7 @@ FLAG_CASES = {
     ("bundle", "clean"): ["--all", "--orphans", "--yes"],
     ("bundle", "validate"): ["--skip-abi-probe"],
     ("bundle", "install"): ["--force", "--quiet", "-q"],
-    ("cache", "clean"): ["--uv", "--tools", "--flashhub", "--all", "--yes"],
+    ("cache", "clean"): ["--yes"],
 }
 
 # Python `doctor --install/--force` installed *host Python* deps; the Go host is
