@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/signal"
 	"strconv"
@@ -157,6 +158,33 @@ func TestFlashcliLauncherOptionsAndFlags(t *testing.T) {
 	waitHealthy(t, p)
 	if log := p.LastLog(); !strings.Contains(log, "--max-seq 128") || !strings.Contains(log, "0.0.0.0") {
 		t.Fatalf("LastLog = %q", log)
+	}
+}
+
+func TestFlashcliProcessHealthAcceptsHealthz(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	p := &flashcliProcess{
+		endpoint: ts.URL,
+		client:   &http.Client{Timeout: 2 * time.Second},
+		done:     make(chan struct{}),
+	}
+	if err := p.Healthy(context.Background()); err != nil {
+		t.Fatalf("Healthy with /healthz only: %v", err)
+	}
+
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer bad.Close()
+	p2 := &flashcliProcess{endpoint: bad.URL, client: &http.Client{Timeout: 2 * time.Second}, done: make(chan struct{})}
+	if err := p2.Healthy(context.Background()); err == nil {
+		t.Fatal("Healthy accepted HTTP 503")
 	}
 }
 

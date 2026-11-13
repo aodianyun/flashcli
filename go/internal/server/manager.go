@@ -427,6 +427,24 @@ func numberFromAny(v any) (int64, bool) {
 	}
 }
 
+// endpointFromLog extracts the endpoint printed by `flashcli serve` for native
+// backends: "native-exec serve: http://127.0.0.1:1234 (no Python)".
+func endpointFromLog(line string) string {
+	const marker = "native-exec serve:"
+	idx := strings.Index(line, marker)
+	if idx < 0 {
+		return ""
+	}
+	rest := strings.TrimSpace(line[idx+len(marker):])
+	if i := strings.IndexAny(rest, " \t\r\n"); i >= 0 {
+		rest = rest[:i]
+	}
+	if !strings.HasPrefix(rest, "http://") && !strings.HasPrefix(rest, "https://") {
+		return ""
+	}
+	return strings.TrimRight(rest, "/")
+}
+
 // portAvailable reports whether a TCP port can be bound on all interfaces.
 func portAvailable(port int) bool {
 	ln, err := net.Listen("tcp", "0.0.0.0:"+strconv.Itoa(port))
@@ -533,18 +551,40 @@ func (l FlashcliLauncher) StartWithOptions(ctx context.Context, refStr string, o
 }
 
 type flashcliProcess struct {
-	ref      string
-	cmd      *exec.Cmd
-	port     int
-	endpoint string
-	client   *http.Client
-	logPath  string
-	done     chan struct{}
-	waitErr  error
+	ref     string
+	cmd     *exec.Cmd
+	port    int
+	client  *http.Client
+	logPath string
+	done    chan struct{}
+	waitErr error
+
+	endpointMu sync.Mutex
+	endpoint   string
 }
 
-func (p *flashcliProcess) Ref() string      { return p.ref }
-func (p *flashcliProcess) Endpoint() string { return p.endpoint }
+func (p *flashcliProcess) Ref() string { return p.ref }
+
+func (p *flashcliProcess) Endpoint() string {
+	p.endpointMu.Lock()
+	defer p.endpointMu.Unlock()
+	return p.endpoint
+}
+
+func (p *flashcliProcess) setEndpoint(endpoint string) {
+	p.endpointMu.Lock()
+	p.endpoint = endpoint
+	p.endpointMu.Unlock()
+}
+
+// adoptReportedEndpoint switches to the endpoint a native serve child reported
+// ("native-exec serve: http://host:port"). Native http backends choose their
+// own port, so the allocated port cannot be assumed.
+func (p *flashcliProcess) adoptReportedEndpoint() {
+	if u := endpointFromLog(p.LastLog()); u != "" && u != p.Endpoint() {
+		p.setEndpoint(u)
+	}
+}
 func (p *flashcliProcess) PID() int {
 	if p.cmd.Process == nil {
 		return 0
@@ -601,19 +641,29 @@ func (p *flashcliProcess) LastLog() string {
 }
 
 func (p *flashcliProcess) Healthy(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.endpoint+"/health", nil)
-	if err != nil {
-		return err
+	// Native http backends report their own endpoint; adopt it before probing.
+	p.adoptReportedEndpoint()
+	// Python serve exposes /health; native serve (abi/exec) exposes /healthz
+	// (docs/bundle_execution_abi.md). Accept either so one supervisor works
+	// for both kinds.
+	var lastErr error
+	for _, path := range []string{"/health", "/healthz"} {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.Endpoint()+path, nil)
+		if err != nil {
+			return err
+		}
+		resp, err := p.client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			return nil
+		}
+		lastErr = fmt.Errorf("%s HTTP %d", path, resp.StatusCode)
 	}
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("health HTTP %d", resp.StatusCode)
-	}
-	return nil
+	return lastErr
 }
 
 func (p *flashcliProcess) Stop(ctx context.Context) error {

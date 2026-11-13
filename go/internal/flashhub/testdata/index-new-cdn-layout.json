@@ -1,0 +1,140 @@
+{
+ "code": 0,
+ "message": "success",
+ "data": {
+  "files": [
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/flash_rt/models/qwen35/__init__.py/__init__.py",
+    "file_name": "__init__.py",
+    "file_size": 51,
+    "md5_hash": "811b597c7b39b423c05457b0a9232a35"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/flash_rt/frontends/torch/__init__.py/__init__.py",
+    "file_name": "__init__.py",
+    "file_size": 70,
+    "md5_hash": "366db5030778ccb59d20e3c82250e0ed"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/flash_rt/frontends/__init__.py/__init__.py",
+    "file_name": "__init__.py",
+    "file_size": 296,
+    "md5_hash": "5ef9c9ca1d4017d76de45df6958b03a6"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/NOTICE.FlashRT/NOTICE.FlashRT",
+    "file_name": "NOTICE.FlashRT",
+    "file_size": 349,
+    "md5_hash": "49b60937905cbab8a7f6bc86cb263475"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/flash_rt/models/__init__.py/__init__.py",
+    "file_name": "__init__.py",
+    "file_size": 500,
+    "md5_hash": "d1a1484c17fea1f48b9d38366c9431fd"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/flashcli-bundle.json/flashcli-bundle.json",
+    "file_name": "flashcli-bundle.json",
+    "file_size": 3058,
+    "md5_hash": "6c449399230dbc24bf6cfb917773e3f4"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/flash_rt/__init__.py/__init__.py",
+    "file_name": "__init__.py",
+    "file_size": 4004,
+    "md5_hash": "a40b34f3ffe61a427fee9befa984e714"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/flash_rt/_extensions.py/_extensions.py",
+    "file_name": "_extensions.py",
+    "file_size": 5347,
+    "md5_hash": "a7385d3f7fd1f2959fa9a66c2289f4dd"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/run.py/run.py",
+    "file_name": "run.py",
+    "file_size": 7193,
+    "md5_hash": "20e5102bf05c7888e01b9de6f7cbc065"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/flash_rt/frontends/torch/_qwen35_rtx_weights.py/_qwen35_rtx_weights.py",
+    "file_name": "_qwen35_rtx_weights.py",
+    "file_size": 9357,
+    "md5_hash": "e5413375c8248041c35da5d31034fdb5"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/LICENSE.FlashRT/LICENSE.FlashRT",
+    "file_name": "LICENSE.FlashRT",
+    "file_size": 11358,
+    "md5_hash": "3b83ef96387f14655fc854ddc3c6bd57"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/flash_rt/frontends/torch/_qwen3_vl_geometry.py/_qwen3_vl_geometry.py",
+    "file_name": "_qwen3_vl_geometry.py",
+    "file_size": 13700,
+    "md5_hash": "003713b1544e01f96e433782c6fc8e7d"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/flash_rt/frontends/torch/qwen35_rtx.py/qwen35_rtx.py",
+    "file_name": "qwen35_rtx.py",
+    "file_size": 17922,
+    "md5_hash": "7124daec7d386c9246f8773b443a4248"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/flash_rt/frontends/torch/_qwen35_rtx_calibrate.py/_qwen35_rtx_calibrate.py",
+    "file_name": "_qwen35_rtx_calibrate.py",
+    "file_size": 22051,
+    "md5_hash": "ef66fb5a07b683df4b67afc78535b941"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/flash_rt/models/qwen35/pipeline_rtx.py/pipeline_rtx.py",
+    "file_name": "pipeline_rtx.py",
+    "file_size": 53139,
+    "md5_hash": "d6ff645a850eae3a15ef65256ce42e4a"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/flash_rt/frontends/torch/_qwen3_vl_vision_rtx.py/_qwen3_vl_vision_rtx.py",
+    "file_name": "_qwen3_vl_vision_rtx.py",
+    "file_size": 64639,
+    "md5_hash": "791d1af3f7a7b4fee853f702ae1b7e79"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/quant/qwen35_4b_draft_tokens.safetensors/qwen35_4b_draft_tokens.safetensors",
+    "file_name": "qwen35_4b_draft_tokens.safetensors",
+    "file_size": 65720,
+    "md5_hash": "aa368e9cc2abed8231a929141af930f3"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/runtime/sm120-cu130-linux-x86_64-py312/flash_rt_qwen3_vl_kernels-3a2f8e1a-sm120-cu130-linux-x86_64-py312.so/flash_rt_qwen3_vl_kernels-3a2f8e1a-sm120-cu130-linux-x86_64-py312.so",
+    "file_name": "flash_rt_qwen3_vl_kernels-3a2f8e1a-sm120-cu130-linux-x86_64-py312.so",
+    "file_size": 692824,
+    "md5_hash": "05523ede38ab71be71cbaa24c9d5a9ac"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/runtime/sm120-cu130-linux-x86_64-py312/flash_rt_kernels-3a2f8e1a-sm120-cu130-linux-x86_64-py312.so/flash_rt_kernels-3a2f8e1a-sm120-cu130-linux-x86_64-py312.so",
+    "file_name": "flash_rt_kernels-3a2f8e1a-sm120-cu130-linux-x86_64-py312.so",
+    "file_size": 35977328,
+    "md5_hash": "a9425ce0d9b029368083dd982cb58684"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/runtime/sm120-cu130-linux-x86_64-py312/flash_rt_fa2-3a2f8e1a-sm120-cu130-linux-x86_64-py312.so/flash_rt_fa2-3a2f8e1a-sm120-cu130-linux-x86_64-py312.so",
+    "file_name": "flash_rt_fa2-3a2f8e1a-sm120-cu130-linux-x86_64-py312.so",
+    "file_size": 71682464,
+    "md5_hash": "22a3c47c781d60035f8005264cfe968e"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/quant/qwen35_4b_vit_gptq.safetensors/qwen35_4b_vit_gptq.safetensors",
+    "file_name": "qwen35_4b_vit_gptq.safetensors",
+    "file_size": 169896112,
+    "md5_hash": "276296a3eb5988b1796fc9bf65786d16"
+   },
+   {
+    "download_url": "https://flashhub-cdn.aodianyun.com/repo/66/versions/145/quant/qwen35_4b_nvfp4_gptq.safetensors/qwen35_4b_nvfp4_gptq.safetensors",
+    "file_name": "qwen35_4b_nvfp4_gptq.safetensors",
+    "file_size": 2365479592,
+    "md5_hash": "387b839fd54defbe755a70a3c189e169"
+   }
+  ]
+ }
+}

@@ -40,13 +40,25 @@ pip install -e "./flashcli-bundle[infer]"
 flashcli doctor
 ```
 
-Run tests:
+Run tests in tiers — do not run the heavy tier for every edit:
+
+| Tier | Command | When |
+|------|---------|------|
+| **1 — code** (default) | `cd go && go test ./...` · `pytest tests/` · `gofmt -l .` | Every change / PR |
+| **2 — acceptance** (local, offline) | `bash scripts/verify_e2e.sh` | Before merging to `main`, before a release candidate |
+| **3 — live** (network) | `bash scripts/verify_e2e.sh --network` | Before publishing a release |
+
+Tier 1 is unit/integration with fixtures. Tier 2 runs the **real binaries**:
+`flashcli version/doctor/bundle validate/models show`, real `run` on v3 and v4
+Python bundles plus a native bundle, an offline FlashHub sync through a local
+HTTP index (both CDN layouts), and a real `flashserver` daemon exercising
+`load → endpoint → logs → unload` over HTTP. Tier 3 adds the live FlashHub
+manifest check (`FLASHCLI_ACCEPTANCE_NETWORK=1`).
 
 ```bash
-pytest tests/              # unit/integration (default; excludes tests/bench)
+pytest tests/              # tier 1 (excludes tests/bench)
 pytest tests/bench/        # bench script helpers (scripts/bench_*.py)
-pytest tests/ tests/bench/ # full suite including bench
-cd go && go test ./...     # Go host, including shared cache/cleanup contracts
+bash scripts/verify_e2e.sh # tier 2 (Linux/WSL; builds dist/go)
 ```
 
 ### Binaries and the desktop client
@@ -173,7 +185,7 @@ unpublished test/draft releases.
 **Host (Go) release checklist:**
 
 1. Bump **both** `[project].version` in `pyproject.toml` and `version` in `desktop/Cargo.toml` on `dev` (desktop uses the three-part prefix, e.g. `1.0.7`); commit (`chore(release): bump version to X`). Packaging fails if they diverge.
-2. Sync `dev` → `main` (squash-and-record, above) so `main` carries the validated commit.
+2. Sync `dev` → `main` (squash-and-record, above) so `main` carries the validated commit. Before tagging, also check the live FlashHub index layout (index JSON only, a few KiB): `FLASHCLI_FLASHHUB_LIVE=1 pytest tests/test_flashhub_index_contract.py`.
 3. On Windows from `main`, build the installer:
    `powershell -ExecutionPolicy Bypass -File scripts/build_windows_package.ps1`
    (client + Go assets + `flashserver-setup-windows-amd64-v<version>.exe`; use `-GoBin` if `go` is not on PATH).
@@ -184,8 +196,7 @@ unpublished test/draft releases.
    The script requires a clean `main` equal to `origin/main`, creates/pushes tag `vX` at HEAD, builds the Linux/Windows Go assets, uploads them plus the Windows installer, and fails if either GitHub or Gitee upload fails. Use `FLASHCLI_RELEASE_TARGET` only for a different release branch; `--allow-non-target` is for tests only.
    The Linux assets are reproducible; the Inno Setup installer is **not** byte-reproducible, so put its final SHA256 into the notes **after** the last installer build and do not rebuild it afterwards.
 5. Write release notes per the standard below on **both** platforms. `--notes-file` uses the same body for GitHub and Gitee; if omitted, the script uses a minimal generated note.
-6. Verify the published assets in a clean environment:
-   `bash scripts/verify_release.sh --version X` (isolated prefix; add `--mirror` for Gitee).
+6. Verify the published assets in a clean environment:   `bash scripts/verify_release.sh --version X` (isolated prefix; add `--mirror` for Gitee). Before tagging, run the acceptance tiers on `main`: `bash scripts/verify_e2e.sh` then `bash scripts/verify_e2e.sh --network`.
 7. Sanity-check the published Windows installer name/SHA256 and that `flashcli-linux-{amd64,arm64}` + `flashserver-*` assets are present on both hosts.
 
 - **Bundles**: follow the maintainer checklist below and [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md).
@@ -218,6 +229,31 @@ Concise; **Features** and **Fixes** only. Bold the key terms. Same text on GitHu
 ```
 
 Rules: short bullets, no raw commit dump, no extra sections; English (an optional one-line `> 简体中文` is fine); include asset sha256.
+
+**Write against the previous release, not against the commits.** The body is a
+comparison: every bullet must be traceable to a difference between the previous
+published tag (`vPREV`) and the new one (`vNEW`). Commit messages are raw
+material only.
+
+Procedure:
+
+1. `git log --oneline vPREV..vNEW` — understand what happened (do not copy it).
+2. `git diff --stat vPREV..vNEW` and review the user-visible surface (commands,
+   flags, APIs, manifests, installers). For each bullet ask: *could a user of
+   `vPREV` have done this before?*
+3. Classify honestly:
+   - **Features** — capabilities that did not exist in `vPREV` (new commands,
+     new components, changed defaults, new asset/format contracts).
+   - **Fixes** — behavior that was **broken in `vPREV`** and now works. Include
+     the observed failure (error text / symptom), not the internal commit.
+   - Drop internal churn from developing unreleased code (fixes made while
+     building a brand-new component are part of that feature, not fixes for
+     `vPREV` users), refactors with no visible effect, and test/doc-only work.
+4. Verify each claim against the diff or a real run; remove anything you cannot
+   demonstrate. Prefer concrete user outcomes ("`du` counted hardlinked layers
+   per runtime") over internal names.
+5. Assets: regenerate the hashes from the **last** build and list every uploaded
+   asset. End with the compare link `.../compare/vPREV...vNEW`.
 
 ## Pull request guidelines
 

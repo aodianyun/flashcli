@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,6 +17,7 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/flashhub"
 	"github.com/aodianyun/flashcli/go/internal/gpu"
 	"github.com/aodianyun/flashcli/go/internal/host"
+	"github.com/aodianyun/flashcli/go/internal/paths"
 	"github.com/aodianyun/flashcli/go/internal/version"
 )
 
@@ -70,15 +72,17 @@ func New(addr string) *Server {
 	}
 	gpuProbe := gpu.Probe
 	store := newServeSettingsStore("")
+	logDir := filepath.Join(paths.Home(), "flashserver", "logs", "serve")
 	return &Server{
 		Addr:          addr,
 		Source:        defaultSource{},
 		Puller:        hostPuller{},
 		Catalog:       flashhub.NewClient(),
 		Jobs:          NewJobManager(),
-		Manager:       NewManagerWithOptions(FlashcliLauncher{}, ManagerOptions{GPU: gpuProbe, ServeSettings: store}),
+		Manager:       NewManagerWithOptions(FlashcliLauncher{LogDir: logDir}, ManagerOptions{GPU: gpuProbe, ServeSettings: store}),
 		GPU:           gpuProbe,
 		Started:       time.Now(),
+		LogDir:        logDir,
 		ServeSettings: store,
 	}
 }

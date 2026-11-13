@@ -43,6 +43,28 @@ func TestFlashcliBundleSpecOverride(t *testing.T) {
 	}
 }
 
+func TestFlashcliBundleSpecLocalDirGetsInferExtra(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/pyproject.toml", []byte(`[project]
+name = "flashcli-bundle"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FLASHCLI_BUNDLE_PIP_SPEC", dir)
+	spec, err := FlashcliBundleSpec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec != dir+"[infer]" {
+		t.Fatalf("spec = %q, want %q", spec, dir+"[infer]")
+	}
+	// An explicit spec is never rewritten.
+	t.Setenv("FLASHCLI_BUNDLE_PIP_SPEC", dir+"[infer]")
+	if spec, _ := FlashcliBundleSpec(); spec != dir+"[infer]" {
+		t.Fatalf("spec = %q", spec)
+	}
+}
+
 func TestFlashcliBundleSpecGitDefault(t *testing.T) {
 	t.Setenv("FLASHCLI_BUNDLE_PIP_SPEC", "")
 	t.Setenv("FLASHCLI_INSTALL_REPO", "")

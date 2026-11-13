@@ -82,6 +82,40 @@ func TestPathFromDownloadURL(t *testing.T) {
 	}
 }
 
+func TestParseIndexCollapsesDuplicatedCDNLeaf(t *testing.T) {
+	body := []byte(`{"code":0,"data":{"files":[
+		{"download_url":"https://cdn.example/repo/66/versions/145/flashcli-bundle.json/flashcli-bundle.json","file_name":"flashcli-bundle.json","file_size":10,"md5_hash":"aa"},
+		{"download_url":"https://cdn.example/repo/66/versions/145/flash_rt/models/qwen35/__init__.py/__init__.py","file_name":"__init__.py","file_size":5,"md5_hash":"bb"},
+		{"download_url":"https://cdn.example/repo/66/versions/145/NOTICE.FlashRT/NOTICE.FlashRT","file_name":"NOTICE.FlashRT","file_size":7,"md5_hash":"cc"},
+		{"download_url":"https://cdn.example/repo/30/versions/79/run.py","file_name":"run.py","file_size":3,"md5_hash":"dd"}
+	]}}`)
+
+	ix, err := parseIndex(body, "demo:1")
+	if err != nil {
+		t.Fatalf("parseIndex: %v", err)
+	}
+	got := map[string]bool{}
+	for _, f := range ix.Files {
+		got[f.Path] = true
+	}
+	for _, want := range []string{
+		"flashcli-bundle.json",
+		"flash_rt/models/qwen35/__init__.py",
+		"NOTICE.FlashRT",
+		"run.py",
+	} {
+		if !got[want] {
+			t.Fatalf("missing path %q in %v", want, got)
+		}
+	}
+	if len(ix.Files) != 4 {
+		t.Fatalf("files = %d", len(ix.Files))
+	}
+	if f := ix.Find(ManifestPath); f == nil || f.Path != ManifestPath {
+		t.Fatalf("manifest lookup = %+v", f)
+	}
+}
+
 func TestFetchIndexAndDownloadManifest(t *testing.T) {
 	manifest := []byte(`{"name":"demo"}`)
 	sum := md5.Sum(manifest)
