@@ -559,12 +559,26 @@ begin
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
 end;
 
+function WSLDistroName: String;
+var
+  A: AnsiString;
+  S: String;
+begin
+  Result := 'Ubuntu';
+  if LoadStringFromFile(ExpandConstant('{localappdata}') + '\FlashServer\distro.txt', A) then
+  begin
+    S := Trim(String(A));
+    if S <> '' then
+      Result := S;
+  end;
+end;
+
 function ServiceActive: Boolean;
 var
   ResultCode: Integer;
 begin
   Result := Exec(ExpandConstant('{sysnative}\wsl.exe'),
-    '-d Ubuntu -u root systemctl is-active flashserver',
+    '-d "' + WSLDistroName + '" -u root systemctl is-active flashserver',
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
 end;
 
