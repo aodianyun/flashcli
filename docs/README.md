@@ -8,6 +8,7 @@
 - **Integrators** — pin preset refs from [FlashHub](https://flashhub.top): [model_bundle_standard.md](model_bundle_standard.md).
 - **External bundle authors** — publish to FlashHub: [bundle_publish_standard.md](bundle_publish_standard.md) (+ [flashcli-bundle/README.md](../flashcli-bundle/README.md)); execution backends: [bundle_execution_abi.md](bundle_execution_abi.md).
 - **Maintainers** — build/release bundles: [bundle_builder_guide.md](bundle_builder_guide.md) · [runtime-matrix.md](runtime-matrix.md).
+- **Desktop / local server** — `flashserver` daemon, desktop client, and Windows/Linux setup: [flashserver.md](flashserver.md).
 - **Contributors / architecture** — [architecture.md](architecture.md), [module_layers.md](module_layers.md); rules: [../CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ## Doc index

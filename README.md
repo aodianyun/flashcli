@@ -26,6 +26,7 @@ Ref syntax: `flashcli-bundle/<name>:<version>` (FlashHub) or `bundles/<name>` (l
 
 | Month | What's new |
 |-------|------------|
+| **2026-11** | **FlashServer** — resident scheduler with a local console, live `/v1/ws` state, and per-model startup parameters; a dedicated `flashserver_ubuntu` WSL2 distro plus a Windows installer; `cache clean` / `bundle clean` split and a host layer shared by the CLI and the daemon |
 | **2026-10** | **Go-only host** — one static binary (the Python host is gone); **native-exec** / **native-abi** backends run bundles **without Python**; the synced bundle tree and weights cache are **shared across environments** |
 | **2026-06** | Production-grade **Qwen3.6 chat serving** — faster real-world replies (early stop on end-of-text), true streaming, longer outputs, and a lighter install path for HTTP + inference |
 | **2026-05** | **Qwen NVFP4 on Blackwell (SM120)** on FlashHub — one-command `run` and OpenAI-compatible `serve`; reproducible multi-env release bundles |
@@ -97,6 +98,26 @@ First run syncs the FlashHub runtime, creates the bundle venv, installs the torc
 bash bundles/pi05_libero/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
 flashcli run bundles/pi05_libero --prompt "pick up the red block"
 ```
+
+### Local server (`flashserver`)
+
+`flashserver` is the resident scheduler behind the desktop client: it keeps
+models loaded, serves the local console API on `http://127.0.0.1:8790`
+(`/health`, `/docs`, `/openapi.yaml`), and streams state over `/v1/ws`.
+
+```bash
+flashserver --addr 127.0.0.1:8790 --token <token>   # foreground daemon
+flashserver-setup                                   # install binaries + service
+flashserver-setup --backend wsl --wsl-dir D:\FlashServerWSL
+flashserver-setup --uninstall --purge-models
+```
+
+`flashserver-setup` is the installer backend on both platforms: Linux writes a
+`flashserver.service` systemd unit; Windows imports a dedicated
+`flashserver_ubuntu` WSL2 distro (a legacy `Ubuntu` with a FlashServer config is
+reused), enables domestic mirrors, and creates the logon task and model firewall
+rule. `flashserver-setup-windows-amd64-v<version>.exe` bundles it with the
+desktop client. Details: [flashserver.md](docs/flashserver.md).
 
 ---
 

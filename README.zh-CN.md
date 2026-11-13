@@ -26,6 +26,7 @@ Ref 语法：`flashcli-bundle/<name>:<version>`（FlashHub）或 `bundles/<name>
 
 | 月份 | 亮点 |
 |------|------|
+| **2026-11** | **FlashServer** —— 常驻调度器 + 本地控制台、`/v1/ws` 实时状态、按模型启动参数；专用 `flashserver_ubuntu` WSL2 发行版与 Windows 安装包；`cache clean` / `bundle clean` 拆分，CLI 与服务共用 host 层 |
 | **2026-10** | **Go-only host** —— 单个静态二进制（Python host 已移除）；**native-exec** / **native-abi** 后端让 bundle **无需 Python** 即可运行；同步的 bundle 树与权重缓存**在 environments 间共享** |
 | **2026-06** | **Qwen3.6 对话服务**达到生产可用 —— 回复更快（遇结束符即停）、真流式输出、更长单次生成，HTTP 与推理安装更省心 |
 | **2026-05** | **Blackwell（SM120）Qwen NVFP4** 上架 FlashHub —— 一条命令 `run` / OpenAI 兼容 `serve`；可复现的多环境发布包 |
@@ -93,6 +94,25 @@ curl -N http://127.0.0.1:8000/v1/chat/completions \
 bash bundles/pi05_libero/build.sh --repo-root /path/to/FlashRT -j "$(nproc)"
 flashcli run bundles/pi05_libero --prompt "pick up the red block"
 ```
+
+### 本地服务（`flashserver`）
+
+`flashserver` 是桌面客户端背后的常驻调度器：保持模型常驻，在本机
+`http://127.0.0.1:8790` 提供控制台 API（`/health`、`/docs`、`/openapi.yaml`），
+并通过 `/v1/ws` 推送状态。
+
+```bash
+flashserver --addr 127.0.0.1:8790 --token <token>   # 前台守护进程
+flashserver-setup                                   # 安装二进制 + 服务
+flashserver-setup --backend wsl --wsl-dir D:\FlashServerWSL
+flashserver-setup --uninstall --purge-models
+```
+
+`flashserver-setup` 是两个平台的安装后端：Linux 写入 `flashserver.service`
+systemd 单元；Windows 导入专用的 `flashserver_ubuntu` WSL2 发行版（已有
+FlashServer 配置的旧 `Ubuntu` 直接复用），启用国内镜像，并创建登录任务和模型
+防火墙规则。`flashserver-setup-windows-amd64-v<version>.exe` 把它与桌面客户端一起
+打包。详见 [flashserver.zh-CN.md](docs/flashserver.zh-CN.md)。
 
 ---
 

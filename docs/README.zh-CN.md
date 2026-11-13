@@ -8,6 +8,7 @@
 - **集成方** — 从 [FlashHub](https://flashhub.top) 固定 preset ref：[model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)。
 - **对外 Bundle 作者** — 发布到 FlashHub：[bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)（+ [flashcli-bundle/README.md](../flashcli-bundle/README.md)）；执行后端：[bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md)。
 - **维护者** — 构建/发布 bundle：[bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md) · [runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md)。
+- **桌面 / 本地服务** — `flashserver` 守护进程、桌面客户端、Windows/Linux 安装：[flashserver.zh-CN.md](flashserver.zh-CN.md)。
 - **贡献者 / 架构** — [architecture.zh-CN.md](architecture.zh-CN.md)、[module_layers.zh-CN.md](module_layers.zh-CN.md)；规则见 [../CONTRIBUTING.md](../CONTRIBUTING.md)。
 
 ## 文档索引
