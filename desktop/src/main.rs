@@ -4494,9 +4494,43 @@ fn run_wsl(args: &[&str]) -> Result<(), String> {
 fn spawn_keepalive() {}
 
 fn start_service() -> Result<String, String> {
-    // `wsl --terminate` leaves systemd booting on the next call. Retry the
-    // start instead of failing the first time systemd is not ready yet.
+    // 1) Bring the distro up. `wsl --terminate` leaves it stopped; this call
+    // starts it and waits for init. Retry because WSL can still be shutting
+    // down from a previous session.
     let mut last_error = String::new();
+    let mut wsl_up = false;
+    for attempt in 0..10 {
+        match run_wsl(&["true"]) {
+            Ok(()) => {
+                wsl_up = true;
+                break;
+            }
+            Err(err) => {
+                last_error = err;
+                if attempt < 9 {
+                    std::thread::sleep(Duration::from_secs(2));
+                }
+            }
+        }
+    }
+    if !wsl_up {
+        return Err(if last_error.is_empty() {
+            "WSL 发行版未启动".to_string()
+        } else {
+            format!("WSL 发行版未启动：{last_error}")
+        });
+    }
+
+    // 2) Wait until systemd reports running (or give it a few seconds and let
+    // the service start retries below handle a degraded boot).
+    for _ in 0..15 {
+        if run_wsl(&["systemctl", "is-system-running"]).is_ok() {
+            break;
+        }
+        std::thread::sleep(Duration::from_secs(1));
+    }
+
+    // 3) Start the service. Retry while systemd finishes bringing units up.
     let mut started = false;
     for attempt in 0..6 {
         match run_wsl(&["systemctl", "start", "flashserver"]) {
@@ -4506,7 +4540,6 @@ fn start_service() -> Result<String, String> {
             }
             Err(err) => {
                 last_error = err;
-                let _ = run_wsl(&["true"]);
                 if attempt < 5 {
                     std::thread::sleep(Duration::from_secs(2));
                 }
