@@ -51,7 +51,7 @@ func FlashcliBundleSpec() (string, error) {
 func FlashcliBundleSpecOrigin() (spec, origin string, err error) {
 	LoadInstallEnv()
 	if s := strings.TrimSpace(os.Getenv("FLASHCLI_BUNDLE_PIP_SPEC")); s != "" {
-		return s, "FLASHCLI_BUNDLE_PIP_SPEC=" + s, nil
+		return normalizeBundleSpec(s), "FLASHCLI_BUNDLE_PIP_SPEC=" + s, nil
 	}
 	if root, ok := localBundleRepo(); ok {
 		dir := filepath.Join(root, "flashcli-bundle")
@@ -67,6 +67,23 @@ func FlashcliBundleSpecOrigin() (spec, origin string, err error) {
 	}
 	s := fmt.Sprintf("flashcli-bundle[infer] @ git+%s@%s#subdirectory=flashcli-bundle", repo, ref)
 	return s, fmt.Sprintf("git+%s@%s", repo, ref), nil
+}
+
+// normalizeBundleSpec appends the infer extra when FLASHCLI_BUNDLE_PIP_SPEC
+// points at a local checkout without extras: installing the bare package would
+// succeed but fail later with "No module named 'typer'" when the venv runs
+// `python -m flashcli_bundle.infer`.
+func normalizeBundleSpec(spec string) string {
+	if strings.Contains(spec, "[") {
+		return spec
+	}
+	dir := strings.TrimRight(spec, "/\\")
+	if info, err := os.Stat(dir); err == nil && info.IsDir() {
+		if _, err := os.Stat(filepath.Join(dir, "pyproject.toml")); err == nil {
+			return dir + "[infer]"
+		}
+	}
+	return spec
 }
 
 func localBundleRepo() (string, bool) {

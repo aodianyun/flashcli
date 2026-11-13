@@ -34,13 +34,15 @@ func LoadConfig(path string) (Config, error) {
 func NewFromConfig(cfg Config) *Server {
 	s := New(cfg.Addr)
 	s.Token = cfg.Token
-	s.LogDir = cfg.LogDir
+	if cfg.LogDir != "" {
+		s.LogDir = cfg.LogDir
+	}
 	s.FlashcliBin = cfg.FlashcliBin
 	s.ServeHost = cfg.ServeHost
 	s.PublicHost = cfg.PublicHost
 	if s.Manager != nil {
 		s.Manager = NewManagerWithOptions(FlashcliLauncher{
-			Bin: cfg.FlashcliBin, Host: cfg.ServeHost, PublicHost: cfg.PublicHost, LogDir: cfg.LogDir,
+			Bin: cfg.FlashcliBin, Host: cfg.ServeHost, PublicHost: cfg.PublicHost, LogDir: s.LogDir,
 		}, ManagerOptions{
 			MaxLoaded:      cfg.MaxLoaded,
 			MinFreeVRAMMiB: cfg.MinFreeVRAMMiB,
