@@ -173,7 +173,7 @@ unpublished test/draft releases.
 **Host (Go) release checklist:**
 
 1. Bump **both** `[project].version` in `pyproject.toml` and `version` in `desktop/Cargo.toml` on `dev` (desktop uses the three-part prefix, e.g. `1.0.7`); commit (`chore(release): bump version to X`). Packaging fails if they diverge.
-2. Sync `dev` → `main` (squash-and-record, above) so `main` carries the validated commit.
+2. Sync `dev` → `main` (squash-and-record, above) so `main` carries the validated commit. Before tagging, also check the live FlashHub index layout (index JSON only, a few KiB): `FLASHCLI_FLASHHUB_LIVE=1 pytest tests/test_flashhub_index_contract.py`.
 3. On Windows from `main`, build the installer:
    `powershell -ExecutionPolicy Bypass -File scripts/build_windows_package.ps1`
    (client + Go assets + `flashserver-setup-windows-amd64-v<version>.exe`; use `-GoBin` if `go` is not on PATH).
@@ -184,8 +184,7 @@ unpublished test/draft releases.
    The script requires a clean `main` equal to `origin/main`, creates/pushes tag `vX` at HEAD, builds the Linux/Windows Go assets, uploads them plus the Windows installer, and fails if either GitHub or Gitee upload fails. Use `FLASHCLI_RELEASE_TARGET` only for a different release branch; `--allow-non-target` is for tests only.
    The Linux assets are reproducible; the Inno Setup installer is **not** byte-reproducible, so put its final SHA256 into the notes **after** the last installer build and do not rebuild it afterwards.
 5. Write release notes per the standard below on **both** platforms. `--notes-file` uses the same body for GitHub and Gitee; if omitted, the script uses a minimal generated note.
-6. Verify the published assets in a clean environment:
-   `bash scripts/verify_release.sh --version X` (isolated prefix; add `--mirror` for Gitee).
+6. Verify the published assets in a clean environment:   `bash scripts/verify_release.sh --version X` (isolated prefix; add `--mirror` for Gitee).
 7. Sanity-check the published Windows installer name/SHA256 and that `flashcli-linux-{amd64,arm64}` + `flashserver-*` assets are present on both hosts.
 
 - **Bundles**: follow the maintainer checklist below and [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md).
