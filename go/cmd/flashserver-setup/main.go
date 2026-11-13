@@ -27,7 +27,7 @@ func run() int {
 	flag.StringVar(&opts.Prefix, "prefix", "/usr/local", "installation prefix")
 	flag.StringVar(&opts.Home, "home", "", "FLASHCLI_HOME for the service")
 	flag.StringVar(&opts.User, "user", "", "service user")
-	flag.StringVar(&opts.Distro, "distro", "Ubuntu", "WSL distribution")
+	flag.StringVar(&opts.Distro, "distro", "flashserver_ubuntu", "WSL distribution")
 	flag.StringVar(&opts.Addr, "addr", "127.0.0.1:8790", "flashserver listen address")
 	flag.StringVar(&opts.Token, "token", "", "local API token (generated when omitted)")
 	flag.StringVar(&opts.ServiceName, "service-name", "flashserver", "service name")

@@ -17,11 +17,68 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aodianyun/flashcli/go/internal/mirror"
 	"github.com/aodianyun/flashcli/go/internal/version"
 )
 
+// resolveDistro keeps existing Ubuntu installs working while new installs use
+// a dedicated flashserver_ubuntu distro. WSL has no in-place rename.
+func resolveDistro(ctx context.Context, _ Env, opts Options) Options {
+	if opts.Distro != "" && opts.Distro != "flashserver_ubuntu" {
+		return opts
+	}
+	if wslNamedExists(ctx, "flashserver_ubuntu") {
+		opts.Distro = "flashserver_ubuntu"
+		return opts
+	}
+	if wslNamedExists(ctx, "Ubuntu") && wslNamedHasConfig(ctx, "Ubuntu", opts.ConfigPath) {
+		opts.Distro = "Ubuntu"
+		return opts
+	}
+	opts.Distro = "flashserver_ubuntu"
+	return opts
+}
+
+func wslNamedExists(ctx context.Context, name string) bool {
+	c, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	return exec.CommandContext(c, sysExe("wsl.exe"), "-d", name, "-u", "root", "--", "true").Run() == nil
+}
+
+func wslNamedHasConfig(ctx context.Context, name, config string) bool {
+	c, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	return exec.CommandContext(c, sysExe("wsl.exe"), "-d", name, "-u", "root", "--", "test", "-f", config).Run() == nil
+}
+
+func writeDistroMarker(name string) {
+	base := os.Getenv("LOCALAPPDATA")
+	if base == "" {
+		return
+	}
+	dir := filepath.Join(base, "FlashServer")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(dir, "distro.txt"), []byte(name+"\n"), 0o644)
+}
+
+func ensureModelFirewall(ctx context.Context, i *installer) {
+	rule := "FlashServer models"
+	_ = exec.CommandContext(ctx, sysExe("netsh.exe"),
+		"advfirewall", "firewall", "delete", "rule", "name="+rule).Run()
+	cmd := exec.CommandContext(ctx, sysExe("netsh.exe"),
+		"advfirewall", "firewall", "add", "rule", "name="+rule,
+		"dir=in", "action=allow", "protocol=TCP", "localport=Any",
+		"profile=private,domain")
+	if err := cmd.Run(); err != nil {
+		i.printf("warn: add Windows firewall rule: %v\n", err)
+	}
+}
+
 func installWSL(ctx context.Context, env Env, opts Options, out io.Writer) error {
 	i := installer{env: env, opts: opts, out: out}
+	writeDistroMarker(opts.Distro)
 	linuxArch := env.Arch
 	binDir := path.Join(opts.Prefix, "bin")
 	total := 8
@@ -88,6 +145,9 @@ func installWSL(ctx context.Context, env Env, opts Options, out io.Writer) error
 		if err := writeToWSL(ctx, opts, opts.ConfigPath, append(cfg, '\n'), 0o600); err != nil {
 			return err
 		}
+		if err := writeToWSL(ctx, opts, path.Join(opts.Home, mirror.EnvFile), mirrorEnvContent(), 0o644); err != nil {
+			return err
+		}
 		unit := systemdUnit(opts, binDir)
 		if err := writeToWSL(ctx, opts, "/etc/systemd/system/"+opts.ServiceName+".service", []byte(unit), 0o644); err != nil {
 			return err
@@ -108,7 +168,11 @@ func installWSL(ctx context.Context, env Env, opts Options, out io.Writer) error
 		if err := createStartupTask(ctx, opts, &i, true); err != nil {
 			return err
 		}
-		return writeToWSL(ctx, opts, autostartMarker, []byte("enabled\n"), 0o644)
+		if err := writeToWSL(ctx, opts, autostartMarker, []byte("enabled\n"), 0o644); err != nil {
+			return err
+		}
+		ensureModelFirewall(ctx, &i)
+		return nil
 	}); err != nil {
 		return err
 	}
@@ -224,6 +288,12 @@ func ensureDistro(ctx context.Context, opts Options, i *installer) error {
 		i.printf("$ wsl.exe --install -d %s\n", opts.Distro)
 		return nil
 	}
+	// flashserver_ubuntu is not a Microsoft Store distro name; import the
+	// official Ubuntu rootfs directly under the dedicated name.
+	if opts.Distro == "flashserver_ubuntu" {
+		i.printf("\nimporting the Ubuntu rootfs as %s\n", opts.Distro)
+		return importDistroRootfs(ctx, opts, i)
+	}
 	i.printf("\ninstalling Ubuntu with wsl --install (this may take up to 90 seconds)\n")
 	installCtx, cancelInstall := context.WithTimeout(ctx, 90*time.Second)
 	err := i.runDiag(installCtx, sysExe("wsl.exe"), "--install", "-d", opts.Distro, "--no-launch")
@@ -304,9 +374,11 @@ func importDistroRootfs(ctx context.Context, opts Options, i *installer) error {
 
 	i.printf("\nimport Ubuntu rootfs into %s\n", abs)
 	cmd := exec.CommandContext(ctx, sysExe("wsl.exe"), "--import", opts.Distro, abs, rootfs, "--version", "2")
-	cmd.Stdout = diag
-	cmd.Stderr = diag
-	if err := cmd.Run(); err != nil {
+	out, err := cmd.CombinedOutput()
+	if len(out) > 0 {
+		_, _ = diag.Write(normalizeDiagnostic(out))
+	}
+	if err != nil {
 		_ = os.RemoveAll(abs)
 		return fmt.Errorf("wsl --import %s: %w", abs, err)
 	}
@@ -570,9 +642,11 @@ func writeToWSL(ctx context.Context, opts Options, dest string, data []byte, mod
 func wslRoot(ctx context.Context, opts Options, name string, args ...string) error {
 	base := []string{"-d", opts.Distro, "-u", "root", "--", name}
 	cmd := exec.CommandContext(ctx, sysExe("wsl.exe"), append(base, args...)...)
-	cmd.Stdout = diag
-	cmd.Stderr = diag
-	return cmd.Run()
+	out, err := cmd.CombinedOutput()
+	if len(out) > 0 {
+		_, _ = diag.Write(normalizeDiagnostic(out))
+	}
+	return err
 }
 
 // waitWSL blocks until the distro accepts a trivial command. A cold WSL

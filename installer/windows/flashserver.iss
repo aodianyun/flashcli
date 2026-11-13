@@ -442,6 +442,72 @@ begin
   end;
 end;
 
+function Utf8ToUnicode(const A: AnsiString): String;
+var
+  I, N, CP: Integer;
+  B: Byte;
+begin
+  Result := '';
+  I := 1;
+  N := Length(A);
+  while I <= N do
+  begin
+    B := Ord(A[I]);
+    if B < $80 then
+    begin
+      CP := B;
+      Inc(I);
+    end
+    else if (B and $E0) = $C0 then
+    begin
+      CP := (B and $1F) shl 6;
+      Inc(I);
+      if I <= N then begin CP := CP or (Ord(A[I]) and $3F); Inc(I); end;
+    end
+    else if (B and $F0) = $E0 then
+    begin
+      CP := (B and $0F) shl 12;
+      Inc(I);
+      if I <= N then begin CP := CP or ((Ord(A[I]) and $3F) shl 6); Inc(I); end;
+      if I <= N then begin CP := CP or (Ord(A[I]) and $3F); Inc(I); end;
+    end
+    else if (B and $F8) = $F0 then
+    begin
+      CP := (B and $07) shl 18;
+      Inc(I);
+      if I <= N then begin CP := CP or ((Ord(A[I]) and $3F) shl 12); Inc(I); end;
+      if I <= N then begin CP := CP or ((Ord(A[I]) and $3F) shl 6); Inc(I); end;
+      if I <= N then begin CP := CP or (Ord(A[I]) and $3F); Inc(I); end;
+    end
+    else
+    begin
+      Inc(I);
+      Continue;
+    end;
+    if CP <= $FFFF then
+      Result := Result + Chr(CP)
+    else if CP <= $10FFFF then
+    begin
+      CP := CP - $10000;
+      Result := Result + Chr($D800 + (CP shr 10)) + Chr($DC00 + (CP and $3FF));
+    end;
+  end;
+end;
+
+function CleanAsciiLog(const Value: String): String;
+var
+  I: Integer;
+  C: Char;
+begin
+  Result := '';
+  for I := 1 to Length(Value) do
+  begin
+    C := Value[I];
+    if (C = #13) or (C = #10) or (C = #9) or ((C >= ' ') and (C <= '~')) then
+      Result := Result + C;
+  end;
+end;
+
 function LogTail(const Path: String; MaxChars: Integer): String;
 var
   S: String;
@@ -450,7 +516,7 @@ begin
   Result := '';
   if LoadStringFromFile(Path, A) then
   begin
-    S := A;
+    S := CleanAsciiLog(A);
     if Length(S) > MaxChars then
       S := Copy(S, Length(S) - MaxChars + 1, MaxChars);
     Result := Trim(S);
@@ -681,7 +747,7 @@ begin
       SetupError := 'FlashServer setup did not complete.';
     SetupError := SetupError + #13#10#13#10 +
       'Log: ' + LogPath + #13#10#13#10 +
-      'Last output:' + #13#10 + LogTail(LogPath, 1500);
+      'Last output (ASCII only; see setup.log for full text):' + #13#10 + LogTail(LogPath, 1500);
     MsgBox(SetupError, mbError, MB_OK);
   end;
 end;

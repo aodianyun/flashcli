@@ -28,9 +28,10 @@ Windows 安装包内置 `FlashServer.exe`：Rust + egui/eframe 原生客户端�
 - 源码：`desktop/`；构建：`cargo build --release`（Rust MSVC 工具链，`cargo` 需在 PATH）。产物：`desktop/target/release/FlashServer.exe`（约 4.7MB）。
 - 内存：约 110~125MB 工作集（GPU 上下文 + 中文字体 + egui 存储）。
 - 主题：默认深色，可在设置中切换或用 `Ctrl+T`；启动时会直接应用已保存的主题（不受 Windows 应用主题影响），保存在 `%LOCALAPPDATA%\FlashServer\settings.json`。
-- 破坏性操作（停止服务、禁用开机启动、停止模型、退出客户端）都会二次确认。
-- 服务启停走 `wsl.exe`，不需要 UAC；开机启动开关调用 `flashserver-setup --enable-autostart/--disable-autostart`，会弹 UAC，且不会启动或停止服务。
+- 破坏性操作（停止服务、禁用开机启动、停止模型、退出客户端）都会二次确认。「停止服务」可选择同时关闭 FlashServer 使用的 WSL 发行版（`distro.txt`，新安装为 `flashserver_ubuntu`，旧安装沿用 `Ubuntu`）。
+- 服务启停走 `wsl.exe`，不需要 UAC；启动时会先拉起 WSL、等待 systemd、重试 `systemctl start` 并校验 `/health`；5 秒健康检查会更新运行状态。开机启动开关调用 `flashserver-setup --enable-autostart/--disable-autostart`，启用/禁用 `flashserver-wsl` 登录任务（即 WSL 开机启动），会弹 UAC，且不会启动或停止服务。
 - 服务状态与开机启动完全独立：停止不会禁用自启，启动不会启用自启，自启开关也不会启动/停止服务。耗时操作会显示模态进度遮罩，完成后弹出结果提示。
+- 新的 Windows 安装默认放行模型端口并默认启用国内镜像。防火墙端口可在 **设置 → WSL 资源 → 防火墙端口** 修改；留空表示所有 TCP 端口。
 - 「API 文档」按钮打开当前 API 地址 + `/docs`（客户端从 `%LOCALAPPDATA%\FlashServer\api-url.txt` 读取端口）。
 - 代码可跨平台编译；服务控制优先 Windows/WSL，Linux 走 `systemctl`（尽力而为），macOS 暂无 flashserver 后端。
 
@@ -80,6 +81,20 @@ Windows 可能把默认端口 `8790` 保留在 Hyper-V/WinNAT 的排除端口范
 `0.0.0.0:<port>`，并把 Windows 侧地址写入
 `%LOCALAPPDATA%\FlashServer\api-url.txt`。桌面客户端和安装器最终健康检查都会读取
 该文件，因此客户端、安装器和 API 文档使用同一个端口。
+
+新安装使用专用发行版名 `flashserver_ubuntu`（直接导入官方 Ubuntu rootfs）。升级时
+如果已有 `Ubuntu` 且包含 `/etc/flashserver/config.json`，会继续沿用旧发行版，避免
+重复创建或丢失数据。实际名称写入 `%LOCALAPPDATA%\FlashServer\distro.txt`，桌面客户
+端和登录任务都使用该文件。WSL 不支持原地改名；现有 `Ubuntu` 需要
+`wsl --export` + `wsl --unregister` + `wsl --import` 迁移。
+
+setup 默认启用国内镜像（写入 `~/.flashcli/mirror.env`），并添加 Windows 防火墙规则
+`FlashServer models`（Private/Domain，默认所有 TCP 端口）。端口可在
+**设置 → WSL 资源 → 防火墙端口** 修改。
+
+安装失败对话框只显示 `setup.log` 的 ASCII 片段，避免 `wsl.exe` 的 UTF-16/OEM 输出
+显示成乱码；完整 UTF-8 日志仍在
+`%LOCALAPPDATA%\FlashServer\logs\setup.log`。
 
 安装包同时携带 `flashcli-bundle` Python 源码。setup 会把它解压到
 `/usr/local/share/flashcli/flashcli-bundle`，并把 `FLASHCLI_BUNDLE_PIP_SPEC`

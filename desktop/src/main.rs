@@ -181,6 +181,8 @@ struct Settings {
     dark: bool,
     #[serde(default)]
     wsl_ports: String,
+    #[serde(default)]
+    stop_wsl: bool,
 }
 
 #[derive(Clone)]
@@ -330,6 +332,7 @@ pub struct App {
     options_dialog: Option<OptionsDialog>,
     wsl: WslConfig,
     wsl_ports: String,
+    stop_wsl: bool,
     wsl_pending: Option<WslConfig>,
     wsl_pending_ports: String,
     smoke: Option<SmokeState>,
@@ -348,6 +351,7 @@ impl App {
         let settings = load_settings();
         let dark = settings.dark;
         let wsl_ports = settings.wsl_ports.clone();
+        let stop_wsl = settings.stop_wsl;
         apply_theme(&cc.egui_ctx, dark);
 
         let (tx, rx) = channel();
@@ -406,6 +410,7 @@ impl App {
             options_dialog: None,
             wsl,
             wsl_ports,
+            stop_wsl,
             wsl_pending: None,
             wsl_pending_ports: String::new(),
             smoke: None,
@@ -2501,7 +2506,11 @@ impl App {
                             if danger_button(ui, "停止服务").clicked() {
                                 self.dialog = Some(DialogState {
                                     title: "停止服务".into(),
-                                    message: "停止后正在启动/运行的模型会中断，已启动模型将不可用。\n确定停止？".into(),
+                                    message: if self.stop_wsl {
+                                        "停止后正在启动/运行的模型会中断，并关闭 WSL 发行版。\n确定停止？".into()
+                                    } else {
+                                        "停止后正在启动/运行的模型会中断，已启动模型将不可用。\n确定停止？".into()
+                                    },
                                     action: Pending::StopService,
                                 });
                             }
@@ -2521,6 +2530,16 @@ impl App {
                             spawn_action(self.tx.clone(), ui.ctx().clone(), Action::EnableAutostart);
                         }
                     });
+                    if ui
+                        .checkbox(&mut self.stop_wsl, "停止服务时同时关闭 WSL 发行版")
+                        .changed()
+                    {
+                        save_settings(&Settings {
+                            dark: self.dark,
+                            wsl_ports: self.wsl_ports.clone(),
+                            stop_wsl: self.stop_wsl,
+                        });
+                    }
                 });
 
                 ui.add_space(10.0);
@@ -2630,6 +2649,7 @@ impl App {
                         save_settings(&Settings {
                             dark: self.dark,
                             wsl_ports: self.wsl_ports.clone(),
+                            stop_wsl: self.stop_wsl,
                         });
                         if service_running {
                             self.wsl_pending = Some(self.wsl.clone());
@@ -2766,6 +2786,7 @@ impl App {
             save_settings(&Settings {
                 dark,
                 wsl_ports: self.wsl_ports.clone(),
+                stop_wsl: self.stop_wsl,
             });
         }
     }
@@ -3141,7 +3162,13 @@ impl App {
             let dialog = self.dialog.take().unwrap();
             match dialog.action {
                 Pending::StopService => {
-                    spawn_action(self.tx.clone(), ctx.clone(), Action::Stop);
+                    spawn_action(
+                        self.tx.clone(),
+                        ctx.clone(),
+                        Action::Stop {
+                            stop_wsl: self.stop_wsl,
+                        },
+                    );
                 }
                 Pending::DisableAutostart => {
                     spawn_action(
@@ -3902,7 +3929,7 @@ fn start_ws(tx: Sender<Event>, ctx: egui::Context) {
 #[derive(Clone, Copy)]
 enum Action {
     Start,
-    Stop,
+    Stop { stop_wsl: bool },
     EnableAutostart,
     DisableAutostart { keep_stopped: bool },
 }
@@ -3911,7 +3938,7 @@ impl Action {
     fn label(self) -> &'static str {
         match self {
             Action::Start => "正在启动服务…",
-            Action::Stop => "正在停止服务…",
+            Action::Stop { .. } => "正在停止服务…",
             Action::EnableAutostart => "正在启用开机启动…",
             Action::DisableAutostart { .. } => "正在禁用开机启动…",
         }
@@ -3947,7 +3974,7 @@ fn spawn_action(tx: Sender<Event>, ctx: egui::Context, action: Action) {
                 }
                 Err(err) => Err(err),
             },
-            Action::Stop => match stop_service() {
+            Action::Stop { stop_wsl } => match stop_service(stop_wsl) {
                 Ok(message) => {
                     let _ = tx.send(Event::ServiceDown);
                     Ok(message)
@@ -3958,7 +3985,7 @@ fn spawn_action(tx: Sender<Event>, ctx: egui::Context, action: Action) {
             Action::DisableAutostart { keep_stopped } => match set_autostart(false) {
                 Ok(message) => {
                     if keep_stopped {
-                        if let Err(err) = stop_service() {
+                        if let Err(err) = stop_service(false) {
                             Err(format!("{message}；停止服务失败：{err}"))
                         } else {
                             let _ = tx.send(Event::ServiceDown);
@@ -3987,7 +4014,7 @@ fn spawn_action(tx: Sender<Event>, ctx: egui::Context, action: Action) {
         let ok = result.is_ok();
         let _ = tx.send(Event::OpDone(result));
         ctx.request_repaint();
-        if ok && !matches!(action, Action::Stop) {
+        if ok && !matches!(action, Action::Stop { .. }) {
             if let Some(v) = get_json("/v1/models") {
                 let _ = tx.send(Event::Models(v));
             }
@@ -4448,9 +4475,23 @@ fn spawn_smoke(tx: Sender<Event>, ctx: egui::Context, ref_str: String) {
 }
 
 #[cfg(windows)]
+fn wsl_distro() -> String {
+    if let Some(dir) = std::env::var_os("LOCALAPPDATA") {
+        let path = PathBuf::from(dir).join("FlashServer").join("distro.txt");
+        if let Ok(text) = std::fs::read_to_string(path) {
+            let name = text.trim();
+            if !name.is_empty() {
+                return name.to_string();
+            }
+        }
+    }
+    "Ubuntu".to_string()
+}
+
 fn run_wsl(args: &[&str]) -> Result<(), String> {
+    let distro = wsl_distro();
     let mut cmd = std::process::Command::new("wsl.exe");
-    cmd.args(["-d", "Ubuntu", "-u", "root", "--"]).args(args);
+    cmd.args(["-d", distro.as_str(), "-u", "root", "--"]).args(args);
     hide(&mut cmd);
     let out = cmd.output().map_err(|e| e.to_string())?;
     if out.status.success() {
@@ -4462,8 +4503,9 @@ fn run_wsl(args: &[&str]) -> Result<(), String> {
 
 #[cfg(windows)]
 fn spawn_keepalive() {
+    let distro = wsl_distro();
     let mut cmd = std::process::Command::new("wsl.exe");
-    cmd.args(["-d", "Ubuntu", "-u", "root", "--", "sleep", "infinity"]);
+    cmd.args(["-d", distro.as_str(), "-u", "root", "--", "sleep", "infinity"]);
     hide(&mut cmd);
     let _ = cmd.spawn();
 }
@@ -4563,10 +4605,18 @@ fn start_service() -> Result<String, String> {
     Err("FlashServer 已启动，但 API 不可达；请检查 WSL 网络/端口或运行 flashserver-setup --start-service".into())
 }
 
-fn stop_service() -> Result<String, String> {
+fn stop_service(stop_wsl: bool) -> Result<String, String> {
     run_wsl(&["systemctl", "stop", "flashserver"])?;
     let _ = run_wsl(&["pkill", "-f", "sleep infinity"]);
-    Ok("服务已停止".into())
+    if stop_wsl {
+        let distro = wsl_distro();
+        let _ = hidden_command("wsl.exe")
+            .args(["--terminate", distro.as_str()])
+            .status();
+        Ok("服务已停止，WSL 已关闭".into())
+    } else {
+        Ok("服务已停止".into())
+    }
 }
 
 fn set_autostart(enabled: bool) -> Result<String, String> {
@@ -4839,14 +4889,16 @@ fn api_healthy() -> bool {
 }
 
 fn service_active() -> bool {
+    let distro = wsl_distro();
     hidden_command("wsl.exe")
-        .args(["-d", "Ubuntu", "-u", "root", "systemctl", "is-active", "flashserver"])
+        .args(["-d", distro.as_str(), "-u", "root", "systemctl", "is-active", "flashserver"])
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "active")
         .unwrap_or(false)
 }
 
 fn apply_wsl(cfg: &WslConfig, restart_service: bool, ports: &str) -> Result<String, String> {
+    let distro = wsl_distro();
     save_wslconfig(cfg)?;
     let _ = hidden_command("wsl.exe").arg("--shutdown").status();
     std::thread::sleep(Duration::from_secs(3));
@@ -4854,7 +4906,7 @@ fn apply_wsl(cfg: &WslConfig, restart_service: bool, ports: &str) -> Result<Stri
         let mut started = false;
         for _ in 0..5 {
             let output = hidden_command("wsl.exe")
-                .args(["-d", "Ubuntu", "-u", "root", "systemctl", "start", "flashserver"])
+                .args(["-d", distro.as_str(), "-u", "root", "systemctl", "start", "flashserver"])
                 .output();
             if output.map(|o| o.status.success()).unwrap_or(false) {
                 started = true;
@@ -4864,7 +4916,7 @@ fn apply_wsl(cfg: &WslConfig, restart_service: bool, ports: &str) -> Result<Stri
         }
         if !started {
             let _ = hidden_command("wsl.exe")
-                .args(["-d", "Ubuntu", "-u", "root", "true"])
+                .args(["-d", distro.as_str(), "-u", "root", "true"])
                 .status();
         }
     }
@@ -4887,7 +4939,7 @@ fn apply_wsl(cfg: &WslConfig, restart_service: bool, ports: &str) -> Result<Stri
                 let _ = hidden_command("wsl.exe").arg("--shutdown").status();
                 std::thread::sleep(Duration::from_secs(3));
                 let _ = hidden_command("wsl.exe")
-                    .args(["-d", "Ubuntu", "-u", "root", "systemctl", "start", "flashserver"])
+                    .args(["-d", distro.as_str(), "-u", "root", "systemctl", "start", "flashserver"])
                     .status();
                 return Err(
                     "WSL 镜像网络在当前 WSL 版本下无法访问 FlashServer API，已自动回滚到 NAT。模型仍可在本机 localhost 使用；局域网访问请使用端口代理或升级/降级 WSL。"
@@ -4949,7 +5001,7 @@ fn load_settings() -> Settings {
     settings_path()
         .and_then(|p| std::fs::read_to_string(p).ok())
         .and_then(|s| serde_json::from_str(s.trim_start_matches('\u{feff}')).ok())
-        .unwrap_or(Settings { dark: true, wsl_ports: String::new() })
+        .unwrap_or(Settings { dark: true, wsl_ports: String::new(), stop_wsl: false })
 }
 
 fn save_settings(s: &Settings) {

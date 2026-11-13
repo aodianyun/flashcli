@@ -30,9 +30,10 @@ The Windows installer ships `FlashServer.exe`, a Rust + egui/eframe desktop clie
 - Memory: ~110-125 MB working set (GPU context + CJK font + egui stores).
 - Theme: dark by default, switched in Settings or with `Ctrl+T`; the saved choice is applied at startup (independent of the Windows app theme) and stored in `%LOCALAPPDATA%\FlashServer\settings.json`.
 - Domestic mirrors: Settings → 下载源 enables pip (Aliyun), HuggingFace (`hf-mirror.com`), GitHub (`gh-proxy.com`) and the Gitee `flashcli` repo. It writes `~/.flashcli/mirror.env` and applies to new downloads immediately; apt sources are not changed.
-- Destructive actions (stop service, disable auto-start, stop model, quit) ask for confirmation.
-- Service buttons use `wsl.exe` (no UAC). The auto-start toggle calls `flashserver-setup --enable-autostart/--disable-autostart` and therefore prompts for UAC; it does not start or stop the service.
+- Destructive actions (stop service, disable auto-start, stop model, quit) ask for confirmation. "停止服务" can optionally terminate the selected WSL distribution (`distro.txt`, default `flashserver_ubuntu`; legacy installs use `Ubuntu`).
+- Service buttons use `wsl.exe` (no UAC). Starting the service boots the distro if stopped, waits for systemd, retries `systemctl start`, and verifies `/health`; a 5-second watchdog updates the running state. The auto-start toggle calls `flashserver-setup --enable-autostart/--disable-autostart`, which enables/disables the `flashserver-wsl` logon task (the WSL auto-start) and therefore prompts for UAC; it does not start or stop the service.
 - Service state and auto-start are independent: stopping never disables auto-start, starting never enables it, and auto-start changes never start/stop the service. Long operations show a modal progress overlay and a result toast.
+- New Windows installs open the model firewall ports and enable domestic mirrors by default. The firewall is editable under **Settings → WSL 资源 → 防火墙端口**; empty means all TCP ports.
 - API docs open the configured API URL + `/docs` (the client reads the port from `%LOCALAPPDATA%\FlashServer\api-url.txt`).
 - The code compiles cross-platform; service control is wired for Windows/WSL first, Linux uses `systemctl` (best effort) and macOS has no flashserver backend yet.
 
@@ -86,6 +87,23 @@ In that case setup automatically selects the next free port (`18790`, `28790`,
 `%LOCALAPPDATA%\FlashServer\api-url.txt`. The desktop client and the installer's
 final health check read that file, so the client, installer, and API docs all use
 the same selected port.
+
+New installs use a dedicated WSL distribution named `flashserver_ubuntu` (the
+official Ubuntu rootfs is imported under that name). Upgrades keep using an
+existing `Ubuntu` distribution when it already contains
+`/etc/flashserver/config.json`, so user data is not duplicated or lost. The
+selected name is stored in `%LOCALAPPDATA%\FlashServer\distro.txt` and used by
+the desktop client and the logon task. WSL has no in-place rename; migrating an
+existing `Ubuntu` requires `wsl --export` + `wsl --unregister` + `wsl --import`.
+
+Setup enables domestic mirrors by default (writes `~/.flashcli/mirror.env`) and
+adds a Windows firewall rule `FlashServer models` for inbound TCP (Private/
+Domain). The firewall port list can be changed from **Settings → WSL 资源 →
+防火墙端口**; an empty list means all TCP ports.
+
+The installer's error dialog shows an ASCII-only tail of `setup.log` so
+UTF-16/OEM output from `wsl.exe` cannot render as mojibake. The full UTF-8 log
+remains in `%LOCALAPPDATA%\FlashServer\logs\setup.log`.
 
 The installer also ships the `flashcli-bundle` Python source. Setup extracts it
 to `/usr/local/share/flashcli/flashcli-bundle` and writes

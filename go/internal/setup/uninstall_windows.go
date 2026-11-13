@@ -96,6 +96,8 @@ func removeWindowsUninstallArtifacts(ctx context.Context, i *installer, opts Opt
 		i.printf("logon task removal returned: %v\n", err)
 	}
 	_ = os.Remove(filepath.Join(os.Getenv("LOCALAPPDATA"), "FlashServer", "wsl-keepalive.vbs"))
+	_ = exec.CommandContext(ctx, sysExe("netsh.exe"),
+		"advfirewall", "firewall", "delete", "rule", "name=FlashServer models").Run()
 	if opts.PurgeSettings {
 		dir := filepath.Join(os.Getenv("LOCALAPPDATA"), "FlashServer")
 		if err := os.RemoveAll(dir); err != nil {

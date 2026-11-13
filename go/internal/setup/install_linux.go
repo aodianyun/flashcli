@@ -11,7 +11,12 @@ import (
 	"os/user"
 	"path/filepath"
 	"strconv"
+
+	"github.com/aodianyun/flashcli/go/internal/mirror"
 )
+
+// resolveDistro is a no-op on Linux; WSL only exists on Windows.
+func resolveDistro(_ context.Context, _ Env, opts Options) Options { return opts }
 
 func installLinux(ctx context.Context, env Env, opts Options, out io.Writer) error {
 	i := installer{env: env, opts: opts, out: out}
@@ -39,6 +44,9 @@ func installLinux(ctx context.Context, env Env, opts Options, out io.Writer) err
 		return err
 	}
 	if err := i.writeFile(opts.ConfigPath, append(cfg, '\n'), 0o600, "flashserver config"); err != nil {
+		return err
+	}
+	if err := i.writeFile(filepath.Join(opts.Home, mirror.EnvFile), mirrorEnvContent(), 0o644, "domestic mirrors"); err != nil {
 		return err
 	}
 	if opts.User != "" && opts.User != "root" {
