@@ -45,8 +45,8 @@ Run tests in tiers — do not run the heavy tier for every edit:
 | Tier | Command | When |
 |------|---------|------|
 | **1 — code** (default) | `cd go && go test ./...` · `pytest tests/` · `gofmt -l .` | Every change / PR |
-| **2 — acceptance** (local, offline) | `bash scripts/verify_e2e.sh` | Before merging to `main`, before a release candidate |
-| **3 — live** (network) | `bash scripts/verify_e2e.sh --network` | Before publishing a release |
+| **2 — acceptance** (local, offline) | `bash scripts/verify_e2e.sh --heavy` | Before merging to `main`, before a release candidate |
+| **3 — full release gate** (network) | `bash scripts/verify_e2e.sh --heavy --network` | Required before publishing; writes `dist/e2e-pass.json` |
 
 Tier 1 is unit/integration with fixtures. Tier 2 runs the **real binaries**:
 `flashcli version/doctor/bundle validate/models show`, real `run` on v3 and v4
@@ -54,6 +54,12 @@ Python bundles plus a native bundle, an offline FlashHub sync through a local
 HTTP index (both CDN layouts), and a real `flashserver` daemon exercising
 `load → endpoint → logs → unload` over HTTP. Tier 3 adds the live FlashHub
 manifest check (`FLASHCLI_ACCEPTANCE_NETWORK=1`).
+
+**Publishing is gated on the full run.** `scripts/release_go.sh --upload`
+refuses to publish unless `dist/e2e-pass.json` records a `--heavy --network`
+pass for the exact commit being released (`FLASHCLI_SKIP_E2E_GATE=1` exists only
+for pipeline tests). Do not tag or replace release assets before that run is
+green.
 
 ```bash
 pytest tests/              # tier 1 (excludes tests/bench)
@@ -196,7 +202,7 @@ unpublished test/draft releases.
    The script requires a clean `main` equal to `origin/main`, creates/pushes tag `vX` at HEAD, builds the Linux/Windows Go assets, uploads them plus the Windows installer, and fails if either GitHub or Gitee upload fails. Use `FLASHCLI_RELEASE_TARGET` only for a different release branch; `--allow-non-target` is for tests only.
    The Linux assets are reproducible; the Inno Setup installer is **not** byte-reproducible, so put its final SHA256 into the notes **after** the last installer build and do not rebuild it afterwards.
 5. Write release notes per the standard below on **both** platforms. `--notes-file` uses the same body for GitHub and Gitee; if omitted, the script uses a minimal generated note.
-6. Verify the published assets in a clean environment:   `bash scripts/verify_release.sh --version X` (isolated prefix; add `--mirror` for Gitee). Before tagging, run the acceptance tiers on `main`: `bash scripts/verify_e2e.sh` then `bash scripts/verify_e2e.sh --network`.
+6. **Gate:** before step 4 (publishing), run the full acceptance gate on `main`: `bash scripts/verify_e2e.sh --heavy --network`. It must be all green; `release_go.sh --upload` refuses without the matching `dist/e2e-pass.json`. Then verify the published assets in a clean environment: `bash scripts/verify_release.sh --version X` (isolated prefix; add `--mirror` for Gitee).
 7. Sanity-check the published Windows installer name/SHA256 and that `flashcli-linux-{amd64,arm64}` + `flashserver-*` assets are present on both hosts.
 
 - **Bundles**: follow the maintainer checklist below and [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md).

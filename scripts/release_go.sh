@@ -26,6 +26,7 @@
 #   FLASHCLI_RELEASE_TARGET      Target branch (default main).
 #   FLASHCLI_WINDOWS_INSTALLER   Same as --windows-installer.
 #   FLASHCLI_ALLOW_NON_TARGET=1  Same as --allow-non-target.
+#   FLASHCLI_SKIP_E2E_GATE=1     Skip the acceptance gate (tests only).
 #   PYTHON_BIN                   Python for JSON helpers (default python3/python).
 #
 # Artifacts (dist/release/):
@@ -46,6 +47,25 @@ NOTES_FILE=""
 WINDOWS_INSTALLER="${FLASHCLI_WINDOWS_INSTALLER:-}"
 
 die() { echo "error: $*" >&2; exit 1; }
+
+# require_e2e_gate refuses to publish without a full acceptance run for this
+# exact commit. scripts/verify_e2e.sh --heavy --network writes the marker.
+require_e2e_gate() {
+  if [ "${FLASHCLI_SKIP_E2E_GATE:-0}" = "1" ]; then
+    echo "[i] acceptance gate skipped (FLASHCLI_SKIP_E2E_GATE=1; tests only)"
+    return 0
+  fi
+  local marker="$ROOT/dist/e2e-pass.json"
+  local head
+  head="$(git -C "$ROOT" rev-parse HEAD)"
+  [ -f "$marker" ] || die "no acceptance evidence: run 'bash scripts/verify_e2e.sh --heavy --network' on this commit"
+  "$PY_BIN" -c 'import json,sys
+d=json.load(open(sys.argv[1]))
+sys.exit(0 if d.get("commit")==sys.argv[2] and d.get("heavy") and d.get("network") else 1)' \
+    "$marker" "$head" \
+    || die "acceptance evidence in $marker is stale or incomplete (need the full --heavy --network run for $head)"
+  echo "[ok] full acceptance gate ($head)"
+}
 
 usage() {
   sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'
@@ -314,6 +334,7 @@ publish_gitee() {
 
 if [ "$UPLOAD" = "1" ]; then
   [ -n "$PY_BIN" ] || die "python3/python is required for release API helpers"
+  require_e2e_gate
   ensure_tag
   failed=0
   publish_github || failed=1
