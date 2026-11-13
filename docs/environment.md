@@ -123,9 +123,10 @@ Standalone Python provisioning (when the bundle `python_abi` is missing):
 
 ## Mirrors (China-friendly)
 
-`install.sh --mirror` writes `~/.flashcli/mirror.env`; the Go host loads it at
-startup (`mirror.Apply`), so it applies to bundle venv pip, HF weight downloads,
-and GitHub downloads.
+`install.sh --mirror` and the Windows/Linux FlashServer setup write
+`~/.flashcli/mirror.env` by default; the Go host loads it at startup
+(`mirror.Apply`), so it applies to bundle venv pip, HF weight downloads, and
+GitHub downloads. The desktop toggle rewrites/removes the same file.
 
 | Variable | Default | Description |
 |----------|---------|-------------|

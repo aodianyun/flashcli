@@ -118,8 +118,9 @@ Standalone Python 自动供给（当 bundle `python_abi` 缺失）：
 
 ## 镜像（国内友好）
 
-`install.sh --mirror` 会写 `~/.flashcli/mirror.env`；Go host 启动时加载（`mirror.Apply`），
-因此对 bundle venv 的 pip、HF 权重下载、GitHub 下载一并生效。
+`install.sh --mirror` 和 Windows/Linux FlashServer setup 默认写入
+`~/.flashcli/mirror.env`；Go host 启动时加载（`mirror.Apply`），因此对 bundle
+venv 的 pip、HF 权重下载、GitHub 下载一并生效。桌面开关会重写或删除同一文件。
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|

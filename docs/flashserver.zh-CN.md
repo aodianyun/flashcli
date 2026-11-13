@@ -45,7 +45,7 @@ Windows 安装包内置 `FlashServer.exe`：Rust + egui/eframe 原生客户端�
 - FlashCLI 源码回退：`https://gitee.com/aodiansoft/flashcli.git`
 - PyTorch wheel：SJTU 镜像（`mirror.TorchIndexURL`）
 
-开关会写入 `~/.flashcli/mirror.env`，对新下载立即生效，不需要重启服务；`GET /v1/mirror` 返回当前状态。与 `install.sh --mirror` 使用同一组端点，不会修改 apt 源。服务停止或有下载/加载/启动任务时，桌面设置中的开关不可用。
+开关会写入 `~/.flashcli/mirror.env`，对新下载立即生效，不需要重启服务；`GET /v1/mirror` 返回当前状态。新安装默认写入并启用该文件，之后可在桌面关闭。与 `install.sh --mirror` 使用同一组端点，不会修改 apt 源。服务停止或有下载/加载/启动任务时，桌面设置中的开关不可用。
 
 ## Windows UI 安装包
 
@@ -63,12 +63,11 @@ flashserver-setup-windows-amd64-v<version>.exe
 UI 安装包（管理员）
   → 解压 payload 到 %ProgramFiles%\FlashServer\payload
   → [1/8] 检查 WSL2；缺失时执行 `wsl --install --no-distribution` 自动启用
-  → [2/8] 安装/注册 Ubuntu（旧版 Windows 10 回退到 DISM）
+  → [2/8] 注册 FlashServer 发行版：新安装导入为 `flashserver_ubuntu`，已有 FlashServer 配置的旧 `Ubuntu` 直接复用
   → [3/8] 启用 systemd  → [4/8] 安装 Linux payload
   → [5/8] 写配置 + service → [6/8] 启动服务
-  → [7/8] 创建 Windows 登录任务 → [8/8] 等待 /health
-  → 再次检查 `systemctl is-active flashserver` 和 /health
-  → 打开桌面客户端
+  → [7/8] 创建 Windows 登录任务 + 模型防火墙规则 → [8/8] 等待 /health
+  → setup 引擎确认就绪后打开桌面客户端
 ```
 
 如果启用 WSL2 需要重启 Windows，setup 会以退出码 **3** 结束。安装包会明确提示
@@ -119,8 +118,9 @@ setup 默认启用国内镜像（写入 `~/.flashcli/mirror.env`），并添加 
    “FlashServer is installed and ready.” 结束。
 4. 独立验证环境（安装器可能选择了 8790 以外的端口）：
    ```powershell
+   $distro = (Get-Content "$env:LOCALAPPDATA\FlashServer\distro.txt").Trim()
    wsl.exe -l -v
-   wsl.exe -d Ubuntu -u root systemctl is-active flashserver   # active
+   wsl.exe -d $distro -u root systemctl is-active flashserver   # active
    $url = (Get-Content "$env:LOCALAPPDATA\FlashServer\api-url.txt").Trim()
    (Invoke-WebRequest -UseBasicParsing "$url/health").StatusCode  # 200
    ```
@@ -149,13 +149,14 @@ Windows（在管理员终端中运行；UI 安装包会自动提权）：
 flashserver-setup.exe
 ```
 
-使用官方 Ubuntu WSL2（不制作自定义镜像）；WSL2 缺失时会自动启用
+把官方 Ubuntu WSL2 rootfs 导入为 `flashserver_ubuntu` 发行版（不制作自定义镜像；
+已有 FlashServer 配置的旧 `Ubuntu` 会直接复用）；WSL2 缺失时会自动启用
 （`wsl --install --no-distribution`，旧版 Windows 10 回退到 DISM），在
 `/etc/wsl.conf` 启用 systemd，在 WSL 内安装 Linux 二进制和
 `flashserver.service`，并创建 `flashserver-wsl` 登录任务。没有 WSL2 的机器第一次
 运行可能需要重启一次 Windows，之后再次运行 setup。
 
-**磁盘位置。** 模型权重和 bundle 运行时都在 Ubuntu 虚拟磁盘（`ext4.vhdx`）里，默认位于系统盘，常见占用 20–40 GB。`--wsl-dir DIR` 会把发行版迁移到其他 NTFS 盘（WSL 没有安装时指定路径的参数，setup 会先安装，再在发行版停止时执行 `wsl --manage <distro> --move DIR`）。UI 安装包新增“WSL 数据目录”页面，默认与安装目录同级：`<安装目录的父目录>\FlashServerWSL`（例如安装到 `D:\software\FlashServer` 时默认 `D:\software\FlashServerWSL`）。之后删除数据**不会**自动缩小 VHDX：先用 `flashcli du` / `flashcli cache clean` / `flashcli bundle clean` 清理，再关闭 WSL 并压缩磁盘（`wsl --manage <distro> --set-sparse true`，或用 `diskpart` compact）。
+**磁盘位置。** 模型权重和 bundle 运行时都在 FlashServer WSL 虚拟磁盘（`ext4.vhdx`）里。UI 安装包默认与安装目录同级：`<安装目录的父目录>\FlashServerWSL`；如果安装在 `Program Files` 下，则默认 `%LOCALAPPDATA%\FlashServerWSL`（避免 WSL 无权限在该 ACL 下创建 VHDX）。`--wsl-dir DIR` 会把发行版迁移到其他 NTFS 盘（WSL 没有安装时指定路径的参数，setup 会先安装，再在发行版停止时执行 `wsl --manage <distro> --move DIR`）。之后删除数据**不会**自动缩小 VHDX：先用 `flashcli du` / `flashcli cache clean` / `flashcli bundle clean` 清理，再关闭 WSL 并压缩磁盘（`wsl --manage <distro> --set-sparse true`，或用 `diskpart` compact）。
 
 **受限网络。** 当 `wsl --install` 无法访问 Microsoft Store 或 GitHub（或 90 秒没有进度）时，setup 会自动从清华/中科大镜像（其次 `cloud-images.ubuntu.com`）下载 Ubuntu 24.04 官方 cloud rootfs，并用 `wsl --import` 导入到所选目录；也可以用 `--distro-rootfs FILE` 指定本地 rootfs 压缩包（离线安装）。
 
@@ -277,7 +278,7 @@ Windows 的 localhost 转发会让 `host=0.0.0.0` 在 Windows 本机可通过 `h
 进入发行版查看实际子进程：
 
 ```bash
-wsl -d Ubuntu
+wsl -d flashserver_ubuntu
 ps -ef | grep '[f]lashcli.*serve'
 # /proc/<pid>/cmdline 用 NUL 分隔参数
 cat /proc/<pid>/cmdline | tr '\0' ' '; echo
@@ -286,11 +287,11 @@ cat /root/.flashcli/flashserver/serve-options.json
 journalctl -u flashserver -n 100 --no-pager
 ```
 
-服务以 root 运行，`FLASHCLI_HOME` 通常是 `/root/.flashcli`。如果安装时用了别的 `--home`，查看 `/etc/systemd/system/flashserver.service` 的 `Environment=`。也可以直接从 Windows 执行：
+服务以 root 运行，`FLASHCLI_HOME` 通常是 `/root/.flashcli`。如果安装时用了别的 `--home`，查看 `/etc/systemd/system/flashserver.service` 的 `Environment=`。旧安装使用 `Ubuntu`，实际名称见 `%LOCALAPPDATA%\FlashServer\distro.txt`。也可以直接从 Windows 执行：
 
 ```powershell
-wsl -d Ubuntu -- ps -ef
-wsl -d Ubuntu -- ss -lntp
+wsl -d flashserver_ubuntu -- ps -ef
+wsl -d flashserver_ubuntu -- ss -lntp
 ```
 
 ## 耗时参考
@@ -358,6 +359,6 @@ sudo flashserver-setup --uninstall
 | `--purge-models` | `FLASHCLI_HOME`（bundle、权重、运行时、缓存）以及解压出的 `flashcli-bundle` 源码 |
 | `--remove-cli` | `/usr/local/bin/flashcli` |
 | `--purge-settings` | 桌面客户端设置和 Windows 安装日志（`%LOCALAPPDATA%\FlashServer`） |
-| `--purge-distro` | Ubuntu WSL 发行版及其 `ext4.vhdx`（释放整个虚拟磁盘；Ubuntu 内所有数据丢失；仅 WSL） |
+| `--purge-distro` | 当前 FlashServer WSL 发行版（`distro.txt`；`flashserver_ubuntu` 或旧 `Ubuntu`）及其 `ext4.vhdx`（释放整个虚拟磁盘；发行版内所有数据丢失；仅 WSL） |
 
 Windows UI 卸载器会在删除文件前提供“全选”以及模型缓存、CLI、客户端设置、发行版四个勾选项；静默卸载默认全部保留。若卸载时模型正在加载或启动，会先停止服务和相关任务（下载/加载状态保留在缓存中，下次安装可继续）。

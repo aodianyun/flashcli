@@ -36,8 +36,8 @@ cargo build --release
 
 - The Windows installer is produced by `scripts/build_windows_package.ps1` (client + Go assets + Inno Setup) and copies the binary to `{app}\FlashServer.exe`, then opens it after installation.
 - The client looks for `flashserver-setup.exe` in `payload\flashserver-setup.exe`, `..\payload\flashserver-setup.exe` or next to itself; `FLASHSERVER_SETUP_BIN` overrides the path.
-- Service start/stop runs `wsl.exe -d Ubuntu -u root systemctl ...` on Windows. Auto-start changes call `flashserver-setup --enable-autostart/--disable-autostart` (UAC) and never start/stop the service. Long operations use a modal progress overlay plus a result toast; the elevated console is hidden.
-- Settings (currently the theme) live in `%LOCALAPPDATA%\FlashServer\settings.json`; a UTF-8 BOM is tolerated.
+- Service start/stop chooses the distro from `%LOCALAPPDATA%\FlashServer\distro.txt` (`flashserver_ubuntu`, or legacy `Ubuntu`) and runs `wsl.exe -d <distro> -u root systemctl ...`. Starting boots WSL, waits for systemd, retries the unit, and verifies `/health`. Auto-start changes call `flashserver-setup --enable-autostart/--disable-autostart` (UAC) and never start/stop the service. Long operations use a modal progress overlay plus a result toast; the elevated console is hidden.
+- Settings live in `%LOCALAPPDATA%\FlashServer\settings.json` (theme, `wsl_ports`, `stop_wsl`); a UTF-8 BOM is tolerated.
 
 ## Keyboard
 

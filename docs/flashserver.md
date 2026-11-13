@@ -47,7 +47,7 @@ Settings → 下载源 (or `POST /v1/mirror {"enabled":true}`) enables China-fri
 - FlashCLI source fallback: `https://gitee.com/aodiansoft/flashcli.git`
 - PyTorch wheels: SJTU mirror (`mirror.TorchIndexURL`)
 
-The toggle writes `~/.flashcli/mirror.env` and applies to new downloads without restarting the service. `GET /v1/mirror` returns the current state. This is the same endpoint set as `install.sh --mirror`; it does not rewrite apt sources. The desktop setting is disabled while the service is stopped or a download/load/start job is running.
+The toggle writes `~/.flashcli/mirror.env` and applies to new downloads without restarting the service. `GET /v1/mirror` returns the current state. Setup enables this file by default on new installs; the desktop can disable it later. This is the same endpoint set as `install.sh --mirror`; it does not rewrite apt sources. The desktop setting is disabled while the service is stopped or a download/load/start job is running.
 
 ## Windows UI installer
 
@@ -66,20 +66,19 @@ also in the release tag and installer metadata:
 UI installer (admin)
   → extract payload to %ProgramFiles%\FlashServer\payload
   → [1/8] check WSL2; enable it with `wsl --install --no-distribution` when missing
-  → [2/8] install/register Ubuntu (DISM fallback for older Windows 10)
+  → [2/8] register the FlashServer distro: new installs import the Ubuntu rootfs as `flashserver_ubuntu`; legacy `Ubuntu` with a FlashServer config is reused
   → [3/8] enable systemd  → [4/8] install Linux payload
   → [5/8] write config + unit → [6/8] start service
-  → [7/8] create the Windows logon task → [8/8] wait for /health
-  → re-check `systemctl is-active flashserver` and /health
-  → launch the desktop client
+  → [7/8] create the Windows logon task + model firewall rule → [8/8] wait for /health
+  → verify readiness in the setup engine, then launch the desktop client
 ```
 
 If enabling WSL2 requires a Windows restart, setup exits with code **3**. The
 installer explains that a restart is required, keeps the client closed, and the
 finished page asks you to run Setup again after restarting. The second run is
-idempotent and completes the Ubuntu/service installation. On success the
-finished page means the environment was verified ready, not just that files were
-copied; the installer shows the actual API URL.
+idempotent and completes the FlashServer distro/service installation. On success
+the finished page means the environment was verified ready by the setup engine,
+not just that files were copied; the installer shows the actual API URL.
 
 Windows can reserve the default port `8790` in a Hyper-V/WinNAT excluded range.
 In that case setup automatically selects the next free port (`18790`, `28790`,
@@ -121,7 +120,7 @@ error). The full trace including `wsl.exe`/`schtasks.exe` output is written to
 Use a Windows 10 2004+/Windows 11 x64 VM with internet access and nested
 virtualization enabled (VT-x/AMD-V); WSL2 cannot start without it.
 
-1. Confirm the VM is clean: `wsl.exe --status` fails and `wsl.exe -l -v` lists no Ubuntu.
+1. Confirm the VM is clean: `wsl.exe --status` fails and `wsl.exe -l -v` lists no `flashserver_ubuntu` (or legacy `Ubuntu`).
 2. Run `flashserver-setup-windows-amd64-v<version>.exe`. The wizard must show the setup progress
    page with a live log (current step, heartbeat, and rootfs download progress); on a machine
    without WSL2 the first run may stop at step 1 and ask for a restart. The progress page has a
@@ -130,8 +129,9 @@ virtualization enabled (VT-x/AMD-V); WSL2 cannot start without it.
    with "FlashServer is installed and ready."
 4. Verify the environment independently (the installer may have selected a port other than 8790):
    ```powershell
+   $distro = (Get-Content "$env:LOCALAPPDATA\FlashServer\distro.txt").Trim()
    wsl.exe -l -v
-   wsl.exe -d Ubuntu -u root systemctl is-active flashserver   # active
+   wsl.exe -d $distro -u root systemctl is-active flashserver   # active
    $url = (Get-Content "$env:LOCALAPPDATA\FlashServer\api-url.txt").Trim()
    (Invoke-WebRequest -UseBasicParsing "$url/health").StatusCode  # 200
    ```
@@ -160,22 +160,22 @@ Windows (run from an elevated terminal; the UI installer does this automatically
 flashserver-setup.exe
 ```
 
-It uses the official Ubuntu WSL2 distribution (no custom image), enables WSL2
-itself when missing (`wsl --install --no-distribution`, with a DISM fallback on
-older Windows 10), enables systemd in `/etc/wsl.conf`, installs the Linux
-binaries inside WSL, registers `flashserver.service`, and creates the
-`flashserver-wsl` logon task. A first run on a machine with no WSL2 may require
-one Windows restart; run setup again afterwards.
+It imports the official Ubuntu WSL2 rootfs as the `flashserver_ubuntu` distro
+(no custom image; a legacy `Ubuntu` that already holds a FlashServer config is
+reused), enables WSL2 itself when missing (`wsl --install --no-distribution`,
+with a DISM fallback on older Windows 10), enables systemd in `/etc/wsl.conf`,
+installs the Linux binaries inside WSL, registers `flashserver.service`, and
+creates the `flashserver-wsl` logon task. A first run on a machine with no WSL2
+may require one Windows restart; run setup again afterwards.
 
-**Disk location.** Model weights and bundle runtimes live inside the Ubuntu
-virtual disk (`ext4.vhdx`), which defaults to the system drive and typically
-grows to 20–40 GB. `--wsl-dir DIR` moves the distro to another NTFS drive
-(WSL has no install-time location flag, so setup installs it and then runs
-`wsl --manage <distro> --move DIR` while the distro is stopped). The UI
-installer adds a "WSL data directory" page and defaults it to a sibling of the
-installation directory (`<install dir parent>\FlashServerWSL`: installing to
-`D:\software\FlashServer` defaults to `D:\software\FlashServerWSL`). Deleting
-data later does **not** shrink
+**Disk location.** Model weights and bundle runtimes live inside the FlashServer
+WSL virtual disk (`ext4.vhdx`). The UI installer defaults it to a sibling of the
+installation directory (`<install dir parent>\FlashServerWSL`); when installing
+under `Program Files`, it defaults to `%LOCALAPPDATA%\FlashServerWSL` because
+WSL may not be able to create a VHDX under that ACL. `--wsl-dir DIR` moves the
+distro to another NTFS drive (WSL has no install-time location flag, so setup
+installs it and then runs `wsl --manage <distro> --move DIR` while the distro is
+stopped). Deleting data later does **not** shrink
 the VHDX: clean up with `flashcli du` / `flashcli cache clean` /
 `flashcli bundle clean`, then shut WSL down and compact the disk
 (`wsl --manage <distro> --set-sparse true`, or `diskpart` compact).
@@ -326,7 +326,7 @@ WSL restart. Mirrored networking requires Windows 11 22H2+ and a recent WSL.
 Enter the distro and inspect the actual child process:
 
 ```bash
-wsl -d Ubuntu
+wsl -d flashserver_ubuntu
 ps -ef | grep '[f]lashcli.*serve'
 # /proc/<pid>/cmdline separates arguments with NUL
 cat /proc/<pid>/cmdline | tr '\0' ' '; echo
@@ -337,12 +337,13 @@ journalctl -u flashserver -n 100 --no-pager
 
 The service runs as root, so its `FLASHCLI_HOME` is normally
 `/root/.flashcli`. If a different `--home` was used, read `Environment=` from
-`/etc/systemd/system/flashserver.service`. From Windows, the same checks work
-without an interactive shell:
+`/etc/systemd/system/flashserver.service`. Legacy installs use `Ubuntu`; read
+`%LOCALAPPDATA%\FlashServer\distro.txt` for the active name. From Windows, the
+same checks work without an interactive shell:
 
 ```powershell
-wsl -d Ubuntu -- ps -ef
-wsl -d Ubuntu -- ss -lntp
+wsl -d flashserver_ubuntu -- ps -ef
+wsl -d flashserver_ubuntu -- ss -lntp
 ```
 
 ## Timing expectations
@@ -410,6 +411,6 @@ Optional cleanup flags:
 | `--purge-models` | `FLASHCLI_HOME` (bundles, weights, runtimes, caches) and the extracted `flashcli-bundle` source |
 | `--remove-cli` | `/usr/local/bin/flashcli` |
 | `--purge-settings` | desktop client settings and the Windows setup log (`%LOCALAPPDATA%\FlashServer`) |
-| `--purge-distro` | the Ubuntu WSL distro and its `ext4.vhdx` (frees the whole virtual disk; all data inside is lost; WSL only) |
+| `--purge-distro` | the active FlashServer WSL distro (`distro.txt`; `flashserver_ubuntu` or legacy `Ubuntu`) and its `ext4.vhdx` (frees the whole virtual disk; all data inside is lost; WSL only) |
 
 The Windows UI uninstaller shows a select-all option plus model-cache, CLI, client-settings, and distro checkboxes before removing files; a silent uninstall keeps everything. Uninstalling while a model is loading or starting stops the service and its jobs first (load/download state resumes from the cache on the next install).
