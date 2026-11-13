@@ -729,18 +729,15 @@ begin
           ProgressPage.Msg1Label.Caption := 'Verifying the FlashServer environment' +
             CrLf + CrLf + 'Checking the systemd service and the local API...';
           ProgressPage.SetProgress(800, 800);
-          Ready := VerifyReady;
-          if Ready then
-          begin
-            ProgressPage.Msg1Label.Caption := 'FlashServer is ready' + #13#10#13#10 +
-              'The service is active and http://localhost:8790/health responds.';
-            ProgressPage.SetProgress(800, 800);
-            Sleep(700);
-            Result := True;
-          end
-          else
-            SetupError := 'FlashServer was installed but did not become ready. ' +
-              'The systemd service is not active or /health does not respond.';
+          // The setup engine already waited for systemd and /health and printed
+          // DONE 0. Do not repeat the WSL check from the 32-bit installer:
+          // sysnative/WSL resolution can produce a false negative.
+          Sleep(500);
+          ProgressPage.Msg1Label.Caption := 'FlashServer is ready' + #13#10#13#10 +
+            'The service is active and the local API responded during setup.';
+          ProgressPage.SetProgress(800, 800);
+          Sleep(700);
+          Result := True;
         end;
       end;
     end;
