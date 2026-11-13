@@ -4494,9 +4494,40 @@ fn run_wsl(args: &[&str]) -> Result<(), String> {
 fn spawn_keepalive() {}
 
 fn start_service() -> Result<String, String> {
-    run_wsl(&["systemctl", "start", "flashserver"])?;
+    // `wsl --terminate` leaves systemd booting on the next call. Retry the
+    // start instead of failing the first time systemd is not ready yet.
+    let mut last_error = String::new();
+    let mut started = false;
+    for attempt in 0..6 {
+        match run_wsl(&["systemctl", "start", "flashserver"]) {
+            Ok(()) => {
+                started = true;
+                break;
+            }
+            Err(err) => {
+                last_error = err;
+                let _ = run_wsl(&["true"]);
+                if attempt < 5 {
+                    std::thread::sleep(Duration::from_secs(2));
+                }
+            }
+        }
+    }
+    if !started {
+        return Err(if last_error.is_empty() {
+            "启动 FlashServer 失败".to_string()
+        } else {
+            format!("启动 FlashServer 失败：{last_error}")
+        });
+    }
     spawn_keepalive();
-    Ok("服务已启动".into())
+    for _ in 0..8 {
+        if api_healthy() {
+            return Ok("服务已启动".into());
+        }
+        std::thread::sleep(Duration::from_secs(1));
+    }
+    Err("FlashServer 已启动，但 API 不可达；请检查 WSL 网络/端口或运行 flashserver-setup --start-service".into())
 }
 
 fn stop_service() -> Result<String, String> {
