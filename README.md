@@ -116,8 +116,10 @@ flashserver-setup --uninstall --purge-models
 `flashserver.service` systemd unit; Windows imports a dedicated
 `flashserver_ubuntu` WSL2 distro (a legacy `Ubuntu` with a FlashServer config is
 reused), enables domestic mirrors, and creates the logon task and model firewall
-rule. `flashserver-setup-windows-amd64-v<version>.exe` bundles it with the
-desktop client. Details: [flashserver.md](docs/flashserver.md).
+rule. Both binaries ship as release assets (`flashserver-<os>-<arch>`,
+`flashserver-setup-<os>-<arch>`), and
+`flashserver-setup-windows-amd64-v<version>.exe` bundles setup with the desktop
+client. Details: [flashserver.md](docs/flashserver.md).
 
 ---
 

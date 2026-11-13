@@ -111,7 +111,9 @@ flashserver-setup --uninstall --purge-models
 `flashserver-setup` 是两个平台的安装后端：Linux 写入 `flashserver.service`
 systemd 单元；Windows 导入专用的 `flashserver_ubuntu` WSL2 发行版（已有
 FlashServer 配置的旧 `Ubuntu` 直接复用），启用国内镜像，并创建登录任务和模型
-防火墙规则。`flashserver-setup-windows-amd64-v<version>.exe` 把它与桌面客户端一起
+防火墙规则。两个二进制都作为 release 资产发布（`flashserver-<os>-<arch>`、
+`flashserver-setup-<os>-<arch>`），
+`flashserver-setup-windows-amd64-v<version>.exe` 则把 setup 与桌面客户端一起
 打包。详见 [flashserver.zh-CN.md](docs/flashserver.zh-CN.md)。
 
 ---
