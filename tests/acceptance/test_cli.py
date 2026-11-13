@@ -39,12 +39,12 @@ def test_bundle_validate_all_kinds(flashcli_bin, cli_env, home):
 
 
 def test_models_show_reports_host_and_match(flashcli_bin, cli_env, home):
-    bundle = prepare_bundle("v4_python_echo", home)
+    bundle = FIXTURES / "v4_python_echo"
     proc = run_cli(flashcli_bin, cli_env, "models", "show", str(bundle), timeout=120)
     assert proc.returncode == 0, proc.stderr
     out = proc.stdout
+    assert "ref:" in out
     assert "this machine:" in out
-    assert CELL in out
     assert "supported (1)" in out
 
 

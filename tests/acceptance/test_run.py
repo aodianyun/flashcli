@@ -7,12 +7,19 @@ process), and prints the entry result as JSON. Nothing is mocked.
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 
 from helpers import prepare_bundle, run_cli
 
+_HEAVY = pytest.mark.skipif(
+    os.environ.get("FLASHCLI_ACCEPTANCE_HEAVY") != "1",
+    reason="heavy tier: installs the torch stack; set FLASHCLI_ACCEPTANCE_HEAVY=1",
+)
 
+
+@_HEAVY
 @pytest.mark.parametrize("fixture", ["python_echo", "v4_python_echo"])
 def test_run_python_bundle(flashcli_bin, cli_env, home, fixture):
     bundle = prepare_bundle(fixture, home)

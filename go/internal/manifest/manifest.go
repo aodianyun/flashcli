@@ -423,7 +423,7 @@ func Validate(m *Manifest) []string {
 	errors = append(errors, validateRuntimeSuffix(m)...)
 	errors = append(errors, validateSystemRequirements(m)...)
 	errors = append(errors, validateSystemRequirements(m)...)
-	if pythonBundle {
+	if pythonBundle || !hasNativeABIEntry(m) {
 		errors = append(errors, native.ValidateRuntimeMatrixOptional(m.Root, m.RuntimeMap())...)
 	} else {
 		errors = append(errors, native.ValidateRuntimeMatrix(m.Root, m.RuntimeMap())...)
@@ -433,6 +433,17 @@ func Validate(m *Manifest) []string {
 	errors = append(errors, ValidateExecution(m)...)
 	errors = append(errors, validateBundleSpecifics(m)...)
 	return errors
+}
+
+// hasNativeABIEntry reports whether any capability uses the native-abi backend,
+// which is the only kind that requires .so artifacts inside the runtime cell.
+func hasNativeABIEntry(m *Manifest) bool {
+	for _, e := range m.effectiveEntries() {
+		if e.Spec.Kind == "native-abi" {
+			return true
+		}
+	}
+	return false
 }
 
 func isCIdentifier(s string) bool {
