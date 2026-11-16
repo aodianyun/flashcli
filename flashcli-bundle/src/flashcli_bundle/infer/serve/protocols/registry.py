@@ -24,13 +24,18 @@ from flashcli_bundle.capabilities import (
 
 # Capabilities implemented by host-owned modules.
 IMPLEMENTED = frozenset(
-    {OPENAI_CHAT, OPENAI_COMPLETIONS, "anthropic.messages", "anthropic.count_tokens"}
+    {
+        OPENAI_CHAT,
+        OPENAI_COMPLETIONS,
+        OPENAI_RESPONSES,
+        "anthropic.messages",
+        "anthropic.count_tokens",
+    }
 )
 
 # Planned HTTP endpoints that return an explicit 501 until implemented.
 # Realtime is WebSocket-only and needs a dedicated mount later.
 PLANNED_HTTP: dict[str, tuple[str, str]] = {
-    OPENAI_RESPONSES: ("POST", "/v1/responses"),
     OPENAI_EMBEDDINGS: ("POST", "/v1/embeddings"),
     OPENAI_MODERATIONS: ("POST", "/v1/moderations"),
     OPENAI_AUDIO_TRANSCRIPTIONS: ("POST", "/v1/audio/transcriptions"),
