@@ -14,6 +14,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from flashcli_bundle.capabilities import (
     ANTHROPIC_COUNT_TOKENS,
     ANTHROPIC_MESSAGES,
+    ANTHROPIC_MODELS,
+    OPENAI_EMBEDDINGS,
     LEGACY_SERVE_CAPABILITIES,
     OPENAI_CHAT,
     OPENAI_COMPLETIONS,
@@ -28,6 +30,10 @@ from flashcli_bundle.infer.serve.openai_bridge import (
 from flashcli_bundle.infer.serve.protocols.anthropic import (
     mount_count_tokens,
     mount_messages,
+    mount_models,
+)
+from flashcli_bundle.infer.serve.protocols.openai_embeddings import (
+    mount as mount_embeddings,
 )
 from flashcli_bundle.infer.serve.protocols.openai_completions import (
     mount as mount_openai_completions,
@@ -153,7 +159,24 @@ def build_app(
         return payload
 
     @app.get("/v1/models")
-    async def list_models():
+    async def list_models(request: Request):
+        if ANTHROPIC_MODELS in capabilities and request.headers.get("anthropic-version"):
+            from datetime import datetime, timezone
+
+            created = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            return {
+                "data": [
+                    {
+                        "type": "model",
+                        "id": engine.model_id,
+                        "display_name": engine.model_id,
+                        "created_at": created,
+                    }
+                ],
+                "has_more": False,
+                "first_id": engine.model_id,
+                "last_id": engine.model_id,
+            }
         return {
             "object": "list",
             "data": [
@@ -489,6 +512,10 @@ def build_app(
         mount_messages(app, engine, gate)
     if ANTHROPIC_COUNT_TOKENS in capabilities:
         mount_count_tokens(app, engine)
+    if ANTHROPIC_MODELS in capabilities:
+        mount_models(app, engine)
+    if OPENAI_EMBEDDINGS in capabilities:
+        mount_embeddings(app, engine)
     mount_unimplemented(app, capabilities)
 
     return app

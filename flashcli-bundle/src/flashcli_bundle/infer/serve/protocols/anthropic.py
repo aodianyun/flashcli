@@ -484,6 +484,31 @@ def mount_messages(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
         )
 
 
+def _model_object(model: str) -> dict[str, Any]:
+    from datetime import datetime, timezone
+
+    return {
+        "type": "model",
+        "id": model,
+        "display_name": model,
+        "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+
+
+def mount_models(app: FastAPI, engine: Any) -> None:
+    @app.get("/v1/models/{model_id}")
+    async def model(model_id: str):
+        if model_id != engine.model_id:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "type": "error",
+                    "error": {"type": "not_found_error", "message": f"model {model_id!r} not found"},
+                },
+            )
+        return _model_object(engine.model_id)
+
+
 def mount_count_tokens(app: FastAPI, engine: Any) -> None:
     @app.post("/v1/messages/count_tokens")
     async def count_tokens(body: dict[str, Any]):
