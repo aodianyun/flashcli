@@ -73,8 +73,8 @@ def test_openai_completions_stream() -> None:
 
 
 def test_planned_capability_returns_501() -> None:
-    with _client(["openai.audio.speech"]) as client:
-        response = client.post("/v1/audio/speech", json={})
+    with _client(["openai.moderations"]) as client:
+        response = client.post("/v1/moderations", json={})
         assert response.status_code == 501
         assert response.json()["error"]["code"] == "capability_not_implemented"
 

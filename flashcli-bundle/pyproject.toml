@@ -18,6 +18,7 @@ infer = [
     "packaging>=23.0",
     "fastapi>=0.100",
     "uvicorn[standard]>=0.24",
+    "python-multipart>=0.0.9",
     "tqdm>=4.66",
 ]
 
