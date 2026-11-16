@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # Tier 2/3 acceptance: drive the real binaries (CLI + flashserver API).
 #
 #   bash scripts/verify_e2e.sh                 # offline tier (local fixtures)
