@@ -17,6 +17,7 @@ from flashcli_bundle.capabilities import (
     LEGACY_SERVE_CAPABILITIES,
     OPENAI_CHAT,
     OPENAI_COMPLETIONS,
+    OPENAI_RESPONSES,
 )
 from flashcli_bundle.infer.engines.base import ChatRequest, ServeEngine
 from flashcli_bundle.infer.serve.inference import GpuBusyError, InferenceGate, iter_on_inference_loop
@@ -30,6 +31,9 @@ from flashcli_bundle.infer.serve.protocols.anthropic import (
 )
 from flashcli_bundle.infer.serve.protocols.openai_completions import (
     mount as mount_openai_completions,
+)
+from flashcli_bundle.infer.serve.protocols.openai_responses import (
+    mount as mount_openai_responses,
 )
 from flashcli_bundle.infer.serve.protocols.registry import mount_unimplemented
 from flashcli_bundle.infer.serve.request_log import (
@@ -479,6 +483,8 @@ def build_app(
         app.add_api_route("/v1/chat/completions", chat_completions, methods=["POST"])
     if OPENAI_COMPLETIONS in capabilities:
         mount_openai_completions(app, engine, gate)
+    if OPENAI_RESPONSES in capabilities:
+        mount_openai_responses(app, engine, gate)
     if ANTHROPIC_MESSAGES in capabilities:
         mount_messages(app, engine, gate)
     if ANTHROPIC_COUNT_TOKENS in capabilities:
