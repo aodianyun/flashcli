@@ -19,21 +19,22 @@ import (
 
 // Model is a locally cached bundle/model view for the HTTP API.
 type Model struct {
-	Ref           string `json:"ref"`
-	CacheKey      string `json:"cache_key"`
-	Variant       string `json:"variant,omitempty"`
-	BundleCached  bool   `json:"bundle_cached"`
-	WeightsCached bool   `json:"weights_cached"`
-	Serve         bool   `json:"serve"`
-	BundleBytes   int64  `json:"bundle_bytes"`
-	RuntimeID     string `json:"runtime_id,omitempty"`
-	RuntimeBytes  int64  `json:"runtime_bytes"`
-	WeightsBytes  int64  `json:"weights_bytes"`
-	WeightsKey    string `json:"weights_key,omitempty"`
-	Directory     string `json:"directory"`
-	WeightsSource string `json:"weights_source,omitempty"`
-	WeightsRepo   string `json:"weights_repo,omitempty"`
-	WeightsRev    string `json:"weights_revision,omitempty"`
+	Ref           string   `json:"ref"`
+	CacheKey      string   `json:"cache_key"`
+	Variant       string   `json:"variant,omitempty"`
+	BundleCached  bool     `json:"bundle_cached"`
+	WeightsCached bool     `json:"weights_cached"`
+	Serve         bool     `json:"serve"`
+	Capabilities  []string `json:"capabilities,omitempty"`
+	BundleBytes   int64    `json:"bundle_bytes"`
+	RuntimeID     string   `json:"runtime_id,omitempty"`
+	RuntimeBytes  int64    `json:"runtime_bytes"`
+	WeightsBytes  int64    `json:"weights_bytes"`
+	WeightsKey    string   `json:"weights_key,omitempty"`
+	Directory     string   `json:"directory"`
+	WeightsSource string   `json:"weights_source,omitempty"`
+	WeightsRepo   string   `json:"weights_repo,omitempty"`
+	WeightsRev    string   `json:"weights_revision,omitempty"`
 }
 
 // Area is one cache area for /v1/storage.
@@ -75,6 +76,7 @@ func ListModels() ([]Model, error) {
 			BundleCached:  bundleOK,
 			WeightsCached: weightsOK,
 			Serve:         bundleOK && bundleServes(bundleRoot),
+			Capabilities:  bundleServeCapabilities(bundleRoot),
 			BundleBytes:   dirSize(filepath.Join(paths.Bundles(), filepath.FromSlash(key))),
 			RuntimeID:     runtimeID,
 			RuntimeBytes:  runtimeSize(runtimeID),
@@ -238,6 +240,21 @@ func BundleRootUsable(root string) bool {
 // cached bundle marker.
 func MarkerWeightsKey(marker map[string]any, fallback, bundleRoot string) string {
 	return markerWeightsKey(marker, fallback, bundleRoot)
+}
+
+func bundleServeCapabilities(root string) []string {
+	if strings.TrimSpace(root) == "" || !bundleServes(root) {
+		return nil
+	}
+	m, err := manifest.Load(root)
+	if err != nil {
+		return nil
+	}
+	env, err := ApplyEnv(m)
+	if err != nil {
+		return nil
+	}
+	return env.ServeCapabilities()
 }
 
 // bundleServes reports whether the bundle declares a serve entry, either at the

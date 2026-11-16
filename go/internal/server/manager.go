@@ -81,9 +81,10 @@ type Manager struct {
 }
 
 type instance struct {
-	ref      string
-	process  ServeProcess
-	loadedAt time.Time
+	ref          string
+	process      ServeProcess
+	loadedAt     time.Time
+	capabilities []string
 }
 
 // NewManager creates a manager with a conservative single-model default.
@@ -236,7 +237,10 @@ func (m *Manager) load(ctx context.Context, refStr string, progress func(phase, 
 		case <-time.After(250 * time.Millisecond):
 		}
 	}
-	inst := &instance{ref: refStr, process: proc, loadedAt: time.Now().UTC()}
+	inst := &instance{
+		ref: refStr, process: proc, loadedAt: time.Now().UTC(),
+		capabilities: append([]string(nil), bundle.Capabilities...),
+	}
 	m.mu.Lock()
 	if existing, ok := m.instances[refStr]; ok {
 		info := infoFor(existing)
@@ -266,17 +270,19 @@ func (m *Manager) Unload(ctx context.Context, refStr string) error {
 
 // InstanceInfo is the public view of a resident model.
 type InstanceInfo struct {
-	Ref      string    `json:"ref"`
-	State    string    `json:"state"`
-	Endpoint string    `json:"endpoint"`
-	PID      int       `json:"pid"`
-	LoadedAt time.Time `json:"loaded_at"`
+	Ref          string    `json:"ref"`
+	State        string    `json:"state"`
+	Endpoint     string    `json:"endpoint"`
+	PID          int       `json:"pid"`
+	LoadedAt     time.Time `json:"loaded_at"`
+	Capabilities []string  `json:"capabilities,omitempty"`
 }
 
 func infoFor(inst *instance) InstanceInfo {
 	return InstanceInfo{
 		Ref: inst.ref, State: "ready", Endpoint: inst.process.Endpoint(),
 		PID: inst.process.PID(), LoadedAt: inst.loadedAt,
+		Capabilities: append([]string(nil), inst.capabilities...),
 	}
 }
 
@@ -367,6 +373,7 @@ type BundleInfo struct {
 	RunOnly      bool
 	MinVRAMMiB   int64
 	ServeOptions []serveopts.Spec
+	Capabilities []string
 }
 
 func inspectBundle(refStr string) (BundleInfo, error) {
@@ -398,6 +405,7 @@ func inspectBundle(refStr string) (BundleInfo, error) {
 		RunOnly:      m.EntryFor("serve", variant) == nil,
 		MinVRAMMiB:   minVRAMMiB(m),
 		ServeOptions: serveopts.FromManifest(m, variant),
+		Capabilities: m.ServeCapabilities(),
 	}, nil
 }
 

@@ -82,7 +82,7 @@ func (s *Server) smokeModel(w http.ResponseWriter, r *http.Request) {
 	job := s.Jobs.Start(context.Background(), "smoke", refStr, func(ctx context.Context, emit func(string, string)) error {
 		emit("smoke", "日志文件: "+logPath)
 		if kind == "serve" {
-			return s.smokeServeRequest(ctx, refStr, endpoint, logPath, emit)
+			return s.smokeServeRequest(ctx, refStr, endpoint, logPath, model.Capabilities, emit)
 		}
 		return s.smokeRun(ctx, refStr, logPath, emit)
 	})
@@ -161,26 +161,30 @@ func (s *Server) smokeRun(ctx context.Context, refStr, logPath string, emit func
 	return err
 }
 
-func (s *Server) smokeServeRequest(ctx context.Context, refStr, endpoint, logPath string, emit func(string, string)) error {
+func (s *Server) smokeServeRequest(ctx context.Context, refStr, endpoint, logPath string, capabilities []string, emit func(string, string)) error {
 	ctx, cancel := context.WithTimeout(ctx, smokeRequestTimeout)
 	defer cancel()
 	client := &http.Client{Timeout: smokeRequestTimeout}
 	modelName := serveModelName(ctx, client, endpoint, refStr)
-	body, _ := json.Marshal(map[string]any{
-		"model":      modelName,
-		"messages":   []map[string]string{{"role": "user", "content": "ping"}},
-		"max_tokens": 32,
-	})
+	path, body, headers, err := smokeTextRequest(capabilities, modelName)
+	if err != nil {
+		appendSmokeLog(logPath, "error="+err.Error()+"\n")
+		emit("smoke", "error="+err.Error())
+		return err
+	}
 	start := time.Now()
 	appendSmokeLog(logPath, fmt.Sprintf("\n=== serve smoke %s ===\nendpoint=%s model=%s request=%s\n",
 		time.Now().Format(time.RFC3339), endpoint, modelName, body))
-	emit("smoke", fmt.Sprintf("POST %s/v1/chat/completions model=%s", strings.TrimRight(endpoint, "/"), modelName))
+	emit("smoke", fmt.Sprintf("POST %s%s model=%s", strings.TrimRight(endpoint, "/"), path, modelName))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		strings.TrimRight(endpoint, "/")+"/v1/chat/completions", bytes.NewReader(body))
+		strings.TrimRight(endpoint, "/")+path, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
 	resp, err := client.Do(req)
 	duration := time.Since(start).Milliseconds()
 	if err != nil {
@@ -199,6 +203,46 @@ func (s *Server) smokeServeRequest(ctx context.Context, refStr, endpoint, logPat
 		return fmt.Errorf("serve request returned HTTP %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func smokeTextRequest(capabilities []string, modelName string) (string, []byte, map[string]string, error) {
+	has := func(capability string) bool {
+		for _, value := range capabilities {
+			if value == capability {
+				return true
+			}
+		}
+		return false
+	}
+	// Old server/model data has no capability list; preserve the chat default.
+	if len(capabilities) == 0 || has("openai.chat") {
+		body, _ := json.Marshal(map[string]any{
+			"model":      modelName,
+			"messages":   []map[string]string{{"role": "user", "content": "ping"}},
+			"max_tokens": 32,
+		})
+		return "/v1/chat/completions", body, nil, nil
+	}
+	if has("openai.completions") {
+		body, _ := json.Marshal(map[string]any{
+			"model": modelName, "prompt": "ping", "max_tokens": 32,
+		})
+		return "/v1/completions", body, nil, nil
+	}
+	if has("openai.responses") {
+		body, _ := json.Marshal(map[string]any{
+			"model": modelName, "input": "ping", "max_output_tokens": 32,
+		})
+		return "/v1/responses", body, nil, nil
+	}
+	if has("anthropic.messages") {
+		body, _ := json.Marshal(map[string]any{
+			"model": modelName, "max_tokens": 32,
+			"messages": []map[string]string{{"role": "user", "content": "ping"}},
+		})
+		return "/v1/messages", body, map[string]string{"anthropic-version": "2023-06-01"}, nil
+	}
+	return "", nil, nil, fmt.Errorf("serve smoke has no supported text capability (capabilities: %s)", strings.Join(capabilities, ", "))
 }
 
 func serveModelName(ctx context.Context, client *http.Client, endpoint, refStr string) string {
