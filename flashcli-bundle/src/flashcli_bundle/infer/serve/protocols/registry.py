@@ -8,8 +8,6 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from flashcli_bundle.capabilities import (
-    ANTHROPIC_COUNT_TOKENS,
-    ANTHROPIC_MESSAGES,
     OPENAI_AUDIO_SPEECH,
     OPENAI_AUDIO_TRANSCRIPTIONS,
     OPENAI_AUDIO_TRANSLATIONS,
@@ -25,7 +23,9 @@ from flashcli_bundle.capabilities import (
 )
 
 # Capabilities implemented by host-owned modules.
-IMPLEMENTED = frozenset({OPENAI_CHAT, OPENAI_COMPLETIONS})
+IMPLEMENTED = frozenset(
+    {OPENAI_CHAT, OPENAI_COMPLETIONS, "anthropic.messages", "anthropic.count_tokens"}
+)
 
 # Planned HTTP endpoints that return an explicit 501 until implemented.
 # Realtime is WebSocket-only and needs a dedicated mount later.
@@ -40,8 +40,6 @@ PLANNED_HTTP: dict[str, tuple[str, str]] = {
     OPENAI_IMAGES_EDITS: ("POST", "/v1/images/edits"),
     OPENAI_IMAGES_VARIATIONS: ("POST", "/v1/images/variations"),
     OPENAI_VIDEOS: ("POST", "/v1/videos"),
-    ANTHROPIC_MESSAGES: ("POST", "/v1/messages"),
-    ANTHROPIC_COUNT_TOKENS: ("POST", "/v1/messages/count_tokens"),
 }
 
 

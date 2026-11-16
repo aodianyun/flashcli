@@ -48,6 +48,8 @@ def parse_chat_completions_body(body: dict[str, Any]) -> ChatRequest:
             role=str(m.get("role", "user")),
             content=m.get("content"),
             tool_calls=m.get("tool_calls"),
+            tool_call_id=m.get("tool_call_id"),
+            name=m.get("name"),
         )
         for m in messages
         if isinstance(m, dict)

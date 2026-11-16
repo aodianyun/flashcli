@@ -12,6 +12,8 @@ from fastapi.responses import StreamingResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from flashcli_bundle.capabilities import (
+    ANTHROPIC_COUNT_TOKENS,
+    ANTHROPIC_MESSAGES,
     LEGACY_SERVE_CAPABILITIES,
     OPENAI_CHAT,
     OPENAI_COMPLETIONS,
@@ -21,6 +23,10 @@ from flashcli_bundle.infer.serve.inference import GpuBusyError, InferenceGate, i
 from flashcli_bundle.infer.serve.openai_bridge import (
     chat_result_to_completion_payload,
     parse_chat_completions_body,
+)
+from flashcli_bundle.infer.serve.protocols.anthropic import (
+    mount_count_tokens,
+    mount_messages,
 )
 from flashcli_bundle.infer.serve.protocols.openai_completions import (
     mount as mount_openai_completions,
@@ -473,6 +479,10 @@ def build_app(
         app.add_api_route("/v1/chat/completions", chat_completions, methods=["POST"])
     if OPENAI_COMPLETIONS in capabilities:
         mount_openai_completions(app, engine, gate)
+    if ANTHROPIC_MESSAGES in capabilities:
+        mount_messages(app, engine, gate)
+    if ANTHROPIC_COUNT_TOKENS in capabilities:
+        mount_count_tokens(app, engine)
     mount_unimplemented(app, capabilities)
 
     return app
