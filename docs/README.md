@@ -20,6 +20,7 @@ every file to its audience and content.
 | [environment.md](environment.md) | users | Environment variables the Go host reads, mirrors, cache paths |
 | [model_bundle_standard.md](model_bundle_standard.md) | integrators | Preset ref syntax + end-user runtime flow |
 | [bundle_publish_standard.md](bundle_publish_standard.md) | bundle authors | **Authoritative** manifest, entry, `.so`, FlashHub layout |
+| [llm_bundle_standard.zh-CN.md](llm_bundle_standard.zh-CN.md) | LLM bundle authors | LLM bundle standard: OpenAI + Anthropic serve surface, manifest, pipeline (Chinese) |
 | [bundle_execution_abi.md](bundle_execution_abi.md) | bundle authors | `entry.kind` backends, native process / `.so` contracts, conformance |
 | [architecture.md](architecture.md) | contributors | Runtime flow, local service stack, host vs bundle, caches, directory layout |
 | [module_layers.md](module_layers.md) | contributors | Host / infer / protocol ownership and the Go package map |
