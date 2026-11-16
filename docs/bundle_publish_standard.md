@@ -225,8 +225,11 @@ Script contracts:
 | `module` | Python module name relative to the bundle root (Python only) |
 | `attr` | Class/callable name (`RunEngine`/`ServeEngine` or script `main`) |
 | `mode` | `engine` (default) or `script` (Python only) |
+| `capabilities` | no | Python engine serve only: host-owned protocol routes to enable. Absent keeps the legacy `["openai.chat"]` behavior; `[]` disables host inference routes. |
 
 A capability has exactly one implementation. Native backends use the sibling `native` block defined in [bundle_execution_abi.md](bundle_execution_abi.md).
+
+`serve.capabilities` controls only host-owned routes (`/health` and `/v1/models` stay enabled). Current capability IDs are `openai.chat`, `openai.responses`, `openai.completions`, `openai.embeddings`, `openai.moderations`, `openai.audio.*`, `openai.images.*`, `openai.videos`, `openai.realtime`, `anthropic.messages`, `anthropic.count_tokens`, and `anthropic.models`. Unknown or duplicate IDs fail `bundle validate`. `register_routes` remains available for custom routes and keeps its legacy priority over host routes.
 
 ### 3.3 `defaults.python_abi`
 
