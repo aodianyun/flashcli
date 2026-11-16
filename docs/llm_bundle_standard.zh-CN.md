@@ -126,7 +126,7 @@ flashcli serve <org>/<name>:<version> --host 0.0.0.0 --port 8080 --api-key <key>
 - 监听地址/端口由 host 的 `--host`（默认 `0.0.0.0`）/ `--port`（默认 `8000`）提供；
   **禁止**在 `serve_options` 中声明 `ip` / `host` / `port`。
 - host 会先调用 `ServeEngine.register_routes(app)` 再挂自带路由，`llm_serve` 的路由优先。
-- `serve.capabilities` 声明由 host 启用的协议路由；缺省等价于 `["openai.chat"]`，显式 `[]` 只保留 `/health`、`/v1/models`。host 尚未内置的能力必须由 bundle 通过 `register_routes` 提供，否则不要声明。
+- `serve.capabilities` 声明由 host 启用的协议路由；缺省等价于 `["openai.chat"]`，显式 `[]` 只保留 `/health`、`/v1/models`。当前 host 已内置 `openai.chat` 和 `openai.completions`；其他已声明但 host 尚未实现的 HTTP 能力返回 `501`，随后按 host 模块落地进度补齐，或由 bundle 通过 `register_routes` 提供。
 - **禁止** script 模式自起 uvicorn（参数、帮助、日志、venv 行为会与其它 bundle 不一致）。
 
 ### 4.2 依赖
