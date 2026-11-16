@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from flashcli_bundle.capabilities import LEGACY_SERVE_CAPABILITIES, OPENAI_CHAT
 from flashcli_bundle.infer.engines.base import ChatRequest, ServeEngine
 from flashcli_bundle.infer.serve.inference import GpuBusyError, InferenceGate, iter_on_inference_loop
 from flashcli_bundle.infer.serve.openai_bridge import (
@@ -48,7 +49,16 @@ def _gpu_busy_response(model_id: str) -> HTTPException:
     )
 
 
-def build_app(engine: ServeEngine) -> FastAPI:
+def build_app(
+    engine: ServeEngine,
+    *,
+    serve_capabilities: list[str] | None = None,
+) -> FastAPI:
+    capabilities = set(
+        LEGACY_SERVE_CAPABILITIES
+        if serve_capabilities is None
+        else serve_capabilities
+    )
     gate = InferenceGate()
     app = FastAPI(title="flashcli unified serve")
 
@@ -162,7 +172,6 @@ def build_app(engine: ServeEngine) -> FastAPI:
         async for chunk in _sync_bridge():
             yield chunk
 
-    @app.post("/v1/chat/completions")
     async def chat_completions(request: Request, body: dict[str, Any]):
         req_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex[:12]
         timer: RequestTimer = getattr(request.state, "timer", None) or RequestTimer()
@@ -451,5 +460,8 @@ def build_app(engine: ServeEngine) -> FastAPI:
                 "X-Accel-Buffering": "no",
             },
         )
+
+    if OPENAI_CHAT in capabilities:
+        app.add_api_route("/v1/chat/completions", chat_completions, methods=["POST"])
 
     return app

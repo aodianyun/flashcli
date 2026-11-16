@@ -44,6 +44,11 @@ type EntrySpec struct {
 	Mode   string
 	Kind   string
 	Native map[string]any
+	// Capabilities is the explicit serve capability list. CapabilitiesSet
+	// distinguishes an absent field (legacy default) from an explicit [].
+	Capabilities        []string
+	CapabilitiesSet     bool
+	CapabilitiesInvalid string
 }
 
 // IsNative reports whether the capability uses a native backend.
@@ -227,7 +232,32 @@ func entrySpecFromMap(data map[string]any, defaultKind string, defaultNative map
 	if kind == "python" && (module == "" || attr == "") {
 		return nil
 	}
-	return &EntrySpec{Module: module, Attr: attr, Mode: mode, Kind: kind, Native: native}
+	spec := &EntrySpec{Module: module, Attr: attr, Mode: mode, Kind: kind, Native: native}
+	if rawCaps, ok := data["capabilities"]; ok {
+		spec.CapabilitiesSet = true
+		switch v := rawCaps.(type) {
+		case []any:
+			for _, item := range v {
+				s, ok := item.(string)
+				if !ok || strings.TrimSpace(s) == "" {
+					spec.CapabilitiesInvalid = "must be an array of non-empty strings"
+					break
+				}
+				spec.Capabilities = append(spec.Capabilities, strings.TrimSpace(s))
+			}
+		case []string:
+			for _, s := range v {
+				if strings.TrimSpace(s) == "" {
+					spec.CapabilitiesInvalid = "must be an array of non-empty strings"
+					break
+				}
+				spec.Capabilities = append(spec.Capabilities, strings.TrimSpace(s))
+			}
+		default:
+			spec.CapabilitiesInvalid = "must be an array of strings"
+		}
+	}
+	return spec
 }
 
 func mergeNative(base, override map[string]any) map[string]any {
@@ -419,6 +449,7 @@ func Validate(m *Manifest) []string {
 		errors = append(errors, "missing runtime map (env_key → runtime/<env-key>/ path)")
 	}
 	errors = append(errors, validateEntryFiles(m)...)
+	errors = append(errors, validateAllServeCapabilities(m)...)
 	errors = append(errors, validatePythonDependencies(m)...)
 	errors = append(errors, validateRuntimeSuffix(m)...)
 	errors = append(errors, validateSystemRequirements(m)...)

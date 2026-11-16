@@ -266,6 +266,7 @@ def execute_serve(
 
     try:
         ensure_flashcli_serve_imports(auto_install=auto_install, quiet=quiet)
+        from flashcli_bundle.capabilities import effective_serve_capabilities
         from flashcli_bundle.infer.serve.app import build_app
     except ImportError as exc:
         typer.echo(
@@ -354,7 +355,10 @@ def execute_serve(
 
     try:
         uvicorn.run(
-            build_app(serve_engine),
+            build_app(
+                serve_engine,
+                serve_capabilities=effective_serve_capabilities(active.entry_serve),
+            ),
             host=host,
             port=port,
             log_level=uvicorn_log,
