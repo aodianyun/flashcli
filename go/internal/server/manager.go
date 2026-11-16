@@ -70,7 +70,8 @@ type instance struct {
 	// owners are the applications (and "model" for the model page) that asked
 	// for this instance. The process stops only when the last owner releases it,
 	// so two applications using the same bundle do not kill each other's model.
-	owners map[string]struct{}
+	owners       map[string]struct{}
+	capabilities []string
 }
 
 // ownerModel marks an instance loaded from the model page, which stays until
@@ -252,7 +253,10 @@ func (m *Manager) load(ctx context.Context, refStr string, progress func(phase, 
 		_ = proc.Stop(context.Background())
 		return InstanceInfo{}, fmt.Errorf("serve process for %s: %w", refStr, err)
 	}
-	inst := &instance{ref: refStr, process: proc, loadedAt: time.Now().UTC()}
+	inst := &instance{
+		ref: refStr, process: proc, loadedAt: time.Now().UTC(),
+		capabilities: append([]string(nil), bundle.Capabilities...),
+	}
 	m.mu.Lock()
 	if existing, ok := m.instances[refStr]; ok {
 		info := infoFor(existing)
@@ -312,17 +316,19 @@ func (m *Manager) ReleaseFor(ctx context.Context, refStr, owner string) (bool, e
 
 // InstanceInfo is the public view of a resident model.
 type InstanceInfo struct {
-	Ref      string    `json:"ref"`
-	State    string    `json:"state"`
-	Endpoint string    `json:"endpoint"`
-	PID      int       `json:"pid"`
-	LoadedAt time.Time `json:"loaded_at"`
+	Ref          string    `json:"ref"`
+	State        string    `json:"state"`
+	Endpoint     string    `json:"endpoint"`
+	PID          int       `json:"pid"`
+	LoadedAt     time.Time `json:"loaded_at"`
+	Capabilities []string  `json:"capabilities,omitempty"`
 }
 
 func infoFor(inst *instance) InstanceInfo {
 	return InstanceInfo{
 		Ref: inst.ref, State: "ready", Endpoint: inst.process.Endpoint(),
 		PID: inst.process.PID(), LoadedAt: inst.loadedAt,
+		Capabilities: append([]string(nil), inst.capabilities...),
 	}
 }
 
@@ -532,6 +538,7 @@ type BundleInfo struct {
 	RunOnly      bool
 	MinVRAMMiB   int64
 	ServeOptions []serveopts.Spec
+	Capabilities []string
 }
 
 func inspectBundle(refStr string) (BundleInfo, error) {
@@ -563,6 +570,7 @@ func inspectBundle(refStr string) (BundleInfo, error) {
 		RunOnly:      m.EntryFor("serve", variant) == nil,
 		MinVRAMMiB:   minVRAMMiB(m),
 		ServeOptions: serveopts.FromManifest(m, variant),
+		Capabilities: m.ServeCapabilities(),
 	}, nil
 }
 

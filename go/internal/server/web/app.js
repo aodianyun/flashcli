@@ -3,6 +3,8 @@
   const TOKEN = window.FLASHSERVER_TOKEN || "";
   const $ = (sel) => document.querySelector(sel);
   const state = { sys: null, models: [], loaded: [], storage: [], gpuProcs: [], history: [], tab: "overview", lang: localStorage.getItem("fs.lang") || "zh", online: null };
+  const canChat = (m) => !m.capabilities || !m.capabilities.length || m.capabilities.includes("openai.chat");
+  const capabilityText = (m) => (m.capabilities || []).join(", ");
 
   const I18N = {
     zh: {
@@ -313,7 +315,7 @@
         <td>${m.weights_cached ? `<span class="badge ok">${t("common.ready")}</span>` : `<span class="badge bad">${t("common.missing")}</span>`}</td>
         <td>${fmtBytes((m.bundle_bytes || 0) + (m.weights_bytes || 0))}</td>
         <td class="muted">${esc(m.weights_source || "")}${m.weights_repo ? " · " + esc(m.weights_repo) : ""}</td>
-        <td style="text-align:right">${loaded ? `<button class="mini" data-chat="${esc(m.ref)}">${t("ld.chat")}</button>` : `<button class="mini" data-load="${esc(m.ref)}">${t("md.load")}</button>`}</td>
+        <td style="text-align:right">${loaded ? (canChat(m) ? `<button class="mini" data-chat="${esc(m.ref)}">${t("ld.chat")}</button>` : `<span class="muted">${esc(capabilityText(m))}</span>`) : `<button class="mini" data-load="${esc(m.ref)}">${t("md.load")}</button>`}</td>
       </tr>`;
     }).join("");
     body.querySelectorAll("[data-load]").forEach((b) => b.addEventListener("click", () => loadModel(b.dataset.load)));
@@ -329,13 +331,14 @@
         <div class="ref">${esc(m.ref)}</div>
         <div class="actions">
           <button class="mini" data-copy="${esc(m.endpoint)}">${t("ld.copy")}</button>
-          <button class="mini" data-chat="${esc(m.ref)}">${t("ld.chat")}</button>
+          ${canChat(m) ? `<button class="mini" data-chat="${esc(m.ref)}">${t("ld.chat")}</button>` : ""}
           <button class="danger" data-unload="${esc(m.ref)}">${t("ld.unload")}</button>
         </div>
       </div>
       <div class="meta">
         <span>${esc(m.endpoint)}</span>
         ${m.pid ? `<span>PID ${m.pid}</span>` : ""}
+        ${capabilityText(m) ? `<span>${esc(capabilityText(m))}</span>` : ""}
         ${m.loaded_at ? `<span>${esc(new Date(m.loaded_at).toLocaleString())}</span>` : ""}
       </div>
     </div>`).join("");
@@ -349,10 +352,11 @@
   function renderChatModels() {
     const sel = $("#chat-model");
     const prev = sel.value;
-    sel.innerHTML = state.loaded.length
-      ? state.loaded.map((m) => `<option value="${esc(m.ref)}">${esc(m.ref)}</option>`).join("")
+    const chatModels = state.loaded.filter(canChat);
+    sel.innerHTML = chatModels.length
+      ? chatModels.map((m) => `<option value="${esc(m.ref)}">${esc(m.ref)}</option>`).join("")
       : `<option value="">${t("chat.none")}</option>`;
-    if (prev && state.loaded.some((m) => m.ref === prev)) sel.value = prev;
+    if (prev && chatModels.some((m) => m.ref === prev)) sel.value = prev;
   }
 
   function renderLogRefs() {

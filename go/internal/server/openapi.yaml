@@ -1072,6 +1072,10 @@ components:
         bundle_cached: { type: boolean }
         weights_cached: { type: boolean }
         serve: { type: boolean, description: Bundle declares a serve entry }
+        capabilities:
+          type: array
+          items: { type: string }
+          description: Host-owned serve protocol capabilities
         bundle_bytes: { type: integer, format: int64 }
         runtime_id: { type: string, description: Per-bundle/version runtime directory id }
         runtime_bytes: { type: integer, format: int64, description: Allocated bytes of this model's runtime directory }
@@ -1089,6 +1093,10 @@ components:
         endpoint: { type: string }
         pid: { type: integer }
         loaded_at: { type: string, format: date-time }
+        capabilities:
+          type: array
+          items: { type: string }
+          description: Host-owned serve protocol capabilities
     ServeOption:
       type: object
       properties:

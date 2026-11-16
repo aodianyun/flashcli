@@ -81,7 +81,7 @@ func TestSmokeServeRequest(t *testing.T) {
 	s := &Server{}
 	lines := []string{}
 	emit := func(_, msg string) { lines = append(lines, msg) }
-	if err := s.smokeServeRequest(context.Background(), "demo:1", srv.URL, logPath, emit); err != nil {
+	if err := s.smokeServeRequest(context.Background(), "demo:1", srv.URL, logPath, nil, emit); err != nil {
 		t.Fatal(err)
 	}
 	blob, err := os.ReadFile(logPath)
@@ -115,5 +115,37 @@ func TestJobCancel(t *testing.T) {
 	job.mu.Unlock()
 	if state != "failed" {
 		t.Fatalf("state = %q, want failed", state)
+	}
+}
+
+func TestSmokeTextRequestCapabilities(t *testing.T) {
+	cases := []struct {
+		name string
+		caps []string
+		path string
+		head string
+	}{
+		{"legacy", nil, "/v1/chat/completions", ""},
+		{"chat", []string{"openai.chat"}, "/v1/chat/completions", ""},
+		{"completions", []string{"openai.completions"}, "/v1/completions", ""},
+		{"responses", []string{"openai.responses"}, "/v1/responses", ""},
+		{"anthropic", []string{"anthropic.messages"}, "/v1/messages", "2023-06-01"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path, _, headers, err := smokeTextRequest(tc.caps, "m")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if path != tc.path {
+				t.Fatalf("path = %q, want %q", path, tc.path)
+			}
+			if tc.head != "" && headers["anthropic-version"] != tc.head {
+				t.Fatalf("headers = %v", headers)
+			}
+		})
+	}
+	if _, _, _, err := smokeTextRequest([]string{"openai.audio.speech"}, "m"); err == nil {
+		t.Fatal("expected unsupported text capability error")
 	}
 }
