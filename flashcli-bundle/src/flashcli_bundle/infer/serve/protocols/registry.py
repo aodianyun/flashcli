@@ -28,15 +28,16 @@ IMPLEMENTED = frozenset(
         OPENAI_CHAT,
         OPENAI_COMPLETIONS,
         OPENAI_RESPONSES,
+        OPENAI_EMBEDDINGS,
         "anthropic.messages",
         "anthropic.count_tokens",
+        "anthropic.models",
     }
 )
 
 # Planned HTTP endpoints that return an explicit 501 until implemented.
 # Realtime is WebSocket-only and needs a dedicated mount later.
 PLANNED_HTTP: dict[str, tuple[str, str]] = {
-    OPENAI_EMBEDDINGS: ("POST", "/v1/embeddings"),
     OPENAI_MODERATIONS: ("POST", "/v1/moderations"),
     OPENAI_AUDIO_TRANSCRIPTIONS: ("POST", "/v1/audio/transcriptions"),
     OPENAI_AUDIO_TRANSLATIONS: ("POST", "/v1/audio/translations"),

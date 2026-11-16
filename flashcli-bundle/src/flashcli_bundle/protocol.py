@@ -44,6 +44,21 @@ class ChatResult:
 
 
 @dataclass
+class EmbeddingRequest:
+    input: list[str] | list[list[int]]
+    model: str = ""
+    dimensions: int | None = None
+    encoding_format: str = "float"
+    extras: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class EmbeddingResult:
+    embeddings: list[list[float]]
+    usage: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class ChatChunk:
     content_delta: str = ""
     reasoning_delta: str = ""
