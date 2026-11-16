@@ -11,13 +11,21 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from flashcli_bundle.capabilities import LEGACY_SERVE_CAPABILITIES, OPENAI_CHAT
+from flashcli_bundle.capabilities import (
+    LEGACY_SERVE_CAPABILITIES,
+    OPENAI_CHAT,
+    OPENAI_COMPLETIONS,
+)
 from flashcli_bundle.infer.engines.base import ChatRequest, ServeEngine
 from flashcli_bundle.infer.serve.inference import GpuBusyError, InferenceGate, iter_on_inference_loop
 from flashcli_bundle.infer.serve.openai_bridge import (
     chat_result_to_completion_payload,
     parse_chat_completions_body,
 )
+from flashcli_bundle.infer.serve.protocols.openai_completions import (
+    mount as mount_openai_completions,
+)
+from flashcli_bundle.infer.serve.protocols.registry import mount_unimplemented
 from flashcli_bundle.infer.serve.request_log import (
     RequestTimer,
     client_label,
@@ -463,5 +471,8 @@ def build_app(
 
     if OPENAI_CHAT in capabilities:
         app.add_api_route("/v1/chat/completions", chat_completions, methods=["POST"])
+    if OPENAI_COMPLETIONS in capabilities:
+        mount_openai_completions(app, engine, gate)
+    mount_unimplemented(app, capabilities)
 
     return app
