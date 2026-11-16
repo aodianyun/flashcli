@@ -22,6 +22,8 @@ from flashcli_bundle.capabilities import (
     OPENAI_IMAGES_EDITS,
     OPENAI_IMAGES_GENERATIONS,
     OPENAI_IMAGES_VARIATIONS,
+    OPENAI_MODERATIONS,
+    OPENAI_VIDEOS,
     LEGACY_SERVE_CAPABILITIES,
     OPENAI_CHAT,
     OPENAI_COMPLETIONS,
@@ -47,6 +49,12 @@ from flashcli_bundle.infer.serve.protocols.openai_embeddings import (
 )
 from flashcli_bundle.infer.serve.protocols.openai_images import (
     mount as mount_images,
+)
+from flashcli_bundle.infer.serve.protocols.openai_moderations import (
+    mount as mount_moderations,
+)
+from flashcli_bundle.infer.serve.protocols.openai_videos import (
+    mount as mount_videos,
 )
 from flashcli_bundle.infer.serve.protocols.openai_completions import (
     mount as mount_openai_completions,
@@ -539,6 +547,10 @@ def build_app(
         or OPENAI_IMAGES_VARIATIONS in capabilities
     ):
         mount_images(app, engine)
+    if OPENAI_MODERATIONS in capabilities:
+        mount_moderations(app, engine)
+    if OPENAI_VIDEOS in capabilities:
+        mount_videos(app, engine)
     mount_unimplemented(app, capabilities)
 
     return app

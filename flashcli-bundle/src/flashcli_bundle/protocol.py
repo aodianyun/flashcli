@@ -44,6 +44,42 @@ class ChatResult:
 
 
 @dataclass
+class ModerationRequest:
+    input: list[str]
+    model: str = ""
+    extras: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ModerationResult:
+    results: list[dict[str, Any]]
+    usage: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class VideoRequest:
+    prompt: str
+    model: str = ""
+    seconds: int | None = None
+    size: str | None = None
+    input_reference: bytes | None = None
+    extras: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class VideoJob:
+    id: str
+    status: str = "queued"
+    progress: float = 0.0
+    created_at: int = 0
+    completed_at: int | None = None
+    expires_at: int | None = None
+    model: str = ""
+    error: dict[str, Any] | None = None
+    extras: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class AudioTranscriptionRequest:
     task: str = "transcribe"  # transcribe | translate
     file: bytes = b""

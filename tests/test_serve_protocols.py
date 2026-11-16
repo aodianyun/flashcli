@@ -72,13 +72,6 @@ def test_openai_completions_stream() -> None:
         assert "[DONE]" in response.text
 
 
-def test_planned_capability_returns_501() -> None:
-    with _client(["openai.moderations"]) as client:
-        response = client.post("/v1/moderations", json={})
-        assert response.status_code == 501
-        assert response.json()["error"]["code"] == "capability_not_implemented"
-
-
 def test_disabled_capability_is_not_mounted() -> None:
     with _client([]) as client:
         assert client.post("/v1/completions", json={"prompt": "hi"}).status_code == 404

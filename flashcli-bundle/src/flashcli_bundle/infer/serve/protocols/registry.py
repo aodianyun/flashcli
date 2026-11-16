@@ -35,6 +35,8 @@ IMPLEMENTED = frozenset(
         OPENAI_IMAGES_GENERATIONS,
         OPENAI_IMAGES_EDITS,
         OPENAI_IMAGES_VARIATIONS,
+        OPENAI_MODERATIONS,
+        OPENAI_VIDEOS,
         "anthropic.messages",
         "anthropic.count_tokens",
         "anthropic.models",
@@ -43,10 +45,7 @@ IMPLEMENTED = frozenset(
 
 # Planned HTTP endpoints that return an explicit 501 until implemented.
 # Realtime is WebSocket-only and needs a dedicated mount later.
-PLANNED_HTTP: dict[str, tuple[str, str]] = {
-    OPENAI_MODERATIONS: ("POST", "/v1/moderations"),
-    OPENAI_VIDEOS: ("POST", "/v1/videos"),
-}
+PLANNED_HTTP: dict[str, tuple[str, str]] = {}
 
 
 def mount_unimplemented(app: FastAPI, capabilities: set[str]) -> None:
