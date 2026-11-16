@@ -18,6 +18,7 @@ from flashcli_bundle.capabilities import (
     OPENAI_IMAGES_GENERATIONS,
     OPENAI_IMAGES_VARIATIONS,
     OPENAI_MODERATIONS,
+    OPENAI_REALTIME,
     OPENAI_RESPONSES,
     OPENAI_VIDEOS,
 )
@@ -37,6 +38,7 @@ IMPLEMENTED = frozenset(
         OPENAI_IMAGES_VARIATIONS,
         OPENAI_MODERATIONS,
         OPENAI_VIDEOS,
+        OPENAI_REALTIME,
         "anthropic.messages",
         "anthropic.count_tokens",
         "anthropic.models",
