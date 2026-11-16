@@ -15,7 +15,13 @@ from flashcli_bundle.capabilities import (
     ANTHROPIC_COUNT_TOKENS,
     ANTHROPIC_MESSAGES,
     ANTHROPIC_MODELS,
+    OPENAI_AUDIO_SPEECH,
+    OPENAI_AUDIO_TRANSCRIPTIONS,
+    OPENAI_AUDIO_TRANSLATIONS,
     OPENAI_EMBEDDINGS,
+    OPENAI_IMAGES_EDITS,
+    OPENAI_IMAGES_GENERATIONS,
+    OPENAI_IMAGES_VARIATIONS,
     LEGACY_SERVE_CAPABILITIES,
     OPENAI_CHAT,
     OPENAI_COMPLETIONS,
@@ -32,8 +38,15 @@ from flashcli_bundle.infer.serve.protocols.anthropic import (
     mount_messages,
     mount_models,
 )
+from flashcli_bundle.infer.serve.protocols.openai_audio import (
+    mount_speech,
+    mount_transcriptions,
+)
 from flashcli_bundle.infer.serve.protocols.openai_embeddings import (
     mount as mount_embeddings,
+)
+from flashcli_bundle.infer.serve.protocols.openai_images import (
+    mount as mount_images,
 )
 from flashcli_bundle.infer.serve.protocols.openai_completions import (
     mount as mount_openai_completions,
@@ -516,6 +529,16 @@ def build_app(
         mount_models(app, engine)
     if OPENAI_EMBEDDINGS in capabilities:
         mount_embeddings(app, engine)
+    if OPENAI_AUDIO_TRANSCRIPTIONS in capabilities or OPENAI_AUDIO_TRANSLATIONS in capabilities:
+        mount_transcriptions(app, engine)
+    if OPENAI_AUDIO_SPEECH in capabilities:
+        mount_speech(app, engine)
+    if (
+        OPENAI_IMAGES_GENERATIONS in capabilities
+        or OPENAI_IMAGES_EDITS in capabilities
+        or OPENAI_IMAGES_VARIATIONS in capabilities
+    ):
+        mount_images(app, engine)
     mount_unimplemented(app, capabilities)
 
     return app

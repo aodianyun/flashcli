@@ -29,6 +29,12 @@ IMPLEMENTED = frozenset(
         OPENAI_COMPLETIONS,
         OPENAI_RESPONSES,
         OPENAI_EMBEDDINGS,
+        OPENAI_AUDIO_TRANSCRIPTIONS,
+        OPENAI_AUDIO_TRANSLATIONS,
+        OPENAI_AUDIO_SPEECH,
+        OPENAI_IMAGES_GENERATIONS,
+        OPENAI_IMAGES_EDITS,
+        OPENAI_IMAGES_VARIATIONS,
         "anthropic.messages",
         "anthropic.count_tokens",
         "anthropic.models",
@@ -39,12 +45,6 @@ IMPLEMENTED = frozenset(
 # Realtime is WebSocket-only and needs a dedicated mount later.
 PLANNED_HTTP: dict[str, tuple[str, str]] = {
     OPENAI_MODERATIONS: ("POST", "/v1/moderations"),
-    OPENAI_AUDIO_TRANSCRIPTIONS: ("POST", "/v1/audio/transcriptions"),
-    OPENAI_AUDIO_TRANSLATIONS: ("POST", "/v1/audio/translations"),
-    OPENAI_AUDIO_SPEECH: ("POST", "/v1/audio/speech"),
-    OPENAI_IMAGES_GENERATIONS: ("POST", "/v1/images/generations"),
-    OPENAI_IMAGES_EDITS: ("POST", "/v1/images/edits"),
-    OPENAI_IMAGES_VARIATIONS: ("POST", "/v1/images/variations"),
     OPENAI_VIDEOS: ("POST", "/v1/videos"),
 }
 

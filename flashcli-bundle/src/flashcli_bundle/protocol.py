@@ -44,6 +44,71 @@ class ChatResult:
 
 
 @dataclass
+class AudioTranscriptionRequest:
+    task: str = "transcribe"  # transcribe | translate
+    file: bytes = b""
+    filename: str = "audio"
+    model: str = ""
+    language: str | None = None
+    prompt: str | None = None
+    response_format: str = "json"
+    temperature: float | None = None
+    timestamp_granularities: list[str] | None = None
+    extras: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class AudioTranscriptionResult:
+    text: str
+    language: str | None = None
+    duration: float | None = None
+    segments: list[dict[str, Any]] = field(default_factory=list)
+    words: list[dict[str, Any]] = field(default_factory=list)
+    usage: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class SpeechRequest:
+    input: str
+    model: str = ""
+    voice: str = "alloy"
+    response_format: str = "mp3"
+    speed: float = 1.0
+    instructions: str | None = None
+    extras: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class SpeechResult:
+    audio: bytes
+    media_type: str = "audio/mpeg"
+    usage: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ImageGenerationRequest:
+    prompt: str
+    model: str = ""
+    mode: str = "generate"  # generate | edit | variation
+    n: int = 1
+    size: str = "1024x1024"
+    quality: str = "auto"
+    style: str | None = None
+    response_format: str = "url"  # url | b64_json
+    images: list[bytes] = field(default_factory=list)
+    mask: bytes | None = None
+    extras: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ImageGenerationResult:
+    images: list[bytes | str]
+    response_format: str = "url"
+    revised_prompt: str | None = None
+    usage: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class EmbeddingRequest:
     input: list[str] | list[list[int]]
     model: str = ""
