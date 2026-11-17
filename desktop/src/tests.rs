@@ -121,6 +121,26 @@ fn app_domains_are_unique_and_skip_blanks() {
 }
 
 #[test]
+fn app_job_phase_tracks_the_install_steps() {
+    assert_eq!(app_job_phase("$ npm install -g x", "安装应用"), "安装应用");
+    assert_eq!(
+        app_job_phase("Preparing model xym/gemma4_e2b_it:1.0.1 ...", "安装应用"),
+        "准备模型"
+    );
+    assert_eq!(app_job_phase("  pull  45%  1.2 GB", "准备模型"), "准备模型");
+    assert_eq!(
+        app_job_phase("Starting xym/gemma4_e2b_it", "准备模型"),
+        "启动模型"
+    );
+    assert_eq!(app_job_phase("Installed xym/demo 1.0.0", "启动模型"), "完成");
+    assert_eq!(
+        app_job_phase("下载中 45%（1/2 字节）", "安装应用"),
+        "安装应用"
+    );
+    assert_eq!(app_job_phase("noise", "启动模型"), "启动模型");
+}
+
+#[test]
 fn installer_kinds_follow_the_extension() {
     assert!(matches!(
         installer_kind("https://x/a.exe?token=1"),

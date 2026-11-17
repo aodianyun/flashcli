@@ -375,11 +375,14 @@ struct AppUninstallPrompt {
     purge_models: bool,
 }
 
-/// Progress of the install/prepare job for the selected application.
+/// Progress of the install/prepare job for one application.
 #[derive(Clone)]
 struct AppJobState {
-    reference: String,
     verb: String,
+    /// Current step: 安装应用 / 准备模型 / 启动模型 / 完成.
+    phase: String,
+    /// 0-100 when the daemon reports a percentage; None = indeterminate.
+    percent: Option<f32>,
     running: bool,
     log: String,
 }
@@ -422,7 +425,8 @@ pub struct App {
     app_detail: Option<Value>,
     app_install: Option<AppInstallPrompt>,
     app_uninstall: Option<AppUninstallPrompt>,
-    app_job: Option<AppJobState>,
+    /// Install/prepare progress per application ref (org/name:version).
+    app_jobs: HashMap<String, AppJobState>,
     app_covers: HashMap<String, AppCover>,
     storage: Vec<(String, String)>,
     storage_total: f64,
@@ -513,7 +517,7 @@ impl App {
             app_detail: None,
             app_install: None,
             app_uninstall: None,
-            app_job: None,
+            app_jobs: HashMap::new(),
             app_covers: HashMap::new(),
             storage: Vec::new(),
             storage_total: 0.0,
@@ -1013,21 +1017,24 @@ impl App {
         }
     }
 
-    /// Track install/prepare progress for the selected application.
+    /// Track install/prepare progress for one application.
     fn apply_app_job(&mut self, verb: &str, reference: &str, line: &str, running: bool) {
-        let job = self.app_job.get_or_insert_with(|| AppJobState {
-            reference: reference.to_string(),
-            verb: verb.to_string(),
-            running: true,
-            log: String::new(),
-        });
-        if job.reference != reference {
-            job.reference = reference.to_string();
-            job.verb = verb.to_string();
-            job.log.clear();
-        }
+        let job = self
+            .app_jobs
+            .entry(reference.to_string())
+            .or_insert_with(|| AppJobState {
+                verb: verb.to_string(),
+                phase: "安装应用".to_string(),
+                percent: None,
+                running: true,
+                log: String::new(),
+            });
         if !line.is_empty() {
             append_app_log(&mut job.log, line);
+            if let Some(pct) = parse_pct(line) {
+                job.percent = Some(pct);
+            }
+            job.phase = app_job_phase(line, &job.phase);
         }
         job.running = running;
     }
@@ -1547,6 +1554,51 @@ impl App {
                 }
             }
         });
+        if let Some((key, job)) = self
+            .app_jobs
+            .iter()
+            .find(|(_, job)| job.running)
+            .map(|(key, job)| (key.clone(), job.clone()))
+        {
+            let label = self
+                .apps
+                .iter()
+                .find(|app| {
+                    app_reference(
+                        app["organization"]["name"].as_str().unwrap_or(""),
+                        app["name"].as_str().unwrap_or(""),
+                        app["version"].as_str().unwrap_or(""),
+                    ) == key
+                })
+                .map(|app| {
+                    app["display_name"]
+                        .as_str()
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| app["name"].as_str())
+                        .unwrap_or(key.as_str())
+                        .to_string()
+                })
+                .unwrap_or_else(|| key.clone());
+            let pct = job
+                .percent
+                .map(|p| format!(" {p:.0}%"))
+                .unwrap_or_default();
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.add(egui::Spinner::new().size(13.0));
+                ui.label(
+                    egui::RichText::new(format!("正在安装 {label} · {}{}", job.phase, pct))
+                        .small()
+                        .strong()
+                        .color(accent(ui)),
+                );
+                ui.label(
+                    egui::RichText::new("同一时间只安装一个应用")
+                        .small()
+                        .weak(),
+                );
+            });
+        }
         if !self.apps_error.is_empty() {
             ui.add_space(4.0);
             ui.colored_label(egui::Color32::from_rgb(200, 90, 80), &self.apps_error);
@@ -1557,7 +1609,7 @@ impl App {
         let detail_width = (ui.available_width() * 0.34).clamp(380.0, 560.0);
         let grid_width = (ui.available_width() - detail_width - 16.0).max(320.0);
         let mut clicked: Option<usize> = None;
-        let cards: Vec<(Value, bool, Option<egui::TextureHandle>)> = self
+        let cards: Vec<(Value, bool, Option<egui::TextureHandle>, Option<AppJobState>)> = self
             .apps
             .iter()
             .enumerate()
@@ -1566,7 +1618,13 @@ impl App {
                     Some(AppCover::Ready(tex)) => Some(tex.clone()),
                     _ => None,
                 });
-                (app.clone(), self.apps_selected == Some(idx), cover)
+                let key = app_reference(
+                    app["organization"]["name"].as_str().unwrap_or(""),
+                    app["name"].as_str().unwrap_or(""),
+                    app["version"].as_str().unwrap_or(""),
+                );
+                let job = self.app_jobs.get(&key).cloned();
+                (app.clone(), self.apps_selected == Some(idx), cover, job)
             })
             .collect();
 
@@ -1591,9 +1649,11 @@ impl App {
                         let cols = ((grid_width / step).floor() as usize).max(1);
                         for (row_idx, row) in cards.chunks(cols).enumerate() {
                             ui.horizontal(|ui| {
-                                for (offset, (app, selected, cover)) in row.iter().enumerate() {
+                                for (offset, (app, selected, cover, job)) in row.iter().enumerate() {
                                     let idx = row_idx * cols + offset;
-                                    if app_card(ui, app, *selected, cover.as_ref()).clicked() {
+                                    if app_card(ui, app, *selected, cover.as_ref(), job.as_ref())
+                                        .clicked()
+                                    {
                                         clicked = Some(idx);
                                     }
                                     ui.add_space(8.0);
@@ -1651,7 +1711,16 @@ impl App {
         let (org_name, app_name, app_version) = app_identity(detail);
         let local_state = detail["local"]["state"].as_str().unwrap_or("").to_string();
         let installed = !local_state.is_empty();
-        let busy = self.app_job.as_ref().map(|j| j.running).unwrap_or(false);
+        let job_key = app_reference(&org_name, &app_name, &app_version);
+        let job = self.app_jobs.get(&job_key).cloned();
+        let busy = job.as_ref().map(|j| j.running).unwrap_or(false);
+        // One install at a time: preparing/starting two applications at once
+        // would fight over disk, ports and GPU memory.
+        let other_install = self
+            .app_jobs
+            .iter()
+            .any(|(key, j)| j.running && key != &job_key);
+        let blocked = busy || other_install;
         let supported = app_platform_supported(manifest);
         let danger = red(ui);
 
@@ -1696,46 +1765,99 @@ impl App {
             });
         });
 
+        // This application's install/prepare progress, directly under the
+        // header and above the actions it blocks.
+        if let Some(job) = job.clone() {
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if job.running {
+                    ui.add(egui::Spinner::new().size(13.0));
+                }
+                ui.label(
+                    egui::RichText::new(format!("{} · {}", job.verb, job.phase)).strong(),
+                );
+                if job.running {
+                    if let Some(pct) = job.percent {
+                        ui.label(egui::RichText::new(format!("{pct:.0}%")).small().strong());
+                    }
+                } else {
+                    ui.label(egui::RichText::new("已结束").small().weak());
+                }
+            });
+            if job.running {
+                let width = ui.available_width().max(120.0);
+                let bar = match job.percent {
+                    Some(pct) => egui::ProgressBar::new((pct / 100.0).clamp(0.0, 1.0))
+                        .desired_width(width)
+                        .desired_height(8.0)
+                        .corner_radius(egui::CornerRadius::same(3))
+                        .fill(accent(ui)),
+                    None => egui::ProgressBar::new(0.0)
+                        .desired_width(width)
+                        .desired_height(8.0)
+                        .corner_radius(egui::CornerRadius::same(3))
+                        .fill(accent(ui))
+                        .animate(true),
+                };
+                ui.add(bar);
+            }
+            for line in app_log_tail(&job.log, 8) {
+                ui.label(egui::RichText::new(line).monospace().small().weak());
+            }
+        }
+
         let mut action: Option<&'static str> = None;
         let mut open_install = false;
         let mut open_uninstall = false;
+        let wait_hint = "已有应用正在安装，请等待完成";
         ui.add_space(8.0);
         ui.horizontal_wrapped(|ui| {
             let install_label = if installed { "重新安装" } else { "安装" };
             let install = ui
-                .add_enabled(!busy && supported, egui::Button::new(install_label))
-                .on_hover_text("安装会先确认是否执行应用自带的安装脚本");
+                .add_enabled(!blocked && supported, egui::Button::new(install_label))
+                .on_hover_text("安装会先确认是否执行应用自带的安装脚本")
+                .on_disabled_hover_text(if other_install { wait_hint } else { "" });
             if install.clicked() {
                 open_install = true;
             }
             if ui
-                .add_enabled(!busy && installed, egui::Button::new("启动"))
+                .add_enabled(!blocked && installed, egui::Button::new("启动"))
+                .on_disabled_hover_text(if other_install { wait_hint } else { "" })
                 .clicked()
             {
                 action = Some("start");
             }
             if ui
                 .add_enabled(
-                    !busy
+                    !blocked
                         && (local_state == "ready"
                             || local_state == "failed"
                             || local_state == "stopped"),
                     egui::Button::new("停止"),
                 )
+                .on_disabled_hover_text(if other_install { wait_hint } else { "" })
                 .clicked()
             {
                 action = Some("stop");
             }
             if ui
                 .add_enabled(
-                    !busy && installed,
+                    !blocked && installed,
                     egui::Button::new(egui::RichText::new("卸载").color(danger)),
                 )
+                .on_disabled_hover_text(if other_install { wait_hint } else { "" })
                 .clicked()
             {
                 open_uninstall = true;
             }
         });
+        if other_install {
+            ui.label(
+                egui::RichText::new("已有应用正在安装：完成后再操作此应用。")
+                    .small()
+                    .weak(),
+            );
+        }
         if !supported {
             ui.label(
                 egui::RichText::new(format!(
@@ -1746,25 +1868,6 @@ impl App {
                 .small()
                 .color(danger),
             );
-        }
-        if let Some(job) = self.app_job.clone() {
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                if job.running {
-                    ui.add(egui::Spinner::new().size(13.0));
-                }
-                ui.label(
-                    egui::RichText::new(format!(
-                        "{} · {}",
-                        job.verb,
-                        if job.running { "进行中" } else { "已结束" }
-                    ))
-                    .strong(),
-                );
-            });
-            for line in app_log_tail(&job.log, 8) {
-                ui.label(egui::RichText::new(line).monospace().small().weak());
-            }
         }
 
         app_section(ui, "简介");
@@ -4004,12 +4107,17 @@ impl App {
         }
         if let Some(action) = choice {
             self.app_install = None;
-            self.app_job = Some(AppJobState {
-                reference: app_reference(&prompt.org, &prompt.name, &prompt.version),
-                verb: "安装".to_string(),
-                running: true,
-                log: String::new(),
-            });
+            let key = app_reference(&prompt.org, &prompt.name, &prompt.version);
+            self.app_jobs.insert(
+                key,
+                AppJobState {
+                    verb: "安装".to_string(),
+                    phase: "安装应用".to_string(),
+                    percent: None,
+                    running: true,
+                    log: String::new(),
+                },
+            );
             spawn_app_install(
                 self.tx.clone(),
                 ctx.clone(),
@@ -4101,7 +4209,8 @@ impl App {
         }
         if confirm {
             self.app_uninstall = None;
-            self.app_job = None;
+            self.app_jobs
+                .remove(&app_reference(&prompt.org, &prompt.name, &prompt.version));
             spawn_app_uninstall(
                 self.tx.clone(),
                 ctx.clone(),
@@ -5231,6 +5340,7 @@ fn app_card(
     app: &Value,
     selected: bool,
     cover: Option<&egui::TextureHandle>,
+    job: Option<&AppJobState>,
 ) -> egui::Response {
     let dark = ui.visuals().dark_mode;
     let fill = if selected {
@@ -5278,7 +5388,9 @@ fn app_card(
                         egui::Label::new(egui::RichText::new(name).strong().size(12.0))
                             .truncate(),
                     );
-                    if installed {
+                    if job.map(|j| j.running).unwrap_or(false) {
+                        ui.label(egui::RichText::new("安装中").size(10.0).color(accent(ui)));
+                    } else if installed {
                         ui.label(egui::RichText::new("已安装").size(10.0).color(green(ui)));
                     }
                 });
@@ -5292,13 +5404,44 @@ fn app_card(
                 ui.add(
                     egui::Label::new(egui::RichText::new(line).size(10.0).weak()).truncate(),
                 );
-                if !description.is_empty() {
-                    ui.add(
-                        egui::Label::new(
-                            egui::RichText::new(description).size(10.0).weak(),
-                        )
-                        .truncate(),
-                    );
+                match job.filter(|j| j.running) {
+                    Some(job) => {
+                        let pct = job
+                            .percent
+                            .map(|p| format!(" {p:.0}%"))
+                            .unwrap_or_default();
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(format!(
+                                    "{} · {}{}",
+                                    job.verb, job.phase, pct
+                                ))
+                                .size(10.0)
+                                .color(accent(ui)),
+                            )
+                            .truncate(),
+                        );
+                        let bar = match job.percent {
+                            Some(pct) => egui::ProgressBar::new((pct / 100.0).clamp(0.0, 1.0))
+                                .desired_height(3.0)
+                                .fill(accent(ui)),
+                            None => egui::ProgressBar::new(0.0)
+                                .desired_height(3.0)
+                                .fill(accent(ui))
+                                .animate(true),
+                        };
+                        ui.add(bar);
+                    }
+                    None => {
+                        if !description.is_empty() {
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(description).size(10.0).weak(),
+                                )
+                                .truncate(),
+                            );
+                        }
+                    }
                 }
             });
         });
@@ -5435,6 +5578,27 @@ fn app_log_tail(log: &str, count: usize) -> Vec<String> {
     let all: Vec<&str> = log.lines().filter(|l| !l.trim().is_empty()).collect();
     let start = all.len().saturating_sub(count);
     all[start..].iter().map(|l| l.to_string()).collect()
+}
+
+/// Install phase for a progress line (keeps the previous phase when the line
+/// carries no step information).
+fn app_job_phase(line: &str, current: &str) -> String {
+    let lower = line.to_ascii_lowercase();
+    if line.starts_with("Application:")
+        || lower.contains("install command")
+        || line.contains("安装程序")
+        || line.starts_with("$ ")
+    {
+        "安装应用".to_string()
+    } else if lower.contains("preparing model") || line.contains("准备模型") {
+        "准备模型".to_string()
+    } else if lower.contains("starting") || lower.contains("started") || line.contains("启动模型") {
+        "启动模型".to_string()
+    } else if lower.contains("installed ") || lower.contains("connection:") {
+        "完成".to_string()
+    } else {
+        current.to_string()
+    }
 }
 
 fn app_identity(detail: &Value) -> (String, String, String) {

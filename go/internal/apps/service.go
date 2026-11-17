@@ -124,8 +124,14 @@ func (s *Service) takeProc(ref string) modelrun.ServeProcess {
 	return proc
 }
 
+// installMu serializes installs in this process: preparing and starting two
+// applications at once would fight over disk, ports and GPU memory.
+var installMu sync.Mutex
+
 // Install runs the flow from docs/application_install_plan.md.
 func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOptions) (InstallResult, error) {
+	installMu.Lock()
+	defer installMu.Unlock()
 	ref, err := flashhub.ParseAppRef(rawRef)
 	if err != nil {
 		return InstallResult{}, err

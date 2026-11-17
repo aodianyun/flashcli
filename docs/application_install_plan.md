@@ -178,6 +178,9 @@ Rules:
   (.exe/.msi on Windows, .dmg/.pkg on macOS) and opens plain pages in a browser.
 - Bundles are prepared only after the application install succeeded; a failed
   install (script or installer) aborts the whole run.
+- Installs are serialized: one application at a time. `internal/apps` holds a
+  process-wide install lock, and the desktop disables the other apps while an
+  install job runs (its card and the page banner show the progress).
 - Ports are allocated automatically and recorded; `start` is idempotent.
 - `uninstall` stops the app's models and removes its state; model caches are kept
   unless `--purge-models` is given.

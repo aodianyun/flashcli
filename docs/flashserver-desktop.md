@@ -26,6 +26,9 @@ for commands. Install/build details are in [../desktop/README.md](../desktop/REA
   install always finishes before the daemon prepares/starts the models, and the
   daemon rejects an install without that explicit decision
   (`install_command: client | run | skip`). Progress streams into the detail pane.
+  One application installs at a time: while a job runs, its card shows
+  `安装中 · 阶段 xx%` with a bar, a banner appears above the grid, and the other
+  apps' actions are disabled.
   Everything is served by `flashserver` (`/v1/apps`).
 - **Logs** — service journal or a model's serve log, with clear and native
   Save-As.

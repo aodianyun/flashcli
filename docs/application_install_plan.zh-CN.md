@@ -172,6 +172,8 @@ flashcli app uninstall <key> [--yes] [--purge-models]
 - URL 由客户端处理：CLI 只打印链接（不下载）；桌面端在用户确认后下载并运行安装包
   （.exe/.msi → Windows，.dmg/.pkg → macOS），普通页面链接在浏览器打开
 - 应用安装成功后才准备 bundle；安装失败会中止整个流程
+- 同一时间只安装一个应用：`internal/apps` 持有进程级安装锁，桌面端在安装进行中禁用其他应用，
+  并在卡片与页面顶部显示该应用的安装进度
 - 端口自动分配并记录；`start` 幂等
 - `uninstall` 停止该应用模型并移除状态；默认保留模型缓存（`--purge-models` 才清理）
 
