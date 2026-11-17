@@ -5429,7 +5429,7 @@ fn put_json_timeout(path: &str, body: &Value, secs: u64) -> Result<Value, String
         .send_json(body)
     {
         Ok(resp) => resp.into_json::<Value>().map_err(|e| e.to_string()),
-        Err(ureq::Error::Status(_, resp)) => Err(resp.into_string().unwrap_or_default()),
+        Err(ureq::Error::Status(_, resp)) => Err(http_error_message(resp)),
         Err(e) => Err(e.to_string()),
     }
 }
@@ -5443,8 +5443,23 @@ fn post_json_timeout(path: &str, body: &Value, secs: u64) -> Result<Value, Strin
         .send_json(body)
     {
         Ok(resp) => resp.into_json::<Value>().map_err(|e| e.to_string()),
-        Err(ureq::Error::Status(_, resp)) => Err(resp.into_string().unwrap_or_default()),
+        Err(ureq::Error::Status(_, resp)) => Err(http_error_message(resp)),
         Err(e) => Err(e.to_string()),
+    }
+}
+
+// Prefer the daemon's JSON `error` text over the raw body in toasts.
+fn http_error_message(resp: ureq::Response) -> String {
+    let text = resp.into_string().unwrap_or_default();
+    if let Ok(v) = serde_json::from_str::<Value>(&text) {
+        if let Some(err) = v["error"].as_str().filter(|e| !e.is_empty()) {
+            return err.to_string();
+        }
+    }
+    if text.is_empty() {
+        "请求失败".to_string()
+    } else {
+        text
     }
 }
 
@@ -5454,7 +5469,7 @@ fn delete_json(path: &str) -> Result<Value, String> {
         .build();
     match agent.delete(&format!("{}{}", api_base(), path)).call() {
         Ok(resp) => resp.into_json::<Value>().map_err(|e| e.to_string()),
-        Err(ureq::Error::Status(_, resp)) => Err(resp.into_string().unwrap_or_default()),
+        Err(ureq::Error::Status(_, resp)) => Err(http_error_message(resp)),
         Err(e) => Err(e.to_string()),
     }
 }
