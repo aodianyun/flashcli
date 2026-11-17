@@ -249,7 +249,7 @@ flashcli run flashcli-bundle/qwen3_8b_nvfp4:1.0.0
 
 | 键 | 说明 |
 |----|------|
-| `torch` | PyTorch wheel；`index: "auto"` 按宿主 CUDA 选择 |
+| `torch` | PyTorch wheel；`index: "auto"` 按宿主 CUDA 选择。不 import torch 的 bundle 设为 `false`：缺省视为安装 `torch`，因此 stub/测试 fixture 必须显式关闭。 |
 | `pip` | 额外 pip 包 |
 
 environment 定义 `python_dependencies` 时整体替换 defaults。

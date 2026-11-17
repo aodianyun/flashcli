@@ -250,7 +250,7 @@ A capability has exactly one implementation. Native backends use the sibling `na
 
 | Key | Description |
 |-----|-------------|
-| `torch` | PyTorch wheel; `index: "auto"` selects the CUDA index from the host |
+| `torch` | PyTorch wheel; `index: "auto"` selects the CUDA index from the host. Set `false` for bundles that never import torch: an absent key defaults to `torch`, so stub/fixture bundles must opt out explicitly. |
 | `pip` | Additional pip packages |
 
 An environment replaces this block completely when it defines `python_dependencies`.
