@@ -9,7 +9,7 @@ $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $GoDist = Join-Path $Root "dist\go"
 $Installer = Join-Path $Root "scripts\build_windows_installer.ps1"
-$ClientExe = Join-Path $Root "desktop\target\release\FlashServer.exe"
+$ClientExe = Join-Path $Root "desktop\target\release\flashcli-desktop.exe"
 
 $VersionLine = Select-String -Path (Join-Path $Root "pyproject.toml") -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
 if (-not $VersionLine) { throw "cannot read version from pyproject.toml" }

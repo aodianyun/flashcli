@@ -1,10 +1,10 @@
 [package]
-name = "flashserver-desktop"
+name = "flashcli-desktop"
 version = "1.0.7"
 edition = "2021"
 
 [[bin]]
-name = "FlashServer"
+name = "flashcli-desktop"
 path = "src/main.rs"
 
 [dependencies]

@@ -40,7 +40,7 @@ UI installer (admin)
   → [6/8] start flashserver.service
   → [7/8] create the Windows ONLOGON keepalive task + model firewall rule
   → [8/8] wait for /health
-  → launch FlashServer.exe (desktop client, egui/eframe)
+  → launch flashcli-desktop.exe (desktop client, egui/eframe)
 ```
 
 The progress page streams the setup engine's recent lines (current step, a
@@ -130,5 +130,5 @@ virtualization enabled (VT-x/AMD-V).
 
 - The UI is only a wrapper; automation and troubleshooting should use
   `flashserver-setup.exe` directly.
-- The desktop client (`FlashServer.exe`) talks to the same HTTP/WebSocket API;
+- The desktop client (`flashcli-desktop.exe`) talks to the same HTTP/WebSocket API;
   its API reference is served at `http://localhost:8790/docs`.

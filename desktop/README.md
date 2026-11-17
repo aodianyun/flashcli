@@ -1,4 +1,4 @@
-# FlashServer Desktop
+# flashcli-desktop
 
 Native desktop client for `flashserver`, built with Rust + [egui/eframe](https://github.com/emilk/egui). No WebView: the UI is rendered by egui through `eframe`, so the binary stays small and runs on Windows, Linux and macOS.
 
@@ -27,14 +27,14 @@ The release binary uses the Windows GUI subsystem, so it starts without a consol
 ```powershell
 cd desktop
 cargo build --release
-# desktop/target/release/FlashServer.exe (~4.7 MB)
+# desktop/target/release/flashcli-desktop.exe (~4.7 MB)
 ```
 
 `build.rs` embeds `build/icon.ico` (generated from `ui/icon.png`) into the executable; the window icon is loaded from the same PNG.
 
 ## Run / package
 
-- The Windows installer is produced by `scripts/build_windows_package.ps1` (client + Go assets + Inno Setup) and copies the binary to `{app}\FlashServer.exe`, then opens it after installation.
+- The Windows installer is produced by `scripts/build_windows_package.ps1` (client + Go assets + Inno Setup) and copies the binary to `{app}\flashcli-desktop.exe`, then opens it after installation.
 - The client looks for `flashserver-setup.exe` in `payload\flashserver-setup.exe`, `..\payload\flashserver-setup.exe` or next to itself; `FLASHSERVER_SETUP_BIN` overrides the path.
 - Service start/stop chooses the distro from `%LOCALAPPDATA%\FlashServer\distro.txt` (`flashserver_ubuntu`, or legacy `Ubuntu`) and runs `wsl.exe -d <distro> -u root systemctl ...`. Starting boots WSL, waits for systemd, retries the unit, and verifies `/health`. Auto-start changes call `flashserver-setup --enable-autostart/--disable-autostart` (UAC) and never start/stop the service. Long operations use a modal progress overlay plus a result toast; the elevated console is hidden.
 - Settings live in `%LOCALAPPDATA%\FlashServer\settings.json` (theme, `wsl_ports`, `stop_wsl`); a UTF-8 BOM is tolerated.

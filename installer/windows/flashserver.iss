@@ -39,21 +39,21 @@ RestartApplications=no
 
 [Files]
 Source: "{#PayloadDir}\flashserver-setup-windows-amd64.exe"; DestDir: "{app}\payload"; DestName: "flashserver-setup.exe"; Flags: ignoreversion
-Source: "{#PayloadDir}\FlashServer.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#PayloadDir}\flashcli-desktop.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\flashcli-bundle.tar.gz"; DestDir: "{app}\payload"; Flags: ignoreversion
 ; x64-only installer: WSL2 is amd64 here, so the arm64 pair is not shipped.
 Source: "{#PayloadDir}\flashcli-linux-amd64"; DestDir: "{app}\payload"; Flags: ignoreversion
 Source: "{#PayloadDir}\flashserver-linux-amd64"; DestDir: "{app}\payload"; Flags: ignoreversion
 
 [Tasks]
-Name: "desktopicon"; Description: "Create a desktop shortcut to the FlashServer client"; GroupDescription: "Additional icons:"
+Name: "desktopicon"; Description: "Create a desktop shortcut to the flashcli desktop client"; GroupDescription: "Additional icons:"
 
 [Icons]
-Name: "{autoprograms}\FlashServer"; Filename: "{app}\FlashServer.exe"
-Name: "{autodesktop}\FlashServer"; Filename: "{app}\FlashServer.exe"; Tasks: desktopicon
+Name: "{autoprograms}\flashcli desktop"; Filename: "{app}\flashcli-desktop.exe"
+Name: "{autodesktop}\flashcli desktop"; Filename: "{app}\flashcli-desktop.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\FlashServer.exe"; Description: "Launch FlashServer"; Flags: postinstall nowait skipifsilent; Check: SetupReady
+Filename: "{app}\flashcli-desktop.exe"; Description: "Launch flashcli desktop"; Flags: postinstall nowait skipifsilent; Check: SetupReady
 
 [Code]
 const
@@ -237,7 +237,7 @@ var
 begin
   if CurUninstallStep = usUninstall then
   begin
-    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM FlashServer.exe', '',
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM flashcli-desktop.exe', '',
       SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Args := '--uninstall' + GetPurgeArgs('');
     if not Exec(ExpandConstant('{app}\payload\flashserver-setup.exe'), Args,
