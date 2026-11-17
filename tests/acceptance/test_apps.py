@@ -144,12 +144,42 @@ def test_app_install_skips_shell_without_yes(flashcli_bin, cli_env, tmp_path):
             # stdin is not a TTY here: the command must be skipped, not run.
         )
         assert proc.returncode == 0, proc.stderr
-        assert "Skipped install command" in proc.stdout
+        assert "Install command declined." in proc.stdout
         # The plan prints the command, but it must not be executed.
         assert "$ echo should-not-run" not in proc.stdout
         state = json.loads((home / "flashserver" / "apps.json").read_text(encoding="utf-8"))["apps"]["xym/demo:1.0.0"]
         assert state["install"]["skipped"] is True
         assert not state["install"]["executed"]
+    finally:
+        MANIFEST = original
+        hub.shutdown()
+
+
+def test_app_install_confirms_shell_interactively(flashcli_bin, cli_env, tmp_path):
+    hub = _hub()
+    home = tmp_path / "home"
+    env = _env(cli_env, hub, home)
+    global MANIFEST
+    original = MANIFEST
+    MANIFEST = json.loads(json.dumps(original))
+    MANIFEST["install"]["commands"] = {
+        "linux": "echo confirmed-run",
+        "darwin": "echo confirmed-run",
+        "windows": "echo confirmed-run",
+    }
+    try:
+        proc = run_cli(
+            flashcli_bin, env, "app", "install", "xym/demo",
+            "--no-model", "--no-start", timeout=180, input="y\n",
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert "Run this command? [y/N]" in proc.stdout
+        # The command really ran (the echo output follows the "$ command" line).
+        assert "$ echo confirmed-run" in proc.stdout
+        assert "confirmed-run" in proc.stdout.split("$ echo confirmed-run", 1)[1]
+        state = json.loads((home / "flashserver" / "apps.json").read_text(encoding="utf-8"))["apps"]["xym/demo:1.0.0"]
+        assert state["install"]["executed"] is True
+        assert not state["install"].get("skipped", False)
     finally:
         MANIFEST = original
         hub.shutdown()

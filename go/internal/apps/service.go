@@ -83,6 +83,9 @@ type InstallOptions struct {
 	// Confirm is asked before executing a shell install command. Nil means
 	// "skip unless Yes".
 	Confirm func(command string) bool
+	// NonInteractive is set when stdin is not a terminal: without Yes there is
+	// no way to ask, so the command is skipped.
+	NonInteractive bool
 }
 
 // InstallResult describes what an install run did.
@@ -178,14 +181,26 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 			state.Install.Skipped = true
 			res.InstallSkipped = true
 		default:
+			// Without --yes, ask interactively. Only when there is no terminal
+			// (no way to confirm) is the command skipped.
 			run := opts.Yes
-			if !run && opts.Confirm != nil {
-				run = opts.Confirm(command)
+			if !run {
+				switch {
+				case opts.NonInteractive || opts.Confirm == nil:
+					fmt.Fprintln(out, "Install command skipped: no interactive terminal to confirm (use --yes to run it).")
+					state.Install.Skipped = true
+					res.InstallSkipped = true
+					break
+				case !opts.Confirm(command):
+					fmt.Fprintln(out, "Install command declined.")
+					state.Install.Skipped = true
+					res.InstallSkipped = true
+					break
+				default:
+					run = true
+				}
 			}
 			if !run {
-				fmt.Fprintln(out, "Skipped install command (use --yes to run it non-interactively).")
-				state.Install.Skipped = true
-				res.InstallSkipped = true
 				break
 			}
 			fmt.Fprintf(out, "\n$ %s\n", command)

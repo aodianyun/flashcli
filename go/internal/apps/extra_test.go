@@ -118,3 +118,32 @@ func TestRegistryConcurrentUpdates(t *testing.T) {
 		t.Fatalf("lost updates: %d entries", len(apps))
 	}
 }
+
+func TestInstallConfirmsThenRuns(t *testing.T) {
+	launcher := &fakeLauncher{}
+	svc, _ := newTestService(t, manifestJSON("a/one:1"), launcher)
+	asked := 0
+	res, err := svc.Install(context.Background(), "xym/demo", InstallOptions{
+		Confirm: func(string) bool { asked++; return true },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asked != 1 || !res.InstallRan || !res.State.Install.Executed {
+		t.Fatalf("confirm did not run the command: asked=%d res=%+v", asked, res)
+	}
+}
+
+func TestInstallDeclinedSkipsScript(t *testing.T) {
+	launcher := &fakeLauncher{}
+	svc, _ := newTestService(t, manifestJSON("a/one:1"), launcher)
+	res, err := svc.Install(context.Background(), "xym/demo", InstallOptions{
+		Confirm: func(string) bool { return false },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.InstallRan || !res.InstallSkipped || !res.State.Install.Skipped {
+		t.Fatalf("declined install = %+v", res)
+	}
+}

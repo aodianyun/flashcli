@@ -41,8 +41,10 @@ def prepare_bundle(name: str, home: Path) -> Path:
     return dest
 
 
-def run_cli(binary: Path, env: dict[str, str], *args: str, timeout: int = 600):
-    return subprocess.run([str(binary), *args], env=env, capture_output=True, text=True, timeout=timeout)
+def run_cli(binary: Path, env: dict[str, str], *args: str, timeout: int = 600, input: str | None = None):
+    return subprocess.run(
+        [str(binary), *args], env=env, capture_output=True, text=True, timeout=timeout, input=input
+    )
 
 
 def free_port() -> int:
