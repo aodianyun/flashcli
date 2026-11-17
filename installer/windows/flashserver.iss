@@ -714,7 +714,17 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
 begin
+  if CurStep = ssInstall then
+  begin
+    // The client may still be running from a previous version. Restart Manager
+    // does not detect it, and Windows keeps the old image alive when the exe is
+    // replaced, so close it before the files are copied.
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM flashcli-desktop.exe', '',
+      SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
   if CurStep = ssPostInstall then
     SetupOK := RunEnvironmentSetup;
 end;
