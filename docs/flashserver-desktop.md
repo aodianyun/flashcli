@@ -13,7 +13,7 @@ for commands. Install/build details are in [../desktop/README.md](../desktop/REA
 - **Models** — local cache plus FlashHub search; per-model Bundle / runtime /
   weights sizes; load, start, stop; run/serve smoke tests with a live log;
   multi-select cache cleanup.
-- **Applications** — the Models page has a third tab for FlashHub apps: search
+- **应用** — a sidebar page for FlashHub apps: search
   and domain filters, dependency models, install/prepare/start/stop/uninstall,
   and the connection URL to copy. 安装 first shows the manifest install script:
   it runs only after 运行脚本并安装 (跳过脚本安装 installs the models without it),

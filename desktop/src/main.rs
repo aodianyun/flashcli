@@ -40,6 +40,7 @@ fn api_addr() -> &'static str {
 enum Tab {
     Overview,
     Models,
+    Apps,
     Logs,
     Settings,
 }
@@ -49,6 +50,7 @@ impl Tab {
         match self {
             Tab::Overview => "概览",
             Tab::Models => "模型",
+            Tab::Apps => "应用",
             Tab::Logs => "日志",
             Tab::Settings => "设置",
         }
@@ -59,7 +61,6 @@ impl Tab {
 enum ModelTab {
     Local,
     Hub,
-    Apps,
 }
 
 #[derive(Clone)]
@@ -1248,16 +1249,6 @@ impl App {
                     spawn_catalog_tags(self.tx.clone(), ui.ctx().clone());
                 }
             }
-            if ui
-                .selectable_label(self.model_tab == ModelTab::Apps, "应用")
-                .clicked()
-            {
-                self.model_tab = ModelTab::Apps;
-                if !self.apps_loaded && !self.apps_loading {
-                    self.apps_loading = true;
-                    spawn_apps(self.tx.clone(), ui.ctx().clone(), self.apps_search.clone(), self.apps_domain.clone());
-                }
-            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if self.hub_busy {
                     ui.add(egui::Spinner::new().size(14.0));
@@ -1271,7 +1262,6 @@ impl App {
         match self.model_tab {
             ModelTab::Local => self.local_models(ui),
             ModelTab::Hub => self.hub_models(ui),
-            ModelTab::Apps => self.apps_page(ui),
         }
         self.show_model_detail(ui.ctx());
     }
@@ -1445,7 +1435,7 @@ impl App {
 
         let height = ui.available_height();
         ui.horizontal_top(|ui| {
-            let list_width = (ui.available_width() * 0.46).max(260.0);
+            let list_width = (ui.available_width() * 0.3).clamp(320.0, 620.0);
             ui.allocate_ui_with_layout(
                 egui::vec2(list_width, height),
                 egui::Layout::top_down(egui::Align::Min),
@@ -3963,7 +3953,7 @@ impl eframe::App for App {
             )
             .show(ctx, |ui| {
                 ui.add_space(8.0);
-                for tab in [Tab::Overview, Tab::Models, Tab::Logs, Tab::Settings] {
+                for tab in [Tab::Overview, Tab::Models, Tab::Apps, Tab::Logs, Tab::Settings] {
                     if nav_item(ui, self.tab == tab, tab.label()).clicked() {
                         self.tab = tab;
                         if tab == Tab::Logs {
@@ -3973,6 +3963,15 @@ impl eframe::App for App {
                                 ctx.clone(),
                                 self.logs_since,
                                 self.logs_ref.clone(),
+                            );
+                        }
+                        if tab == Tab::Apps && !self.apps_loaded && !self.apps_loading {
+                            self.apps_loading = true;
+                            spawn_apps(
+                                self.tx.clone(),
+                                ctx.clone(),
+                                self.apps_search.clone(),
+                                self.apps_domain.clone(),
                             );
                         }
                     }
@@ -4056,6 +4055,7 @@ impl eframe::App for App {
             match self.tab {
                 Tab::Overview => self.overview(ui),
                 Tab::Models => self.models_page(ui),
+                Tab::Apps => self.apps_page(ui),
                 Tab::Logs => self.logs_page(ui),
                 Tab::Settings => self.settings_page(ui),
             }

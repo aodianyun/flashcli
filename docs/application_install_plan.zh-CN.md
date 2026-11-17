@@ -172,7 +172,7 @@ CLI、守护进程、桌面端都调用同一个 `internal/apps`，区别只在�
 |---|---|
 | `flashcli app install` | 终端上询问 `[y/N]`；`--yes` 直接执行；没有终端且无 `--yes` 时跳过并记录 `skipped` |
 | `flashserver` `POST /v1/apps/{org}/{name}/install` | 必须带 `install_command: "run" \| "skip"`（否则 400）；作为 `app-install` 作业执行并推送事件 |
-| `flashcli-desktop` 应用 Tab | 「安装」弹窗展示命令：「运行脚本并安装」发 `run`、「跳过脚本安装」发 `skip`、取消则什么也不做；作业进度轮询显示在详情区 |
+| `flashcli-desktop` 应用页 | 「安装」弹窗展示命令：「运行脚本并安装」发 `run`、「跳过脚本安装」发 `skip`、取消则什么也不做；作业进度轮询显示在详情区 |
 
 卸载在三端都可用（`DELETE /v1/apps/{org}/{name}`；桌面「卸载」可选 `purge_models`），
 但都不会卸载应用自身安装的文件。
@@ -238,5 +238,5 @@ v1 的 manifest 发布 `config: []`。host 只写 `connection.json`（base URL�
 2. **M2** —— `internal/apps`：manifest、安装策略、加锁注册表、`Prepare`
 3. **M3** —— `internal/apps`：`Start`/`Stop`/`Status`/`Uninstall`（自动端口 + 回滚）
 4. **M4** —— `flashcli app` 命令组（直接调用 `internal/apps`）
-5. **M5** —— `flashserver` `/v1/apps*`（薄封装）与桌面「应用」Tab
+5. **M5** —— `flashserver` `/v1/apps*`（薄封装）与桌面「应用」页（左侧菜单）
 6. **M6** —— 文档、OpenAPI、T1/T2/T3、发布门禁

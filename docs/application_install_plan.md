@@ -177,7 +177,7 @@ only the way the install-script decision is obtained differs:
 |---|---|
 | `flashcli app install` | asks `[y/N]` on a terminal; `--yes` runs it; no terminal without `--yes` skips and records `skipped` |
 | `flashserver` `POST /v1/apps/{org}/{name}/install` | body must carry `install_command: "run" \| "skip"` (400 otherwise); runs as job `app-install` and streams events |
-| `flashcli-desktop` 应用 tab | 安装 dialog shows the command; 运行脚本并安装 sends `run`, 跳过脚本安装 sends `skip`, 取消 does nothing; job progress is polled into the detail pane |
+| `flashcli-desktop` 应用页 | 安装 dialog shows the command; 运行脚本并安装 sends `run`, 跳过脚本安装 sends `skip`, 取消 does nothing; job progress is polled into the detail pane |
 
 Uninstall is exposed on both fronts (`DELETE /v1/apps/{org}/{name}`,
 desktop 卸载 with an optional `purge_models`); it never removes the app's own
@@ -247,5 +247,5 @@ rollback.
 2. **M2** — `internal/apps`: manifest, install policy, locked registry, `Prepare`.
 3. **M3** — `internal/apps`: `Start`/`Stop`/`Status`/`Uninstall` with auto ports and rollback.
 4. **M4** — `flashcli app` commands calling `internal/apps` directly.
-5. **M5** — `flashserver` `/v1/apps*` handlers (thin) and the desktop Applications tab.
+5. **M5** — `flashserver` `/v1/apps*` handlers (thin) and the desktop 应用 page.
 6. **M6** — docs, OpenAPI, T1/T2/T3, release gate.

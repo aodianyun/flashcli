@@ -6,8 +6,9 @@ Native desktop client for `flashserver`, built with Rust + [egui/eframe](https:/
 
 - Overview: GPU environment (driver + CUDA on one row, used/total VRAM, compute capability, torch, temperature, clocks, power) with a 0-100 utilization/VRAM chart, CPU info with a 0-100 usage chart, and compact two-row service/disk cards (disk title includes the total). A flat status bar shows GPU/VRAM/CPU/RAM percentages.
 - Models: one page for local and FlashHub sources.
-  - Applications: a third tab lists FlashHub apps (search/domain), shows their
-    model bundles, and installs/prepares/starts/stops/uninstalls them through
+  - Applications: a dedicated 应用 page in the sidebar lists FlashHub apps
+    (search/domain), shows their model bundles, and
+    installs/prepares/starts/stops/uninstalls them through
     `/v1/apps`. 安装 opens a confirmation dialog that shows the app's install
     script; the script only runs when you pick 运行脚本并安装 (or 跳过脚本安装 to
     install the models without it), while a download-page command is only shown
