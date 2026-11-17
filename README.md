@@ -4,7 +4,7 @@
 
 **Production CLI for shipping [FlashRT](https://github.com/flashrt-project/FlashRT) inference.**
 
-One install, one preset name — flashcli resolves the right native runtime for your GPU, fetches a versioned **Model Bundle** from FlashHub, installs its Python dependencies, caches weights, and runs **`run`** (inference) or **`serve`** (OpenAI-compatible HTTP) without hand-wiring FlashRT, CUDA tags, or pip matrices.
+One install, one preset name — flashcli resolves the right native runtime for your GPU, fetches a versioned **Model Bundle** from FlashHub, installs its Python dependencies, caches weights, and runs **`run`** (inference) or **`serve`** (OpenAI/Anthropic-compatible HTTP) without hand-wiring FlashRT, CUDA tags, or pip matrices.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
@@ -84,7 +84,7 @@ flashcli du                                            # disk usage by cache are
 
 ```bash
 flashcli run   flashcli-bundle/<name>:<version> [OPTIONS]        # inference
-flashcli serve flashcli-bundle/<name>:<version> --port 8000      # OpenAI-compatible HTTP
+flashcli serve flashcli-bundle/<name>:<version> --port 8000      # OpenAI/Anthropic-compatible HTTP
 
 curl -N http://127.0.0.1:8000/v1/chat/completions \
   -H "Content-Type: application/json" \

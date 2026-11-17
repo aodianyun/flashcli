@@ -108,7 +108,7 @@ bundle venv 入口：`python -m flashcli_bundle.infer run|serve`。
 | 模块 | 职责 |
 |------|------|
 | `__main__.py`、`app.py`、`cli.py` | bundle argv + 分派 |
-| `engines/*`、`serve/*` | engine 加载 + FastAPI/uvicorn |
+| `engines/*`、`serve/*` | engine 加载；`serve/app.py` 按能力挂载 host 自有的 OpenAI/Anthropic 路由（[llm_bundle_standard.zh-CN.md](llm_bundle_standard.zh-CN.md)） |
 | `deps.py`、`runtime/bundle_venv.py` | bundle venv pip（只读路径） |
 | `bundle/resolve.py` | `activate_for_preset`（infer 激活路径） |
 

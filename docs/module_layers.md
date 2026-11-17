@@ -108,7 +108,7 @@ Bundle venv entry: `python -m flashcli_bundle.infer run|serve`.
 | Module | Role |
 |--------|------|
 | `__main__.py`, `app.py`, `cli.py` | Bundle argv + dispatch |
-| `engines/*`, `serve/*` | Engine load + FastAPI/uvicorn |
+| `engines/*`, `serve/*` | Engine load; `serve/app.py` mounts host-owned OpenAI/Anthropic routes by capability ([llm_bundle_standard.md](llm_bundle_standard.md)) |
 | `deps.py`, `runtime/bundle_venv.py` | Bundle venv pip (read-only paths) |
 | `bundle/resolve.py` | `activate_for_preset` (infer activation path) |
 

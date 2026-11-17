@@ -108,7 +108,7 @@ bundle venv **不** prepend 主机 `PYTHONPATH`。实现：Go `internal/{inferex
 | `flashcli-bundle.json` | | ✓ |
 | FlashHub 拉取 / 本地 `path` | ✓ | |
 | bundle venv、PYTHONPATH、pip | ✓ | `python_dependencies` |
-| OpenAI HTTP（`serve`） | ✓ | |
+| OpenAI + Anthropic HTTP（`serve`） | ✓ | |
 | `RunEngine` / `ServeEngine` | | ✓ |
 | `flash_rt`、`*.so` | | ✓ |
 
