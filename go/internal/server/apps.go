@@ -59,7 +59,7 @@ func (s *Server) appManifest(w http.ResponseWriter, r *http.Request) {
 	}
 	var manifest map[string]any
 	_ = json.Unmarshal(blob, &manifest)
-	resp := map[string]any{"manifest": manifest}
+	resp := map[string]any{"manifest": manifest, "org": ref.Org, "name": ref.Name, "version": ref.Version}
 	svc := s.appService()
 	if key, err := svc.ResolveKey(ref); err == nil {
 		if st, ok, _ := svc.Registry.Get(key); ok {

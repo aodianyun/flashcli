@@ -13,6 +13,10 @@ for commands. Install/build details are in [../desktop/README.md](../desktop/REA
 - **Models** — local cache plus FlashHub search; per-model Bundle / runtime /
   weights sizes; load, start, stop; run/serve smoke tests with a live log;
   multi-select cache cleanup.
+- **Applications** — the Models page has a third tab for FlashHub apps: search
+  and domain filters, dependency models, one-click prepare/start/stop, and the
+  install command/connection to copy. Everything is served by `flashserver`
+  (`/v1/apps`); the client never executes install scripts.
 - **Logs** — service journal or a model's serve log, with clear and native
   Save-As.
 - **Settings** — service start/stop, auto-start, domestic mirrors, shared-cache

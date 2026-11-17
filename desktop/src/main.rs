@@ -59,6 +59,7 @@ impl Tab {
 enum ModelTab {
     Local,
     Hub,
+    Apps,
 }
 
 #[derive(Clone)]
@@ -239,6 +240,10 @@ enum Event {
     CatalogTags(Vec<(i64, String)>),
     HubDetail(HubDetail),
     HubError(String),
+    Apps(Vec<Value>),
+    AppsError(String),
+    AppDetail(Value),
+    AppAction(String, Result<String, String>),
     ModelOptions { reference: String, result: Result<Value, String> },
     ModelOptionsSaved { reference: String, result: Result<Value, String>, start: bool },
     WslApplied(Result<String, String>),
@@ -300,6 +305,14 @@ pub struct App {
     hub_busy: bool,
     hub_searched: bool,
     hub_error: String,
+    apps: Vec<Value>,
+    apps_loading: bool,
+    apps_loaded: bool,
+    apps_error: String,
+    apps_search: String,
+    apps_domain: String,
+    apps_selected: Option<usize>,
+    app_detail: Option<Value>,
     storage: Vec<(String, String)>,
     storage_total: f64,
     storage_sizes: HashMap<String, f64>,
@@ -378,6 +391,14 @@ impl App {
             hub_busy: false,
             hub_searched: false,
             hub_error: String::new(),
+            apps: Vec::new(),
+            apps_loading: false,
+            apps_loaded: false,
+            apps_error: String::new(),
+            apps_search: String::new(),
+            apps_domain: String::new(),
+            apps_selected: None,
+            app_detail: None,
             storage: Vec::new(),
             storage_total: 0.0,
             storage_sizes: HashMap::new(),
@@ -698,6 +719,33 @@ impl App {
                     self.hub_error = err;
                     self.hub_busy = false;
                 }
+                Event::Apps(list) => {
+                    self.apps = list;
+                    self.apps_loading = false;
+                    self.apps_loaded = true;
+                    self.apps_error.clear();
+                }
+                Event::AppsError(err) => {
+                    self.apps_loading = false;
+                    self.apps_error = err;
+                }
+                Event::AppDetail(detail) => {
+                    self.app_detail = Some(detail);
+                }
+                Event::AppAction(what, result) => match result {
+                    Ok(msg) => {
+                        self.op_note = Some((format!("{what}: {msg}"), true, Instant::now()));
+                        if let Some(idx) = self.apps_selected {
+                            if let Some(app) = self.apps.get(idx).cloned() {
+                                let org = app["organization"]["name"].as_str().unwrap_or("").to_string();
+                                let name = app["name"].as_str().unwrap_or("").to_string();
+                                let version = app["version"].as_str().unwrap_or("").to_string();
+                                spawn_app_detail(self.tx.clone(), ctx.clone(), org, name, version);
+                            }
+                        }
+                    }
+                    Err(err) => self.op_note = Some((format!("{what} 失败: {err}"), false, Instant::now())),
+                },
             }
         }
     }
@@ -1127,6 +1175,16 @@ impl App {
                     spawn_catalog_tags(self.tx.clone(), ui.ctx().clone());
                 }
             }
+            if ui
+                .selectable_label(self.model_tab == ModelTab::Apps, "应用")
+                .clicked()
+            {
+                self.model_tab = ModelTab::Apps;
+                if !self.apps_loaded && !self.apps_loading {
+                    self.apps_loading = true;
+                    spawn_apps(self.tx.clone(), ui.ctx().clone(), self.apps_search.clone(), self.apps_domain.clone());
+                }
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if self.hub_busy {
                     ui.add(egui::Spinner::new().size(14.0));
@@ -1140,6 +1198,7 @@ impl App {
         match self.model_tab {
             ModelTab::Local => self.local_models(ui),
             ModelTab::Hub => self.hub_models(ui),
+            ModelTab::Apps => self.apps_page(ui),
         }
         self.show_model_detail(ui.ctx());
     }
@@ -1240,6 +1299,225 @@ impl App {
                 });
             }
         });
+    }
+
+
+    fn apps_page(&mut self, ui: &mut egui::Ui) {
+        if !self.apps_loaded && !self.apps_loading {
+            self.apps_loading = true;
+            spawn_apps(
+                self.tx.clone(),
+                ui.ctx().clone(),
+                self.apps_search.clone(),
+                self.apps_domain.clone(),
+            );
+        }
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("刷新").clicked() {
+                self.apps_loading = true;
+                spawn_apps(
+                    self.tx.clone(),
+                    ui.ctx().clone(),
+                    self.apps_search.clone(),
+                    self.apps_domain.clone(),
+                );
+            }
+            ui.add(
+                egui::TextEdit::singleline(&mut self.apps_search)
+                    .hint_text("搜索应用")
+                    .desired_width(200.0),
+            );
+            if ui.button("搜索").clicked() {
+                self.apps_loading = true;
+                spawn_apps(
+                    self.tx.clone(),
+                    ui.ctx().clone(),
+                    self.apps_search.clone(),
+                    self.apps_domain.clone(),
+                );
+            }
+            ui.separator();
+            if ui
+                .selectable_label(self.apps_domain.is_empty(), "全部")
+                .clicked()
+            {
+                self.apps_domain.clear();
+                self.apps_loading = true;
+                spawn_apps(self.tx.clone(), ui.ctx().clone(), self.apps_search.clone(), String::new());
+            }
+            for domain in ["通用Agent", "专业Agent", "音视频处理"] {
+                if ui
+                    .selectable_label(self.apps_domain == domain, domain)
+                    .clicked()
+                {
+                    self.apps_domain = domain.to_string();
+                    self.apps_loading = true;
+                    spawn_apps(
+                        self.tx.clone(),
+                        ui.ctx().clone(),
+                        self.apps_search.clone(),
+                        self.apps_domain.clone(),
+                    );
+                }
+            }
+            if self.apps_loading {
+                ui.add(egui::Spinner::new().size(14.0));
+            }
+        });
+        if !self.apps_error.is_empty() {
+            ui.add_space(4.0);
+            ui.colored_label(egui::Color32::from_rgb(200, 90, 80), &self.apps_error);
+        }
+        ui.add_space(6.0);
+
+        let height = ui.available_height();
+        ui.horizontal_top(|ui| {
+            let list_width = (ui.available_width() * 0.46).max(260.0);
+            ui.allocate_ui_with_layout(
+                egui::vec2(list_width, height),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    egui::ScrollArea::vertical()
+                        .id_salt("apps-list")
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            if self.apps.is_empty() && !self.apps_loading {
+                                ui.label("没有应用。检查 FlashHub 连接后点击刷新。");
+                            }
+                            let apps = self.apps.clone();
+                            for (idx, app) in apps.iter().enumerate() {
+                                let name = app["display_name"]
+                                    .as_str()
+                                    .or(app["name"].as_str())
+                                    .unwrap_or("?");
+                                let version = app["version"].as_str().unwrap_or("");
+                                let domain = app["domain"].as_str().unwrap_or("");
+                                let org = app["organization"]["name"].as_str().unwrap_or("");
+                                let installed = app["installed"].as_bool().unwrap_or(false);
+                                let mut label = format!("{name}  {version}  {domain}  {org}");
+                                if installed {
+                                    label.push_str("  [已安装]");
+                                }
+                                if ui
+                                    .selectable_label(self.apps_selected == Some(idx), label)
+                                    .clicked()
+                                {
+                                    self.apps_selected = Some(idx);
+                                    spawn_app_detail(
+                                        self.tx.clone(),
+                                        ui.ctx().clone(),
+                                        org.to_string(),
+                                        app["name"].as_str().unwrap_or("").to_string(),
+                                        version.to_string(),
+                                    );
+                                }
+                            }
+                        });
+                },
+            );
+            ui.separator();
+            ui.vertical(|ui| {
+                ui.set_min_width(320.0);
+                if let Some(detail) = self.app_detail.clone() {
+                    self.render_app_detail(ui, &detail);
+                } else {
+                    ui.label("选择左侧应用查看详情。");
+                }
+            });
+        });
+    }
+
+    fn render_app_detail(&mut self, ui: &mut egui::Ui, detail: &Value) {
+        let manifest = &detail["manifest"];
+        let name = manifest["name"].as_str().unwrap_or("?");
+        let version = manifest["version"].as_str().unwrap_or("");
+        let display = manifest["display_name"].as_str().unwrap_or(name);
+        ui.heading(format!("{display} {version}"));
+        if let Some(desc) = manifest["description"].as_str().filter(|s| !s.is_empty()) {
+            ui.label(desc);
+        } else if let Some(desc) = manifest["description_en"].as_str().filter(|s| !s.is_empty()) {
+            ui.label(desc);
+        }
+        ui.add_space(4.0);
+        if let Some(list) = manifest["model"]["bundles"].as_array() {
+            ui.label(egui::RichText::new("依赖模型").strong());
+            for b in list {
+                let ref_str = b["bundle"].as_str().unwrap_or("");
+                let default = b["default"].as_bool().unwrap_or(false);
+                ui.label(format!(
+                    "  {ref_str}{}",
+                    if default { "  (default)" } else { "" }
+                ));
+            }
+        }
+        let (org_name, app_name, app_version) = app_identity(detail);
+        let mut action: Option<&'static str> = None;
+        ui.add_space(6.0);
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("准备模型").clicked() {
+                action = Some("prepare");
+            }
+            let local_state = detail["local"]["state"].as_str().unwrap_or("");
+            if ui
+                .add_enabled(
+                    !local_state.is_empty(),
+                    egui::Button::new("启动"),
+                )
+                .clicked()
+            {
+                action = Some("start");
+            }
+            if ui
+                .add_enabled(
+                    local_state == "ready" || local_state == "failed",
+                    egui::Button::new("停止"),
+                )
+                .clicked()
+            {
+                action = Some("stop");
+            }
+        });
+        if let Some(path) = install_command(manifest) {
+            ui.add_space(6.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.label(egui::RichText::new("安装命令").strong());
+                ui.label(egui::RichText::new(&path).monospace().small());
+                if ui.button("复制").clicked() {
+                    ui.ctx().copy_text(path.clone());
+                }
+            });
+        }
+        if !local_state_is_empty(detail) {
+            ui.add_space(6.0);
+            ui.label(
+                egui::RichText::new(format!("本地状态: {}", detail["local"]["state"].as_str().unwrap_or("")))
+                    .small()
+                    .weak(),
+            );
+            if let Some(models) = detail["local"]["models"].as_array() {
+                for m in models {
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "  {}  {}",
+                            m["id"].as_str().unwrap_or(""),
+                            m["endpoint"].as_str().unwrap_or("")
+                        ))
+                        .monospace()
+                        .small(),
+                    );
+                }
+            }
+        }
+        if let Some(what) = action {
+            spawn_app_action(
+                self.tx.clone(),
+                ui.ctx().clone(),
+                org_name,
+                app_name,
+                app_version,
+                what,
+            );
+        }
     }
 
     fn local_models(&mut self, ui: &mut egui::Ui) {
@@ -4068,6 +4346,131 @@ fn spawn_job(
         }
         ctx.request_repaint();
     });
+}
+
+
+fn app_os_key() -> &'static str {
+    match std::env::consts::OS {
+        "macos" => "darwin",
+        other => other,
+    }
+}
+
+fn install_command(manifest: &Value) -> Option<String> {
+    let commands = manifest["install"]["commands"].as_object()?;
+    let os = app_os_key();
+    let arch = match std::env::consts::ARCH {
+        "x86_64" => "x86_64",
+        "aarch64" => "arm64",
+        other => other,
+    };
+    commands
+        .get(&format!("{os}/{arch}"))
+        .or_else(|| commands.get(os))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
+fn local_state_is_empty(detail: &Value) -> bool {
+    detail["local"]["state"].as_str().unwrap_or("").is_empty()
+}
+
+fn app_identity(detail: &Value) -> (String, String, String) {
+    let manifest = &detail["manifest"];
+    let org = detail["org"].as_str().unwrap_or("").to_string();
+    let name = manifest["name"].as_str().unwrap_or("").to_string();
+    let version = detail["version"]
+        .as_str()
+        .or_else(|| manifest["version"].as_str())
+        .unwrap_or("")
+        .to_string();
+    (org, name, version)
+}
+
+fn spawn_apps(tx: Sender<Event>, ctx: egui::Context, search: String, domain: String) {
+    std::thread::spawn(move || {
+        let mut params = vec![("page_size", "100".to_string())];
+        if !search.trim().is_empty() {
+            params.push(("search", search.trim().to_string()));
+        }
+        if !domain.trim().is_empty() {
+            params.push(("domain", domain.trim().to_string()));
+        }
+        match get_json_query("/v1/apps", &params) {
+            Some(v) => {
+                let list = v["apps"].as_array().cloned().unwrap_or_default();
+                let _ = tx.send(Event::Apps(list));
+            }
+            None => {
+                let _ = tx.send(Event::AppsError(
+                    "无法获取应用列表：请确认 flashserver 正在运行".to_string(),
+                ));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+fn spawn_app_detail(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    org: String,
+    name: String,
+    version: String,
+) {
+    std::thread::spawn(move || {
+        let path = if version.is_empty() {
+            format!("/v1/apps/{org}/{name}")
+        } else {
+            format!("/v1/apps/{org}/{name}?version={version}")
+        };
+        match get_json(&path) {
+            Some(v) => {
+                let _ = tx.send(Event::AppDetail(v));
+            }
+            None => {
+                let _ = tx.send(Event::AppsError("无法获取应用详情".to_string()));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+fn spawn_app_action(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    org: String,
+    name: String,
+    version: String,
+    action: &'static str,
+) {
+    std::thread::spawn(move || {
+        let path = format!("/v1/apps/{org}/{name}/{action}");
+        let body = if action == "prepare" {
+            serde_json::json!({ "version": version })
+        } else {
+            serde_json::json!({})
+        };
+        let result = match post_json_timeout(&path, &body, 180) {
+            Ok(v) => Ok(v["job_id"]
+                .as_str()
+                .map(|id| format!("已提交任务 {id}"))
+                .or_else(|| v["state"].as_str().map(|s| s.to_string()))
+                .unwrap_or_else(|| "完成".to_string())),
+            Err(err) => Err(err),
+        };
+        let _ = tx.send(Event::AppAction(action_label(action).to_string(), result));
+        ctx.request_repaint();
+    });
+}
+
+fn action_label(action: &str) -> &'static str {
+    match action {
+        "prepare" => "准备模型",
+        "start" => "启动",
+        "stop" => "停止",
+        _ => "操作",
+    }
 }
 
 fn spawn_catalog(tx: Sender<Event>, ctx: egui::Context, query: String, tag: Option<i64>) {
