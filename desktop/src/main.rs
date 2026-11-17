@@ -243,6 +243,7 @@ enum Event {
     HubError(String),
     Apps(Vec<Value>),
     AppsError(String),
+    AppCover(String, Option<Vec<u8>>),
     AppDetail(Value),
     AppAction(String, Result<String, String>),
     AppJob { verb: String, reference: String, line: String, running: bool },
@@ -318,6 +319,13 @@ struct AppJobState {
     log: String,
 }
 
+/// A downloaded application cover, decoded into a UI texture.
+enum AppCover {
+    Loading,
+    Ready(egui::TextureHandle),
+    Failed,
+}
+
 pub struct App {
     rx: Receiver<Event>,
     tx: Sender<Event>,
@@ -349,6 +357,7 @@ pub struct App {
     app_install: Option<AppInstallPrompt>,
     app_uninstall: Option<AppUninstallPrompt>,
     app_job: Option<AppJobState>,
+    app_covers: HashMap<String, AppCover>,
     storage: Vec<(String, String)>,
     storage_total: f64,
     storage_sizes: HashMap<String, f64>,
@@ -438,6 +447,7 @@ impl App {
             app_install: None,
             app_uninstall: None,
             app_job: None,
+            app_covers: HashMap::new(),
             storage: Vec::new(),
             storage_total: 0.0,
             storage_sizes: HashMap::new(),
@@ -763,10 +773,18 @@ impl App {
                     self.apps_loading = false;
                     self.apps_loaded = true;
                     self.apps_error.clear();
+                    self.load_app_covers(ctx);
                 }
                 Event::AppsError(err) => {
                     self.apps_loading = false;
                     self.apps_error = err;
+                }
+                Event::AppCover(url, bytes) => {
+                    let cover = match bytes.as_deref().map(|b| decode_cover(ctx, &url, b)) {
+                        Some(Some(tex)) => AppCover::Ready(tex),
+                        _ => AppCover::Failed,
+                    };
+                    self.app_covers.insert(url, cover);
                 }
                 Event::AppDetail(detail) => {
                     self.app_detail = Some(detail);
@@ -901,6 +919,22 @@ impl App {
                 self.load_status_at = None;
             }
             _ => {}
+        }
+    }
+
+    /// Fetch covers for newly listed apps (each URL once; failures are cached).
+    fn load_app_covers(&mut self, ctx: &egui::Context) {
+        let mut wanted: Vec<String> = Vec::new();
+        for app in &self.apps {
+            if let Some(url) = app_cover_url(app) {
+                if !self.app_covers.contains_key(&url) {
+                    self.app_covers.insert(url.clone(), AppCover::Loading);
+                    wanted.push(url);
+                }
+            }
+        }
+        for url in wanted {
+            spawn_app_cover(self.tx.clone(), ctx.clone(), url);
         }
     }
 
@@ -1434,95 +1468,148 @@ impl App {
         ui.add_space(6.0);
 
         let height = ui.available_height();
+        let detail_width = (ui.available_width() * 0.34).clamp(380.0, 560.0);
+        let grid_width = (ui.available_width() - detail_width - 16.0).max(320.0);
+        let mut clicked: Option<usize> = None;
+        let cards: Vec<(Value, bool, Option<egui::TextureHandle>)> = self
+            .apps
+            .iter()
+            .enumerate()
+            .map(|(idx, app)| {
+                let cover = app_cover_url(app).and_then(|url| match self.app_covers.get(&url) {
+                    Some(AppCover::Ready(tex)) => Some(tex.clone()),
+                    _ => None,
+                });
+                (app.clone(), self.apps_selected == Some(idx), cover)
+            })
+            .collect();
+
         ui.horizontal_top(|ui| {
-            let list_width = (ui.available_width() * 0.3).clamp(320.0, 620.0);
-            ui.allocate_ui_with_layout(
-                egui::vec2(list_width, height),
-                egui::Layout::top_down(egui::Align::Min),
-                |ui| {
-                    egui::ScrollArea::vertical()
-                        .id_salt("apps-list")
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            if self.apps.is_empty() && !self.apps_loading {
-                                ui.label("没有应用。检查 FlashHub 连接后点击刷新。");
-                            }
-                            let apps = self.apps.clone();
-                            for (idx, app) in apps.iter().enumerate() {
-                                let name = app["display_name"]
-                                    .as_str()
-                                    .or(app["name"].as_str())
-                                    .unwrap_or("?");
-                                let version = app["version"].as_str().unwrap_or("");
-                                let domain = app["domain"].as_str().unwrap_or("");
-                                let org = app["organization"]["name"].as_str().unwrap_or("");
-                                let installed = app["installed"].as_bool().unwrap_or(false);
-                                let mut label = format!("{name}  {version}  {domain}  {org}");
-                                if installed {
-                                    label.push_str("  [已安装]");
+            ui.vertical(|ui| {
+                ui.set_width(grid_width);
+                ui.set_min_width(grid_width);
+                egui::ScrollArea::vertical()
+                    .id_salt("apps-grid")
+                    .max_height(height)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        if cards.is_empty() && !self.apps_loading {
+                            ui.label("没有应用。检查 FlashHub 连接后点击刷新。");
+                        }
+                        let gap = 8.0_f32;
+                        let cols = (((grid_width + gap) / (APP_CARD_WIDTH + gap)).floor() as usize)
+                            .max(1);
+                        for (row_idx, row) in cards.chunks(cols).enumerate() {
+                            ui.horizontal(|ui| {
+                                for (offset, (app, selected, cover)) in row.iter().enumerate() {
+                                    let idx = row_idx * cols + offset;
+                                    if app_card(ui, app, *selected, cover.as_ref()).clicked() {
+                                        clicked = Some(idx);
+                                    }
+                                    ui.add_space(gap);
                                 }
-                                if ui
-                                    .selectable_label(self.apps_selected == Some(idx), label)
-                                    .clicked()
-                                {
-                                    self.apps_selected = Some(idx);
-                                    spawn_app_detail(
-                                        self.tx.clone(),
-                                        ui.ctx().clone(),
-                                        org.to_string(),
-                                        app["name"].as_str().unwrap_or("").to_string(),
-                                        version.to_string(),
-                                    );
-                                }
-                            }
-                        });
-                },
-            );
+                            });
+                            ui.add_space(gap);
+                        }
+                    });
+            });
             ui.separator();
             ui.vertical(|ui| {
-                ui.set_min_width(320.0);
-                if let Some(detail) = self.app_detail.clone() {
-                    self.render_app_detail(ui, &detail);
-                } else {
-                    ui.label("选择左侧应用查看详情。");
-                }
+                ui.set_width(detail_width);
+                egui::ScrollArea::vertical()
+                    .id_salt("app-detail")
+                    .max_height(height)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        if let Some(detail) = self.app_detail.clone() {
+                            self.render_app_detail(ui, &detail);
+                        } else {
+                            ui.label("选择左侧应用查看详情。");
+                        }
+                    });
             });
         });
+
+        if let Some(idx) = clicked {
+            self.apps_selected = Some(idx);
+            if let Some(app) = self.apps.get(idx).cloned() {
+                spawn_app_detail(
+                    self.tx.clone(),
+                    ui.ctx().clone(),
+                    app["organization"]["name"].as_str().unwrap_or("").to_string(),
+                    app["name"].as_str().unwrap_or("").to_string(),
+                    app["version"].as_str().unwrap_or("").to_string(),
+                );
+            }
+        }
     }
 
     fn render_app_detail(&mut self, ui: &mut egui::Ui, detail: &Value) {
         let manifest = &detail["manifest"];
+        let row = self
+            .apps_selected
+            .and_then(|idx| self.apps.get(idx))
+            .cloned()
+            .unwrap_or(Value::Null);
         let name = manifest["name"].as_str().unwrap_or("?");
         let version = manifest["version"].as_str().unwrap_or("");
-        let display = manifest["display_name"].as_str().unwrap_or(name);
-        ui.heading(format!("{display} {version}"));
-        if let Some(desc) = manifest["description"].as_str().filter(|s| !s.is_empty()) {
-            ui.label(desc);
-        } else if let Some(desc) = manifest["description_en"].as_str().filter(|s| !s.is_empty()) {
-            ui.label(desc);
-        }
-        ui.add_space(4.0);
-        if let Some(list) = manifest["model"]["bundles"].as_array() {
-            ui.label(egui::RichText::new("依赖模型").strong());
-            for b in list {
-                let ref_str = b["bundle"].as_str().unwrap_or("");
-                let default = b["default"].as_bool().unwrap_or(false);
-                ui.label(format!(
-                    "  {ref_str}{}",
-                    if default { "  (default)" } else { "" }
-                ));
-            }
-        }
+        let display = row["display_name"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .or_else(|| manifest["display_name"].as_str().filter(|s| !s.is_empty()))
+            .unwrap_or(name);
         let (org_name, app_name, app_version) = app_identity(detail);
         let local_state = detail["local"]["state"].as_str().unwrap_or("").to_string();
         let installed = !local_state.is_empty();
         let busy = self.app_job.as_ref().map(|j| j.running).unwrap_or(false);
         let supported = app_platform_supported(manifest);
         let danger = red(ui);
+
+        ui.horizontal_top(|ui| {
+            let cover = app_cover_url(&row)
+                .and_then(|url| match self.app_covers.get(&url) {
+                    Some(AppCover::Ready(tex)) => Some(tex.clone()),
+                    _ => None,
+                });
+            app_cover_widget(ui, cover.as_ref(), 72.0, display);
+            ui.add_space(1.0);
+            ui.vertical(|ui| {
+                ui.label(egui::RichText::new(format!("{display} {version}")).size(18.0).strong());
+                let mut meta: Vec<String> = Vec::new();
+                if let Some(domain) = row["domain"].as_str().filter(|s| !s.is_empty()) {
+                    meta.push(domain.to_string());
+                }
+                if !org_name.is_empty() {
+                    meta.push(org_name.clone());
+                }
+                if let Some(downloads) = row["downloads"].as_i64() {
+                    meta.push(format!("{downloads} 次下载"));
+                }
+                if let Some(status) = row["status"].as_str().filter(|s| !s.is_empty()) {
+                    meta.push(status.to_string());
+                }
+                if !meta.is_empty() {
+                    ui.label(egui::RichText::new(meta.join(" · ")).small().weak());
+                }
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(egui::RichText::new(format!("{org_name}/{name}")).monospace().small());
+                    if ui.small_button("复制").on_hover_text("复制应用标识").clicked() {
+                        ui.ctx().copy_text(format!("{org_name}/{name}"));
+                    }
+                    if installed {
+                        ui.label(egui::RichText::new("已安装").small().color(green(ui)));
+                    }
+                    if !supported {
+                        ui.label(egui::RichText::new("当前平台不受支持").small().color(danger));
+                    }
+                });
+            });
+        });
+
         let mut action: Option<&'static str> = None;
         let mut open_install = false;
         let mut open_uninstall = false;
-        ui.add_space(6.0);
+        ui.add_space(8.0);
         ui.horizontal_wrapped(|ui| {
             let install_label = if installed { "重新安装" } else { "安装" };
             let install = ui
@@ -1530,17 +1617,6 @@ impl App {
                 .on_hover_text("安装会先确认是否执行应用自带的安装脚本");
             if install.clicked() {
                 open_install = true;
-            }
-            if !supported {
-                ui.label(
-                    egui::RichText::new(format!(
-                        "当前平台 ({}/{}) 不受支持",
-                        app_os_key(),
-                        app_arch_key()
-                    ))
-                    .small()
-                    .color(danger),
-                );
             }
             if ui
                 .add_enabled(!busy, egui::Button::new("准备模型"))
@@ -1556,7 +1632,10 @@ impl App {
             }
             if ui
                 .add_enabled(
-                    !busy && (local_state == "ready" || local_state == "failed" || local_state == "stopped"),
+                    !busy
+                        && (local_state == "ready"
+                            || local_state == "failed"
+                            || local_state == "stopped"),
                     egui::Button::new("停止"),
                 )
                 .clicked()
@@ -1573,6 +1652,17 @@ impl App {
                 open_uninstall = true;
             }
         });
+        if !supported {
+            ui.label(
+                egui::RichText::new(format!(
+                    "当前平台 ({}/{}) 不在 supported 列表中，安装已禁用。",
+                    app_os_key(),
+                    app_arch_key()
+                ))
+                .small()
+                .color(danger),
+            );
+        }
         if let Some(job) = self.app_job.clone() {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
@@ -1592,50 +1682,188 @@ impl App {
                 ui.label(egui::RichText::new(line).monospace().small().weak());
             }
         }
-        if let Some(path) = install_command(manifest) {
-            ui.add_space(6.0);
-            ui.horizontal_wrapped(|ui| {
-                let icon = if is_url_command(&path) { "下载页" } else { "安装脚本" };
-                ui.label(egui::RichText::new(icon).strong());
-                ui.label(egui::RichText::new(&path).monospace().small());
-                if ui.button("复制").clicked() {
-                    ui.ctx().copy_text(path.clone());
-                }
-            });
+
+        app_section(ui, "简介");
+        let mut described = false;
+        for key in ["description", "description_en"] {
+            if let Some(text) = row[key].as_str().filter(|s| !s.is_empty()) {
+                described = true;
+                ui.add(egui::Label::new(egui::RichText::new(text).small()).wrap());
+                ui.add_space(4.0);
+            }
         }
-        if !local_state_is_empty(detail) {
-            ui.add_space(6.0);
+        if !described {
+            ui.label(egui::RichText::new("（无简介）").small().weak());
+        }
+
+        app_section(ui, "平台");
+        app_field(
+            ui,
+            "supported",
+            &format!(
+                "os {} / arch {}",
+                csv_list(&manifest["supported"]["os"]),
+                csv_list(&manifest["supported"]["arch"])
+            ),
+        );
+        app_field(
+            ui,
+            "当前",
+            &format!(
+                "{}/{} ({})",
+                app_os_key(),
+                app_arch_key(),
+                if supported { "支持" } else { "不支持" }
+            ),
+        );
+
+        app_section(ui, "安装命令");
+        let current_key = app_platform_command_key(manifest);
+        let commands = app_install_commands(manifest);
+        if commands.is_empty() {
             ui.label(
-                egui::RichText::new(format!("本地状态: {local_state}"))
+                egui::RichText::new("manifest 未声明安装命令（无需安装脚本）")
                     .small()
                     .weak(),
             );
+        }
+        for (key, command) in commands {
+            let current = current_key.as_deref() == Some(key.as_str());
+            ui.horizontal_wrapped(|ui| {
+                let label = if current {
+                    egui::RichText::new(format!("[{key}]")).monospace().small().color(accent(ui))
+                } else {
+                    egui::RichText::new(format!("[{key}]")).monospace().small().weak()
+                };
+                ui.label(label);
+                let kind = if is_url_command(&command) { "下载页" } else { "脚本" };
+                ui.label(egui::RichText::new(kind).small().weak());
+                if ui.small_button("复制").clicked() {
+                    ui.ctx().copy_text(command.clone());
+                }
+            });
+            app_mono(ui, &command);
+        }
+
+        app_section(ui, "依赖模型");
+        match manifest["model"]["bundles"].as_array() {
+            Some(bundles) if !bundles.is_empty() => {
+                for bundle in bundles {
+                    let ref_str = bundle["bundle"].as_str().unwrap_or("");
+                    let default = bundle["default"].as_bool().unwrap_or(false);
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(egui::RichText::new(ref_str).monospace().small());
+                        if default {
+                            ui.label(egui::RichText::new("默认").small().color(accent(ui)));
+                        }
+                        if ui.small_button("复制").clicked() {
+                            ui.ctx().copy_text(ref_str.to_string());
+                        }
+                    });
+                    if let Some(options) = bundle["serve"]["options"]
+                        .as_object()
+                        .filter(|o| !o.is_empty())
+                    {
+                        let text = serde_json::to_string(options).unwrap_or_default();
+                        app_mono(ui, &format!("serve.options {text}"));
+                    }
+                }
+            }
+            _ => {
+                ui.label(egui::RichText::new("manifest 未声明依赖模型").small().weak());
+            }
+        }
+
+        if !local_state_is_empty(detail) {
+            app_section(ui, "本地状态");
+            app_field(ui, "state", &local_state);
+            if let Some(value) = detail["local"]["installed_at"].as_str() {
+                app_field(ui, "installed_at", value);
+            }
+            if let Some(value) = detail["local"]["updated_at"].as_str() {
+                app_field(ui, "updated_at", value);
+            }
+            if let Some(err) = detail["local"]["error"].as_str().filter(|e| !e.is_empty()) {
+                ui.label(egui::RichText::new(err).small().color(danger));
+            }
+            if let Some(install) = detail["local"]["install"].as_object() {
+                let mut flags: Vec<&str> = Vec::new();
+                if install.get("executed").and_then(|v| v.as_bool()) == Some(true) {
+                    flags.push("已执行安装脚本");
+                }
+                if install.get("skipped").and_then(|v| v.as_bool()) == Some(true) {
+                    flags.push("已跳过安装脚本");
+                }
+                if !flags.is_empty() {
+                    app_field(ui, "install", &flags.join(" · "));
+                }
+                if let Some(command) = install
+                    .get("command")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty())
+                {
+                    app_mono(ui, command);
+                }
+            }
             if let Some(base) = detail["local"]["connection"]["base_url"]
                 .as_str()
                 .filter(|s| !s.is_empty())
             {
                 ui.horizontal_wrapped(|ui| {
-                    ui.label(egui::RichText::new("连接").strong());
+                    ui.label(egui::RichText::new("接入地址").small().weak());
                     ui.label(egui::RichText::new(base).monospace().small());
-                    if ui.button("复制").clicked() {
+                    if ui.small_button("复制").clicked() {
                         ui.ctx().copy_text(base.to_string());
                     }
                 });
+                if let Some(key) = detail["local"]["connection"]["api_key"]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                {
+                    app_field(ui, "api_key", key);
+                }
             }
             if let Some(models) = detail["local"]["models"].as_array() {
-                for m in models {
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "  {}  {}",
-                            m["id"].as_str().unwrap_or(""),
-                            m["endpoint"].as_str().unwrap_or("")
-                        ))
-                        .monospace()
-                        .small(),
+                for model in models {
+                    let id = model["id"].as_str().unwrap_or("");
+                    let ref_str = model["ref"].as_str().unwrap_or("");
+                    let prepared = model["prepared"].as_bool().unwrap_or(false);
+                    app_field(
+                        ui,
+                        "model",
+                        &format!(
+                            "{id}  {ref_str}{}",
+                            if prepared { "" } else { "  (未准备)" }
+                        ),
                     );
+                    if let Some(endpoint) = model["endpoint"].as_str().filter(|s| !s.is_empty()) {
+                        app_mono(ui, endpoint);
+                    }
                 }
             }
         }
+
+        app_section(ui, "Manifest");
+        app_field(ui, "format", manifest["format"].as_str().unwrap_or("-"));
+        app_field(
+            ui,
+            "app_format_version",
+            &manifest["app_format_version"].to_string(),
+        );
+        app_field(
+            ui,
+            "protocol_version",
+            &manifest["protocol_version"].to_string(),
+        );
+        if let Some(config) = manifest["config"].as_array().filter(|a| !a.is_empty()) {
+            app_field(ui, "config", &format!("{} 项", config.len()));
+            for item in config {
+                app_mono(ui, &serde_json::to_string(item).unwrap_or_default());
+            }
+        } else {
+            app_field(ui, "config", "（空，v1 未使用）");
+        }
+
         if open_install {
             self.app_install = Some(AppInstallPrompt {
                 org: org_name.clone(),
@@ -4804,15 +5032,63 @@ fn app_arch_key() -> &'static str {
 }
 
 fn install_command(manifest: &Value) -> Option<String> {
+    let key = app_platform_command_key(manifest)?;
+    manifest["install"]["commands"][key.as_str()]
+        .as_str()
+        .map(|s| s.to_string())
+}
+
+/// The `install.commands` key the host uses for this build (`os/arch` then `os`).
+fn app_platform_command_key(manifest: &Value) -> Option<String> {
     let commands = manifest["install"]["commands"].as_object()?;
     let os = app_os_key();
     let arch = app_arch_key();
-    commands
-        .get(&format!("{os}/{arch}"))
-        .or_else(|| commands.get(os))
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
+    let exact = format!("{os}/{arch}");
+    if commands.contains_key(&exact) {
+        Some(exact)
+    } else if commands.contains_key(os) {
+        Some(os.to_string())
+    } else {
+        None
+    }
 }
+
+/// Every declared install command, sorted by platform key (current one is
+/// highlighted by the UI via `app_platform_command_key`).
+fn app_install_commands(manifest: &Value) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = manifest["install"]["commands"]
+        .as_object()
+        .map(|commands| {
+            commands
+                .iter()
+                .filter_map(|(key, value)| value.as_str().map(|cmd| (key.clone(), cmd.to_string())))
+                .collect()
+        })
+        .unwrap_or_default();
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out
+}
+
+/// `https://…/cover.png` from a list row or manifest; empty values are ignored.
+fn app_cover_url(app: &Value) -> Option<String> {
+    app["cover_url"]
+        .as_str()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+fn csv_list(value: &Value) -> String {
+    value
+        .as_array()
+        .map(|list| {
+            list.iter()
+                .filter_map(|item| item.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default()
+}
+
 
 fn local_state_is_empty(detail: &Value) -> bool {
     detail["local"]["state"].as_str().unwrap_or("").is_empty()
@@ -4834,6 +5110,148 @@ fn app_platform_supported(manifest: &Value) -> bool {
     };
     listed("os", app_os_key()) && listed("arch", app_arch_key())
 }
+
+const APP_CARD_WIDTH: f32 = 300.0;
+const APP_COVER_TEXTURE_PX: u32 = 144;
+
+/// One application card: cover, name, version · domain, org / installed badge.
+fn app_card(
+    ui: &mut egui::Ui,
+    app: &Value,
+    selected: bool,
+    cover: Option<&egui::TextureHandle>,
+) -> egui::Response {
+    let dark = ui.visuals().dark_mode;
+    let fill = if selected {
+        if dark {
+            egui::Color32::from_rgb(34, 52, 68)
+        } else {
+            egui::Color32::from_rgb(232, 242, 252)
+        }
+    } else if dark {
+        egui::Color32::from_rgb(30, 32, 36)
+    } else {
+        egui::Color32::from_rgb(250, 250, 252)
+    };
+    let stroke = if selected {
+        egui::Stroke::new(1.0_f32, accent(ui))
+    } else if dark {
+        egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(52, 56, 62))
+    } else {
+        egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(222, 226, 232))
+    };
+    let name = app["display_name"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .or_else(|| app["name"].as_str())
+        .unwrap_or("?");
+    let description = app["description"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .or_else(|| app["description_en"].as_str().filter(|s| !s.is_empty()))
+        .unwrap_or("");
+    let installed = app["installed"].as_bool().unwrap_or(false);
+    let inner = egui::Frame::NONE
+        .fill(fill)
+        .stroke(stroke)
+        .corner_radius(8)
+        .inner_margin(egui::Margin::same(10))
+        .show(ui, |ui| {
+            ui.set_width(APP_CARD_WIDTH - 20.0);
+            ui.horizontal_top(|ui| {
+                app_cover_widget(ui, cover, 56.0, name);
+                ui.add_space(2.0);
+                ui.vertical(|ui| {
+                    ui.set_width(APP_CARD_WIDTH - 20.0 - 58.0);
+                    ui.horizontal(|ui| {
+                        ui.add(egui::Label::new(egui::RichText::new(name).strong()).truncate());
+                        if installed {
+                            ui.label(egui::RichText::new("已安装").small().color(green(ui)));
+                        }
+                    });
+                    let version = app["version"].as_str().unwrap_or("");
+                    let domain = app["domain"].as_str().unwrap_or("");
+                    let line = if domain.is_empty() {
+                        version.to_string()
+                    } else {
+                        format!("{version} · {domain}")
+                    };
+                    ui.add(egui::Label::new(egui::RichText::new(line).small().weak()).truncate());
+                    let org = app["organization"]["display_name"]
+                        .as_str()
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| app["organization"]["name"].as_str())
+                        .unwrap_or("");
+                    let third = if description.is_empty() { org } else { description };
+                    if !third.is_empty() {
+                        ui.add(egui::Label::new(egui::RichText::new(third).small().weak()).truncate());
+                    }
+                });
+            });
+        });
+    let response = inner.response.interact(egui::Sense::click());
+    if description.is_empty() {
+        response.on_hover_cursor(egui::CursorIcon::PointingHand)
+    } else {
+        response
+            .on_hover_cursor(egui::CursorIcon::PointingHand)
+            .on_hover_text(description)
+    }
+}
+
+/// Cover image, or a rounded placeholder with the app's first character.
+fn app_cover_widget(
+    ui: &mut egui::Ui,
+    cover: Option<&egui::TextureHandle>,
+    size: f32,
+    fallback: &str,
+) {
+    match cover {
+        Some(texture) => {
+            ui.add(
+                egui::Image::new(egui::load::SizedTexture::new(
+                    texture.id(),
+                    egui::vec2(size, size),
+                ))
+                .corner_radius(6),
+            );
+        }
+        None => {
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::hover());
+            ui.painter().rect_filled(rect, 6, ui.visuals().faint_bg_color);
+            let initial: String = fallback.chars().next().map(|c| c.to_string()).unwrap_or_default();
+            ui.painter().text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                initial,
+                egui::FontId::proportional(size * 0.48),
+                ui.visuals().weak_text_color(),
+            );
+        }
+    }
+}
+
+fn app_section(ui: &mut egui::Ui, title: &str) {
+    ui.add_space(10.0);
+    ui.separator();
+    ui.label(egui::RichText::new(title).strong());
+    ui.add_space(2.0);
+}
+
+fn app_field(ui: &mut egui::Ui, key: &str, value: &str) {
+    if value.trim().is_empty() {
+        return;
+    }
+    ui.horizontal_wrapped(|ui| {
+        ui.label(egui::RichText::new(key).small().weak());
+        ui.label(egui::RichText::new(value).small());
+    });
+}
+
+fn app_mono(ui: &mut egui::Ui, value: &str) {
+    ui.add(egui::Label::new(egui::RichText::new(value).monospace().small()).wrap());
+}
+
 
 /// Bundle refs the install will prepare (every `default: true` entry).
 fn default_app_bundles(manifest: &Value) -> Vec<String> {
@@ -4905,6 +5323,37 @@ fn app_identity(detail: &Value) -> (String, String, String) {
         .unwrap_or("")
         .to_string();
     (org, name, version)
+}
+
+/// Download one cover; the UI thread decodes and uploads it as a texture.
+fn spawn_app_cover(tx: Sender<Event>, ctx: egui::Context, url: String) {
+    std::thread::spawn(move || {
+        let bytes = ureq::AgentBuilder::new()
+            .timeout(Duration::from_secs(20))
+            .build()
+            .get(&url)
+            .call()
+            .ok()
+            .and_then(|resp| {
+                let mut buf = Vec::new();
+                let mut reader = resp.into_reader();
+                std::io::Read::read_to_end(&mut reader, &mut buf)
+                    .ok()
+                    .map(|_| buf)
+            });
+        let _ = tx.send(Event::AppCover(url, bytes));
+        ctx.request_repaint();
+    });
+}
+
+fn decode_cover(ctx: &egui::Context, url: &str, bytes: &[u8]) -> Option<egui::TextureHandle> {
+    let image = image::load_from_memory(bytes).ok()?;
+    let thumb = image
+        .thumbnail(APP_COVER_TEXTURE_PX, APP_COVER_TEXTURE_PX)
+        .to_rgba8();
+    let size = [thumb.width() as usize, thumb.height() as usize];
+    let pixels = egui::ColorImage::from_rgba_unmultiplied(size, thumb.as_raw());
+    Some(ctx.load_texture(url.to_string(), pixels, egui::TextureOptions::LINEAR))
 }
 
 fn spawn_apps(tx: Sender<Event>, ctx: egui::Context, search: String, domain: String) {

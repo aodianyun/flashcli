@@ -64,6 +64,50 @@ fn install_command_prefers_the_arch_specific_entry() {
 }
 
 #[test]
+fn app_cover_url_ignores_blank_values() {
+    let app = serde_json::json!({"cover_url": " https://cdn.test/a.png "});
+    assert_eq!(app_cover_url(&app).as_deref(), Some("https://cdn.test/a.png"));
+    assert_eq!(app_cover_url(&serde_json::json!({"cover_url": "  "})), None);
+    assert_eq!(app_cover_url(&serde_json::json!({})), None);
+}
+
+#[test]
+fn app_install_commands_lists_every_platform() {
+    let manifest = serde_json::json!({"install": {"commands": {
+        "windows": "irm x | iex",
+        "linux": "curl -fsSL x | bash",
+        "darwin/x86_64": "https://example.com/dmg"
+    }}});
+    let commands = app_install_commands(&manifest);
+    let keys: Vec<&str> = commands.iter().map(|(k, _)| k.as_str()).collect();
+    assert_eq!(keys, vec!["darwin/x86_64", "linux", "windows"]);
+    assert_eq!(commands[0].1, "https://example.com/dmg");
+    assert!(app_install_commands(&serde_json::json!({})).is_empty());
+}
+
+#[test]
+fn app_platform_command_key_prefers_the_arch_key() {
+    let manifest = serde_json::json!({"install": {"commands": {
+        (app_os_key()): "generic",
+        (format!("{}/{}", app_os_key(), app_arch_key())): "exact"
+    }}});
+    assert_eq!(
+        app_platform_command_key(&manifest).as_deref(),
+        Some(format!("{}/{}", app_os_key(), app_arch_key()).as_str())
+    );
+    let generic = serde_json::json!({"install": {"commands": {(app_os_key()): "generic"}}});
+    assert_eq!(app_platform_command_key(&generic).as_deref(), Some(app_os_key()));
+    assert_eq!(app_platform_command_key(&serde_json::json!({})), None);
+}
+
+#[test]
+fn csv_list_joins_strings_only() {
+    let value = serde_json::json!(["linux", "darwin", 3]);
+    assert_eq!(csv_list(&value), "linux, darwin");
+    assert_eq!(csv_list(&serde_json::json!(null)), "");
+}
+
+#[test]
 fn app_install_body_makes_the_script_decision_explicit() {
     let run = app_install_body("1.0.0", true, true);
     assert_eq!(run["version"], "1.0.0");
