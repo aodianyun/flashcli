@@ -14,9 +14,12 @@ for commands. Install/build details are in [../desktop/README.md](../desktop/REA
   weights sizes; load, start, stop; run/serve smoke tests with a live log;
   multi-select cache cleanup.
 - **Applications** — the Models page has a third tab for FlashHub apps: search
-  and domain filters, dependency models, one-click prepare/start/stop, and the
-  install command/connection to copy. Everything is served by `flashserver`
-  (`/v1/apps`); the client never executes install scripts.
+  and domain filters, dependency models, install/prepare/start/stop/uninstall,
+  and the connection URL to copy. 安装 first shows the manifest install script:
+  it runs only after 运行脚本并安装 (跳过脚本安装 installs the models without it),
+  and the daemon rejects an install without that explicit decision
+  (`install_command: run | skip`). Progress streams into the detail pane.
+  Everything is served by `flashserver` (`/v1/apps`).
 - **Logs** — service journal or a model's serve log, with clear and native
   Save-As.
 - **Settings** — service start/stop, auto-start, domestic mirrors, shared-cache

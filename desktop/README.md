@@ -7,9 +7,12 @@ Native desktop client for `flashserver`, built with Rust + [egui/eframe](https:/
 - Overview: GPU environment (driver + CUDA on one row, used/total VRAM, compute capability, torch, temperature, clocks, power) with a 0-100 utilization/VRAM chart, CPU info with a 0-100 usage chart, and compact two-row service/disk cards (disk title includes the total). A flat status bar shows GPU/VRAM/CPU/RAM percentages.
 - Models: one page for local and FlashHub sources.
   - Applications: a third tab lists FlashHub apps (search/domain), shows their
-    model bundles, prepares/starts/stops them through `/v1/apps`, and lets you
-    copy the install command and connection details; install scripts are never
-    executed by the client.
+    model bundles, and installs/prepares/starts/stops/uninstalls them through
+    `/v1/apps`. 安装 opens a confirmation dialog that shows the app's install
+    script; the script only runs when you pick 运行脚本并安装 (or 跳过脚本安装 to
+    install the models without it), while a download-page command is only shown
+    for copying. Install/prepare progress streams into the detail pane, and the
+    installed app shows its connection URL with a copy button.
   - Local: bundle/runtime/weight readiness, serve capability (run-only bundles are marked "仅 run"), separate bundle/runtime/weight sizes, total size, ready/started state, async load (bundle/runtime/weights) and start (serve) progress, row actions (使用 / 更多 → 查看信息 / 查看日志 / Run 冒烟测试 / 停止), and multi-select cache cleanup (all cleanable rows selected by default; started models are skipped). "加载" prepares a model to the ready state; only then can it be started with "启动". Ready run-only models offer a `flashcli run` smoke test in the 更多 menu behind a confirmation; it runs at low CPU priority, streams output live to a log dialog, and is cancelled when the dialog or the main window is closed. Started serve models offer one OpenAI-compatible request test inside the 使用 dialog. The 使用 dialog shows the model's serve endpoint, OpenAI-compatible curl examples, API docs, model list, local console, and the request test.
   - FlashHub: nothing is listed until you search or pick a category; then browse versions with size/file count and download a version. A search with no matches shows "no results" (not a request failure); clicking a repository expands its version list and 关闭 (or clicking the row again) collapses it. Load it from the Local tab, which shows "仅 run" and hides the start action for bundles without a serve entry.
 - Logs: server `journalctl` tail or a specific started model's serve log (返回服务日志 switches back), "清空" for server logs, and "另存为…" saves the full log via a native file dialog.

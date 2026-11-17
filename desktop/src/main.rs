@@ -244,6 +244,7 @@ enum Event {
     AppsError(String),
     AppDetail(Value),
     AppAction(String, Result<String, String>),
+    AppJob { verb: String, reference: String, line: String, running: bool },
     ModelOptions { reference: String, result: Result<Value, String> },
     ModelOptionsSaved { reference: String, result: Result<Value, String>, start: bool },
     WslApplied(Result<String, String>),
@@ -285,6 +286,37 @@ struct SmokeState {
     log: String,
 }
 
+/// A pending application install: the user must confirm the install script.
+#[derive(Clone)]
+struct AppInstallPrompt {
+    org: String,
+    name: String,
+    version: String,
+    display_name: String,
+    bundles: Vec<String>,
+    command: Option<String>,
+    force: bool,
+}
+
+/// A pending application uninstall.
+#[derive(Clone)]
+struct AppUninstallPrompt {
+    org: String,
+    name: String,
+    version: String,
+    display_name: String,
+    purge_models: bool,
+}
+
+/// Progress of the install/prepare job for the selected application.
+#[derive(Clone)]
+struct AppJobState {
+    reference: String,
+    verb: String,
+    running: bool,
+    log: String,
+}
+
 pub struct App {
     rx: Receiver<Event>,
     tx: Sender<Event>,
@@ -313,6 +345,9 @@ pub struct App {
     apps_domain: String,
     apps_selected: Option<usize>,
     app_detail: Option<Value>,
+    app_install: Option<AppInstallPrompt>,
+    app_uninstall: Option<AppUninstallPrompt>,
+    app_job: Option<AppJobState>,
     storage: Vec<(String, String)>,
     storage_total: f64,
     storage_sizes: HashMap<String, f64>,
@@ -399,6 +434,9 @@ impl App {
             apps_domain: String::new(),
             apps_selected: None,
             app_detail: None,
+            app_install: None,
+            app_uninstall: None,
+            app_job: None,
             storage: Vec::new(),
             storage_total: 0.0,
             storage_sizes: HashMap::new(),
@@ -732,19 +770,18 @@ impl App {
                 Event::AppDetail(detail) => {
                     self.app_detail = Some(detail);
                 }
+                Event::AppJob { verb, reference, line, running } => {
+                    self.apply_app_job(&verb, &reference, &line, running);
+                }
                 Event::AppAction(what, result) => match result {
                     Ok(msg) => {
                         self.op_note = Some((format!("{what}: {msg}"), true, Instant::now()));
-                        if let Some(idx) = self.apps_selected {
-                            if let Some(app) = self.apps.get(idx).cloned() {
-                                let org = app["organization"]["name"].as_str().unwrap_or("").to_string();
-                                let name = app["name"].as_str().unwrap_or("").to_string();
-                                let version = app["version"].as_str().unwrap_or("").to_string();
-                                spawn_app_detail(self.tx.clone(), ctx.clone(), org, name, version);
-                            }
-                        }
+                        self.refresh_apps_after_action(ctx);
                     }
-                    Err(err) => self.op_note = Some((format!("{what} 失败: {err}"), false, Instant::now())),
+                    Err(err) => {
+                        self.op_note = Some((format!("{what} 失败: {err}"), false, Instant::now()));
+                        self.refresh_apps_after_action(ctx);
+                    }
                 },
             }
         }
@@ -863,6 +900,42 @@ impl App {
                 self.load_status_at = None;
             }
             _ => {}
+        }
+    }
+
+    /// Track install/prepare progress for the selected application.
+    fn apply_app_job(&mut self, verb: &str, reference: &str, line: &str, running: bool) {
+        let job = self.app_job.get_or_insert_with(|| AppJobState {
+            reference: reference.to_string(),
+            verb: verb.to_string(),
+            running: true,
+            log: String::new(),
+        });
+        if job.reference != reference {
+            job.reference = reference.to_string();
+            job.verb = verb.to_string();
+            job.log.clear();
+        }
+        if !line.is_empty() {
+            append_app_log(&mut job.log, line);
+        }
+        job.running = running;
+    }
+
+    /// Reload the app list and the selected app after an action finished.
+    fn refresh_apps_after_action(&mut self, ctx: &egui::Context) {
+        self.apps_loading = true;
+        spawn_apps(
+            self.tx.clone(),
+            ctx.clone(),
+            self.apps_search.clone(),
+            self.apps_domain.clone(),
+        );
+        if let Some(detail) = self.app_detail.clone() {
+            let (org, name, version) = app_identity(&detail);
+            if !org.is_empty() && !name.is_empty() {
+                spawn_app_detail(self.tx.clone(), ctx.clone(), org, name, version);
+            }
         }
     }
 
@@ -1451,36 +1524,78 @@ impl App {
             }
         }
         let (org_name, app_name, app_version) = app_identity(detail);
+        let local_state = detail["local"]["state"].as_str().unwrap_or("").to_string();
+        let installed = !local_state.is_empty();
+        let busy = self.app_job.as_ref().map(|j| j.running).unwrap_or(false);
+        let danger = red(ui);
         let mut action: Option<&'static str> = None;
+        let mut open_install = false;
+        let mut open_uninstall = false;
         ui.add_space(6.0);
         ui.horizontal_wrapped(|ui| {
-            if ui.button("准备模型").clicked() {
+            let install_label = if installed { "重新安装" } else { "安装" };
+            if ui
+                .add_enabled(!busy, egui::Button::new(install_label))
+                .on_hover_text("安装会先确认是否执行应用自带的安装脚本")
+                .clicked()
+            {
+                open_install = true;
+            }
+            if ui
+                .add_enabled(!busy, egui::Button::new("准备模型"))
+                .clicked()
+            {
                 action = Some("prepare");
             }
-            let local_state = detail["local"]["state"].as_str().unwrap_or("");
             if ui
-                .add_enabled(
-                    !local_state.is_empty(),
-                    egui::Button::new("启动"),
-                )
+                .add_enabled(!busy && installed, egui::Button::new("启动"))
                 .clicked()
             {
                 action = Some("start");
             }
             if ui
                 .add_enabled(
-                    local_state == "ready" || local_state == "failed",
+                    !busy && (local_state == "ready" || local_state == "failed" || local_state == "stopped"),
                     egui::Button::new("停止"),
                 )
                 .clicked()
             {
                 action = Some("stop");
             }
+            if ui
+                .add_enabled(
+                    !busy && installed,
+                    egui::Button::new(egui::RichText::new("卸载").color(danger)),
+                )
+                .clicked()
+            {
+                open_uninstall = true;
+            }
         });
+        if let Some(job) = self.app_job.clone() {
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                if job.running {
+                    ui.add(egui::Spinner::new().size(13.0));
+                }
+                ui.label(
+                    egui::RichText::new(format!(
+                        "{} · {}",
+                        job.verb,
+                        if job.running { "进行中" } else { "已结束" }
+                    ))
+                    .strong(),
+                );
+            });
+            for line in app_log_tail(&job.log, 8) {
+                ui.label(egui::RichText::new(line).monospace().small().weak());
+            }
+        }
         if let Some(path) = install_command(manifest) {
             ui.add_space(6.0);
             ui.horizontal_wrapped(|ui| {
-                ui.label(egui::RichText::new("安装命令").strong());
+                let icon = if is_url_command(&path) { "下载页" } else { "安装脚本" };
+                ui.label(egui::RichText::new(icon).strong());
                 ui.label(egui::RichText::new(&path).monospace().small());
                 if ui.button("复制").clicked() {
                     ui.ctx().copy_text(path.clone());
@@ -1490,10 +1605,22 @@ impl App {
         if !local_state_is_empty(detail) {
             ui.add_space(6.0);
             ui.label(
-                egui::RichText::new(format!("本地状态: {}", detail["local"]["state"].as_str().unwrap_or("")))
+                egui::RichText::new(format!("本地状态: {local_state}"))
                     .small()
                     .weak(),
             );
+            if let Some(base) = detail["local"]["connection"]["base_url"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+            {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(egui::RichText::new("连接").strong());
+                    ui.label(egui::RichText::new(base).monospace().small());
+                    if ui.button("复制").clicked() {
+                        ui.ctx().copy_text(base.to_string());
+                    }
+                });
+            }
             if let Some(models) = detail["local"]["models"].as_array() {
                 for m in models {
                     ui.label(
@@ -1507,6 +1634,26 @@ impl App {
                     );
                 }
             }
+        }
+        if open_install {
+            self.app_install = Some(AppInstallPrompt {
+                org: org_name.clone(),
+                name: app_name.clone(),
+                version: app_version.clone(),
+                display_name: display.to_string(),
+                bundles: default_app_bundles(manifest),
+                command: install_command(manifest),
+                force: installed,
+            });
+        }
+        if open_uninstall {
+            self.app_uninstall = Some(AppUninstallPrompt {
+                org: org_name.clone(),
+                name: app_name.clone(),
+                version: app_version.clone(),
+                display_name: display.to_string(),
+                purge_models: false,
+            });
         }
         if let Some(what) = action {
             spawn_app_action(
@@ -3369,6 +3516,278 @@ impl App {
         }
     }
 
+    /// Confirm an application install. A shell install command only runs when
+    /// the user explicitly picks "运行脚本并安装"; the daemon never decides.
+    fn show_app_install_dialog(&mut self, ctx: &egui::Context) {
+        let Some(prompt) = self.app_install.clone() else {
+            return;
+        };
+        let dark = ctx.style().visuals.dark_mode;
+        let danger = egui::Color32::from_rgb(176, 54, 48);
+        let shell_command = prompt
+            .command
+            .as_deref()
+            .filter(|c| !is_url_command(c))
+            .map(|c| c.to_string());
+        let url_command = prompt
+            .command
+            .as_deref()
+            .filter(|c| is_url_command(c))
+            .map(|c| c.to_string());
+        let mut close = false;
+        let mut run_script: Option<bool> = None;
+        modal_backdrop(ctx, dark, &mut close);
+        egui::Window::new("app_install_dialog")
+            .title_bar(false)
+            .order(egui::Order::Foreground)
+            .frame(dialog_frame(dark))
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.set_width(560.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("安装应用").size(16.0).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(egui::RichText::new("×").size(18.0))
+                                    .min_size(egui::vec2(28.0, 24.0)),
+                            )
+                            .clicked()
+                        {
+                            close = true;
+                        }
+                    });
+                });
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(12.0);
+                ui.label(
+                    egui::RichText::new(format!(
+                        "{} {}",
+                        prompt.display_name,
+                        if prompt.version.is_empty() {
+                            "".to_string()
+                        } else {
+                            format!("({})", prompt.version)
+                        }
+                    ))
+                    .strong(),
+                );
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new("将下载并准备以下默认模型：").weak().small());
+                if prompt.bundles.is_empty() {
+                    ui.label(egui::RichText::new("  (manifest 未声明默认模型)").small().weak());
+                }
+                for bundle in &prompt.bundles {
+                    ui.label(egui::RichText::new(format!("  · {bundle}")).monospace().small());
+                }
+                if let Some(command) = &shell_command {
+                    ui.add_space(12.0);
+                    ui.label(
+                        egui::RichText::new("该应用需要执行安装脚本")
+                            .strong()
+                            .color(danger),
+                    );
+                    ui.add_space(4.0);
+                    egui::Frame::NONE
+                        .fill(if dark {
+                            egui::Color32::from_rgb(48, 40, 40)
+                        } else {
+                            egui::Color32::from_rgb(250, 242, 240)
+                        })
+                        .corner_radius(6)
+                        .inner_margin(egui::Margin::same(10))
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new(command).monospace().small());
+                        });
+                    ui.add_space(6.0);
+                    ui.label(
+                        egui::RichText::new(
+                            "脚本会以当前用户权限执行，可以修改系统文件或写入应用目录。\n只在信任该应用来源时继续；也可以跳过脚本，仅安装并启动模型。",
+                        )
+                        .weak()
+                        .small(),
+                    );
+                } else if let Some(url) = &url_command {
+                    ui.add_space(12.0);
+                    ui.label(egui::RichText::new("该应用的下载页").strong());
+                    ui.add_space(4.0);
+                    ui.label(egui::RichText::new(url).monospace().small());
+                    ui.add_space(6.0);
+                    ui.label(
+                        egui::RichText::new(
+                            "flashcli 不会自动下载或打开链接；需要时请复制后用浏览器访问。\n这里只安装并启动模型。",
+                        )
+                        .weak()
+                        .small(),
+                    );
+                } else {
+                    ui.add_space(12.0);
+                    ui.label(
+                        egui::RichText::new("该应用在当前平台不需要安装脚本，将直接安装并启动模型。")
+                            .weak()
+                            .small(),
+                    );
+                }
+                if prompt.force {
+                    ui.add_space(8.0);
+                    ui.label(
+                        egui::RichText::new("应用已安装：将重新执行安装流程并重启模型。")
+                            .weak()
+                            .small(),
+                    );
+                }
+                ui.add_space(14.0);
+                ui.separator();
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    ui.add_space((ui.available_width() - 300.0).max(0.0));
+                    if button(ui, "取消").clicked() {
+                        close = true;
+                    }
+                    ui.add_space(8.0);
+                    if shell_command.is_some() && button(ui, "跳过脚本安装").clicked() {
+                        run_script = Some(false);
+                    }
+                    ui.add_space(8.0);
+                    let label = if shell_command.is_some() {
+                        "运行脚本并安装"
+                    } else {
+                        "开始安装"
+                    };
+                    let fill = if shell_command.is_some() {
+                        danger
+                    } else {
+                        ui.visuals().widgets.active.bg_fill
+                    };
+                    if ui
+                        .add(
+                            egui::Button::new(egui::RichText::new(label).color(egui::Color32::WHITE))
+                                .fill(fill)
+                                .min_size(egui::vec2(120.0, 28.0)),
+                        )
+                        .clicked()
+                    {
+                        run_script = Some(shell_command.is_some());
+                    }
+                });
+            });
+        if close {
+            self.app_install = None;
+        }
+        if let Some(run) = run_script {
+            self.app_install = None;
+            self.app_job = Some(AppJobState {
+                reference: app_reference(&prompt.org, &prompt.name, &prompt.version),
+                verb: "安装".to_string(),
+                running: true,
+                log: String::new(),
+            });
+            spawn_app_install(
+                self.tx.clone(),
+                ctx.clone(),
+                prompt.org,
+                prompt.name,
+                prompt.version,
+                run,
+                prompt.force,
+            );
+        }
+    }
+
+    /// Confirm removing an application (models stop first; caches are optional).
+    fn show_app_uninstall_dialog(&mut self, ctx: &egui::Context) {
+        let Some(prompt) = self.app_uninstall.clone() else {
+            return;
+        };
+        let dark = ctx.style().visuals.dark_mode;
+        let mut close = false;
+        let mut purge = prompt.purge_models;
+        let mut confirm = false;
+        modal_backdrop(ctx, dark, &mut close);
+        egui::Window::new("app_uninstall_dialog")
+            .title_bar(false)
+            .order(egui::Order::Foreground)
+            .frame(dialog_frame(dark))
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.set_width(500.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("卸载应用").size(16.0).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(egui::RichText::new("×").size(18.0))
+                                    .min_size(egui::vec2(28.0, 24.0)),
+                            )
+                            .clicked()
+                        {
+                            close = true;
+                        }
+                    });
+                });
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(12.0);
+                ui.label(
+                    egui::RichText::new(format!(
+                        "卸载 {}？应用内模型会先停止。",
+                        prompt.display_name
+                    ))
+                    .strong(),
+                );
+                ui.add_space(6.0);
+                ui.checkbox(&mut purge, "同时删除模型缓存（重新安装时需要重新下载）");
+                ui.add_space(10.0);
+                ui.label(
+                    egui::RichText::new("默认保留模型缓存；应用自身的安装文件不会被卸载。")
+                        .weak()
+                        .small(),
+                );
+                ui.add_space(14.0);
+                ui.separator();
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    ui.add_space((ui.available_width() - 200.0).max(0.0));
+                    if button(ui, "取消").clicked() {
+                        close = true;
+                    }
+                    ui.add_space(8.0);
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("卸载").color(egui::Color32::WHITE),
+                            )
+                            .fill(egui::Color32::from_rgb(176, 54, 48))
+                            .min_size(egui::vec2(96.0, 28.0)),
+                        )
+                        .clicked()
+                    {
+                        confirm = true;
+                    }
+                });
+            });
+        if close {
+            self.app_uninstall = None;
+        }
+        if confirm {
+            self.app_uninstall = None;
+            self.app_job = None;
+            spawn_app_uninstall(
+                self.tx.clone(),
+                ctx.clone(),
+                prompt.org,
+                prompt.name,
+                prompt.version,
+                purge,
+            );
+        }
+    }
+
     fn show_dialog(&mut self, ctx: &egui::Context) {
         let Some(dialog) = self.dialog.as_ref() else {
             return;
@@ -3635,6 +4054,8 @@ impl eframe::App for App {
         self.show_cache_dialog(ctx);
         self.show_smoke_dialog(ctx);
         self.show_options_dialog(ctx);
+        self.show_app_install_dialog(ctx);
+        self.show_app_uninstall_dialog(ctx);
         self.show_dialog(ctx);
         self.show_busy_overlay(ctx);
         self.show_toast(ctx);
@@ -4146,6 +4567,13 @@ fn start_ws(tx: Sender<Event>, ctx: egui::Context) {
                                                 let data = &v["data"];
                                                 let kind =
                                                     data["type"].as_str().unwrap_or("").to_string();
+                                                // App install/prepare progress is polled by
+                                                // follow_app_job; feeding it here would also
+                                                // drive the model-loading progress bar.
+                                                if kind.starts_with("app-") {
+                                                    ctx.request_repaint();
+                                                    continue;
+                                                }
                                                 let verb = match kind.as_str() {
                                                     "pull" => "下载",
                                                     "smoke" => "测试",
@@ -4375,6 +4803,72 @@ fn local_state_is_empty(detail: &Value) -> bool {
     detail["local"]["state"].as_str().unwrap_or("").is_empty()
 }
 
+/// True when the manifest's platform command is a download page, not a script.
+fn is_url_command(command: &str) -> bool {
+    let c = command.trim().to_ascii_lowercase();
+    c.starts_with("http://") || c.starts_with("https://")
+}
+
+/// Bundle refs the install will prepare (every `default: true` entry).
+fn default_app_bundles(manifest: &Value) -> Vec<String> {
+    manifest["model"]["bundles"]
+        .as_array()
+        .map(|list| {
+            list.iter()
+                .filter(|b| b["default"].as_bool().unwrap_or(false))
+                .filter_map(|b| b["bundle"].as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Install request body. The decision about the install script is explicit:
+/// the daemon must never run or skip it on its own.
+fn app_install_body(version: &str, run_script: bool, force: bool) -> Value {
+    serde_json::json!({
+        "version": version,
+        "install_command": if run_script { "run" } else { "skip" },
+        "force": force,
+    })
+}
+
+/// Job reference in the same shape the daemon reports: `org/name[:version]`.
+fn app_reference(org: &str, name: &str, version: &str) -> String {
+    if version.is_empty() {
+        format!("{org}/{name}")
+    } else {
+        format!("{org}/{name}:{version}")
+    }
+}
+
+/// Append a job log line, ignoring the duplicate the poller re-reads.
+fn append_app_log(log: &mut String, line: &str) {
+    let line = line.trim_end();
+    if line.is_empty() {
+        return;
+    }
+    if log.lines().last() == Some(line) {
+        return;
+    }
+    log.push_str(line);
+    log.push('\n');
+    const MAX_LINES: usize = 300;
+    let lines = log.lines().count();
+    if lines > MAX_LINES {
+        let skip = lines - MAX_LINES;
+        let rest: Vec<&str> = log.lines().skip(skip).collect();
+        *log = rest.join("\n");
+        log.push('\n');
+    }
+}
+
+/// The last `count` log lines, for the detail pane.
+fn app_log_tail(log: &str, count: usize) -> Vec<String> {
+    let all: Vec<&str> = log.lines().filter(|l| !l.trim().is_empty()).collect();
+    let start = all.len().saturating_sub(count);
+    all[start..].iter().map(|l| l.to_string()).collect()
+}
+
 fn app_identity(detail: &Value) -> (String, String, String) {
     let manifest = &detail["manifest"];
     let org = detail["org"].as_str().unwrap_or("").to_string();
@@ -4451,16 +4945,158 @@ fn spawn_app_action(
         } else {
             serde_json::json!({})
         };
-        let result = match post_json_timeout(&path, &body, 180) {
-            Ok(v) => Ok(v["job_id"]
-                .as_str()
-                .map(|id| format!("已提交任务 {id}"))
-                .or_else(|| v["state"].as_str().map(|s| s.to_string()))
-                .unwrap_or_else(|| "完成".to_string())),
+        let verb = action_label(action).to_string();
+        match post_json_timeout(&path, &body, 180) {
+            Ok(v) => {
+                if action == "prepare" {
+                    if let Some(job_id) = v["job_id"].as_str().filter(|id| !id.is_empty()) {
+                        follow_app_job(
+                            tx.clone(),
+                            ctx.clone(),
+                            job_id.to_string(),
+                            verb,
+                            app_reference(&org, &name, &version),
+                        );
+                        return;
+                    }
+                }
+                let message = v["state"]
+                    .as_str()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "完成".to_string());
+                let _ = tx.send(Event::AppAction(verb, Ok(message)));
+            }
+            Err(err) => {
+                let _ = tx.send(Event::AppAction(verb, Err(err)));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+/// `force` re-runs an already installed app; `run_script` records the user's
+/// explicit decision in the confirmation dialog.
+fn spawn_app_install(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    org: String,
+    name: String,
+    version: String,
+    run_script: bool,
+    force: bool,
+) {
+    std::thread::spawn(move || {
+        let path = format!("/v1/apps/{org}/{name}/install");
+        let body = app_install_body(&version, run_script, force);
+        let verb = "安装".to_string();
+        let reference = app_reference(&org, &name, &version);
+        match post_json_timeout(&path, &body, 120) {
+            Ok(v) => match v["job_id"].as_str().filter(|id| !id.is_empty()) {
+                Some(job_id) => {
+                    follow_app_job(tx.clone(), ctx.clone(), job_id.to_string(), verb, reference);
+                }
+                None => {
+                    let _ = tx.send(Event::AppAction(verb, Ok("完成".to_string())));
+                }
+            },
+            Err(err) => {
+                let _ = tx.send(Event::AppAction(verb, Err(err)));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+fn spawn_app_uninstall(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    org: String,
+    name: String,
+    version: String,
+    purge_models: bool,
+) {
+    std::thread::spawn(move || {
+        let mut path = format!("/v1/apps/{org}/{name}");
+        let mut params: Vec<String> = Vec::new();
+        if !version.is_empty() {
+            params.push(format!("version={version}"));
+        }
+        if purge_models {
+            params.push("purge_models=1".to_string());
+        }
+        if !params.is_empty() {
+            path.push('?');
+            path.push_str(&params.join("&"));
+        }
+        let verb = "卸载".to_string();
+        let result = match delete_json(&path) {
+            Ok(_) => Ok("已卸载".to_string()),
             Err(err) => Err(err),
         };
-        let _ = tx.send(Event::AppAction(action_label(action).to_string(), result));
+        let _ = tx.send(Event::AppAction(verb, result));
         ctx.request_repaint();
+    });
+}
+
+/// Follow an install/prepare job over HTTP and stream its lines to the detail
+/// pane. WebSocket job events are not used for app jobs (they would also drive
+/// the model-loading progress bar).
+fn follow_app_job(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    job_id: String,
+    verb: String,
+    reference: String,
+) {
+    std::thread::spawn(move || {
+        let mut seen = 0usize;
+        loop {
+            let Some(job) = get_json_timeout(&format!("/v1/jobs/{job_id}"), 20) else {
+                let _ = tx.send(Event::AppAction(
+                    verb,
+                    Err("任务状态读取失败（flashserver 可能已停止）".to_string()),
+                ));
+                ctx.request_repaint();
+                return;
+            };
+            let events = job["events"].as_array().cloned().unwrap_or_default();
+            for ev in events.iter().skip(seen) {
+                let message = ev["message"].as_str().unwrap_or("");
+                if !message.is_empty() {
+                    let _ = tx.send(Event::AppJob {
+                        verb: verb.clone(),
+                        reference: reference.clone(),
+                        line: message.to_string(),
+                        running: true,
+                    });
+                }
+            }
+            seen = events.len();
+            let state = job["state"].as_str().unwrap_or("");
+            let done = state == "done" || state == "failed";
+            let _ = tx.send(Event::AppJob {
+                verb: verb.clone(),
+                reference: reference.clone(),
+                line: String::new(),
+                running: !done,
+            });
+            ctx.request_repaint();
+            if done {
+                let result = if state == "done" {
+                    Ok(format!("{verb}完成"))
+                } else {
+                    Err(job["error"]
+                        .as_str()
+                        .filter(|e| !e.is_empty())
+                        .unwrap_or("任务失败")
+                        .to_string())
+                };
+                let _ = tx.send(Event::AppAction(verb, result));
+                ctx.request_repaint();
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(400));
+        }
     });
 }
 
@@ -4812,8 +5448,18 @@ fn post_json_timeout(path: &str, body: &Value, secs: u64) -> Result<Value, Strin
     }
 }
 
-fn spawn_model_options(tx: Sender<Event>, ctx: egui::Context, reference: String) {
-    std::thread::spawn(move || {
+fn delete_json(path: &str) -> Result<Value, String> {
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(60))
+        .build();
+    match agent.delete(&format!("{}{}", api_base(), path)).call() {
+        Ok(resp) => resp.into_json::<Value>().map_err(|e| e.to_string()),
+        Err(ureq::Error::Status(_, resp)) => Err(resp.into_string().unwrap_or_default()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+fn spawn_model_options(tx: Sender<Event>, ctx: egui::Context, reference: String) {    std::thread::spawn(move || {
         let result = get_json_query("/v1/models/options", &[("ref", reference.clone())])
             .ok_or_else(|| "读取启动参数失败：服务不可用".to_string());
         let _ = tx.send(Event::ModelOptions { reference, result });

@@ -33,6 +33,68 @@ fn firewall_ports_reject_invalid_input() {
 }
 
 #[test]
+fn app_install_body_makes_the_script_decision_explicit() {
+    let run = app_install_body("1.0.0", true, true);
+    assert_eq!(run["version"], "1.0.0");
+    assert_eq!(run["install_command"], "run");
+    assert_eq!(run["force"], true);
+    let skip = app_install_body("1.0.0", false, false);
+    assert_eq!(skip["install_command"], "skip");
+    assert_eq!(skip["force"], false);
+}
+
+#[test]
+fn app_install_command_is_classified() {
+    assert!(is_url_command("https://example.com/demo"));
+    assert!(is_url_command("  HTTP://example.com/demo "));
+    assert!(!is_url_command("irm https://example.com/demo | iex"));
+    assert!(!is_url_command("bash install.sh"));
+    assert!(!is_url_command(""));
+}
+
+#[test]
+fn default_app_bundles_selects_default_entries() {
+    let manifest: Value = serde_json::from_str(
+        r#"{"model":{"bundles":[
+            {"bundle":"a/one:1","default":true},
+            {"bundle":"a/two:1","default":false},
+            {"bundle":"a/three:1"}
+        ]}}"#,
+    )
+    .unwrap();
+    assert_eq!(default_app_bundles(&manifest), vec!["a/one:1".to_string()]);
+    assert!(default_app_bundles(&Value::Null).is_empty());
+}
+
+#[test]
+fn app_reference_matches_the_daemon_format() {
+    assert_eq!(app_reference("xym", "demo", "1.0.0"), "xym/demo:1.0.0");
+    assert_eq!(app_reference("xym", "demo", ""), "xym/demo");
+}
+
+#[test]
+fn app_job_log_dedupes_and_caps() {
+    let mut log = String::new();
+    append_app_log(&mut log, "preparing a/one");
+    append_app_log(&mut log, "preparing a/one");
+    append_app_log(&mut log, "   ");
+    assert_eq!(log, "preparing a/one\n");
+
+    for i in 0..400 {
+        append_app_log(&mut log, &format!("line {i}"));
+    }
+    assert_eq!(log.lines().count(), 300);
+    assert_eq!(log.lines().last().unwrap(), "line 399");
+}
+
+#[test]
+fn app_log_tail_returns_the_last_lines() {
+    assert_eq!(app_log_tail("a\nb\nc\n\n", 2), vec!["b", "c"]);
+    assert_eq!(app_log_tail("only", 5), vec!["only"]);
+    assert!(app_log_tail("", 5).is_empty());
+}
+
+#[test]
 fn settings_tolerate_missing_optional_fields() {
     let s: Settings = serde_json::from_str(r#"{"dark":true}"#).unwrap();
     assert!(s.dark);

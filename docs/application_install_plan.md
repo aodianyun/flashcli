@@ -168,6 +168,21 @@ Rules:
 - `uninstall` stops the app's models and removes its state; model caches are kept
   unless `--purge-models` is given.
 
+## Entry points
+
+The CLI, the daemon and the desktop all drive the same `internal/apps` service;
+only the way the install-script decision is obtained differs:
+
+| Entry point | Install-script decision |
+|---|---|
+| `flashcli app install` | asks `[y/N]` on a terminal; `--yes` runs it; no terminal without `--yes` skips and records `skipped` |
+| `flashserver` `POST /v1/apps/{org}/{name}/install` | body must carry `install_command: "run" \| "skip"` (400 otherwise); runs as job `app-install` and streams events |
+| `flashcli-desktop` 应用 tab | 安装 dialog shows the command; 运行脚本并安装 sends `run`, 跳过脚本安装 sends `skip`, 取消 does nothing; job progress is polled into the detail pane |
+
+Uninstall is exposed on both fronts (`DELETE /v1/apps/{org}/{name}`,
+desktop 卸载 with an optional `purge_models`); it never removes the app's own
+installed files.
+
 ## Local state
 
 Shared by the CLI and the daemon at `$FLASHCLI_HOME/flashserver/apps.json`
@@ -212,15 +227,18 @@ rollback.
   the only way to run them unattended.
 - URLs are opened by the user, not fetched by the host.
 - The local API stays single-user (no remote mode).
-- The desktop does not execute install scripts in phase 1: it opens download
-  links and copies commands; execution stays in the CLI.
+- The desktop never guesses about an install script. 安装 opens a dialog that
+  shows the command; it executes only after 运行脚本并安装 (跳过脚本安装 installs
+  without it). The daemon enforces this: `POST /v1/apps/{org}/{name}/install`
+  requires `install_command: "run" | "skip"` and rejects a missing value, since
+  a daemon has no terminal to ask.
 
 ## Testing
 
 | Tier | Coverage |
 |---|---|
-| T1 | manifest parse/validate, platform command precedence, default bundle selection, state lock/round-trip, shared lifecycle with fakes |
-| T2 | local fake FlashHub (httptest) + real `flashserver`: prepare → start → status → stop; `--dry-run`; shell skip without `--yes`; URL is never executed |
+| T1 | manifest parse/validate, platform command precedence, default bundle selection, state lock/round-trip, shared lifecycle with fakes, install endpoint run/skip/decision-required; desktop helper unit tests (request body decision, URL vs script, log dedupe/cap) |
+| T2 | local fake FlashHub (httptest) + real `flashserver`: prepare → start → status → stop; the install job with `install_command: run` (script output recorded), `skip` (no script), and no decision (400); `--dry-run`; shell prompt/decline; URL is never executed |
 | T3 | `FLASHCLI_FLASHHUB_LIVE=1`: live app list/manifest shape contract |
 
 ## Milestones
