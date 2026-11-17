@@ -129,7 +129,7 @@ During `activate_bundle()`, `PYTHONPATH` prepends the **bundle root** so `entry`
 | `flashcli-bundle.json` | | ✓ |
 | FlashHub fetch / local `path` | ✓ | |
 | bundle venv, PYTHONPATH, pip | ✓ | `python_dependencies` |
-| OpenAI HTTP (`serve`) | ✓ | |
+| OpenAI + Anthropic HTTP (`serve`) | ✓ | |
 | `RunEngine` / `ServeEngine` | | ✓ |
 | `flash_rt`, `*.so` | | ✓ |
 

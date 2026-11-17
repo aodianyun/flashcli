@@ -229,7 +229,7 @@ Script contracts:
 
 A capability has exactly one implementation. Native backends use the sibling `native` block defined in [bundle_execution_abi.md](bundle_execution_abi.md).
 
-`serve.capabilities` controls only host-owned routes (`/health` and `/v1/models` stay enabled). Current capability IDs are `openai.chat`, `openai.responses`, `openai.completions`, `openai.embeddings`, `openai.moderations`, `openai.audio.*`, `openai.images.*`, `openai.videos`, `openai.realtime`, `anthropic.messages`, `anthropic.count_tokens`, and `anthropic.models`. Unknown or duplicate IDs fail `bundle validate`. `register_routes` remains available for custom routes and keeps its legacy priority over host routes.
+`serve.capabilities` controls only host-owned routes (`/health` and `/v1/models` stay enabled). Current capability IDs are `openai.chat`, `openai.responses`, `openai.completions`, `openai.embeddings`, `openai.moderations`, `openai.audio.*`, `openai.images.*`, `openai.videos`, `openai.realtime`, `anthropic.messages`, `anthropic.count_tokens`, and `anthropic.models`. Unknown or duplicate IDs fail `bundle validate`. `register_routes` remains available for custom routes and keeps its legacy priority over host routes. Capability behavior and the `ServeEngine` contract are specified in [llm_bundle_standard.md](llm_bundle_standard.md).
 
 ### 3.3 `defaults.python_abi`
 
@@ -529,7 +529,7 @@ Script mode must not load `.so` through environment variables or manual `dlopen`
 
 ### 4.3 Engine mode
 
-`RunEngine.load(checkpoint, preset, **options)` loads weights; `RunEngine.predict(...)` runs inference. `ServeEngine` exposes `model_id`, `load`, `warmup`, `chat`, and `chat_stream`. Read defaults via `flashcli_bundle` helpers; do not duplicate manifest defaults in code.
+`RunEngine.load(checkpoint, preset, **options)` loads weights; `RunEngine.predict(...)` runs inference. `ServeEngine` requires `model_id`, `load`, `warmup`, `chat`, and `chat_stream`; declared capabilities may add `embed`, `moderate`, `transcribe`, `speech`, `generate_images`, video methods, `count_tokens`, and `realtime_session`. See [llm_bundle_standard.md](llm_bundle_standard.md) for the full contract and capability-to-endpoint mapping. Read defaults via `flashcli_bundle` helpers; do not duplicate manifest defaults in code.
 
 ### 4.4 Script mode
 

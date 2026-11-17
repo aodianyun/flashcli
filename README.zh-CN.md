@@ -4,7 +4,7 @@
 
 **用于分发与运行 [FlashRT](https://github.com/flashrt-project/FlashRT) 推理的生产级 CLI。**
 
-安装一次、记住 preset 名称即可：flashcli 按 GPU 解析原生 runtime、从 FlashHub 拉取版本化 **Model Bundle**、安装其 Python 依赖、缓存权重，并执行 **`run`**（推理）或 **`serve`**（OpenAI 兼容 HTTP），无需手工拼接 FlashRT、CUDA 线与 pip 矩阵。
+安装一次、记住 preset 名称即可：flashcli 按 GPU 解析原生 runtime、从 FlashHub 拉取版本化 **Model Bundle**、安装其 Python 依赖、缓存权重，并执行 **`run`**（推理）或 **`serve`**（OpenAI/Anthropic 兼容 HTTP），无需手工拼接 FlashRT、CUDA 线与 pip 矩阵。
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aodianyun/flashcli/main/install.sh | sh
@@ -80,7 +80,7 @@ flashcli du                                            # 各缓存区域磁盘�
 
 ```bash
 flashcli run   flashcli-bundle/<name>:<version> [OPTIONS]        # 推理
-flashcli serve flashcli-bundle/<name>:<version> --port 8000      # OpenAI 兼容 HTTP
+flashcli serve flashcli-bundle/<name>:<version> --port 8000      # OpenAI/Anthropic 兼容 HTTP
 
 curl -N http://127.0.0.1:8000/v1/chat/completions \
   -H "Content-Type: application/json" \

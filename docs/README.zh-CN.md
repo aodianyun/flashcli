@@ -19,6 +19,7 @@
 | [app_manifest_standard.zh-CN.md](app_manifest_standard.zh-CN.md) | 应用作者 / 集成方 | **权威** FlashHub 应用 manifest（v1）：字段、安装命令、默认 bundle |
 | [application_install_plan.zh-CN.md](application_install_plan.zh-CN.md) | 维护者 | `flashcli app` 安装流程、状态机、回滚、命令、里程碑 |
 | [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) | bundle 作者 | `entry.kind` 后端、原生进程/`.so` 契约、conformance |
+| [llm_bundle_standard.zh-CN.md](llm_bundle_standard.zh-CN.md) | bundle 作者 | **权威** OpenAI/Anthropic serve：能力、`ServeEngine`、路由 |
 | [architecture.zh-CN.md](architecture.zh-CN.md) | 贡献者 | 运行时流程、本地服务栈、host 与 bundle、缓存、目录布局 |
 | [module_layers.zh-CN.md](module_layers.zh-CN.md) | 贡献者 | host / infer / protocol 归属与 Go 包地图 |
 | [bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md) | 维护者 | bundle 构建、多 CUDA 矩阵发布、FlashHub 上传 |
@@ -38,6 +39,7 @@
   [openapi.yaml](openapi.yaml)（HTTP）→ [environment.zh-CN.md](environment.zh-CN.md)。
 - **bundle 作者** —— [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) →
   [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) →
+  [llm_bundle_standard.zh-CN.md](llm_bundle_standard.zh-CN.md)（LLM/音频/图像/视频 serve）→
   [bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md)。
 - **维护者 / 贡献者** —— [architecture.zh-CN.md](architecture.zh-CN.md) →
   [module_layers.zh-CN.md](module_layers.zh-CN.md) → [../CONTRIBUTING.md](../CONTRIBUTING.md)。

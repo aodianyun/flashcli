@@ -23,6 +23,7 @@ every file to its audience and content.
 | [app_manifest_standard.md](app_manifest_standard.md) | app authors / integrators | **Authoritative** FlashHub application manifest (v1): fields, install commands, default bundles |
 | [application_install_plan.md](application_install_plan.md) | maintainers | `flashcli app` install flow, state machine, rollback, commands, milestones |
 | [bundle_execution_abi.md](bundle_execution_abi.md) | bundle authors | `entry.kind` backends, native process / `.so` contracts, conformance |
+| [llm_bundle_standard.md](llm_bundle_standard.md) | bundle authors | **Authoritative** OpenAI/Anthropic serve: capabilities, `ServeEngine`, routing |
 | [architecture.md](architecture.md) | contributors | Runtime flow, local service stack, host vs bundle, caches, directory layout |
 | [module_layers.md](module_layers.md) | contributors | Host / infer / protocol ownership and the Go package map |
 | [bundle_builder_guide.md](bundle_builder_guide.md) | maintainers | Bundle build, multi-CUDA matrix release, FlashHub upload |
@@ -44,6 +45,7 @@ Chinese mirrors use the same names with a `.zh-CN.md` suffix.
   [openapi.yaml](openapi.yaml) (HTTP) → [environment.md](environment.md).
 - **Bundle author** — [bundle_publish_standard.md](bundle_publish_standard.md) →
   [bundle_execution_abi.md](bundle_execution_abi.md) →
+  [llm_bundle_standard.md](llm_bundle_standard.md) (LLM/audio/image/video serve) →
   [bundle_builder_guide.md](bundle_builder_guide.md).
 - **Maintainer / contributor** — [architecture.md](architecture.md) →
   [module_layers.md](module_layers.md) → [../CONTRIBUTING.md](../CONTRIBUTING.md).
