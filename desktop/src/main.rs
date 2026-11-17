@@ -241,10 +241,11 @@ enum Event {
     CatalogTags(Vec<(i64, String)>),
     HubDetail(HubDetail),
     HubError(String),
-    Apps(Vec<Value>),
-    AppsError(String),
+    Apps(Vec<Value>, u64),
+    AppsError(String, u64),
     AppCover(String, Option<Vec<u8>>),
     AppDetail(Value),
+    AppDetailError(String),
     AppAction(String, Result<String, String>),
     AppJob { verb: String, reference: String, line: String, running: bool },
     ModelOptions { reference: String, result: Result<Value, String> },
@@ -421,6 +422,11 @@ pub struct App {
     apps_search: String,
     apps_domain: String,
     apps_domains: Vec<String>,
+    /// Bumped for every list request; stale responses are dropped.
+    apps_req: u64,
+    /// App key -> display name, so the install banner keeps the name even when
+    /// the current filter excludes that app.
+    app_names: HashMap<String, String>,
     apps_selected: Option<usize>,
     app_detail: Option<Value>,
     app_install: Option<AppInstallPrompt>,
@@ -513,6 +519,8 @@ impl App {
             apps_search: String::new(),
             apps_domain: String::new(),
             apps_domains: Vec::new(),
+            apps_req: 0,
+            app_names: HashMap::new(),
             apps_selected: None,
             app_detail: None,
             app_install: None,
@@ -839,13 +847,29 @@ impl App {
                     self.hub_error = err;
                     self.hub_busy = false;
                 }
-                Event::Apps(list) => {
+                Event::Apps(list, req) => {
+                    // Drop responses from a superseded request (rapid chip
+                    // switching), otherwise the list would not match the chip.
+                    if req != self.apps_req {
+                        continue;
+                    }
                     // The unfiltered response defines the domain chips; a
                     // filtered request would otherwise shrink the list to one.
                     if self.apps_search.trim().is_empty() && self.apps_domain.is_empty() {
                         let domains = app_domains(&list);
                         if !domains.is_empty() {
                             self.apps_domains = domains;
+                        }
+                    }
+                    for app in &list {
+                        let key = app_list_key(app);
+                        let name = app["display_name"]
+                            .as_str()
+                            .filter(|s| !s.is_empty())
+                            .or_else(|| app["name"].as_str())
+                            .unwrap_or("");
+                        if !name.is_empty() {
+                            self.app_names.insert(key, name.to_string());
                         }
                     }
                     let selected = self
@@ -871,8 +895,14 @@ impl App {
                     self.apps_error.clear();
                     self.load_app_covers(ctx);
                 }
-                Event::AppsError(err) => {
+                Event::AppsError(err, req) => {
+                    if req != self.apps_req {
+                        continue;
+                    }
                     self.apps_loading = false;
+                    self.apps_error = err;
+                }
+                Event::AppDetailError(err) => {
                     self.apps_error = err;
                 }
                 Event::AppCover(url, bytes) => {
@@ -1058,19 +1088,27 @@ impl App {
 
     /// Reload the app list and the selected app after an action finished.
     fn refresh_apps_after_action(&mut self, ctx: &egui::Context) {
-        self.apps_loading = true;
-        spawn_apps(
-            self.tx.clone(),
-            ctx.clone(),
-            self.apps_search.clone(),
-            self.apps_domain.clone(),
-        );
+        self.reload_apps(ctx);
         if let Some(detail) = self.app_detail.clone() {
             let (org, name, version) = app_identity(&detail);
             if !org.is_empty() && !name.is_empty() {
                 spawn_app_detail(self.tx.clone(), ctx.clone(), org, name, version);
             }
         }
+    }
+
+    /// Request the app list for the current search + domain and remember the
+    /// request id so an older response cannot overwrite it.
+    fn reload_apps(&mut self, ctx: &egui::Context) {
+        self.apps_req = self.apps_req.wrapping_add(1);
+        self.apps_loading = true;
+        spawn_apps(
+            self.tx.clone(),
+            ctx.clone(),
+            self.apps_search.clone(),
+            self.apps_domain.clone(),
+            self.apps_req,
+        );
     }
 
     fn sync_model_selection(&mut self) {
@@ -1500,24 +1538,12 @@ impl App {
 
     fn apps_page(&mut self, ui: &mut egui::Ui) {
         if !self.apps_loaded && !self.apps_loading {
-            self.apps_loading = true;
-            spawn_apps(
-                self.tx.clone(),
-                ui.ctx().clone(),
-                self.apps_search.clone(),
-                self.apps_domain.clone(),
-            );
+            self.reload_apps(ui.ctx());
         }
         ui.spacing_mut().interact_size.y = 26.0;
         ui.horizontal(|ui| {
             if ui.add_sized([64.0, 26.0], egui::Button::new("刷新")).clicked() {
-                self.apps_loading = true;
-                spawn_apps(
-                    self.tx.clone(),
-                    ui.ctx().clone(),
-                    self.apps_search.clone(),
-                    self.apps_domain.clone(),
-                );
+                self.reload_apps(ui.ctx());
             }
             ui.add_sized(
                 [240.0, 26.0],
@@ -1527,13 +1553,7 @@ impl App {
                     .margin(egui::Margin::symmetric(8, 3)),
             );
             if ui.add_sized([64.0, 26.0], egui::Button::new("搜索")).clicked() {
-                self.apps_loading = true;
-                spawn_apps(
-                    self.tx.clone(),
-                    ui.ctx().clone(),
-                    self.apps_search.clone(),
-                    self.apps_domain.clone(),
-                );
+                self.reload_apps(ui.ctx());
             }
             if self.apps_loading {
                 ui.add(egui::Spinner::new().size(14.0));
@@ -1546,13 +1566,7 @@ impl App {
                 .clicked()
             {
                 self.apps_domain.clear();
-                self.apps_loading = true;
-                spawn_apps(
-                    self.tx.clone(),
-                    ui.ctx().clone(),
-                    self.apps_search.clone(),
-                    String::new(),
-                );
+                self.reload_apps(ui.ctx());
             }
             let domains = self.apps_domains.clone();
             for domain in domains {
@@ -1561,13 +1575,7 @@ impl App {
                     .clicked()
                 {
                     self.apps_domain = domain.clone();
-                    self.apps_loading = true;
-                    spawn_apps(
-                        self.tx.clone(),
-                        ui.ctx().clone(),
-                        self.apps_search.clone(),
-                        domain,
-                    );
+                    self.reload_apps(ui.ctx());
                 }
             }
         });
@@ -1577,17 +1585,24 @@ impl App {
             .find(|(_, job)| job.running)
             .map(|(key, job)| (key.clone(), job.clone()))
         {
+            // Prefer the cached display name: the current filter may not list
+            // the installing app.
             let label = self
-                .apps
-                .iter()
-                .find(|app| app_list_key(app) == key)
-                .map(|app| {
-                    app["display_name"]
-                        .as_str()
-                        .filter(|s| !s.is_empty())
-                        .or_else(|| app["name"].as_str())
-                        .unwrap_or(key.as_str())
-                        .to_string()
+                .app_names
+                .get(&key)
+                .cloned()
+                .or_else(|| {
+                    self.apps
+                        .iter()
+                        .find(|app| app_list_key(app) == key)
+                        .map(|app| {
+                            app["display_name"]
+                                .as_str()
+                                .filter(|s| !s.is_empty())
+                                .or_else(|| app["name"].as_str())
+                                .unwrap_or(key.as_str())
+                                .to_string()
+                        })
                 })
                 .unwrap_or_else(|| key.clone());
             let pct = job
@@ -4411,13 +4426,7 @@ impl eframe::App for App {
                             );
                         }
                         if tab == Tab::Apps && !self.apps_loaded && !self.apps_loading {
-                            self.apps_loading = true;
-                            spawn_apps(
-                                self.tx.clone(),
-                                ctx.clone(),
-                                self.apps_search.clone(),
-                                self.apps_domain.clone(),
-                            );
+                            self.reload_apps(ctx);
                         }
                     }
                     ui.add_space(2.0);
@@ -5665,7 +5674,13 @@ fn decode_cover(ctx: &egui::Context, url: &str, bytes: &[u8]) -> Option<egui::Te
     Some(ctx.load_texture(url.to_string(), pixels, egui::TextureOptions::LINEAR))
 }
 
-fn spawn_apps(tx: Sender<Event>, ctx: egui::Context, search: String, domain: String) {
+fn spawn_apps(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    search: String,
+    domain: String,
+    req: u64,
+) {
     std::thread::spawn(move || {
         let mut params = vec![("page_size", "100".to_string())];
         if !search.trim().is_empty() {
@@ -5677,11 +5692,12 @@ fn spawn_apps(tx: Sender<Event>, ctx: egui::Context, search: String, domain: Str
         match get_json_query("/v1/apps", &params) {
             Some(v) => {
                 let list = v["apps"].as_array().cloned().unwrap_or_default();
-                let _ = tx.send(Event::Apps(list));
+                let _ = tx.send(Event::Apps(list, req));
             }
             None => {
                 let _ = tx.send(Event::AppsError(
                     "无法获取应用列表：请确认 flashserver 正在运行".to_string(),
+                    req,
                 ));
             }
         }
@@ -5707,7 +5723,7 @@ fn spawn_app_detail(
                 let _ = tx.send(Event::AppDetail(v));
             }
             None => {
-                let _ = tx.send(Event::AppsError("无法获取应用详情".to_string()));
+                let _ = tx.send(Event::AppDetailError("无法获取应用详情".to_string()));
             }
         }
         ctx.request_repaint();
@@ -5856,12 +5872,39 @@ fn download_and_run_installer(
     };
     log(format!("下载安装程序 {url}"));
 
-    let response = ureq::AgentBuilder::new()
-        .timeout(Duration::from_secs(30))
-        .build()
-        .get(url)
-        .call()
-        .map_err(|e| format!("下载失败: {e}"))?;
+    let host = url
+        .split("://")
+        .nth(1)
+        .and_then(|rest| rest.split('/').next())
+        .unwrap_or(url);
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(20))
+        .timeout_read(Duration::from_secs(180))
+        .timeout_write(Duration::from_secs(60))
+        .build();
+    // One retry: large installer downloads often fail on a flaky connection.
+    let mut response = None;
+    for attempt in 0..2 {
+        match agent.get(url).call() {
+            Ok(resp) => {
+                response = Some(resp);
+                break;
+            }
+            Err(ureq::Error::Status(code, _)) => {
+                return Err(format!("下载失败（{host}）：HTTP {code}"));
+            }
+            Err(err) => {
+                if attempt == 1 {
+                    return Err(format!(
+                        "下载失败（{host}）：{err}。可稍后重试，或复制链接手动下载。"
+                    ));
+                }
+                log(format!("下载中断（{err}），正在重试…"));
+                std::thread::sleep(Duration::from_secs(2));
+            }
+        }
+    }
+    let response = response.ok_or_else(|| format!("下载失败（{host}）"))?;
     let total: Option<u64> = response
         .header("Content-Length")
         .and_then(|v| v.parse().ok());
@@ -5871,7 +5914,9 @@ fn download_and_run_installer(
     let mut written: u64 = 0;
     let mut last_pct: i64 = -1;
     loop {
-        let read = reader.read(&mut buf).map_err(|e| format!("下载中断: {e}"))?;
+        let read = reader
+            .read(&mut buf)
+            .map_err(|e| format!("下载中断（{host}）：{e}。可重试，或复制链接手动下载。"))?;
         if read == 0 {
             break;
         }
