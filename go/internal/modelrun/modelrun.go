@@ -294,6 +294,32 @@ func endpointFromLog(line string) string {
 	return strings.TrimRight(rest, "/")
 }
 
+// HealthyEndpoint probes /health then /healthz on an already running model.
+func HealthyEndpoint(ctx context.Context, endpoint string) error {
+	if strings.TrimSpace(endpoint) == "" {
+		return errors.New("empty model endpoint")
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	var lastErr error
+	for _, path := range []string{"/health", "/healthz"} {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint, "/")+path, nil)
+		if err != nil {
+			return err
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			return nil
+		}
+		lastErr = fmt.Errorf("%s HTTP %d", path, resp.StatusCode)
+	}
+	return lastErr
+}
+
 // PortAvailable reports whether a TCP port can be bound on all interfaces.
 func PortAvailable(port int) bool {
 	ln, err := net.Listen("tcp", "0.0.0.0:"+strconv.Itoa(port))
