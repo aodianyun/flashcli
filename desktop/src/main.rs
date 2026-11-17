@@ -352,6 +352,7 @@ pub struct App {
     apps_error: String,
     apps_search: String,
     apps_domain: String,
+    apps_domains: Vec<String>,
     apps_selected: Option<usize>,
     app_detail: Option<Value>,
     app_install: Option<AppInstallPrompt>,
@@ -442,6 +443,7 @@ impl App {
             apps_error: String::new(),
             apps_search: String::new(),
             apps_domain: String::new(),
+            apps_domains: Vec::new(),
             apps_selected: None,
             app_detail: None,
             app_install: None,
@@ -769,6 +771,14 @@ impl App {
                     self.hub_busy = false;
                 }
                 Event::Apps(list) => {
+                    // The unfiltered response defines the domain chips; a
+                    // filtered request would otherwise shrink the list to one.
+                    if self.apps_search.trim().is_empty() && self.apps_domain.is_empty() {
+                        let domains = app_domains(&list);
+                        if !domains.is_empty() {
+                            self.apps_domains = domains;
+                        }
+                    }
                     self.apps = list;
                     self.apps_loading = false;
                     self.apps_loaded = true;
@@ -1409,8 +1419,9 @@ impl App {
                 self.apps_domain.clone(),
             );
         }
-        ui.horizontal_wrapped(|ui| {
-            if ui.button("刷新").clicked() {
+        ui.spacing_mut().interact_size.y = 26.0;
+        ui.horizontal(|ui| {
+            if ui.add_sized([64.0, 26.0], egui::Button::new("刷新")).clicked() {
                 self.apps_loading = true;
                 spawn_apps(
                     self.tx.clone(),
@@ -1419,12 +1430,14 @@ impl App {
                     self.apps_domain.clone(),
                 );
             }
-            ui.add(
+            ui.add_sized(
+                [240.0, 26.0],
                 egui::TextEdit::singleline(&mut self.apps_search)
                     .hint_text("搜索应用")
-                    .desired_width(200.0),
+                    .vertical_align(egui::Align::Center)
+                    .margin(egui::Margin::symmetric(8, 3)),
             );
-            if ui.button("搜索").clicked() {
+            if ui.add_sized([64.0, 26.0], egui::Button::new("搜索")).clicked() {
                 self.apps_loading = true;
                 spawn_apps(
                     self.tx.clone(),
@@ -1433,32 +1446,40 @@ impl App {
                     self.apps_domain.clone(),
                 );
             }
-            ui.separator();
+            if self.apps_loading {
+                ui.add(egui::Spinner::new().size(14.0));
+            }
+        });
+        ui.add_space(4.0);
+        ui.horizontal_wrapped(|ui| {
             if ui
                 .selectable_label(self.apps_domain.is_empty(), "全部")
                 .clicked()
             {
                 self.apps_domain.clear();
                 self.apps_loading = true;
-                spawn_apps(self.tx.clone(), ui.ctx().clone(), self.apps_search.clone(), String::new());
+                spawn_apps(
+                    self.tx.clone(),
+                    ui.ctx().clone(),
+                    self.apps_search.clone(),
+                    String::new(),
+                );
             }
-            for domain in ["通用Agent", "专业Agent", "音视频处理"] {
+            let domains = self.apps_domains.clone();
+            for domain in domains {
                 if ui
-                    .selectable_label(self.apps_domain == domain, domain)
+                    .selectable_label(self.apps_domain == domain, &domain)
                     .clicked()
                 {
-                    self.apps_domain = domain.to_string();
+                    self.apps_domain = domain.clone();
                     self.apps_loading = true;
                     spawn_apps(
                         self.tx.clone(),
                         ui.ctx().clone(),
                         self.apps_search.clone(),
-                        self.apps_domain.clone(),
+                        domain,
                     );
                 }
-            }
-            if self.apps_loading {
-                ui.add(egui::Spinner::new().size(14.0));
             }
         });
         if !self.apps_error.is_empty() {
@@ -1571,7 +1592,7 @@ impl App {
                     Some(AppCover::Ready(tex)) => Some(tex.clone()),
                     _ => None,
                 });
-            app_cover_widget(ui, cover.as_ref(), 72.0, display);
+            app_cover_widget(ui, cover.as_ref(), 72.0, 72.0, display);
             ui.add_space(1.0);
             ui.vertical(|ui| {
                 ui.label(egui::RichText::new(format!("{display} {version}")).size(18.0).strong());
@@ -1617,12 +1638,6 @@ impl App {
                 .on_hover_text("安装会先确认是否执行应用自带的安装脚本");
             if install.clicked() {
                 open_install = true;
-            }
-            if ui
-                .add_enabled(!busy, egui::Button::new("准备模型"))
-                .clicked()
-            {
-                action = Some("prepare");
             }
             if ui
                 .add_enabled(!busy && installed, egui::Button::new("启动"))
@@ -5062,6 +5077,19 @@ fn csv_list(value: &Value) -> String {
         .unwrap_or_default()
 }
 
+/// Unique non-empty `domain` values from a list response, first-seen order.
+fn app_domains(list: &[Value]) -> Vec<String> {
+    let mut domains: Vec<String> = Vec::new();
+    for app in list {
+        if let Some(domain) = app["domain"].as_str().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+            if !domains.iter().any(|seen| seen == domain) {
+                domains.push(domain.to_string());
+            }
+        }
+    }
+    domains
+}
+
 
 fn local_state_is_empty(detail: &Value) -> bool {
     detail["local"]["state"].as_str().unwrap_or("").is_empty()
@@ -5085,7 +5113,8 @@ fn app_platform_supported(manifest: &Value) -> bool {
 }
 
 const APP_CARD_WIDTH: f32 = 300.0;
-const APP_COVER_TEXTURE_PX: u32 = 144;
+const APP_CARD_COVER_HEIGHT: f32 = 150.0;
+const APP_COVER_TEXTURE_PX: u32 = 512;
 
 /// One application card: cover, name, version · domain, org / installed badge.
 fn app_card(
@@ -5121,7 +5150,6 @@ fn app_card(
     let description = app["description"]
         .as_str()
         .filter(|s| !s.is_empty())
-        .or_else(|| app["description_en"].as_str().filter(|s| !s.is_empty()))
         .unwrap_or("");
     let installed = app["installed"].as_bool().unwrap_or(false);
     let inner = egui::Frame::NONE
@@ -5131,35 +5159,36 @@ fn app_card(
         .inner_margin(egui::Margin::same(10))
         .show(ui, |ui| {
             ui.set_width(APP_CARD_WIDTH - 20.0);
-            ui.horizontal_top(|ui| {
-                app_cover_widget(ui, cover, 56.0, name);
-                ui.add_space(2.0);
-                ui.vertical(|ui| {
-                    ui.set_width(APP_CARD_WIDTH - 20.0 - 58.0);
-                    ui.horizontal(|ui| {
-                        ui.add(egui::Label::new(egui::RichText::new(name).strong()).truncate());
-                        if installed {
-                            ui.label(egui::RichText::new("已安装").small().color(green(ui)));
-                        }
-                    });
-                    let version = app["version"].as_str().unwrap_or("");
-                    let domain = app["domain"].as_str().unwrap_or("");
-                    let line = if domain.is_empty() {
-                        version.to_string()
-                    } else {
-                        format!("{version} · {domain}")
-                    };
-                    ui.add(egui::Label::new(egui::RichText::new(line).small().weak()).truncate());
-                    let org = app["organization"]["display_name"]
-                        .as_str()
-                        .filter(|s| !s.is_empty())
-                        .or_else(|| app["organization"]["name"].as_str())
-                        .unwrap_or("");
-                    let third = if description.is_empty() { org } else { description };
-                    if !third.is_empty() {
-                        ui.add(egui::Label::new(egui::RichText::new(third).small().weak()).truncate());
+            ui.vertical(|ui| {
+                ui.set_width(APP_CARD_WIDTH - 20.0);
+                app_cover_widget(
+                    ui,
+                    cover,
+                    APP_CARD_WIDTH - 20.0,
+                    APP_CARD_COVER_HEIGHT,
+                    name,
+                );
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.add(egui::Label::new(egui::RichText::new(name).strong()).truncate());
+                    if installed {
+                        ui.label(egui::RichText::new("已安装").small().color(green(ui)));
                     }
                 });
+                let version = app["version"].as_str().unwrap_or("");
+                let domain = app["domain"].as_str().unwrap_or("");
+                let line = if domain.is_empty() {
+                    version.to_string()
+                } else {
+                    format!("{version} · {domain}")
+                };
+                ui.add(egui::Label::new(egui::RichText::new(line).small().weak()).truncate());
+                if !description.is_empty() {
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(description).small().weak())
+                            .truncate(),
+                    );
+                }
             });
         });
     let response = inner.response.interact(egui::Sense::click());
@@ -5172,47 +5201,37 @@ fn app_card(
     }
 }
 
-/// Cover image, cropped to a centred square (no distortion), or a rounded
-/// placeholder with the app's first character.
+/// Cover image scaled to fit the slot (aspect ratio kept, whole image visible)
+/// on a muted tile, or a placeholder with the app's first character.
 fn app_cover_widget(
     ui: &mut egui::Ui,
     cover: Option<&egui::TextureHandle>,
-    size: f32,
+    width: f32,
+    height: f32,
     fallback: &str,
 ) {
-    let (slot, _) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::hover());
+    let (slot, _) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
+    ui.painter()
+        .rect_filled(slot, 6, ui.visuals().faint_bg_color);
     match cover {
         Some(texture) => {
             let original = texture.size_vec2();
-            let side = original.x.min(original.y).max(1.0);
-            let uv = if original.x > original.y {
-                let x0 = (original.x - side) / 2.0 / original.x;
-                egui::Rect::from_min_max(
-                    egui::pos2(x0, 0.0),
-                    egui::pos2(x0 + side / original.x, 1.0),
-                )
-            } else {
-                let y0 = (original.y - side) / 2.0 / original.y;
-                egui::Rect::from_min_max(
-                    egui::pos2(0.0, y0),
-                    egui::pos2(1.0, y0 + side / original.y),
-                )
-            };
+            let scale = (width / original.x).min(height / original.y);
+            let display = original * scale;
+            let rect = egui::Rect::from_center_size(slot.center(), display);
             ui.put(
-                slot,
-                egui::Image::new(egui::load::SizedTexture::new(texture.id(), slot.size()))
-                    .uv(uv)
+                rect,
+                egui::Image::new(egui::load::SizedTexture::new(texture.id(), display))
                     .corner_radius(6),
             );
         }
         None => {
-            ui.painter().rect_filled(slot, 6, ui.visuals().faint_bg_color);
             let initial: String = fallback.chars().next().map(|c| c.to_string()).unwrap_or_default();
             ui.painter().text(
                 slot.center(),
                 egui::Align2::CENTER_CENTER,
                 initial,
-                egui::FontId::proportional(size * 0.48),
+                egui::FontId::proportional(height.min(width) * 0.4),
                 ui.visuals().weak_text_color(),
             );
         }

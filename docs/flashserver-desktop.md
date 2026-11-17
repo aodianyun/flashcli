@@ -18,7 +18,7 @@ for commands. Install/build details are in [../desktop/README.md](../desktop/REA
   detail pane with all available metadata — organization/downloads/status,
   description, supported OS/arch, every platform install command,
   dependency bundles and serve options, local state/models, connection URL —
-  and install/prepare/start/stop/uninstall through
+  and install/start/stop/uninstall through
   `/v1/apps`. 安装 first shows the manifest install script:
   it runs only after 运行脚本并安装 (跳过脚本安装 installs the models without it),
   and the daemon rejects an install without that explicit decision

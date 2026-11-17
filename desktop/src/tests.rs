@@ -108,6 +108,19 @@ fn csv_list_joins_strings_only() {
 }
 
 #[test]
+fn app_domains_are_unique_and_skip_blanks() {
+    let list = vec![
+        serde_json::json!({"domain": "通用Agent"}),
+        serde_json::json!({"domain": "专用Agent"}),
+        serde_json::json!({"domain": " 通用Agent "}),
+        serde_json::json!({"domain": ""}),
+        serde_json::json!({}),
+    ];
+    assert_eq!(app_domains(&list), vec!["通用Agent", "专用Agent"]);
+    assert!(app_domains(&[]).is_empty());
+}
+
+#[test]
 fn app_install_body_makes_the_script_decision_explicit() {
     let run = app_install_body("1.0.0", true, true);
     assert_eq!(run["version"], "1.0.0");
