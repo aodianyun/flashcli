@@ -2,7 +2,7 @@
 # Tier 2/3 acceptance: drive the real binaries (CLI + flashserver API).
 #
 #   bash scripts/verify_e2e.sh                 # offline tier (local fixtures)
-#   bash scripts/verify_e2e.sh --heavy         # + python bundles (installs torch)
+#   bash scripts/verify_e2e.sh --heavy         # + python bundles (creates venvs)
 #   bash scripts/verify_e2e.sh --heavy --network  # full release gate
 #   bash scripts/verify_e2e.sh --no-build      # reuse dist/go binaries
 #

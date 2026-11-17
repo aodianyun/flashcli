@@ -15,6 +15,7 @@
     },
     "python_abi": "310",
     "python_dependencies": {
+      "torch": false,
       "pip": []
     },
     "run_options": [
