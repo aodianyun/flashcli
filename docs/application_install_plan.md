@@ -2,8 +2,8 @@
 
 <p align="right"><strong>English</strong> · <a href="application_install_plan.zh-CN.md">简体中文</a></p>
 
-> **Status: approved design, not implemented.** The manifest schema is specified
-> in [app_manifest_standard.md](app_manifest_standard.md) (v1, matching FlashHub).
+> **Status: implemented (v1).** The manifest schema is specified in
+> [app_manifest_standard.md](app_manifest_standard.md) (v1, matching FlashHub).
 
 ## Goals
 

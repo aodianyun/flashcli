@@ -2,7 +2,7 @@
 
 <p align="right"><a href="application_install_plan.md">English</a> · <strong>简体中文</strong></p>
 
-> **状态：设计已确认，尚未实现。** manifest 规范见
+> **状态：已实现（v1）。** manifest 规范见
 > [app_manifest_standard.zh-CN.md](app_manifest_standard.zh-CN.md)（v1，与 FlashHub 实际一致）。
 
 ## 目标
