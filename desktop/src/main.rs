@@ -5112,9 +5112,10 @@ fn app_platform_supported(manifest: &Value) -> bool {
     listed("os", app_os_key()) && listed("arch", app_arch_key())
 }
 
-const APP_CARD_WIDTH: f32 = 300.0;
-const APP_CARD_COVER_HEIGHT: f32 = 150.0;
-const APP_COVER_TEXTURE_PX: u32 = 512;
+const APP_CARD_WIDTH: f32 = 160.0;
+const APP_CARD_COVER_HEIGHT: f32 = 80.0;
+const APP_CARD_PADDING: f32 = 8.0;
+const APP_COVER_TEXTURE_PX: u32 = 256;
 
 /// One application card: cover, name, version · domain, org / installed badge.
 fn app_card(
@@ -5152,27 +5153,25 @@ fn app_card(
         .filter(|s| !s.is_empty())
         .unwrap_or("");
     let installed = app["installed"].as_bool().unwrap_or(false);
+    let inner_width = APP_CARD_WIDTH - APP_CARD_PADDING * 2.0;
     let inner = egui::Frame::NONE
         .fill(fill)
         .stroke(stroke)
-        .corner_radius(8)
-        .inner_margin(egui::Margin::same(10))
+        .corner_radius(6)
+        .inner_margin(egui::Margin::same(APP_CARD_PADDING as i8))
         .show(ui, |ui| {
-            ui.set_width(APP_CARD_WIDTH - 20.0);
+            ui.set_width(inner_width);
             ui.vertical(|ui| {
-                ui.set_width(APP_CARD_WIDTH - 20.0);
-                app_cover_widget(
-                    ui,
-                    cover,
-                    APP_CARD_WIDTH - 20.0,
-                    APP_CARD_COVER_HEIGHT,
-                    name,
-                );
-                ui.add_space(6.0);
+                ui.set_width(inner_width);
+                app_cover_widget(ui, cover, inner_width, APP_CARD_COVER_HEIGHT, name);
+                ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    ui.add(egui::Label::new(egui::RichText::new(name).strong()).truncate());
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(name).strong().size(12.0))
+                            .truncate(),
+                    );
                     if installed {
-                        ui.label(egui::RichText::new("已安装").small().color(green(ui)));
+                        ui.label(egui::RichText::new("已安装").size(10.0).color(green(ui)));
                     }
                 });
                 let version = app["version"].as_str().unwrap_or("");
@@ -5182,11 +5181,15 @@ fn app_card(
                 } else {
                     format!("{version} · {domain}")
                 };
-                ui.add(egui::Label::new(egui::RichText::new(line).small().weak()).truncate());
+                ui.add(
+                    egui::Label::new(egui::RichText::new(line).size(10.0).weak()).truncate(),
+                );
                 if !description.is_empty() {
                     ui.add(
-                        egui::Label::new(egui::RichText::new(description).small().weak())
-                            .truncate(),
+                        egui::Label::new(
+                            egui::RichText::new(description).size(10.0).weak(),
+                        )
+                        .truncate(),
                     );
                 }
             });
@@ -5212,7 +5215,7 @@ fn app_cover_widget(
 ) {
     let (slot, _) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
     ui.painter()
-        .rect_filled(slot, 6, ui.visuals().faint_bg_color);
+        .rect_filled(slot, 4, ui.visuals().faint_bg_color);
     match cover {
         Some(texture) => {
             let original = texture.size_vec2();
@@ -5222,7 +5225,7 @@ fn app_cover_widget(
             ui.put(
                 rect,
                 egui::Image::new(egui::load::SizedTexture::new(texture.id(), display))
-                    .corner_radius(6),
+                    .corner_radius(4),
             );
         }
         None => {
