@@ -3909,6 +3909,7 @@ impl App {
                 prompt.name,
                 prompt.version,
                 run,
+                shell_command.clone(),
                 prompt.force,
             );
         }
@@ -5276,12 +5277,18 @@ fn default_app_bundles(manifest: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Install request body. The decision about the install script is explicit:
-/// the daemon must never run or skip it on its own.
-fn app_install_body(version: &str, run_script: bool, force: bool) -> Value {
+/// Install request body for the daemon.
+///
+/// The application is installed on the client OS, so the desktop runs the
+/// command itself and tells the daemon `client` (already handled) or `skip`
+/// (do not run it). The daemon gets the client platform for the manifest check
+/// and only prepares/starts the models.
+fn app_install_body(version: &str, ran_script: bool, force: bool) -> Value {
     serde_json::json!({
         "version": version,
-        "install_command": if run_script { "run" } else { "skip" },
+        "install_command": if ran_script { "client" } else { "skip" },
+        "client_os": app_os_key(),
+        "client_arch": app_arch_key(),
         "force": force,
     })
 }
@@ -5468,13 +5475,32 @@ fn spawn_app_install(
     name: String,
     version: String,
     run_script: bool,
+    script: Option<String>,
     force: bool,
 ) {
     std::thread::spawn(move || {
-        let path = format!("/v1/apps/{org}/{name}/install");
-        let body = app_install_body(&version, run_script, force);
         let verb = "安装".to_string();
         let reference = app_reference(&org, &name, &version);
+        // The application lives on the client OS (for example a Windows exe),
+        // while the models stay in WSL. Run the command here, then let the
+        // daemon prepare/start the models with install_command=client.
+        if run_script {
+            if let Some(command) = script.as_deref() {
+                let _ = tx.send(Event::AppJob {
+                    verb: verb.clone(),
+                    reference: reference.clone(),
+                    line: format!("$ {command}"),
+                    running: true,
+                });
+                if let Err(err) = run_local_command(&tx, &ctx, &verb, &reference, command) {
+                    let _ = tx.send(Event::AppAction(verb, Err(err)));
+                    ctx.request_repaint();
+                    return;
+                }
+            }
+        }
+        let path = format!("/v1/apps/{org}/{name}/install");
+        let body = app_install_body(&version, run_script, force);
         match post_json_timeout(&path, &body, 120) {
             Ok(v) => match v["job_id"].as_str().filter(|id| !id.is_empty()) {
                 Some(job_id) => {
@@ -5490,6 +5516,101 @@ fn spawn_app_install(
         }
         ctx.request_repaint();
     });
+}
+
+/// Shell that runs an install command on the client OS.
+fn local_command(command: &str) -> (String, Vec<String>) {
+    if cfg!(windows) {
+        (
+            "powershell".to_string(),
+            vec![
+                "-NoProfile".to_string(),
+                "-ExecutionPolicy".to_string(),
+                "Bypass".to_string(),
+                "-Command".to_string(),
+                command.to_string(),
+            ],
+        )
+    } else {
+        ("sh".to_string(), vec!["-c".to_string(), command.to_string()])
+    }
+}
+
+/// Run the install command locally, streaming its output into the app job log.
+fn run_local_command(
+    tx: &Sender<Event>,
+    ctx: &egui::Context,
+    verb: &str,
+    reference: &str,
+    command: &str,
+) -> Result<(), String> {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+
+    let (program, args) = local_command(command);
+    let mut cmd = Command::new(&program);
+    cmd.args(&args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // 0x08000000 = CREATE_NO_WINDOW: no console flash for the GUI client.
+        cmd.creation_flags(0x0800_0000);
+    }
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("无法启动 {program}: {e}"))?;
+
+    let mut readers = Vec::new();
+    if let Some(stdout) = child.stdout.take() {
+        let tx = tx.clone();
+        let ctx = ctx.clone();
+        let verb = verb.to_string();
+        let reference = reference.to_string();
+        readers.push(std::thread::spawn(move || {
+            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                let _ = tx.send(Event::AppJob {
+                    verb: verb.clone(),
+                    reference: reference.clone(),
+                    line,
+                    running: true,
+                });
+                ctx.request_repaint();
+            }
+        }));
+    }
+    if let Some(stderr) = child.stderr.take() {
+        let tx = tx.clone();
+        let ctx = ctx.clone();
+        let verb = verb.to_string();
+        let reference = reference.to_string();
+        readers.push(std::thread::spawn(move || {
+            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                let _ = tx.send(Event::AppJob {
+                    verb: verb.clone(),
+                    reference: reference.clone(),
+                    line,
+                    running: true,
+                });
+                ctx.request_repaint();
+            }
+        }));
+    }
+    for reader in readers {
+        let _ = reader.join();
+    }
+    let status = child
+        .wait()
+        .map_err(|e| format!("安装脚本状态读取失败: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(match status.code() {
+            Some(code) => format!("安装脚本失败（exit {code}）"),
+            None => "安装脚本被终止".to_string(),
+        })
+    }
 }
 
 fn spawn_app_uninstall(

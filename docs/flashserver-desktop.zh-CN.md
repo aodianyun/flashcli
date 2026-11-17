@@ -16,9 +16,12 @@ Windows 安装包内置 `flashcli-desktop.exe`（Rust + egui/eframe，不用 Web
   （组织/下载量/状态、简介、supported OS/arch、各平台安装命令、依赖模型与
   serve options、本地状态与模型、接入地址），并支持安装/启动/停止/卸载；数据全部来自
   `flashserver` 的 `/v1/apps`。点「安装」会先展示 manifest 里的安装脚本：只有选择
-  「运行脚本并安装」才会执行（选择「跳过脚本安装」则只安装并启动模型），
-  下载页类命令只展示供复制；守护进程收到缺少 `install_command`（`run`/`skip`）
-  的安装请求会拒绝执行。安装进度直接显示在详情区；domain 分类取自接口返回，不再写死。
+  「运行脚本并安装」才会**在客户端 OS 本地执行**（Windows 应用装在 Windows，不在 WSL；
+  其他系统用 `sh -c`），然后让守护进程准备并启动模型；「跳过脚本安装」则只准备模型。
+  下载页类命令只展示供复制；守护进程收到缺少 `install_command`
+  （`client`/`run`/`skip`）的安装请求会拒绝执行。平台校验与命令选择使用客户端
+  OS/arch（`client_os`/`client_arch`）。安装进度直接显示在详情区；domain 分类取自
+  接口返回，不再写死。
 - **日志** —— 服务日志或单个模型的 serve 日志，可清空和另存为。
 - **设置** —— 服务启停、开机启动、国内镜像、共享缓存清理、WSL 资源与防火墙端口、
   主题（`Ctrl+T`）、API 文档。

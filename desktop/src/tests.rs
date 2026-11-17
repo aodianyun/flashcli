@@ -122,13 +122,29 @@ fn app_domains_are_unique_and_skip_blanks() {
 
 #[test]
 fn app_install_body_makes_the_script_decision_explicit() {
-    let run = app_install_body("1.0.0", true, true);
-    assert_eq!(run["version"], "1.0.0");
-    assert_eq!(run["install_command"], "run");
-    assert_eq!(run["force"], true);
+    let ran = app_install_body("1.0.0", true, true);
+    assert_eq!(ran["version"], "1.0.0");
+    assert_eq!(ran["install_command"], "client");
+    assert_eq!(ran["client_os"], app_os_key());
+    assert_eq!(ran["client_arch"], app_arch_key());
+    assert_eq!(ran["force"], true);
     let skip = app_install_body("1.0.0", false, false);
     assert_eq!(skip["install_command"], "skip");
+    assert_eq!(skip["client_os"], app_os_key());
     assert_eq!(skip["force"], false);
+}
+
+#[test]
+fn local_command_uses_the_platform_shell() {
+    let (program, args) = local_command("echo hi");
+    if cfg!(windows) {
+        assert_eq!(program, "powershell");
+        assert!(args.iter().any(|a| a == "-Command"));
+    } else {
+        assert_eq!(program, "sh");
+        assert_eq!(args[0], "-c");
+    }
+    assert_eq!(args.last().map(String::as_str), Some("echo hi"));
 }
 
 #[test]

@@ -19,10 +19,12 @@ for commands. Install/build details are in [../desktop/README.md](../desktop/REA
   description, supported OS/arch, every platform install command,
   dependency bundles and serve options, local state/models, connection URL —
   and install/start/stop/uninstall through
-  `/v1/apps`. 安装 first shows the manifest install script:
-  it runs only after 运行脚本并安装 (跳过脚本安装 installs the models without it),
-  and the daemon rejects an install without that explicit decision
-  (`install_command: run | skip`). Progress streams into the detail pane.
+  `/v1/apps`. 安装 first shows the manifest install script: it runs on the
+  client OS (a Windows app installs on Windows, not in WSL) and only after
+  运行脚本并安装 (跳过脚本安装 installs the models without it); a download-page
+  command is only shown for copying. The daemon then prepares/starts the
+  models and rejects an install without that explicit decision
+  (`install_command: client | run | skip`). Progress streams into the detail pane.
   Everything is served by `flashserver` (`/v1/apps`).
 - **Logs** — service journal or a model's serve log, with clear and native
   Save-As.
