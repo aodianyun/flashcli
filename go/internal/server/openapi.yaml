@@ -230,6 +230,140 @@ paths:
           $ref: '#/components/responses/Error'
         '502':
           $ref: '#/components/responses/Error'
+  /v1/apps:
+    get:
+      summary: List FlashHub applications with local state
+      description: Proxies FlashHub `/api/v1/apps` (5 min cache) and overlays installed state from the shared app registry.
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: domain, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        '200':
+          description: Applications
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  apps:
+                    type: array
+                    items: { $ref: '#/components/schemas/AppSummary' }
+                  total: { type: integer }
+        '502':
+          $ref: '#/components/responses/Error'
+  /v1/apps/installed:
+    get:
+      summary: Installed applications (shared registry)
+      responses:
+        '200':
+          description: Registry keyed by `<org>/<name>:<version>`
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /v1/apps/{org}/{name}:
+    parameters:
+      - { name: org, in: path, required: true, schema: { type: string } }
+      - { name: name, in: path, required: true, schema: { type: string } }
+      - { name: version, in: query, schema: { type: string } }
+    get:
+      summary: Application manifest plus local state
+      description: Manifest format is specified in docs/app_manifest_standard.md.
+      responses:
+        '200':
+          description: Manifest and optional local record
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  manifest: { type: object, additionalProperties: true }
+                  local: { $ref: '#/components/schemas/AppState' }
+        '502':
+          $ref: '#/components/responses/Error'
+    delete:
+      summary: Uninstall the application state
+      description: Stops its models and removes the registry entry; model caches are kept unless `purge_models=1`.
+      parameters:
+        - { name: purge_models, in: query, schema: { type: string, enum: ['1'] } }
+      responses:
+        '200':
+          description: Uninstalled
+        '404':
+          $ref: '#/components/responses/Error'
+  /v1/apps/{org}/{name}/status:
+    parameters:
+      - { name: org, in: path, required: true, schema: { type: string } }
+      - { name: name, in: path, required: true, schema: { type: string } }
+      - { name: version, in: query, schema: { type: string } }
+    get:
+      summary: Application state with live health
+      responses:
+        '200':
+          description: Application state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppState' }
+        '404':
+          $ref: '#/components/responses/Error'
+  /v1/apps/{org}/{name}/prepare:
+    parameters:
+      - { name: org, in: path, required: true, schema: { type: string } }
+      - { name: name, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Prepare default model bundles (async job)
+      description: "Pulls every `default: true` bundle. Never runs the manifest install command."
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                version: { type: string }
+                bundles: { type: array, items: { type: string } }
+      responses:
+        '202':
+          description: Job accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAccepted' }
+        '400':
+          $ref: '#/components/responses/Error'
+  /v1/apps/{org}/{name}/start:
+    parameters:
+      - { name: org, in: path, required: true, schema: { type: string } }
+      - { name: name, in: path, required: true, schema: { type: string } }
+      - { name: version, in: query, schema: { type: string } }
+    post:
+      summary: Start the application's prepared models
+      responses:
+        '200':
+          description: Application state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppState' }
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+  /v1/apps/{org}/{name}/stop:
+    parameters:
+      - { name: org, in: path, required: true, schema: { type: string } }
+      - { name: name, in: path, required: true, schema: { type: string } }
+      - { name: version, in: query, schema: { type: string } }
+    post:
+      summary: Stop the application's models
+      responses:
+        '200':
+          description: Application state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppState' }
+        '404':
+          $ref: '#/components/responses/Error'
   /v1/storage:
     get:
       summary: Disk usage (unique allocated bytes)
@@ -362,7 +496,7 @@ paths:
           schema: { type: string }
       responses:
         '200':
-          description: SSE stream (`event: progress`, JSON Event payloads)
+          description: "SSE stream (`event: progress` events with JSON payloads)"
           content:
             text/event-stream:
               schema: { type: string }
@@ -910,6 +1044,49 @@ components:
         options:
           type: object
           additionalProperties: { type: string }
+    AppSummary:
+      type: object
+      additionalProperties: true
+      properties:
+        name: { type: string }
+        display_name: { type: string }
+        domain: { type: string }
+        version: { type: string }
+        cover_url: { type: string }
+        supported_os: { type: array, items: { type: string } }
+        supported_arch: { type: array, items: { type: string } }
+        install_commands:
+          type: object
+          additionalProperties: { type: string }
+        model_bundles:
+          type: array
+          items:
+            type: object
+            properties:
+              bundle: { type: string }
+              is_default: { type: boolean }
+        installed: { type: boolean }
+        state: { type: string }
+    AppState:
+      type: object
+      additionalProperties: true
+      properties:
+        app: { type: string }
+        version: { type: string }
+        state: { type: string }
+        installed_at: { type: string }
+        error: { type: string }
+        models:
+          type: array
+          items:
+            type: object
+            properties:
+              ref: { type: string }
+              id: { type: string }
+              port: { type: integer }
+              pid: { type: integer }
+              endpoint: { type: string }
+              prepared: { type: boolean }
     StorageArea:
       type: object
       properties:
