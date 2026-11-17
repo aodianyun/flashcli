@@ -298,6 +298,37 @@ def test_server_app_install_run_executes_script(flashserver_bin, flashcli_bin, c
         assert not st["install"].get("skipped")
 
 
+def test_server_app_install_uninstall_reinstall(
+    flashserver_bin, flashcli_bin, cli_env, tmp_path
+):
+    """Full cycle: install -> uninstall (purge caches) -> install again."""
+    with _fake_hub() as hub, _daemon(
+        flashserver_bin, flashcli_bin, cli_env, tmp_path, hub
+    ) as base:
+        for attempt in (1, 2):
+            status, body = http_json(
+                base + "/v1/apps/xym/demo/install",
+                {"version": "1.0.0", "install_command": "skip", "start": False},
+            )
+            assert status == 202, (attempt, body)
+            state, job = _wait_job(base, body["job_id"])
+            assert state == "done", (attempt, job.get("error") or job)
+
+            status, st = http_json(base + "/v1/apps/xym/demo/status?version=1.0.0")
+            assert status == 200, st
+            assert st["state"] == "ready"
+            assert st["models"][0]["prepared"] is True
+
+            if attempt == 1:
+                status, _ = http_json(
+                    base + "/v1/apps/xym/demo?version=1.0.0&purge_models=1",
+                    method="DELETE",
+                )
+                assert status == 200
+                status, _ = http_json(base + "/v1/apps/xym/demo/status?version=1.0.0")
+                assert status == 404
+
+
 def test_server_app_install_uses_the_client_platform(
     flashserver_bin, flashcli_bin, cli_env, tmp_path
 ):

@@ -30,6 +30,10 @@ for commands. Install/build details are in [../desktop/README.md](../desktop/REA
   `安装中 · 阶段 xx%` with a bar, a banner appears above the grid, and the other
   apps' actions are disabled.
   Everything is served by `flashserver` (`/v1/apps`).
+  Uninstall stops the app's models and removes its install record; the optional
+  "同时删除模型缓存" checkbox also deletes that app's bundle/weight caches
+  (a reinstall downloads them again). The app's own installed program and its
+  data are never removed.
 - **Logs** — service journal or a model's serve log, with clear and native
   Save-As.
 - **Settings** — service start/stop, auto-start, domestic mirrors, shared-cache

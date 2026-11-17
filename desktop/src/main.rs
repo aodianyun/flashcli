@@ -848,7 +848,24 @@ impl App {
                             self.apps_domains = domains;
                         }
                     }
+                    let selected = self
+                        .apps_selected
+                        .and_then(|idx| self.apps.get(idx))
+                        .map(app_list_key);
                     self.apps = list;
+                    // Keep the selection on the same application; a filter that
+                    // excludes it clears both the highlight and the detail pane.
+                    match selected {
+                        Some(key) => match self.apps.iter().position(|app| app_list_key(app) == key)
+                        {
+                            Some(idx) => self.apps_selected = Some(idx),
+                            None => {
+                                self.apps_selected = None;
+                                self.app_detail = None;
+                            }
+                        },
+                        None => {}
+                    }
                     self.apps_loading = false;
                     self.apps_loaded = true;
                     self.apps_error.clear();
@@ -1563,13 +1580,7 @@ impl App {
             let label = self
                 .apps
                 .iter()
-                .find(|app| {
-                    app_reference(
-                        app["organization"]["name"].as_str().unwrap_or(""),
-                        app["name"].as_str().unwrap_or(""),
-                        app["version"].as_str().unwrap_or(""),
-                    ) == key
-                })
+                .find(|app| app_list_key(app) == key)
                 .map(|app| {
                     app["display_name"]
                         .as_str()
@@ -1618,11 +1629,7 @@ impl App {
                     Some(AppCover::Ready(tex)) => Some(tex.clone()),
                     _ => None,
                 });
-                let key = app_reference(
-                    app["organization"]["name"].as_str().unwrap_or(""),
-                    app["name"].as_str().unwrap_or(""),
-                    app["version"].as_str().unwrap_or(""),
-                );
+                let key = app_list_key(app);
                 let job = self.app_jobs.get(&key).cloned();
                 (app.clone(), self.apps_selected == Some(idx), cover, job)
             })
@@ -4204,6 +4211,11 @@ impl App {
                     }
                 });
             });
+        // Persist the checkbox so the next frame starts from the user's choice
+        // (the dialog is rebuilt from a clone every frame).
+        if let Some(prompt) = self.app_uninstall.as_mut() {
+            prompt.purge_models = purge;
+        }
         if close {
             self.app_uninstall = None;
         }
@@ -5294,6 +5306,15 @@ fn csv_list(value: &Value) -> String {
         .unwrap_or_default()
 }
 
+/// Key of an app row from the list response: `org/name:version`.
+fn app_list_key(app: &Value) -> String {
+    app_reference(
+        app["organization"]["name"].as_str().unwrap_or(""),
+        app["name"].as_str().unwrap_or(""),
+        app["version"].as_str().unwrap_or(""),
+    )
+}
+
 /// Unique non-empty `domain` values from a list response, first-seen order.
 fn app_domains(list: &[Value]) -> Vec<String> {
     let mut domains: Vec<String> = Vec::new();
@@ -5751,6 +5772,18 @@ fn spawn_app_install(
     std::thread::spawn(move || {
         let verb = "安装".to_string();
         let reference = app_reference(&org, &name, &version);
+        let fail = |err: String| {
+            // Always close the job first: otherwise the detail pane keeps
+            // spinning after a failed install.
+            let _ = tx.send(Event::AppJob {
+                verb: verb.clone(),
+                reference: reference.clone(),
+                line: String::new(),
+                running: false,
+            });
+            let _ = tx.send(Event::AppAction(verb.clone(), Err(err)));
+            ctx.request_repaint();
+        };
         // The application lives on the client OS (for example a Windows exe),
         // while the models stay in WSL. Install it here, then let the daemon
         // prepare/start the models with install_command=client.
@@ -5764,8 +5797,7 @@ fn spawn_app_install(
                     running: true,
                 });
                 if let Err(err) = run_local_command(&tx, &ctx, &verb, &reference, command) {
-                    let _ = tx.send(Event::AppAction(verb, Err(err)));
-                    ctx.request_repaint();
+                    fail(err);
                     return;
                 }
                 true
@@ -5774,8 +5806,7 @@ fn spawn_app_install(
                 if let Err(err) =
                     download_and_run_installer(&tx, &ctx, &verb, &reference, url, *kind)
                 {
-                    let _ = tx.send(Event::AppAction(verb, Err(err)));
-                    ctx.request_repaint();
+                    fail(err);
                     return;
                 }
                 true
@@ -5792,9 +5823,7 @@ fn spawn_app_install(
                     let _ = tx.send(Event::AppAction(verb, Ok("完成".to_string())));
                 }
             },
-            Err(err) => {
-                let _ = tx.send(Event::AppAction(verb, Err(err)));
-            }
+            Err(err) => fail(err),
         }
         ctx.request_repaint();
     });
