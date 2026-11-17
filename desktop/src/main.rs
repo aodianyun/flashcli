@@ -433,6 +433,8 @@ pub struct App {
     app_uninstall: Option<AppUninstallPrompt>,
     /// Install/prepare progress per application ref (org/name:version).
     app_jobs: HashMap<String, AppJobState>,
+    /// Full install log shown in a dialog: (title, text).
+    app_log_dialog: Option<(String, String)>,
     app_covers: HashMap<String, AppCover>,
     storage: Vec<(String, String)>,
     storage_total: f64,
@@ -526,6 +528,7 @@ impl App {
             app_install: None,
             app_uninstall: None,
             app_jobs: HashMap::new(),
+            app_log_dialog: None,
             app_covers: HashMap::new(),
             storage: Vec::new(),
             storage_total: 0.0,
@@ -1542,9 +1545,6 @@ impl App {
         }
         ui.spacing_mut().interact_size.y = 26.0;
         ui.horizontal(|ui| {
-            if ui.add_sized([64.0, 26.0], egui::Button::new("刷新")).clicked() {
-                self.reload_apps(ui.ctx());
-            }
             ui.add_sized(
                 [240.0, 26.0],
                 egui::TextEdit::singleline(&mut self.apps_search)
@@ -1617,11 +1617,6 @@ impl App {
                         .small()
                         .strong()
                         .color(accent(ui)),
-                );
-                ui.label(
-                    egui::RichText::new("同一时间只安装一个应用")
-                        .small()
-                        .weak(),
                 );
             });
         }
@@ -1825,6 +1820,10 @@ impl App {
             }
             for line in app_log_tail(&job.log, 8) {
                 ui.label(egui::RichText::new(line).monospace().small().weak());
+            }
+            if !job.log.is_empty() && ui.small_button("查看完整日志").clicked() {
+                self.app_log_dialog =
+                    Some((format!("{display} · 安装日志"), job.log.clone()));
             }
         }
 
@@ -4249,6 +4248,80 @@ impl App {
         }
     }
 
+    /// Full install/prepare log for one application.
+    fn show_app_log_dialog(&mut self, ctx: &egui::Context) {
+        let Some((title, log)) = self.app_log_dialog.clone() else {
+            return;
+        };
+        let dark = ctx.style().visuals.dark_mode;
+        let mut close = false;
+        let mut copy = false;
+        modal_backdrop(ctx, dark, &mut close);
+        egui::Window::new("app_log_dialog")
+            .title_bar(false)
+            .order(egui::Order::Foreground)
+            .frame(dialog_frame(dark))
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .collapsible(false)
+            .resizable(true)
+            .show(ctx, |ui| {
+                ui.set_width(760.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(&title).size(16.0).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(egui::RichText::new("×").size(18.0))
+                                    .min_size(egui::vec2(28.0, 24.0)),
+                            )
+                            .clicked()
+                        {
+                            close = true;
+                        }
+                    });
+                });
+                ui.add_space(6.0);
+                ui.separator();
+                ui.add_space(8.0);
+                egui::ScrollArea::vertical()
+                    .id_salt("app-log-scroll")
+                    .max_height(460.0)
+                    .auto_shrink([false, false])
+                    .stick_to_bottom(true)
+                    .show(ui, |ui| {
+                        if log.is_empty() {
+                            ui.label(egui::RichText::new("（暂无日志）").weak());
+                        } else {
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(&log).monospace().small(),
+                                )
+                                .wrap(),
+                            );
+                        }
+                    });
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    ui.add_space((ui.available_width() - 200.0).max(0.0));
+                    if button(ui, "复制").clicked() {
+                        copy = true;
+                    }
+                    ui.add_space(8.0);
+                    if button(ui, "关闭").clicked() {
+                        close = true;
+                    }
+                });
+            });
+        if copy {
+            ctx.copy_text(log);
+        }
+        if close {
+            self.app_log_dialog = None;
+        }
+    }
+
     fn show_dialog(&mut self, ctx: &egui::Context) {
         let Some(dialog) = self.dialog.as_ref() else {
             return;
@@ -4521,6 +4594,7 @@ impl eframe::App for App {
         self.show_options_dialog(ctx);
         self.show_app_install_dialog(ctx);
         self.show_app_uninstall_dialog(ctx);
+        self.show_app_log_dialog(ctx);
         self.show_dialog(ctx);
         self.show_busy_overlay(ctx);
         self.show_toast(ctx);
@@ -5879,7 +5953,7 @@ fn download_and_run_installer(
         .unwrap_or(url);
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(20))
-        .timeout_read(Duration::from_secs(180))
+        .timeout_read(Duration::from_secs(60))
         .timeout_write(Duration::from_secs(60))
         .build();
     // One retry: large installer downloads often fail on a flaky connection.
@@ -5912,7 +5986,9 @@ fn download_and_run_installer(
     let mut file = std::fs::File::create(&dest).map_err(|e| format!("无法写入 {file_name}: {e}"))?;
     let mut buf = vec![0_u8; 64 * 1024];
     let mut written: u64 = 0;
-    let mut last_pct: i64 = -1;
+    let mut last_pct: Option<i64> = None;
+    let mut last_log = std::time::Instant::now();
+    let mut last_bytes: u64 = 0;
     loop {
         let read = reader
             .read(&mut buf)
@@ -5923,16 +5999,33 @@ fn download_and_run_installer(
         file.write_all(&buf[..read])
             .map_err(|e| format!("写入失败: {e}"))?;
         written += read as u64;
-        if let Some(total) = total.filter(|t| *t > 0) {
-            let pct = (written * 100 / total) as i64;
-            if pct / 10 != last_pct / 10 {
-                last_pct = pct;
-                log(format!("下载中 {pct}%（{written}/{total} 字节）"));
-            }
+        let pct = total
+            .filter(|t| *t > 0)
+            .map(|t| ((written * 100 / t).min(100)) as i64);
+        // Update every 1% or every 2 s (a big installer can take minutes and
+        // a stalled percentage should still show the transfer moving).
+        let advanced = matches!((pct, last_pct), (Some(now), Some(prev)) if now > prev);
+        let due = last_log.elapsed() >= Duration::from_secs(2);
+        if advanced || due {
+            let secs = last_log.elapsed().as_secs_f64().max(0.001);
+            let speed = (written.saturating_sub(last_bytes)) as f64 / secs;
+            let line = match (pct, total) {
+                (Some(pct), Some(total)) => format!(
+                    "下载中 {pct}%（{} / {}，{}/s）",
+                    fmt_bytes(written as f64),
+                    fmt_bytes(total as f64),
+                    fmt_bytes(speed)
+                ),
+                _ => format!("下载中 {}（{}/s）", fmt_bytes(written as f64), fmt_bytes(speed)),
+            };
+            log(line);
+            last_pct = pct;
+            last_bytes = written;
+            last_log = std::time::Instant::now();
         }
     }
     drop(file);
-    log(format!("已下载 {}（{} 字节）", dest.display(), written));
+    log(format!("已下载 {}（{}）", dest.display(), fmt_bytes(written as f64)));
 
     let status = match kind {
         InstallerKind::Exe => {

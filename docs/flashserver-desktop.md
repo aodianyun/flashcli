@@ -34,6 +34,10 @@ for commands. Install/build details are in [../desktop/README.md](../desktop/REA
   "同时删除模型缓存" checkbox also deletes that app's bundle/weight caches
   (a reinstall downloads them again). The app's own installed program and its
   data are never removed.
+- **Logs** — three sources: the app install/prepare log (last 8 lines in the
+  app detail plus 查看完整日志, up to 300 lines, copyable), per-model serve logs
+  (模型 → 更多 → 查看日志, with 另存为), and the daemon journal (日志 page, clear /
+  save).
 - **Logs** — service journal or a model's serve log, with clear and native
   Save-As.
 - **Settings** — service start/stop, auto-start, domestic mirrors, shared-cache
