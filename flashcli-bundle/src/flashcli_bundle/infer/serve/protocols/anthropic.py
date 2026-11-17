@@ -214,6 +214,9 @@ def _request(body: dict[str, Any]) -> ChatRequest:
         }
         and v is not None
     }
+    choice = body.get("tool_choice")
+    if choice is not None:
+        extras["tool_choice"] = _tool_choice(choice)
     thinking = body.get("thinking")
     if isinstance(thinking, dict):
         extras["anthropic_thinking"] = thinking

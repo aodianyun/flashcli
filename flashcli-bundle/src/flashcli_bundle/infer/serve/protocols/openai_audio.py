@@ -100,7 +100,12 @@ def _vtt(segments: list[dict[str, Any]]) -> str:
     return "\n".join(out)
 
 
-def _transcription_response(result: AudioTranscriptionResult, response_format: str) -> Any:
+def _transcription_response(
+    result: AudioTranscriptionResult,
+    response_format: str,
+    *,
+    task: str = "transcribe",
+) -> Any:
     if response_format == "text":
         return PlainTextResponse(result.text)
     if response_format == "srt":
@@ -109,7 +114,7 @@ def _transcription_response(result: AudioTranscriptionResult, response_format: s
         return PlainTextResponse(_vtt(result.segments) or result.text)
     if response_format == "verbose_json":
         return {
-            "task": "transcribe",
+            "task": task,
             "language": result.language,
             "duration": result.duration,
             "text": result.text,
@@ -137,7 +142,7 @@ def mount_transcriptions(app: FastAPI, engine: Any) -> None:
             raise HTTPException(500, f"transcription failed: {exc}") from exc
         if not isinstance(result, AudioTranscriptionResult):
             raise HTTPException(500, "engine transcribe() must return AudioTranscriptionResult")
-        return _transcription_response(result, req.response_format)
+        return _transcription_response(result, req.response_format, task=task)
 
     @app.post("/v1/audio/transcriptions")
     async def transcriptions(request: Request):
