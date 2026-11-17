@@ -16,6 +16,8 @@
 | [environment.zh-CN.md](environment.zh-CN.md) | 用户 | Go host 读取的环境变量、镜像、缓存路径 |
 | [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | 集成方 | preset ref 语法 + 终端用户运行时流程 |
 | [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) | bundle 作者 | **权威** manifest、entry、`.so`、FlashHub 布局 |
+| [app_manifest_standard.zh-CN.md](app_manifest_standard.zh-CN.md) | 应用作者 / 集成方 | **权威** FlashHub 应用 manifest（v1）：字段、安装命令、默认 bundle |
+| [application_install_plan.zh-CN.md](application_install_plan.zh-CN.md) | 维护者 | `flashcli app` 安装流程、状态机、回滚、命令、里程碑 |
 | [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) | bundle 作者 | `entry.kind` 后端、原生进程/`.so` 契约、conformance |
 | [architecture.zh-CN.md](architecture.zh-CN.md) | 贡献者 | 运行时流程、本地服务栈、host 与 bundle、缓存、目录布局 |
 | [module_layers.zh-CN.md](module_layers.zh-CN.md) | 贡献者 | host / infer / protocol 归属与 Go 包地图 |

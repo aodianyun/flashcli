@@ -1,0 +1,233 @@
+# FlashHub application install plan
+
+<p align="right"><strong>English</strong> · <a href="application_install_plan.zh-CN.md">简体中文</a></p>
+
+> **Status: approved design, not implemented.** The manifest schema is specified
+> in [app_manifest_standard.md](app_manifest_standard.md) (v1, matching FlashHub).
+
+## Goals
+
+One command installs an application, prepares its models, and leaves them ready:
+
+```bash
+flashcli app install xym/workbuddy
+```
+
+`flashcli` must work **without** a running `flashserver`; the daemon and the CLI
+share one Go implementation (`internal/apps`), and the desktop talks to the
+daemon over HTTP only.
+
+## Terminology
+
+| Term | Meaning |
+|---|---|
+| **Application** | An external app published on FlashHub (`xym/workbuddy`) |
+| **App key** | `[namespace/]name[:version]` |
+| **Manifest** | `flashcli-application` document (see the manifest standard) |
+| **Model bundle** | Existing `flashcli-bundle/<name>:<version>` runtime |
+| **Resident daemon** | `flashserver` (unchanged: scheduler, console, API) |
+
+## Responsibilities
+
+| Component | Owns |
+|---|---|
+| FlashHub | App registry, versions, manifest validation, metadata |
+| `internal/apps` (shared) | Manifest use, install policy, app state, model preparation and lifecycle |
+| `internal/modelrun` (shared) | Supervising `flashcli serve` children (ports, health, logs, stop) |
+| `flashcli` CLI | User interaction, confirmations, exit codes, JSON output |
+| `flashserver` | HTTP API used by the desktop; calls the same shared package |
+| `flashcli-desktop` | UI only; HTTP/WS to `flashserver` |
+
+No HTTP call from the CLI to the daemon is required (or used) for app operations.
+
+## App key
+
+`xym/workbuddy` resolves the latest version; `xym/workbuddy:1.0.0` pins it.
+`flashcli app install` records the resolved version.
+
+## Manifest
+
+`GET /api/v1/apps/{namespace}/{name}[:version]` returns the manifest. The host
+validates `format`, `app_format_version`, `protocol_version`, required fields,
+and that `name`/`version` match the key. See
+[app_manifest_standard.md](app_manifest_standard.md).
+
+## Install flow
+
+Steps (all state transitions are persisted so `status` and re-runs work):
+
+```text
+RESOLVE → VALIDATE → PLATFORM → PREFLIGHT → PLAN
+  → CONFIRM_INSTALL (shell only)
+  → INSTALL_APP (URL: manual | shell: run)
+  → PREPARE_MODELS (every default bundle, serial)
+  → START_MODELS (one group, auto ports)
+  → HEALTH (per model)
+  → APPLY_CONFIG (skipped in v1)
+  → READY
+```
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as User
+  participant CLI as flashcli app install
+  participant A as internal/apps
+  participant FH as FlashHub
+  participant H as internal/host + modelrun
+  participant REG as apps.json (locked)
+
+  U->>CLI: app install xym/workbuddy [--yes] [--dry-run]
+  CLI->>A: Install(ref, opts)
+  A->>FH: GET /api/v1/apps/xym/workbuddy
+  FH-->>A: manifest v1
+  A->>A: validate + platform + preflight
+  alt unsupported or invalid
+    A-->>CLI: error (nothing changed)
+  end
+  alt install command is a URL
+    A-->>CLI: print link (manual install)
+    A->>REG: install=manual
+  else install command is a shell command
+    A->>U: show command, ask [y/N]
+    Note over A: non-interactive without -y: skip and record
+    U-->>A: yes
+    A->>A: execute (sh -c / powershell -Command)
+    A->>REG: install=executed
+  end
+  loop every default bundle (serial)
+    A->>H: prepare = pull tree + venv + weights
+    H-->>A: progress
+    A->>REG: bundle=prepared
+  end
+  A->>H: start group (auto ports)
+  loop every bundle
+    H-->>A: pid + endpoint
+    A->>H: health check
+    A->>REG: model=running
+  end
+  opt any start/health failure
+    A->>H: stop the models started by this run
+    A->>REG: state=FAILED
+  end
+  A->>A: APPLY_CONFIG (skip in v1)
+  A->>REG: state=READY + connection
+  A-->>CLI: base_url / model ids / state dir
+```
+
+### State machine
+
+```mermaid
+stateDiagram-v2
+  [*] --> RESOLVING
+  RESOLVING --> PLANNED: manifest valid, platform supported
+  RESOLVING --> FAILED: invalid manifest or unsupported platform
+  PLANNED --> INSTALLING: confirmed shell command
+  PLANNED --> PREPARING: URL or skipped script
+  INSTALLING --> PREPARING: command succeeded
+  INSTALLING --> FAILED: command failed (abort)
+  PREPARING --> PREPARED: all default bundles prepared
+  PREPARING --> FAILED: a bundle failed (abort)
+  PREPARED --> STARTING: group start
+  STARTING --> READY: all models healthy
+  STARTING --> FAILED: any failure (roll back started models)
+  READY --> STOPPED: app stop
+  STOPPED --> READY: app start
+  READY --> [*]: app uninstall
+```
+
+### Failure and rollback
+
+- **Script failure** aborts immediately; no model preparation runs.
+- **Prepare failure** aborts; already prepared bundles stay cached (re-run resumes).
+- **Start/health failure** stops the models started by that run
+  (`--keep-partial` keeps them for debugging).
+- Re-running `app install` is idempotent: it fills missing steps, reuses running
+  models, and only re-runs the install script with `--force`.
+
+## Commands
+
+```bash
+flashcli app list   [--json]
+flashcli app show   <key> [--json]
+flashcli app install <key> [--yes|-y] [--dry-run] [--force]
+                     [--bundle REF]... [--no-install] [--no-model] [--no-start]
+                     [--keep-partial]
+flashcli app status <key> [--json]
+flashcli app start|stop|restart <key>
+flashcli app logs   <key> [--ref REF] [--lines N] [-f]
+flashcli app uninstall <key> [--yes] [--purge-models]
+```
+
+Rules:
+
+- Any shell execution requires explicit confirmation; `--yes` runs it without a
+  prompt; non-interactive runs without `--yes` skip it and record `skipped`.
+- URLs are printed (never downloaded automatically).
+- Ports are allocated automatically and recorded; `start` is idempotent.
+- `uninstall` stops the app's models and removes its state; model caches are kept
+  unless `--purge-models` is given.
+
+## Local state
+
+Shared by the CLI and the daemon at `$FLASHCLI_HOME/flashserver/apps.json`
+(cross-process file lock; atomic rename on write):
+
+```json
+{
+  "apps": {
+    "xym/workbuddy": {
+      "version": "1.0.0",
+      "state": "ready",
+      "installed_at": "2026-11-17T08:00:00Z",
+      "install": {"command": "irm … | iex", "executed": true},
+      "models": [
+        {"ref": "xym/gemma4_e2b_it:1.0.1", "id": "gemma4_e2b_it",
+         "port": 18100, "endpoint": "http://127.0.0.1:18100"}
+      ],
+      "connection": {"base_url": "http://127.0.0.1:18100/v1", "api_key": "local"}
+    }
+  }
+}
+```
+
+## Model lifecycle
+
+- `internal/apps` prepares bundles via `internal/host` and starts them via
+  `internal/modelrun` (the same supervisor `flashserver` uses).
+- If `flashserver` is running, its `Manager` and `apps` share state: `start` sees
+  the recorded pid/port and reuses the running model instead of spawning again.
+- Auto ports are recorded; on restart the recorded port is reused when free.
+
+## Configuration (deferred)
+
+v1 manifests publish `config: []`. The host writes `connection.json` (base URL,
+model ids, `api_key=local`) and does not modify application files. A future
+`config` schema will define adapters (`json`/`yaml`/`env`/…) with backup and
+rollback.
+
+## Security
+
+- Remote shell installers are shown first and require confirmation; `--yes` is
+  the only way to run them unattended.
+- URLs are opened by the user, not fetched by the host.
+- The local API stays single-user (no remote mode).
+- The desktop does not execute install scripts in phase 1: it opens download
+  links and copies commands; execution stays in the CLI.
+
+## Testing
+
+| Tier | Coverage |
+|---|---|
+| T1 | manifest parse/validate, platform command precedence, default bundle selection, state lock/round-trip, shared lifecycle with fakes |
+| T2 | local fake FlashHub (httptest) + real `flashserver`: prepare → start → status → stop; `--dry-run`; shell skip without `--yes`; URL is never executed |
+| T3 | `FLASHCLI_FLASHHUB_LIVE=1`: live app list/manifest shape contract |
+
+## Milestones
+
+1. **M1** — extract `internal/modelrun` from the server launcher; `server` uses it (existing tests stay green).
+2. **M2** — `internal/apps`: manifest, install policy, locked registry, `Prepare`.
+3. **M3** — `internal/apps`: `Start`/`Stop`/`Status`/`Uninstall` with auto ports and rollback.
+4. **M4** — `flashcli app` commands calling `internal/apps` directly.
+5. **M5** — `flashserver` `/v1/apps*` handlers (thin) and the desktop Applications tab.
+6. **M6** — docs, OpenAPI, T1/T2/T3, release gate.
