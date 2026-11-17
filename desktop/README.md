@@ -9,11 +9,11 @@ Native desktop client for `flashserver`, built with Rust + [egui/eframe](https:/
   - Applications: a dedicated 应用 page in the sidebar lists FlashHub apps as
     cover cards (name, version · domain, description; search/domain filters),
     with a detail pane that shows everything the manifest and local state carry:
-    organization/downloads/status, Chinese + English description, supported
+    organization/downloads/status, description, supported
     OS/arch vs this build, every platform install command (current one
     highlighted, script vs download page), dependency bundles with their
-    serve options, install/prepare progress, local state and models, connection
-    URL/api_key and the manifest version fields. Install/prepare/start/stop/uninstall
+    serve options, install/prepare progress, local state and models, and the
+    connection URL/api_key. Install/prepare/start/stop/uninstall
     go through `/v1/apps`; 安装 opens a confirmation dialog that shows the app's
     install script, and the script only runs when you pick 运行脚本并安装 (跳过脚本安装
     installs the models without it), while a download-page command is only shown

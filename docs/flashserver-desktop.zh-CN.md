@@ -12,9 +12,9 @@ Windows 安装包内置 `flashcli-desktop.exe`（Rust + egui/eframe，不用 Web
 - **模型** —— 本地缓存 + FlashHub 搜索；分开展示 Bundle / 运行时 / 权重大小；
   加载、启动、停止；run/serve 冒烟测试带实时日志；多选清理。
 - **应用** —— 左侧独立菜单页：封面卡片网格（名称、版本 · domain、简介，支持搜索与
-  domain 过滤）+ 详情区展示能拿到的全部信息（组织/下载量/状态、中英文简介、
+  domain 过滤）+ 详情区展示能拿到的信息（组织/下载量/状态、简介、
   supported OS/arch、各平台安装命令、依赖模型与 serve options、本地状态与模型、
-  接入地址、manifest 版本字段），并支持安装/准备/启动/停止/卸载；数据全部来自
+  接入地址），并支持安装/准备/启动/停止/卸载；数据全部来自
   `flashserver` 的 `/v1/apps`。点「安装」会先展示 manifest 里的安装脚本：只有选择
   「运行脚本并安装」才会执行（选择「跳过脚本安装」则只安装并启动模型），
   下载页类命令只展示供复制；守护进程收到缺少 `install_command`（`run`/`skip`）

@@ -1684,15 +1684,9 @@ impl App {
         }
 
         app_section(ui, "简介");
-        let mut described = false;
-        for key in ["description", "description_en"] {
-            if let Some(text) = row[key].as_str().filter(|s| !s.is_empty()) {
-                described = true;
-                ui.add(egui::Label::new(egui::RichText::new(text).small()).wrap());
-                ui.add_space(4.0);
-            }
-        }
-        if !described {
+        if let Some(text) = row["description"].as_str().filter(|s| !s.is_empty()) {
+            ui.add(egui::Label::new(egui::RichText::new(text).small()).wrap());
+        } else {
             ui.label(egui::RichText::new("（无简介）").small().weak());
         }
 
@@ -1841,27 +1835,6 @@ impl App {
                     }
                 }
             }
-        }
-
-        app_section(ui, "Manifest");
-        app_field(ui, "format", manifest["format"].as_str().unwrap_or("-"));
-        app_field(
-            ui,
-            "app_format_version",
-            &manifest["app_format_version"].to_string(),
-        );
-        app_field(
-            ui,
-            "protocol_version",
-            &manifest["protocol_version"].to_string(),
-        );
-        if let Some(config) = manifest["config"].as_array().filter(|a| !a.is_empty()) {
-            app_field(ui, "config", &format!("{} 项", config.len()));
-            for item in config {
-                app_mono(ui, &serde_json::to_string(item).unwrap_or_default());
-            }
-        } else {
-            app_field(ui, "config", "（空，v1 未使用）");
         }
 
         if open_install {
@@ -5199,29 +5172,44 @@ fn app_card(
     }
 }
 
-/// Cover image, or a rounded placeholder with the app's first character.
+/// Cover image, cropped to a centred square (no distortion), or a rounded
+/// placeholder with the app's first character.
 fn app_cover_widget(
     ui: &mut egui::Ui,
     cover: Option<&egui::TextureHandle>,
     size: f32,
     fallback: &str,
 ) {
+    let (slot, _) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::hover());
     match cover {
         Some(texture) => {
-            ui.add(
-                egui::Image::new(egui::load::SizedTexture::new(
-                    texture.id(),
-                    egui::vec2(size, size),
-                ))
-                .corner_radius(6),
+            let original = texture.size_vec2();
+            let side = original.x.min(original.y).max(1.0);
+            let uv = if original.x > original.y {
+                let x0 = (original.x - side) / 2.0 / original.x;
+                egui::Rect::from_min_max(
+                    egui::pos2(x0, 0.0),
+                    egui::pos2(x0 + side / original.x, 1.0),
+                )
+            } else {
+                let y0 = (original.y - side) / 2.0 / original.y;
+                egui::Rect::from_min_max(
+                    egui::pos2(0.0, y0),
+                    egui::pos2(1.0, y0 + side / original.y),
+                )
+            };
+            ui.put(
+                slot,
+                egui::Image::new(egui::load::SizedTexture::new(texture.id(), slot.size()))
+                    .uv(uv)
+                    .corner_radius(6),
             );
         }
         None => {
-            let (rect, _) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::hover());
-            ui.painter().rect_filled(rect, 6, ui.visuals().faint_bg_color);
+            ui.painter().rect_filled(slot, 6, ui.visuals().faint_bg_color);
             let initial: String = fallback.chars().next().map(|c| c.to_string()).unwrap_or_default();
             ui.painter().text(
-                rect.center(),
+                slot.center(),
                 egui::Align2::CENTER_CENTER,
                 initial,
                 egui::FontId::proportional(size * 0.48),
