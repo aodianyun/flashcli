@@ -316,12 +316,16 @@ paths:
     post:
       summary: Install an application (async job)
       description: >
-        Runs the manifest install command only when `install_command` is `run`
-        (the user confirmed it in the UI), otherwise installs without it
-        (`skip`). The daemon has no terminal, so the decision is mandatory; a
-        missing or invalid value is rejected. URL commands are never fetched —
-        they are reported as a download page. Then every `default: true` bundle
-        is prepared and its models are started (unless `start` is false).
+        Two sides are involved. The application itself is installed on the
+        client OS (for example a Windows exe while the daemon runs in WSL), so
+        the client may run the manifest command itself and report `client`
+        (already handled); `skip` means it was not run and `run` lets the daemon
+        host execute it. A missing or invalid value is rejected because the
+        daemon cannot ask. When `client_os`/`client_arch` are given, they are
+        used for the manifest platform check and command selection (default: the
+        daemon's own platform). URL commands are never fetched — they are
+        reported as a download page. The daemon then prepares every
+        `default: true` bundle and starts its models (unless `start` is false).
       requestBody:
         required: true
         content:
@@ -334,8 +338,10 @@ paths:
                 bundles: { type: array, items: { type: string } }
                 install_command:
                   type: string
-                  enum: [run, skip]
-                  description: "`run` = the user explicitly allowed the install script; `skip` = do not run it"
+                  enum: [run, skip, client]
+                  description: "`client` = the caller already ran the command on its own platform; `run` = let the daemon host run it; `skip` = do not run it"
+                client_os: { type: string, description: "Platform that owns the application (e.g. windows)" }
+                client_arch: { type: string, description: "arch as used by manifests: x86_64 / arm64" }
                 force: { type: boolean, default: false }
                 start: { type: boolean, default: true }
       responses:

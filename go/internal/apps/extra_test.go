@@ -2,6 +2,9 @@ package apps
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -116,6 +119,41 @@ func TestRegistryConcurrentUpdates(t *testing.T) {
 	}
 	if len(apps) != 8 {
 		t.Fatalf("lost updates: %d entries", len(apps))
+	}
+}
+
+func TestInstallUsesClientPlatformAndHandlesScript(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "script-ran")
+	svc, _ := newTestService(t, manifestJSONFor("windows", "touch "+marker, "a/one:1"), &fakeLauncher{})
+	res, err := svc.Install(context.Background(), "xym/demo", InstallOptions{
+		OS:            "windows",
+		Arch:          "x86_64",
+		ScriptHandled: true,
+		NoStart:       true,
+	})
+	if err != nil {
+		t.Fatalf("windows app on a linux host: %v", err)
+	}
+	if !res.InstallRan || !res.State.Install.Executed {
+		t.Fatalf("script decision not recorded: %+v", res.State.Install)
+	}
+	if res.State.Install.Command != "touch "+marker {
+		t.Fatalf("recorded command = %q", res.State.Install.Command)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("daemon executed a command marked as handled by the client")
+	}
+}
+
+func TestInstallRejectsUnsupportedClientPlatform(t *testing.T) {
+	svc, _ := newTestService(t, manifestJSONFor("windows", "echo x", "a/one:1"), &fakeLauncher{})
+	_, err := svc.Install(context.Background(), "xym/demo", InstallOptions{
+		OS:            "linux",
+		Arch:          "x86_64",
+		ScriptHandled: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "does not support linux/x86_64") {
+		t.Fatalf("err = %v", err)
 	}
 }
 

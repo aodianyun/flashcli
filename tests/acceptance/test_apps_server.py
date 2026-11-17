@@ -34,7 +34,7 @@ BUNDLE_MANIFEST = {
 RUN_PY = "class RunEngine:\n    def predict(self, **kw):\n        return {'echo': 'x'}\n"
 
 
-def app_manifest(bundle: str, command: str | None = None) -> dict:
+def app_manifest(bundle: str, command: str | None = None, supported_os: list[str] | None = None) -> dict:
     install = command or "https://example.com/demo"
     return {
         "format": "flashcli-application",
@@ -43,7 +43,10 @@ def app_manifest(bundle: str, command: str | None = None) -> dict:
         "name": "demo",
         "version": "1.0.0",
         "display_name": "Demo",
-        "supported": {"os": ["linux", "darwin", "windows"], "arch": ["x86_64", "arm64"]},
+        "supported": {
+            "os": supported_os or ["linux", "darwin", "windows"],
+            "arch": ["x86_64", "arm64"],
+        },
         "install": {"commands": {"linux": install, "darwin": install, "windows": install}},
         "model": {"bundles": [{"bundle": bundle, "default": True, "serve": {"options": {}}}]},
         "config": [],
@@ -79,8 +82,13 @@ class _Hub(BaseHTTPRequestHandler):
             ).encode()
         elif self.path.startswith("/api/v1/apps/xym/demo"):
             command = getattr(self.server, "command", None)
+            supported_os = getattr(self.server, "supported_os", None)
             body = json.dumps(
-                {"code": 0, "message": "success", "data": app_manifest(BUNDLE, command)}
+                {
+                    "code": 0,
+                    "message": "success",
+                    "data": app_manifest(BUNDLE, command, supported_os),
+                }
             ).encode()
         elif self.path.startswith("/api/v1/repos/a/one:1.0.0"):
             files = [
@@ -111,9 +119,10 @@ class _Hub(BaseHTTPRequestHandler):
 
 
 class _HubServer(ThreadingHTTPServer):
-    def __init__(self, command: str | None = None):
+    def __init__(self, command: str | None = None, supported_os: list[str] | None = None):
         super().__init__(("127.0.0.1", 0), _Hub)
         self.command = command
+        self.supported_os = supported_os
 
 
 def _start_daemon(flashserver_bin, flashcli_bin, cli_env, tmp_path, hub):
@@ -182,8 +191,8 @@ def _wait_job(base: str, job_id: str, timeout: float = 120.0) -> tuple[str, dict
 
 
 @contextlib.contextmanager
-def _fake_hub(command: str | None = None):
-    hub = _HubServer(command)
+def _fake_hub(command: str | None = None, supported_os: list[str] | None = None):
+    hub = _HubServer(command, supported_os)
     threading.Thread(target=hub.serve_forever, daemon=True).start()
     try:
         yield hub
@@ -287,3 +296,36 @@ def test_server_app_install_run_executes_script(flashserver_bin, flashcli_bin, c
         assert status == 200, st
         assert st["install"]["executed"] is True
         assert not st["install"].get("skipped")
+
+
+def test_server_app_install_uses_the_client_platform(
+    flashserver_bin, flashcli_bin, cli_env, tmp_path
+):
+    """A Windows-only app installs from Windows while the daemon runs in WSL."""
+    marker = tmp_path / "client-script-ran"
+    command = f"printf ran > {marker}"
+    with _fake_hub(command, supported_os=["windows"]) as hub, _daemon(
+        flashserver_bin, flashcli_bin, cli_env, tmp_path, hub
+    ) as base:
+        status, body = http_json(
+            base + "/v1/apps/xym/demo/install",
+            {
+                "version": "1.0.0",
+                "install_command": "client",
+                "client_os": "windows",
+                "client_arch": "x86_64",
+                "start": False,
+            },
+        )
+        assert status == 202, body
+        state, job = _wait_job(base, body["job_id"])
+        assert state == "done", job.get("error") or job
+
+        # The daemon must not run a command the client already handled.
+        assert not marker.exists()
+
+        status, st = http_json(base + "/v1/apps/xym/demo/status?version=1.0.0")
+        assert status == 200, st
+        assert st["install"]["executed"] is True
+        assert st["install"]["command"] == command
+        assert st["models"][0]["prepared"] is True

@@ -176,8 +176,23 @@ only the way the install-script decision is obtained differs:
 | Entry point | Install-script decision |
 |---|---|
 | `flashcli app install` | asks `[y/N]` on a terminal; `--yes` runs it; no terminal without `--yes` skips and records `skipped` |
-| `flashserver` `POST /v1/apps/{org}/{name}/install` | body must carry `install_command: "run" \| "skip"` (400 otherwise); runs as job `app-install` and streams events |
-| `flashcli-desktop` 应用页 | 安装 dialog shows the command; 运行脚本并安装 sends `run`, 跳过脚本安装 sends `skip`, 取消 does nothing; job progress is polled into the detail pane |
+| `flashserver` `POST /v1/apps/{org}/{name}/install` | body must carry `install_command: "run" \| "skip" \| "client"` (400 otherwise); runs as job `app-install` and streams events |
+| `flashcli-desktop` 应用页 | 安装 dialog shows the command; 运行脚本并安装 runs it **on the client OS** and then sends `client`, 跳过脚本安装 sends `skip`, 取消 does nothing; job progress is polled into the detail pane |
+
+### Platform ownership
+
+The application and its models live on different platforms: the app is
+installed where the user works (for example a Windows exe), while the models
+run in WSL/the daemon host. Therefore:
+
+- The manifest platform check and command selection use the **client** platform
+  (`client_os`/`client_arch` on the API, the desktop's own OS/arch). Without
+  them the daemon falls back to its own platform (CLI behaviour).
+- The desktop executes the install command itself (`powershell -Command` on
+  Windows, `sh -c` elsewhere) and reports `install_command: "client"`; the
+  daemon records the command as executed and never runs a client-side exe.
+- Preparing bundles and starting models stays with the daemon and is unaffected
+  by the client platform.
 
 Uninstall is exposed on both fronts (`DELETE /v1/apps/{org}/{name}`,
 desktop 卸载 with an optional `purge_models`); it never removes the app's own

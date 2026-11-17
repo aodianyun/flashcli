@@ -171,8 +171,20 @@ CLI、守护进程、桌面端都调用同一个 `internal/apps`，区别只在�
 | 入口 | 安装脚本决策 |
 |---|---|
 | `flashcli app install` | 终端上询问 `[y/N]`；`--yes` 直接执行；没有终端且无 `--yes` 时跳过并记录 `skipped` |
-| `flashserver` `POST /v1/apps/{org}/{name}/install` | 必须带 `install_command: "run" \| "skip"`（否则 400）；作为 `app-install` 作业执行并推送事件 |
-| `flashcli-desktop` 应用页 | 「安装」弹窗展示命令：「运行脚本并安装」发 `run`、「跳过脚本安装」发 `skip`、取消则什么也不做；作业进度轮询显示在详情区 |
+| `flashserver` `POST /v1/apps/{org}/{name}/install` | 必须带 `install_command: "run" \| "skip" \| "client"`（否则 400）；作为 `app-install` 作业执行并推送事件 |
+| `flashcli-desktop` 应用页 | 「安装」弹窗展示命令：「运行脚本并安装」在**客户端 OS 本地**执行后发 `client`；「跳过脚本安装」发 `skip`；取消则什么也不做；作业进度轮询显示在详情区 |
+
+### 平台归属
+
+应用本体和模型不在同一个平台：应用装在用户实际使用的系统（例如 Windows 的
+exe），模型跑在 WSL/守护进程所在主机。因此：
+
+- manifest 的平台校验与命令选择使用**客户端**平台（API 的 `client_os`/`client_arch`，
+  桌面端传自己的 OS/arch）；不传时守护进程回退到自身平台（CLI 行为）。
+- 安装命令由桌面端自己执行（Windows 用 `powershell -Command`，其他系统用 `sh -c`），
+  然后告诉守护进程 `install_command: "client"`；守护进程只记录「已执行」，绝不在
+  WSL 里跑客户端 exe。
+- 准备 bundle、启动模型仍由守护进程负责，与客户端平台无关。
 
 卸载在三端都可用（`DELETE /v1/apps/{org}/{name}`；桌面「卸载」可选 `purge_models`），
 但都不会卸载应用自身安装的文件。

@@ -90,6 +90,13 @@ type InstallOptions struct {
 	// NonInteractive is set when stdin is not a terminal: without Yes there is
 	// no way to ask, so the command is skipped.
 	NonInteractive bool
+	// OS/Arch override the platform used for the application check and for
+	// picking the install command. The desktop client passes its own platform:
+	// the application runs there even though the daemon runs in WSL.
+	OS, Arch string
+	// ScriptHandled records that the caller already executed the platform
+	// install command on its own platform; the host only records it.
+	ScriptHandled bool
 }
 
 // InstallResult describes what an install run did.
@@ -140,15 +147,22 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 	ref.Version = m.Version
 	key := ref.String()
 
-	if !Supported(m, runtimeGOOS(), runtimeGOARCH()) {
-		return InstallResult{}, fmt.Errorf("application %s %s does not support %s/%s", key, m.Version, runtimeGOOS(), runtimeGOARCH())
+	goos, goarch := runtimeGOOS(), runtimeGOARCH()
+	if opts.OS != "" {
+		goos = opts.OS
 	}
-	keyName, command, hasCommand := PlatformCommand(m, runtimeGOOS(), runtimeGOARCH())
+	if opts.Arch != "" {
+		goarch = opts.Arch
+	}
+	if !Supported(m, goos, goarch) {
+		return InstallResult{}, fmt.Errorf("application %s %s does not support %s/%s", key, m.Version, goos, goarch)
+	}
+	keyName, command, hasCommand := PlatformCommand(m, goos, goarch)
 	refs := DefaultBundles(m, opts.Bundles)
 
 	out := s.out()
 	fmt.Fprintf(out, "Application: %s %s\n", m.DisplayName, m.Version)
-	fmt.Fprintf(out, "Platform:    %s/%s (supported)\n", runtimeGOOS(), runtimeGOARCH())
+	fmt.Fprintf(out, "Platform:    %s/%s (supported)\n", goos, goarch)
 	if hasCommand {
 		fmt.Fprintf(out, "Install:     [%s] %s\n", keyName, command)
 	} else {
@@ -184,6 +198,12 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 			fmt.Fprintln(out, "Open it in a browser to install the application (flashcli does not auto-download).")
 			state.Install.Skipped = true
 			res.InstallSkipped = true
+		case opts.ScriptHandled:
+			// The caller runs the command on its own platform (the desktop
+			// client installs the Windows app; models stay in WSL).
+			fmt.Fprintf(out, "\nInstall command already executed by the client: %s\n", command)
+			state.Install = InstallRecord{Command: command, Executed: true}
+			res.InstallRan = true
 		default:
 			// Without --yes, ask interactively. Only when there is no terminal
 			// (no way to confirm) is the command skipped.

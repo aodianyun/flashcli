@@ -15,6 +15,12 @@ import (
 )
 
 func manifestJSON(bundles ...string) []byte {
+	return manifestJSONFor(runtime.GOOS, "echo install-ok", bundles...)
+}
+
+// manifestJSONFor builds a manifest for an explicit platform, used to test the
+// desktop client's platform (Windows) on a Linux test host.
+func manifestJSONFor(goos, command string, bundles ...string) []byte {
 	items := make([]string, 0, len(bundles))
 	for _, b := range bundles {
 		items = append(items, fmt.Sprintf(`{"bundle":%q,"default":true,"serve":{"options":{}}}`, b))
@@ -27,10 +33,10 @@ func manifestJSON(bundles ...string) []byte {
   "version": "1.0.0",
   "display_name": "Demo",
   "supported": {"os": [%q], "arch": ["x86_64", "arm64"]},
-  "install": {"commands": {%q: "echo install-ok"}},
+  "install": {"commands": {%q: %q}},
   "model": {"bundles": [%s]},
   "config": []
-}`, runtime.GOOS, runtime.GOOS, strings.Join(items, ",")))
+}`, goos, goos, command, strings.Join(items, ",")))
 }
 
 type fakeProc struct {

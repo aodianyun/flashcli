@@ -28,6 +28,19 @@ const appManifestFixture = `{
   "config": []
 }`
 
+const appManifestWindowsFixture = `{
+  "format": "flashcli-application",
+  "app_format_version": 1,
+  "protocol_version": 1,
+  "name": "demo",
+  "version": "1.0.0",
+  "display_name": "Demo",
+  "supported": {"os": ["windows"], "arch": ["x86_64"]},
+  "install": {"commands": {"windows": "echo should-not-run"}},
+  "model": {"bundles": [{"bundle": "a/one:1", "default": true, "serve": {"options": {}}}]},
+  "config": []
+}`
+
 type appFakeProc struct {
 	ref      string
 	endpoint string
@@ -56,6 +69,10 @@ func (l *appFakeLauncher) StartWithOptions(_ context.Context, ref string, opts m
 }
 
 func newAppTestServer(t *testing.T) (*Server, *httptest.Server, *appFakeLauncher) {
+	return newAppTestServerManifest(t, appManifestFixture)
+}
+
+func newAppTestServerManifest(t *testing.T, manifest string) (*Server, *httptest.Server, *appFakeLauncher) {
 	t.Helper()
 	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -73,7 +90,7 @@ func newAppTestServer(t *testing.T) (*Server, *httptest.Server, *appFakeLauncher
 				},
 			})
 		case "/api/v1/apps/xym/demo":
-			_, _ = w.Write([]byte(`{"code":0,"message":"success","data":` + appManifestFixture + `}`))
+			_, _ = w.Write([]byte(`{"code":0,"message":"success","data":` + manifest + `}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -88,7 +105,7 @@ func newAppTestServer(t *testing.T) (*Server, *httptest.Server, *appFakeLauncher
 	svc.Launcher = launcher
 	svc.Prepare = func(context.Context, string) error { return nil }
 	svc.Fetch = func(ctx context.Context, ref flashhub.AppRef) ([]byte, error) {
-		return []byte(appManifestFixture), nil
+		return []byte(manifest), nil
 	}
 
 	s := &Server{Source: fakeSource{}, Jobs: NewJobManager(), AppService: func() *apps.Service { return svc }}
@@ -116,25 +133,32 @@ func appRequest(t *testing.T, method, url string, body string) (int, map[string]
 	return resp.StatusCode, out
 }
 
-func waitJobDone(t *testing.T, s *Server, id string) *Job {
+// waitJob blocks until the job reaches done/failed and returns it as-is.
+func waitJob(t *testing.T, s *Server, id string) *Job {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		if job, ok := s.Jobs.Get(id); ok {
 			job.mu.Lock()
-			state, errMsg := job.State, job.Error
+			state := job.State
 			job.mu.Unlock()
-			if state == "done" {
+			if state == "done" || state == "failed" {
 				return job
-			}
-			if state == "failed" {
-				t.Fatalf("job failed: %s", errMsg)
 			}
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatal("job did not finish")
 	return nil
+}
+
+func waitJobDone(t *testing.T, s *Server, id string) *Job {
+	t.Helper()
+	job := waitJob(t, s, id)
+	if job.State != "done" {
+		t.Fatalf("job failed: %s", job.Error)
+	}
+	return job
 }
 
 func appState(t *testing.T, svc *apps.Service, key string) apps.AppState {
@@ -146,7 +170,48 @@ func appState(t *testing.T, svc *apps.Service, key string) apps.AppState {
 	return st
 }
 
-// A daemon has no terminal: the caller must decide about the install script.
+// The desktop client is the platform that owns the application: a Windows-only
+// app must install from Windows even though the daemon runs in WSL.
+func TestAppInstallUsesClientPlatform(t *testing.T) {
+	s, ts, _ := newAppTestServerManifest(t, appManifestWindowsFixture)
+	status, body := appRequest(t, http.MethodPost, ts.URL+"/v1/apps/xym/demo/install",
+		`{"version":"1.0.0","install_command":"client","client_os":"windows","client_arch":"x86_64","start":false}`)
+	if status != http.StatusAccepted {
+		t.Fatalf("install = %d %v", status, body)
+	}
+	job := waitJobDone(t, s, fmt.Sprint(body["job_id"]))
+	for _, ev := range job.Events {
+		if strings.HasPrefix(ev.Message, "$ ") {
+			t.Fatalf("daemon ran a client-handled command: %v", ev.Message)
+		}
+	}
+	st := appState(t, s.appService(), "xym/demo:1.0.0")
+	if !st.Install.Executed || st.Install.Skipped {
+		t.Fatalf("install state = %+v", st.Install)
+	}
+	if st.Install.Command != "echo should-not-run" {
+		t.Fatalf("recorded command = %q", st.Install.Command)
+	}
+	if st.State != "ready" || len(st.Models) != 1 || !st.Models[0].Prepared {
+		t.Fatalf("install did not prepare/start the models: %+v", st)
+	}
+}
+
+// Without a client platform the daemon keeps its own (linux) and rejects the
+// Windows-only app instead of silently installing something unusable.
+func TestAppInstallDaemonPlatformRejectsWindowsOnly(t *testing.T) {
+	s, ts, _ := newAppTestServerManifest(t, appManifestWindowsFixture)
+	status, body := appRequest(t, http.MethodPost, ts.URL+"/v1/apps/xym/demo/install",
+		`{"version":"1.0.0","install_command":"skip"}`)
+	if status != http.StatusAccepted {
+		t.Fatalf("install = %d %v", status, body)
+	}
+	job := waitJob(t, s, fmt.Sprint(body["job_id"]))
+	if job.State != "failed" || !strings.Contains(job.Error, "does not support linux/") {
+		t.Fatalf("job = %s %s", job.State, job.Error)
+	}
+}
+
 func TestAppInstallRequiresScriptDecision(t *testing.T) {
 	s, ts, _ := newAppTestServer(t)
 	status, body := appRequest(t, http.MethodPost, ts.URL+"/v1/apps/xym/demo/install", `{"version":"1.0.0"}`)

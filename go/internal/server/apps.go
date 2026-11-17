@@ -109,6 +109,8 @@ func (s *Server) appInstall(w http.ResponseWriter, r *http.Request) {
 		Version        string   `json:"version"`
 		Bundles        []string `json:"bundles"`
 		InstallCommand string   `json:"install_command"`
+		ClientOS       string   `json:"client_os"`
+		ClientArch     string   `json:"client_arch"`
 		Force          bool     `json:"force"`
 		Start          *bool    `json:"start"`
 	}
@@ -118,29 +120,30 @@ func (s *Server) appInstall(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "org and name are required"})
 		return
 	}
-	var runScript bool
+	var opts apps.InstallOptions
 	switch strings.ToLower(strings.TrimSpace(body.InstallCommand)) {
 	case "run":
-		runScript = true
+		opts.Yes = true
 	case "skip":
-		runScript = false
+		opts.Confirm = func(string) bool { return false }
+	case "client":
+		opts.ScriptHandled = true
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]any{
-			"error": `install_command is required: "run" executes the app's install command after explicit user confirmation, "skip" installs without running it`,
+			"error": `install_command is required: "run" executes the command on the daemon host, "skip" does not run it, "client" means the caller already ran it on its own platform`,
 		})
 		return
 	}
-	start := body.Start == nil || *body.Start
+	opts.OS = strings.TrimSpace(body.ClientOS)
+	opts.Arch = strings.TrimSpace(body.ClientArch)
+	opts.Force = body.Force
+	opts.NoStart = body.Start != nil && !*body.Start
+	opts.Bundles = body.Bundles
+
 	job := s.Jobs.Start(context.Background(), "app-install", ref.String(), func(ctx context.Context, emit func(string, string)) error {
 		svc := s.appService()
 		svc.Out = emitWriter{emit: emit}
-		_, err := svc.Install(ctx, ref.String(), apps.InstallOptions{
-			Yes:     runScript,
-			Confirm: func(string) bool { return false },
-			Force:   body.Force,
-			NoStart: !start,
-			Bundles: body.Bundles,
-		})
+		_, err := svc.Install(ctx, ref.String(), opts)
 		return err
 	})
 	writeJSON(w, http.StatusAccepted, map[string]any{"job_id": job.ID, "state": job.State})
