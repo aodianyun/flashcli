@@ -2760,7 +2760,7 @@ impl App {
 
                 ui.add_space(10.0);
                 panel(ui, "关于", |ui| {
-                    ui.label(format!("FlashServer Desktop v{}", env!("CARGO_PKG_VERSION")));
+                    ui.label(format!("flashcli-desktop v{}", env!("CARGO_PKG_VERSION")));
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
                         if button(ui, "API 文档").clicked() {
@@ -5233,7 +5233,7 @@ fn main() -> eframe::Result<()> {
         ..Default::default()
     };
     eframe::run_native(
-        "FlashServer",
+        "flashcli-desktop",
         options,
         Box::new(|cc| Ok(Box::new(App::new(cc)))),
     )

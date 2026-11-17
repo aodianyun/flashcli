@@ -2,7 +2,7 @@
 
 <p align="right"><a href="flashserver-desktop.md">English</a> · <strong>简体中文</strong></p>
 
-Windows 安装包内置 `FlashServer.exe`（Rust + egui/eframe，不用 WebView，无控制台窗口）。
+Windows 安装包内置 `flashcli-desktop.exe`（Rust + egui/eframe，不用 WebView，无控制台窗口）。
 实时状态走 `/v1/ws`，命令走 HTTP。安装与自行构建见
 [../desktop/README.md](../desktop/README.md)。
 

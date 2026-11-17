@@ -2,7 +2,7 @@
 
 <p align="right"><strong>English</strong> · <a href="flashserver-desktop.zh-CN.md">简体中文</a></p>
 
-The Windows package ships `FlashServer.exe`, a Rust + egui/eframe client (no
+The Windows package ships `flashcli-desktop.exe`, a Rust + egui/eframe client (no
 WebView, no console window). It streams live state over `/v1/ws` and uses HTTP
 for commands. Install/build details are in [../desktop/README.md](../desktop/README.md).
 

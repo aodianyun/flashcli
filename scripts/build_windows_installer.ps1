@@ -43,11 +43,11 @@ $Payload = Join-Path $env:TEMP ("flashserver-installer-payload-" + [guid]::NewGu
 New-Item -ItemType Directory -Force -Path $Payload | Out-Null
 try {
     Copy-Item $SetupExe (Join-Path $Payload "flashserver-setup-windows-amd64.exe")
-    $ClientExe = Join-Path $Root "desktop\target\release\FlashServer.exe"
+    $ClientExe = Join-Path $Root "desktop\target\release\flashcli-desktop.exe"
     if (-not (Test-Path $ClientExe)) {
         throw "missing $ClientExe; run 'cargo build --release' in desktop/ first"
     }
-    Copy-Item $ClientExe (Join-Path $Payload "FlashServer.exe")
+    Copy-Item $ClientExe (Join-Path $Payload "flashcli-desktop.exe")
     # Only amd64 Linux binaries are shipped: the installer is x64-only
     # (ArchitecturesAllowed=x64) and WSL2 on x64 Windows is amd64. Setup picks
     # flashcli-linux-<arch>/flashserver-linux-<arch> from this directory, so no
