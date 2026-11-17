@@ -188,19 +188,37 @@ def build_app(
         if ANTHROPIC_MODELS in capabilities and request.headers.get("anthropic-version"):
             from datetime import datetime, timezone
 
+            raw_limit = request.query_params.get("limit")
+            try:
+                limit = int(raw_limit) if raw_limit is not None else 20
+            except ValueError:
+                raise HTTPException(
+                    400, "limit must be an integer between 1 and 1000"
+                ) from None
+            if limit < 1 or limit > 1000:
+                raise HTTPException(400, "limit must be between 1 and 1000")
+
+            cursor = request.query_params.get("after_id") or request.query_params.get(
+                "before_id"
+            )
+            # A single-model host has no page after/before a cursor id.
+            items = [] if cursor is not None else [engine.model_id]
+            items = items[:limit]
             created = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            data = [
+                {
+                    "type": "model",
+                    "id": model_id,
+                    "display_name": model_id,
+                    "created_at": created,
+                }
+                for model_id in items
+            ]
             return {
-                "data": [
-                    {
-                        "type": "model",
-                        "id": engine.model_id,
-                        "display_name": engine.model_id,
-                        "created_at": created,
-                    }
-                ],
+                "data": data,
                 "has_more": False,
-                "first_id": engine.model_id,
-                "last_id": engine.model_id,
+                "first_id": data[0]["id"] if data else None,
+                "last_id": data[-1]["id"] if data else None,
             }
         return {
             "object": "list",
@@ -268,12 +286,24 @@ def build_app(
             )
             raise
 
+        raw_n = body.get("n")
+        try:
+            n = int(raw_n) if raw_n is not None else 1
+        except (TypeError, ValueError):
+            raise HTTPException(400, "n must be an integer") from None
+        if n < 1:
+            raise HTTPException(400, "n must be >= 1")
+        if n > 1 and req.stream:
+            raise HTTPException(501, "streaming n>1 is not implemented yet")
+
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
         created = int(time.time())
 
         if not req.stream:
             try:
-                result = await gate.run(req_id, _chat_result(req))
+                results = [
+                    await gate.run(req_id, _chat_result(req)) for _ in range(n)
+                ]
             except GpuBusyError:
                 log.warning(
                     "chat END | id=%s | from=%s | status=503 gpu_busy | %.1f ms | %s",
@@ -301,6 +331,7 @@ def build_app(
                 )
                 raise HTTPException(500, f"inference failed: {exc}") from exc
 
+            result = results[0]
             usage_line = usage_summary(result.usage)
             log.info(
                 "chat END | id=%s | from=%s | status=200 | %.1f ms | "
@@ -313,12 +344,32 @@ def build_app(
                 usage_line,
                 f" | {summary}" if not usage_line else "",
             )
-            return chat_result_to_completion_payload(
+            payload = chat_result_to_completion_payload(
                 result,
                 completion_id=completion_id,
                 model_id=engine.model_id,
                 created=created,
             )
+            if n == 1:
+                return payload
+
+            choices: list[dict[str, Any]] = []
+            usage: dict[str, Any] = {}
+            for index, item in enumerate(results):
+                choice = chat_result_to_completion_payload(
+                    item,
+                    completion_id=completion_id,
+                    model_id=engine.model_id,
+                    created=created,
+                )["choices"][0]
+                choice["index"] = index
+                choices.append(choice)
+                for key, value in (item.usage or {}).items():
+                    if isinstance(value, (int, float)):
+                        usage[key] = usage.get(key, 0) + value
+            payload["choices"] = choices
+            payload["usage"] = usage
+            return payload
 
         try:
             await gate.acquire(req_id)

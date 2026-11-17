@@ -25,15 +25,9 @@ _CHAT_COMPLETIONS_KNOWN: frozenset[str] = frozenset(
         "top_k",
         "stream",
         "tools",
-        "tool_choice",
         "stop",
         "seed",
         "n",
-        "user",
-        "response_format",
-        "logprobs",
-        "presence_penalty",
-        "frequency_penalty",
     }
 )
 

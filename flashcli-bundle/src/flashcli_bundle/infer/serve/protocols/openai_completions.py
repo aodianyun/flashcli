@@ -29,12 +29,16 @@ def _parse(body: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
         prompts = list(prompt)
     else:
         raise HTTPException(400, "prompt must be a string or array of strings")
-    if not prompts:
+    if not prompts or any(prompt == "" for prompt in prompts):
         raise HTTPException(400, "prompt must not be empty")
     for key in _UNSUPPORTED:
         if body.get(key) is not None:
             raise HTTPException(400, f"{key} is not supported by this bundle")
-    n = int(body.get("n", 1) or 1)
+    raw_n = body.get("n")
+    try:
+        n = int(raw_n) if raw_n is not None else 1
+    except (TypeError, ValueError):
+        raise HTTPException(400, "n must be an integer") from None
     if n < 1:
         raise HTTPException(400, "n must be >= 1")
     if n > 1 and not body.get("stream"):

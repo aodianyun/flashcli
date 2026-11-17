@@ -166,6 +166,12 @@ def _request(body: dict[str, Any]) -> ChatRequest:
     }
     if isinstance(text, dict) and isinstance(text.get("format"), dict):
         extras["response_format"] = text["format"]
+    choice = body.get("tool_choice")
+    if choice is not None:
+        extras["tool_choice"] = _tool_choice(choice)
+    for key in ("reasoning", "truncation", "parallel_tool_calls"):
+        if body.get(key) is not None:
+            extras[key] = body[key]
     return ChatRequest(
         messages=messages,
         max_tokens=int(body.get("max_output_tokens", 1024) or 1024),
