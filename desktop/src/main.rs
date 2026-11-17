@@ -1821,15 +1821,12 @@ impl App {
             for line in app_log_tail(&job.log, 8) {
                 ui.label(egui::RichText::new(line).monospace().small().weak());
             }
-            if !job.log.is_empty() && ui.small_button("查看完整日志").clicked() {
-                self.app_log_dialog =
-                    Some((format!("{display} · 安装日志"), job.log.clone()));
-            }
         }
 
         let mut action: Option<&'static str> = None;
         let mut open_install = false;
         let mut open_uninstall = false;
+        let mut open_log = false;
         let wait_hint = "已有应用正在安装，请等待完成";
         ui.add_space(8.0);
         ui.horizontal_wrapped(|ui| {
@@ -1871,6 +1868,11 @@ impl App {
             {
                 open_uninstall = true;
             }
+            if let Some(job) = &job {
+                if !job.log.is_empty() && ui.small_button("查看完整日志").clicked() {
+                    open_log = true;
+                }
+            }
         });
         if other_install {
             ui.label(
@@ -1878,6 +1880,12 @@ impl App {
                     .small()
                     .weak(),
             );
+        }
+        if open_log {
+            if let Some(job) = &job {
+                self.app_log_dialog =
+                    Some((format!("{display} · 安装日志"), job.log.clone()));
+            }
         }
         if !supported {
             ui.label(
@@ -5863,12 +5871,12 @@ fn spawn_app_install(
         let verb = "安装".to_string();
         let reference = app_reference(&org, &name, &version);
         let fail = |err: String| {
-            // Always close the job first: otherwise the detail pane keeps
-            // spinning after a failed install.
+            // Close the job (so the pane stops spinning) and keep the reason in
+            // the log, not only in the transient toast.
             let _ = tx.send(Event::AppJob {
                 verb: verb.clone(),
                 reference: reference.clone(),
-                line: String::new(),
+                line: format!("失败: {err}"),
                 running: false,
             });
             let _ = tx.send(Event::AppAction(verb.clone(), Err(err)));
@@ -6241,6 +6249,15 @@ fn follow_app_job(
                         .unwrap_or("任务失败")
                         .to_string())
                 };
+                // Keep the failure reason in the log too.
+                if let Err(err) = &result {
+                    let _ = tx.send(Event::AppJob {
+                        verb: verb.clone(),
+                        reference: reference.clone(),
+                        line: format!("失败: {err}"),
+                        running: false,
+                    });
+                }
                 let _ = tx.send(Event::AppAction(verb, result));
                 ctx.request_repaint();
                 return;
