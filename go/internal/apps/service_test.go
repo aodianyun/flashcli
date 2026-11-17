@@ -58,9 +58,13 @@ type fakeLauncher struct {
 	procs   []*fakeProc
 	failRef string
 	nextPID int
+	onStart func(string)
 }
 
 func (l *fakeLauncher) StartWithOptions(_ context.Context, ref string, opts modelrun.LoadOptions) (modelrun.ServeProcess, error) {
+	if l.onStart != nil {
+		l.onStart(ref)
+	}
 	if ref == l.failRef {
 		return nil, fmt.Errorf("boom")
 	}

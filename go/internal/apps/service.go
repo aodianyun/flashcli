@@ -426,7 +426,7 @@ func (s *Service) startModels(ctx context.Context, st *AppState, keepPartial boo
 	}
 	for i := range st.Models {
 		mdl := &st.Models[i]
-		if mdl.PID > 0 && mdl.Endpoint != "" && modelrun.HealthyEndpoint(ctx, mdl.Endpoint) == nil {
+		if mdl.PID > 0 && mdl.Endpoint != "" && endpointHealthy(ctx, mdl.Endpoint) {
 			fmt.Fprintf(s.out(), "  reuse %s at %s\n", mdl.ID, mdl.Endpoint)
 			continue
 		}
@@ -456,6 +456,14 @@ func (s *Service) startModels(ctx context.Context, st *AppState, keepPartial boo
 		fmt.Fprintf(s.out(), "  started %s at %s (pid %d)\n", mdl.ID, mdl.Endpoint, mdl.PID)
 	}
 	return nil
+}
+
+// endpointHealthy bounds the reuse probe so a stale endpoint cannot stall an
+// install for the full health timeout.
+func endpointHealthy(ctx context.Context, endpoint string) bool {
+	probe, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	return modelrun.HealthyEndpoint(probe, endpoint) == nil
 }
 
 func waitHealthy(ctx context.Context, proc modelrun.ServeProcess, timeout time.Duration) error {
