@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/aodianyun/flashcli/go/internal/host"
+	"github.com/aodianyun/flashcli/go/internal/modelrun"
 )
 
 const (
@@ -108,7 +109,7 @@ func (s *Server) smokeLogPath(refStr string) string {
 }
 
 func (s *Server) smokeRun(ctx context.Context, refStr, logPath string, emit func(string, string)) error {
-	bin, err := resolveFlashcliBin(s.FlashcliBin)
+	bin, err := modelrun.ResolveBin(s.FlashcliBin)
 	if err != nil {
 		appendSmokeLog(logPath, "启动失败: "+err.Error()+"\n")
 		return err

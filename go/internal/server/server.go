@@ -17,6 +17,7 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/flashhub"
 	"github.com/aodianyun/flashcli/go/internal/gpu"
 	"github.com/aodianyun/flashcli/go/internal/host"
+	"github.com/aodianyun/flashcli/go/internal/modelrun"
 	"github.com/aodianyun/flashcli/go/internal/paths"
 	"github.com/aodianyun/flashcli/go/internal/version"
 )
@@ -79,7 +80,7 @@ func New(addr string) *Server {
 		Puller:        hostPuller{},
 		Catalog:       flashhub.NewClient(),
 		Jobs:          NewJobManager(),
-		Manager:       NewManagerWithOptions(FlashcliLauncher{LogDir: logDir}, ManagerOptions{GPU: gpuProbe, ServeSettings: store}),
+		Manager:       NewManagerWithOptions(modelrun.FlashcliLauncher{LogDir: logDir}, ManagerOptions{GPU: gpuProbe, ServeSettings: store}),
 		GPU:           gpuProbe,
 		Started:       time.Now(),
 		LogDir:        logDir,

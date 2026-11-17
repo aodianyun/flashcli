@@ -3,6 +3,8 @@ package server
 import (
 	"encoding/json"
 	"os"
+
+	"github.com/aodianyun/flashcli/go/internal/modelrun"
 )
 
 // Config is the on-disk flashserver configuration written by flashserver-setup.
@@ -41,7 +43,7 @@ func NewFromConfig(cfg Config) *Server {
 	s.ServeHost = cfg.ServeHost
 	s.PublicHost = cfg.PublicHost
 	if s.Manager != nil {
-		s.Manager = NewManagerWithOptions(FlashcliLauncher{
+		s.Manager = NewManagerWithOptions(modelrun.FlashcliLauncher{
 			Bin: cfg.FlashcliBin, Host: cfg.ServeHost, PublicHost: cfg.PublicHost, LogDir: s.LogDir,
 		}, ManagerOptions{
 			MaxLoaded:      cfg.MaxLoaded,

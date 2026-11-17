@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/aodianyun/flashcli/go/internal/gpu"
+	"github.com/aodianyun/flashcli/go/internal/modelrun"
 )
 
 // staticLauncher returns a fixed endpoint so HTTP handlers can proxy to a test
@@ -242,7 +243,7 @@ func TestJobsOverHTTP(t *testing.T) {
 }
 
 func TestRunServesUntilContextCancel(t *testing.T) {
-	port, err := freePort()
+	port, err := modelrun.FreePort()
 	if err != nil {
 		t.Fatal(err)
 	}
