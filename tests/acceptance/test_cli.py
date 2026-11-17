@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 
-from helpers import CELL, FIXTURES, prepare_bundle, run_cli
+from helpers import CELL, FIXTURES, prepare_bundle, run_cli, skip_without_gpu
 
 
 def _pyproject_version() -> str:
@@ -44,6 +44,7 @@ def test_models_show_reports_host_and_match(flashcli_bin, cli_env, home):
     assert proc.returncode == 0, proc.stderr
     out = proc.stdout
     assert "ref:" in out
+    skip_without_gpu(out)
     assert "this machine:" in out
     assert "supported (1)" in out
 
