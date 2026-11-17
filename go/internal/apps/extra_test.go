@@ -157,6 +157,24 @@ func TestInstallRejectsUnsupportedClientPlatform(t *testing.T) {
 	}
 }
 
+func TestInstallHandledUrlIsRecordedAsExecuted(t *testing.T) {
+	// The desktop downloads and runs an installer URL itself; the daemon must
+	// record that instead of marking the URL as skipped.
+	svc, _ := newTestService(t, manifestJSONFor("windows", "https://example.com/workbuddy.exe", "a/one:1"), &fakeLauncher{})
+	res, err := svc.Install(context.Background(), "xym/demo", InstallOptions{
+		OS:            "windows",
+		Arch:          "x86_64",
+		ScriptHandled: true,
+		NoStart:       true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.InstallRan || !res.State.Install.Executed || res.State.Install.Skipped {
+		t.Fatalf("install state = %+v", res.State.Install)
+	}
+}
+
 func TestInstallConfirmsThenRuns(t *testing.T) {
 	launcher := &fakeLauncher{}
 	svc, _ := newTestService(t, manifestJSON("a/one:1"), launcher)

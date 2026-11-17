@@ -193,17 +193,18 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 	res := InstallResult{}
 	if !opts.NoInstall && hasCommand {
 		switch {
+		case opts.ScriptHandled:
+			// The caller installed the application on its own platform (the
+			// desktop client downloads/runs a Windows installer; models stay in
+			// WSL). Record it and never execute anything here.
+			fmt.Fprintf(out, "\nInstall command already handled by the client: %s\n", command)
+			state.Install = InstallRecord{Command: command, Executed: true}
+			res.InstallRan = true
 		case IsURL(command):
 			fmt.Fprintf(out, "\nDownload page: %s\n", command)
 			fmt.Fprintln(out, "Open it in a browser to install the application (flashcli does not auto-download).")
 			state.Install.Skipped = true
 			res.InstallSkipped = true
-		case opts.ScriptHandled:
-			// The caller runs the command on its own platform (the desktop
-			// client installs the Windows app; models stay in WSL).
-			fmt.Fprintf(out, "\nInstall command already executed by the client: %s\n", command)
-			state.Install = InstallRecord{Command: command, Executed: true}
-			res.InstallRan = true
 		default:
 			// Without --yes, ask interactively. Only when there is no terminal
 			// (no way to confirm) is the command skipped.
