@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/aodianyun/flashcli/go/internal/apps"
 	"github.com/aodianyun/flashcli/go/internal/flashhub"
 	"github.com/aodianyun/flashcli/go/internal/gpu"
 	"github.com/aodianyun/flashcli/go/internal/host"
@@ -50,6 +51,8 @@ type Server struct {
 	ServeHost     string
 	PublicHost    string
 	ServeSettings *serveSettingsStore
+	// AppService returns the shared application service (nil = default).
+	AppService func() *apps.Service
 
 	pullBusy atomic.Bool
 
@@ -122,6 +125,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/models/smoke", s.smokeModel)
 	mux.HandleFunc("POST /v1/models/clean", s.cleanModels)
 	mux.HandleFunc("POST /v1/storage/clean", s.cleanStorage)
+	mux.HandleFunc("GET /v1/apps", s.appList)
+	mux.HandleFunc("GET /v1/apps/installed", s.appInstalled)
+	mux.HandleFunc("GET /v1/apps/{org}/{name}", s.appManifest)
+	mux.HandleFunc("GET /v1/apps/{org}/{name}/status", s.appStatus)
+	mux.HandleFunc("POST /v1/apps/{org}/{name}/prepare", s.appPrepare)
+	mux.HandleFunc("POST /v1/apps/{org}/{name}/start", s.appStart)
+	mux.HandleFunc("POST /v1/apps/{org}/{name}/stop", s.appStop)
+	mux.HandleFunc("DELETE /v1/apps/{org}/{name}", s.appUninstall)
 	mux.HandleFunc("POST /v1/ui/chat", s.uiChat)
 	mux.HandleFunc("GET /", s.ui)
 	return s.authorize(mux)
