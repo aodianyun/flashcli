@@ -121,6 +121,43 @@ fn app_domains_are_unique_and_skip_blanks() {
 }
 
 #[test]
+fn installer_kinds_follow_the_extension() {
+    assert!(matches!(
+        installer_kind("https://x/a.exe?token=1"),
+        InstallerKind::Exe
+    ));
+    assert!(matches!(installer_kind("https://x/a.MSI"), InstallerKind::Msi));
+    assert!(matches!(
+        installer_kind("https://x/a.dmg#frag"),
+        InstallerKind::Dmg
+    ));
+    assert!(matches!(installer_kind("https://x/a.pkg"), InstallerKind::Pkg));
+    assert!(matches!(
+        installer_kind("https://example.com/demo"),
+        InstallerKind::Page
+    ));
+    assert!(installer_is_runnable(InstallerKind::Exe));
+    assert!(installer_is_runnable(InstallerKind::Msi));
+    assert!(!installer_is_runnable(InstallerKind::Page));
+}
+
+#[test]
+fn installer_file_names_are_sanitized() {
+    assert_eq!(
+        installer_file_name("https://x/WorkBuddy-5.exe?token=1", InstallerKind::Exe),
+        "WorkBuddy-5.exe"
+    );
+    assert_eq!(
+        installer_file_name("https://x/", InstallerKind::Exe),
+        "installer.exe"
+    );
+    assert_eq!(
+        installer_file_name("https://x/setup.msi", InstallerKind::Msi),
+        "setup.msi"
+    );
+}
+
+#[test]
 fn app_install_body_makes_the_script_decision_explicit() {
     let ran = app_install_body("1.0.0", true, true);
     assert_eq!(ran["version"], "1.0.0");

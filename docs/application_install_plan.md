@@ -54,12 +54,14 @@ and that `name`/`version` match the key. See
 
 ## Install flow
 
-Steps (all state transitions are persisted so `status` and re-runs work):
+Steps (all state transitions are persisted so `status` and re-runs work). The
+order is fixed: **the application is installed first; no bundle is prepared
+until that step succeeded** (or the user explicitly skipped it).
 
 ```text
 RESOLVE → VALIDATE → PLATFORM → PREFLIGHT → PLAN
-  → CONFIRM_INSTALL (shell only)
-  → INSTALL_APP (URL: manual | shell: run)
+  → CONFIRM_INSTALL (shell command or installer download; page URL: manual)
+  → INSTALL_APP (script: run | installer URL: download + run | page: open/copy)
   → PREPARE_MODELS (every default bundle, serial)
   → START_MODELS (one group, auto ports)
   → HEALTH (per model)
@@ -71,7 +73,7 @@ RESOLVE → VALIDATE → PLATFORM → PREFLIGHT → PLAN
 sequenceDiagram
   autonumber
   participant U as User
-  participant CLI as flashcli app install
+  participant CLI as CLI / desktop
   participant A as internal/apps
   participant FH as FlashHub
   participant H as internal/host + modelrun
@@ -81,20 +83,28 @@ sequenceDiagram
   CLI->>A: Install(ref, opts)
   A->>FH: GET /api/v1/apps/xym/workbuddy
   FH-->>A: manifest v1
-  A->>A: validate + platform + preflight
+  A->>A: validate + platform (client OS) + preflight
   alt unsupported or invalid
     A-->>CLI: error (nothing changed)
   end
-  alt install command is a URL
-    A-->>CLI: print link (manual install)
-    A->>REG: install=manual
-  else install command is a shell command
-    A->>U: show command, ask [y/N]
-    Note over A: non-interactive without -y: skip and record
-    U-->>A: yes
-    A->>A: execute (sh -c / powershell -Command)
+  alt install command is a page URL
+    CLI-->>U: show link (manual install)
+    A->>REG: install=skipped(manual)
+  else installer URL (.exe/.msi/.dmg/.pkg)
+    CLI->>U: show link, ask to download + run
+    U-->>CLI: confirmed
+    CLI->>CLI: download, run the installer (client OS)
+    CLI->>A: install_command=client
+    A->>REG: install=executed
+  else shell command
+    CLI->>U: show command, ask [y/N]
+    Note over CLI: non-interactive without -y: skip and record
+    U-->>CLI: yes
+    CLI->>CLI: execute (powershell -Command / sh -c)
+    CLI->>A: install_command=client
     A->>REG: install=executed
   end
+  Note over A,H: the application install must finish before this point
   loop every default bundle (serial)
     A->>H: prepare = pull tree + venv + weights
     H-->>A: progress
@@ -122,8 +132,8 @@ stateDiagram-v2
   [*] --> RESOLVING
   RESOLVING --> PLANNED: manifest valid, platform supported
   RESOLVING --> FAILED: invalid manifest or unsupported platform
-  PLANNED --> INSTALLING: confirmed shell command
-  PLANNED --> PREPARING: URL or skipped script
+  PLANNED --> INSTALLING: confirmed script or installer download
+  PLANNED --> PREPARING: skipped script or manual page URL
   INSTALLING --> PREPARING: command succeeded
   INSTALLING --> FAILED: command failed (abort)
   PREPARING --> PREPARED: all default bundles prepared
@@ -163,7 +173,11 @@ Rules:
 
 - Any shell execution requires explicit confirmation; `--yes` runs it without a
   prompt; non-interactive runs without `--yes` skip it and record `skipped`.
-- URLs are printed (never downloaded automatically).
+- URLs are handled by the client: the CLI prints the link and never downloads;
+  the desktop, after confirmation, downloads and runs installers
+  (.exe/.msi on Windows, .dmg/.pkg on macOS) and opens plain pages in a browser.
+- Bundles are prepared only after the application install succeeded; a failed
+  install (script or installer) aborts the whole run.
 - Ports are allocated automatically and recorded; `start` is idempotent.
 - `uninstall` stops the app's models and removes its state; model caches are kept
   unless `--purge-models` is given.
@@ -240,12 +254,15 @@ rollback.
 
 - Remote shell installers are shown first and require confirmation; `--yes` is
   the only way to run them unattended.
-- URLs are opened by the user, not fetched by the host.
+- URLs are never fetched by the daemon. The desktop downloads an installer only
+  after the user confirms it in the dialog (the host is shown), and page links
+  open in the browser.
 - The local API stays single-user (no remote mode).
-- The desktop never guesses about an install script. 安装 opens a dialog that
-  shows the command; it executes only after 运行脚本并安装 (跳过脚本安装 installs
-  without it). The daemon enforces this: `POST /v1/apps/{org}/{name}/install`
-  requires `install_command: "run" | "skip"` and rejects a missing value, since
+- The desktop never guesses about an install script or installer. 安装 opens a
+  dialog that shows the command or URL; a script runs and an installer downloads
+  only after 运行脚本并安装 / 下载并安装 (跳过 prepares the models without it). The
+  daemon enforces this: `POST /v1/apps/{org}/{name}/install` requires
+  `install_command: "run" | "skip" | "client"` and rejects a missing value, since
   a daemon has no terminal to ask.
 
 ## Testing

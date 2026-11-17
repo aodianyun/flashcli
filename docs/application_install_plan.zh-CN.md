@@ -56,8 +56,8 @@ CLI 的应用操作**不需要**（也不使用）对守护进程的 HTTP 调用
 
 ```text
 RESOLVE → VALIDATE → PLATFORM → PREFLIGHT → PLAN
-  → CONFIRM_INSTALL（仅 shell）
-  → INSTALL_APP（URL：manual | shell：执行）
+  → CONFIRM_INSTALL（shell 命令或安装包下载；普通页面链接：手动）
+  → INSTALL_APP（脚本：执行 | 安装包 URL：下载并运行 | 页面：打开/复制）
   → PREPARE_MODELS（所有 default bundle，串行）
   → START_MODELS（作为一组，自动端口）
   → HEALTH（逐个模型）
@@ -65,11 +65,13 @@ RESOLVE → VALIDATE → PLATFORM → PREFLIGHT → PLAN
   → READY
 ```
 
+顺序是固定的：**先装应用，安装成功之前不会开始准备任何 bundle**（除非用户明确跳过）。
+
 ```mermaid
 sequenceDiagram
   autonumber
   participant U as 用户
-  participant CLI as flashcli app install
+  participant CLI as CLI / 桌面端
   participant A as internal/apps
   participant FH as FlashHub
   participant H as internal/host + modelrun
@@ -79,20 +81,28 @@ sequenceDiagram
   CLI->>A: Install(ref, opts)
   A->>FH: GET /api/v1/apps/xym/workbuddy
   FH-->>A: manifest v1
-  A->>A: 校验 + 平台判断 + 预检
+  A->>A: 校验 + 平台判断（客户端 OS）+ 预检
   alt 不支持或非法
     A-->>CLI: 报错（无任何改动）
   end
-  alt install 命令是 URL
-    A-->>CLI: 打印链接（手动安装）
-    A->>REG: install=manual
-  else install 命令是 shell
-    A->>U: 展示命令并询问 [y/N]
-    Note over A: 非交互且无 -y：跳过并记录
-    U-->>A: 同意
-    A->>A: 执行（sh -c / powershell -Command）
+  alt install 命令是普通页面链接
+    CLI-->>U: 展示链接（手动安装）
+    A->>REG: install=skipped(manual)
+  else 安装包 URL（.exe/.msi/.dmg/.pkg）
+    CLI->>U: 展示链接，询问是否下载并运行
+    U-->>CLI: 确认
+    CLI->>CLI: 下载并运行安装程序（客户端 OS）
+    CLI->>A: install_command=client
+    A->>REG: install=executed
+  else shell 命令
+    CLI->>U: 展示命令并询问 [y/N]
+    Note over CLI: 非交互且无 -y：跳过并记录
+    U-->>CLI: 同意
+    CLI->>CLI: 执行（powershell -Command / sh -c）
+    CLI->>A: install_command=client
     A->>REG: install=executed
   end
+  Note over A,H: 应用安装完成后才进入下面的准备阶段
   loop 每个 default bundle（串行）
     A->>H: prepare = 同步 bundle + venv + 权重
     H-->>A: 进度
@@ -120,8 +130,8 @@ stateDiagram-v2
   [*] --> RESOLVING
   RESOLVING --> PLANNED: manifest 合法、平台支持
   RESOLVING --> FAILED: manifest 非法或平台不支持
-  PLANNED --> INSTALLING: 确认执行 shell 命令
-  PLANNED --> PREPARING: URL 或跳过脚本
+  PLANNED --> INSTALLING: 确认执行脚本或下载安装包
+  PLANNED --> PREPARING: 跳过脚本或页面链接手动安装
   INSTALLING --> PREPARING: 命令成功
   INSTALLING --> FAILED: 命令失败（终止）
   PREPARING --> PREPARED: 所有 default bundle 就绪
@@ -159,7 +169,9 @@ flashcli app uninstall <key> [--yes] [--purge-models]
 规则：
 
 - 任何 shell 执行都要显式确认；`--yes` 免询问；非交互无 `--yes` 时跳过并记 `skipped`
-- URL 只打印，host 不自动下载
+- URL 由客户端处理：CLI 只打印链接（不下载）；桌面端在用户确认后下载并运行安装包
+  （.exe/.msi → Windows，.dmg/.pkg → macOS），普通页面链接在浏览器打开
+- 应用安装成功后才准备 bundle；安装失败会中止整个流程
 - 端口自动分配并记录；`start` 幂等
 - `uninstall` 停止该应用模型并移除状态；默认保留模型缓存（`--purge-models` 才清理）
 
@@ -229,10 +241,11 @@ v1 的 manifest 发布 `config: []`。host 只写 `connection.json`（base URL�
 ## 安全
 
 - 远程 shell 安装器先展示再确认；`--yes` 是唯一的免交互方式
-- URL 由用户打开，host 不主动下载
+- URL 不由守护进程抓取：桌面端只在用户于弹窗确认后下载并运行安装包（弹窗显示来源），
+  普通页面链接在浏览器打开
 - 本地 API 保持单用户（不做 remote 模式）
-- 桌面端从不自行决定是否执行安装脚本：点「安装」先展示命令，只有选
-  「运行脚本并安装」才执行（选「跳过脚本安装」则只安装模型）。守护进程强制这一点：
+- 桌面端从不自行决定是否执行安装脚本/安装包：点「安装」先展示命令，只有选
+  「运行脚本并安装」/「下载并安装」才执行（选「跳过」则只准备模型）。守护进程强制这一点：
   `POST /v1/apps/{org}/{name}/install` 必须带 `install_command: "run" | "skip"`，
   缺失即拒绝——daemon 没有终端可以询问用户
 

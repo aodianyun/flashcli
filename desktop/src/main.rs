@@ -288,6 +288,71 @@ struct SmokeState {
     log: String,
 }
 
+/// What the user picked in the install confirmation dialog.
+enum AppInstallAction {
+    /// Install the models only.
+    Skip,
+    /// Run the manifest shell command on this machine.
+    RunScript(String),
+    /// Download the installer behind a URL and run it.
+    Installer { url: String, kind: InstallerKind },
+}
+
+/// Installer type behind an install URL.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum InstallerKind {
+    Exe,
+    Msi,
+    Dmg,
+    Pkg,
+    /// A plain download page: opened in the browser, never fetched.
+    Page,
+}
+
+/// Installer type behind an install URL, by extension (query ignored).
+fn installer_kind(url: &str) -> InstallerKind {
+    let path = url.split(['?', '#']).next().unwrap_or(url).to_ascii_lowercase();
+    if path.ends_with(".exe") {
+        InstallerKind::Exe
+    } else if path.ends_with(".msi") {
+        InstallerKind::Msi
+    } else if path.ends_with(".dmg") {
+        InstallerKind::Dmg
+    } else if path.ends_with(".pkg") {
+        InstallerKind::Pkg
+    } else {
+        InstallerKind::Page
+    }
+}
+
+/// File name for a downloaded installer (last path segment, sanitized).
+fn installer_file_name(url: &str, kind: InstallerKind) -> String {
+    let path = url.split(['?', '#']).next().unwrap_or(url);
+    let name = path.rsplit('/').next().unwrap_or("");
+    let cleaned: String = name
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+        .collect();
+    if cleaned.is_empty() || cleaned.starts_with('.') {
+        match kind {
+            InstallerKind::Msi => "installer.msi".to_string(),
+            InstallerKind::Dmg => "installer.dmg".to_string(),
+            InstallerKind::Pkg => "installer.pkg".to_string(),
+            _ => "installer.exe".to_string(),
+        }
+    } else {
+        cleaned
+    }
+}
+
+/// True when this kind is downloaded and executed (not just opened).
+fn installer_is_runnable(kind: InstallerKind) -> bool {
+    matches!(
+        kind,
+        InstallerKind::Exe | InstallerKind::Msi | InstallerKind::Dmg | InstallerKind::Pkg
+    )
+}
+
 /// A pending application install: the user must confirm the install script.
 #[derive(Clone)]
 struct AppInstallPrompt {
@@ -1509,17 +1574,21 @@ impl App {
             ui.vertical(|ui| {
                 ui.set_width(grid_width);
                 ui.set_min_width(grid_width);
+                ui.set_max_width(grid_width);
                 egui::ScrollArea::vertical()
                     .id_salt("apps-grid")
                     .max_height(height)
+                    .max_width(grid_width)
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         if cards.is_empty() && !self.apps_loading {
                             ui.label("没有应用。检查 FlashHub 连接后点击刷新。");
                         }
-                        let gap = 8.0_f32;
-                        let cols = (((grid_width + gap) / (APP_CARD_WIDTH + gap)).floor() as usize)
-                            .max(1);
+                        // Each card plus the 16 px gap (8 item spacing + 8 added)
+                        // must stay inside the grid column, otherwise the row
+                        // paints over the detail pane.
+                        let step = APP_CARD_WIDTH + 16.0;
+                        let cols = ((grid_width / step).floor() as usize).max(1);
                         for (row_idx, row) in cards.chunks(cols).enumerate() {
                             ui.horizontal(|ui| {
                                 for (offset, (app, selected, cover)) in row.iter().enumerate() {
@@ -1527,10 +1596,10 @@ impl App {
                                     if app_card(ui, app, *selected, cover.as_ref()).clicked() {
                                         clicked = Some(idx);
                                     }
-                                    ui.add_space(gap);
+                                    ui.add_space(8.0);
                                 }
                             });
-                            ui.add_space(gap);
+                            ui.add_space(8.0);
                         }
                     });
             });
@@ -3751,8 +3820,9 @@ impl App {
             .as_deref()
             .filter(|c| is_url_command(c))
             .map(|c| c.to_string());
+        let installer = url_command.as_deref().map(installer_kind);
         let mut close = false;
-        let mut run_script: Option<bool> = None;
+        let mut choice: Option<AppInstallAction> = None;
         modal_backdrop(ctx, dark, &mut close);
         egui::Window::new("app_install_dialog")
             .title_bar(false)
@@ -3829,14 +3899,24 @@ impl App {
                     );
                 } else if let Some(url) = &url_command {
                     ui.add_space(12.0);
-                    ui.label(egui::RichText::new("该应用的下载页").strong());
+                    let runnable = installer.map(installer_is_runnable).unwrap_or(false);
+                    ui.label(
+                        egui::RichText::new(if runnable {
+                            "该应用通过安装程序安装"
+                        } else {
+                            "该应用的下载页"
+                        })
+                        .strong(),
+                    );
                     ui.add_space(4.0);
                     ui.label(egui::RichText::new(url).monospace().small());
                     ui.add_space(6.0);
                     ui.label(
-                        egui::RichText::new(
-                            "flashcli 不会自动下载或打开链接；需要时请复制后用浏览器访问。\n这里只安装并启动模型。",
-                        )
+                        egui::RichText::new(if runnable {
+                            "将下载安装程序并以当前用户权限运行（可能弹出 UAC）。\n只在信任该应用来源时继续；也可以跳过，仅安装并启动模型。"
+                        } else {
+                            "将在浏览器中打开下载页；flashcli 不会自动下载。\n也可以跳过，仅安装并启动模型。"
+                        })
                         .weak()
                         .small(),
                     );
@@ -3860,24 +3940,31 @@ impl App {
                 ui.separator();
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
-                    ui.add_space((ui.available_width() - 300.0).max(0.0));
+                    ui.add_space((ui.available_width() - 340.0).max(0.0));
                     if button(ui, "取消").clicked() {
                         close = true;
                     }
                     ui.add_space(8.0);
-                    if shell_command.is_some() && button(ui, "跳过脚本安装").clicked() {
-                        run_script = Some(false);
+                    let skip_label = if shell_command.is_some() {
+                        "跳过脚本安装"
+                    } else if url_command.is_some() {
+                        "跳过，仅安装模型"
+                    } else {
+                        ""
+                    };
+                    if !skip_label.is_empty() && button(ui, skip_label).clicked() {
+                        choice = Some(AppInstallAction::Skip);
                     }
                     ui.add_space(8.0);
-                    let label = if shell_command.is_some() {
-                        "运行脚本并安装"
+                    let runnable = installer.map(installer_is_runnable).unwrap_or(false);
+                    let (label, fill) = if shell_command.is_some() {
+                        ("运行脚本并安装", danger)
+                    } else if runnable {
+                        ("下载并安装", danger)
+                    } else if url_command.is_some() {
+                        ("打开下载页", ui.visuals().widgets.active.bg_fill)
                     } else {
-                        "开始安装"
-                    };
-                    let fill = if shell_command.is_some() {
-                        danger
-                    } else {
-                        ui.visuals().widgets.active.bg_fill
+                        ("开始安装", ui.visuals().widgets.active.bg_fill)
                     };
                     if ui
                         .add(
@@ -3887,14 +3974,35 @@ impl App {
                         )
                         .clicked()
                     {
-                        run_script = Some(shell_command.is_some());
+                        choice = Some(match (&shell_command, &url_command, installer) {
+                            (Some(command), _, _) => AppInstallAction::RunScript(command.clone()),
+                            (None, Some(url), Some(kind)) if installer_is_runnable(kind) => {
+                                AppInstallAction::Installer {
+                                    url: url.clone(),
+                                    kind,
+                                }
+                            }
+                            (None, Some(url), _) => {
+                                // A plain download page: open it instead of
+                                // fetching anything, then prepare the models.
+                                if let Err(err) = webbrowser::open(url) {
+                                    self.op_note = Some((
+                                        format!("无法打开浏览器: {err}"),
+                                        false,
+                                        Instant::now(),
+                                    ));
+                                }
+                                AppInstallAction::Skip
+                            }
+                            _ => AppInstallAction::Skip,
+                        });
                     }
                 });
             });
         if close {
             self.app_install = None;
         }
-        if let Some(run) = run_script {
+        if let Some(action) = choice {
             self.app_install = None;
             self.app_job = Some(AppJobState {
                 reference: app_reference(&prompt.org, &prompt.name, &prompt.version),
@@ -3908,8 +4016,7 @@ impl App {
                 prompt.org,
                 prompt.name,
                 prompt.version,
-                run,
-                shell_command.clone(),
+                action,
                 prompt.force,
             );
         }
@@ -5474,18 +5581,18 @@ fn spawn_app_install(
     org: String,
     name: String,
     version: String,
-    run_script: bool,
-    script: Option<String>,
+    action: AppInstallAction,
     force: bool,
 ) {
     std::thread::spawn(move || {
         let verb = "安装".to_string();
         let reference = app_reference(&org, &name, &version);
         // The application lives on the client OS (for example a Windows exe),
-        // while the models stay in WSL. Run the command here, then let the
-        // daemon prepare/start the models with install_command=client.
-        if run_script {
-            if let Some(command) = script.as_deref() {
+        // while the models stay in WSL. Install it here, then let the daemon
+        // prepare/start the models with install_command=client.
+        let handled = match &action {
+            AppInstallAction::Skip => false,
+            AppInstallAction::RunScript(command) => {
                 let _ = tx.send(Event::AppJob {
                     verb: verb.clone(),
                     reference: reference.clone(),
@@ -5497,10 +5604,21 @@ fn spawn_app_install(
                     ctx.request_repaint();
                     return;
                 }
+                true
             }
-        }
+            AppInstallAction::Installer { url, kind } => {
+                if let Err(err) =
+                    download_and_run_installer(&tx, &ctx, &verb, &reference, url, *kind)
+                {
+                    let _ = tx.send(Event::AppAction(verb, Err(err)));
+                    ctx.request_repaint();
+                    return;
+                }
+                true
+            }
+        };
         let path = format!("/v1/apps/{org}/{name}/install");
-        let body = app_install_body(&version, run_script, force);
+        let body = app_install_body(&version, handled, force);
         match post_json_timeout(&path, &body, 120) {
             Ok(v) => match v["job_id"].as_str().filter(|id| !id.is_empty()) {
                 Some(job_id) => {
@@ -5516,6 +5634,101 @@ fn spawn_app_install(
         }
         ctx.request_repaint();
     });
+}
+
+/// Download an installer URL and run it, reporting progress into the job log.
+fn download_and_run_installer(
+    tx: &Sender<Event>,
+    ctx: &egui::Context,
+    verb: &str,
+    reference: &str,
+    url: &str,
+    kind: InstallerKind,
+) -> Result<(), String> {
+    use std::io::{Read, Write};
+
+    let file_name = installer_file_name(url, kind);
+    let dir = std::env::temp_dir().join("flashcli-apps");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("无法创建临时目录: {e}"))?;
+    let dest = dir.join(&file_name);
+
+    let log = |line: String| {
+        let _ = tx.send(Event::AppJob {
+            verb: verb.to_string(),
+            reference: reference.to_string(),
+            line,
+            running: true,
+        });
+        ctx.request_repaint();
+    };
+    log(format!("下载安装程序 {url}"));
+
+    let response = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .get(url)
+        .call()
+        .map_err(|e| format!("下载失败: {e}"))?;
+    let total: Option<u64> = response
+        .header("Content-Length")
+        .and_then(|v| v.parse().ok());
+    let mut reader = response.into_reader();
+    let mut file = std::fs::File::create(&dest).map_err(|e| format!("无法写入 {file_name}: {e}"))?;
+    let mut buf = vec![0_u8; 64 * 1024];
+    let mut written: u64 = 0;
+    let mut last_pct: i64 = -1;
+    loop {
+        let read = reader.read(&mut buf).map_err(|e| format!("下载中断: {e}"))?;
+        if read == 0 {
+            break;
+        }
+        file.write_all(&buf[..read])
+            .map_err(|e| format!("写入失败: {e}"))?;
+        written += read as u64;
+        if let Some(total) = total.filter(|t| *t > 0) {
+            let pct = (written * 100 / total) as i64;
+            if pct / 10 != last_pct / 10 {
+                last_pct = pct;
+                log(format!("下载中 {pct}%（{written}/{total} 字节）"));
+            }
+        }
+    }
+    drop(file);
+    log(format!("已下载 {}（{} 字节）", dest.display(), written));
+
+    let status = match kind {
+        InstallerKind::Exe => {
+            if !cfg!(windows) {
+                return Err("该安装程序只能在 Windows 上运行".to_string());
+            }
+            std::process::Command::new(&dest)
+                .status()
+                .map_err(|e| format!("无法运行安装程序: {e}"))?
+        }
+        InstallerKind::Msi => {
+            if !cfg!(windows) {
+                return Err("该安装程序只能在 Windows 上运行".to_string());
+            }
+            std::process::Command::new("msiexec")
+                .arg("/i")
+                .arg(&dest)
+                .status()
+                .map_err(|e| format!("无法运行 msiexec: {e}"))?
+        }
+        InstallerKind::Dmg | InstallerKind::Pkg => std::process::Command::new("open")
+            .arg(&dest)
+            .status()
+            .map_err(|e| format!("无法打开安装包: {e}"))?,
+        InstallerKind::Page => return Err("不是安装程序".to_string()),
+    };
+    if !status.success() {
+        return Err(match status.code() {
+            Some(code) => format!("安装程序退出码 {code}"),
+            None => "安装程序被终止".to_string(),
+        });
+    }
+    log("安装程序已结束".to_string());
+    Ok(())
 }
 
 /// Shell that runs an install command on the client OS.
