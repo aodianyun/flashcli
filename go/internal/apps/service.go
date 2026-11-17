@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -341,6 +342,40 @@ func (s *Service) Uninstall(ctx context.Context, key string, purgeModels bool) (
 		return st, err
 	}
 	return st, nil
+}
+
+// ResolveKey maps a user ref to the installed registry key (latest version when
+// the ref omits one).
+func (s *Service) ResolveKey(ref flashhub.AppRef) (string, error) {
+	apps, err := s.Registry.Load()
+	if err != nil {
+		return "", err
+	}
+	prefix := ref.Org + "/" + ref.Name + ":"
+	if ref.Version != "" {
+		key := prefix + ref.Version
+		if _, ok := apps[key]; ok {
+			return key, nil
+		}
+		return "", fmt.Errorf("application %s is not installed", key)
+	}
+	var keys []string
+	for k := range apps {
+		if strings.HasPrefix(k, prefix) {
+			keys = append(keys, k)
+		}
+	}
+	if len(keys) == 0 {
+		return "", fmt.Errorf("application %s/%s is not installed", ref.Org, ref.Name)
+	}
+	sort.Strings(keys)
+	return keys[len(keys)-1], nil
+}
+
+// ModelLogPath is the per-model serve log written by modelrun.
+func (s *Service) ModelLogPath(ref string) string {
+	name := strings.NewReplacer("/", "_", "\\", "_", ":", "_").Replace(ref) + ".log"
+	return filepath.Join(s.LogDir, name)
 }
 
 func planModels(refs []string, existing []ModelState) []ModelState {
