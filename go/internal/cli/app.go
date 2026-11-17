@@ -32,6 +32,7 @@ func appCmd() *cobra.Command {
 func newAppService(cmd *cobra.Command) *apps.Service {
 	svc := apps.New(paths.Home())
 	svc.Out = cmd.OutOrStdout()
+	svc.Stdin = os.Stdin
 	svc.Bin = strings.TrimSpace(os.Getenv("FLASHCLI_BIN"))
 	return svc
 }

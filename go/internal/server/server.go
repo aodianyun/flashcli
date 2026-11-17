@@ -129,6 +129,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/apps/installed", s.appInstalled)
 	mux.HandleFunc("GET /v1/apps/{org}/{name}", s.appManifest)
 	mux.HandleFunc("GET /v1/apps/{org}/{name}/status", s.appStatus)
+	mux.HandleFunc("POST /v1/apps/{org}/{name}/install", s.appInstall)
 	mux.HandleFunc("POST /v1/apps/{org}/{name}/prepare", s.appPrepare)
 	mux.HandleFunc("POST /v1/apps/{org}/{name}/start", s.appStart)
 	mux.HandleFunc("POST /v1/apps/{org}/{name}/stop", s.appStop)

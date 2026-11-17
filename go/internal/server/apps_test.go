@@ -116,6 +116,109 @@ func appRequest(t *testing.T, method, url string, body string) (int, map[string]
 	return resp.StatusCode, out
 }
 
+func waitJobDone(t *testing.T, s *Server, id string) *Job {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if job, ok := s.Jobs.Get(id); ok {
+			job.mu.Lock()
+			state, errMsg := job.State, job.Error
+			job.mu.Unlock()
+			if state == "done" {
+				return job
+			}
+			if state == "failed" {
+				t.Fatalf("job failed: %s", errMsg)
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("job did not finish")
+	return nil
+}
+
+func appState(t *testing.T, svc *apps.Service, key string) apps.AppState {
+	t.Helper()
+	st, ok, err := svc.Registry.Get(key)
+	if err != nil || !ok {
+		t.Fatalf("app %s state: ok=%v err=%v", key, ok, err)
+	}
+	return st
+}
+
+// A daemon has no terminal: the caller must decide about the install script.
+func TestAppInstallRequiresScriptDecision(t *testing.T) {
+	s, ts, _ := newAppTestServer(t)
+	status, body := appRequest(t, http.MethodPost, ts.URL+"/v1/apps/xym/demo/install", `{"version":"1.0.0"}`)
+	if status != http.StatusBadRequest {
+		t.Fatalf("install without decision = %d %v", status, body)
+	}
+	if !strings.Contains(fmt.Sprint(body["error"]), "install_command") {
+		t.Fatalf("error does not explain the decision: %v", body)
+	}
+	if _, ok := s.Jobs.Get("app-install-1"); ok {
+		t.Fatal("rejected install still started a job")
+	}
+}
+
+func TestAppInstallSkipDoesNotRunScript(t *testing.T) {
+	s, ts, _ := newAppTestServer(t)
+	status, body := appRequest(t, http.MethodPost, ts.URL+"/v1/apps/xym/demo/install",
+		`{"version":"1.0.0","install_command":"skip","start":false}`)
+	if status != http.StatusAccepted {
+		t.Fatalf("install = %d %v", status, body)
+	}
+	job := waitJobDone(t, s, fmt.Sprint(body["job_id"]))
+	declined := false
+	for _, ev := range job.Events {
+		if strings.HasPrefix(ev.Message, "$ ") {
+			t.Fatalf("skipped install ran the command: %v", ev.Message)
+		}
+		if strings.Contains(ev.Message, "declined") {
+			declined = true
+		}
+	}
+	if !declined {
+		t.Fatalf("skip install did not report the decision: %+v", job.Events)
+	}
+	st := appState(t, s.appService(), "xym/demo:1.0.0")
+	if st.Install.Executed || !st.Install.Skipped {
+		t.Fatalf("skip state = %+v", st.Install)
+	}
+	if len(st.Models) != 1 || !st.Models[0].Prepared {
+		t.Fatalf("skip install did not prepare models: %+v", st.Models)
+	}
+}
+
+func TestAppInstallRunsConfirmedScript(t *testing.T) {
+	s, ts, launcher := newAppTestServer(t)
+	status, body := appRequest(t, http.MethodPost, ts.URL+"/v1/apps/xym/demo/install",
+		`{"version":"1.0.0","install_command":"run"}`)
+	if status != http.StatusAccepted {
+		t.Fatalf("install = %d %v", status, body)
+	}
+	job := waitJobDone(t, s, fmt.Sprint(body["job_id"]))
+	ran := false
+	for _, ev := range job.Events {
+		if strings.HasPrefix(ev.Message, "$ ") {
+			ran = true
+		}
+	}
+	if !ran {
+		t.Fatalf("confirmed install did not run the command: %+v", job.Events)
+	}
+	st := appState(t, s.appService(), "xym/demo:1.0.0")
+	if !st.Install.Executed || st.Install.Skipped {
+		t.Fatalf("run state = %+v", st.Install)
+	}
+	if st.State != "ready" || len(st.Models) != 1 || st.Models[0].Endpoint == "" {
+		t.Fatalf("install state = %+v", st)
+	}
+	if len(launcher.procs) != 1 {
+		t.Fatalf("launcher started %d models", len(launcher.procs))
+	}
+}
+
 func TestAppEndpointsLifecycle(t *testing.T) {
 	s, ts, launcher := newAppTestServer(t)
 	base := ts.URL

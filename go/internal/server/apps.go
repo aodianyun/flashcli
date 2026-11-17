@@ -96,6 +96,56 @@ func (s *Server) appPrepare(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]any{"job_id": job.ID, "state": job.State})
 }
 
+// appInstall serves POST /v1/apps/{org}/{name}/install as an async job that
+// runs the platform install command (when the caller allows it), prepares the
+// default bundles, and starts the models.
+//
+// A daemon has no terminal, so it never guesses: `install_command` must be
+// "run" (the user confirmed the command in the UI) or "skip" (install without
+// the script). Missing/invalid values are rejected instead of silently running
+// or skipping the script.
+func (s *Server) appInstall(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Version        string   `json:"version"`
+		Bundles        []string `json:"bundles"`
+		InstallCommand string   `json:"install_command"`
+		Force          bool     `json:"force"`
+		Start          *bool    `json:"start"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	ref := flashhub.AppRef{Org: r.PathValue("org"), Name: r.PathValue("name"), Version: body.Version}
+	if ref.Org == "" || ref.Name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "org and name are required"})
+		return
+	}
+	var runScript bool
+	switch strings.ToLower(strings.TrimSpace(body.InstallCommand)) {
+	case "run":
+		runScript = true
+	case "skip":
+		runScript = false
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": `install_command is required: "run" executes the app's install command after explicit user confirmation, "skip" installs without running it`,
+		})
+		return
+	}
+	start := body.Start == nil || *body.Start
+	job := s.Jobs.Start(context.Background(), "app-install", ref.String(), func(ctx context.Context, emit func(string, string)) error {
+		svc := s.appService()
+		svc.Out = emitWriter{emit: emit}
+		_, err := svc.Install(ctx, ref.String(), apps.InstallOptions{
+			Yes:     runScript,
+			Confirm: func(string) bool { return false },
+			Force:   body.Force,
+			NoStart: !start,
+			Bundles: body.Bundles,
+		})
+		return err
+	})
+	writeJSON(w, http.StatusAccepted, map[string]any{"job_id": job.ID, "state": job.State})
+}
+
 // appStart serves POST /v1/apps/{org}/{name}/start.
 func (s *Server) appStart(w http.ResponseWriter, r *http.Request) {
 	svc := s.appService()

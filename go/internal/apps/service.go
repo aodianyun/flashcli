@@ -26,12 +26,16 @@ type Launcher interface {
 
 // Service implements app install and lifecycle for one host.
 type Service struct {
-	Home         string
-	Bin          string
-	Host         string
-	PublicHost   string
-	LogDir       string
-	Out          io.Writer
+	Home       string
+	Bin        string
+	Host       string
+	PublicHost string
+	LogDir     string
+	Out        io.Writer
+	// Stdin is given to install commands. The CLI passes its own stdin so a
+	// script may prompt; the daemon leaves it nil (child gets the null device)
+	// so an unattended install can never block on input.
+	Stdin        io.Reader
 	Registry     *Registry
 	Launcher     Launcher
 	Prepare      func(context.Context, string) error
@@ -525,7 +529,7 @@ func (s *Service) runCommand(ctx context.Context, command string) error {
 	cmd := execCommand(ctx, name, args...)
 	cmd.Stdout = s.out()
 	cmd.Stderr = s.out()
-	cmd.Stdin = os.Stdin
+	cmd.Stdin = s.Stdin
 	return cmd.Run()
 }
 

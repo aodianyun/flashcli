@@ -1,11 +1,13 @@
 """Real flashserver /v1/apps endpoints against a local fake FlashHub.
 
-Also covers the prepare job: the bundle tree is synced from a fake repo so the
-daemon exercises the real pull path without network.
+Also covers the prepare and install jobs: the bundle tree is synced from a fake
+repo so the daemon exercises the real pull path without network, and the install
+script decision (`run` / `skip`) is checked end to end.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import subprocess
 import threading
@@ -25,14 +27,15 @@ BUNDLE_MANIFEST = {
     "defaults": {
         "python_abi": "312",
         "entry": {"run": {"kind": "python", "module": "run", "attr": "RunEngine"}},
-        "python_dependencies": {"pip": []},
+        "python_dependencies": {"torch": False, "pip": []},
     },
     "environments": {CELL: {"runtime": f"runtime/{CELL}"}},
 }
 RUN_PY = "class RunEngine:\n    def predict(self, **kw):\n        return {'echo': 'x'}\n"
 
 
-def app_manifest(bundle: str) -> dict:
+def app_manifest(bundle: str, command: str | None = None) -> dict:
+    install = command or "https://example.com/demo"
     return {
         "format": "flashcli-application",
         "app_format_version": 1,
@@ -41,7 +44,7 @@ def app_manifest(bundle: str) -> dict:
         "version": "1.0.0",
         "display_name": "Demo",
         "supported": {"os": ["linux", "darwin", "windows"], "arch": ["x86_64", "arm64"]},
-        "install": {"commands": {"linux": "https://example.com/demo", "darwin": "https://example.com/demo", "windows": "https://example.com/demo"}},
+        "install": {"commands": {"linux": install, "darwin": install, "windows": install}},
         "model": {"bundles": [{"bundle": bundle, "default": True, "serve": {"options": {}}}]},
         "config": [],
     }
@@ -75,7 +78,10 @@ class _Hub(BaseHTTPRequestHandler):
                 }
             ).encode()
         elif self.path.startswith("/api/v1/apps/xym/demo"):
-            body = json.dumps({"code": 0, "message": "success", "data": app_manifest(BUNDLE)}).encode()
+            command = getattr(self.server, "command", None)
+            body = json.dumps(
+                {"code": 0, "message": "success", "data": app_manifest(BUNDLE, command)}
+            ).encode()
         elif self.path.startswith("/api/v1/repos/a/one:1.0.0"):
             files = [
                 {"download_url": f"http://127.0.0.1:{self.server.server_port}/repo/1/versions/1/flashcli-bundle.json",
@@ -105,8 +111,9 @@ class _Hub(BaseHTTPRequestHandler):
 
 
 class _HubServer(ThreadingHTTPServer):
-    def __init__(self):
+    def __init__(self, command: str | None = None):
         super().__init__(("127.0.0.1", 0), _Hub)
+        self.command = command
 
 
 def _start_daemon(flashserver_bin, flashcli_bin, cli_env, tmp_path, hub):
@@ -162,6 +169,42 @@ def test_server_apps_list_and_manifest(flashserver_bin, flashcli_bin, cli_env, t
         hub.shutdown()
 
 
+def _wait_job(base: str, job_id: str, timeout: float = 120.0) -> tuple[str, dict]:
+    deadline = time.time() + timeout
+    state, job = "", {}
+    while time.time() < deadline:
+        _, job = http_json(f"{base}/v1/jobs/{job_id}")
+        state = job.get("state", "")
+        if state in ("done", "failed"):
+            break
+        time.sleep(0.2)
+    return state, job
+
+
+@contextlib.contextmanager
+def _fake_hub(command: str | None = None):
+    hub = _HubServer(command)
+    threading.Thread(target=hub.serve_forever, daemon=True).start()
+    try:
+        yield hub
+    finally:
+        hub.shutdown()
+
+
+@contextlib.contextmanager
+def _daemon(flashserver_bin, flashcli_bin, cli_env, tmp_path, hub):
+    proc, base = _start_daemon(flashserver_bin, flashcli_bin, cli_env, tmp_path, hub)
+    try:
+        wait_json(base + "/health", timeout=30)
+        yield base
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
 def test_server_app_prepare_pulls_bundle(flashserver_bin, flashcli_bin, cli_env, tmp_path):
     hub = _HubServer()
     threading.Thread(target=hub.serve_forever, daemon=True).start()
@@ -191,3 +234,56 @@ def test_server_app_prepare_pulls_bundle(flashserver_bin, flashcli_bin, cli_env,
         except subprocess.TimeoutExpired:
             proc.kill()
         hub.shutdown()
+
+
+def test_server_app_install_requires_script_decision(flashserver_bin, flashcli_bin, cli_env, tmp_path):
+    """The daemon has no terminal: it must never guess about the install script."""
+    with _fake_hub() as hub, _daemon(
+        flashserver_bin, flashcli_bin, cli_env, tmp_path, hub
+    ) as base:
+        status, body = http_json(base + "/v1/apps/xym/demo/install", {"version": "1.0.0"})
+        assert status == 400, body
+        assert "install_command" in body["error"]
+
+
+def test_server_app_install_skip_does_not_run_script(flashserver_bin, flashcli_bin, cli_env, tmp_path):
+    marker = tmp_path / "script-ran"
+    command = f"printf ran > {marker}"
+    with _fake_hub(command) as hub, _daemon(
+        flashserver_bin, flashcli_bin, cli_env, tmp_path, hub
+    ) as base:
+        status, body = http_json(
+            base + "/v1/apps/xym/demo/install",
+            {"version": "1.0.0", "install_command": "skip", "start": False},
+        )
+        assert status == 202, body
+        state, job = _wait_job(base, body["job_id"])
+        assert state == "done", job.get("error") or job
+        assert not marker.exists()
+
+        status, st = http_json(base + "/v1/apps/xym/demo/status?version=1.0.0")
+        assert status == 200, st
+        assert st["install"]["skipped"] is True
+        assert not st["install"].get("executed")
+        assert st["models"][0]["prepared"] is True
+
+
+def test_server_app_install_run_executes_script(flashserver_bin, flashcli_bin, cli_env, tmp_path):
+    marker = tmp_path / "script-ran"
+    command = f"printf ran > {marker}"
+    with _fake_hub(command) as hub, _daemon(
+        flashserver_bin, flashcli_bin, cli_env, tmp_path, hub
+    ) as base:
+        status, body = http_json(
+            base + "/v1/apps/xym/demo/install",
+            {"version": "1.0.0", "install_command": "run", "start": False},
+        )
+        assert status == 202, body
+        state, job = _wait_job(base, body["job_id"])
+        assert state == "done", job.get("error") or job
+        assert marker.read_text(encoding="utf-8") == "ran"
+
+        status, st = http_json(base + "/v1/apps/xym/demo/status?version=1.0.0")
+        assert status == 200, st
+        assert st["install"]["executed"] is True
+        assert not st["install"].get("skipped")

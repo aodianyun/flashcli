@@ -309,6 +309,43 @@ paths:
               schema: { $ref: '#/components/schemas/AppState' }
         '404':
           $ref: '#/components/responses/Error'
+  /v1/apps/{org}/{name}/install:
+    parameters:
+      - { name: org, in: path, required: true, schema: { type: string } }
+      - { name: name, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Install an application (async job)
+      description: >
+        Runs the manifest install command only when `install_command` is `run`
+        (the user confirmed it in the UI), otherwise installs without it
+        (`skip`). The daemon has no terminal, so the decision is mandatory; a
+        missing or invalid value is rejected. URL commands are never fetched —
+        they are reported as a download page. Then every `default: true` bundle
+        is prepared and its models are started (unless `start` is false).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [install_command]
+              properties:
+                version: { type: string }
+                bundles: { type: array, items: { type: string } }
+                install_command:
+                  type: string
+                  enum: [run, skip]
+                  description: "`run` = the user explicitly allowed the install script; `skip` = do not run it"
+                force: { type: boolean, default: false }
+                start: { type: boolean, default: true }
+      responses:
+        '202':
+          description: Job accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAccepted' }
+        '400':
+          $ref: '#/components/responses/Error'
   /v1/apps/{org}/{name}/prepare:
     parameters:
       - { name: org, in: path, required: true, schema: { type: string } }
