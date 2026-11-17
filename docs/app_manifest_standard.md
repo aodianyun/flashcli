@@ -9,6 +9,19 @@ only: FlashHub owns the manifest, `flashcli` executes it under the rules below.
 This document is authoritative for `app_format_version: 1`, matching what
 FlashHub serves today. It is referenced by [application_install_plan.md](application_install_plan.md).
 
+## Flow
+
+```mermaid
+flowchart LR
+  K["app key"] --> M["manifest"]
+  M --> P{"platform supported?"}
+  P -- no --> S["stop"]
+  P -- yes --> I["install command"]
+  I --> B["prepare default bundles"]
+  B --> R["start models"]
+  R --> D["ready"]
+```
+
 ## Format and versioning
 
 | Field | Meaning |
