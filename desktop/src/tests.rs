@@ -33,6 +33,37 @@ fn firewall_ports_reject_invalid_input() {
 }
 
 #[test]
+fn app_platform_support_checks_os_and_arch() {
+    let supported = serde_json::json!({
+        "supported": {"os": [app_os_key()], "arch": [app_arch_key()]}
+    });
+    assert!(app_platform_supported(&supported));
+
+    let other_os = if app_os_key() == "linux" { "windows" } else { "linux" };
+    let wrong_os = serde_json::json!({
+        "supported": {"os": [other_os], "arch": [app_arch_key()]}
+    });
+    assert!(!app_platform_supported(&wrong_os));
+    assert!(!app_platform_supported(&serde_json::json!({})));
+}
+
+#[test]
+fn install_command_prefers_the_arch_specific_entry() {
+    let mut commands = serde_json::Map::new();
+    commands.insert(
+        app_os_key().to_string(),
+        Value::String("echo generic".into()),
+    );
+    commands.insert(
+        format!("{}/{}", app_os_key(), app_arch_key()),
+        Value::String("echo arch".into()),
+    );
+    let manifest = serde_json::json!({"install": {"commands": commands}});
+    assert_eq!(install_command(&manifest).as_deref(), Some("echo arch"));
+    assert_eq!(install_command(&serde_json::json!({})), None);
+}
+
+#[test]
 fn app_install_body_makes_the_script_decision_explicit() {
     let run = app_install_body("1.0.0", true, true);
     assert_eq!(run["version"], "1.0.0");

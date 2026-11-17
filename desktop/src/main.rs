@@ -1527,6 +1527,7 @@ impl App {
         let local_state = detail["local"]["state"].as_str().unwrap_or("").to_string();
         let installed = !local_state.is_empty();
         let busy = self.app_job.as_ref().map(|j| j.running).unwrap_or(false);
+        let supported = app_platform_supported(manifest);
         let danger = red(ui);
         let mut action: Option<&'static str> = None;
         let mut open_install = false;
@@ -1534,12 +1535,22 @@ impl App {
         ui.add_space(6.0);
         ui.horizontal_wrapped(|ui| {
             let install_label = if installed { "重新安装" } else { "安装" };
-            if ui
-                .add_enabled(!busy, egui::Button::new(install_label))
-                .on_hover_text("安装会先确认是否执行应用自带的安装脚本")
-                .clicked()
-            {
+            let install = ui
+                .add_enabled(!busy && supported, egui::Button::new(install_label))
+                .on_hover_text("安装会先确认是否执行应用自带的安装脚本");
+            if install.clicked() {
                 open_install = true;
+            }
+            if !supported {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "当前平台 ({}/{}) 不受支持",
+                        app_os_key(),
+                        app_arch_key()
+                    ))
+                    .small()
+                    .color(danger),
+                );
             }
             if ui
                 .add_enabled(!busy, egui::Button::new("准备模型"))
@@ -4784,14 +4795,18 @@ fn app_os_key() -> &'static str {
     }
 }
 
-fn install_command(manifest: &Value) -> Option<String> {
-    let commands = manifest["install"]["commands"].as_object()?;
-    let os = app_os_key();
-    let arch = match std::env::consts::ARCH {
+fn app_arch_key() -> &'static str {
+    match std::env::consts::ARCH {
         "x86_64" => "x86_64",
         "aarch64" => "arm64",
         other => other,
-    };
+    }
+}
+
+fn install_command(manifest: &Value) -> Option<String> {
+    let commands = manifest["install"]["commands"].as_object()?;
+    let os = app_os_key();
+    let arch = app_arch_key();
     commands
         .get(&format!("{os}/{arch}"))
         .or_else(|| commands.get(os))
@@ -4807,6 +4822,17 @@ fn local_state_is_empty(detail: &Value) -> bool {
 fn is_url_command(command: &str) -> bool {
     let c = command.trim().to_ascii_lowercase();
     c.starts_with("http://") || c.starts_with("https://")
+}
+
+/// True when `supported.os` / `supported.arch` include this build's platform.
+fn app_platform_supported(manifest: &Value) -> bool {
+    let listed = |key: &str, want: &str| {
+        manifest["supported"][key]
+            .as_array()
+            .map(|list| list.iter().any(|v| v.as_str() == Some(want)))
+            .unwrap_or(false)
+    };
+    listed("os", app_os_key()) && listed("arch", app_arch_key())
 }
 
 /// Bundle refs the install will prepare (every `default: true` entry).
