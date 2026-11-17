@@ -1869,7 +1869,7 @@ impl App {
                 open_uninstall = true;
             }
             if let Some(job) = &job {
-                if !job.log.is_empty() && ui.small_button("查看完整日志").clicked() {
+                if !job.log.is_empty() && ui.button("完整日志").clicked() {
                     open_log = true;
                 }
             }
