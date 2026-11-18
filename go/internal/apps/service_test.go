@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -353,5 +354,56 @@ func TestStartAndStopReportProgress(t *testing.T) {
 	out := buf.String()
 	if !strings.Contains(out, "starting a/one:1") || !strings.Contains(out, "waiting for a/one:1") {
 		t.Fatalf("start log = %q", out)
+	}
+}
+
+// concurrentLauncher records overlapping StartWithOptions calls.
+type concurrentLauncher struct {
+	mu     sync.Mutex
+	active int
+	max    int
+	n      int
+}
+
+func (l *concurrentLauncher) StartWithOptions(_ context.Context, ref string, _ modelrun.LoadOptions) (modelrun.ServeProcess, error) {
+	l.mu.Lock()
+	l.active++
+	if l.active > l.max {
+		l.max = l.active
+	}
+	l.n++
+	pid := 700 + l.n
+	l.mu.Unlock()
+	time.Sleep(120 * time.Millisecond)
+	l.mu.Lock()
+	l.active--
+	l.mu.Unlock()
+	return &fakeProc{ref: ref, endpoint: fmt.Sprintf("http://127.0.0.1:%d", 31000+pid), pid: pid, healthy: true}, nil
+}
+
+// A restore and a manual start must not run at the same time: otherwise both
+// start a model and the saved connection/setup config can point at different
+// ports.
+func TestConcurrentStartsAreSerialized(t *testing.T) {
+	launcher := &concurrentLauncher{}
+	svc, _ := newTestService(t, manifestJSON("a/one:1"), &fakeLauncher{})
+	svc.Launcher = launcher
+	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{Yes: true, NoStart: true}); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = svc.Start(context.Background(), "xym/demo:1.0.0", false)
+		}()
+	}
+	wg.Wait()
+	launcher.mu.Lock()
+	max := launcher.max
+	launcher.mu.Unlock()
+	if max != 1 {
+		t.Fatalf("concurrent starts overlapped: max active = %d", max)
 	}
 }

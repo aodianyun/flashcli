@@ -86,6 +86,19 @@ func New(home string) *Service {
 	return svc
 }
 
+// appLocks serializes mutations of one application. Services are created per
+// request/frontend, so the lock must live at package scope; otherwise a restore
+// and a manual start can run concurrently, start two models, and leave the
+// connection and the setup config pointing at different ports.
+var appLocks sync.Map
+
+func lockApp(key string) func() {
+	v, _ := appLocks.LoadOrStore(key, &sync.Mutex{})
+	mu := v.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
+}
+
 // InstallOptions controls `app install`.
 type InstallOptions struct {
 	Yes         bool
@@ -171,6 +184,8 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 	}
 	ref.Version = m.Version
 	key := ref.String()
+	unlock := lockApp(key)
+	defer unlock()
 	ctx = WithOwner(ctx, key)
 
 	goos, goarch := runtimeGOOS(), runtimeGOARCH()
@@ -366,6 +381,8 @@ func (s *Service) Start(ctx context.Context, key string, keepPartial bool) (AppS
 // StartWithSetup starts the app's models and then runs the confirmed setup
 // scripts in manifest order (each run is confirmed by the caller).
 func (s *Service) StartWithSetup(ctx context.Context, key string, keepPartial bool, setup SetupOptions) (AppState, error) {
+	unlock := lockApp(key)
+	defer unlock()
 	st, ok, err := s.Registry.Get(key)
 	if err != nil {
 		return AppState{}, err
@@ -514,6 +531,8 @@ func (s *Service) manifestFor(ctx context.Context, key string) (*Manifest, error
 
 // Stop stops the app's models and marks it stopped.
 func (s *Service) Stop(ctx context.Context, key string) (AppState, error) {
+	unlock := lockApp(key)
+	defer unlock()
 	st, ok, err := s.Registry.Get(key)
 	if err != nil {
 		return AppState{}, err
@@ -644,6 +663,8 @@ func (s *Service) transitionExpired(st *AppState) bool {
 // Uninstall stops the models and removes the app state; model caches stay
 // unless purgeModels is set.
 func (s *Service) Uninstall(ctx context.Context, key string, purgeModels bool) (AppState, error) {
+	unlock := lockApp(key)
+	defer unlock()
 	st, ok, err := s.Registry.Get(key)
 	if err != nil {
 		return AppState{}, err

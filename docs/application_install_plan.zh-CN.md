@@ -153,7 +153,8 @@ stateDiagram-v2
 
 daemon 启动时会把被中断的过渡状态归一化，避免永远卡住：`starting` 会重试（因
 shutdown 取消的启动保留启动意图），`installing`/`preparing` 变为 `failed` 并提示
-重新安装，`stopping` 直接完成为 `stopped`。
+重新安装，`stopping` 直接完成为 `stopped`。同一应用的安装/启动/停止会串行化，
+恢复与手动点击不会同时启动两个模型，也就不会出现接入地址或应用配置指向不同端口。
 
 ### 配置脚本（可选）
 

@@ -158,7 +158,9 @@ showing a silent spinner while a model loads.
 On daemon start, an interrupted transition is normalized instead of staying
 stuck: `starting` is retried (a start canceled by the shutdown keeps its
 intent), `installing`/`preparing` becomes `failed` with a reinstall hint, and
-`stopping` is completed as `stopped`.
+`stopping` is completed as `stopped`. Install/start/stop are serialized per
+application, so a restore and a manual click cannot start two models and leave
+the connection or the setup config pointing at different ports.
 
 ### Setup scripts (optional)
 
