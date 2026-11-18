@@ -920,6 +920,9 @@ impl App {
                 }
                 Event::AppDetail(detail) => {
                     self.app_detail = Some(detail);
+                    // Refresh the local state immediately; this also repairs a
+                    // state left as starting/preparing by an interrupted run.
+                    self.refresh_app_state(ctx);
                 }
                 Event::AppLocal { key, state } => {
                     self.apply_app_local(&key, state);
