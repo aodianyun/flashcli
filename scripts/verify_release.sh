@@ -47,7 +47,7 @@ args=()
 if [ "${#INSTALL_ARGS[@]}" -gt 0 ]; then args+=("${INSTALL_ARGS[@]}"); fi
 
 echo "[verify] prefix=$FLASHCLI_GO_INSTALL_DIR  FLASHCLI_HOME=$FLASHCLI_HOME"
-echo "[verify] installing (${SOURCE_DIR:+source=$SOURCE_DIR}${SOURCE_DIR:-release}) ..."
+echo "[verify] installing (source=${SOURCE_DIR:-release}) ..."
 bash "$ROOT/install.sh" "${args[@]}"
 
 bin="$FLASHCLI_GO_INSTALL_DIR/flashcli"
