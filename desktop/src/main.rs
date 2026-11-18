@@ -1773,16 +1773,6 @@ impl App {
         let local_state = detail["local"]["state"].as_str().unwrap_or("").to_string();
         let installed = !local_state.is_empty();
         let transitional = matches!(local_state.as_str(), "installing" | "preparing" | "starting" | "stopping");
-        let model_endpoint = detail["local"]["models"]
-            .as_array()
-            .and_then(|models| {
-                models.iter().find_map(|m| {
-                    m["endpoint"]
-                        .as_str()
-                        .filter(|s| !s.is_empty())
-                        .map(|s| s.to_string())
-                })
-            });
         let connection_base = detail["local"]["connection"]["base_url"]
             .as_str()
             .filter(|s| !s.is_empty())
@@ -1943,17 +1933,48 @@ impl App {
                 if let Some((label, color)) = app_state_badge(&local_state, ui) {
                     ui.label(egui::RichText::new(label).strong().color(color));
                 }
-                if local_state == "ready" {
-                    if let Some(endpoint) = &model_endpoint {
-                        ui.label(egui::RichText::new(endpoint).monospace().small());
-                        if ui.small_button("复制").on_hover_text("复制模型地址").clicked() {
-                            ui.ctx().copy_text(endpoint.clone());
-                        }
-                    }
-                }
             });
+            // The single place where the model connection is shown: one field
+            // per row, each with its own copy button.
+            if local_state == "ready" {
+                if let Some(base) = &connection_base {
+                    ui.add_space(6.0);
+                    egui::Grid::new(format!("app-connection-{job_key}"))
+                        .num_columns(3)
+                        .spacing([10.0, 4.0])
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new("接入地址").small().weak());
+                            ui.label(egui::RichText::new(base).monospace().small());
+                            if ui.small_button("复制").clicked() {
+                                ui.ctx().copy_text(base.clone());
+                            }
+                            ui.end_row();
+                            if !model_ids.is_empty() {
+                                ui.label(egui::RichText::new("模型").small().weak());
+                                ui.label(egui::RichText::new(&model_ids).monospace().small());
+                                if ui.small_button("复制").clicked() {
+                                    ui.ctx().copy_text(model_ids.clone());
+                                }
+                                ui.end_row();
+                            }
+                            if let Some(key) = &connection_key {
+                                ui.label(egui::RichText::new("API Key").small().weak());
+                                ui.label(egui::RichText::new(key).monospace().small());
+                                if ui.small_button("复制").clicked() {
+                                    ui.ctx().copy_text(key.clone());
+                                }
+                                ui.end_row();
+                            }
+                        });
+                    ui.label(
+                        egui::RichText::new("在应用本体中填入上述地址、模型与 API Key 即可连接本地模型。")
+                            .small()
+                            .weak(),
+                    );
+                }
+            }
             if let Some(job) = job.clone() {
-                ui.add_space(4.0);
+                ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     if job.running {
                         ui.add(egui::Spinner::new().size(12.0));
@@ -1998,29 +2019,6 @@ impl App {
                 ui.label(egui::RichText::new(err).small().color(danger));
             } else if installed && !transitional {
                 ui.label(egui::RichText::new("暂无操作日志").small().weak());
-            }
-            // What an installed client uses to reach the models.
-            if local_state == "ready" {
-                if let Some(base) = &connection_base {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(egui::RichText::new("接入地址").small().weak());
-                        ui.label(egui::RichText::new(base).monospace().small());
-                        if ui.small_button("复制").clicked() {
-                            ui.ctx().copy_text(base.clone());
-                        }
-                        if !model_ids.is_empty() {
-                            ui.label(egui::RichText::new(format!("model {model_ids}")).small().weak());
-                        }
-                        if let Some(key) = &connection_key {
-                            ui.label(egui::RichText::new(format!("api_key {key}")).small().weak());
-                        }
-                    });
-                    ui.label(
-                        egui::RichText::new("在应用本体中填入上述地址、模型与 api_key 即可连接本地模型。")
-                            .small()
-                            .weak(),
-                    );
-                }
             }
             // The application itself lives on the client OS; a skipped script
             // means its command still has to be run in a terminal.
@@ -2174,24 +2172,6 @@ impl App {
                     .filter(|s| !s.is_empty())
                 {
                     app_mono(ui, command);
-                }
-            }
-            if let Some(base) = detail["local"]["connection"]["base_url"]
-                .as_str()
-                .filter(|s| !s.is_empty())
-            {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(egui::RichText::new("接入地址").small().weak());
-                    ui.label(egui::RichText::new(base).monospace().small());
-                    if ui.small_button("复制").clicked() {
-                        ui.ctx().copy_text(base.to_string());
-                    }
-                });
-                if let Some(key) = detail["local"]["connection"]["api_key"]
-                    .as_str()
-                    .filter(|s| !s.is_empty())
-                {
-                    app_field(ui, "api_key", key);
                 }
             }
             if let Some(models) = detail["local"]["models"].as_array() {
