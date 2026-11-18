@@ -315,6 +315,27 @@ func TestRestoreReplaysSavedSetupScripts(t *testing.T) {
 	}
 }
 
+// A start interrupted by shutdown keeps its intent so the next daemon start
+// retries it instead of showing "failed: context canceled".
+func TestStartCanceledKeepsIntent(t *testing.T) {
+	launcher := &fakeLauncher{failRef: "a/one:1"}
+	svc, _ := newTestService(t, manifestJSON("a/one:1"), launcher)
+	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{
+		Yes: true, NoStart: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := svc.Start(ctx, "xym/demo:1.0.0", false); err == nil {
+		t.Fatal("expected a start error")
+	}
+	st, _, _ := svc.Registry.Get("xym/demo:1.0.0")
+	if st.State != StateStarting || st.Error != "" {
+		t.Fatalf("interrupted start = state %q error %q", st.State, st.Error)
+	}
+}
+
 func TestSetupFailureIgnoresInterruptedContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

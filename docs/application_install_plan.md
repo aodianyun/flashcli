@@ -155,6 +155,11 @@ start because the scheduler picks the port. Start/stop are also available as
 async jobs (`?async=1`) so clients can stream their progress lines instead of
 showing a silent spinner while a model loads.
 
+On daemon start, an interrupted transition is normalized instead of staying
+stuck: `starting` is retried (a start canceled by the shutdown keeps its
+intent), `installing`/`preparing` becomes `failed` with a reinstall hint, and
+`stopping` is completed as `stopped`.
+
 ### Setup scripts (optional)
 
 After the models become ready, the host runs the manifest's `setup.scripts` in

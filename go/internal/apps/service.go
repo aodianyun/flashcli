@@ -313,6 +313,14 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 		state.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 		s.save(&state)
 		if err := s.startModels(ctx, &state, opts.KeepPartial); err != nil {
+			if ctx.Err() != nil {
+				// Interrupted by a shutdown; the next daemon start resumes the
+				// start (the models are already prepared).
+				state.State = StateStarting
+				state.UpdatedAt = s.now().UTC().Format(time.RFC3339)
+				s.save(&state)
+				return res, err
+			}
 			state.State = StateFailed
 			state.Error = err.Error()
 			s.save(&state)
@@ -374,6 +382,15 @@ func (s *Service) StartWithSetup(ctx context.Context, key string, keepPartial bo
 	st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 	s.save(&st)
 	if err := s.startModels(ctx, &st, keepPartial); err != nil {
+		if ctx.Err() != nil {
+			// The daemon is shutting down (or the caller went away). Keep the
+			// start intent so the next daemon start retries it instead of
+			// showing a false "failed: context canceled".
+			st.State = StateStarting
+			st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
+			s.save(&st)
+			return st, err
+		}
 		st.State = StateFailed
 		st.Error = err.Error()
 		st.UpdatedAt = s.now().UTC().Format(time.RFC3339)

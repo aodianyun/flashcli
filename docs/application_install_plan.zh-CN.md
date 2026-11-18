@@ -151,6 +151,10 @@ stateDiagram-v2
 重新选端口，接入地址在每次启动后重算。start/stop 也支持异步任务（`?async=1`），
 客户端可以流式显示进度，而不是在模型加载期间一直空转。
 
+daemon 启动时会把被中断的过渡状态归一化，避免永远卡住：`starting` 会重试（因
+shutdown 取消的启动保留启动意图），`installing`/`preparing` 变为 `failed` 并提示
+重新安装，`stopping` 直接完成为 `stopped`。
+
 ### 配置脚本（可选）
 
 模型就绪后，host 按 manifest 顺序执行 `setup.scripts`，只执行用户**本次**确认过的

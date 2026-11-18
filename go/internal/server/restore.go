@@ -26,8 +26,35 @@ func (s *Server) restoreOnStart(ctx context.Context) {
 	var keys []string
 	if err := svc.Registry.Update(func(m map[string]apps.AppState) error {
 		for key, st := range m {
-			if !appWasRunning(st) {
+			switch st.State {
+			case apps.StateStarting:
+				// The daemon stopped during a start (or a restore). Retry it;
+				// a model that cannot start turns the app into failed with a
+				// reason instead of leaving it stuck in 启动中 forever.
+			case apps.StateInstalling, apps.StatePreparing:
+				// The install was interrupted; its download/install state is
+				// unknown, so surface it and let the user reinstall.
+				st.State = apps.StateFailed
+				st.Error = "daemon restarted before the install finished; reinstall the application"
+				st.UpdatedAt = now
+				m[key] = st
 				continue
+			case apps.StateStopping:
+				// The models died with the daemon; finish the stop.
+				for i := range st.Models {
+					st.Models[i].PID = 0
+					st.Models[i].Endpoint = ""
+				}
+				st.State = apps.StateStopped
+				st.Error = ""
+				st.SetupError = ""
+				st.UpdatedAt = now
+				m[key] = st
+				continue
+			default:
+				if !appWasRunning(st) {
+					continue
+				}
 			}
 			st.State = apps.StateStarting
 			st.Error = ""
