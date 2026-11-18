@@ -2054,11 +2054,13 @@ impl App {
                 }
             }
         });
-        // Always-visible run status block: state, the current operation with
-        // progress, recent log lines and the full-log entry point. Model
-        // loading can take a minute, so a silent spinner is not enough.
-        ui.add_space(10.0);
-        egui::Frame::NONE
+        // Run status block for installed applications: state, the current
+        // operation with progress, recent log lines and the full-log entry
+        // point. Model loading can take a minute, so a silent spinner is not
+        // enough. An app that is not installed has nothing to report here.
+        if installed {
+            ui.add_space(10.0);
+            egui::Frame::NONE
             .fill(ui.visuals().faint_bg_color)
             .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
             .corner_radius(6)
@@ -2214,7 +2216,8 @@ impl App {
                         .color(danger),
                 );
             }
-        });
+            });
+        }
         if other_install {
             ui.label(
                 egui::RichText::new("已有应用正在安装：完成后再操作此应用。")
@@ -4673,6 +4676,9 @@ impl App {
                 Vec::new()
             };
             let key = app_reference(&prompt.org, &prompt.name, &prompt.version);
+            // Show the install progress immediately; the status card is only
+            // rendered for installed applications.
+            self.set_app_local_state(&prompt.org, &prompt.name, &prompt.version, "installing");
             self.app_jobs.insert(
                 key,
                 AppJobState {
