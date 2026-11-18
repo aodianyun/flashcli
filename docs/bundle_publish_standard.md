@@ -295,11 +295,17 @@ Declares the measured runtime footprint used by `flashserver` model admission.
 }
 ```
 
-- `min_vram_mib`: minimum free GPU memory required to start the model.
+- `min_vram_mib`: free GPU memory (MiB) the bundle needs on the largest card.
+  Set it from the measured peak usage plus a small headroom, e.g. a bundle that
+  peaks at 11.4 GiB uses `12288` (12 GiB).
 - A v4 environment overlay may override the value.
-- `flashserver` rejects a load with `409 RESOURCE_EXHAUSTED` when free VRAM minus
-  the configured safety margin is insufficient.
-- Bundles without this field are admitted by the flashserver slot limit only.
+- The same rule applies to models started from the 模型 page and models started
+  by an installed application: `flashserver` admits the start only when
+  `free VRAM >= min_vram_mib`, otherwise it returns
+  `409 RESOURCE_EXHAUSTED` with `need N MiB free VRAM, have M MiB`.
+- The value is the whole requirement; there is no extra global margin.
+- Bundles without this field are always admitted by VRAM (the `max_loaded`
+  slot limit still applies).
 - Values must reflect measured peak usage for the bundle's declared runtime.
 
 ### 3.5 `defaults.env`

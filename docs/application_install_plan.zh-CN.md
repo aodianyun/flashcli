@@ -232,8 +232,11 @@ rename）：
   （与 `flashserver` 使用同一个监管器）
 - 准备是离线优先的：权重缓存与下载清单完整时直接复用，不访问模型 Hub；只有显式
   `flashcli pull` 和桌面端「下载」会强制重新列取远端文件
-- `flashserver` 在运行时，其 `Manager` 与 `apps` 共享状态：`start` 发现记录中的
-  pid/端口存活则复用，不重复拉起
+- `flashserver` 在运行时，其 `Manager` 与 `apps` 共享状态：应用模型通过 Manager
+  启动（与模型页使用同一 `max_loaded` 槽位和 bundle `resources.min_vram_mib`
+  准入）；已常驻时 `start` 复用记录中的 pid/端口
+- 停止或卸载应用会从 Manager 卸载其模型，因此在「每个请求新建 app service」的
+  模型下，槽位与模型页列表仍然准确
 - 自动端口会记录；重启时优先复用，被占用才重新分配
 
 ## 配置（待定）

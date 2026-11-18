@@ -292,10 +292,14 @@ environment 定义 `python_dependencies` 时整体替换 defaults。
 }
 ```
 
-- `min_vram_mib`：启动模型所需的最小空闲显存。
+- `min_vram_mib`：bundle 在最大一张卡上需要的空闲显存（MiB）。按实测峰值加少量
+  余量填写，例如峰值 11.4 GiB 的 bundle 填 `12288`（12 GiB）。
 - v4 environment overlay 可以覆盖该值。
-- 空闲显存减去配置的安全余量不足时，`flashserver` 返回 `409 RESOURCE_EXHAUSTED`。
-- 未声明该字段的 bundle 只按 flashserver 槽位限制准入。
+- 模型页启动的模型和应用启动的模型使用同一规则：仅当
+  `空闲显存 >= min_vram_mib` 时 `flashserver` 才准入，否则返回
+  `409 RESOURCE_EXHAUSTED`（`need N MiB free VRAM, have M MiB`）。
+- 该值就是全部要求，不再叠加全局安全余量。
+- 未声明该字段的 bundle 不做显存准入（`max_loaded` 槽位限制仍然生效）。
 - 数值应来自该 bundle 声明 runtime 的实测峰值。
 
 ### 3.5 `defaults.env`

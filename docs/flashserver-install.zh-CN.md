@@ -60,14 +60,14 @@ sudo flashserver-setup
   "public_host": "127.0.0.1",
   "serve_host": "127.0.0.1",
   "log_dir": "/home/me/.flashcli/logs/serve",
-  "max_loaded": 0,
-  "min_free_vram_mib": 2048
+  "max_loaded": 0
 }
 ```
 
-- `max_loaded=0` 只按显存准入。bundle 的 `resources.min_vram_mib` 必须能放进
-  「空闲显存 − `min_free_vram_mib`」，否则 `load` 返回 `409 RESOURCE_EXHAUSTED`；
-  槽位上限也把正在启动的模型计入。
+- `max_loaded=0` 表示不限制槽位。显存准入只看每个 bundle 的
+  `resources.min_vram_mib`：最大一张卡的空闲显存不低于该值时准入，否则 `load`
+  返回 `409 RESOURCE_EXHAUSTED`。未声明该字段的 bundle 不做显存准入；槽位上限
+  仍把正在启动的模型计入。应用启动的模型与模型页使用同一准入。
 - WSL 默认：`addr=0.0.0.0:8790`、`public_host=localhost`、`serve_host=0.0.0.0`
   （Windows 通过 localhost 转发访问服务）。
 - `token` 可选。设置后除 `/health`、`/`、`/docs`、`/ui/*`、`/openapi.yaml` 外的所有

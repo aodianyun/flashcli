@@ -30,11 +30,9 @@ type LoadOptions = modelrun.LoadOptions
 
 // ManagerOptions controls model admission.
 type ManagerOptions struct {
-	// MaxLoaded is the maximum number of resident models. Zero means only the
-	// GPU memory policy is enforced.
+	// MaxLoaded is the maximum number of resident models. Zero means no slot
+	// limit; admission then relies on the bundle's resources.min_vram_mib.
 	MaxLoaded int
-	// MinFreeVRAMMiB is the safety margin kept free on the GPU.
-	MinFreeVRAMMiB int64
 	// GPU returns the current GPU inventory. Nil falls back to gpu.Probe.
 	GPU func(context.Context) ([]gpu.Device, error)
 	// Inspect reads a bundle's admission metadata. Nil uses inspectBundle.
@@ -225,6 +223,12 @@ func (m *Manager) load(ctx context.Context, refStr string, progress func(phase, 
 
 // Unload stops a resident model.
 func (m *Manager) Unload(ctx context.Context, refStr string) error {
+	_, err := m.UnloadIfLoaded(ctx, refStr)
+	return err
+}
+
+// UnloadIfLoaded stops a resident model and reports whether it was resident.
+func (m *Manager) UnloadIfLoaded(ctx context.Context, refStr string) (bool, error) {
 	m.mu.Lock()
 	inst, ok := m.instances[refStr]
 	if ok {
@@ -232,9 +236,9 @@ func (m *Manager) Unload(ctx context.Context, refStr string) error {
 	}
 	m.mu.Unlock()
 	if !ok {
-		return nil
+		return false, nil
 	}
-	return inst.process.Stop(ctx)
+	return true, inst.process.Stop(ctx)
 }
 
 // InstanceInfo is the public view of a resident model.
@@ -269,6 +273,17 @@ func (m *Manager) Busy(ref string) bool {
 	}
 	_, ok := m.loading[ref]
 	return ok
+}
+
+// IsRunning reports whether a loaded instance's process is still alive.
+func (m *Manager) IsRunning(refStr string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	inst, ok := m.instances[refStr]
+	if !ok {
+		return false
+	}
+	return inst.process.Running()
 }
 
 // List returns resident models.
@@ -327,9 +342,10 @@ func (m *Manager) checkCapacityLocked(ctx context.Context, b BundleInfo) error {
 			free = d.MemoryFree
 		}
 	}
-	need := (b.MinVRAMMiB + m.opts.MinFreeVRAMMiB) * 1024 * 1024
+	// Only the bundle declares its requirement; there is no global margin.
+	need := b.MinVRAMMiB * 1024 * 1024
 	if free < need {
-		return fmt.Errorf("%w: need %d MiB free VRAM, have %d MiB", ErrResourceExhausted, b.MinVRAMMiB+m.opts.MinFreeVRAMMiB, free/(1024*1024))
+		return fmt.Errorf("%w: need %d MiB free VRAM, have %d MiB", ErrResourceExhausted, b.MinVRAMMiB, free/(1024*1024))
 	}
 	return nil
 }

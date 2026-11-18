@@ -14,11 +14,22 @@ import (
 )
 
 // appService returns the shared application service (tests may override it).
+// It installs a Manager-backed launcher so app models share the daemon's
+// slot/VRAM admission with the 模型 page.
 func (s *Server) appService() *apps.Service {
 	if s.AppService != nil {
 		return s.AppService()
 	}
-	return apps.New(paths.Home())
+	svc := apps.New(paths.Home())
+	if s.Manager != nil {
+		svc.Launcher = managerLauncher{manager: s.Manager}
+		// App models the model page loaded are not in this service's process
+		// map; unload them through the Manager so its slots stay accurate.
+		svc.Stopper = func(ctx context.Context, refStr string) (bool, error) {
+			return s.Manager.UnloadIfLoaded(ctx, refStr)
+		}
+	}
+	return svc
 }
 
 // appList serves GET /v1/apps: FlashHub applications with local state overlay.

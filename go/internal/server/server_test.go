@@ -15,6 +15,7 @@ import (
 
 	"github.com/aodianyun/flashcli/go/internal/gpu"
 	"github.com/aodianyun/flashcli/go/internal/host"
+	"github.com/aodianyun/flashcli/go/internal/modelrun"
 )
 
 type fakeSource struct{}
@@ -266,6 +267,110 @@ func TestVRAMAdmission(t *testing.T) {
 	})
 	if _, err := m.Load(context.Background(), "demo:1"); !errors.Is(err, ErrResourceExhausted) {
 		t.Fatalf("load error = %v", err)
+	}
+}
+
+// Only resources.min_vram_mib gates admission: no declared value means the
+// bundle is admitted, and the exact requirement needs no extra margin.
+func TestVRAMAdmissionUsesBundleRequirementOnly(t *testing.T) {
+	cases := []struct {
+		name  string
+		free  int64
+		min   int64
+		allow bool
+	}{
+		{name: "no requirement", free: 256 * 1024 * 1024, min: 0, allow: true},
+		{name: "exact match", free: 4096 * 1024 * 1024, min: 4096, allow: true},
+		{name: "one MiB short", free: 4095 * 1024 * 1024, min: 4096, allow: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			free := tc.free
+			m := NewManagerWithOptions(&fakeLauncher{}, ManagerOptions{
+				GPU: func(context.Context) ([]gpu.Device, error) {
+					return []gpu.Device{{MemoryFree: free}}, nil
+				},
+				Inspect: func(string) (BundleInfo, error) {
+					return BundleInfo{MinVRAMMiB: tc.min}, nil
+				},
+			})
+			_, err := m.Load(context.Background(), "demo:1")
+			if tc.allow && err != nil {
+				t.Fatalf("expected admission, got %v", err)
+			}
+			if !tc.allow && !errors.Is(err, ErrResourceExhausted) {
+				t.Fatalf("expected ErrResourceExhausted, got %v", err)
+			}
+		})
+	}
+}
+
+// An app model start must go through the same admission as a model-page load.
+func TestManagerLauncherSharesAdmission(t *testing.T) {
+	m := NewManagerWithOptions(&fakeLauncher{}, ManagerOptions{
+		MaxLoaded: 1,
+		GPU: func(context.Context) ([]gpu.Device, error) {
+			return []gpu.Device{{MemoryFree: 1024 * 1024 * 1024}}, nil
+		},
+		Inspect: func(string) (BundleInfo, error) { return BundleInfo{MinVRAMMiB: 2048}, nil },
+	})
+	launcher := managerLauncher{manager: m}
+	if _, err := launcher.StartWithOptions(context.Background(), "demo:1", modelrun.LoadOptions{}); !errors.Is(err, ErrResourceExhausted) {
+		t.Fatalf("app start error = %v", err)
+	}
+	if _, err := launcher.StartWithOptions(context.Background(), "demo:1", modelrun.LoadOptions{}); err == nil {
+		t.Fatal("expected the second start to be rejected too")
+	}
+}
+
+// A successful app start is owned by the Manager; stopping it frees the slot.
+func TestManagerLauncherStopFreesSlot(t *testing.T) {
+	m := NewManagerWithOptions(&fakeLauncher{}, ManagerOptions{
+		MaxLoaded: 1,
+		GPU: func(context.Context) ([]gpu.Device, error) {
+			return []gpu.Device{{MemoryFree: 16 * 1024 * 1024 * 1024}}, nil
+		},
+		Inspect: func(string) (BundleInfo, error) { return BundleInfo{MinVRAMMiB: 1024}, nil },
+	})
+	launcher := managerLauncher{manager: m}
+	proc, err := launcher.StartWithOptions(context.Background(), "demo:1", modelrun.LoadOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if proc.Endpoint() == "" || proc.PID() == 0 {
+		t.Fatalf("proc = %+v", proc)
+	}
+	if loaded, _ := m.Slots(); loaded != 1 {
+		t.Fatalf("loaded = %d, want 1", loaded)
+	}
+	if err := proc.Stop(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if loaded, _ := m.Slots(); loaded != 0 {
+		t.Fatalf("slot not freed: loaded = %d", loaded)
+	}
+}
+
+// UnloadIfLoaded tells a per-request app service whether the Manager owned the
+// model, so a Stop falls back to the recorded PID only when it did not.
+func TestManagerUnloadIfLoaded(t *testing.T) {
+	m := NewManagerWithOptions(&fakeLauncher{}, ManagerOptions{
+		GPU: func(context.Context) ([]gpu.Device, error) {
+			return []gpu.Device{{MemoryFree: 16 * 1024 * 1024 * 1024}}, nil
+		},
+		Inspect: func(string) (BundleInfo, error) { return BundleInfo{}, nil },
+	})
+	if handled, err := m.UnloadIfLoaded(context.Background(), "demo:1"); handled || err != nil {
+		t.Fatalf("unknown ref: handled=%v err=%v", handled, err)
+	}
+	if _, err := m.Load(context.Background(), "demo:1"); err != nil {
+		t.Fatal(err)
+	}
+	if handled, err := m.UnloadIfLoaded(context.Background(), "demo:1"); !handled || err != nil {
+		t.Fatalf("loaded ref: handled=%v err=%v", handled, err)
+	}
+	if loaded, _ := m.Slots(); loaded != 0 {
+		t.Fatalf("slot not freed: loaded = %d", loaded)
 	}
 }
 

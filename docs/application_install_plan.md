@@ -245,8 +245,13 @@ Shared by the CLI and the daemon at `$FLASHCLI_HOME/flashserver/apps.json`
 - Preparing is offline-first: a complete weights cache + download manifest is
   reused without contacting the model hub. Only an explicit `flashcli pull` and
   the desktop's 下载 force a remote re-listing.
-- If `flashserver` is running, its `Manager` and `apps` share state: `start` sees
-  the recorded pid/port and reuses the running model instead of spawning again.
+- If `flashserver` is running, its `Manager` and `apps` share state: app models
+  start through the Manager (same `max_loaded` slots and bundle
+  `resources.min_vram_mib` admission as the 模型 page), and `start` reuses the
+  recorded pid/port when the model is already resident.
+- Stopping or uninstalling an app unloads its models from the Manager, so the
+  slots and the 模型 page list stay accurate even though the daemon builds a
+  short-lived app service per request.
 - Auto ports are recorded; on restart the recorded port is reused when free.
 
 ## Configuration (deferred)

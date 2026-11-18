@@ -218,3 +218,36 @@ func TestStopAndUninstall(t *testing.T) {
 		t.Fatal("app still registered")
 	}
 }
+
+func TestStopUsesStopperWhenProcIsUnknown(t *testing.T) {
+	// The daemon builds a service per request, so a later Stop has no entry in
+	// procs. A Manager-backed Stopper must unload the model instead of killing
+	// a PID behind the shared Manager's back.
+	svc, _ := newTestService(t, manifestJSON("a/one:1"), &fakeLauncher{})
+	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{Yes: true}); err != nil {
+		t.Fatal(err)
+	}
+	stopped := ""
+	fresh := &Service{
+		Home:         svc.Home,
+		Out:          io.Discard,
+		Registry:     svc.Registry,
+		Launcher:     &fakeLauncher{},
+		Now:          func() time.Time { return time.Unix(0, 0) },
+		StartTimeout: 2 * time.Second,
+		Stopper: func(_ context.Context, ref string) (bool, error) {
+			stopped = ref
+			return true, nil
+		},
+	}
+	st, err := fresh.Stop(context.Background(), "xym/demo:1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stopped != "a/one:1" {
+		t.Fatalf("stopper ref = %q", stopped)
+	}
+	if st.Models[0].PID != 0 || st.Models[0].Endpoint != "" {
+		t.Fatalf("model still running: %+v", st.Models[0])
+	}
+}

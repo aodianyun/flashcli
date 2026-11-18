@@ -24,8 +24,7 @@ func main() {
 	flashcliBin := flag.String("flashcli-bin", "", "path to flashcli binary")
 	publicHost := flag.String("public-host", "", "host name returned in model endpoints")
 	logDir := flag.String("log-dir", "", "directory for per-model serve logs")
-	maxLoaded := flag.Int("max-loaded", 0, "maximum resident models (0 = GPU memory only)")
-	minFreeVRAM := flag.Int64("min-free-vram-mib", 0, "free VRAM safety margin in MiB")
+	maxLoaded := flag.Int("max-loaded", 0, "maximum resident models (0 = no slot limit)")
 	showVersion := flag.Bool("version", false, "print version")
 	flag.Parse()
 
@@ -36,7 +35,7 @@ func main() {
 
 	cfg := server.Config{
 		Addr: *addr, Token: *token, FlashcliBin: *flashcliBin, PublicHost: *publicHost,
-		LogDir: *logDir, MaxLoaded: *maxLoaded, MinFreeVRAMMiB: *minFreeVRAM,
+		LogDir: *logDir, MaxLoaded: *maxLoaded,
 	}
 	if *configPath != "" {
 		loaded, err := server.LoadConfig(*configPath)
@@ -81,9 +80,6 @@ func mergeConfig(base, override server.Config) server.Config {
 	}
 	if override.MaxLoaded != 0 {
 		base.MaxLoaded = override.MaxLoaded
-	}
-	if override.MinFreeVRAMMiB != 0 {
-		base.MinFreeVRAMMiB = override.MinFreeVRAMMiB
 	}
 	return base
 }

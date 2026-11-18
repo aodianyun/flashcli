@@ -9,14 +9,13 @@ import (
 
 // Config is the on-disk flashserver configuration written by flashserver-setup.
 type Config struct {
-	Addr           string `json:"addr"`
-	Token          string `json:"token,omitempty"`
-	FlashcliBin    string `json:"flashcli_bin,omitempty"`
-	PublicHost     string `json:"public_host,omitempty"`
-	ServeHost      string `json:"serve_host,omitempty"`
-	LogDir         string `json:"log_dir,omitempty"`
-	MaxLoaded      int    `json:"max_loaded,omitempty"`
-	MinFreeVRAMMiB int64  `json:"min_free_vram_mib,omitempty"`
+	Addr        string `json:"addr"`
+	Token       string `json:"token,omitempty"`
+	FlashcliBin string `json:"flashcli_bin,omitempty"`
+	PublicHost  string `json:"public_host,omitempty"`
+	ServeHost   string `json:"serve_host,omitempty"`
+	LogDir      string `json:"log_dir,omitempty"`
+	MaxLoaded   int    `json:"max_loaded,omitempty"`
 }
 
 // LoadConfig reads a JSON config file.
@@ -46,10 +45,9 @@ func NewFromConfig(cfg Config) *Server {
 		s.Manager = NewManagerWithOptions(modelrun.FlashcliLauncher{
 			Bin: cfg.FlashcliBin, Host: cfg.ServeHost, PublicHost: cfg.PublicHost, LogDir: s.LogDir,
 		}, ManagerOptions{
-			MaxLoaded:      cfg.MaxLoaded,
-			MinFreeVRAMMiB: cfg.MinFreeVRAMMiB,
-			GPU:            s.GPU,
-			ServeSettings:  s.ServeSettings,
+			MaxLoaded:     cfg.MaxLoaded,
+			GPU:           s.GPU,
+			ServeSettings: s.ServeSettings,
 		})
 	}
 	return s

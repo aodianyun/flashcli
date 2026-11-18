@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -35,11 +37,15 @@ type Service struct {
 	// Stdin is given to install commands. The CLI passes its own stdin so a
 	// script may prompt; the daemon leaves it nil (child gets the null device)
 	// so an unattended install can never block on input.
-	Stdin        io.Reader
-	Registry     *Registry
-	Launcher     Launcher
-	Prepare      func(context.Context, string) error
-	Fetch        func(context.Context, flashhub.AppRef) ([]byte, error)
+	Stdin    io.Reader
+	Registry *Registry
+	Launcher Launcher
+	Prepare  func(context.Context, string) error
+	Fetch    func(context.Context, flashhub.AppRef) ([]byte, error)
+	// Stopper stops a model that this service instance did not start (for
+	// example after a daemon restart or a shared Manager). It reports whether
+	// the reference was handled; false falls back to the recorded PID.
+	Stopper      func(context.Context, string) (bool, error)
 	Now          func() time.Time
 	StartTimeout time.Duration
 
@@ -504,9 +510,15 @@ func (s *Service) startModels(ctx context.Context, st *AppState, keepPartial boo
 			return fail(fmt.Errorf("model %s did not become healthy: %w", mdl.Ref, err))
 		}
 		s.setProc(mdl.Ref, proc)
-		mdl.Port = port
-		mdl.PID = proc.PID()
 		mdl.Endpoint = proc.Endpoint()
+		// A Manager-backed launcher picks its own port (it may honor the model
+		// page's serve settings), so trust the endpoint over the requested port.
+		if p := endpointPort(mdl.Endpoint); p > 0 {
+			mdl.Port = p
+		} else {
+			mdl.Port = port
+		}
+		mdl.PID = proc.PID()
 		mdl.Prepared = true
 		s.save(st)
 		fmt.Fprintf(s.out(), "  started %s at %s (pid %d)\n", mdl.ID, mdl.Endpoint, mdl.PID)
@@ -520,6 +532,19 @@ func endpointHealthy(ctx context.Context, endpoint string) bool {
 	probe, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	return modelrun.HealthyEndpoint(probe, endpoint) == nil
+}
+
+// endpointPort returns the port of an http endpoint, or 0 when unavailable.
+func endpointPort(endpoint string) int {
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return 0
+	}
+	port, err := strconv.Atoi(u.Port())
+	if err != nil {
+		return 0
+	}
+	return port
 }
 
 func waitHealthy(ctx context.Context, proc modelrun.ServeProcess, timeout time.Duration) error {
@@ -547,6 +572,13 @@ func (s *Service) stopModel(ctx context.Context, m *ModelState) {
 		_ = proc.Stop(ctx)
 		m.PID, m.Endpoint = 0, ""
 		return
+	}
+	if s.Stopper != nil {
+		if handled, err := s.Stopper(ctx, m.Ref); handled {
+			_ = err
+			m.PID, m.Endpoint = 0, ""
+			return
+		}
 	}
 	if m.PID <= 0 {
 		m.PID, m.Endpoint = 0, ""
