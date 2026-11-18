@@ -383,7 +383,18 @@ func (s *Service) Start(ctx context.Context, key string, keepPartial bool) (AppS
 func (s *Service) StartWithSetup(ctx context.Context, key string, keepPartial bool, setup SetupOptions) (AppState, error) {
 	unlock := lockApp(key)
 	defer unlock()
-	st, ok, err := s.Registry.Get(key)
+	var st AppState
+	var ok bool
+	var err error
+	capture := s.beginCapture()
+	defer func() {
+		s.endCapture(capture)
+		if ok {
+			st.LastLog = tailLog(capture.buf.String(), 100)
+			s.save(&st)
+		}
+	}()
+	st, ok, err = s.Registry.Get(key)
 	if err != nil {
 		return AppState{}, err
 	}
@@ -893,6 +904,43 @@ func (s *Service) out() io.Writer {
 		return io.Discard
 	}
 	return s.Out
+}
+
+// logCapture tees the operation output so it can be kept on the app state.
+type logCapture struct {
+	prev io.Writer
+	buf  strings.Builder
+}
+
+func (c *logCapture) Write(p []byte) (int, error) {
+	c.buf.Write(p)
+	if c.prev != nil {
+		_, _ = c.prev.Write(p)
+	}
+	return len(p), nil
+}
+
+func (s *Service) beginCapture() *logCapture {
+	capture := &logCapture{prev: s.Out}
+	s.Out = capture
+	return capture
+}
+
+func (s *Service) endCapture(capture *logCapture) {
+	s.Out = capture.prev
+}
+
+// tailLog keeps the last max lines (the state is persisted, so keep it small).
+func tailLog(text string, max int) []string {
+	text = strings.TrimRight(text, "\n")
+	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+	lines := strings.Split(text, "\n")
+	if len(lines) > max {
+		lines = lines[len(lines)-max:]
+	}
+	return lines
 }
 
 func (s *Service) now() time.Time {

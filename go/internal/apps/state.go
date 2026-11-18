@@ -54,6 +54,10 @@ type AppState struct {
 	SetupClientHome string        `json:"setup_client_home,omitempty"`
 	// SetupError keeps the last setup failure (the app itself stays ready).
 	SetupError string `json:"setup_error,omitempty"`
+	// LastLog keeps the tail of the last start output (copy/prepare/start and
+	// setup lines). A daemon restore has no desktop job, so the detail pane
+	// reads this to keep showing the log and a full-log entry.
+	LastLog []string `json:"last_log,omitempty"`
 
 	// Error keeps the last failure reason for `app status`.
 	Error string `json:"error,omitempty"`

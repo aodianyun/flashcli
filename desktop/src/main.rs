@@ -1923,6 +1923,16 @@ impl App {
             .as_str()
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string());
+        let last_log = detail["local"]["last_log"]
+            .as_array()
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         let install_executed = detail["local"]["install"]["executed"]
             .as_bool()
             .unwrap_or(false);
@@ -2181,7 +2191,17 @@ impl App {
             } else if let Some(err) = &last_error {
                 ui.label(egui::RichText::new(err).small().color(danger));
             } else if installed && !transitional {
-                ui.label(egui::RichText::new("暂无操作日志").small().weak());
+                if last_log.is_empty() {
+                    ui.label(egui::RichText::new("暂无操作日志").small().weak());
+                } else {
+                    for line in last_log.iter().rev().take(6).rev() {
+                        ui.label(egui::RichText::new(line).monospace().small().weak());
+                    }
+                    if ui.small_button("完整日志").clicked() {
+                        self.app_log_dialog =
+                            Some((format!("{display} · 日志"), last_log.join("\n")));
+                    }
+                }
             }
             // The application itself lives on the client OS; a skipped script
             // means its command still has to be run in a terminal.

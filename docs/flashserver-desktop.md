@@ -36,7 +36,9 @@ for commands. Install/build details are in [../desktop/README.md](../desktop/REA
   client home are saved; a daemon restart restores the app and automatically
   re-runs the same scripts for the new connection (no manifest fetch). A failure
   is logged, shown on the app, and stops the remaining scripts; a ready app also
-  offers **应用配置** to re-run the scripts without restarting the models.
+  offers **应用配置** to re-run the scripts without restarting the models. The
+  last start/install output is kept on the app (`last_log`), so a restored app
+  still shows recent lines and a full-log entry.
   One application installs at a time: while a job runs, its card shows
   `安装中 · 阶段 xx%` with a bar, a banner appears above the grid, and the other
   apps' actions are disabled.

@@ -1168,6 +1168,10 @@ components:
         setup_error:
           type: string
           description: "Last setup failure; the app itself stays ready."
+        last_log:
+          type: array
+          items: { type: string }
+          description: "Tail of the last start/install output; shown after a daemon restore when no client job exists."
         models:
           type: array
           items:

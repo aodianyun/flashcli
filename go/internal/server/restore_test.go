@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -243,5 +244,9 @@ func TestRestoreReplaysSavedSetupScripts(t *testing.T) {
 	}
 	if len(st.SetupScripts) != 1 || st.SetupScripts[0] != "conf" {
 		t.Fatalf("setup_scripts = %#v", st.SetupScripts)
+	}
+	log := strings.Join(st.LastLog, "\n")
+	if !strings.Contains(log, "setup conf") {
+		t.Fatalf("restored app log = %q", log)
 	}
 }
