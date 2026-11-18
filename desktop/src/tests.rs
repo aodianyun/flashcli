@@ -172,6 +172,36 @@ fn lifecycle_jobs_start_with_their_own_phase() {
 }
 
 #[test]
+fn app_job_status_names_the_model_for_start_and_stop() {
+    let mut job = AppJobState {
+        verb: "启动".to_string(),
+        phase: "启动模型".to_string(),
+        percent: None,
+        running: true,
+        log: "starting xym/gemma4_e2b_it:1.0.1 ...\n".to_string(),
+    };
+    assert_eq!(
+        app_job_status_text(&job, "Grok CLI", ""),
+        "正在启动模型 xym/gemma4_e2b_it:1.0.1"
+    );
+    job.verb = "停止".to_string();
+    job.log = "stopping xym/gemma4_e2b_it:1.0.1 ...\n".to_string();
+    assert_eq!(
+        app_job_status_text(&job, "Grok CLI", ""),
+        "正在停止模型 xym/gemma4_e2b_it:1.0.1"
+    );
+    job.verb = "启动".to_string();
+    job.log.clear();
+    assert_eq!(app_job_status_text(&job, "Grok CLI", ""), "正在启动模型…");
+    job.verb = "安装".to_string();
+    job.phase = "安装应用".to_string();
+    assert_eq!(
+        app_job_status_text(&job, "Grok CLI", ""),
+        "正在安装 Grok CLI · 安装应用"
+    );
+}
+
+#[test]
 fn installer_kinds_follow_the_extension() {
     assert!(matches!(
         installer_kind("https://x/a.exe?token=1"),

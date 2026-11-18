@@ -1657,7 +1657,7 @@ impl App {
             ui.horizontal(|ui| {
                 ui.add(egui::Spinner::new().size(13.0));
                 ui.label(
-                    egui::RichText::new(format!("正在安装 {label} · {}{}", job.phase, pct))
+                    egui::RichText::new(app_job_status_text(&job, &label, &pct))
                         .small()
                         .strong()
                         .color(accent(ui)),
@@ -5907,8 +5907,43 @@ fn app_log_tail(log: &str, count: usize) -> Vec<String> {
 
 /// Install phase for a progress line (keeps the previous phase when the line
 /// carries no step information).
-fn app_job_phase(line: &str, current: &str) -> String {
-    let lower = line.to_ascii_lowercase();
+/// Status line above the app grid: name the model for start/stop/prepare
+/// instead of always saying "正在安装 <app>".
+fn app_job_status_text(job: &AppJobState, label: &str, pct: &str) -> String {
+    let model = app_job_model(&job.log);
+    match job.verb.as_str() {
+        "启动" => match model {
+            Some(m) => format!("正在启动模型 {m}{pct}"),
+            None => format!("正在启动模型…{pct}"),
+        },
+        "停止" => match model {
+            Some(m) => format!("正在停止模型 {m}{pct}"),
+            None => format!("正在停止模型…{pct}"),
+        },
+        "准备模型" => match model {
+            Some(m) => format!("正在准备模型 {m}{pct}"),
+            None => format!("正在准备模型…{pct}"),
+        },
+        _ => format!("正在安装 {label} · {}{}", job.phase, pct),
+    }
+}
+
+/// The last model ref mentioned by the start/stop/prepare log lines.
+fn app_job_model(log: &str) -> Option<String> {
+    for line in log.lines().rev() {
+        let line = line.trim();
+        for prefix in ["starting ", "stopping ", "Preparing model ", "reuse "] {
+            if let Some(rest) = line.strip_prefix(prefix) {
+                if let Some(first) = rest.split_whitespace().next() {
+                    return Some(first.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+fn app_job_phase(line: &str, current: &str) -> String {    let lower = line.to_ascii_lowercase();
     if line.starts_with("Application:")
         || lower.contains("install command")
         || line.contains("安装程序")
