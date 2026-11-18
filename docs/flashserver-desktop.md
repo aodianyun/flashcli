@@ -101,8 +101,11 @@ Windows localhost forwarding makes `host=0.0.0.0` reachable at
 3. Applying restarts WSL and `flashserver`; running models are interrupted.
 
 The same panel edits `.wslconfig` `memory`/`processors`/`swap` (empty = WSL
-defaults: 50% RAM, all logical CPUs, 25% swap). These apply to every WSL2 distro.
-Mirrored networking requires Windows 11 22H2+. Public internet access additionally
+defaults: 50% RAM, all logical CPUs, 25% swap). `autoMemoryReclaim=gradual` is
+on by default: WSL returns idle page cache to Windows instead of holding it for
+the whole session (reusable pages, so a later model load may read them from disk
+again). These apply to every WSL2 distro and need a WSL restart. Mirrored
+networking requires Windows 11 22H2+. Public internet access additionally
 needs a Public-profile rule and router port forwarding; never expose the API
 without a token.
 

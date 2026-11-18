@@ -212,12 +212,27 @@ struct OptionsDialog {
     start_after_save: bool,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 struct WslConfig {
     memory: String,
     processors: String,
     swap: String,
     mirrored: bool,
+    /// `autoMemoryReclaim=gradual` (on by default): WSL returns idle page
+    /// cache to Windows instead of holding it for the whole session.
+    auto_memory_reclaim: bool,
+}
+
+impl Default for WslConfig {
+    fn default() -> Self {
+        Self {
+            memory: String::new(),
+            processors: String::new(),
+            swap: String::new(),
+            mirrored: false,
+            auto_memory_reclaim: true,
+        }
+    }
 }
 
 enum Event {
@@ -3816,6 +3831,12 @@ impl App {
                                 egui::TextEdit::singleline(&mut self.wsl.swap)
                                     .hint_text("默认：内存的 25%（0 关闭）")
                                     .desired_width(220.0),
+                            );
+                            ui.end_row();
+                            ui.label("自动回收内存");
+                            ui.checkbox(
+                                &mut self.wsl.auto_memory_reclaim,
+                                "autoMemoryReclaim=gradual（空闲时把缓存还给 Windows）",
                             );
                             ui.end_row();
                             ui.label("防火墙端口");
@@ -7865,6 +7886,9 @@ fn parse_wslconfig(text: &str) -> WslConfig {
             "processors" => cfg.processors = value,
             "swap" => cfg.swap = value,
             "networkingmode" => cfg.mirrored = value.eq_ignore_ascii_case("mirrored"),
+            "automemoryreclaim" => {
+                cfg.auto_memory_reclaim = !value.eq_ignore_ascii_case("disabled")
+            }
             _ => {}
         }
     }
@@ -7937,7 +7961,18 @@ fn update_wslconfig(text: &str, cfg: &WslConfig) -> String {
     if cfg.mirrored {
         managed.push("networkingMode=mirrored".to_string());
     }
-    let keys = ["memory", "processors", "swap", "networkingmode"];
+    managed.push(if cfg.auto_memory_reclaim {
+        "autoMemoryReclaim=gradual".to_string()
+    } else {
+        "autoMemoryReclaim=disabled".to_string()
+    });
+    let keys = [
+        "memory",
+        "processors",
+        "swap",
+        "networkingmode",
+        "automemoryreclaim",
+    ];
     let mut out: Vec<String> = Vec::new();
     let mut in_wsl2 = false;
     let mut seen = false;

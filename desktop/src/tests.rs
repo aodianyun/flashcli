@@ -426,11 +426,12 @@ fn wslconfig_replaces_managed_keys_only() {
         processors: "8".into(),
         swap: String::new(),
         mirrored: true,
+        auto_memory_reclaim: true,
     };
     let out = update_wslconfig(text, &cfg);
     assert_eq!(
         out,
-        "[wsl2]\nmemory=8GB\nprocessors=8\nnetworkingMode=mirrored\n\n[experimental]\nsparseVhd=true\n"
+        "[wsl2]\nmemory=8GB\nprocessors=8\nnetworkingMode=mirrored\nautoMemoryReclaim=gradual\n\n[experimental]\nsparseVhd=true\n"
     );
 }
 
@@ -440,10 +441,16 @@ fn wslconfig_appends_section_when_missing() {
         memory: "8GB".into(),
         ..Default::default()
     };
-    assert_eq!(update_wslconfig("", &cfg), "[wsl2]\nmemory=8GB\n");
+    assert_eq!(
+        update_wslconfig("", &cfg),
+        "[wsl2]\nmemory=8GB\nautoMemoryReclaim=gradual\n"
+    );
 
     let out = update_wslconfig("[experimental]\nsparseVhd=true\n", &cfg);
-    assert_eq!(out, "[experimental]\nsparseVhd=true\n\n[wsl2]\nmemory=8GB\n");
+    assert_eq!(
+        out,
+        "[experimental]\nsparseVhd=true\n\n[wsl2]\nmemory=8GB\nautoMemoryReclaim=gradual\n"
+    );
 }
 
 #[test]
@@ -453,7 +460,10 @@ fn wslconfig_preserves_crlf() {
         ..Default::default()
     };
     let out = update_wslconfig("[wsl2]\r\nmemory=4GB\r\n", &cfg);
-    assert_eq!(out, "[wsl2]\r\nmemory=8GB\r\n");
+    assert_eq!(
+        out,
+        "[wsl2]\r\nmemory=8GB\r\nautoMemoryReclaim=gradual\r\n"
+    );
 }
 
 #[test]
@@ -463,6 +473,18 @@ fn wslconfig_empty_values_do_not_add_keys() {
         processors: String::new(),
         swap: String::new(),
         mirrored: false,
+        auto_memory_reclaim: true,
     };
-    assert_eq!(update_wslconfig("[wsl2]\nmemory=4GB\n", &cfg), "[wsl2]\n");
+    assert_eq!(
+        update_wslconfig("[wsl2]\nmemory=4GB\n", &cfg),
+        "[wsl2]\nautoMemoryReclaim=gradual\n"
+    );
+}
+
+#[test]
+fn wslconfig_reads_auto_memory_reclaim() {
+    assert!(parse_wslconfig("[wsl2]\nautoMemoryReclaim=gradual\n").auto_memory_reclaim);
+    assert!(!parse_wslconfig("[wsl2]\nautoMemoryReclaim=disabled\n").auto_memory_reclaim);
+    // Missing key: reclaim is on by default.
+    assert!(parse_wslconfig("").auto_memory_reclaim);
 }

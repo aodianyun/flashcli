@@ -84,7 +84,9 @@ Windows 的 localhost 转发让 `host=0.0.0.0` 在 Windows 上可通过
 3. 应用设置会重启 WSL 和 `flashserver`，正在运行的模型会中断。
 
 同一面板可修改 `.wslconfig` 的 `memory`/`processors`/`swap`（留空用 WSL 默认值：
-内存 50%、全部逻辑 CPU、Swap 25%），对所有 WSL2 发行版生效。镜像网络需要
+内存 50%、全部逻辑 CPU、Swap 25%）。`autoMemoryReclaim=gradual` 默认开启：空闲时把
+可回收的 page cache 还给 Windows，避免 WSL 长时间占着内存；代价是之后再次加载模型可能
+需要重新读盘（稍慢）。这些设置对所有 WSL2 发行版生效，并需要重启 WSL。镜像网络需要
 Windows 11 22H2+。公网访问还需要额外的 Public 规则和路由器端口映射；不要在没有
 token 的情况下直接暴露 API。
 
