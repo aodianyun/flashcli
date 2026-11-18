@@ -90,6 +90,42 @@ invalid required field is rejected with the field name. An unsupported
 - `serve.options` values are forwarded as `--flag value`; the bundle's
   `serve_options` remains authoritative for names and defaults.
 
+## Updating a model bundle
+
+Bundle versions are **immutable**: the cache key, marker and weights store are
+derived from the version/revision, so changing a bundle's content under an
+existing version is not picked up by `run`/`serve`/`pull` (the cached tree is
+treated as complete).
+
+To update:
+
+1. Publish a new bundle version (for example `xym/demo:1.0.2`) with the new
+   content/weights revision.
+2. Update the application manifest's `model.bundles[].bundle` to the new ref
+   (publish a new application version if your process treats app versions as
+   immutable).
+3. Reinstall the application (`重新安装` in the desktop, or
+   `flashcli app install <app> --force`).
+
+Reinstall fetches the current manifest, stops models that are no longer
+referenced (freeing their slots/VRAM), keeps their caches, prepares and starts
+the new bundle, and then runs the confirmed setup scripts for the new
+connection. Old caches are not deleted automatically; use
+`flashcli bundle clean --all <old-ref>` when they are no longer needed.
+
+A new **application** version is a separate app key: install it and stop or
+uninstall the old version. Updating the bundle refs in place under the same
+application version is supported by reinstall, but publishing a new app version
+is the documented/immutable path.
+
+For an in-place cache refresh of the **same** version (for example a mutable
+`main` revision or a repaired cache), the model page exposes **更多 → 重新同步**
+only while the model is not running. It calls
+`POST /v1/pull {"ref": "...", "force": true}` (CLI:
+`flashcli pull <ref> --force`), re-downloading the bundle tree/manifest and
+re-verifying weights. Treat this as a repair path; normal content updates should
+publish a new bundle version.
+
 ## config (reserved)
 
 `config` is part of the schema but v1 applications publish an empty array. Hosts

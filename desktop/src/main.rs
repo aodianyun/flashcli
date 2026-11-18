@@ -2515,6 +2515,7 @@ impl App {
         let mut detail_request = None;
         let mut load_request = None;
         let mut pull_request = None;
+        let mut resync_request = None;
         let mut unload_request = None;
         let mut logs_request = None;
         let mut use_request: Option<ModelRow> = None;
@@ -2648,6 +2649,10 @@ impl App {
                                     logs_request = Some(m.name.clone());
                                     ui.close_menu();
                                 }
+                                if m.ready() && !m.loaded && ui.button("重新同步").on_hover_text("重新下载当前版本的 bundle/权重（模型未运行时可用）").clicked() {
+                                    resync_request = Some(m.name.clone());
+                                    ui.close_menu();
+                                }
                                 if m.ready() && !m.serve && ui.button("Run 冒烟测试").clicked()
                                 {
                                     smoke_request = Some(m.clone());
@@ -2726,6 +2731,9 @@ impl App {
         }
         if let Some(name) = pull_request {
             self.spawn_job_ui(ui.ctx(), name, true, "加载");
+        }
+        if let Some(name) = resync_request {
+            self.spawn_job_ui(ui.ctx(), name, true, "重新同步");
         }
         if let Some(name) = unload_request {
             self.dialog = Some(DialogState {
@@ -4691,6 +4699,10 @@ impl App {
                 Vec::new()
             };
             let key = app_reference(&prompt.org, &prompt.name, &prompt.version);
+            if setup_keys.is_empty() {
+                // The install dialog asked; do not ask again when it becomes ready.
+                self.skip_setup_for.insert(key.clone());
+            }
             self.app_jobs.insert(
                 key,
                 AppJobState {
@@ -5891,7 +5903,11 @@ fn spawn_job(
             kind: kind.to_string(),
             authoritative: true,
         }));
-        let body = serde_json::json!({ "ref": ref_str, "async": true });
+        let body = serde_json::json!({
+            "ref": ref_str,
+            "async": true,
+            "force": pull && verb == "重新同步",
+        });
         match post_json(endpoint, &body) {
             Ok(v) => {
                 let job = v["job_id"].as_str().unwrap_or("");

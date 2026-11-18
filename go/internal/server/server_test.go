@@ -601,6 +601,52 @@ func TestRestoreAppsOnlyWhenModelsWereRunning(t *testing.T) {
 	}
 }
 
+// Re-syncing a cached version passes Force to the puller; a loaded model must
+// be unloaded first.
+func TestPullForceAndBusy(t *testing.T) {
+	p := &capturePuller{}
+	s := &Server{Puller: p, Jobs: NewJobManager()}
+	req := httptest.NewRequest(http.MethodPost, "/v1/pull", strings.NewReader(`{"ref":"demo:1","force":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for !p.force && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !p.force {
+		t.Fatal("pull did not receive force")
+	}
+
+	m := NewManagerWithOptions(&fakeLauncher{}, ManagerOptions{Inspect: fakeInspect})
+	if _, err := m.Load(context.Background(), "demo:1"); err != nil {
+		t.Fatal(err)
+	}
+	s.Manager = m
+	req = httptest.NewRequest(http.MethodPost, "/v1/pull", strings.NewReader(`{"ref":"demo:1"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("loaded model pull status = %d, want 409", rec.Code)
+	}
+}
+
+type capturePuller struct {
+	force bool
+}
+
+func (p *capturePuller) Pull(ctx context.Context, ref string, opts host.PullOptions) (host.PullResult, error) {
+	p.force = opts.Force
+	if opts.Progress != nil {
+		opts.Progress(host.PullEvent{Phase: "done", Ref: ref})
+	}
+	return host.PullResult{BundleRoot: "/tmp/bundle", Checkpoint: "/tmp/weights"}, nil
+}
+
 func TestInspectBundleVRAM(t *testing.T) {
 	dir := t.TempDir()
 	data := `{

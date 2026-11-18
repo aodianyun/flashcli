@@ -294,7 +294,7 @@ func Pull(ctx context.Context, refStr string, opts PullOptions) (PullResult, err
 		}
 	}
 	ctx = progress.WithSink(ctx, sink)
-	bundleRoot, ver, variant, err := EnsureBundleContext(ctx, refStr, opts.Quiet, false)
+	bundleRoot, ver, variant, err := EnsureBundleContext(ctx, refStr, opts.Quiet, opts.Force)
 	if err != nil {
 		return PullResult{}, err
 	}

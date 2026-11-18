@@ -181,6 +181,35 @@ func TestStartFailureRollsBack(t *testing.T) {
 	}
 }
 
+func TestReinstallStopsModelsRemovedFromManifest(t *testing.T) {
+	launcher := &fakeLauncher{}
+	svc, _ := newTestService(t, manifestJSON("a/one:1"), launcher)
+	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{Yes: true}); err != nil {
+		t.Fatal(err)
+	}
+	if len(launcher.procs) != 1 {
+		t.Fatalf("initial procs = %d", len(launcher.procs))
+	}
+	old := launcher.procs[0]
+	// The app manifest now references a new bundle version.
+	svc.Fetch = func(context.Context, flashhub.AppRef) ([]byte, error) {
+		return manifestJSON("b/two:2"), nil
+	}
+	res, err := svc.Install(context.Background(), "xym/demo", InstallOptions{Yes: true, Force: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !old.stopped {
+		t.Fatal("old model was not stopped after the bundle changed")
+	}
+	if len(res.State.Models) != 1 || res.State.Models[0].Ref != "b/two:2" {
+		t.Fatalf("models = %+v", res.State.Models)
+	}
+	if len(launcher.procs) != 2 {
+		t.Fatalf("procs = %d, want old + new", len(launcher.procs))
+	}
+}
+
 func TestReinstallIsIdempotent(t *testing.T) {
 	launcher := &fakeLauncher{}
 	svc, prepared := newTestService(t, manifestJSON("a/one:1"), launcher)

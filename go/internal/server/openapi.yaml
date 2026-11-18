@@ -537,6 +537,10 @@ paths:
               required: [ref]
               properties:
                 ref: { type: string }
+                force:
+                  type: boolean
+                  default: false
+                  description: "Re-download the bundle tree/manifest even when the cache marker is present (model page 重新同步). The model must not be running."
       responses:
         '202':
           description: Pull job accepted
@@ -544,7 +548,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/JobRef' }
         '409':
-          description: Another download is already running
+          description: Another download is running, or the model is loaded (unload it first)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }

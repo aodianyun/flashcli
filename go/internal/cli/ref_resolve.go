@@ -33,6 +33,7 @@ func applyEnv(m *manifest.Manifest) (*manifest.Manifest, error) {
 func pullCmd() *cobra.Command {
 	var quiet bool
 	var noAutoInstall bool
+	var force bool
 	cmd := &cobra.Command{
 		Use:   "pull <ref>",
 		Short: "Download a bundle's weights into the flashcli cache",
@@ -44,6 +45,7 @@ func pullCmd() *cobra.Command {
 				Quiet:         quiet,
 				NoAutoInstall: noAutoInstall,
 				VerifyWeights: true,
+				Force:         force,
 				Progress: func(ev host.PullEvent) {
 					if quiet || ev.Message == "" {
 						return
@@ -61,6 +63,7 @@ func pullCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress output")
 	cmd.Flags().BoolVar(&noAutoInstall, "no-auto-install", false, "Do not auto-install the Python stack")
+	cmd.Flags().BoolVar(&force, "force", false, "Re-download the bundle tree even when it is cached")
 	return cmd
 }
 

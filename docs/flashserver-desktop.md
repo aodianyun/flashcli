@@ -12,7 +12,10 @@ for commands. Install/build details are in [../desktop/README.md](../desktop/REA
   cards, current API URL.
 - **Models** — local cache plus FlashHub search; per-model Bundle / runtime /
   weights sizes; load, start, stop; run/serve smoke tests with a live log;
-  multi-select cache cleanup.
+  multi-select cache cleanup. A cached model that is not running also offers
+  **更多 → 重新同步**, which force-re-downloads its bundle tree/weights
+  (`/v1/pull {"force":true}`); use it only as a repair for a mutable revision,
+  not instead of a new bundle version.
 - **应用** — a sidebar page for FlashHub apps: a cover-card grid
   (name, version · domain, description; search and domain filters) plus a
   detail pane with all available metadata — organization/downloads/status,

@@ -84,6 +84,31 @@ flowchart LR
 - `serve.options` 以 `--flag value` 形式转发；选项名与默认值仍由 bundle 的
   `serve_options` 决定
 
+## 更新模型 bundle
+
+bundle 版本是**不可变**的：cache key、marker 和权重 store 都由版本/revision 派生，
+因此在同一版本下替换 bundle 内容不会被 `run`/`serve`/`pull` 识别（缓存视为完整）。
+
+更新步骤：
+
+1. 发布新的 bundle 版本（例如 `xym/demo:1.0.2`），包含新内容/权重 revision。
+2. 把应用 manifest 的 `model.bundles[].bundle` 改成新 ref（如果流程要求应用版本不可变，
+   同时发布新的应用版本）。
+3. 重新安装应用（桌面端「重新安装」，或 `flashcli app install <app> --force`）。
+
+重新安装会重新拉取 manifest、停止不再被引用的旧模型（释放槽位/显存，保留缓存）、
+准备并启动新 bundle，然后针对新的接入地址执行已确认的配置脚本。旧缓存不会自动删除，
+确认不再需要时用 `flashcli bundle clean --all <old-ref>` 清理。
+
+新的**应用**版本是一个新的 app key：安装新版本并停止/卸载旧版本。同一应用版本下直接
+更新 bundle ref 也支持重新安装，但发布新应用版本才是符合不可变约定的路径。
+
+如果确实需要在**同一版本**下刷新缓存（例如可变的 `main` revision 或缓存修复），模型页
+提供 **更多 → 重新同步**，仅在模型未运行时可用。它调用
+`POST /v1/pull {"ref": "...", "force": true}`（CLI：`flashcli pull <ref> --force`），
+重新下载 bundle 树/manifest 并重新校验权重。这是修复路径；正常内容更新应发布新的 bundle
+版本。
+
 ## config（预留）
 
 `config` 属于 schema，但 v1 应用全部发布空数组。host 必须接受并忽略未知条目；

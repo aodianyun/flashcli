@@ -211,6 +211,22 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 	state.Key = key
 	state.Version = m.Version
 	state.State = StatePlanned
+	// A reinstall can point at new bundle versions. Stop models that are no
+	// longer in the manifest so their slots/VRAM are released (caches stay).
+	if found {
+		keep := make(map[string]bool, len(refs))
+		for _, ref := range refs {
+			keep[ref] = true
+		}
+		for i := range existing.Models {
+			old := existing.Models[i]
+			if keep[old.Ref] {
+				continue
+			}
+			fmt.Fprintf(out, "\nRemoving model %s (no longer in the manifest)\n", old.Ref)
+			s.stopModel(ctx, &old)
+		}
+	}
 	state.Models = planModels(refs, existing.Models)
 	s.save(&state)
 
