@@ -1769,6 +1769,7 @@ impl App {
         let (org_name, app_name, app_version) = app_identity(detail);
         let local_state = detail["local"]["state"].as_str().unwrap_or("").to_string();
         let installed = !local_state.is_empty();
+        let transitional = matches!(local_state.as_str(), "installing" | "preparing" | "starting" | "stopping");
         let job_key = app_reference(&org_name, &app_name, &app_version);
         let job = self.app_jobs.get(&job_key).cloned();
         let busy = job.as_ref().map(|j| j.running).unwrap_or(false);
@@ -1815,6 +1816,14 @@ impl App {
                     }
                     if installed {
                         ui.label(egui::RichText::new("已安装").small().color(green(ui)));
+                    }
+                    // Surface the live state next to the buttons' input: the
+                    // 本地状态 block is far below and easy to miss.
+                    if transitional {
+                        ui.add(egui::Spinner::new().size(11.0));
+                    }
+                    if let Some((label, color)) = app_state_badge(&local_state, ui) {
+                        ui.label(egui::RichText::new(label).small().color(color));
                     }
                     if !supported {
                         ui.label(egui::RichText::new("当前平台不受支持").small().color(danger));
@@ -1869,13 +1878,14 @@ impl App {
         let mut open_uninstall = false;
         let mut open_log = false;
         let wait_hint = "已有应用正在安装，请等待完成";
+        let can_start = installed && matches!(local_state.as_str(), "stopped" | "failed");
+        let can_stop = installed && matches!(local_state.as_str(), "ready" | "failed");
         ui.add_space(8.0);
         ui.horizontal_wrapped(|ui| {
             let install_label = if installed { "重新安装" } else { "安装" };
-            let transitioning = matches!(local_state.as_str(), "starting" | "stopping");
             let install = ui
                 .add_enabled(
-                    !blocked && !transitioning && supported,
+                    !blocked && !transitional && supported,
                     egui::Button::new(install_label),
                 )
                 .on_hover_text("安装会先确认是否执行应用自带的安装脚本")
@@ -1885,7 +1895,7 @@ impl App {
             }
             if ui
                 .add_enabled(
-                    !blocked && !transitioning && installed,
+                    !blocked && !transitional && can_start,
                     egui::Button::new("启动"),
                 )
                 .on_disabled_hover_text(if other_install { wait_hint } else { "" })
@@ -1895,11 +1905,7 @@ impl App {
             }
             if ui
                 .add_enabled(
-                    !blocked
-                        && !transitioning
-                        && (local_state == "ready"
-                            || local_state == "failed"
-                            || local_state == "stopped"),
+                    !blocked && !transitional && can_stop,
                     egui::Button::new("停止"),
                 )
                 .on_disabled_hover_text(if other_install { wait_hint } else { "" })
@@ -1909,7 +1915,7 @@ impl App {
             }
             if ui
                 .add_enabled(
-                    !blocked && !transitioning && installed,
+                    !blocked && !transitional && installed,
                     egui::Button::new(egui::RichText::new("卸载").color(danger)),
                 )
                 .on_disabled_hover_text(if other_install { wait_hint } else { "" })
@@ -5735,6 +5741,20 @@ fn app_install_body(version: &str, ran_script: bool, force: bool) -> Value {
         "client_os": app_os_key(),
         "client_arch": app_arch_key(),
         "force": force,
+    })
+}
+
+/// Human label + colour for an app state (shown next to the app key).
+fn app_state_badge(state: &str, ui: &egui::Ui) -> Option<(&'static str, egui::Color32)> {
+    Some(match state {
+        "ready" => ("运行中", green(ui)),
+        "stopped" => ("已停止", ui.visuals().weak_text_color()),
+        "failed" => ("失败", red(ui)),
+        "starting" => ("启动中…", accent(ui)),
+        "stopping" => ("停止中…", accent(ui)),
+        "preparing" => ("准备中…", accent(ui)),
+        "installing" => ("安装中…", accent(ui)),
+        _ => return None,
     })
 }
 
