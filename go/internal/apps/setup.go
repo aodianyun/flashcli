@@ -24,24 +24,14 @@ type SetupOptions struct {
 	Provided bool
 }
 
-// runSetupScripts executes confirmed setup scripts in manifest order. A failed
-// script stops the remaining scripts and is returned as err.
-func (s *Service) runSetupScripts(ctx context.Context, m *Manifest, st *AppState, opts SetupOptions) (bool, error) {
-	if len(opts.Scripts) == 0 || len(m.Setup.Scripts) == 0 {
-		return false, nil
-	}
-	confirmed := make(map[string]bool, len(opts.Scripts))
-	for _, key := range opts.Scripts {
-		confirmed[key] = true
-	}
+// runSetupScripts executes the selected setup script definitions in order. A
+// failed script stops the remaining scripts and is returned as err.
+func (s *Service) runSetupScripts(ctx context.Context, scripts []SetupScript, st *AppState, clientHome string) (bool, error) {
 	ran := false
-	for _, script := range m.Setup.Scripts {
-		if !confirmed[script.Key] {
-			continue
-		}
+	for _, script := range scripts {
 		ran = true
 		fmt.Fprintf(s.out(), "setup %s: %s\n", script.Key, script.URL)
-		if err := s.runSetupScript(ctx, script, st.Connection, opts.ClientHome); err != nil {
+		if err := s.runSetupScript(ctx, script, st.Connection, clientHome); err != nil {
 			fmt.Fprintf(s.out(), "setup %s failed: %v\n", script.Key, err)
 			return true, err
 		}

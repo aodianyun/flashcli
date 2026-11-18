@@ -31,6 +31,7 @@ func (s *Server) restoreOnStart(ctx context.Context) {
 			}
 			st.State = apps.StateStarting
 			st.Error = ""
+			st.SetupError = ""
 			st.UpdatedAt = now
 			m[key] = st
 			keys = append(keys, key)

@@ -14,6 +14,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/aodianyun/flashcli/go/internal/flashhub"
 )
 
 const setupScriptBody = `import json, os, sys
@@ -191,9 +193,7 @@ func TestSetupScriptsRunInOrderAndStopOnFailure(t *testing.T) {
 	svc := &Service{Out: io.Discard}
 	home := t.TempDir()
 	st := &AppState{Connection: conn}
-	svc.runSetupScripts(context.Background(), m, st, SetupOptions{
-		Scripts: []string{"one", "two"}, ClientHome: home,
-	})
+	svc.runSetupScripts(context.Background(), m.Setup.Scripts, st, home)
 	blob, err := os.ReadFile(filepath.Join(home, "order.txt"))
 	if err != nil {
 		t.Fatal(err)
@@ -208,9 +208,7 @@ func TestSetupScriptsRunInOrderAndStopOnFailure(t *testing.T) {
 		{Key: "fail", Kind: "python", URL: srv.URL + "/fail", SHA256: hash(fail)},
 		{Key: "two", Kind: "python", URL: srv.URL + "/two", SHA256: hash(two), Args: []string{"two"}},
 	}
-	svc.runSetupScripts(context.Background(), m, &AppState{Connection: conn}, SetupOptions{
-		Scripts: []string{"fail", "two"}, ClientHome: home2,
-	})
+	svc.runSetupScripts(context.Background(), m.Setup.Scripts, &AppState{Connection: conn}, home2)
 	if _, err := os.Stat(filepath.Join(home2, "order.txt")); !os.IsNotExist(err) {
 		t.Fatal("a script ran after the first failure")
 	}
@@ -283,18 +281,27 @@ func TestRestoreReplaysSavedSetupScripts(t *testing.T) {
 		t.Fatal(err)
 	}
 	home := t.TempDir()
-	// Persisted by the previous start: the confirmed selection is the record.
+	// Persisted by the previous start: the confirmed selection and its pinned
+	// definition. No manifest fetch is available on restore.
 	if err := svc.Registry.Update(func(m map[string]AppState) error {
 		st, ok := m["xym/workbuddy:1.0.0"]
 		if !ok {
 			t.Fatal("app not installed")
 		}
 		st.SetupScripts = []string{"workbuddy"}
+		st.SetupPlan = []SetupScript{{
+			Key: "workbuddy", Kind: "python", URL: srv.URL,
+			SHA256: hex.EncodeToString(sum[:]),
+			Args:   []string{"{base_url}", "{model}", "--api-key {api_key}"},
+		}}
 		st.SetupClientHome = home
 		m["xym/workbuddy:1.0.0"] = st
 		return nil
 	}); err != nil {
 		t.Fatal(err)
+	}
+	svc.Fetch = func(context.Context, flashhub.AppRef) ([]byte, error) {
+		return nil, fmt.Errorf("offline: manifest fetch must not be needed on restore")
 	}
 	started, err := svc.Start(context.Background(), "xym/workbuddy:1.0.0", false)
 	if err != nil {
@@ -305,6 +312,45 @@ func TestRestoreReplaysSavedSetupScripts(t *testing.T) {
 	}
 	if len(started.SetupScripts) != 1 || started.SetupScripts[0] != "workbuddy" {
 		t.Fatalf("setup_scripts = %#v", started.SetupScripts)
+	}
+}
+
+func TestSetupFailureIgnoresInterruptedContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if got := setupFailure(ctx, context.Canceled); got != "" {
+		t.Fatalf("canceled error persisted: %q", got)
+	}
+	if got := setupFailure(context.Background(), fmt.Errorf("script failed")); got != "script failed" {
+		t.Fatalf("failure = %q", got)
+	}
+}
+
+// A failure from an earlier run is cleared as soon as the app starts again.
+func TestStartClearsStaleSetupError(t *testing.T) {
+	svc, _ := newTestService(t, manifestJSON("a/one:1"), &fakeLauncher{})
+	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{
+		Yes: true, NoStart: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Registry.Update(func(m map[string]AppState) error {
+		st, ok := m["xym/demo:1.0.0"]
+		if !ok {
+			t.Fatal("app not installed")
+		}
+		st.SetupError = "setup skipped: context canceled"
+		m["xym/demo:1.0.0"] = st
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Start(context.Background(), "xym/demo:1.0.0", false); err != nil {
+		t.Fatal(err)
+	}
+	st, _, _ := svc.Registry.Get("xym/demo:1.0.0")
+	if st.SetupError != "" {
+		t.Fatalf("setup_error = %q", st.SetupError)
 	}
 }
 

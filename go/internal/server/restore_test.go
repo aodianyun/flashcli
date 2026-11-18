@@ -104,19 +104,6 @@ func TestRestoreReplaysSavedSetupScripts(t *testing.T) {
 	http.DefaultTransport = srv.Client().Transport
 	defer func() { http.DefaultTransport = previous }()
 	sum := sha256.Sum256(body)
-	raw := fmt.Sprintf(`{
-      "app_format_version": 1,
-      "protocol_version": 1,
-      "format": "flashcli-application",
-      "name": "demo",
-      "version": "1.0.0",
-      "supported": {"os": ["linux", "windows", "darwin"], "arch": ["x86_64", "arm64"]},
-      "install": {"commands": {"linux": "echo ok"}},
-      "model": {"bundles": [{"bundle": "a/one:1"}]},
-      "setup": {"scripts": [{
-        "key": "conf", "kind": "python", "url": %q, "sha256": %q, "args": []
-      }]}
-    }`, srv.URL, hex.EncodeToString(sum[:]))
 
 	home := t.TempDir()
 	clientHome := t.TempDir()
@@ -128,7 +115,11 @@ func TestRestoreReplaysSavedSetupScripts(t *testing.T) {
 			Models: []apps.ModelState{{
 				Ref: "a/one:1", ID: "one", PID: 123, Endpoint: "http://127.0.0.1:1", Prepared: true,
 			}},
-			SetupScripts:    []string{"conf"},
+			SetupScripts: []string{"conf"},
+			SetupPlan: []apps.SetupScript{{
+				Key: "conf", Kind: "python", URL: srv.URL,
+				SHA256: hex.EncodeToString(sum[:]),
+			}},
 			SetupClientHome: clientHome,
 		}
 		return nil
@@ -146,7 +137,7 @@ func TestRestoreReplaysSavedSetupScripts(t *testing.T) {
 		Stopper:      func(context.Context, string) (bool, error) { return false, nil },
 		Claim:        func(context.Context, string) error { return nil },
 		Fetch: func(context.Context, flashhub.AppRef) ([]byte, error) {
-			return []byte(raw), nil
+			return nil, fmt.Errorf("offline: manifest fetch must not be needed on restore")
 		},
 	}
 	s := &Server{

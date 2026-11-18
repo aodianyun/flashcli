@@ -44,11 +44,14 @@ type AppState struct {
 	Install     InstallRecord `json:"install"`
 	Models      []ModelState  `json:"models"`
 	Connection  Connection    `json:"connection"`
-	// SetupScripts/SetupClientHome record the setup selection and the client
-	// home from the last start/install. A daemon restart replays this selection
-	// automatically after the restored models are ready.
-	SetupScripts    []string `json:"setup_scripts,omitempty"`
-	SetupClientHome string   `json:"setup_client_home,omitempty"`
+	// SetupScripts/SetupPlan/SetupClientHome record the confirmed setup
+	// selection (keys, the pinned definitions, and the client home) from the
+	// last start/install. A daemon restart replays the plan automatically after
+	// the restored models are ready, so the scripts receive the new connection
+	// without fetching the manifest again.
+	SetupScripts    []string      `json:"setup_scripts,omitempty"`
+	SetupPlan       []SetupScript `json:"setup_plan,omitempty"`
+	SetupClientHome string        `json:"setup_client_home,omitempty"`
 	// SetupError keeps the last setup failure (the app itself stays ready).
 	SetupError string `json:"setup_error,omitempty"`
 

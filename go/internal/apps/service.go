@@ -309,6 +309,7 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 
 	if !opts.NoStart {
 		state.State = StateStarting
+		state.SetupError = ""
 		state.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 		s.save(&state)
 		if err := s.startModels(ctx, &state, opts.KeepPartial); err != nil {
@@ -367,6 +368,9 @@ func (s *Service) StartWithSetup(ctx context.Context, key string, keepPartial bo
 	ctx = WithOwner(ctx, key)
 	st.State = StateStarting
 	st.Error = ""
+	// A previous failure belongs to the previous run; do not show it while
+	// this start is in progress (setup runs again once the models are ready).
+	st.SetupError = ""
 	st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 	s.save(&st)
 	if err := s.startModels(ctx, &st, keepPartial); err != nil {
@@ -389,12 +393,25 @@ func (s *Service) StartWithSetup(ctx context.Context, key string, keepPartial bo
 // CLI, ConfirmSetup prompts for each manifest script; the daemon passes the
 // already-confirmed keys. A failure is logged and stops the remaining scripts.
 func (s *Service) applySetupScripts(ctx context.Context, key string, st *AppState, setup SetupOptions, m *Manifest) {
+	// A restore (no explicit selection; the daemon has no terminal) replays the
+	// pinned definitions from the last confirmed run. The scripts need the new
+	// {base_url}/{model}/{api_key}, which only exist now that the models are
+	// ready; no manifest fetch is needed, so a daemon restart works offline.
+	if !setup.Provided && s.ConfirmSetup == nil && len(st.SetupPlan) > 0 {
+		st.SetupError = ""
+		if _, err := s.runSetupScripts(ctx, st.SetupPlan, st, st.SetupClientHome); err != nil {
+			st.SetupError = setupFailure(ctx, err)
+		}
+		s.save(st)
+		return
+	}
+
 	if m == nil && (setup.Provided || len(st.SetupScripts) > 0 || s.ConfirmSetup != nil) {
 		fetched, err := s.manifestFor(ctx, key)
 		if err != nil {
 			if (setup.Provided && len(setup.Scripts) > 0) || len(st.SetupScripts) > 0 {
 				fmt.Fprintf(s.out(), "setup skipped: %v\n", err)
-				st.SetupError = fmt.Sprintf("setup skipped: %v", err)
+				st.SetupError = setupFailure(ctx, err)
 				s.save(st)
 			}
 			return
@@ -407,6 +424,7 @@ func (s *Service) applySetupScripts(ctx context.Context, key string, st *AppStat
 	if len(m.Setup.Scripts) == 0 {
 		if setup.Provided || len(st.SetupScripts) > 0 {
 			st.SetupScripts = nil
+			st.SetupPlan = nil
 			s.save(st)
 		}
 		return
@@ -421,23 +439,48 @@ func (s *Service) applySetupScripts(ctx context.Context, key string, st *AppStat
 				}
 			}
 		} else {
-			// Restore/no explicit selection: replay the saved choice.
+			// Legacy state without pinned definitions: select the saved keys.
 			setup.Provided = true
 			setup.Scripts = append([]string(nil), st.SetupScripts...)
 			setup.ClientHome = st.SetupClientHome
 		}
 	}
-	st.SetupScripts = append([]string(nil), setup.Scripts...)
+	// Pin the confirmed definitions in manifest order so a later restore can
+	// run them without fetching the manifest again.
+	confirmed := make(map[string]bool, len(setup.Scripts))
+	for _, key := range setup.Scripts {
+		confirmed[key] = true
+	}
+	selected := make([]SetupScript, 0, len(setup.Scripts))
+	keys := make([]string, 0, len(setup.Scripts))
+	for _, script := range m.Setup.Scripts {
+		if confirmed[script.Key] {
+			selected = append(selected, script)
+			keys = append(keys, script.Key)
+		}
+	}
+	st.SetupScripts = keys
+	st.SetupPlan = selected
 	if setup.ClientHome != "" {
 		st.SetupClientHome = setup.ClientHome
 	}
 	st.SetupError = ""
-	if len(setup.Scripts) > 0 {
-		if _, err := s.runSetupScripts(ctx, m, st, setup); err != nil {
-			st.SetupError = err.Error()
+	if len(selected) > 0 {
+		if _, err := s.runSetupScripts(ctx, selected, st, setup.ClientHome); err != nil {
+			st.SetupError = setupFailure(ctx, err)
 		}
 	}
 	s.save(st)
+}
+
+// setupFailure keeps a real script/fetch failure but drops an interruption
+// caused by a daemon shutdown; the next start/replay retries and a stale
+// "context canceled" must not be shown as a configuration failure.
+func setupFailure(ctx context.Context, err error) string {
+	if ctx.Err() != nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func (s *Service) manifestFor(ctx context.Context, key string) (*Manifest, error) {

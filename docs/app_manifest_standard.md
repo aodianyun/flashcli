@@ -173,10 +173,11 @@ Rules:
   is written. The model port changes on every start and a restored app replays
   the selected scripts, so the script must be idempotent.
 - The user confirms the selection on every manual start/install (desktop dialog;
-  a prompt per script in the CLI). The confirmed keys and the client home are
-  persisted, so a daemon restart restores the app and automatically runs the
-  same scripts once the models are ready. Selecting no scripts clears the saved
-  selection.
+  a prompt per script in the CLI). The confirmed definitions (URL/`sha256`/args),
+  keys, and client home are persisted, so a daemon restart restores the app and
+  automatically runs the same scripts once the models are ready (no manifest
+  fetch is needed; the script still receives the new `{base_url}`/`{model}`/
+  `{api_key}`). Selecting no scripts clears the saved selection.
 - Scripts run in manifest order; the first failure stops the remaining scripts
   and is reported in the app log. The running app stays `ready`.
 - Download and `sha256` verification happen before execution. A mismatch or a
