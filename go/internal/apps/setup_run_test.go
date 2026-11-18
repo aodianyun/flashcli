@@ -119,12 +119,16 @@ func TestStartRunsConfirmedSetupScripts(t *testing.T) {
 	started, err := svc.StartWithSetup(context.Background(), "xym/workbuddy:1.0.0", false, SetupOptions{
 		Scripts:    []string{"workbuddy"},
 		ClientHome: home,
+		Provided:   true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if started.SetupFor == "" || started.SetupFor != started.Connection.BaseURL {
-		t.Fatalf("setup_for = %q, connection = %q", started.SetupFor, started.Connection.BaseURL)
+	if len(started.SetupScripts) != 1 || started.SetupScripts[0] != "workbuddy" {
+		t.Fatalf("setup_scripts = %#v", started.SetupScripts)
+	}
+	if started.SetupClientHome != home {
+		t.Fatalf("setup_client_home = %q, want %q", started.SetupClientHome, home)
 	}
 	blob, err := os.ReadFile(filepath.Join(home, "setup.json"))
 	if err != nil {
@@ -235,7 +239,7 @@ func TestInstallRunsConfirmedSetupScripts(t *testing.T) {
 	home := t.TempDir()
 	res, err := svc.Install(context.Background(), "xym/workbuddy", InstallOptions{
 		Yes: true, OS: "windows", Arch: "x86_64",
-		SetupScripts: []string{"workbuddy"}, ClientHome: home,
+		SetupScripts: []string{"workbuddy"}, ClientHome: home, SetupProvided: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -243,8 +247,64 @@ func TestInstallRunsConfirmedSetupScripts(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(home, "setup.json")); err != nil {
 		t.Fatalf("setup script did not run during install: %v", err)
 	}
-	if res.State.SetupFor == "" || res.State.SetupFor != res.State.Connection.BaseURL {
-		t.Fatalf("setup_for = %q, connection = %q", res.State.SetupFor, res.State.Connection.BaseURL)
+	if len(res.State.SetupScripts) != 1 || res.State.SetupScripts[0] != "workbuddy" {
+		t.Fatalf("setup_scripts = %#v", res.State.SetupScripts)
+	}
+	if res.State.SetupClientHome != home {
+		t.Fatalf("setup_client_home = %q, want %q", res.State.SetupClientHome, home)
+	}
+}
+
+// A daemon restart restores the app with a new connection; Start (no explicit
+// selection) must replay the scripts the user confirmed on the previous start.
+func TestRestoreReplaysSavedSetupScripts(t *testing.T) {
+	if _, err := setupPython(); err != nil {
+		t.Skip(err)
+	}
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(setupScriptBody))
+	}))
+	defer srv.Close()
+	previous := http.DefaultTransport
+	http.DefaultTransport = srv.Client().Transport
+	defer func() { http.DefaultTransport = previous }()
+	sum := sha256.Sum256([]byte(setupScriptBody))
+	scriptJSON := fmt.Sprintf(`{
+      "key": "workbuddy",
+      "kind": "python",
+      "url": %q,
+      "sha256": %q,
+      "args": ["{base_url}", "{model}", "--api-key {api_key}"]
+    }`, srv.URL, hex.EncodeToString(sum[:]))
+	svc, _ := newTestService(t, []byte(setupManifest(scriptJSON)), &fakeLauncher{})
+	if _, err := svc.Install(context.Background(), "xym/workbuddy", InstallOptions{
+		Yes: true, NoStart: true, OS: "windows", Arch: "x86_64",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	home := t.TempDir()
+	// Persisted by the previous start: the confirmed selection is the record.
+	if err := svc.Registry.Update(func(m map[string]AppState) error {
+		st, ok := m["xym/workbuddy:1.0.0"]
+		if !ok {
+			t.Fatal("app not installed")
+		}
+		st.SetupScripts = []string{"workbuddy"}
+		st.SetupClientHome = home
+		m["xym/workbuddy:1.0.0"] = st
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	started, err := svc.Start(context.Background(), "xym/workbuddy:1.0.0", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(home, "setup.json")); err != nil {
+		t.Fatalf("restore did not replay the saved setup scripts: %v", err)
+	}
+	if len(started.SetupScripts) != 1 || started.SetupScripts[0] != "workbuddy" {
+		t.Fatalf("setup_scripts = %#v", started.SetupScripts)
 	}
 }
 

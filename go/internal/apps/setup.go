@@ -19,13 +19,16 @@ import (
 type SetupOptions struct {
 	Scripts    []string
 	ClientHome string
+	// Provided distinguishes an explicit selection (possibly empty) from a
+	// restore/no-selection call, which replays the saved selection.
+	Provided bool
 }
 
 // runSetupScripts executes confirmed setup scripts in manifest order. A failed
-// script stops the remaining scripts and returns false.
-func (s *Service) runSetupScripts(ctx context.Context, m *Manifest, st *AppState, opts SetupOptions) bool {
+// script stops the remaining scripts and is returned as err.
+func (s *Service) runSetupScripts(ctx context.Context, m *Manifest, st *AppState, opts SetupOptions) (bool, error) {
 	if len(opts.Scripts) == 0 || len(m.Setup.Scripts) == 0 {
-		return false
+		return false, nil
 	}
 	confirmed := make(map[string]bool, len(opts.Scripts))
 	for _, key := range opts.Scripts {
@@ -40,11 +43,11 @@ func (s *Service) runSetupScripts(ctx context.Context, m *Manifest, st *AppState
 		fmt.Fprintf(s.out(), "setup %s: %s\n", script.Key, script.URL)
 		if err := s.runSetupScript(ctx, script, st.Connection, opts.ClientHome); err != nil {
 			fmt.Fprintf(s.out(), "setup %s failed: %v\n", script.Key, err)
-			return false
+			return true, err
 		}
 		fmt.Fprintf(s.out(), "setup %s: done\n", script.Key)
 	}
-	return ran
+	return ran, nil
 }
 
 func (s *Service) runSetupScript(ctx context.Context, script SetupScript, conn Connection, clientHome string) error {

@@ -168,15 +168,15 @@ Rules:
   and is split into argv tokens (values must not contain spaces in v1). Use
   `"--api-key {api_key}"`, not `"--api-key={api_key}"`.
 - The script runs in the **client's home context** after the models become
-  ready, and again after each start because the model port changes. The desktop
-  confirms; when flashserver runs in WSL it executes the script with `HOME`
-  mapped to the client home so the application's real config is written. The
-  script must be idempotent.
-- The user confirms **every execution** (each start/install in the desktop, or a
-  prompt per script in the CLI); there is no remembered consent.
-- After a daemon restart the app may be restored with a new endpoint. The client
-  asks again (the recorded `setup_for` no longer matches the connection) before
-  re-running the scripts.
+  ready. The desktop confirms; when flashserver runs in WSL it executes the
+  script with `HOME` mapped to the client home so the application's real config
+  is written. The model port changes on every start and a restored app replays
+  the selected scripts, so the script must be idempotent.
+- The user confirms the selection on every manual start/install (desktop dialog;
+  a prompt per script in the CLI). The confirmed keys and the client home are
+  persisted, so a daemon restart restores the app and automatically runs the
+  same scripts once the models are ready. Selecting no scripts clears the saved
+  selection.
 - Scripts run in manifest order; the first failure stops the remaining scripts
   and is reported in the app log. The running app stays `ready`.
 - Download and `sha256` verification happen before execution. A mismatch or a

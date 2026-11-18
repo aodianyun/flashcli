@@ -160,13 +160,14 @@ showing a silent spinner while a model loads.
 After the models become ready, the host runs the manifest's `setup.scripts` in
 manifest order for the keys the user confirmed **for this run**. The client (the
 desktop dialog on every start/install, or the CLI prompt per script) is the
-confirmation point; there is no remembered consent. Each script is downloaded,
-verified against `sha256`, and executed with the explicit argv template
-(`{base_url}`, `{model}`, `{api_key}`). A failure is written to the app job log
-and stops the remaining scripts; the running app is not marked failed. Apps
-without `setup.scripts` skip this step. After a daemon restart the app is
-restored with a new port, so the desktop prompts again and re-runs the scripts
-for the new `base_url` (tracked as `setup_for`).
+confirmation point. Each script is downloaded, verified against `sha256`, and
+executed with the explicit argv template (`{base_url}`, `{model}`, `{api_key}`).
+A failure is written to the app job log and stops the remaining scripts; the
+running app is not marked failed. Apps without `setup.scripts` skip this step.
+The confirmed keys and client home are persisted; after a daemon restart the
+restored app automatically runs the same scripts
+automatically once its models are ready, so the new connection is written
+without another prompt.
 
 ### Failure and rollback
 

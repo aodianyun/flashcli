@@ -32,8 +32,11 @@ for commands. Install/build details are in [../desktop/README.md](../desktop/REA
   When the manifest declares `setup.scripts`, starting or installing asks once
   per execution which scripts to run; after the models are ready the daemon runs
   them in manifest order, verifies `sha256`, and maps the client home into WSL so
-  the application's real config is written. A failure is logged and stops the
-  remaining scripts.
+  the application's real config is written. The confirmed keys and client home
+  are saved; a daemon restart restores the app and automatically re-runs the same
+  scripts for the new connection. A failure is logged, shown on the app, and
+  stops the remaining scripts; a ready app also offers **应用配置** to re-run the
+  scripts without restarting the models.
   One application installs at a time: while a job runs, its card shows
   `安装中 · 阶段 xx%` with a bar, a banner appears above the grid, and the other
   apps' actions are disabled.

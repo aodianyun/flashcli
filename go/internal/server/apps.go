@@ -168,6 +168,7 @@ func (s *Server) appInstall(w http.ResponseWriter, r *http.Request) {
 	opts.NoStart = body.Start != nil && !*body.Start
 	opts.Bundles = body.Bundles
 	opts.SetupScripts = body.SetupScripts
+	opts.SetupProvided = body.SetupScripts != nil
 	opts.ClientHome = strings.TrimSpace(body.ClientHome)
 
 	job := s.Jobs.Start(context.Background(), "app-install", ref.String(), func(ctx context.Context, emit func(string, string)) error {
@@ -210,6 +211,7 @@ func (s *Server) appLifecycle(w http.ResponseWriter, r *http.Request, action str
 	setup := apps.SetupOptions{
 		Scripts:    body.SetupScripts,
 		ClientHome: strings.TrimSpace(body.ClientHome),
+		Provided:   body.SetupScripts != nil,
 	}
 	if r.URL.Query().Get("async") == "1" {
 		job := s.Jobs.Start(context.Background(), "app-"+action, key, func(ctx context.Context, emit func(string, string)) error {

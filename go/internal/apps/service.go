@@ -111,9 +111,11 @@ type InstallOptions struct {
 	ScriptHandled bool
 	// SetupScripts lists the setup script keys the user confirmed for this run
 	// (empty = run none). ClientHome is the caller's OS home, used to write the
-	// application's real config when the daemon runs in WSL.
-	SetupScripts []string
-	ClientHome   string
+	// application's real config when the daemon runs in WSL. SetupProvided
+	// distinguishes an explicit empty selection from "no selection supplied".
+	SetupScripts  []string
+	ClientHome    string
+	SetupProvided bool
 }
 
 // InstallResult describes what an install run did.
@@ -211,9 +213,6 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 	state.Key = key
 	state.Version = m.Version
 	state.State = StatePlanned
-	// A (re)install applies a fresh model set; any previous setup result no
-	// longer describes this run, so a restored/ready app will ask again.
-	state.SetupFor = ""
 	// A reinstall can point at new bundle versions. Stop models that are no
 	// longer in the manifest so their slots/VRAM are released (caches stay).
 	if found {
@@ -334,6 +333,7 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 		s.applySetupScripts(ctx, key, &state, SetupOptions{
 			Scripts:    opts.SetupScripts,
 			ClientHome: opts.ClientHome,
+			Provided:   opts.SetupProvided,
 		}, m)
 	}
 
@@ -389,28 +389,53 @@ func (s *Service) StartWithSetup(ctx context.Context, key string, keepPartial bo
 // CLI, ConfirmSetup prompts for each manifest script; the daemon passes the
 // already-confirmed keys. A failure is logged and stops the remaining scripts.
 func (s *Service) applySetupScripts(ctx context.Context, key string, st *AppState, setup SetupOptions, m *Manifest) {
-	if m == nil && (len(setup.Scripts) > 0 || s.ConfirmSetup != nil) {
+	if m == nil && (setup.Provided || len(st.SetupScripts) > 0 || s.ConfirmSetup != nil) {
 		fetched, err := s.manifestFor(ctx, key)
 		if err != nil {
-			if len(setup.Scripts) > 0 {
+			if (setup.Provided && len(setup.Scripts) > 0) || len(st.SetupScripts) > 0 {
 				fmt.Fprintf(s.out(), "setup skipped: %v\n", err)
+				st.SetupError = fmt.Sprintf("setup skipped: %v", err)
+				s.save(st)
 			}
 			return
 		}
 		m = fetched
 	}
-	if m == nil || len(m.Setup.Scripts) == 0 {
+	if m == nil {
 		return
 	}
-	if len(setup.Scripts) == 0 && s.ConfirmSetup != nil {
-		for _, script := range m.Setup.Scripts {
-			if s.ConfirmSetup(script) {
-				setup.Scripts = append(setup.Scripts, script.Key)
+	if len(m.Setup.Scripts) == 0 {
+		if setup.Provided || len(st.SetupScripts) > 0 {
+			st.SetupScripts = nil
+			s.save(st)
+		}
+		return
+	}
+	if !setup.Provided {
+		if s.ConfirmSetup != nil {
+			setup.Provided = true
+			setup.Scripts = nil
+			for _, script := range m.Setup.Scripts {
+				if s.ConfirmSetup(script) {
+					setup.Scripts = append(setup.Scripts, script.Key)
+				}
 			}
+		} else {
+			// Restore/no explicit selection: replay the saved choice.
+			setup.Provided = true
+			setup.Scripts = append([]string(nil), st.SetupScripts...)
+			setup.ClientHome = st.SetupClientHome
 		}
 	}
-	if s.runSetupScripts(ctx, m, st, setup) {
-		st.SetupFor = st.Connection.BaseURL
+	st.SetupScripts = append([]string(nil), setup.Scripts...)
+	if setup.ClientHome != "" {
+		st.SetupClientHome = setup.ClientHome
+	}
+	st.SetupError = ""
+	if len(setup.Scripts) > 0 {
+		if _, err := s.runSetupScripts(ctx, m, st, setup); err != nil {
+			st.SetupError = err.Error()
+		}
 	}
 	s.save(st)
 }

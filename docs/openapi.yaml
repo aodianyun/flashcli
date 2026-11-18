@@ -1158,6 +1158,16 @@ components:
         state: { type: string }
         installed_at: { type: string }
         error: { type: string }
+        setup_scripts:
+          type: array
+          items: { type: string }
+          description: "Setup script keys the user confirmed for the current run (replayed after a daemon restore)."
+        setup_client_home:
+          type: string
+          description: "Client OS home used when the setup scripts last ran."
+        setup_error:
+          type: string
+          description: "Last setup failure; the app itself stays ready."
         models:
           type: array
           items:

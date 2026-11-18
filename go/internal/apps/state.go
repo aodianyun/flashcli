@@ -44,10 +44,13 @@ type AppState struct {
 	Install     InstallRecord `json:"install"`
 	Models      []ModelState  `json:"models"`
 	Connection  Connection    `json:"connection"`
-	// SetupFor is the connection base URL for which the setup scripts last ran
-	// successfully. A changed URL (every start picks a new port) needs a new
-	// confirmation/execution.
-	SetupFor string `json:"setup_for,omitempty"`
+	// SetupScripts/SetupClientHome record the setup selection and the client
+	// home from the last start/install. A daemon restart replays this selection
+	// automatically after the restored models are ready.
+	SetupScripts    []string `json:"setup_scripts,omitempty"`
+	SetupClientHome string   `json:"setup_client_home,omitempty"`
+	// SetupError keeps the last setup failure (the app itself stays ready).
+	SetupError string `json:"setup_error,omitempty"`
 
 	// Error keeps the last failure reason for `app status`.
 	Error string `json:"error,omitempty"`
