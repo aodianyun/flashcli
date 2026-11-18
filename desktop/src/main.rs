@@ -1929,7 +1929,12 @@ impl App {
         // progress, recent log lines and the full-log entry point. Model
         // loading can take a minute, so a silent spinner is not enough.
         ui.add_space(10.0);
-        egui::Frame::group(ui.style()).show(ui, |ui| {
+        egui::Frame::NONE
+            .fill(ui.visuals().faint_bg_color)
+            .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
+            .corner_radius(6)
+            .inner_margin(egui::Margin::same(10))
+            .show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.label(egui::RichText::new("运行状态").strong());
                 if transitional {
