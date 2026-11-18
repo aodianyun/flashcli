@@ -5907,24 +5907,35 @@ fn app_log_tail(log: &str, count: usize) -> Vec<String> {
 
 /// Install phase for a progress line (keeps the previous phase when the line
 /// carries no step information).
-/// Status line above the app grid: name the model for start/stop/prepare
-/// instead of always saying "正在安装 <app>".
+/// Status line above the app grid: name the application action first, then the
+/// current sub-step (for example "正在启动 Grok CLI 应用 · 模型 xxx 启动中").
 fn app_job_status_text(job: &AppJobState, label: &str, pct: &str) -> String {
+    let action = match job.verb.as_str() {
+        "启动" => "启动",
+        "停止" => "停止",
+        "准备模型" => "准备",
+        _ => "安装",
+    };
+    format!(
+        "正在{action} {label} 应用 · {}{pct}",
+        app_job_subitem(job)
+    )
+}
+
+fn app_job_subitem(job: &AppJobState) -> String {
     let model = app_job_model(&job.log);
+    let model_text = model.map(|m| format!("{m} ")).unwrap_or_default();
     match job.verb.as_str() {
-        "启动" => match model {
-            Some(m) => format!("正在启动模型 {m}{pct}"),
-            None => format!("正在启动模型…{pct}"),
+        "启动" => format!("模型 {model_text}启动中"),
+        "停止" => format!("模型 {model_text}停止中"),
+        "准备模型" => format!("模型 {model_text}准备中"),
+        _ => match job.phase.as_str() {
+            "准备模型" => format!("模型 {model_text}准备中"),
+            "启动模型" => format!("模型 {model_text}启动中"),
+            "安装应用" => "安装应用".to_string(),
+            "完成" => "完成".to_string(),
+            other => other.to_string(),
         },
-        "停止" => match model {
-            Some(m) => format!("正在停止模型 {m}{pct}"),
-            None => format!("正在停止模型…{pct}"),
-        },
-        "准备模型" => match model {
-            Some(m) => format!("正在准备模型 {m}{pct}"),
-            None => format!("正在准备模型…{pct}"),
-        },
-        _ => format!("正在安装 {label} · {}{}", job.phase, pct),
     }
 }
 
