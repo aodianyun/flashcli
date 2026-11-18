@@ -165,9 +165,8 @@ executed with the explicit argv template (`{base_url}`, `{model}`, `{api_key}`).
 A failure is written to the app job log and stops the remaining scripts; the
 running app is not marked failed. Apps without `setup.scripts` skip this step.
 The confirmed keys and client home are persisted; after a daemon restart the
-restored app automatically runs the same scripts
-automatically once its models are ready, so the new connection is written
-without another prompt.
+restored app runs the same scripts automatically once its models are ready, so
+the new connection is written without another prompt.
 
 ### Failure and rollback
 
