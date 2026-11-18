@@ -327,6 +327,24 @@ func infoFor(inst *instance) InstanceInfo {
 	}
 }
 
+// Claim registers an owner on an already resident model without starting one.
+// It reports false when the Manager does not own that ref (for example a serve
+// process started by the CLI), so the caller keeps its own endpoint and the
+// Manager does not spawn a duplicate.
+func (m *Manager) Claim(refStr, owner string) bool {
+	if owner == "" {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	inst, ok := m.instances[refStr]
+	if !ok || !inst.process.Running() {
+		return false
+	}
+	addOwnerLocked(inst, owner)
+	return true
+}
+
 // Slots returns the current resident/pending count and configured slot limit.
 func (m *Manager) Slots() (int, int) {
 	m.mu.Lock()

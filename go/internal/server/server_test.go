@@ -490,6 +490,30 @@ func TestManagerLauncherRegistersAppOwner(t *testing.T) {
 	}
 }
 
+// Claiming a model that the Manager does not own must not start a duplicate.
+func TestManagerClaimOnlyForResidentModels(t *testing.T) {
+	l := &fakeLauncher{}
+	m := NewManagerWithOptions(l, ManagerOptions{Inspect: fakeInspect})
+	if m.Claim("demo:1", "app:a") {
+		t.Fatal("claimed a model that is not resident")
+	}
+	if len(l.procs) != 0 {
+		t.Fatalf("claim started %d processes", len(l.procs))
+	}
+	if _, err := m.LoadFor(context.Background(), "demo:1", "app:a"); err != nil {
+		t.Fatal(err)
+	}
+	if !m.Claim("demo:1", "app:b") {
+		t.Fatal("claim on a resident model failed")
+	}
+	if _, err := m.ReleaseFor(context.Background(), "demo:1", "app:a"); err != nil {
+		t.Fatal(err)
+	}
+	if l.procs[0].stopped {
+		t.Fatal("model stopped while claim owner app:b is present")
+	}
+}
+
 func TestInspectBundleVRAM(t *testing.T) {
 	dir := t.TempDir()
 	data := `{

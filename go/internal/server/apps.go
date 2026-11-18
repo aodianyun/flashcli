@@ -37,8 +37,8 @@ func (s *Server) appService() *apps.Service {
 			return s.Manager.ReleaseFor(ctx, refStr, apps.OwnerFrom(ctx))
 		}
 		svc.Claim = func(ctx context.Context, refStr string) error {
-			_, err := s.Manager.LoadFor(ctx, refStr, apps.OwnerFrom(ctx))
-			return err
+			s.Manager.Claim(refStr, apps.OwnerFrom(ctx))
+			return nil
 		}
 	}
 	return svc
