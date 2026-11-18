@@ -55,7 +55,15 @@ type instance struct {
 	ref      string
 	process  ServeProcess
 	loadedAt time.Time
+	// owners are the applications (and "model" for the model page) that asked
+	// for this instance. The process stops only when the last owner releases it,
+	// so two applications using the same bundle do not kill each other's model.
+	owners map[string]struct{}
 }
+
+// ownerModel marks an instance loaded from the model page, which stays until
+// the user unloads it explicitly.
+const ownerModel = "model"
 
 // NewManager creates a manager with a conservative single-model default.
 func NewManager(l Launcher) *Manager {
@@ -74,17 +82,33 @@ func NewManagerWithOptions(l Launcher, opts ManagerOptions) *Manager {
 
 // Load starts a serve process for ref if it is not already resident.
 func (m *Manager) Load(ctx context.Context, refStr string) (*InstanceInfo, error) {
-	return m.LoadWithProgress(ctx, refStr, nil)
+	return m.loadOwned(ctx, refStr, ownerModel, nil)
 }
 
 // LoadWithProgress is Load with coarse progress events (bundle/weights/venv).
 func (m *Manager) LoadWithProgress(ctx context.Context, refStr string, progress func(phase, message string)) (*InstanceInfo, error) {
+	return m.loadOwned(ctx, refStr, ownerModel, progress)
+}
+
+// LoadFor loads ref on behalf of one application. The application is recorded
+// as an owner; the returned process must be released instead of force-unloaded.
+func (m *Manager) LoadFor(ctx context.Context, refStr, owner string) (*InstanceInfo, error) {
+	return m.loadOwned(ctx, refStr, owner, nil)
+}
+
+// LoadForWithProgress is LoadFor with coarse progress events.
+func (m *Manager) LoadForWithProgress(ctx context.Context, refStr, owner string, progress func(phase, message string)) (*InstanceInfo, error) {
+	return m.loadOwned(ctx, refStr, owner, progress)
+}
+
+func (m *Manager) loadOwned(ctx context.Context, refStr, owner string, progress func(phase, message string)) (*InstanceInfo, error) {
 	for {
 		m.mu.Lock()
 		if inst, ok := m.instances[refStr]; ok {
 			// A child that died outside the Manager (crash, OOM kill) must not
 			// be handed out as a live instance: reload instead.
 			if inst.process.Running() {
+				addOwnerLocked(inst, owner)
 				info := infoFor(inst)
 				m.mu.Unlock()
 				return &info, nil
@@ -111,12 +135,28 @@ func (m *Manager) LoadWithProgress(ctx context.Context, refStr string, progress 
 		m.mu.Lock()
 		delete(m.loading, refStr)
 		close(wait)
+		if err == nil {
+			if inst, ok := m.instances[refStr]; ok {
+				addOwnerLocked(inst, owner)
+				info = infoFor(inst)
+			}
+		}
 		m.mu.Unlock()
 		if err != nil {
 			return nil, err
 		}
 		return &info, nil
 	}
+}
+
+func addOwnerLocked(inst *instance, owner string) {
+	if owner == "" {
+		return
+	}
+	if inst.owners == nil {
+		inst.owners = map[string]struct{}{}
+	}
+	inst.owners[owner] = struct{}{}
 }
 
 func (m *Manager) load(ctx context.Context, refStr string, progress func(phase, message string)) (InstanceInfo, error) {
@@ -229,7 +269,7 @@ func (m *Manager) load(ctx context.Context, refStr string, progress func(phase, 
 	return info, nil
 }
 
-// Unload stops a resident model.
+// Unload stops a resident model regardless of its owners (model page action).
 func (m *Manager) Unload(ctx context.Context, refStr string) error {
 	_, err := m.UnloadIfLoaded(ctx, refStr)
 	return err
@@ -246,6 +286,28 @@ func (m *Manager) UnloadIfLoaded(ctx context.Context, refStr string) (bool, erro
 	if !ok {
 		return false, nil
 	}
+	return true, inst.process.Stop(ctx)
+}
+
+// ReleaseFor removes one application's claim on a resident model and stops the
+// process only when no owner remains. It reports whether the Manager owned the
+// instance (false means the caller should fall back to a recorded pid).
+func (m *Manager) ReleaseFor(ctx context.Context, refStr, owner string) (bool, error) {
+	m.mu.Lock()
+	inst, ok := m.instances[refStr]
+	if !ok {
+		m.mu.Unlock()
+		return false, nil
+	}
+	if owner != "" {
+		delete(inst.owners, owner)
+	}
+	if len(inst.owners) > 0 {
+		m.mu.Unlock()
+		return true, nil
+	}
+	delete(m.instances, refStr)
+	m.mu.Unlock()
 	return true, inst.process.Stop(ctx)
 }
 

@@ -31,9 +31,14 @@ func (s *Server) appService() *apps.Service {
 			},
 		}
 		// App models the model page loaded are not in this service's process
-		// map; unload them through the Manager so its slots stay accurate.
+		// map; release them through the Manager (keeping models another app
+		// still owns resident).
 		svc.Stopper = func(ctx context.Context, refStr string) (bool, error) {
-			return s.Manager.UnloadIfLoaded(ctx, refStr)
+			return s.Manager.ReleaseFor(ctx, refStr, apps.OwnerFrom(ctx))
+		}
+		svc.Claim = func(ctx context.Context, refStr string) error {
+			_, err := s.Manager.LoadFor(ctx, refStr, apps.OwnerFrom(ctx))
+			return err
 		}
 	}
 	return svc

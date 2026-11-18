@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aodianyun/flashcli/go/internal/apps"
 	"github.com/aodianyun/flashcli/go/internal/gpu"
 	"github.com/aodianyun/flashcli/go/internal/host"
 	"github.com/aodianyun/flashcli/go/internal/modelrun"
@@ -392,6 +393,100 @@ func TestManagerDropsDeadInstances(t *testing.T) {
 	l.procs[1].stopped = true
 	if got := m.List(); len(got) != 0 {
 		t.Fatalf("List = %+v, want no dead instance", got)
+	}
+}
+
+// Two applications using the same bundle share one process; it stops only when
+// the last owner releases it.
+func TestManagerSharedModelStaysUntilLastOwner(t *testing.T) {
+	l := &fakeLauncher{}
+	m := NewManagerWithOptions(l, ManagerOptions{Inspect: fakeInspect})
+	if _, err := m.LoadFor(context.Background(), "demo:1", "app:a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.LoadFor(context.Background(), "demo:1", "app:b"); err != nil {
+		t.Fatal(err)
+	}
+	if len(l.procs) != 1 {
+		t.Fatalf("processes = %d, want 1 shared", len(l.procs))
+	}
+	handled, err := m.ReleaseFor(context.Background(), "demo:1", "app:a")
+	if !handled || err != nil {
+		t.Fatalf("release a: handled=%v err=%v", handled, err)
+	}
+	if l.procs[0].stopped {
+		t.Fatal("model stopped while app:b still owns it")
+	}
+	if loaded, _ := m.Slots(); loaded != 1 {
+		t.Fatalf("loaded = %d, want 1", loaded)
+	}
+	handled, err = m.ReleaseFor(context.Background(), "demo:1", "app:b")
+	if !handled || err != nil {
+		t.Fatalf("release b: handled=%v err=%v", handled, err)
+	}
+	if !l.procs[0].stopped {
+		t.Fatal("last owner did not stop the model")
+	}
+	if loaded, _ := m.Slots(); loaded != 0 {
+		t.Fatalf("loaded = %d, want 0", loaded)
+	}
+}
+
+// A model loaded from the model page is not unloaded when an app that reused it
+// stops; the model page unload is the explicit override.
+func TestManagerModelPageOwnership(t *testing.T) {
+	l := &fakeLauncher{}
+	m := NewManagerWithOptions(l, ManagerOptions{Inspect: fakeInspect})
+	if _, err := m.Load(context.Background(), "demo:1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.LoadFor(context.Background(), "demo:1", "app:a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.ReleaseFor(context.Background(), "demo:1", "app:a"); err != nil {
+		t.Fatal(err)
+	}
+	if l.procs[0].stopped {
+		t.Fatal("model page instance stopped by an app release")
+	}
+	if err := m.Unload(context.Background(), "demo:1"); err != nil {
+		t.Fatal(err)
+	}
+	if !l.procs[0].stopped {
+		t.Fatal("model page unload did not stop the model")
+	}
+}
+
+// The app launcher must record the owner from the request context so stopping
+// one app does not release a model another app still uses.
+func TestManagerLauncherRegistersAppOwner(t *testing.T) {
+	l := &fakeLauncher{}
+	m := NewManagerWithOptions(l, ManagerOptions{Inspect: fakeInspect})
+	launcher := managerLauncher{manager: m}
+	ctxA := apps.WithOwner(context.Background(), "app:a")
+	ctxB := apps.WithOwner(context.Background(), "app:b")
+	a, err := launcher.StartWithOptions(ctxA, "demo:1", modelrun.LoadOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := launcher.StartWithOptions(ctxB, "demo:1", modelrun.LoadOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(l.procs) != 1 {
+		t.Fatalf("processes = %d, want 1 shared", len(l.procs))
+	}
+	if err := a.Stop(ctxA); err != nil {
+		t.Fatal(err)
+	}
+	if l.procs[0].stopped {
+		t.Fatal("stopping app:a stopped a model still owned by app:b")
+	}
+	if err := b.Stop(ctxB); err != nil {
+		t.Fatal(err)
+	}
+	if !l.procs[0].stopped {
+		t.Fatal("stopping the last owner did not stop the model")
 	}
 }
 

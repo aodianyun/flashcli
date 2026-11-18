@@ -46,7 +46,10 @@ type Service struct {
 	// Stopper stops a model that this service instance did not start (for
 	// example after a daemon restart or a shared Manager). It reports whether
 	// the reference was handled; false falls back to the recorded PID.
-	Stopper      func(context.Context, string) (bool, error)
+	Stopper func(context.Context, string) (bool, error)
+	// Claim registers this application as an owner of an already healthy
+	// model so another app stopping it does not take it away.
+	Claim        func(context.Context, string) error
 	Now          func() time.Time
 	StartTimeout time.Duration
 
@@ -159,6 +162,7 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 	}
 	ref.Version = m.Version
 	key := ref.String()
+	ctx = WithOwner(ctx, key)
 
 	goos, goarch := runtimeGOOS(), runtimeGOARCH()
 	if opts.OS != "" {
@@ -321,6 +325,7 @@ func (s *Service) Start(ctx context.Context, key string, keepPartial bool) (AppS
 	if !ok {
 		return AppState{}, fmt.Errorf("application %s is not installed", key)
 	}
+	ctx = WithOwner(ctx, key)
 	st.State = StateStarting
 	st.Error = ""
 	st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
@@ -349,6 +354,7 @@ func (s *Service) Stop(ctx context.Context, key string) (AppState, error) {
 	if !ok {
 		return AppState{}, fmt.Errorf("application %s is not installed", key)
 	}
+	ctx = WithOwner(ctx, key)
 	st.State = StateStopping
 	st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 	s.save(&st)
@@ -478,6 +484,7 @@ func (s *Service) Uninstall(ctx context.Context, key string, purgeModels bool) (
 	if !ok {
 		return AppState{}, fmt.Errorf("application %s is not installed", key)
 	}
+	ctx = WithOwner(ctx, key)
 	for i := range st.Models {
 		s.stopModel(ctx, &st.Models[i])
 	}
@@ -581,6 +588,13 @@ func (s *Service) startModels(ctx context.Context, st *AppState, keepPartial boo
 		mdl := &st.Models[i]
 		if mdl.PID > 0 && mdl.Endpoint != "" && endpointHealthy(ctx, mdl.Endpoint) {
 			fmt.Fprintf(s.out(), "  reuse %s at %s\n", mdl.ID, mdl.Endpoint)
+			// Reusing another app's instance still makes this app an owner;
+			// otherwise stopping the other app would unload it underneath us.
+			if s.Claim != nil {
+				if err := s.Claim(ctx, mdl.Ref); err != nil {
+					return fail(fmt.Errorf("claim %s: %w", mdl.Ref, err))
+				}
+			}
 			continue
 		}
 		port := mdl.Port

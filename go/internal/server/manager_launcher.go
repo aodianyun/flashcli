@@ -3,13 +3,15 @@ package server
 import (
 	"context"
 
+	"github.com/aodianyun/flashcli/go/internal/apps"
 	"github.com/aodianyun/flashcli/go/internal/modelrun"
 )
 
 // managerLauncher adapts the daemon's model Manager to apps.Launcher so that
 // application models go through the same admission as models started from the
 // 模型 page: the max_loaded slot limit and the bundle's resources.min_vram_mib.
-// Stopping an app model unloads the Manager instance and frees its slot.
+// Each application registers as an owner, so stopping one app keeps a model
+// that another app still uses resident.
 type managerLauncher struct {
 	manager *Manager
 	// Log receives the serve child's progress lines (weight loading etc.) so
@@ -22,29 +24,31 @@ func (l managerLauncher) StartWithOptions(
 	refStr string,
 	_ modelrun.LoadOptions,
 ) (modelrun.ServeProcess, error) {
+	owner := apps.OwnerFrom(ctx)
 	var (
 		info *InstanceInfo
 		err  error
 	)
 	if l.Log != nil {
-		info, err = l.manager.LoadWithProgress(ctx, refStr, func(_, message string) {
+		info, err = l.manager.LoadForWithProgress(ctx, refStr, owner, func(_, message string) {
 			if message != "" {
 				l.Log(message)
 			}
 		})
 	} else {
-		info, err = l.manager.Load(ctx, refStr)
+		info, err = l.manager.LoadFor(ctx, refStr, owner)
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &managerProcess{manager: l.manager, ref: refStr, info: *info}, nil
+	return &managerProcess{manager: l.manager, ref: refStr, owner: owner, info: *info}, nil
 }
 
 // managerProcess exposes a Manager-owned instance as a ServeProcess.
 type managerProcess struct {
 	manager *Manager
 	ref     string
+	owner   string
 	info    InstanceInfo
 }
 
@@ -59,5 +63,6 @@ func (p *managerProcess) Healthy(ctx context.Context) error {
 }
 
 func (p *managerProcess) Stop(ctx context.Context) error {
-	return p.manager.Unload(ctx, p.ref)
+	_, err := p.manager.ReleaseFor(ctx, p.ref, p.owner)
+	return err
 }

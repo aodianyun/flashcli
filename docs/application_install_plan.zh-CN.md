@@ -242,7 +242,11 @@ rename）：
 - `flashserver` 在运行时，其 `Manager` 与 `apps` 共享状态：应用模型通过 Manager
   启动（与模型页使用同一 `max_loaded` 槽位和 bundle `resources.min_vram_mib`
   准入）；已常驻时 `start` 复用记录中的 pid/端口
-- 停止或卸载应用会从 Manager 卸载其模型，因此在「每个请求新建 app service」的
+- 声明同一 bundle 的多个应用共用一个常驻实例。每个应用都是 owner（模型页是
+  `model` owner），复用已健康实例时也会登记；停止一个应用只释放它自己的声明，
+  最后一个 owner 释放时才停止进程。模型页「卸载」是显式覆盖，会无视 owner 直接
+  停止
+- 停止或卸载应用会通过 Manager 释放其模型，因此在「每个请求新建 app service」的
   模型下，槽位与模型页列表仍然准确
 - 自动端口会记录；重启时优先复用，被占用才重新分配
 

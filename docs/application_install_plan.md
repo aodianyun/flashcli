@@ -258,8 +258,13 @@ Shared by the CLI and the daemon at `$FLASHCLI_HOME/flashserver/apps.json`
   start through the Manager (same `max_loaded` slots and bundle
   `resources.min_vram_mib` admission as the 模型 page), and `start` reuses the
   recorded pid/port when the model is already resident.
-- Stopping or uninstalling an app unloads its models from the Manager, so the
-  slots and the 模型 page list stay accurate even though the daemon builds a
+- Applications that declare the same bundle share one resident instance. Each
+  application is an owner (the 模型 page is the `model` owner), including when it
+  reuses an already healthy instance; stopping an app releases only its own
+  claim, and the process stops when the last owner releases it. Unloading from
+  the 模型 page is the explicit override that stops it regardless of owners.
+- Stopping or uninstalling an app releases its models through the Manager, so
+  the slots and the 模型 page list stay accurate even though the daemon builds a
   short-lived app service per request.
 - Auto ports are recorded; on restart the recorded port is reused when free.
 
