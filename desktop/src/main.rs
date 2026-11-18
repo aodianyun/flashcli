@@ -374,6 +374,9 @@ struct AppSetupPrompt {
     version: String,
     display_name: String,
     scripts: Vec<(AppSetupScript, bool)>,
+    /// True when this is a post-restore configuration (the app is already
+    /// ready; confirming reuses the model and runs the scripts again).
+    restore: bool,
 }
 
 /// A pending application install: the user must confirm the install script.
@@ -455,6 +458,12 @@ pub struct App {
     app_detail: Option<Value>,
     app_install: Option<AppInstallPrompt>,
     app_setup: Option<AppSetupPrompt>,
+    /// App ref -> connection URL for which the setup prompt was already shown
+    /// (avoid nagging while the user stays on the same run).
+    setup_prompted: HashMap<String, String>,
+    /// Apps started with "skip scripts": do not prompt again when this run
+    /// becomes ready.
+    skip_setup_for: HashSet<String>,
     app_uninstall: Option<AppUninstallPrompt>,
     /// Install/prepare progress per application ref (org/name:version).
     app_jobs: HashMap<String, AppJobState>,
@@ -557,6 +566,8 @@ impl App {
             app_detail: None,
             app_install: None,
             app_setup: None,
+            setup_prompted: HashMap::new(),
+            skip_setup_for: HashSet::new(),
             app_uninstall: None,
             app_jobs: HashMap::new(),
             app_model_logs: HashMap::new(),
@@ -1192,6 +1203,62 @@ impl App {
             self.reload_apps(ctx);
         }
         ctx.request_repaint_after(Duration::from_millis(400));
+    }
+
+    /// After a daemon restore the app is ready with a new connection URL; its
+    /// setup scripts must run again (with confirmation) because the old config
+    /// points at the previous port.
+    fn maybe_prompt_setup(&mut self) {
+        if self.tab != Tab::Apps || self.app_setup.is_some() {
+            return;
+        }
+        let Some(detail) = self.app_detail.clone() else {
+            return;
+        };
+        if detail["local"]["state"].as_str() != Some("ready") {
+            return;
+        }
+        let scripts = app_setup_scripts(&detail["manifest"]);
+        if scripts.is_empty() {
+            return;
+        }
+        let base = detail["local"]["connection"]["base_url"]
+            .as_str()
+            .unwrap_or("");
+        if base.is_empty() {
+            return;
+        }
+        let (org, name, version) = app_identity(&detail);
+        let key = app_reference(&org, &name, &version);
+        if self.skip_setup_for.remove(&key) {
+            self.setup_prompted.insert(key, base.to_string());
+            return;
+        }
+        if detail["local"]["setup_for"].as_str() == Some(base) {
+            return;
+        }
+        if self
+            .setup_prompted
+            .get(&key)
+            .map(|url| url == base)
+            .unwrap_or(false)
+        {
+            return;
+        }
+        self.setup_prompted.insert(key, base.to_string());
+        let display = detail["manifest"]["display_name"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .or_else(|| detail["manifest"]["name"].as_str())
+            .unwrap_or("应用");
+        self.app_setup = Some(AppSetupPrompt {
+            org,
+            name,
+            version,
+            display_name: display.to_string(),
+            scripts: scripts.into_iter().map(|s| (s, true)).collect(),
+            restore: true,
+        });
     }
 
     /// One-line status for a daemon-side restore/start (no desktop job).
@@ -2313,6 +2380,7 @@ impl App {
                         version: app_version,
                         display_name: display.to_string(),
                         scripts: scripts.into_iter().map(|s| (s, true)).collect(),
+                        restore: false,
                     });
                     return;
                 }
@@ -4251,7 +4319,15 @@ impl App {
             .show(ctx, |ui| {
                 ui.set_width(560.0);
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("启动应用").size(16.0).strong());
+                    ui.label(
+                        egui::RichText::new(if prompt.restore {
+                            "应用配置"
+                        } else {
+                            "启动应用"
+                        })
+                        .size(16.0)
+                        .strong(),
+                    );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui
                             .add(
@@ -4273,9 +4349,11 @@ impl App {
                 );
                 ui.add_space(4.0);
                 ui.label(
-                    egui::RichText::new(
-                        "该应用声明了配置脚本：模型启动完成后会按顺序执行。每次启动都需要确认。",
-                    )
+                    egui::RichText::new(if prompt.restore {
+                        "重启后模型已恢复，接入地址已变化；需要重新执行配置脚本。每次执行都需要确认。"
+                    } else {
+                        "该应用声明了配置脚本：模型启动完成后会按顺序执行。每次启动都需要确认。"
+                    })
                     .small()
                     .weak(),
                 );
@@ -4308,15 +4386,23 @@ impl App {
                         close = true;
                     }
                     ui.add_space(8.0);
-                    if button(ui, "跳过脚本并启动").clicked() {
+                    if prompt.restore {
+                        if button(ui, "暂不配置").clicked() {
+                            close = true;
+                        }
+                    } else if button(ui, "跳过脚本并启动").clicked() {
                         start_with = Some(Vec::new());
                     }
                     ui.add_space(8.0);
                     if ui
                         .add(
                             egui::Button::new(
-                                egui::RichText::new("执行并启动")
-                                    .color(egui::Color32::WHITE),
+                                egui::RichText::new(if prompt.restore {
+                                    "执行配置"
+                                } else {
+                                    "执行并启动"
+                                })
+                                .color(egui::Color32::WHITE),
                             )
                             .fill(ui.visuals().widgets.active.bg_fill)
                             .min_size(egui::vec2(120.0, 28.0)),
@@ -4344,6 +4430,14 @@ impl App {
         }
         if let Some(keys) = start_with {
             self.app_setup = None;
+            let key = app_reference(&prompt.org, &prompt.name, &prompt.version);
+            if keys.is_empty() {
+                if prompt.restore {
+                    return;
+                }
+                // The user explicitly skipped the scripts for this start.
+                self.skip_setup_for.insert(key);
+            }
             self.set_app_local_state(
                 &prompt.org,
                 &prompt.name,
@@ -4902,6 +4996,7 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.drain_events(ctx);
         self.poll_transitional_app(ctx);
+        self.maybe_prompt_setup();
         if self.health_at.elapsed() >= Duration::from_secs(5) {
             self.health_at = Instant::now();
             spawn_health(self.tx.clone(), ctx.clone());

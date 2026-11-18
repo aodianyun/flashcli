@@ -22,27 +22,29 @@ type SetupOptions struct {
 }
 
 // runSetupScripts executes confirmed setup scripts in manifest order. A failed
-// script stops the remaining scripts; the model keeps running and the failure
-// stays in the app job log.
-func (s *Service) runSetupScripts(ctx context.Context, m *Manifest, st *AppState, opts SetupOptions) {
+// script stops the remaining scripts and returns false.
+func (s *Service) runSetupScripts(ctx context.Context, m *Manifest, st *AppState, opts SetupOptions) bool {
 	if len(opts.Scripts) == 0 || len(m.Setup.Scripts) == 0 {
-		return
+		return false
 	}
 	confirmed := make(map[string]bool, len(opts.Scripts))
 	for _, key := range opts.Scripts {
 		confirmed[key] = true
 	}
+	ran := false
 	for _, script := range m.Setup.Scripts {
 		if !confirmed[script.Key] {
 			continue
 		}
+		ran = true
 		fmt.Fprintf(s.out(), "setup %s: %s\n", script.Key, script.URL)
 		if err := s.runSetupScript(ctx, script, st.Connection, opts.ClientHome); err != nil {
 			fmt.Fprintf(s.out(), "setup %s failed: %v\n", script.Key, err)
-			return
+			return false
 		}
 		fmt.Fprintf(s.out(), "setup %s: done\n", script.Key)
 	}
+	return ran
 }
 
 func (s *Service) runSetupScript(ctx context.Context, script SetupScript, conn Connection, clientHome string) error {

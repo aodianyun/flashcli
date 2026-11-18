@@ -390,7 +390,9 @@ func (s *Service) applySetupScripts(ctx context.Context, key string, st *AppStat
 			}
 		}
 	}
-	s.runSetupScripts(ctx, m, st, setup)
+	if s.runSetupScripts(ctx, m, st, setup) {
+		st.SetupFor = st.Connection.BaseURL
+	}
 	s.save(st)
 }
 

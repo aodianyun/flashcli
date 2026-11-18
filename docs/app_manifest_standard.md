@@ -138,6 +138,9 @@ Rules:
   script must be idempotent.
 - The user confirms **every execution** (each start/install in the desktop, or a
   prompt per script in the CLI); there is no remembered consent.
+- After a daemon restart the app may be restored with a new endpoint. The client
+  asks again (the recorded `setup_for` no longer matches the connection) before
+  re-running the scripts.
 - Scripts run in manifest order; the first failure stops the remaining scripts
   and is reported in the app log. The running app stays `ready`.
 - Download and `sha256` verification happen before execution. A mismatch or a

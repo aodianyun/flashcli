@@ -116,11 +116,15 @@ func TestStartRunsConfirmedSetupScripts(t *testing.T) {
 		t.Fatal(err)
 	}
 	home := t.TempDir()
-	if _, err := svc.StartWithSetup(context.Background(), "xym/workbuddy:1.0.0", false, SetupOptions{
+	started, err := svc.StartWithSetup(context.Background(), "xym/workbuddy:1.0.0", false, SetupOptions{
 		Scripts:    []string{"workbuddy"},
 		ClientHome: home,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatal(err)
+	}
+	if started.SetupFor == "" || started.SetupFor != started.Connection.BaseURL {
+		t.Fatalf("setup_for = %q, connection = %q", started.SetupFor, started.Connection.BaseURL)
 	}
 	blob, err := os.ReadFile(filepath.Join(home, "setup.json"))
 	if err != nil {
