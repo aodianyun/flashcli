@@ -139,6 +139,8 @@ func (s *Server) appInstall(w http.ResponseWriter, r *http.Request) {
 		ClientArch     string   `json:"client_arch"`
 		Force          bool     `json:"force"`
 		Start          *bool    `json:"start"`
+		SetupScripts   []string `json:"setup_scripts"`
+		ClientHome     string   `json:"client_home"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	ref := flashhub.AppRef{Org: r.PathValue("org"), Name: r.PathValue("name"), Version: body.Version}
@@ -165,6 +167,8 @@ func (s *Server) appInstall(w http.ResponseWriter, r *http.Request) {
 	opts.Force = body.Force
 	opts.NoStart = body.Start != nil && !*body.Start
 	opts.Bundles = body.Bundles
+	opts.SetupScripts = body.SetupScripts
+	opts.ClientHome = strings.TrimSpace(body.ClientHome)
 
 	job := s.Jobs.Start(context.Background(), "app-install", ref.String(), func(ctx context.Context, emit func(string, string)) error {
 		svc := s.appService()
@@ -196,16 +200,27 @@ func (s *Server) appLifecycle(w http.ResponseWriter, r *http.Request, action str
 		writeError(w, http.StatusNotFound, err)
 		return
 	}
+	var body struct {
+		SetupScripts []string `json:"setup_scripts"`
+		ClientHome   string   `json:"client_home"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+	setup := apps.SetupOptions{
+		Scripts:    body.SetupScripts,
+		ClientHome: strings.TrimSpace(body.ClientHome),
+	}
 	if r.URL.Query().Get("async") == "1" {
 		job := s.Jobs.Start(context.Background(), "app-"+action, key, func(ctx context.Context, emit func(string, string)) error {
 			svc := s.appService()
 			svc.Out = emitWriter{emit: emit}
-			return runAppLifecycle(ctx, svc, action, key)
+			return runAppLifecycle(ctx, svc, action, key, setup)
 		})
 		writeJSON(w, http.StatusAccepted, map[string]any{"job_id": job.ID, "state": job.State})
 		return
 	}
-	st, err := runAppLifecycleState(r.Context(), svc, action, key)
+	st, err := runAppLifecycleState(r.Context(), svc, action, key, setup)
 	if err != nil {
 		writeError(w, http.StatusConflict, err)
 		return
@@ -213,16 +228,16 @@ func (s *Server) appLifecycle(w http.ResponseWriter, r *http.Request, action str
 	writeJSON(w, http.StatusOK, st)
 }
 
-func runAppLifecycle(ctx context.Context, svc *apps.Service, action, key string) error {
-	_, err := runAppLifecycleState(ctx, svc, action, key)
+func runAppLifecycle(ctx context.Context, svc *apps.Service, action, key string, setup apps.SetupOptions) error {
+	_, err := runAppLifecycleState(ctx, svc, action, key, setup)
 	return err
 }
 
-func runAppLifecycleState(ctx context.Context, svc *apps.Service, action, key string) (apps.AppState, error) {
+func runAppLifecycleState(ctx context.Context, svc *apps.Service, action, key string, setup apps.SetupOptions) (apps.AppState, error) {
 	if action == "stop" {
 		return svc.Stop(ctx, key)
 	}
-	return svc.Start(ctx, key, false)
+	return svc.StartWithSetup(ctx, key, false, setup)
 }
 
 // appStatus serves GET /v1/apps/{org}/{name}/status.

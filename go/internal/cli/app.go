@@ -35,6 +35,11 @@ func newAppService(cmd *cobra.Command) *apps.Service {
 	svc.Out = cmd.OutOrStdout()
 	svc.Stdin = os.Stdin
 	svc.Bin = strings.TrimSpace(os.Getenv("FLASHCLI_BIN"))
+	svc.ConfirmSetup = func(script apps.SetupScript) bool {
+		fmt.Fprintf(cmd.OutOrStdout(), "Setup script %s: %s\n", script.Key, script.URL)
+		fmt.Fprintf(cmd.OutOrStdout(), "Execute it now? [y/N]: ")
+		return readYes(cmd)
+	}
 	return svc
 }
 

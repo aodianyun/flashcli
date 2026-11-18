@@ -155,6 +155,17 @@ start because the scheduler picks the port. Start/stop are also available as
 async jobs (`?async=1`) so clients can stream their progress lines instead of
 showing a silent spinner while a model loads.
 
+### Setup scripts (optional)
+
+After the models become ready, the host runs the manifest's `setup.scripts` in
+manifest order for the keys the user confirmed **for this run**. The client (the
+desktop dialog on every start/install, or the CLI prompt per script) is the
+confirmation point; there is no remembered consent. Each script is downloaded,
+verified against `sha256`, and executed with the explicit argv template
+(`{base_url}`, `{model}`, `{api_key}`). A failure is written to the app job log
+and stops the remaining scripts; the running app is not marked failed. Apps
+without `setup.scripts` skip this step.
+
 ### Failure and rollback
 
 - **Script failure** aborts immediately; no model preparation runs.

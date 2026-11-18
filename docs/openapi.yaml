@@ -344,6 +344,11 @@ paths:
                 client_arch: { type: string, description: "arch as used by manifests: x86_64 / arm64" }
                 force: { type: boolean, default: false }
                 start: { type: boolean, default: true }
+                setup_scripts:
+                  type: array
+                  items: { type: string }
+                  description: "Confirmed setup script keys; they run in manifest order after the models are ready"
+                client_home: { type: string, description: "Client OS home used by setup scripts (a Windows path is mapped to /mnt/<drive>/... in WSL)" }
       responses:
         '202':
           description: Job accepted
@@ -386,6 +391,18 @@ paths:
         schema: { type: string, enum: ['1'] }
     post:
       summary: Start the application's prepared models
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                setup_scripts:
+                  type: array
+                  items: { type: string }
+                  description: "Confirmed setup script keys; they run in manifest order after the models are ready"
+                client_home: { type: string, description: "Client OS home used by setup scripts (a Windows path is mapped to /mnt/<drive>/... in WSL)" }
       responses:
         '200':
           description: Application state

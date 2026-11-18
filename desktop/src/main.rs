@@ -357,6 +357,24 @@ fn installer_is_runnable(kind: InstallerKind) -> bool {
     )
 }
 
+/// One client-side setup script from the app manifest.
+#[derive(Clone)]
+struct AppSetupScript {
+    key: String,
+    url: String,
+    sha256: String,
+}
+
+/// A pending start: the user confirms which setup scripts may run afterwards.
+#[derive(Clone)]
+struct AppSetupPrompt {
+    org: String,
+    name: String,
+    version: String,
+    display_name: String,
+    scripts: Vec<(AppSetupScript, bool)>,
+}
+
 /// A pending application install: the user must confirm the install script.
 #[derive(Clone)]
 struct AppInstallPrompt {
@@ -367,6 +385,8 @@ struct AppInstallPrompt {
     bundles: Vec<String>,
     command: Option<String>,
     force: bool,
+    setup_scripts: Vec<AppSetupScript>,
+    setup_run: bool,
 }
 
 /// A pending application uninstall.
@@ -433,6 +453,7 @@ pub struct App {
     apps_selected: Option<usize>,
     app_detail: Option<Value>,
     app_install: Option<AppInstallPrompt>,
+    app_setup: Option<AppSetupPrompt>,
     app_uninstall: Option<AppUninstallPrompt>,
     /// Install/prepare progress per application ref (org/name:version).
     app_jobs: HashMap<String, AppJobState>,
@@ -529,6 +550,7 @@ impl App {
             apps_selected: None,
             app_detail: None,
             app_install: None,
+            app_setup: None,
             app_uninstall: None,
             app_jobs: HashMap::new(),
             app_log_dialog: None,
@@ -2163,6 +2185,8 @@ impl App {
                 bundles: default_app_bundles(manifest),
                 command: install_command(manifest),
                 force: installed,
+                setup_scripts: app_setup_scripts(manifest),
+                setup_run: true,
             });
         }
         if open_uninstall {
@@ -2175,6 +2199,19 @@ impl App {
             });
         }
         if let Some(what) = action {
+            if what == "start" {
+                let scripts = app_setup_scripts(manifest);
+                if !scripts.is_empty() {
+                    self.app_setup = Some(AppSetupPrompt {
+                        org: org_name,
+                        name: app_name,
+                        version: app_version,
+                        display_name: display.to_string(),
+                        scripts: scripts.into_iter().map(|s| (s, true)).collect(),
+                    });
+                    return;
+                }
+            }
             // Optimistic state so the buttons/status react on the next frame;
             // refresh_app_state corrects it with the daemon's answer.
             let interim = match what {
@@ -2192,6 +2229,7 @@ impl App {
                 app_name,
                 app_version,
                 what,
+                Vec::new(),
             );
         }
     }
@@ -4089,6 +4127,136 @@ impl App {
 
     /// Confirm an application install. A shell install command only runs when
     /// the user explicitly picks "运行脚本并安装"; the daemon never decides.
+    fn show_app_setup_dialog(&mut self, ctx: &egui::Context) {
+        let Some(prompt) = self.app_setup.clone() else {
+            return;
+        };
+        let dark = ctx.style().visuals.dark_mode;
+        let mut close = false;
+        let mut start_with: Option<Vec<String>> = None;
+        let mut checked: Vec<bool> = prompt.scripts.iter().map(|(_, c)| *c).collect();
+        modal_backdrop(ctx, dark, &mut close);
+        egui::Window::new("app_setup_dialog")
+            .title_bar(false)
+            .order(egui::Order::Foreground)
+            .frame(dialog_frame(dark))
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.set_width(560.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("启动应用").size(16.0).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(egui::RichText::new("×").size(18.0))
+                                    .min_size(egui::vec2(28.0, 24.0)),
+                            )
+                            .clicked()
+                        {
+                            close = true;
+                        }
+                    });
+                });
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(12.0);
+                ui.label(
+                    egui::RichText::new(format!("{} {}", prompt.display_name, prompt.version))
+                        .strong(),
+                );
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new(
+                        "该应用声明了配置脚本：模型启动完成后会按顺序执行。每次启动都需要确认。",
+                    )
+                    .small()
+                    .weak(),
+                );
+                ui.add_space(8.0);
+                for (i, (script, _)) in prompt.scripts.iter().enumerate() {
+                    let hash = if script.sha256.len() > 12 {
+                        &script.sha256[..12]
+                    } else {
+                        script.sha256.as_str()
+                    };
+                    ui.checkbox(
+                        &mut checked[i],
+                        format!("{}  {}  (sha256 {}…)", script.key, script.url, hash),
+                    );
+                }
+                ui.add_space(8.0);
+                ui.label(
+                    egui::RichText::new(
+                        "脚本会先下载并校验 sha256，再以当前用户权限执行；失败会写入日志并停止后续脚本。",
+                    )
+                    .weak()
+                    .small(),
+                );
+                ui.add_space(14.0);
+                ui.separator();
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    ui.add_space((ui.available_width() - 360.0).max(0.0));
+                    if button(ui, "取消").clicked() {
+                        close = true;
+                    }
+                    ui.add_space(8.0);
+                    if button(ui, "跳过脚本并启动").clicked() {
+                        start_with = Some(Vec::new());
+                    }
+                    ui.add_space(8.0);
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("执行并启动")
+                                    .color(egui::Color32::WHITE),
+                            )
+                            .fill(ui.visuals().widgets.active.bg_fill)
+                            .min_size(egui::vec2(120.0, 28.0)),
+                        )
+                        .clicked()
+                    {
+                        let keys = prompt
+                            .scripts
+                            .iter()
+                            .zip(&checked)
+                            .filter(|(_, run)| **run)
+                            .map(|((script, _), _)| script.key.clone())
+                            .collect();
+                        start_with = Some(keys);
+                    }
+                });
+            });
+        if let Some(p) = self.app_setup.as_mut() {
+            for (i, (_, run)) in p.scripts.iter_mut().enumerate() {
+                *run = checked.get(i).copied().unwrap_or(true);
+            }
+        }
+        if close {
+            self.app_setup = None;
+        }
+        if let Some(keys) = start_with {
+            self.app_setup = None;
+            self.set_app_local_state(
+                &prompt.org,
+                &prompt.name,
+                &prompt.version,
+                "starting",
+            );
+            spawn_app_action(
+                self.tx.clone(),
+                ctx.clone(),
+                prompt.org,
+                prompt.name,
+                prompt.version,
+                "start",
+                keys,
+            );
+        }
+    }
+
     fn show_app_install_dialog(&mut self, ctx: &egui::Context) {
         let Some(prompt) = self.app_install.clone() else {
             return;
@@ -4108,6 +4276,7 @@ impl App {
         let installer = url_command.as_deref().map(installer_kind);
         let mut close = false;
         let mut choice: Option<AppInstallAction> = None;
+        let mut setup_run = prompt.setup_run;
         modal_backdrop(ctx, dark, &mut close);
         egui::Window::new("app_install_dialog")
             .title_bar(false)
@@ -4221,6 +4390,28 @@ impl App {
                             .small(),
                     );
                 }
+                if !prompt.setup_scripts.is_empty() {
+                    ui.add_space(12.0);
+                    ui.label(
+                        egui::RichText::new("应用配置脚本（模型启动完成后按顺序执行）").strong(),
+                    );
+                    ui.checkbox(&mut setup_run, "执行配置脚本（本次操作）");
+                    for script in &prompt.setup_scripts {
+                        ui.label(
+                            egui::RichText::new(format!("  · {}  {}", script.key, script.url))
+                                .monospace()
+                                .small()
+                                .weak(),
+                        );
+                    }
+                    ui.label(
+                        egui::RichText::new(
+                            "每次安装/启动都会再次确认；脚本下载后先校验 sha256，失败会写入日志并停止后续脚本。",
+                        )
+                        .weak()
+                        .small(),
+                    );
+                }
                 ui.add_space(14.0);
                 ui.separator();
                 ui.add_space(10.0);
@@ -4286,9 +4477,20 @@ impl App {
             });
         if close {
             self.app_install = None;
+        } else if let Some(p) = self.app_install.as_mut() {
+            p.setup_run = setup_run;
         }
         if let Some(action) = choice {
             self.app_install = None;
+            let setup_keys = if setup_run {
+                prompt
+                    .setup_scripts
+                    .iter()
+                    .map(|script| script.key.clone())
+                    .collect()
+            } else {
+                Vec::new()
+            };
             let key = app_reference(&prompt.org, &prompt.name, &prompt.version);
             self.app_jobs.insert(
                 key,
@@ -4308,6 +4510,7 @@ impl App {
                 prompt.version,
                 action,
                 prompt.force,
+                setup_keys,
             );
         }
     }
@@ -4748,6 +4951,7 @@ impl eframe::App for App {
         self.show_smoke_dialog(ctx);
         self.show_options_dialog(ctx);
         self.show_app_install_dialog(ctx);
+        self.show_app_setup_dialog(ctx);
         self.show_app_uninstall_dialog(ctx);
         self.show_app_log_dialog(ctx);
         self.show_dialog(ctx);
@@ -5526,6 +5730,32 @@ fn app_arch_key() -> &'static str {
     }
 }
 
+fn app_setup_scripts(manifest: &Value) -> Vec<AppSetupScript> {
+    manifest["setup"]["scripts"]
+        .as_array()
+        .map(|scripts| {
+            scripts
+                .iter()
+                .filter_map(|script| {
+                    let key = script["key"].as_str().filter(|s| !s.is_empty())?;
+                    let url = script["url"].as_str().filter(|s| !s.is_empty())?;
+                    Some(AppSetupScript {
+                        key: key.to_string(),
+                        url: url.to_string(),
+                        sha256: script["sha256"].as_str().unwrap_or("").to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn client_home() -> String {
+    std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .unwrap_or_default()
+}
+
 fn install_command(manifest: &Value) -> Option<String> {
     let key = app_platform_command_key(manifest)?;
     manifest["install"]["commands"][key.as_str()]
@@ -5827,13 +6057,15 @@ fn default_app_bundles(manifest: &Value) -> Vec<String> {
 /// command itself and tells the daemon `client` (already handled) or `skip`
 /// (do not run it). The daemon gets the client platform for the manifest check
 /// and only prepares/starts the models.
-fn app_install_body(version: &str, ran_script: bool, force: bool) -> Value {
+fn app_install_body(version: &str, ran_script: bool, force: bool, setup_scripts: &[String]) -> Value {
     serde_json::json!({
         "version": version,
         "install_command": if ran_script { "client" } else { "skip" },
         "client_os": app_os_key(),
         "client_arch": app_arch_key(),
         "force": force,
+        "setup_scripts": setup_scripts,
+        "client_home": client_home(),
     })
 }
 
@@ -6127,6 +6359,7 @@ fn spawn_app_action(
     name: String,
     version: String,
     action: &'static str,
+    setup_scripts: Vec<String>,
 ) {
     let reference = app_reference(&org, &name, &version);
     let verb = action_label(action).to_string();
@@ -6149,11 +6382,15 @@ fn spawn_app_action(
         } else {
             format!("/v1/apps/{org}/{name}/{action}")
         };
-        let body = if action == "prepare" {
+        let mut body = if action == "prepare" {
             serde_json::json!({ "version": version })
         } else {
             serde_json::json!({})
         };
+        if action == "start" {
+            body["setup_scripts"] = serde_json::json!(setup_scripts);
+            body["client_home"] = serde_json::json!(client_home());
+        }
         match post_json_timeout(&path, &body, 180) {
             Ok(v) => {
                 if let Some(job_id) = v["job_id"].as_str().filter(|id| !id.is_empty()) {
@@ -6196,6 +6433,7 @@ fn spawn_app_install(
     version: String,
     action: AppInstallAction,
     force: bool,
+    setup_scripts: Vec<String>,
 ) {
     std::thread::spawn(move || {
         let verb = "安装".to_string();
@@ -6241,7 +6479,7 @@ fn spawn_app_install(
             }
         };
         let path = format!("/v1/apps/{org}/{name}/install");
-        let body = app_install_body(&version, handled, force);
+        let body = app_install_body(&version, handled, force, &setup_scripts);
         match post_json_timeout(&path, &body, 120) {
             Ok(v) => match v["job_id"].as_str().filter(|id| !id.is_empty()) {
                 Some(job_id) => {

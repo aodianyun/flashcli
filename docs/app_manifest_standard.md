@@ -133,8 +133,10 @@ Rules:
   `"--api-key {api_key}"`, not `"--api-key={api_key}"`.
 - The script runs on the **client OS** after the models become ready, and again
   after each start because the model port changes. It must be idempotent.
-- The user confirms execution once per app/version/script/hash; the consent is
-  remembered until the hash changes.
+- The user confirms **every execution** (each start/install in the desktop, or a
+  prompt per script in the CLI); there is no remembered consent.
+- Scripts run in manifest order; the first failure stops the remaining scripts
+  and is reported in the app log. The running app stays `ready`.
 - Download and `sha256` verification happen before execution. A mismatch or a
   non-zero exit is reported in the app log; it does not mark the running app as
   failed.

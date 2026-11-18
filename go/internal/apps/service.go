@@ -48,7 +48,10 @@ type Service struct {
 	Stopper func(context.Context, string) (bool, error)
 	// Claim registers this application as an owner of an already healthy
 	// model so another app stopping it does not take it away.
-	Claim        func(context.Context, string) error
+	Claim func(context.Context, string) error
+	// ConfirmSetup asks the local user before running a setup script. The daemon
+	// leaves it nil (the client sends confirmed script keys); the CLI prompts.
+	ConfirmSetup func(SetupScript) bool
 	Now          func() time.Time
 	StartTimeout time.Duration
 
@@ -106,6 +109,11 @@ type InstallOptions struct {
 	// ScriptHandled records that the caller already executed the platform
 	// install command on its own platform; the host only records it.
 	ScriptHandled bool
+	// SetupScripts lists the setup script keys the user confirmed for this run
+	// (empty = run none). ClientHome is the caller's OS home, used to write the
+	// application's real config when the daemon runs in WSL.
+	SetupScripts []string
+	ClientHome   string
 }
 
 // InstallResult describes what an install run did.
@@ -303,6 +311,13 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 	state.Connection = connectionFor(key, m.Version, state.Models)
 	s.save(&state)
 
+	if !opts.NoStart {
+		s.applySetupScripts(ctx, key, &state, SetupOptions{
+			Scripts:    opts.SetupScripts,
+			ClientHome: opts.ClientHome,
+		}, m)
+	}
+
 	fmt.Fprintf(out, "\nInstalled %s %s\n", key, m.Version)
 	fmt.Fprintf(out, "Models:\n")
 	for _, mdl := range state.Models {
@@ -317,6 +332,12 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 
 // Start starts every prepared model of an installed app (idempotent).
 func (s *Service) Start(ctx context.Context, key string, keepPartial bool) (AppState, error) {
+	return s.StartWithSetup(ctx, key, keepPartial, SetupOptions{})
+}
+
+// StartWithSetup starts the app's models and then runs the confirmed setup
+// scripts in manifest order (each run is confirmed by the caller).
+func (s *Service) StartWithSetup(ctx context.Context, key string, keepPartial bool, setup SetupOptions) (AppState, error) {
 	st, ok, err := s.Registry.Get(key)
 	if err != nil {
 		return AppState{}, err
@@ -341,7 +362,48 @@ func (s *Service) Start(ctx context.Context, key string, keepPartial bool) (AppS
 	st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 	st.Connection = connectionFor(key, st.Version, st.Models)
 	s.save(&st)
+	s.applySetupScripts(ctx, key, &st, setup, nil)
 	return st, nil
+}
+
+// applySetupScripts runs setup scripts after a successful model start. For the
+// CLI, ConfirmSetup prompts for each manifest script; the daemon passes the
+// already-confirmed keys. A failure is logged and stops the remaining scripts.
+func (s *Service) applySetupScripts(ctx context.Context, key string, st *AppState, setup SetupOptions, m *Manifest) {
+	if m == nil && (len(setup.Scripts) > 0 || s.ConfirmSetup != nil) {
+		fetched, err := s.manifestFor(ctx, key)
+		if err != nil {
+			if len(setup.Scripts) > 0 {
+				fmt.Fprintf(s.out(), "setup skipped: %v\n", err)
+			}
+			return
+		}
+		m = fetched
+	}
+	if m == nil || len(m.Setup.Scripts) == 0 {
+		return
+	}
+	if len(setup.Scripts) == 0 && s.ConfirmSetup != nil {
+		for _, script := range m.Setup.Scripts {
+			if s.ConfirmSetup(script) {
+				setup.Scripts = append(setup.Scripts, script.Key)
+			}
+		}
+	}
+	s.runSetupScripts(ctx, m, st, setup)
+	s.save(st)
+}
+
+func (s *Service) manifestFor(ctx context.Context, key string) (*Manifest, error) {
+	ref, err := flashhub.ParseAppRef(key)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := s.Fetch(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	return Parse(raw)
 }
 
 // Stop stops the app's models and marks it stopped.

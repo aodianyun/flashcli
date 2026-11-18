@@ -249,16 +249,19 @@ fn installer_file_names_are_sanitized() {
 
 #[test]
 fn app_install_body_makes_the_script_decision_explicit() {
-    let ran = app_install_body("1.0.0", true, true);
+    let scripts = vec!["workbuddy".to_string()];
+    let ran = app_install_body("1.0.0", true, true, &scripts);
     assert_eq!(ran["version"], "1.0.0");
     assert_eq!(ran["install_command"], "client");
     assert_eq!(ran["client_os"], app_os_key());
     assert_eq!(ran["client_arch"], app_arch_key());
     assert_eq!(ran["force"], true);
-    let skip = app_install_body("1.0.0", false, false);
+    assert_eq!(ran["setup_scripts"][0], "workbuddy");
+    let skip = app_install_body("1.0.0", false, false, &[]);
     assert_eq!(skip["install_command"], "skip");
     assert_eq!(skip["client_os"], app_os_key());
     assert_eq!(skip["force"], false);
+    assert_eq!(skip["setup_scripts"].as_array().unwrap().len(), 0);
 }
 
 #[test]
