@@ -131,8 +131,11 @@ Rules:
 - Each `args` entry is appended after substitution. An entry may contain spaces
   and is split into argv tokens (values must not contain spaces in v1). Use
   `"--api-key {api_key}"`, not `"--api-key={api_key}"`.
-- The script runs on the **client OS** after the models become ready, and again
-  after each start because the model port changes. It must be idempotent.
+- The script runs in the **client's home context** after the models become
+  ready, and again after each start because the model port changes. The desktop
+  confirms; when flashserver runs in WSL it executes the script with `HOME`
+  mapped to the client home so the application's real config is written. The
+  script must be idempotent.
 - The user confirms **every execution** (each start/install in the desktop, or a
   prompt per script in the CLI); there is no remembered consent.
 - Scripts run in manifest order; the first failure stops the remaining scripts

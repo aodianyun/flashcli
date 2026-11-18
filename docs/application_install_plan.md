@@ -284,12 +284,13 @@ Shared by the CLI and the daemon at `$FLASHCLI_HOME/flashserver/apps.json`
   normal admission; the OS autostart toggle only decides whether the daemon
   starts at boot.
 
-## Configuration (deferred)
+## Configuration
 
-v1 manifests publish `config: []`. The host writes `connection.json` (base URL,
-model ids, `api_key=local`) and does not modify application files. A future
-`config` schema will define adapters (`json`/`yaml`/`env`/…) with backup and
-rollback.
+v1 manifests publish `config: []`; the host does not interpret it. Client
+configuration is done by `setup.scripts` (see
+[app_manifest_standard.md](app_manifest_standard.md)): after the models are
+ready, the confirmed scripts write the application's own config using the
+connection. There is no `connection.json` writer.
 
 ## Security
 

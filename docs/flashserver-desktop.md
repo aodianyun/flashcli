@@ -26,6 +26,11 @@ for commands. Install/build details are in [../desktop/README.md](../desktop/REA
   install always finishes before the daemon prepares/starts the models, and the
   daemon rejects an install without that explicit decision
   (`install_command: client | run | skip`). Progress streams into the detail pane.
+  When the manifest declares `setup.scripts`, starting or installing asks once
+  per execution which scripts to run; after the models are ready the daemon runs
+  them in manifest order, verifies `sha256`, and maps the client home into WSL so
+  the application's real config is written. A failure is logged and stops the
+  remaining scripts.
   One application installs at a time: while a job runs, its card shows
   `安装中 · 阶段 xx%` with a bar, a banner appears above the grid, and the other
   apps' actions are disabled.

@@ -261,11 +261,11 @@ rename）：
   `~/.flashcli/flashserver/models.json` 恢复）；恢复在后台按正常准入执行，操作系统
   开机启动只决定 daemon 是否随系统启动
 
-## 配置（待定）
+## 配置
 
-v1 的 manifest 发布 `config: []`。host 只写 `connection.json`（base URL、模型 id、
-`api_key=local`），不修改应用文件。后续 `config` schema 会定义适配器
-（`json`/`yaml`/`env`/…）并带备份与回滚。
+v1 的 manifest 发布 `config: []`，host 不解释它。客户端配置由 `setup.scripts` 完成
+（见 [app_manifest_standard.zh-CN.md](app_manifest_standard.zh-CN.md)）：模型就绪后，
+用户确认的脚本使用连接信息写入应用自身配置；host 不再写 `connection.json`。
 
 ## 安全
 
