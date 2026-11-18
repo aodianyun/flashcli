@@ -240,12 +240,25 @@ func EnsureRuntime(ctx context.Context, m *manifest.Manifest, bundleRoot, ver, v
 	if envBool("FLASHCLI_SKIP_VENV_SETUP") {
 		return runtimeID, "", nil
 	}
+	if err := EnsureSystemRequirements(m, "", quiet); err != nil {
+		return "", "", err
+	}
 	python, err := venv.Ensure(ctx, runtimeID, m, venv.Options{
 		SkipSetup:     envBool("FLASHCLI_SKIP_VENV_SETUP"),
+		Force:         envBool("FLASHCLI_FORCE_VENV"),
 		NoAutoInstall: noAutoInstall,
 		Quiet:         quiet,
 	})
 	if err != nil {
+		return "", "", err
+	}
+	if err := venv.EnsureProtocolCacheSchema(ctx, python, venv.Options{
+		Quiet:         quiet,
+		NoAutoInstall: noAutoInstall,
+	}); err != nil {
+		return "", "", err
+	}
+	if err := EnsureSystemRequirements(m, python, quiet); err != nil {
 		return "", "", err
 	}
 	if _, err := PreflightBundle(m, bundleRoot, python, quiet, !noAutoInstall); err != nil {

@@ -76,7 +76,7 @@ func New(addr string) *Server {
 	}
 	gpuProbe := gpu.Probe
 	store := newServeSettingsStore("")
-	logDir := filepath.Join(paths.Home(), "flashserver", "logs", "serve")
+	logDir := filepath.Join(paths.Home(), "logs", "serve")
 	return &Server{
 		Addr:          addr,
 		Source:        defaultSource{},

@@ -54,6 +54,9 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 
 - **禁止**在 `go/internal/cli` 或 `go/internal/server` 再写 marker 遍历、权重就绪判断、目录大小遍历、清理路径解析。
 - 新行为只在 `host` 实现一次，再由两个前端暴露；表格、颜色、提示等纯展示逻辑留在前端。
+- **Pull/准备只有一条流水线**：`flashcli pull`、`/v1/pull`、应用准备都走 `host.Pull`；`host.EnsureRuntime` 负责运行时/venv 准备，必须与 `flashcli serve` 保持一致（system 能力、协议缓存 schema、CUDA）。
+- **Serve 子进程**的日志命名/尾部读取统一用 `modelrun.LogName`/`modelrun.TailLines`，就绪等待统一用 `modelrun.WaitHealthy`。日志目录固定为 `~/.flashcli/logs/serve`（配置 `log_dir` 可覆盖），`flashcli app logs` 与 `/v1/logs` 读同一路径。
+- **应用状态判定**（是否在运行/是否恢复）只在 `apps`（`apps.WasRunning`）实现，daemon 恢复和桌面端不得各自推导。
 - `flashcli cache clean` 只清理共享缓存（`cache` + 基础 Python + uv），对应 `/v1/storage/clean {"targets":["cache"]}`。模型数据/运行时使用 `flashcli bundle clean` / `/v1/models/clean`；共享权重/运行时按引用保留。磁盘统计和 ref 路径选择在 `host` 共享。
 - 测试：`go test ./...`；host 测试覆盖统计/清理，CLI 测试通过 host 函数覆盖 `du`、`models list`、`bundle clean`。详见 [module_layers.zh-CN.md](module_layers.zh-CN.md)。
 

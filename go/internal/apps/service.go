@@ -2,7 +2,6 @@ package apps
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -59,7 +58,7 @@ type Service struct {
 
 // New returns a service wired to the shared host/modelrun implementation.
 func New(home string) *Service {
-	logDir := filepath.Join(home, "flashserver", "logs", "serve")
+	logDir := filepath.Join(home, "logs", "serve")
 	svc := &Service{
 		Home:         home,
 		Host:         "127.0.0.1",
@@ -654,23 +653,7 @@ func endpointPort(endpoint string) int {
 }
 
 func waitHealthy(ctx context.Context, proc modelrun.ServeProcess, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for {
-		if err := proc.Healthy(ctx); err == nil {
-			return nil
-		}
-		if !proc.Running() {
-			return errors.New("serve process exited")
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timeout after %s", timeout)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(250 * time.Millisecond):
-		}
-	}
+	return modelrun.WaitHealthy(ctx, proc, timeout, nil)
 }
 
 func (s *Service) stopModel(ctx context.Context, m *ModelState) {

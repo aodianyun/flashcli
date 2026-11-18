@@ -21,6 +21,9 @@ func (s *Server) appService() *apps.Service {
 		return s.AppService()
 	}
 	svc := apps.New(paths.Home())
+	if s.LogDir != "" {
+		svc.LogDir = s.LogDir
+	}
 	if s.Manager != nil {
 		svc.Launcher = managerLauncher{
 			manager: s.Manager,
@@ -62,7 +65,7 @@ func (s *Server) appList(w http.ResponseWriter, r *http.Request) {
 	out := make([]item, 0, len(list))
 	for _, a := range list {
 		it := item{AppSummary: a}
-		key := a.Organization.Name + "/" + a.Name + ":" + a.Version
+		key := flashhub.AppRef{Org: a.Organization.Name, Name: a.Name, Version: a.Version}.String()
 		if st, ok := installed[key]; ok {
 			it.Installed = true
 			it.State = st.State

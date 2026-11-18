@@ -23,7 +23,13 @@ import (
 // serve child, `flashcli app logs`, and the daemon log endpoint so the three
 // never disagree about sanitization.
 func LogName(refStr string) string {
-	return strings.NewReplacer("/", "_", "\\", "_", ":", "_").Replace(refStr) + ".log"
+	return LogNameSuffix(refStr, "")
+}
+
+// LogNameSuffix is LogName with an extra suffix (for example ".smoke") before
+// the extension.
+func LogNameSuffix(refStr, suffix string) string {
+	return strings.NewReplacer("/", "_", "\\", "_", ":", "_").Replace(refStr) + suffix + ".log"
 }
 
 // TailLines returns the last n lines of a log file. Shared by `flashcli app
@@ -58,6 +64,39 @@ func TailLines(path string, n int) ([]string, error) {
 		n = len(all)
 	}
 	return all[len(all)-n:], nil
+}
+
+// WaitHealthy polls a serve child until it reports healthy, exits, or the
+// timeout elapses. It is shared by the Manager and application model starts so
+// readiness always means the same thing. onLog receives new log tail lines.
+func WaitHealthy(ctx context.Context, proc ServeProcess, timeout time.Duration, onLog func(string)) error {
+	deadline := time.Now().Add(timeout)
+	lastLog := ""
+	for {
+		if onLog != nil {
+			if line := strings.TrimSpace(proc.LastLog()); line != "" && line != lastLog {
+				lastLog = line
+				onLog(line)
+			}
+		}
+		if err := proc.Healthy(ctx); err == nil {
+			return nil
+		}
+		if !proc.Running() {
+			if detail := strings.TrimSpace(proc.LastLog()); detail != "" {
+				return fmt.Errorf("serve process exited: %s", detail)
+			}
+			return errors.New("serve process exited")
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout after %s", timeout)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
 }
 
 // ServeProcess is one `flashcli serve` child process.

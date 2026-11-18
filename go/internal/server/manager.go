@@ -241,37 +241,16 @@ func (m *Manager) load(ctx context.Context, refStr string, progress func(phase, 
 	if err != nil {
 		return InstanceInfo{}, err
 	}
-	deadline := time.Now().Add(120 * time.Second)
-	lastLog := ""
-	for {
+	// Shared readiness loop with apps.Service: same 250 ms poll and last-log
+	// error, so a model start behaves the same from the 模型 page and an app.
+	err = modelrun.WaitHealthy(ctx, proc, 120*time.Second, func(line string) {
 		if progress != nil {
-			if line := strings.TrimSpace(proc.LastLog()); line != "" && line != lastLog {
-				lastLog = line
-				progress("progress", line)
-			}
+			progress("progress", line)
 		}
-		if err := proc.Healthy(ctx); err == nil {
-			break
-		}
-		// Return the child's own error instead of waiting out the deadline
-		// (e.g. a run-only bundle rejects serve immediately).
-		if !proc.Running() {
-			_ = proc.Stop(context.Background())
-			if detail := strings.TrimSpace(proc.LastLog()); detail != "" {
-				return InstanceInfo{}, fmt.Errorf("serve process for %s exited: %s", refStr, detail)
-			}
-			return InstanceInfo{}, fmt.Errorf("serve process for %s exited before becoming ready", refStr)
-		}
-		if time.Now().After(deadline) {
-			_ = proc.Stop(context.Background())
-			return InstanceInfo{}, fmt.Errorf("serve process for %s did not become healthy", refStr)
-		}
-		select {
-		case <-ctx.Done():
-			_ = proc.Stop(context.Background())
-			return InstanceInfo{}, ctx.Err()
-		case <-time.After(250 * time.Millisecond):
-		}
+	})
+	if err != nil {
+		_ = proc.Stop(context.Background())
+		return InstanceInfo{}, fmt.Errorf("serve process for %s: %w", refStr, err)
 	}
 	inst := &instance{ref: refStr, process: proc, loadedAt: time.Now().UTC()}
 	m.mu.Lock()

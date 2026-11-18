@@ -43,23 +43,28 @@ func weightsCachedFor(p ref.Parsed, refStr string) bool {
 	if p.Local || ver == "" {
 		ver = "local"
 	}
-	key := weights.TreeKey(p.Name, ver)
-	rel := "checkpoint"
+	key := host.RefCacheKey(p)
 	m, err := loadManifestForRef(refStr, p)
 	if err == nil {
 		weightsKey := weights.StoreKeyFor(m, ver)
 		cached, _, _, _ := host.WeightsInfo(m, weightsKey, p.Variant)
 		return cached
 	}
-	// Keep a marker-only fallback for offline/foreign caches whose manifest
-	// cannot be loaded here; readiness is unavailable in that case.
-	dir := filepath.Join(paths.Models(), filepath.FromSlash(key), filepath.FromSlash(rel))
-	if cp, ok := weights.ReadMarker(dir); ok {
-		if info, err := os.Stat(cp); err == nil && info.IsDir() {
-			return true
-		}
+	// Marker-only fallback for offline/foreign caches: use the same readiness
+	// check as `models list` and the daemon instead of a private path guess.
+	if marker := markerForRef(refStr, key); marker != nil {
+		return weightsCachedFromMarker(marker)
 	}
 	return false
+}
+
+func markerForRef(refStr, key string) map[string]any {
+	for _, marker := range host.Markers() {
+		if strOf(marker["ref"]) == refStr || strOf(marker["cache_key"]) == key {
+			return marker
+		}
+	}
+	return nil
 }
 
 func modelsListCmd() *cobra.Command {
