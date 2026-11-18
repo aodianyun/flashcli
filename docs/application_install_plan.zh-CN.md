@@ -140,9 +140,16 @@ stateDiagram-v2
   STARTING --> READY: 全部健康
   STARTING --> FAILED: 任一失败（回滚已启动模型）
   READY --> STOPPED: app stop
+  READY --> STOPPED: status 发现没有健康模型（daemon 重启 / 崩溃）
+  READY --> FAILED: 部分模型未运行
   STOPPED --> READY: app start
   READY --> [*]: app uninstall
 ```
+
+`status` 会用实时健康状态校正持久化状态：记录为 `ready` 但模型进程已不在时报告
+`stopped`（这样「启动」可用，也不会再展示失效的接入地址）；由于调度器每次启动都会
+重新选端口，接入地址在每次启动后重算。start/stop 也支持异步任务（`?async=1`），
+客户端可以流式显示进度，而不是在模型加载期间一直空转。
 
 ### 失败与回滚
 

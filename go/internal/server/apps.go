@@ -22,7 +22,14 @@ func (s *Server) appService() *apps.Service {
 	}
 	svc := apps.New(paths.Home())
 	if s.Manager != nil {
-		svc.Launcher = managerLauncher{manager: s.Manager}
+		svc.Launcher = managerLauncher{
+			manager: s.Manager,
+			Log: func(line string) {
+				if svc.Out != nil {
+					fmt.Fprintln(svc.Out, line)
+				}
+			},
+		}
 		// App models the model page loaded are not in this service's process
 		// map; unload them through the Manager so its slots stay accurate.
 		svc.Stopper = func(ctx context.Context, refStr string) (bool, error) {
@@ -162,13 +169,35 @@ func (s *Server) appInstall(w http.ResponseWriter, r *http.Request) {
 
 // appStart serves POST /v1/apps/{org}/{name}/start.
 func (s *Server) appStart(w http.ResponseWriter, r *http.Request) {
+	s.appLifecycle(w, r, "start")
+}
+
+// appStop serves POST /v1/apps/{org}/{name}/stop.
+func (s *Server) appStop(w http.ResponseWriter, r *http.Request) {
+	s.appLifecycle(w, r, "stop")
+}
+
+// appLifecycle starts or stops an application. The default response is the
+// resulting AppState; `?async=1` returns a job whose events carry the start or
+// stop progress (a model can take a minute to load, and a silent spinner is
+// indistinguishable from a hang).
+func (s *Server) appLifecycle(w http.ResponseWriter, r *http.Request, action string) {
 	svc := s.appService()
 	key, err := s.resolveAppKey(r, svc)
 	if err != nil {
 		writeError(w, http.StatusNotFound, err)
 		return
 	}
-	st, err := svc.Start(r.Context(), key, false)
+	if r.URL.Query().Get("async") == "1" {
+		job := s.Jobs.Start(context.Background(), "app-"+action, key, func(ctx context.Context, emit func(string, string)) error {
+			svc := s.appService()
+			svc.Out = emitWriter{emit: emit}
+			return runAppLifecycle(ctx, svc, action, key)
+		})
+		writeJSON(w, http.StatusAccepted, map[string]any{"job_id": job.ID, "state": job.State})
+		return
+	}
+	st, err := runAppLifecycleState(r.Context(), svc, action, key)
 	if err != nil {
 		writeError(w, http.StatusConflict, err)
 		return
@@ -176,20 +205,16 @@ func (s *Server) appStart(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, st)
 }
 
-// appStop serves POST /v1/apps/{org}/{name}/stop.
-func (s *Server) appStop(w http.ResponseWriter, r *http.Request) {
-	svc := s.appService()
-	key, err := s.resolveAppKey(r, svc)
-	if err != nil {
-		writeError(w, http.StatusNotFound, err)
-		return
+func runAppLifecycle(ctx context.Context, svc *apps.Service, action, key string) error {
+	_, err := runAppLifecycleState(ctx, svc, action, key)
+	return err
+}
+
+func runAppLifecycleState(ctx context.Context, svc *apps.Service, action, key string) (apps.AppState, error) {
+	if action == "stop" {
+		return svc.Stop(ctx, key)
 	}
-	st, err := svc.Stop(r.Context(), key)
-	if err != nil {
-		writeError(w, http.StatusConflict, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, st)
+	return svc.Start(ctx, key, false)
 }
 
 // appStatus serves GET /v1/apps/{org}/{name}/status.

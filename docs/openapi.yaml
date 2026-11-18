@@ -380,6 +380,10 @@ paths:
       - { name: org, in: path, required: true, schema: { type: string } }
       - { name: name, in: path, required: true, schema: { type: string } }
       - { name: version, in: query, schema: { type: string } }
+      - name: async
+        in: query
+        description: "`1` returns a job with start progress (model loading can take a minute)."
+        schema: { type: string, enum: ['1'] }
     post:
       summary: Start the application's prepared models
       responses:
@@ -388,6 +392,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AppState' }
+        '202':
+          description: Async job accepted (`async=1`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAccepted' }
         '404':
           $ref: '#/components/responses/Error'
         '409':
@@ -397,6 +406,10 @@ paths:
       - { name: org, in: path, required: true, schema: { type: string } }
       - { name: name, in: path, required: true, schema: { type: string } }
       - { name: version, in: query, schema: { type: string } }
+      - name: async
+        in: query
+        description: "`1` returns a job with stop progress."
+        schema: { type: string, enum: ['1'] }
     post:
       summary: Stop the application's models
       responses:
@@ -405,6 +418,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AppState' }
+        '202':
+          description: Async job accepted (`async=1`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAccepted' }
         '404':
           $ref: '#/components/responses/Error'
   /v1/storage:

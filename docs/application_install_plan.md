@@ -142,9 +142,18 @@ stateDiagram-v2
   STARTING --> READY: all models healthy
   STARTING --> FAILED: any failure (roll back started models)
   READY --> STOPPED: app stop
+  READY --> STOPPED: status finds no healthy model (daemon restart / crash)
+  READY --> FAILED: some models are not running
   STOPPED --> READY: app start
   READY --> [*]: app uninstall
 ```
+
+`status` reconciles the stored state with live health: a `ready` app whose
+model process is gone is reported as `stopped` (so 启动 is enabled and the dead
+endpoint is not advertised), and the connection URL is recomputed after every
+start because the scheduler picks the port. Start/stop are also available as
+async jobs (`?async=1`) so clients can stream their progress lines instead of
+showing a silent spinner while a model loads.
 
 ### Failure and rollback
 

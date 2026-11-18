@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"sort"
 	"strconv"
@@ -215,6 +216,7 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 		case IsURL(command):
 			fmt.Fprintf(out, "\nDownload page: %s\n", command)
 			fmt.Fprintln(out, "Open it in a browser to install the application (flashcli does not auto-download).")
+			state.Install.Command = command
 			state.Install.Skipped = true
 			res.InstallSkipped = true
 		default:
@@ -225,11 +227,13 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 				switch {
 				case opts.NonInteractive || opts.Confirm == nil:
 					fmt.Fprintln(out, "Install command skipped: no interactive terminal to confirm (use --yes to run it).")
+					state.Install.Command = command
 					state.Install.Skipped = true
 					res.InstallSkipped = true
 					break
 				case !opts.Confirm(command):
 					fmt.Fprintln(out, "Install command declined.")
+					state.Install.Command = command
 					state.Install.Skipped = true
 					res.InstallSkipped = true
 					break
@@ -255,6 +259,7 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 
 	if !opts.NoModel {
 		state.State = StatePreparing
+		state.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 		s.save(&state)
 		for i := range state.Models {
 			mdl := &state.Models[i]
@@ -275,6 +280,7 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 
 	if !opts.NoStart {
 		state.State = StateStarting
+		state.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 		s.save(&state)
 		if err := s.startModels(ctx, &state, opts.KeepPartial); err != nil {
 			state.State = StateFailed
@@ -315,15 +321,21 @@ func (s *Service) Start(ctx context.Context, key string, keepPartial bool) (AppS
 	if !ok {
 		return AppState{}, fmt.Errorf("application %s is not installed", key)
 	}
+	st.State = StateStarting
+	st.Error = ""
+	st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
+	s.save(&st)
 	if err := s.startModels(ctx, &st, keepPartial); err != nil {
 		st.State = StateFailed
 		st.Error = err.Error()
+		st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 		s.save(&st)
 		return st, err
 	}
 	st.State = StateReady
 	st.Error = ""
 	st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
+	st.Connection = connectionFor(key, st.Version, st.Models)
 	s.save(&st)
 	return st, nil
 }
@@ -337,16 +349,26 @@ func (s *Service) Stop(ctx context.Context, key string) (AppState, error) {
 	if !ok {
 		return AppState{}, fmt.Errorf("application %s is not installed", key)
 	}
+	st.State = StateStopping
+	st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
+	s.save(&st)
 	for i := range st.Models {
 		s.stopModel(ctx, &st.Models[i])
 	}
 	st.State = StateStopped
 	st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
+	st.Connection = connectionFor(key, st.Version, st.Models)
 	s.save(&st)
 	return st, nil
 }
 
 // Status returns the stored state with live health annotations.
+//
+// The recorded state is reconciled with reality: after a daemon restart (or a
+// crash/manual kill) an app can be stored as ready while its model process is
+// gone. Reporting it as ready would disable 启动 and advertise a dead endpoint,
+// so a ready app with no healthy model becomes stopped, and a partially healthy
+// app becomes failed.
 func (s *Service) Status(ctx context.Context, key string) (AppState, error) {
 	st, ok, err := s.Registry.Get(key)
 	if err != nil {
@@ -355,26 +377,100 @@ func (s *Service) Status(ctx context.Context, key string) (AppState, error) {
 	if !ok {
 		return AppState{}, fmt.Errorf("application %s is not installed", key)
 	}
-	// A starting/stopping state left behind by an interrupted run (daemon
-	// restart or crash) would keep the UI's actions disabled forever; report it
-	// as failed so the user can start/stop again.
-	if st.State == StateStarting || st.State == StatePreparing || st.State == StateInstalling {
+	changed := false
+	now := s.now().UTC().Format(time.RFC3339)
+	// A transitional state left behind by an interrupted run would keep the
+	// UI's actions disabled forever. A live start/stop keeps it while the
+	// operation is within its timeout; only an old one is reported as failed.
+	if isTransitional(st.State) && s.transitionExpired(&st) {
 		st.State = StateFailed
 		if st.Error == "" {
 			st.Error = "previous operation was interrupted"
 		}
-		s.save(&st)
+		changed = true
 	}
+	healthy := 0
 	for i := range st.Models {
 		mdl := &st.Models[i]
 		if mdl.Endpoint == "" {
+			if mdl.Prepared {
+				mdl.Prepared = false
+				changed = true
+			}
 			continue
 		}
-		if modelrun.HealthyEndpoint(ctx, mdl.Endpoint) == nil {
-			mdl.Prepared = true
+		if endpointHealthy(ctx, mdl.Endpoint) {
+			if !mdl.Prepared {
+				mdl.Prepared = true
+				changed = true
+			}
+			healthy++
+			continue
+		}
+		// The recorded process is gone (daemon restart, crash, manual kill).
+		// Drop the stale pid/endpoint so a later Stop cannot signal an
+		// unrelated process and the connection info is not advertised.
+		mdl.PID, mdl.Endpoint, mdl.Prepared = 0, "", false
+		changed = true
+	}
+	if len(st.Models) > 0 {
+		switch st.State {
+		case StateReady:
+			if healthy == 0 {
+				st.State = StateStopped
+				st.Error = ""
+				changed = true
+			} else if healthy < len(st.Models) {
+				st.State = StateFailed
+				st.Error = "some models are not running"
+				changed = true
+			}
+		case StateFailed:
+			if healthy == len(st.Models) {
+				st.State = StateReady
+				st.Error = ""
+				changed = true
+			}
 		}
 	}
+	// Endpoints change on every start (the Manager picks the port), so the
+	// advertised connection must never be a port from a previous run.
+	if conn := connectionFor(key, st.Version, st.Models); !reflect.DeepEqual(conn, st.Connection) {
+		st.Connection = conn
+		changed = true
+	}
+	if changed {
+		st.UpdatedAt = now
+		s.save(&st)
+	}
 	return st, nil
+}
+
+// isTransitional reports whether an operation is in progress.
+func isTransitional(state string) bool {
+	switch state {
+	case StateInstalling, StatePreparing, StateStarting, StateStopping:
+		return true
+	}
+	return false
+}
+
+// transitionExpired reports whether a transitional state is old enough to be an
+// interrupted run. startTimeout bounds one model start; allow several models
+// and some slack before declaring the operation dead.
+func (s *Service) transitionExpired(st *AppState) bool {
+	if st.UpdatedAt == "" {
+		return true
+	}
+	t, err := time.Parse(time.RFC3339, st.UpdatedAt)
+	if err != nil {
+		return true
+	}
+	limit := s.startTimeout() * 2
+	if limit < 10*time.Minute {
+		limit = 10 * time.Minute
+	}
+	return s.now().Sub(t) > limit
 }
 
 // Uninstall stops the models and removes the app state; model caches stay
@@ -500,11 +596,13 @@ func (s *Service) startModels(ctx context.Context, st *AppState, keepPartial boo
 				return fail(err)
 			}
 		}
+		fmt.Fprintf(s.out(), "starting %s ...\n", mdl.Ref)
 		proc, err := launcher.StartWithOptions(ctx, mdl.Ref, modelrun.LoadOptions{Port: port})
 		if err != nil {
 			return fail(fmt.Errorf("start %s: %w", mdl.Ref, err))
 		}
 		started = append(started, mdl)
+		fmt.Fprintf(s.out(), "waiting for %s to become ready ...\n", mdl.Ref)
 		if err := waitHealthy(ctx, proc, s.startTimeout()); err != nil {
 			_ = proc.Stop(context.Background())
 			return fail(fmt.Errorf("model %s did not become healthy: %w", mdl.Ref, err))
@@ -568,6 +666,7 @@ func waitHealthy(ctx context.Context, proc modelrun.ServeProcess, timeout time.D
 }
 
 func (s *Service) stopModel(ctx context.Context, m *ModelState) {
+	fmt.Fprintf(s.out(), "stopping %s ...\n", m.Ref)
 	if proc := s.takeProc(m.Ref); proc != nil {
 		_ = proc.Stop(ctx)
 		m.PID, m.Endpoint = 0, ""

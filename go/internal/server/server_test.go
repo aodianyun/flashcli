@@ -374,6 +374,27 @@ func TestManagerUnloadIfLoaded(t *testing.T) {
 	}
 }
 
+// A child that died outside the Manager must not be reused: Load starts a
+// fresh process, and List stops advertising it.
+func TestManagerDropsDeadInstances(t *testing.T) {
+	l := &fakeLauncher{}
+	m := NewManagerWithOptions(l, ManagerOptions{Inspect: fakeInspect})
+	if _, err := m.Load(context.Background(), "demo:1"); err != nil {
+		t.Fatal(err)
+	}
+	l.procs[0].stopped = true
+	if _, err := m.Load(context.Background(), "demo:1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(l.procs) != 2 {
+		t.Fatalf("processes = %d, want 2 (dead instance was reused)", len(l.procs))
+	}
+	l.procs[1].stopped = true
+	if got := m.List(); len(got) != 0 {
+		t.Fatalf("List = %+v, want no dead instance", got)
+	}
+}
+
 func TestInspectBundleVRAM(t *testing.T) {
 	dir := t.TempDir()
 	data := `{

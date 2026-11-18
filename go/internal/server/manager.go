@@ -82,9 +82,17 @@ func (m *Manager) LoadWithProgress(ctx context.Context, refStr string, progress 
 	for {
 		m.mu.Lock()
 		if inst, ok := m.instances[refStr]; ok {
-			info := infoFor(inst)
+			// A child that died outside the Manager (crash, OOM kill) must not
+			// be handed out as a live instance: reload instead.
+			if inst.process.Running() {
+				info := infoFor(inst)
+				m.mu.Unlock()
+				return &info, nil
+			}
+			delete(m.instances, refStr)
 			m.mu.Unlock()
-			return &info, nil
+			_ = inst.process.Stop(context.Background())
+			continue
 		}
 		if wait, ok := m.loading[refStr]; ok {
 			m.mu.Unlock()
@@ -291,7 +299,13 @@ func (m *Manager) List() []InstanceInfo {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	out := make([]InstanceInfo, 0, len(m.instances))
-	for _, inst := range m.instances {
+	for ref, inst := range m.instances {
+		// Drop children that exited without an unload, so the model page does
+		// not advertise a dead instance (and the next load starts fresh).
+		if !inst.process.Running() {
+			delete(m.instances, ref)
+			continue
+		}
 		out = append(out, infoFor(inst))
 	}
 	return out

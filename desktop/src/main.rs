@@ -1085,7 +1085,7 @@ impl App {
             .entry(reference.to_string())
             .or_insert_with(|| AppJobState {
                 verb: verb.to_string(),
-                phase: "安装应用".to_string(),
+                phase: default_app_job_phase(verb),
                 percent: None,
                 running: true,
                 log: String::new(),
@@ -1773,6 +1773,45 @@ impl App {
         let local_state = detail["local"]["state"].as_str().unwrap_or("").to_string();
         let installed = !local_state.is_empty();
         let transitional = matches!(local_state.as_str(), "installing" | "preparing" | "starting" | "stopping");
+        let model_endpoint = detail["local"]["models"]
+            .as_array()
+            .and_then(|models| {
+                models.iter().find_map(|m| {
+                    m["endpoint"]
+                        .as_str()
+                        .filter(|s| !s.is_empty())
+                        .map(|s| s.to_string())
+                })
+            });
+        let connection_base = detail["local"]["connection"]["base_url"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        let connection_key = detail["local"]["connection"]["api_key"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        let model_ids = detail["local"]["connection"]["models"]
+            .as_array()
+            .map(|models| {
+                models
+                    .iter()
+                    .filter_map(|v| v.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default();
+        let last_error = detail["local"]["error"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        let install_executed = detail["local"]["install"]["executed"]
+            .as_bool()
+            .unwrap_or(false);
+        let recorded_install_command = detail["local"]["install"]["command"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
         let job_key = app_reference(&org_name, &app_name, &app_version);
         let job = self.app_jobs.get(&job_key).cloned();
         let busy = job.as_ref().map(|j| j.running).unwrap_or(false);
@@ -1835,47 +1874,6 @@ impl App {
             });
         });
 
-        // This application's install/prepare progress, directly under the
-        // header and above the actions it blocks.
-        if let Some(job) = job.clone() {
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                if job.running {
-                    ui.add(egui::Spinner::new().size(13.0));
-                }
-                ui.label(
-                    egui::RichText::new(format!("{} · {}", job.verb, job.phase)).strong(),
-                );
-                if job.running {
-                    if let Some(pct) = job.percent {
-                        ui.label(egui::RichText::new(format!("{pct:.0}%")).small().strong());
-                    }
-                } else {
-                    ui.label(egui::RichText::new("已结束").small().weak());
-                }
-            });
-            if job.running {
-                let width = ui.available_width().max(120.0);
-                let bar = match job.percent {
-                    Some(pct) => egui::ProgressBar::new((pct / 100.0).clamp(0.0, 1.0))
-                        .desired_width(width)
-                        .desired_height(8.0)
-                        .corner_radius(egui::CornerRadius::same(3))
-                        .fill(accent(ui)),
-                    None => egui::ProgressBar::new(0.0)
-                        .desired_width(width)
-                        .desired_height(8.0)
-                        .corner_radius(egui::CornerRadius::same(3))
-                        .fill(accent(ui))
-                        .animate(true),
-                };
-                ui.add(bar);
-            }
-            for line in app_log_tail(&job.log, 8) {
-                ui.label(egui::RichText::new(line).monospace().small().weak());
-            }
-        }
-
         let mut action: Option<&'static str> = None;
         let mut open_install = false;
         let mut open_uninstall = false;
@@ -1926,9 +1924,110 @@ impl App {
             {
                 open_uninstall = true;
             }
-            if let Some(job) = &job {
-                if !job.log.is_empty() && ui.button("完整日志").clicked() {
+        });
+        // Always-visible run status block: state, the current operation with
+        // progress, recent log lines and the full-log entry point. Model
+        // loading can take a minute, so a silent spinner is not enough.
+        ui.add_space(10.0);
+        egui::Frame::group(ui.style()).show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(egui::RichText::new("运行状态").strong());
+                if transitional {
+                    ui.add(egui::Spinner::new().size(12.0));
+                }
+                if let Some((label, color)) = app_state_badge(&local_state, ui) {
+                    ui.label(egui::RichText::new(label).strong().color(color));
+                }
+                if local_state == "ready" {
+                    if let Some(endpoint) = &model_endpoint {
+                        ui.label(egui::RichText::new(endpoint).monospace().small());
+                        if ui.small_button("复制").on_hover_text("复制模型地址").clicked() {
+                            ui.ctx().copy_text(endpoint.clone());
+                        }
+                    }
+                }
+            });
+            if let Some(job) = job.clone() {
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    if job.running {
+                        ui.add(egui::Spinner::new().size(12.0));
+                    }
+                    ui.label(
+                        egui::RichText::new(format!("{} · {}", job.verb, job.phase))
+                            .small()
+                            .strong(),
+                    );
+                    if job.running {
+                        if let Some(pct) = job.percent {
+                            ui.label(egui::RichText::new(format!("{pct:.0}%")).small().strong());
+                        }
+                    } else {
+                        ui.label(egui::RichText::new("已结束").small().weak());
+                    }
+                });
+                if job.running {
+                    let width = ui.available_width().max(120.0);
+                    let bar = match job.percent {
+                        Some(pct) => egui::ProgressBar::new((pct / 100.0).clamp(0.0, 1.0))
+                            .desired_width(width)
+                            .desired_height(6.0)
+                            .corner_radius(egui::CornerRadius::same(3))
+                            .fill(accent(ui)),
+                        None => egui::ProgressBar::new(0.0)
+                            .desired_width(width)
+                            .desired_height(6.0)
+                            .corner_radius(egui::CornerRadius::same(3))
+                            .fill(accent(ui))
+                            .animate(true),
+                    };
+                    ui.add(bar);
+                }
+                for line in app_log_tail(&job.log, 6) {
+                    ui.label(egui::RichText::new(line).monospace().small().weak());
+                }
+                if !job.log.is_empty() && ui.small_button("完整日志").clicked() {
                     open_log = true;
+                }
+            } else if let Some(err) = &last_error {
+                ui.label(egui::RichText::new(err).small().color(danger));
+            } else if installed && !transitional {
+                ui.label(egui::RichText::new("暂无操作日志").small().weak());
+            }
+            // What an installed client uses to reach the models.
+            if local_state == "ready" {
+                if let Some(base) = &connection_base {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(egui::RichText::new("接入地址").small().weak());
+                        ui.label(egui::RichText::new(base).monospace().small());
+                        if ui.small_button("复制").clicked() {
+                            ui.ctx().copy_text(base.clone());
+                        }
+                        if !model_ids.is_empty() {
+                            ui.label(egui::RichText::new(format!("model {model_ids}")).small().weak());
+                        }
+                        if let Some(key) = &connection_key {
+                            ui.label(egui::RichText::new(format!("api_key {key}")).small().weak());
+                        }
+                    });
+                    ui.label(
+                        egui::RichText::new("在应用本体中填入上述地址、模型与 api_key 即可连接本地模型。")
+                            .small()
+                            .weak(),
+                    );
+                }
+            }
+            // The application itself lives on the client OS; a skipped script
+            // means its command still has to be run in a terminal.
+            if installed && !install_executed && !busy {
+                if let Some(command) = &recorded_install_command {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(egui::RichText::new("应用本体未安装").small().color(danger));
+                        ui.label(egui::RichText::new(command).monospace().small());
+                        if ui.small_button("复制安装命令").clicked() {
+                            ui.ctx().copy_text(command.clone());
+                        }
+                    });
                 }
             }
         });
@@ -1941,8 +2040,7 @@ impl App {
         }
         if open_log {
             if let Some(job) = &job {
-                self.app_log_dialog =
-                    Some((format!("{display} · 安装日志"), job.log.clone()));
+                self.app_log_dialog = Some((format!("{display} · 日志"), job.log.clone()));
             }
         }
         if !supported {
@@ -5829,11 +5927,23 @@ fn app_job_phase(line: &str, current: &str) -> String {
         "准备模型".to_string()
     } else if lower.contains("starting") || lower.contains("started") || line.contains("启动模型") {
         "启动模型".to_string()
+    } else if lower.contains("stopping") || line.contains("停止模型") {
+        "停止模型".to_string()
     } else if lower.contains("installed ") || lower.contains("connection:") {
         "完成".to_string()
     } else {
         current.to_string()
     }
+}
+
+fn default_app_job_phase(verb: &str) -> String {
+    match verb {
+        "准备模型" => "准备模型",
+        "启动" => "启动模型",
+        "停止" => "停止模型",
+        _ => "安装应用",
+    }
+    .to_string()
 }
 
 fn app_identity(detail: &Value) -> (String, String, String) {
@@ -5980,27 +6090,43 @@ fn spawn_app_action(
     version: String,
     action: &'static str,
 ) {
+    let reference = app_reference(&org, &name, &version);
+    let verb = action_label(action).to_string();
+    let lifecycle = matches!(action, "start" | "stop");
+    // Create the status entry before the request leaves, so the pane reacts on
+    // the same frame instead of after the first poll.
+    if lifecycle {
+        let _ = tx.send(Event::AppJob {
+            verb: verb.clone(),
+            reference: reference.clone(),
+            line: String::new(),
+            running: true,
+        });
+    }
     std::thread::spawn(move || {
-        let path = format!("/v1/apps/{org}/{name}/{action}");
+        // start/stop can take a minute (model loading); run them as daemon jobs
+        // so their progress lines stream into the status block.
+        let path = if lifecycle {
+            format!("/v1/apps/{org}/{name}/{action}?async=1")
+        } else {
+            format!("/v1/apps/{org}/{name}/{action}")
+        };
         let body = if action == "prepare" {
             serde_json::json!({ "version": version })
         } else {
             serde_json::json!({})
         };
-        let verb = action_label(action).to_string();
         match post_json_timeout(&path, &body, 180) {
             Ok(v) => {
-                if action == "prepare" {
-                    if let Some(job_id) = v["job_id"].as_str().filter(|id| !id.is_empty()) {
-                        follow_app_job(
-                            tx.clone(),
-                            ctx.clone(),
-                            job_id.to_string(),
-                            verb,
-                            app_reference(&org, &name, &version),
-                        );
-                        return;
-                    }
+                if let Some(job_id) = v["job_id"].as_str().filter(|id| !id.is_empty()) {
+                    follow_app_job(
+                        tx.clone(),
+                        ctx.clone(),
+                        job_id.to_string(),
+                        verb,
+                        reference,
+                    );
+                    return;
                 }
                 let message = v["state"]
                     .as_str()
@@ -6009,6 +6135,12 @@ fn spawn_app_action(
                 let _ = tx.send(Event::AppAction(verb, Ok(message)));
             }
             Err(err) => {
+                let _ = tx.send(Event::AppJob {
+                    verb: verb.clone(),
+                    reference: reference.clone(),
+                    line: format!("失败: {err}"),
+                    running: false,
+                });
                 let _ = tx.send(Event::AppAction(verb, Err(err)));
             }
         }

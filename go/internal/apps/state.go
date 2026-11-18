@@ -58,6 +58,7 @@ const (
 	StateStarting   = "starting"
 	StateReady      = "ready"
 	StateStopped    = "stopped"
+	StateStopping   = "stopping"
 	StateFailed     = "failed"
 )
 

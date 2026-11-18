@@ -161,6 +161,17 @@ fn app_job_phase_tracks_the_install_steps() {
 }
 
 #[test]
+fn lifecycle_jobs_start_with_their_own_phase() {
+    assert_eq!(default_app_job_phase("启动"), "启动模型");
+    assert_eq!(default_app_job_phase("停止"), "停止模型");
+    assert_eq!(default_app_job_phase("安装"), "安装应用");
+    assert_eq!(
+        app_job_phase("stopping xym/gemma4_e2b_it:1.0.1 ...", "启动模型"),
+        "停止模型"
+    );
+}
+
+#[test]
 fn installer_kinds_follow_the_extension() {
     assert!(matches!(
         installer_kind("https://x/a.exe?token=1"),

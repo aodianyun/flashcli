@@ -12,6 +12,9 @@ import (
 // Stopping an app model unloads the Manager instance and frees its slot.
 type managerLauncher struct {
 	manager *Manager
+	// Log receives the serve child's progress lines (weight loading etc.) so
+	// an app start job is not silent while a model loads.
+	Log func(string)
 }
 
 func (l managerLauncher) StartWithOptions(
@@ -19,7 +22,19 @@ func (l managerLauncher) StartWithOptions(
 	refStr string,
 	_ modelrun.LoadOptions,
 ) (modelrun.ServeProcess, error) {
-	info, err := l.manager.Load(ctx, refStr)
+	var (
+		info *InstanceInfo
+		err  error
+	)
+	if l.Log != nil {
+		info, err = l.manager.LoadWithProgress(ctx, refStr, func(_, message string) {
+			if message != "" {
+				l.Log(message)
+			}
+		})
+	} else {
+		info, err = l.manager.Load(ctx, refStr)
+	}
 	if err != nil {
 		return nil, err
 	}

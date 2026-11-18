@@ -251,3 +251,74 @@ func TestStopUsesStopperWhenProcIsUnknown(t *testing.T) {
 		t.Fatalf("model still running: %+v", st.Models[0])
 	}
 }
+
+// A daemon restart (or a crash/manual kill) leaves state=ready with a dead
+// endpoint. Status must not keep advertising 运行中, otherwise 启动 is disabled
+// and the connection URL points at nothing.
+func TestStatusDowngradesReadyWhenModelsAreGone(t *testing.T) {
+	svc, _ := newTestService(t, manifestJSON("a/one:1"), &fakeLauncher{})
+	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{Yes: true}); err != nil {
+		t.Fatal(err)
+	}
+	st, err := svc.Status(context.Background(), "xym/demo:1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.State != StateStopped {
+		t.Fatalf("state = %q, want %q", st.State, StateStopped)
+	}
+	if st.Models[0].PID != 0 || st.Models[0].Endpoint != "" || st.Models[0].Prepared {
+		t.Fatalf("stale model kept: %+v", st.Models[0])
+	}
+	if st.Connection.BaseURL != "" {
+		t.Fatalf("stale connection kept: %+v", st.Connection)
+	}
+}
+
+// A start/stop that is still within its timeout must not be repaired to failed
+// by a status query (the UI polls it while the operation runs).
+func TestStatusKeepsFreshTransitionalState(t *testing.T) {
+	svc, _ := newTestService(t, manifestJSON("a/one:1"), &fakeLauncher{})
+	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{Yes: true, NoStart: true}); err != nil {
+		t.Fatal(err)
+	}
+	st, ok, err := svc.Registry.Get("xym/demo:1.0.0")
+	if err != nil || !ok {
+		t.Fatalf("get: ok=%v err=%v", ok, err)
+	}
+	st.State = StateStarting
+	st.UpdatedAt = svc.now().UTC().Format(time.RFC3339)
+	svc.save(&st)
+	got, err := svc.Status(context.Background(), "xym/demo:1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State != StateStarting {
+		t.Fatalf("state = %q, want %q", got.State, StateStarting)
+	}
+}
+
+// Start/stop jobs stream these lines into the desktop log.
+func TestStartAndStopReportProgress(t *testing.T) {
+	svc, _ := newTestService(t, manifestJSON("a/one:1"), &fakeLauncher{})
+	var buf strings.Builder
+	svc.Out = &buf
+	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{Yes: true}); err != nil {
+		t.Fatal(err)
+	}
+	buf.Reset()
+	if _, err := svc.Stop(context.Background(), "xym/demo:1.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "stopping a/one:1") {
+		t.Fatalf("stop log = %q", buf.String())
+	}
+	buf.Reset()
+	if _, err := svc.Start(context.Background(), "xym/demo:1.0.0", false); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "starting a/one:1") || !strings.Contains(out, "waiting for a/one:1") {
+		t.Fatalf("start log = %q", out)
+	}
+}
