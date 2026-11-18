@@ -1846,17 +1846,6 @@ impl App {
                     if ui.small_button("复制").on_hover_text("复制应用标识").clicked() {
                         ui.ctx().copy_text(format!("{org_name}/{name}"));
                     }
-                    if installed {
-                        ui.label(egui::RichText::new("已安装").small().color(green(ui)));
-                    }
-                    // Surface the live state next to the buttons' input: the
-                    // 本地状态 block is far below and easy to miss.
-                    if transitional {
-                        ui.add(egui::Spinner::new().size(11.0));
-                    }
-                    if let Some((label, color)) = app_state_badge(&local_state, ui) {
-                        ui.label(egui::RichText::new(label).small().color(color));
-                    }
                     if !supported {
                         ui.label(egui::RichText::new("当前平台不受支持").small().color(danger));
                     }
@@ -2024,8 +2013,8 @@ impl App {
             // means its command still has to be run in a terminal.
             if installed && !install_executed && !busy {
                 if let Some(command) = &recorded_install_command {
+                    ui.label(egui::RichText::new("应用本体未安装").small().color(danger));
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(egui::RichText::new("应用本体未安装").small().color(danger));
                         ui.label(egui::RichText::new(command).monospace().small());
                         if ui.small_button("复制安装命令").clicked() {
                             ui.ctx().copy_text(command.clone());
@@ -2140,57 +2129,6 @@ impl App {
             }
             _ => {
                 ui.label(egui::RichText::new("manifest 未声明依赖模型").small().weak());
-            }
-        }
-
-        if !local_state_is_empty(detail) {
-            app_section(ui, "本地状态");
-            app_field(ui, "state", &local_state);
-            if let Some(value) = detail["local"]["installed_at"].as_str() {
-                app_field(ui, "installed_at", value);
-            }
-            if let Some(value) = detail["local"]["updated_at"].as_str() {
-                app_field(ui, "updated_at", value);
-            }
-            if let Some(err) = detail["local"]["error"].as_str().filter(|e| !e.is_empty()) {
-                ui.label(egui::RichText::new(err).small().color(danger));
-            }
-            if let Some(install) = detail["local"]["install"].as_object() {
-                let mut flags: Vec<&str> = Vec::new();
-                if install.get("executed").and_then(|v| v.as_bool()) == Some(true) {
-                    flags.push("已执行安装脚本");
-                }
-                if install.get("skipped").and_then(|v| v.as_bool()) == Some(true) {
-                    flags.push("已跳过安装脚本");
-                }
-                if !flags.is_empty() {
-                    app_field(ui, "install", &flags.join(" · "));
-                }
-                if let Some(command) = install
-                    .get("command")
-                    .and_then(|v| v.as_str())
-                    .filter(|s| !s.is_empty())
-                {
-                    app_mono(ui, command);
-                }
-            }
-            if let Some(models) = detail["local"]["models"].as_array() {
-                for model in models {
-                    let id = model["id"].as_str().unwrap_or("");
-                    let ref_str = model["ref"].as_str().unwrap_or("");
-                    let prepared = model["prepared"].as_bool().unwrap_or(false);
-                    app_field(
-                        ui,
-                        "model",
-                        &format!(
-                            "{id}  {ref_str}{}",
-                            if prepared { "" } else { "  (未准备)" }
-                        ),
-                    );
-                    if let Some(endpoint) = model["endpoint"].as_str().filter(|s| !s.is_empty()) {
-                        app_mono(ui, endpoint);
-                    }
-                }
             }
         }
 
@@ -5592,11 +5530,6 @@ fn app_domains(list: &[Value]) -> Vec<String> {
         }
     }
     domains
-}
-
-
-fn local_state_is_empty(detail: &Value) -> bool {
-    detail["local"]["state"].as_str().unwrap_or("").is_empty()
 }
 
 /// True when the manifest's platform command is a download page, not a script.
