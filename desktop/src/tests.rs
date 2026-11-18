@@ -227,6 +227,23 @@ fn app_setup_scripts_reads_the_manifest() {
 }
 
 #[test]
+fn transitional_states_and_model_ref() {
+    assert_eq!(transitional_verb("starting"), Some("启动"));
+    assert_eq!(transitional_verb("stopping"), Some("停止"));
+    assert_eq!(transitional_verb("preparing"), Some("准备"));
+    assert_eq!(transitional_verb("ready"), None);
+    let detail = serde_json::json!({
+        "local": {"models": [{"ref": "xym/demo:1.0.0"}]},
+        "manifest": {"model": {"bundles": [{"bundle": "xym/demo:1.0.0"}]}}
+    });
+    assert_eq!(app_model_ref(&detail).as_deref(), Some("xym/demo:1.0.0"));
+    let fallback = serde_json::json!({
+        "manifest": {"model": {"bundles": [{"bundle": "xym/fallback:1.0.0", "default": true}]}}
+    });
+    assert_eq!(app_model_ref(&fallback).as_deref(), Some("xym/fallback:1.0.0"));
+}
+
+#[test]
 fn installer_kinds_follow_the_extension() {
     assert!(matches!(
         installer_kind("https://x/a.exe?token=1"),

@@ -251,6 +251,7 @@ enum Event {
     AppLocal { key: String, state: Option<Value> },
     AppAction(String, Result<String, String>),
     AppJob { verb: String, reference: String, line: String, running: bool },
+    AppModelLog { key: String, lines: Vec<String> },
     ModelOptions { reference: String, result: Result<Value, String> },
     ModelOptionsSaved { reference: String, result: Result<Value, String>, start: bool },
     WslApplied(Result<String, String>),
@@ -457,6 +458,11 @@ pub struct App {
     app_uninstall: Option<AppUninstallPrompt>,
     /// Install/prepare progress per application ref (org/name:version).
     app_jobs: HashMap<String, AppJobState>,
+    /// Recent serve-log lines for apps started by the daemon (restore), keyed
+    /// by app ref. Desktop-initiated jobs already stream their own log.
+    app_model_logs: HashMap<String, Vec<String>>,
+    last_app_poll: Instant,
+    last_apps_poll: Instant,
     /// Full install log shown in a dialog: (title, text).
     app_log_dialog: Option<(String, String)>,
     app_covers: HashMap<String, AppCover>,
@@ -553,6 +559,9 @@ impl App {
             app_setup: None,
             app_uninstall: None,
             app_jobs: HashMap::new(),
+            app_model_logs: HashMap::new(),
+            last_app_poll: Instant::now(),
+            last_apps_poll: Instant::now(),
             app_log_dialog: None,
             app_covers: HashMap::new(),
             storage: Vec::new(),
@@ -952,6 +961,9 @@ impl App {
                 Event::AppJob { verb, reference, line, running } => {
                     self.apply_app_job(&verb, &reference, &line, running);
                 }
+                Event::AppModelLog { key, lines } => {
+                    self.app_model_logs.insert(key, lines);
+                }
                 Event::AppAction(what, result) => match result {
                     Ok(msg) => {
                         self.op_note = Some((format!("{what}: {msg}"), true, Instant::now()));
@@ -1153,6 +1165,86 @@ impl App {
                 spawn_app_state(self.tx.clone(), ctx.clone(), org, name, version);
             }
         }
+    }
+
+    /// The daemon restores previously running apps on startup without a desktop
+    /// job. Keep polling the selected app's status and serve log while it is
+    /// transitional, and refresh stale list states occasionally.
+    fn poll_transitional_app(&mut self, ctx: &egui::Context) {
+        let detail = self.app_detail.clone();
+        let detail_state = detail
+            .as_ref()
+            .and_then(|d| d["local"]["state"].as_str())
+            .unwrap_or("");
+        let selected_transitional = matches!(
+            detail_state,
+            "starting" | "stopping" | "preparing" | "installing"
+        );
+        let list_transitional = self.apps.iter().any(|app| {
+            matches!(
+                app["state"].as_str(),
+                Some("starting" | "stopping" | "preparing" | "installing")
+            )
+        });
+        if !selected_transitional && !list_transitional {
+            return;
+        }
+        if selected_transitional && self.last_app_poll.elapsed() >= Duration::from_millis(900) {
+            self.last_app_poll = Instant::now();
+            self.refresh_app_state(ctx);
+            if let Some(detail) = detail.as_ref() {
+                let (org, name, version) = app_identity(detail);
+                let key = app_reference(&org, &name, &version);
+                if let Some(model) = app_model_ref(detail) {
+                    spawn_app_model_log(self.tx.clone(), ctx.clone(), key, model);
+                }
+            }
+        }
+        if list_transitional && self.last_apps_poll.elapsed() >= Duration::from_secs(5) {
+            self.last_apps_poll = Instant::now();
+            self.reload_apps(ctx);
+        }
+        ctx.request_repaint_after(Duration::from_millis(400));
+    }
+
+    /// One-line status for a daemon-side restore/start (no desktop job).
+    fn transitional_banner(&self) -> Option<String> {
+        if let Some(detail) = &self.app_detail {
+            let state = detail["local"]["state"].as_str().unwrap_or("");
+            if let Some(verb) = transitional_verb(state) {
+                let display = detail["manifest"]["display_name"]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| detail["manifest"]["name"].as_str())
+                    .unwrap_or("应用");
+                let model = app_model_ref(detail).unwrap_or_else(|| "模型".to_string());
+                return Some(format!(
+                    "正在{verb} {display} 应用 · 模型 {model} {verb}中"
+                ));
+            }
+        }
+        let app = self.apps.iter().find(|app| {
+            transitional_verb(app["state"].as_str().unwrap_or("")).is_some()
+        })?;
+        let verb = transitional_verb(app["state"].as_str().unwrap_or(""))?;
+        let display = app["display_name"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .or_else(|| app["name"].as_str())
+            .unwrap_or("应用");
+        let model = app["model_bundles"]
+            .as_array()
+            .and_then(|bundles| {
+                bundles
+                    .iter()
+                    .find(|b| b["is_default"].as_bool().unwrap_or(false))
+                    .or_else(|| bundles.first())
+            })
+            .and_then(|b| b["bundle"].as_str())
+            .unwrap_or("模型");
+        Some(format!(
+            "正在{verb} {display} 应用 · 模型 {model} {verb}中"
+        ))
     }
 
     /// Reload the app list and the selected app after an action finished.
@@ -1650,8 +1742,7 @@ impl App {
             .iter()
             .find(|(_, job)| job.running)
             .map(|(key, job)| (key.clone(), job.clone()))
-        {
-            // Prefer the cached display name: the current filter may not list
+        {            // Prefer the cached display name: the current filter may not list
             // the installing app.
             let label = self
                 .app_names
@@ -1680,6 +1771,17 @@ impl App {
                 ui.add(egui::Spinner::new().size(13.0));
                 ui.label(
                     egui::RichText::new(app_job_status_text(&job, &label, &pct))
+                        .small()
+                        .strong()
+                        .color(accent(ui)),
+                );
+            });
+        } else if let Some(text) = self.transitional_banner() {
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.add(egui::Spinner::new().size(13.0));
+                ui.label(
+                    egui::RichText::new(text)
                         .small()
                         .strong()
                         .color(accent(ui)),
@@ -1994,7 +2096,7 @@ impl App {
                     );
                 }
             }
-            if let Some(job) = job.clone() {
+            if let Some(job) = job.clone().filter(|job| job.running || !transitional) {
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     if job.running {
@@ -2035,6 +2137,22 @@ impl App {
                 }
                 if !job.log.is_empty() && ui.small_button("完整日志").clicked() {
                     open_log = true;
+                }
+            } else if transitional {
+                let verb = transitional_verb(&local_state).unwrap_or("处理");
+                let model = app_model_ref(detail).unwrap_or_else(|| "模型".to_string());
+                ui.add_space(6.0);
+                ui.label(
+                    egui::RichText::new(format!(
+                        "flashserver 正在{verb} {model}，完成后自动刷新"
+                    ))
+                    .small()
+                    .weak(),
+                );
+                if let Some(lines) = self.app_model_logs.get(&job_key) {
+                    for line in lines.iter().rev().take(4).rev() {
+                        ui.label(egui::RichText::new(line).monospace().small().weak());
+                    }
                 }
             } else if let Some(err) = &last_error {
                 ui.label(egui::RichText::new(err).small().color(danger));
@@ -4796,6 +4914,7 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.drain_events(ctx);
+        self.poll_transitional_app(ctx);
         if self.health_at.elapsed() >= Duration::from_secs(5) {
             self.health_at = Instant::now();
             spawn_health(self.tx.clone(), ctx.clone());
@@ -6216,6 +6335,40 @@ fn default_app_job_phase(verb: &str) -> String {
     .to_string()
 }
 
+fn transitional_verb(state: &str) -> Option<&'static str> {
+    match state {
+        "starting" => Some("启动"),
+        "stopping" => Some("停止"),
+        "preparing" => Some("准备"),
+        "installing" => Some("安装"),
+        _ => None,
+    }
+}
+
+fn app_model_ref(detail: &Value) -> Option<String> {
+    detail["local"]["models"]
+        .as_array()
+        .and_then(|models| {
+            models.iter().find_map(|model| {
+                model["ref"]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+            })
+        })
+        .or_else(|| {
+            detail["manifest"]["model"]["bundles"]
+                .as_array()
+                .and_then(|bundles| {
+                    bundles
+                        .iter()
+                        .find(|b| b["default"].as_bool().unwrap_or(false))
+                        .or_else(|| bundles.first())
+                })
+                .and_then(|b| b["bundle"].as_str().map(|s| s.to_string()))
+        })
+}
+
 fn app_identity(detail: &Value) -> (String, String, String) {
     let manifest = &detail["manifest"];
     let org = detail["org"].as_str().unwrap_or("").to_string();
@@ -6323,6 +6476,36 @@ fn spawn_app_state(
             }
             Err(_) => {}
         }
+        ctx.request_repaint();
+    });
+}
+
+/// Poll the serve log of a model started by the daemon (restore/start) so the
+/// status card has content even without a desktop job.
+fn spawn_app_model_log(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    key: String,
+    reference: String,
+) {
+    std::thread::spawn(move || {
+        let params = vec![
+            ("kind", "model".to_string()),
+            ("ref", reference),
+            ("lines", "6".to_string()),
+        ];
+        let lines = get_json_query("/v1/logs", &params)
+            .map(|v| {
+                v["lines"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(|line| line.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let _ = tx.send(Event::AppModelLog { key, lines });
         ctx.request_repaint();
     });
 }
