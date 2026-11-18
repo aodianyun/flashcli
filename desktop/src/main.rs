@@ -246,6 +246,9 @@ enum Event {
     AppCover(String, Option<Vec<u8>>),
     AppDetail(Value),
     AppDetailError(String),
+    /// Fresh local state for one app (None = not installed). Lets 启动/停止/卸载
+    /// update the UI immediately without waiting for the FlashHub manifest.
+    AppLocal { key: String, state: Option<Value> },
     AppAction(String, Result<String, String>),
     AppJob { verb: String, reference: String, line: String, running: bool },
     ModelOptions { reference: String, result: Result<Value, String> },
@@ -918,16 +921,21 @@ impl App {
                 Event::AppDetail(detail) => {
                     self.app_detail = Some(detail);
                 }
+                Event::AppLocal { key, state } => {
+                    self.apply_app_local(&key, state);
+                }
                 Event::AppJob { verb, reference, line, running } => {
                     self.apply_app_job(&verb, &reference, &line, running);
                 }
                 Event::AppAction(what, result) => match result {
                     Ok(msg) => {
                         self.op_note = Some((format!("{what}: {msg}"), true, Instant::now()));
+                        self.refresh_app_state(ctx);
                         self.refresh_apps_after_action(ctx);
                     }
                     Err(err) => {
                         self.op_note = Some((format!("{what} 失败: {err}"), false, Instant::now()));
+                        self.refresh_app_state(ctx);
                         self.refresh_apps_after_action(ctx);
                     }
                 },
@@ -1081,12 +1089,55 @@ impl App {
             });
         if !line.is_empty() {
             append_app_log(&mut job.log, line);
+            // A new stage starts with its own progress; the previous stage's
+            // percentage (e.g. a finished download) must not stay at 100%.
+            let phase = app_job_phase(line, &job.phase);
+            if phase != job.phase {
+                job.phase = phase;
+                job.percent = None;
+            }
             if let Some(pct) = parse_pct(line) {
                 job.percent = Some(pct);
             }
-            job.phase = app_job_phase(line, &job.phase);
         }
         job.running = running;
+    }
+
+    /// Merge a fresh local state into the detail pane and the list row.
+    fn apply_app_local(&mut self, key: &str, state: Option<Value>) {        let local = state.clone().unwrap_or_else(|| Value::Object(Default::default()));
+        if let Some(detail) = self.app_detail.as_mut() {
+            let (org, name, version) = app_identity(detail);
+            if app_reference(&org, &name, &version) == key {
+                if let Some(obj) = detail.as_object_mut() {
+                    obj.insert("local".to_string(), local.clone());
+                }
+            }
+        }
+        if let Some(app) = self
+            .apps
+            .iter_mut()
+            .find(|app| app_list_key(app) == key)
+        {
+            if let Some(obj) = app.as_object_mut() {
+                obj.insert("installed".to_string(), Value::Bool(state.is_some()));
+                let st = state
+                    .as_ref()
+                    .and_then(|s| s["state"].as_str())
+                    .unwrap_or("")
+                    .to_string();
+                obj.insert("state".to_string(), Value::String(st));
+            }
+        }
+    }
+
+    /// Fetch only the local state of the selected app (no FlashHub round trip).
+    fn refresh_app_state(&self, ctx: &egui::Context) {
+        if let Some(detail) = self.app_detail.clone() {
+            let (org, name, version) = app_identity(&detail);
+            if !org.is_empty() && !name.is_empty() {
+                spawn_app_state(self.tx.clone(), ctx.clone(), org, name, version);
+            }
+        }
     }
 
     /// Reload the app list and the selected app after an action finished.
@@ -5787,6 +5838,43 @@ fn spawn_apps(
     });
 }
 
+/// Fetch `/v1/apps/{org}/{name}/status` (local only) and update the detail.
+fn spawn_app_state(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    org: String,
+    name: String,
+    version: String,
+) {
+    std::thread::spawn(move || {
+        let key = app_reference(&org, &name, &version);
+        let mut path = format!("/v1/apps/{org}/{name}/status");
+        if !version.is_empty() {
+            path.push_str(&format!("?version={version}"));
+        }
+        let url = format!("{}{}", api_base(), path);
+        let agent = ureq::AgentBuilder::new()
+            .timeout(Duration::from_secs(20))
+            .build();
+        match agent.get(&url).call() {
+            Ok(resp) => {
+                if let Ok(v) = resp.into_json::<Value>() {
+                    let _ = tx.send(Event::AppLocal {
+                        key,
+                        state: Some(v),
+                    });
+                }
+            }
+            Err(ureq::Error::Status(404, _)) => {
+                // Uninstalled: clear the local state.
+                let _ = tx.send(Event::AppLocal { key, state: None });
+            }
+            Err(_) => {}
+        }
+        ctx.request_repaint();
+    });
+}
+
 fn spawn_app_detail(
     tx: Sender<Event>,
     ctx: egui::Context,
@@ -5952,88 +6040,114 @@ fn download_and_run_installer(
         });
         ctx.request_repaint();
     };
-    log(format!("下载安装程序 {url}"));
+    let cached = std::fs::metadata(&dest)
+        .ok()
+        .map(|m| m.len())
+        .filter(|n| *n > 0);
+    if let Some(size) = cached {
+        // A cancelled/failed run leaves the installer behind; do not download
+        // it again (the installer verifies its own integrity).
+        log(format!(
+            "复用已下载的安装程序（{}）：{}",
+            fmt_bytes(size as f64),
+            dest.display()
+        ));
+    } else {
+        log(format!("下载安装程序 {url}"));
 
-    let host = url
-        .split("://")
-        .nth(1)
-        .and_then(|rest| rest.split('/').next())
-        .unwrap_or(url);
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(20))
-        .timeout_read(Duration::from_secs(60))
-        .timeout_write(Duration::from_secs(60))
-        .build();
-    // One retry: large installer downloads often fail on a flaky connection.
-    let mut response = None;
-    for attempt in 0..2 {
-        match agent.get(url).call() {
-            Ok(resp) => {
-                response = Some(resp);
+        let host = url
+            .split("://")
+            .nth(1)
+            .and_then(|rest| rest.split('/').next())
+            .unwrap_or(url);
+        let agent = ureq::AgentBuilder::new()
+            .timeout_connect(Duration::from_secs(20))
+            .timeout_read(Duration::from_secs(60))
+            .timeout_write(Duration::from_secs(60))
+            .build();
+        // One retry: large installer downloads often fail on a flaky connection.
+        let mut response = None;
+        for attempt in 0..2 {
+            match agent.get(url).call() {
+                Ok(resp) => {
+                    response = Some(resp);
+                    break;
+                }
+                Err(ureq::Error::Status(code, _)) => {
+                    return Err(format!("下载失败（{host}）：HTTP {code}"));
+                }
+                Err(err) => {
+                    if attempt == 1 {
+                        return Err(format!(
+                            "下载失败（{host}）：{err}。可稍后重试，或复制链接手动下载。"
+                        ));
+                    }
+                    log(format!("下载中断（{err}），正在重试…"));
+                    std::thread::sleep(Duration::from_secs(2));
+                }
+            }
+        }
+        let response = response.ok_or_else(|| format!("下载失败（{host}）"))?;
+        let total: Option<u64> = response
+            .header("Content-Length")
+            .and_then(|v| v.parse().ok());
+        let mut reader = response.into_reader();
+        // Write to a .part file first so an interrupted download never looks
+        // like a complete installer.
+        let part = dir.join(format!("{file_name}.part"));
+        let _ = std::fs::remove_file(&part);
+        let mut file =
+            std::fs::File::create(&part).map_err(|e| format!("无法写入 {file_name}: {e}"))?;
+        let mut buf = vec![0_u8; 64 * 1024];
+        let mut written: u64 = 0;
+        let mut last_pct: Option<i64> = None;
+        let mut last_log = std::time::Instant::now();
+        let mut last_bytes: u64 = 0;
+        loop {
+            let read = reader
+                .read(&mut buf)
+                .map_err(|e| format!("下载中断（{host}）：{e}。可重试，或复制链接手动下载。"))?;
+            if read == 0 {
                 break;
             }
-            Err(ureq::Error::Status(code, _)) => {
-                return Err(format!("下载失败（{host}）：HTTP {code}"));
+            file.write_all(&buf[..read])
+                .map_err(|e| format!("写入失败: {e}"))?;
+            written += read as u64;
+            let pct = total
+                .filter(|t| *t > 0)
+                .map(|t| ((written * 100 / t).min(100)) as i64);
+            // Update every 1% or every 2 s (a big installer can take minutes and
+            // a stalled percentage should still show the transfer moving).
+            let advanced = matches!((pct, last_pct), (Some(now), Some(prev)) if now > prev);
+            let due = last_log.elapsed() >= Duration::from_secs(2);
+            if advanced || due {
+                let secs = last_log.elapsed().as_secs_f64().max(0.001);
+                let speed = (written.saturating_sub(last_bytes)) as f64 / secs;
+                let line = match (pct, total) {
+                    (Some(pct), Some(total)) => format!(
+                        "下载中 {pct}%（{} / {}，{}/s）",
+                        fmt_bytes(written as f64),
+                        fmt_bytes(total as f64),
+                        fmt_bytes(speed)
+                    ),
+                    _ => {
+                        format!("下载中 {}（{}/s）", fmt_bytes(written as f64), fmt_bytes(speed))
+                    }
+                };
+                log(line);
+                last_pct = pct;
+                last_bytes = written;
+                last_log = std::time::Instant::now();
             }
-            Err(err) => {
-                if attempt == 1 {
-                    return Err(format!(
-                        "下载失败（{host}）：{err}。可稍后重试，或复制链接手动下载。"
-                    ));
-                }
-                log(format!("下载中断（{err}），正在重试…"));
-                std::thread::sleep(Duration::from_secs(2));
-            }
         }
+        drop(file);
+        std::fs::rename(&part, &dest).map_err(|e| format!("保存安装程序失败: {e}"))?;
+        log(format!(
+            "已下载 {}（{}）",
+            dest.display(),
+            fmt_bytes(written as f64)
+        ));
     }
-    let response = response.ok_or_else(|| format!("下载失败（{host}）"))?;
-    let total: Option<u64> = response
-        .header("Content-Length")
-        .and_then(|v| v.parse().ok());
-    let mut reader = response.into_reader();
-    let mut file = std::fs::File::create(&dest).map_err(|e| format!("无法写入 {file_name}: {e}"))?;
-    let mut buf = vec![0_u8; 64 * 1024];
-    let mut written: u64 = 0;
-    let mut last_pct: Option<i64> = None;
-    let mut last_log = std::time::Instant::now();
-    let mut last_bytes: u64 = 0;
-    loop {
-        let read = reader
-            .read(&mut buf)
-            .map_err(|e| format!("下载中断（{host}）：{e}。可重试，或复制链接手动下载。"))?;
-        if read == 0 {
-            break;
-        }
-        file.write_all(&buf[..read])
-            .map_err(|e| format!("写入失败: {e}"))?;
-        written += read as u64;
-        let pct = total
-            .filter(|t| *t > 0)
-            .map(|t| ((written * 100 / t).min(100)) as i64);
-        // Update every 1% or every 2 s (a big installer can take minutes and
-        // a stalled percentage should still show the transfer moving).
-        let advanced = matches!((pct, last_pct), (Some(now), Some(prev)) if now > prev);
-        let due = last_log.elapsed() >= Duration::from_secs(2);
-        if advanced || due {
-            let secs = last_log.elapsed().as_secs_f64().max(0.001);
-            let speed = (written.saturating_sub(last_bytes)) as f64 / secs;
-            let line = match (pct, total) {
-                (Some(pct), Some(total)) => format!(
-                    "下载中 {pct}%（{} / {}，{}/s）",
-                    fmt_bytes(written as f64),
-                    fmt_bytes(total as f64),
-                    fmt_bytes(speed)
-                ),
-                _ => format!("下载中 {}（{}/s）", fmt_bytes(written as f64), fmt_bytes(speed)),
-            };
-            log(line);
-            last_pct = pct;
-            last_bytes = written;
-            last_log = std::time::Instant::now();
-        }
-    }
-    drop(file);
-    log(format!("已下载 {}（{}）", dest.display(), fmt_bytes(written as f64)));
 
     let status = match kind {
         InstallerKind::Exe => {
