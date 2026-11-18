@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -17,6 +18,47 @@ import (
 	"sync"
 	"time"
 )
+
+// LogName is the serve log file name for a bundle ref. It is shared by the
+// serve child, `flashcli app logs`, and the daemon log endpoint so the three
+// never disagree about sanitization.
+func LogName(refStr string) string {
+	return strings.NewReplacer("/", "_", "\\", "_", ":", "_").Replace(refStr) + ".log"
+}
+
+// TailLines returns the last n lines of a log file. Shared by `flashcli app
+// logs` and the daemon log endpoint; only the tail window is read.
+func TailLines(path string, n int) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	const window = 256 * 1024
+	off := info.Size() - window
+	if off < 0 {
+		off = 0
+	}
+	if _, err := f.Seek(off, io.SeekStart); err != nil {
+		return nil, err
+	}
+	blob, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+	all := strings.Split(strings.TrimRight(string(blob), "\n"), "\n")
+	if off > 0 && len(all) > 0 {
+		all = all[1:] // drop the partial first line
+	}
+	if n > len(all) {
+		n = len(all)
+	}
+	return all[len(all)-n:], nil
+}
 
 // ServeProcess is one `flashcli serve` child process.
 type ServeProcess interface {
@@ -110,7 +152,7 @@ func (l FlashcliLauncher) StartWithOptions(ctx context.Context, refStr string, o
 		if err := os.MkdirAll(l.LogDir, 0o755); err != nil {
 			return nil, err
 		}
-		name := strings.NewReplacer("/", "_", "\\", "_", ":", "_").Replace(refStr) + ".log"
+		name := LogName(refStr)
 		logPath = filepath.Join(l.LogDir, name)
 		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 		if err != nil {

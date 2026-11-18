@@ -62,6 +62,21 @@ const (
 	StateFailed     = "failed"
 )
 
+// WasRunning reports whether an app was ready with models that had a recorded
+// process. An app installed with start=false is ready but has no pid/endpoint,
+// so it must not be restored after a daemon restart.
+func WasRunning(st AppState) bool {
+	if st.State != StateReady {
+		return false
+	}
+	for _, mdl := range st.Models {
+		if mdl.PID > 0 || mdl.Endpoint != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // Registry persists application state in $FLASHCLI_HOME/flashserver/apps.json.
 // The CLI and the daemon may both write it, so every update takes a
 // cross-process lock file and writes atomically.

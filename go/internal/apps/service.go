@@ -534,8 +534,7 @@ func (s *Service) ResolveKey(ref flashhub.AppRef) (string, error) {
 
 // ModelLogPath is the per-model serve log written by modelrun.
 func (s *Service) ModelLogPath(ref string) string {
-	name := strings.NewReplacer("/", "_", "\\", "_", ":", "_").Replace(ref) + ".log"
-	return filepath.Join(s.LogDir, name)
+	return filepath.Join(s.LogDir, modelrun.LogName(ref))
 }
 
 func planModels(refs []string, existing []ModelState) []ModelState {

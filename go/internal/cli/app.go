@@ -14,6 +14,7 @@ import (
 
 	"github.com/aodianyun/flashcli/go/internal/apps"
 	"github.com/aodianyun/flashcli/go/internal/flashhub"
+	"github.com/aodianyun/flashcli/go/internal/modelrun"
 	"github.com/aodianyun/flashcli/go/internal/paths"
 )
 
@@ -400,13 +401,9 @@ func truncate(s string, n int) string {
 
 // tailFileTo writes the last n lines of path to w.
 func tailFileTo(w io.Writer, path string, n int) error {
-	blob, err := os.ReadFile(path)
+	lines, err := modelrun.TailLines(path, n)
 	if err != nil {
 		return err
-	}
-	lines := strings.Split(strings.TrimRight(string(blob), "\n"), "\n")
-	if n > 0 && len(lines) > n {
-		lines = lines[len(lines)-n:]
 	}
 	for _, line := range lines {
 		_, _ = fmt.Fprintln(w, line)

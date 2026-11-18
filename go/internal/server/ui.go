@@ -6,7 +6,6 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"github.com/aodianyun/flashcli/go/internal/gpu"
+	"github.com/aodianyun/flashcli/go/internal/modelrun"
 	"github.com/aodianyun/flashcli/go/internal/preflight"
 	"github.com/aodianyun/flashcli/go/internal/version"
 )
@@ -157,7 +157,7 @@ func (s *Server) logs(w http.ResponseWriter, r *http.Request) {
 }
 
 func serveLogName(refStr string) string {
-	return strings.NewReplacer("/", "_", "\\", "_", ":", "_").Replace(refStr) + ".log"
+	return modelrun.LogName(refStr)
 }
 
 // journalTail reads the service log from journald. The in-memory ring buffer is
@@ -216,35 +216,7 @@ func (s *Server) downloadLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func tailFile(path string, n int) ([]string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	info, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-	const window = 256 * 1024
-	off := info.Size() - window
-	if off < 0 {
-		off = 0
-	}
-	if _, err := f.Seek(off, io.SeekStart); err != nil {
-		return nil, err
-	}
-	blob, err := io.ReadAll(f)
-	if err != nil {
-		return nil, err
-	}
-	all := strings.Split(strings.TrimRight(string(blob), "\n"), "\n")
-	if off > 0 && len(all) > 0 {
-		all = all[1:] // drop the partial first line
-	}
-	if n > len(all) {
-		n = len(all)
-	}
-	return all[len(all)-n:], nil
+	return modelrun.TailLines(path, n)
 }
 
 // ui serves the embedded local console.

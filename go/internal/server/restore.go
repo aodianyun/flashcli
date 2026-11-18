@@ -56,13 +56,5 @@ func (s *Server) restoreOnStart(ctx context.Context) {
 // appWasRunning distinguishes an app that had live models from one installed
 // with start=false (ready state, but no pid/endpoint yet).
 func appWasRunning(st apps.AppState) bool {
-	if st.State != apps.StateReady {
-		return false
-	}
-	for _, mdl := range st.Models {
-		if mdl.PID > 0 || mdl.Endpoint != "" {
-			return true
-		}
-	}
-	return false
+	return apps.WasRunning(st)
 }
