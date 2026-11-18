@@ -63,6 +63,12 @@ Rules:
 - **Serve children** use `modelrun.LogName`/`modelrun.TailLines` for log file naming/tailing and `modelrun.WaitHealthy` for readiness. Serve logs live under the canonical `~/.flashcli/logs/serve` (config `log_dir` overrides); both `flashcli app logs` and `/v1/logs` read the same name.
 - **App state predicates** (running/restore) live in `apps` (`apps.WasRunning`); the daemon restore and the desktop must not re-derive them.
 - **Isolation:** the daemon may wrap a shared service with a Launcher/Stopper (for example owner-aware Manager admission), but the lifecycle logic itself stays in `apps`; the CLI must not grow a parallel copy.
+- **Scope — only genuinely common behavior is shared.** Do **not** force frontend-specific behavior into a shared package or make one frontend emulate the other. Keep the following in the respective frontend:
+  - CLI: flags, prompts, human-readable tables/colors, single-process launch behavior.
+  - flashserver: HTTP/auth/jobs/websocket, Manager slot/VRAM/owner admission, restore scheduling, telemetry/GPU history.
+  - desktop: all UI, dialogs and local app/installer execution.
+  - Adapters (Launcher/Stopper/Log hooks) may differ between frontends.
+- **Decision test:** share it only if both frontends must make the **same decision about the same on-disk state or model readiness** (cache key, weights readiness, pull/prepare steps, serve log name/readiness, app state). If it is orchestration, scheduling policy, UX, or presentation, keep it in the frontend.
 - `flashcli cache clean` removes the shared cache group (`cache` + base Python + uv), matching `/v1/storage/clean {"targets":["cache"]}`. Model data/runtimes use `flashcli bundle clean` / `/v1/models/clean`; shared weights/runtime are reference-counted and kept. Disk accounting and ref-path selection are shared in `host`.
 - **Guard:** `go test ./internal/architecture/...` fails on the mechanical re-introductions (direct `nvidia-smi`, log-name `NewReplacer`, `filepath.Walk*`, `.flashcli_download.incomplete`). Add a pattern there when a new class of duplication is found.
 - Tests: `go test ./...`; host tests cover accounting/cleanup, CLI tests exercise `du`, `models list`, and `bundle clean` through the host functions. See [module_layers.md](module_layers.md).

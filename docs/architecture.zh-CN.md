@@ -62,6 +62,12 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 - **Serve 子进程**的日志命名/尾部读取统一用 `modelrun.LogName`/`modelrun.TailLines`，就绪等待统一用 `modelrun.WaitHealthy`。日志目录固定为 `~/.flashcli/logs/serve`（配置 `log_dir` 可覆盖），`flashcli app logs` 与 `/v1/logs` 读同一路径。
 - **应用状态判定**（是否在运行/是否恢复）只在 `apps`（`apps.WasRunning`）实现，daemon 恢复和桌面端不得各自推导。
 - **隔离**：daemon 可以用 Launcher/Stopper 包装共享服务（例如带 owner 的 Manager 准入），但生命周期逻辑仍在 `apps`；CLI 不得另写一份。
+- **范围——只共享真正公共的行为。** 不要把前端特有的行为硬塞进共享包，也不要让一个前端去模拟另一个：
+  - CLI：参数、交互提示、人类可读表格/颜色、单进程启动行为。
+  - flashserver：HTTP/鉴权/任务/WebSocket、Manager 槽位/显存/owner 准入、恢复调度、遥测/GPU 历史。
+  - desktop：全部 UI、弹窗、本地应用/安装器执行。
+  - Launcher/Stopper/Log 等适配器允许两端不同。
+- **判断标准：** 只有“两个前端必须对同一份磁盘状态/模型就绪做出相同判断”时才共享（cache key、权重就绪、pull/准备步骤、serve 日志名/就绪、应用状态）。编排、调度策略、UX、展示逻辑留在前端。
 - `flashcli cache clean` 只清理共享缓存（`cache` + 基础 Python + uv），对应 `/v1/storage/clean {"targets":["cache"]}`。模型数据/运行时使用 `flashcli bundle clean` / `/v1/models/clean`；共享权重/运行时按引用保留。磁盘统计和 ref 路径选择在 `host` 共享。
 - **防跑偏测试**：`go test ./internal/architecture/...` 会拦截机械性重复（直接 `nvidia-smi`、日志名 `NewReplacer`、`filepath.Walk*`、`.flashcli_download.incomplete`）。发现新的重复类型时，把模式补进该测试。
 - 测试：`go test ./...`；host 测试覆盖统计/清理，CLI 测试通过 host 函数覆盖 `du`、`models list`、`bundle clean`。详见 [module_layers.zh-CN.md](module_layers.zh-CN.md)。
