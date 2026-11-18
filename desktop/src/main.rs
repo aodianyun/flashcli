@@ -4699,8 +4699,10 @@ impl App {
                 Vec::new()
             };
             let key = app_reference(&prompt.org, &prompt.name, &prompt.version);
-            if setup_keys.is_empty() {
-                // The install dialog asked; do not ask again when it becomes ready.
+            if setup_keys.is_empty() && !prompt.setup_scripts.is_empty() {
+                // The install dialog asked about these scripts; do not ask again
+                // when it becomes ready. If it had no scripts (stale detail),
+                // leave the post-install prompt enabled for the fresh manifest.
                 self.skip_setup_for.insert(key.clone());
             }
             self.app_jobs.insert(

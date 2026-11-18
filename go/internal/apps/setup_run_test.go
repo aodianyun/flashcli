@@ -212,6 +212,42 @@ func TestSetupScriptsRunInOrderAndStopOnFailure(t *testing.T) {
 	}
 }
 
+func TestInstallRunsConfirmedSetupScripts(t *testing.T) {
+	if _, err := setupPython(); err != nil {
+		t.Skip(err)
+	}
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(setupScriptBody))
+	}))
+	defer srv.Close()
+	previous := http.DefaultTransport
+	http.DefaultTransport = srv.Client().Transport
+	defer func() { http.DefaultTransport = previous }()
+	sum := sha256.Sum256([]byte(setupScriptBody))
+	scriptJSON := fmt.Sprintf(`{
+      "key": "workbuddy",
+      "kind": "python",
+      "url": %q,
+      "sha256": %q,
+      "args": ["{base_url}", "{model}", "--api-key {api_key}"]
+    }`, srv.URL, hex.EncodeToString(sum[:]))
+	svc, _ := newTestService(t, []byte(setupManifest(scriptJSON)), &fakeLauncher{})
+	home := t.TempDir()
+	res, err := svc.Install(context.Background(), "xym/workbuddy", InstallOptions{
+		Yes: true, OS: "windows", Arch: "x86_64",
+		SetupScripts: []string{"workbuddy"}, ClientHome: home,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(home, "setup.json")); err != nil {
+		t.Fatalf("setup script did not run during install: %v", err)
+	}
+	if res.State.SetupFor == "" || res.State.SetupFor != res.State.Connection.BaseURL {
+		t.Fatalf("setup_for = %q, connection = %q", res.State.SetupFor, res.State.Connection.BaseURL)
+	}
+}
+
 func TestSetupEnvMapsWindowsHome(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("windows path is used as-is there")

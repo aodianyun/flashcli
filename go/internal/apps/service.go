@@ -211,6 +211,9 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 	state.Key = key
 	state.Version = m.Version
 	state.State = StatePlanned
+	// A (re)install applies a fresh model set; any previous setup result no
+	// longer describes this run, so a restored/ready app will ask again.
+	state.SetupFor = ""
 	// A reinstall can point at new bundle versions. Stop models that are no
 	// longer in the manifest so their slots/VRAM are released (caches stay).
 	if found {
