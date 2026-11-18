@@ -389,44 +389,39 @@ func (s *Service) Status(ctx context.Context, key string) (AppState, error) {
 		}
 		changed = true
 	}
-	healthy := 0
+	healthy, recorded := 0, 0
 	for i := range st.Models {
 		mdl := &st.Models[i]
 		if mdl.Endpoint == "" {
-			if mdl.Prepared {
-				mdl.Prepared = false
-				changed = true
-			}
+			// Prepared but not started (install --no-start / start=false):
+			// Prepared describes the weights cache, not liveness.
 			continue
 		}
+		recorded++
 		if endpointHealthy(ctx, mdl.Endpoint) {
-			if !mdl.Prepared {
-				mdl.Prepared = true
-				changed = true
-			}
 			healthy++
 			continue
 		}
 		// The recorded process is gone (daemon restart, crash, manual kill).
 		// Drop the stale pid/endpoint so a later Stop cannot signal an
 		// unrelated process and the connection info is not advertised.
-		mdl.PID, mdl.Endpoint, mdl.Prepared = 0, "", false
+		mdl.PID, mdl.Endpoint = 0, ""
 		changed = true
 	}
-	if len(st.Models) > 0 {
+	if recorded > 0 {
 		switch st.State {
 		case StateReady:
 			if healthy == 0 {
 				st.State = StateStopped
 				st.Error = ""
 				changed = true
-			} else if healthy < len(st.Models) {
+			} else if healthy < recorded {
 				st.State = StateFailed
 				st.Error = "some models are not running"
 				changed = true
 			}
 		case StateFailed:
-			if healthy == len(st.Models) {
+			if healthy == recorded {
 				st.State = StateReady
 				st.Error = ""
 				changed = true

@@ -267,8 +267,12 @@ func TestStatusDowngradesReadyWhenModelsAreGone(t *testing.T) {
 	if st.State != StateStopped {
 		t.Fatalf("state = %q, want %q", st.State, StateStopped)
 	}
-	if st.Models[0].PID != 0 || st.Models[0].Endpoint != "" || st.Models[0].Prepared {
+	if st.Models[0].PID != 0 || st.Models[0].Endpoint != "" {
 		t.Fatalf("stale model kept: %+v", st.Models[0])
+	}
+	// Prepared is about the weights cache; the model can be started again.
+	if !st.Models[0].Prepared {
+		t.Fatalf("prepared flag lost: %+v", st.Models[0])
 	}
 	if st.Connection.BaseURL != "" {
 		t.Fatalf("stale connection kept: %+v", st.Connection)
