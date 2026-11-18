@@ -242,6 +242,9 @@ Shared by the CLI and the daemon at `$FLASHCLI_HOME/flashserver/apps.json`
 
 - `internal/apps` prepares bundles via `internal/host` and starts them via
   `internal/modelrun` (the same supervisor `flashserver` uses).
+- Preparing is offline-first: a complete weights cache + download manifest is
+  reused without contacting the model hub. Only an explicit `flashcli pull` and
+  the desktop's 下载 force a remote re-listing.
 - If `flashserver` is running, its `Manager` and `apps` share state: `start` sees
   the recorded pid/port and reuses the running model instead of spawning again.
 - Auto ports are recorded; on restart the recorded port is reused when free.

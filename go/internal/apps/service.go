@@ -349,6 +349,16 @@ func (s *Service) Status(ctx context.Context, key string) (AppState, error) {
 	if !ok {
 		return AppState{}, fmt.Errorf("application %s is not installed", key)
 	}
+	// A starting/stopping state left behind by an interrupted run (daemon
+	// restart or crash) would keep the UI's actions disabled forever; report it
+	// as failed so the user can start/stop again.
+	if st.State == StateStarting || st.State == StatePreparing || st.State == StateInstalling {
+		st.State = StateFailed
+		if st.Error == "" {
+			st.Error = "previous operation was interrupted"
+		}
+		s.save(&st)
+	}
 	for i := range st.Models {
 		mdl := &st.Models[i]
 		if mdl.Endpoint == "" {

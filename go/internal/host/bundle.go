@@ -302,7 +302,7 @@ func Pull(ctx context.Context, refStr string, opts PullOptions) (PullResult, err
 	}
 	emit("runtime", "runtime ready")
 	emit("weights", "downloading weights")
-	checkpoint, _, err := weights.PrepareBundle(ctx, m, ver, variant, opts.Quiet, true)
+	checkpoint, _, err := weights.PrepareBundle(ctx, m, ver, variant, opts.Quiet, opts.VerifyWeights)
 	if err != nil {
 		return PullResult{}, err
 	}

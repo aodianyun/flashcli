@@ -42,7 +42,7 @@ func (s *Server) pull(w http.ResponseWriter, r *http.Request) {
 	}
 	job := s.Jobs.Start(context.Background(), "pull", req.Ref, func(ctx context.Context, emit func(string, string)) error {
 		defer s.pullBusy.Store(false)
-		_, err := s.Puller.Pull(ctx, req.Ref, host.PullOptions{Progress: func(ev host.PullEvent) {
+		_, err := s.Puller.Pull(ctx, req.Ref, host.PullOptions{VerifyWeights: true, Progress: func(ev host.PullEvent) {
 			emit(ev.Phase, ev.Message)
 		}})
 		return err

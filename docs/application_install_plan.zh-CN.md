@@ -230,6 +230,8 @@ rename）：
 
 - `internal/apps` 通过 `internal/host` 准备 bundle，通过 `internal/modelrun` 启动
   （与 `flashserver` 使用同一个监管器）
+- 准备是离线优先的：权重缓存与下载清单完整时直接复用，不访问模型 Hub；只有显式
+  `flashcli pull` 和桌面端「下载」会强制重新列取远端文件
 - `flashserver` 在运行时，其 `Manager` 与 `apps` 共享状态：`start` 发现记录中的
   pid/端口存活则复用，不重复拉起
 - 自动端口会记录；重启时优先复用，被占用才重新分配

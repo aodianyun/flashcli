@@ -11,6 +11,10 @@ type PullEvent struct {
 type PullOptions struct {
 	Quiet         bool
 	NoAutoInstall bool
+	// VerifyWeights re-lists the remote weights even when the local download
+	// manifest is complete (explicit `flashcli pull`). App installs leave it
+	// false so an already cached model is used without touching the network.
+	VerifyWeights bool
 	Progress      func(PullEvent)
 }
 
