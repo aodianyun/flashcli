@@ -211,6 +211,22 @@ fn app_job_status_names_the_app_and_substep() {
 }
 
 #[test]
+fn app_setup_scripts_reads_the_manifest() {
+    let manifest = serde_json::json!({
+        "setup": {"scripts": [
+            {"key": "workbuddy", "url": "https://example.com/setup.py", "sha256": "abc123"},
+            {"key": "", "url": "https://example.com/ignored.py"}
+        ]}
+    });
+    let scripts = app_setup_scripts(&manifest);
+    assert_eq!(scripts.len(), 1);
+    assert_eq!(scripts[0].key, "workbuddy");
+    assert_eq!(scripts[0].url, "https://example.com/setup.py");
+    assert_eq!(scripts[0].sha256, "abc123");
+    assert!(app_setup_scripts(&serde_json::json!({})).is_empty());
+}
+
+#[test]
 fn installer_kinds_follow_the_extension() {
     assert!(matches!(
         installer_kind("https://x/a.exe?token=1"),

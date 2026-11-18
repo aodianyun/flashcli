@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -137,6 +138,73 @@ func TestStartRunsConfirmedSetupScripts(t *testing.T) {
 	}
 	if got.Home != home {
 		t.Fatalf("HOME = %q, want %q", got.Home, home)
+	}
+}
+
+const appendScriptBody = `import os, sys
+with open(os.path.join(os.environ["HOME"], "order.txt"), "a", encoding="utf-8") as f:
+    f.write(sys.argv[1] + "\n")
+`
+
+const failScriptBody = `import sys
+sys.exit(3)
+`
+
+func TestSetupScriptsRunInOrderAndStopOnFailure(t *testing.T) {
+	if _, err := setupPython(); err != nil {
+		t.Skip(err)
+	}
+	one := []byte(appendScriptBody)
+	two := []byte(appendScriptBody)
+	fail := []byte(failScriptBody)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/one":
+			_, _ = w.Write(one)
+		case "/two":
+			_, _ = w.Write(two)
+		case "/fail":
+			_, _ = w.Write(fail)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	hash := func(blob []byte) string {
+		sum := sha256.Sum256(blob)
+		return hex.EncodeToString(sum[:])
+	}
+	m := &Manifest{}
+	m.Setup.Scripts = []SetupScript{
+		{Key: "one", Kind: "python", URL: srv.URL + "/one", SHA256: hash(one), Args: []string{"one"}},
+		{Key: "two", Kind: "python", URL: srv.URL + "/two", SHA256: hash(two), Args: []string{"two"}},
+	}
+	conn := Connection{BaseURL: "http://127.0.0.1:1/v1", APIKey: "local", Models: []string{"m"}}
+	svc := &Service{Out: io.Discard}
+	home := t.TempDir()
+	st := &AppState{Connection: conn}
+	svc.runSetupScripts(context.Background(), m, st, SetupOptions{
+		Scripts: []string{"one", "two"}, ClientHome: home,
+	})
+	blob, err := os.ReadFile(filepath.Join(home, "order.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(blob) != "one\ntwo\n" {
+		t.Fatalf("order = %q", blob)
+	}
+
+	// A failing first script stops the second.
+	home2 := t.TempDir()
+	m.Setup.Scripts = []SetupScript{
+		{Key: "fail", Kind: "python", URL: srv.URL + "/fail", SHA256: hash(fail)},
+		{Key: "two", Kind: "python", URL: srv.URL + "/two", SHA256: hash(two), Args: []string{"two"}},
+	}
+	svc.runSetupScripts(context.Background(), m, &AppState{Connection: conn}, SetupOptions{
+		Scripts: []string{"fail", "two"}, ClientHome: home2,
+	})
+	if _, err := os.Stat(filepath.Join(home2, "order.txt")); !os.IsNotExist(err) {
+		t.Fatal("a script ran after the first failure")
 	}
 }
 
