@@ -1843,9 +1843,13 @@ impl App {
                 }
                 ui.horizontal_wrapped(|ui| {
                     ui.label(egui::RichText::new(format!("{org_name}/{name}")).monospace().small());
-                    if ui.small_button("复制").on_hover_text("复制应用标识").clicked() {
-                        ui.ctx().copy_text(format!("{org_name}/{name}"));
-                    }
+                    copy_button(
+                        ui,
+                        &format!("copy-app-key-{job_key}"),
+                        "复制",
+                        &format!("{org_name}/{name}"),
+                        "复制应用标识",
+                    );
                     if !supported {
                         ui.label(egui::RichText::new("当前平台不受支持").small().color(danger));
                     }
@@ -1934,24 +1938,30 @@ impl App {
                         .show(ui, |ui| {
                             ui.label(egui::RichText::new("接入地址").small().weak());
                             ui.label(egui::RichText::new(base).monospace().small());
-                            if ui.small_button("复制").clicked() {
-                                ui.ctx().copy_text(base.clone());
-                            }
+                            copy_button(ui, &format!("copy-base-{job_key}"), "复制", base, "");
                             ui.end_row();
                             if !model_ids.is_empty() {
                                 ui.label(egui::RichText::new("模型").small().weak());
                                 ui.label(egui::RichText::new(&model_ids).monospace().small());
-                                if ui.small_button("复制").clicked() {
-                                    ui.ctx().copy_text(model_ids.clone());
-                                }
+                                copy_button(
+                                    ui,
+                                    &format!("copy-model-{job_key}"),
+                                    "复制",
+                                    &model_ids,
+                                    "",
+                                );
                                 ui.end_row();
                             }
                             if let Some(key) = &connection_key {
                                 ui.label(egui::RichText::new("API Key").small().weak());
                                 ui.label(egui::RichText::new(key).monospace().small());
-                                if ui.small_button("复制").clicked() {
-                                    ui.ctx().copy_text(key.clone());
-                                }
+                                copy_button(
+                                    ui,
+                                    &format!("copy-key-{job_key}"),
+                                    "复制",
+                                    key,
+                                    "",
+                                );
                                 ui.end_row();
                             }
                         });
@@ -2016,9 +2026,13 @@ impl App {
                     ui.label(egui::RichText::new("应用本体未安装").small().color(danger));
                     ui.horizontal_wrapped(|ui| {
                         ui.label(egui::RichText::new(command).monospace().small());
-                        if ui.small_button("复制安装命令").clicked() {
-                            ui.ctx().copy_text(command.clone());
-                        }
+                        copy_button(
+                            ui,
+                            &format!("copy-install-hint-{job_key}"),
+                            "复制安装命令",
+                            command,
+                            "",
+                        );
                     });
                 }
             }
@@ -2096,9 +2110,13 @@ impl App {
                 ui.label(label);
                 let kind = if is_url_command(&command) { "下载页" } else { "脚本" };
                 ui.label(egui::RichText::new(kind).small().weak());
-                if ui.small_button("复制").clicked() {
-                    ui.ctx().copy_text(command.clone());
-                }
+                copy_button(
+                    ui,
+                    &format!("copy-install-{key}-{org_name}-{name}"),
+                    "复制",
+                    &command,
+                    "",
+                );
             });
             app_mono(ui, &command);
         }
@@ -2114,9 +2132,13 @@ impl App {
                         if default {
                             ui.label(egui::RichText::new("默认").small().color(accent(ui)));
                         }
-                        if ui.small_button("复制").clicked() {
-                            ui.ctx().copy_text(ref_str.to_string());
-                        }
+                        copy_button(
+                            ui,
+                            &format!("copy-bundle-{ref_str}"),
+                            "复制",
+                            ref_str,
+                            "",
+                        );
                     });
                     if let Some(options) = bundle["serve"]["options"]
                         .as_object()
@@ -3250,8 +3272,14 @@ impl App {
                         )
                         .wrap(),
                     );
-                    if button(ui, "复制地址").clicked() {
-                        ui.ctx().copy_text(model.endpoint.clone());
+                    if copy_button_sized(
+                        ui,
+                        "copy-model-endpoint",
+                        "复制地址",
+                        &model.endpoint,
+                        "",
+                        false,
+                    ) {
                         copied = true;
                     }
                 });
@@ -3274,8 +3302,14 @@ impl App {
                     ui.with_layout(
                         egui::Layout::right_to_left(egui::Align::Center),
                         |ui| {
-                            if button(ui, "复制示例").clicked() {
-                                ui.ctx().copy_text(example.clone());
+                            if copy_button_sized(
+                                ui,
+                                "copy-model-example",
+                                "复制示例",
+                                &example,
+                                "",
+                                false,
+                            ) {
                                 copied_example = true;
                             }
                         },
@@ -4010,7 +4044,14 @@ impl App {
                             cancel = true;
                         }
                     } else if !smoke.running {
-                        if button(ui, "复制日志").clicked() {
+                        if copy_button_sized(
+                            ui,
+                            "copy-smoke-log",
+                            "复制日志",
+                            &smoke.log,
+                            "",
+                            false,
+                        ) {
                             copy = true;
                         }
                     }
@@ -4030,7 +4071,6 @@ impl App {
                 });
             });
         if copy {
-            ctx.copy_text(smoke.log.clone());
             self.op_note = Some(("测试日志已复制".into(), true, Instant::now()));
         }
         if cancel {
@@ -4376,7 +4416,6 @@ impl App {
         };
         let dark = ctx.style().visuals.dark_mode;
         let mut close = false;
-        let mut copy = false;
         modal_backdrop(ctx, dark, &mut close);
         egui::Window::new("app_log_dialog")
             .title_bar(false)
@@ -4426,18 +4465,13 @@ impl App {
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     ui.add_space((ui.available_width() - 200.0).max(0.0));
-                    if button(ui, "复制").clicked() {
-                        copy = true;
-                    }
+                    copy_button_sized(ui, "copy-app-log", "复制", &log, "", false);
                     ui.add_space(8.0);
                     if button(ui, "关闭").clicked() {
                         close = true;
                     }
                 });
             });
-        if copy {
-            ctx.copy_text(log);
-        }
         if close {
             self.app_log_dialog = None;
         }
@@ -4980,6 +5014,46 @@ fn plot(
 
 fn button(ui: &mut egui::Ui, text: &str) -> egui::Response {
     ui.add_sized([96.0, 28.0], egui::Button::new(text))
+}
+
+/// Copy button with a transient "已复制" label, so every copy is acknowledged.
+fn copy_button(ui: &mut egui::Ui, key: &str, label: &str, text: &str, hover: &str) -> bool {
+    copy_button_sized(ui, key, label, text, hover, true)
+}
+
+/// Copy button using the standard (not small) button size.
+fn copy_button_sized(
+    ui: &mut egui::Ui,
+    key: &str,
+    label: &str,
+    text: &str,
+    hover: &str,
+    small: bool,
+) -> bool {
+    let now = ui.input(|i| i.time);
+    let id = egui::Id::new(("copy-feedback", key));
+    let copied_at = ui.ctx().data(|d| d.get_temp::<f64>(id));
+    let show_done = copied_at.map(|t| now - t < 1.5).unwrap_or(false);
+    let shown = if show_done { "已复制" } else { label };
+    let response = if small {
+        ui.small_button(shown)
+    } else {
+        ui.add_sized([96.0, 28.0], egui::Button::new(shown))
+    };
+    let response = if hover.is_empty() {
+        response
+    } else {
+        response.on_hover_text(hover)
+    };
+    let clicked = response.clicked();
+    if clicked {
+        ui.ctx().copy_text(text.to_string());
+        ui.ctx().data_mut(|d| d.insert_temp(id, now));
+    }
+    if clicked || show_done {
+        ui.ctx().request_repaint_after(Duration::from_millis(100));
+    }
+    clicked
 }
 
 fn primary_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
