@@ -2,11 +2,20 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/aodianyun/flashcli/go/internal/apps"
+	"github.com/aodianyun/flashcli/go/internal/flashhub"
 )
 
 // Apps that were ready with live models are restarted on daemon start; an app
@@ -75,5 +84,102 @@ func TestRestoreOnStartStartsReadyApps(t *testing.T) {
 	}
 	if len(launcher.procs) != 1 {
 		t.Fatalf("prepared-only app started a second model (%d)", len(launcher.procs))
+	}
+}
+
+// A daemon restart restores the app with a new connection; the setup scripts
+// the user confirmed before the restart must run again automatically.
+func TestRestoreReplaysSavedSetupScripts(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		if _, err := exec.LookPath("python"); err != nil {
+			t.Skip("no python interpreter")
+		}
+	}
+	body := []byte("import os\nopen(os.path.join(os.environ['HOME'], 'restored.txt'), 'w').write('ok')\n")
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+	previous := http.DefaultTransport
+	http.DefaultTransport = srv.Client().Transport
+	defer func() { http.DefaultTransport = previous }()
+	sum := sha256.Sum256(body)
+	raw := fmt.Sprintf(`{
+      "app_format_version": 1,
+      "protocol_version": 1,
+      "format": "flashcli-application",
+      "name": "demo",
+      "version": "1.0.0",
+      "supported": {"os": ["linux", "windows", "darwin"], "arch": ["x86_64", "arm64"]},
+      "install": {"commands": {"linux": "echo ok"}},
+      "model": {"bundles": [{"bundle": "a/one:1"}]},
+      "setup": {"scripts": [{
+        "key": "conf", "kind": "python", "url": %q, "sha256": %q, "args": []
+      }]}
+    }`, srv.URL, hex.EncodeToString(sum[:]))
+
+	home := t.TempDir()
+	clientHome := t.TempDir()
+	registry := apps.NewRegistry(home)
+	key := "xym/demo:1.0.0"
+	if err := registry.Update(func(m map[string]apps.AppState) error {
+		m[key] = apps.AppState{
+			Key: key, Version: "1.0.0", State: apps.StateReady,
+			Models: []apps.ModelState{{
+				Ref: "a/one:1", ID: "one", PID: 123, Endpoint: "http://127.0.0.1:1", Prepared: true,
+			}},
+			SetupScripts:    []string{"conf"},
+			SetupClientHome: clientHome,
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	launcher := &fakeLauncher{}
+	svc := &apps.Service{
+		Home:         home,
+		Out:          io.Discard,
+		Registry:     registry,
+		Launcher:     launcher,
+		Now:          func() time.Time { return time.Unix(0, 0) },
+		StartTimeout: 2 * time.Second,
+		Stopper:      func(context.Context, string) (bool, error) { return false, nil },
+		Claim:        func(context.Context, string) error { return nil },
+		Fetch: func(context.Context, flashhub.AppRef) ([]byte, error) {
+			return []byte(raw), nil
+		},
+	}
+	s := &Server{
+		Manager:    NewManagerWithOptions(&fakeLauncher{}, ManagerOptions{Inspect: fakeInspect}),
+		AppService: func() *apps.Service { return svc },
+	}
+	s.restoreOnStart(context.Background())
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		st, ok, _ := registry.Get(key)
+		if ok && st.State == apps.StateReady && st.Connection.BaseURL != "" {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	st, _, _ := registry.Get(key)
+	t.Logf("state=%q base=%q scripts=%v home=%q err=%q procs=%d", st.State, st.Connection.BaseURL, st.SetupScripts, st.SetupClientHome, st.SetupError, len(launcher.procs))
+	file := filepath.Join(clientHome, "restored.txt")
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(file); err == nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if _, err := os.Stat(file); err != nil {
+		t.Fatalf("restore did not replay the saved setup scripts: %v", err)
+	}
+	if st.SetupError != "" {
+		t.Fatalf("setup_error = %q", st.SetupError)
+	}
+	if len(st.SetupScripts) != 1 || st.SetupScripts[0] != "conf" {
+		t.Fatalf("setup_scripts = %#v", st.SetupScripts)
 	}
 }
