@@ -64,6 +64,7 @@ invalid required field is rejected with the field name. An unsupported
 | `model.bundles[].default` | no | Prepare this bundle by default (default `false`) |
 | `model.bundles[].serve.options` | no | Options passed to `flashcli serve` (must be declared by the bundle) |
 | `config[]` | no | Reserved for configuration rules; empty in v1 |
+| `setup.scripts[]` | no | Client-side configuration scripts run after models are ready |
 
 ## install.commands
 
@@ -92,10 +93,54 @@ invalid required field is rejected with the field name. An unsupported
 ## config (reserved)
 
 `config` is part of the schema but v1 applications publish an empty array. Hosts
-must accept it and ignore unknown entries; configuration rewriting will be
-specified separately when the format is final. Until then the host writes a
-`connection.json` (base URL, model ids, local API key) instead of editing
-application files.
+must accept it and ignore unknown entries; configuration rewriting via `config`
+will be specified separately when the format is final. Use `setup.scripts` for
+the v1 client-side configuration hook described below.
+
+## setup.scripts (client configuration)
+
+Optional list of client-side scripts that configure the installed application
+after its models are ready. The script receives the app's connection and writes
+the application's own config (for example a custom OpenAI-compatible model
+entry).
+
+| Field | Required | Semantics |
+|---|---|---|
+| `key` | yes | Unique id within the app; used for consent and logs |
+| `kind` | yes | `python` (v1) |
+| `url` | yes | HTTPS URL of the script; downloaded by the client |
+| `sha256` | yes | 64 hex chars; must match the downloaded bytes or the script is not run |
+| `args` | no | Explicit argv template; every entry is appended |
+
+```json
+"setup": {
+  "scripts": [{
+    "key": "workbuddy",
+    "kind": "python",
+    "url": "https://flashhub-cdn.aodianyun.com/tools/model-setup/model_setup_workbuddy.py",
+    "sha256": "…64 hex…",
+    "args": ["{base_url}", "{model}", "--api-key {api_key}"]
+  }]
+}
+```
+
+Rules:
+
+- Placeholders are exactly `{base_url}`, `{model}`, `{api_key}` (the installed
+  app's connection); unknown placeholders are invalid.
+- Each `args` entry is appended after substitution. An entry may contain spaces
+  and is split into argv tokens (values must not contain spaces in v1). Use
+  `"--api-key {api_key}"`, not `"--api-key={api_key}"`.
+- The script runs on the **client OS** after the models become ready, and again
+  after each start because the model port changes. It must be idempotent.
+- The user confirms execution once per app/version/script/hash; the consent is
+  remembered until the hash changes.
+- Download and `sha256` verification happen before execution. A mismatch or a
+  non-zero exit is reported in the app log; it does not mark the running app as
+  failed.
+- Scripts must only modify the application's own configuration.
+- App versions are immutable: publish a new app version when adding or changing
+  setup scripts.
 
 ## Host-owned behavior
 
@@ -106,10 +151,11 @@ The manifest deliberately does **not** define:
   `/healthz`).
 - **Service lifecycle** — reuse the resident `flashserver` when present;
   otherwise `flashcli app` supervises `flashcli serve` processes itself.
-- **Config files** — out of scope in v1.
+- **Config files** — `config[]` is out of scope in v1; `setup.scripts` is the
+  client-side hook (the host supplies the connection and verifies the script).
 - **System capabilities** — validated from the model bundle.
-- **Download integrity** — no checksums in v1; shell commands are confirmed by
-  the user.
+- **Download integrity** — install commands have no checksum (user-confirmed);
+  `setup.scripts` require `sha256`.
 
 ## Examples
 

@@ -19,6 +19,17 @@ type Bundle struct {
 	} `json:"serve"`
 }
 
+// SetupScript is a client-side configuration script declared by an application.
+// It is downloaded, verified against SHA256, and executed with an explicit argv
+// template (placeholders {base_url}, {model}, {api_key}).
+type SetupScript struct {
+	Key    string   `json:"key"`
+	Kind   string   `json:"kind"`
+	URL    string   `json:"url"`
+	SHA256 string   `json:"sha256"`
+	Args   []string `json:"args"`
+}
+
 // Manifest is a FlashHub application manifest (app_format_version 1).
 type Manifest struct {
 	Format           string `json:"format"`
@@ -38,6 +49,9 @@ type Manifest struct {
 		Bundles []Bundle `json:"bundles"`
 	} `json:"model"`
 	Config []any `json:"config"`
+	Setup  struct {
+		Scripts []SetupScript `json:"scripts"`
+	} `json:"setup"`
 }
 
 // Parse decodes and validates an application manifest.
@@ -81,7 +95,77 @@ func Validate(m *Manifest) []string {
 			errs = append(errs, fmt.Sprintf("model.bundles[%d].bundle is required", i))
 		}
 	}
+	seenScripts := map[string]bool{}
+	for i, s := range m.Setup.Scripts {
+		prefix := fmt.Sprintf("setup.scripts[%d]", i)
+		key := strings.TrimSpace(s.Key)
+		switch {
+		case key == "":
+			errs = append(errs, prefix+".key is required")
+		case seenScripts[key]:
+			errs = append(errs, fmt.Sprintf("%s.key %q is duplicated", prefix, key))
+		default:
+			seenScripts[key] = true
+		}
+		if !strings.EqualFold(strings.TrimSpace(s.Kind), "python") {
+			errs = append(errs, prefix+`.kind must be "python"`)
+		}
+		if u := strings.TrimSpace(s.URL); !strings.HasPrefix(strings.ToLower(u), "https://") {
+			errs = append(errs, prefix+".url must be an https:// URL")
+		}
+		if !isHex64(s.SHA256) {
+			errs = append(errs, prefix+".sha256 must be 64 hex characters")
+		}
+		for j, arg := range s.Args {
+			if strings.TrimSpace(arg) == "" {
+				errs = append(errs, fmt.Sprintf("%s.args[%d] must not be empty", prefix, j))
+				continue
+			}
+			if strings.ContainsAny(arg, "\x00\r\n") {
+				errs = append(errs, fmt.Sprintf("%s.args[%d] must be a single line", prefix, j))
+				continue
+			}
+			if msg := setupArgError(arg); msg != "" {
+				errs = append(errs, fmt.Sprintf("%s.args[%d]: %s", prefix, j, msg))
+			}
+		}
+	}
 	return errs
+}
+
+func isHex64(s string) bool {
+	s = strings.TrimSpace(s)
+	if len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+// setupArgError validates the explicit argv template placeholders.
+func setupArgError(arg string) string {
+	for i := 0; i < len(arg); i++ {
+		switch arg[i] {
+		case '{':
+			j := strings.IndexByte(arg[i+1:], '}')
+			if j < 0 {
+				return "unterminated placeholder"
+			}
+			switch name := arg[i+1 : i+1+j]; name {
+			case "base_url", "model", "api_key":
+			default:
+				return fmt.Sprintf("unknown placeholder {%s}", name)
+			}
+			i += j + 1
+		case '}':
+			return "unexpected '}'"
+		}
+	}
+	return ""
 }
 
 // Supported reports whether the manifest supports this OS/arch.

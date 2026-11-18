@@ -62,6 +62,7 @@ flowchart LR
 | `model.bundles[].default` | 否 | 默认准备该 bundle（缺省 `false`） |
 | `model.bundles[].serve.options` | 否 | 传给 `flashcli serve` 的选项（必须由 bundle 声明） |
 | `config[]` | 否 | 预留的配置规则；v1 为空数组 |
+| `setup.scripts[]` | 否 | 客户端配置脚本（模型就绪后写入应用配置） |
 
 ## install.commands
 
@@ -86,8 +87,44 @@ flowchart LR
 ## config（预留）
 
 `config` 属于 schema，但 v1 应用全部发布空数组。host 必须接受并忽略未知条目；
-配置改写待格式定稿后单独规范。在此之前 host 只写 `connection.json`（base URL、
-模型 id、本地 API key），不修改应用自身文件。
+通过 `config` 的配置改写待格式定稿后单独规范。v1 的客户端配置钩子请使用
+`setup.scripts`。
+
+## setup.scripts（客户端配置）
+
+可选的客户端脚本列表，在应用模型就绪后配置已安装的应用。脚本会拿到应用的连接
+信息，写入应用自己的配置文件（例如新增一个 OpenAI 兼容的自定义模型）。
+
+| 字段 | 必填 | 语义 |
+|---|---|---|
+| `key` | 是 | 应用内唯一标识；用于确认记忆和日志 |
+| `kind` | 是 | `python`（v1） |
+| `url` | 是 | 脚本的 HTTPS 地址，由客户端下载 |
+| `sha256` | 是 | 64 位十六进制；必须与下载内容一致，否则不执行 |
+| `args` | 否 | 显式 argv 模板；每一项都会追加 |
+
+```json
+"setup": {
+  "scripts": [{
+    "key": "workbuddy",
+    "kind": "python",
+    "url": "https://flashhub-cdn.aodianyun.com/tools/model-setup/model_setup_workbuddy.py",
+    "sha256": "…64 位…",
+    "args": ["{base_url}", "{model}", "--api-key {api_key}"]
+  }]
+}
+```
+
+规则：
+
+- 占位符仅 `{base_url}`、`{model}`、`{api_key}`（已安装应用的连接信息）；未知占位符非法
+- `args` 每一项替换后追加；可以包含空格，替换后按空格拆成 argv token
+  （v1 中值不能含空格）。写成 `"--api-key {api_key}"`，不要写 `"--api-key={api_key}"`
+- 脚本在**客户端 OS**上、模型就绪后执行；每次启动都会重新执行（端口会变），必须幂等
+- 首次执行需用户确认；按 app/version/script/hash 记住，哈希变化后重新确认
+- 执行前下载并校验 `sha256`；不匹配或非零退出只写入应用日志，不把运行中的应用标成失败
+- 脚本只能修改应用自身的配置
+- 应用版本不可变：新增/修改 `setup` 脚本时发布新的应用版本
 
 ## 由 host 决定的行为
 
@@ -97,9 +134,10 @@ manifest 刻意**不**定义：
 - **健康检查** —— host 探测 `/health`（native 后端同时接受 `/healthz`）
 - **服务生命周期** —— 有常驻 `flashserver` 时复用；否则 `flashcli app` 自行监管
   `flashcli serve` 进程
-- **配置文件** —— v1 不涉及
+- **配置文件** —— `config[]` 在 v1 不涉及；`setup.scripts` 是客户端钩子
+  （host 提供连接信息并校验脚本）
 - **系统能力** —— 由模型 bundle 预检
-- **下载完整性** —— v1 无校验和；shell 命令由用户确认
+- **下载完整性** —— 安装命令无校验和（由用户确认）；`setup.scripts` 必须提供 `sha256`
 
 ## 示例
 
