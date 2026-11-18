@@ -1104,29 +1104,19 @@ impl App {
     }
 
     /// Merge a fresh local state into the detail pane and the list row.
-    fn apply_app_local(&mut self, key: &str, state: Option<Value>) {        let local = state.clone().unwrap_or_else(|| Value::Object(Default::default()));
+    fn apply_app_local(&mut self, key: &str, state: Option<Value>) {
         if let Some(detail) = self.app_detail.as_mut() {
             let (org, name, version) = app_identity(detail);
             if app_reference(&org, &name, &version) == key {
-                if let Some(obj) = detail.as_object_mut() {
-                    obj.insert("local".to_string(), local.clone());
-                }
+                merge_detail_local(detail, state.clone());
             }
         }
-        if let Some(app) = self
-            .apps
-            .iter_mut()
-            .find(|app| app_list_key(app) == key)
-        {
-            if let Some(obj) = app.as_object_mut() {
-                obj.insert("installed".to_string(), Value::Bool(state.is_some()));
-                let st = state
-                    .as_ref()
-                    .and_then(|s| s["state"].as_str())
-                    .unwrap_or("")
-                    .to_string();
-                obj.insert("state".to_string(), Value::String(st));
-            }
+        if let Some(app) = self.apps.iter_mut().find(|app| app_list_key(app) == key) {
+            let st = state
+                .as_ref()
+                .and_then(|s| s["state"].as_str())
+                .unwrap_or("");
+            merge_list_state(app, state.is_some(), st);
         }
     }
 
@@ -1882,15 +1872,22 @@ impl App {
         ui.add_space(8.0);
         ui.horizontal_wrapped(|ui| {
             let install_label = if installed { "重新安装" } else { "安装" };
+            let transitioning = matches!(local_state.as_str(), "starting" | "stopping");
             let install = ui
-                .add_enabled(!blocked && supported, egui::Button::new(install_label))
+                .add_enabled(
+                    !blocked && !transitioning && supported,
+                    egui::Button::new(install_label),
+                )
                 .on_hover_text("安装会先确认是否执行应用自带的安装脚本")
                 .on_disabled_hover_text(if other_install { wait_hint } else { "" });
             if install.clicked() {
                 open_install = true;
             }
             if ui
-                .add_enabled(!blocked && installed, egui::Button::new("启动"))
+                .add_enabled(
+                    !blocked && !transitioning && installed,
+                    egui::Button::new("启动"),
+                )
                 .on_disabled_hover_text(if other_install { wait_hint } else { "" })
                 .clicked()
             {
@@ -1899,6 +1896,7 @@ impl App {
             if ui
                 .add_enabled(
                     !blocked
+                        && !transitioning
                         && (local_state == "ready"
                             || local_state == "failed"
                             || local_state == "stopped"),
@@ -1911,7 +1909,7 @@ impl App {
             }
             if ui
                 .add_enabled(
-                    !blocked && installed,
+                    !blocked && !transitioning && installed,
                     egui::Button::new(egui::RichText::new("卸载").color(danger)),
                 )
                 .on_disabled_hover_text(if other_install { wait_hint } else { "" })
@@ -2125,6 +2123,16 @@ impl App {
             });
         }
         if let Some(what) = action {
+            // Optimistic state so the buttons/status react on the next frame;
+            // refresh_app_state corrects it with the daemon's answer.
+            let interim = match what {
+                "start" => "starting",
+                "stop" => "stopping",
+                _ => "",
+            };
+            if !interim.is_empty() {
+                self.set_app_local_state(&org_name, &app_name, &app_version, interim);
+            }
             spawn_app_action(
                 self.tx.clone(),
                 ui.ctx().clone(),
@@ -2133,6 +2141,30 @@ impl App {
                 app_version,
                 what,
             );
+        }
+    }
+
+    /// Write a state string into the detail and the list row for one app.
+    fn set_app_local_state(&mut self, org: &str, name: &str, version: &str, state: &str) {
+        let key = app_reference(org, name, version);
+        if let Some(detail) = self.app_detail.as_mut() {
+            let (o, n, v) = app_identity(detail);
+            if app_reference(&o, &n, &v) == key {
+                if let Some(obj) = detail.as_object_mut() {
+                    if !obj.contains_key("local") {
+                        obj.insert("local".to_string(), Value::Object(Default::default()));
+                    }
+                    if let Some(local) = obj.get_mut("local").and_then(|v| v.as_object_mut()) {
+                        local.insert("state".to_string(), Value::String(state.to_string()));
+                        local.remove("error");
+                    }
+                }
+            }
+        }
+        if let Some(app) = self.apps.iter_mut().find(|app| app_list_key(app) == key) {
+            if let Some(obj) = app.as_object_mut() {
+                obj.insert("state".to_string(), Value::String(state.to_string()));
+            }
         }
     }
 
@@ -5704,6 +5736,23 @@ fn app_install_body(version: &str, ran_script: bool, force: bool) -> Value {
         "client_arch": app_arch_key(),
         "force": force,
     })
+}
+
+/// Replace the `local` block of an app detail with fresh state (None = not
+/// installed).
+fn merge_detail_local(detail: &mut Value, state: Option<Value>) {
+    let local = state.unwrap_or_else(|| Value::Object(Default::default()));
+    if let Some(obj) = detail.as_object_mut() {
+        obj.insert("local".to_string(), local);
+    }
+}
+
+/// Update one app row in the list overlay.
+fn merge_list_state(app: &mut Value, installed: bool, state: &str) {
+    if let Some(obj) = app.as_object_mut() {
+        obj.insert("installed".to_string(), Value::Bool(installed));
+        obj.insert("state".to_string(), Value::String(state.to_string()));
+    }
 }
 
 /// Job reference in the same shape the daemon reports: `org/name[:version]`.

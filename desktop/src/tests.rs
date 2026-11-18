@@ -121,6 +121,26 @@ fn app_domains_are_unique_and_skip_blanks() {
 }
 
 #[test]
+fn detail_local_merge_replaces_the_state() {
+    let mut detail = serde_json::json!({"local": {"state": "ready", "models": []}});
+    merge_detail_local(&mut detail, Some(serde_json::json!({"state": "stopped"})));
+    assert_eq!(detail["local"]["state"], "stopped");
+    // Uninstalled: the local block is emptied.
+    merge_detail_local(&mut detail, None);
+    assert_eq!(detail["local"], serde_json::json!({}));
+}
+
+#[test]
+fn list_state_merge_updates_the_installed_flag() {
+    let mut app = serde_json::json!({"installed": false, "state": ""});
+    merge_list_state(&mut app, true, "ready");
+    assert_eq!(app["installed"], true);
+    assert_eq!(app["state"], "ready");
+    merge_list_state(&mut app, false, "");
+    assert_eq!(app["installed"], false);
+}
+
+#[test]
 fn app_job_phase_tracks_the_install_steps() {
     assert_eq!(app_job_phase("$ npm install -g x", "安装应用"), "安装应用");
     assert_eq!(
