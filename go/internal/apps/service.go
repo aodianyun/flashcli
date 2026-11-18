@@ -444,7 +444,7 @@ func (s *Service) applySetupScripts(ctx context.Context, key string, st *AppStat
 	// ready; no manifest fetch is needed, so a daemon restart works offline.
 	if !setup.Provided && s.ConfirmSetup == nil && len(st.SetupPlan) > 0 {
 		st.SetupError = ""
-		if _, err := s.runSetupScripts(ctx, st.SetupPlan, st, st.SetupClientHome); err != nil {
+		if err := s.runSetupScripts(ctx, st.SetupPlan, st, st.SetupClientHome); err != nil {
 			st.SetupError = setupFailure(ctx, err)
 		}
 		s.save(st)
@@ -511,7 +511,7 @@ func (s *Service) applySetupScripts(ctx context.Context, key string, st *AppStat
 	}
 	st.SetupError = ""
 	if len(selected) > 0 {
-		if _, err := s.runSetupScripts(ctx, selected, st, setup.ClientHome); err != nil {
+		if err := s.runSetupScripts(ctx, selected, st, setup.ClientHome); err != nil {
 			st.SetupError = setupFailure(ctx, err)
 		}
 	}

@@ -26,18 +26,16 @@ type SetupOptions struct {
 
 // runSetupScripts executes the selected setup script definitions in order. A
 // failed script stops the remaining scripts and is returned as err.
-func (s *Service) runSetupScripts(ctx context.Context, scripts []SetupScript, st *AppState, clientHome string) (bool, error) {
-	ran := false
+func (s *Service) runSetupScripts(ctx context.Context, scripts []SetupScript, st *AppState, clientHome string) error {
 	for _, script := range scripts {
-		ran = true
 		fmt.Fprintf(s.out(), "setup %s: %s\n", script.Key, script.URL)
 		if err := s.runSetupScript(ctx, script, st.Connection, clientHome); err != nil {
 			fmt.Fprintf(s.out(), "setup %s failed: %v\n", script.Key, err)
-			return true, err
+			return err
 		}
 		fmt.Fprintf(s.out(), "setup %s: done\n", script.Key)
 	}
-	return ran, nil
+	return nil
 }
 
 func (s *Service) runSetupScript(ctx context.Context, script SetupScript, conn Connection, clientHome string) error {

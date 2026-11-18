@@ -302,6 +302,18 @@ fn installer_file_names_are_sanitized() {
 }
 
 #[test]
+fn app_last_log_reads_the_state_tail() {
+    let detail = serde_json::json!({
+        "local": {"last_log": ["starting demo", "setup done", 7]}
+    });
+    assert_eq!(
+        app_last_log(&detail),
+        vec!["starting demo".to_string(), "setup done".to_string()]
+    );
+    assert!(app_last_log(&serde_json::json!({})).is_empty());
+}
+
+#[test]
 fn app_install_body_makes_the_script_decision_explicit() {
     let scripts = vec!["workbuddy".to_string()];
     let ran = app_install_body("1.0.0", true, true, &scripts);

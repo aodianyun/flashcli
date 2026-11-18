@@ -132,6 +132,11 @@ func TestStartRunsConfirmedSetupScripts(t *testing.T) {
 	if started.SetupClientHome != home {
 		t.Fatalf("setup_client_home = %q, want %q", started.SetupClientHome, home)
 	}
+	saved, _, _ := svc.Registry.Get("xym/workbuddy:1.0.0")
+	log := strings.Join(saved.LastLog, "\n")
+	if !strings.Contains(log, "setup workbuddy: done") {
+		t.Fatalf("last_log = %q", log)
+	}
 	blob, err := os.ReadFile(filepath.Join(home, "setup.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -250,6 +255,9 @@ func TestInstallRunsConfirmedSetupScripts(t *testing.T) {
 	}
 	if res.State.SetupClientHome != home {
 		t.Fatalf("setup_client_home = %q, want %q", res.State.SetupClientHome, home)
+	}
+	if len(res.State.SetupPlan) != 1 || res.State.SetupPlan[0].URL != srv.URL {
+		t.Fatalf("setup_plan = %#v", res.State.SetupPlan)
 	}
 }
 
@@ -372,6 +380,48 @@ func TestStartClearsStaleSetupError(t *testing.T) {
 	st, _, _ := svc.Registry.Get("xym/demo:1.0.0")
 	if st.SetupError != "" {
 		t.Fatalf("setup_error = %q", st.SetupError)
+	}
+}
+
+// An explicit empty selection (Provided) clears both the keys and the pinned
+// definitions, so a later restore does not run them again.
+func TestExplicitEmptySetupSelectionClearsSavedPlan(t *testing.T) {
+	scriptJSON := `{
+      "key": "conf",
+      "kind": "python",
+      "url": "https://example.invalid/conf.py",
+      "sha256": "` + strings.Repeat("a", 64) + `",
+      "args": ["{base_url}"]
+    }`
+	svc, _ := newTestService(t, []byte(setupManifest(scriptJSON)), &fakeLauncher{})
+	if _, err := svc.Install(context.Background(), "xym/workbuddy", InstallOptions{
+		Yes: true, NoStart: true, OS: "windows", Arch: "x86_64",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Registry.Update(func(m map[string]AppState) error {
+		st, ok := m["xym/workbuddy:1.0.0"]
+		if !ok {
+			t.Fatal("app not installed")
+		}
+		st.SetupScripts = []string{"conf"}
+		st.SetupPlan = []SetupScript{{
+			Key: "conf", Kind: "python", URL: "https://example.invalid/conf.py",
+			SHA256: strings.Repeat("a", 64),
+		}}
+		m["xym/workbuddy:1.0.0"] = st
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.StartWithSetup(context.Background(), "xym/workbuddy:1.0.0", false, SetupOptions{
+		Provided: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	st, _, _ := svc.Registry.Get("xym/workbuddy:1.0.0")
+	if len(st.SetupScripts) != 0 || len(st.SetupPlan) != 0 {
+		t.Fatalf("explicit empty selection kept scripts=%v plan=%v", st.SetupScripts, st.SetupPlan)
 	}
 }
 

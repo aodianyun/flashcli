@@ -95,3 +95,10 @@ func TestBundleSyncFromFlashHub(t *testing.T) {
 		t.Fatalf("models list exit = %d", code)
 	}
 }
+
+func TestPullForceFlag(t *testing.T) {
+	cmd := pullCmd()
+	if cmd.Flags().Lookup("force") == nil {
+		t.Fatal("pull --force flag is missing")
+	}
+}

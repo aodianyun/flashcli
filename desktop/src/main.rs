@@ -1923,16 +1923,7 @@ impl App {
             .as_str()
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string());
-        let last_log = detail["local"]["last_log"]
-            .as_array()
-            .map(|items| {
-                items
-                    .iter()
-                    .filter_map(|v| v.as_str())
-                    .map(|s| s.to_string())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
+        let last_log = app_last_log(detail);
         let install_executed = detail["local"]["install"]["executed"]
             .as_bool()
             .unwrap_or(false);
@@ -2190,7 +2181,7 @@ impl App {
                 }
             } else if let Some(err) = &last_error {
                 ui.label(egui::RichText::new(err).small().color(danger));
-            } else if installed && !transitional {
+            } else if !transitional {
                 if last_log.is_empty() {
                     ui.label(egui::RichText::new("暂无操作日志").small().weak());
                 } else {
@@ -2205,7 +2196,7 @@ impl App {
             }
             // The application itself lives on the client OS; a skipped script
             // means its command still has to be run in a terminal.
-            if installed && !install_executed && !busy {
+            if !install_executed && !busy {
                 if let Some(command) = &recorded_install_command {
                     ui.label(egui::RichText::new("应用本体未安装").small().color(danger));
                     ui.horizontal_wrapped(|ui| {
@@ -2223,7 +2214,7 @@ impl App {
             if local_state == "ready" && !setup_keys.is_empty() {
                 ui.label(
                     egui::RichText::new(format!(
-                        "配置脚本: {setup_keys}（重启恢复后自动执行）"
+                        "配置脚本: {setup_keys}（重启恢复时自动执行）"
                     ))
                     .small()
                     .weak(),
@@ -5983,6 +5974,21 @@ fn app_setup_scripts(manifest: &Value) -> Vec<AppSetupScript> {
                         sha256: script["sha256"].as_str().unwrap_or("").to_string(),
                     })
                 })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Last start/install output kept on the daemon app state. A restored app has
+/// no desktop job, so the detail pane falls back to this.
+fn app_last_log(detail: &Value) -> Vec<String> {
+    detail["local"]["last_log"]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|v| v.as_str())
+                .map(|s| s.to_string())
                 .collect()
         })
         .unwrap_or_default()

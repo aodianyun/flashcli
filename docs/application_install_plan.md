@@ -142,7 +142,7 @@ stateDiagram-v2
   STARTING --> READY: all models healthy
   STARTING --> FAILED: any failure (roll back started models)
   READY --> STOPPED: app stop
-  READY --> STOPPED: status finds no healthy model (daemon restart / crash)
+  READY --> STOPPED: status finds no healthy model (crash; a daemon restart restores first)
   READY --> FAILED: some models are not running
   STOPPED --> READY: app start
   READY --> [*]: app uninstall

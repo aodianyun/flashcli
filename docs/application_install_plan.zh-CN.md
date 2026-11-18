@@ -140,7 +140,7 @@ stateDiagram-v2
   STARTING --> READY: 全部健康
   STARTING --> FAILED: 任一失败（回滚已启动模型）
   READY --> STOPPED: app stop
-  READY --> STOPPED: status 发现没有健康模型（daemon 重启 / 崩溃）
+  READY --> STOPPED: status 发现没有健康模型（崩溃；daemon 重启会先恢复）
   READY --> FAILED: 部分模型未运行
   STOPPED --> READY: app start
   READY --> [*]: app uninstall
