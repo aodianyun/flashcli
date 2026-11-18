@@ -159,7 +159,7 @@ shutdown 取消的启动保留启动意图），`installing`/`preparing` 变为 
 ### 配置脚本（可选）
 
 模型就绪后，host 按 manifest 顺序执行 `setup.scripts`，只执行用户**本次**确认过的
-脚本。确认点是客户端（桌面端每次启动/安装的确认框，或 CLI 对每个脚本的提示）。每个
+脚本。确认点是客户端（桌面端启动时的确认框，或 CLI 对每个脚本的提示）。每个
 脚本都会下载、校验 `sha256`，并用显式 argv 模板执行
 （`{base_url}`、`{model}`、`{api_key}`）。失败会写入应用 job 日志并停止后续脚本，
 但不会把已运行的应用标成失败；没有 `setup.scripts` 的应用跳过此步骤。确认的脚本定义、
@@ -171,8 +171,8 @@ key 和客户端 home 会持久化；daemon 重启后恢复的应用会在模型
 - **脚本失败**立即终止，不再准备模型
 - **准备失败**终止；已准备的 bundle 保留缓存，重跑可续
 - **启动/健康失败**停止本次已启动的模型（`--keep-partial` 保留用于排查）
-- 重复执行 `app install` 幂等：补齐缺失步骤、复用运行中的模型；只有 `--force`
-  才会重跑安装脚本
+- 重复执行 `app install` 幂等：补齐缺失的准备步骤；只有 `--force` 才会重跑
+  安装脚本；安装从不启动模型
 
 ## 命令
 
@@ -180,8 +180,7 @@ key 和客户端 home 会持久化；daemon 重启后恢复的应用会在模型
 flashcli app list   [--json]
 flashcli app show   <key> [--json]
 flashcli app install <key> [--yes|-y] [--dry-run] [--force]
-                     [--bundle REF]... [--no-install] [--no-model] [--no-start]
-                     [--keep-partial]
+                     [--bundle REF]... [--no-install] [--no-model]
 flashcli app status <key> [--json]
 flashcli app start|stop|restart <key>
 flashcli app logs   <key> [--ref REF] [--lines N] [-f]

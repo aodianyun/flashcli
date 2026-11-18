@@ -84,9 +84,10 @@ invalid required field is rejected with the field name. An unsupported
 
 - The host prepares **every** bundle with `default: true`; `--bundle` overrides
   the selection. If no bundle is marked default, the first one is used.
-- Bundles are prepared sequentially (bundle tree, venv, weights).
-- After all default bundles are prepared, they are started as one group with
-  automatically allocated ports; each model endpoint is health-checked.
+- With `default: true` bundles are prepared sequentially (bundle tree, venv,
+  weights). Preparation stops there: models are **not** started by install.
+- `flashcli app start` (or the desktop 启动 button) starts the prepared group
+  with automatically allocated ports and health-checks each endpoint.
 - `serve.options` values are forwarded as `--flag value`; the bundle's
   `serve_options` remains authoritative for names and defaults.
 
@@ -107,10 +108,10 @@ To update:
 3. Reinstall the application (`重新安装` in the desktop, or
    `flashcli app install <app> --force`).
 
-Reinstall fetches the current manifest, stops models that are no longer
-referenced (freeing their slots/VRAM), keeps their caches, prepares and starts
-the new bundle, and then runs the confirmed setup scripts for the new
-connection. Old caches are not deleted automatically; use
+Reinstall fetches the current manifest, stops every running model of the app
+(freeing slots/VRAM), keeps the caches, and prepares the new bundles — install
+does not start them. Starting the app afterwards runs the confirmed setup
+scripts for the new connection. Old caches are not deleted automatically; use
 `flashcli bundle clean --all <old-ref>` when they are no longer needed.
 
 A new **application** version is a separate app key: install it and stop or
@@ -172,8 +173,8 @@ Rules:
   script with `HOME` mapped to the client home so the application's real config
   is written. The model port changes on every start and a restored app replays
   the selected scripts, so the script must be idempotent.
-- The user confirms the selection on every manual start/install (desktop dialog;
-  a prompt per script in the CLI). The confirmed definitions (URL/`sha256`/args),
+- The user confirms the selection on every manual start (desktop dialog; a
+  prompt per script in the CLI). The confirmed definitions (URL/`sha256`/args),
   keys, and client home are persisted, so a daemon restart restores the app and
   automatically runs the same scripts once the models are ready (no manifest
   fetch is needed; the script still receives the new `{base_url}`/`{model}`/

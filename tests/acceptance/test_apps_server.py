@@ -263,7 +263,7 @@ def test_server_app_install_skip_does_not_run_script(flashserver_bin, flashcli_b
     ) as base:
         status, body = http_json(
             base + "/v1/apps/xym/demo/install",
-            {"version": "1.0.0", "install_command": "skip", "start": False},
+            {"version": "1.0.0", "install_command": "skip"},
         )
         assert status == 202, body
         state, job = _wait_job(base, body["job_id"])
@@ -285,7 +285,7 @@ def test_server_app_install_run_executes_script(flashserver_bin, flashcli_bin, c
     ) as base:
         status, body = http_json(
             base + "/v1/apps/xym/demo/install",
-            {"version": "1.0.0", "install_command": "run", "start": False},
+            {"version": "1.0.0", "install_command": "run"},
         )
         assert status == 202, body
         state, job = _wait_job(base, body["job_id"])
@@ -308,7 +308,7 @@ def test_server_app_install_uninstall_reinstall(
         for attempt in (1, 2):
             status, body = http_json(
                 base + "/v1/apps/xym/demo/install",
-                {"version": "1.0.0", "install_command": "skip", "start": False},
+                {"version": "1.0.0", "install_command": "skip"},
             )
             assert status == 202, (attempt, body)
             state, job = _wait_job(base, body["job_id"])
@@ -316,7 +316,7 @@ def test_server_app_install_uninstall_reinstall(
 
             status, st = http_json(base + "/v1/apps/xym/demo/status?version=1.0.0")
             assert status == 200, st
-            assert st["state"] == "ready"
+            assert st["state"] == "prepared"
             assert st["models"][0]["prepared"] is True
 
             if attempt == 1:
@@ -345,7 +345,6 @@ def test_server_app_install_uses_the_client_platform(
                 "install_command": "client",
                 "client_os": "windows",
                 "client_arch": "x86_64",
-                "start": False,
             },
         )
         assert status == 202, body

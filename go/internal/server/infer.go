@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 )
 
@@ -62,9 +63,11 @@ func (s *Server) unloadModel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotImplemented, errors.New("model manager is not configured"))
 		return
 	}
+	fmt.Fprintf(LogSink(), "model unload %s\n", req.Ref)
 	if err := s.Manager.Unload(r.Context(), req.Ref); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	fmt.Fprintf(LogSink(), "model unloaded %s\n", req.Ref)
 	writeJSON(w, http.StatusOK, map[string]any{"ref": req.Ref, "state": "unloaded"})
 }

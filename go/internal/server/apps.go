@@ -112,10 +112,10 @@ func (s *Server) appPrepare(w http.ResponseWriter, r *http.Request) {
 		svc := s.appService()
 		svc.Out = emitWriter{emit: emit}
 		_, err := svc.Install(ctx, ref.String(), apps.InstallOptions{
-			NoInstall: true,
-			NoStart:   true,
-			Force:     true,
-			Bundles:   body.Bundles,
+			NoInstall:   true,
+			PrepareOnly: true,
+			Force:       true,
+			Bundles:     body.Bundles,
 		})
 		return err
 	})
@@ -138,9 +138,6 @@ func (s *Server) appInstall(w http.ResponseWriter, r *http.Request) {
 		ClientOS       string   `json:"client_os"`
 		ClientArch     string   `json:"client_arch"`
 		Force          bool     `json:"force"`
-		Start          *bool    `json:"start"`
-		SetupScripts   []string `json:"setup_scripts"`
-		ClientHome     string   `json:"client_home"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	ref := flashhub.AppRef{Org: r.PathValue("org"), Name: r.PathValue("name"), Version: body.Version}
@@ -165,11 +162,7 @@ func (s *Server) appInstall(w http.ResponseWriter, r *http.Request) {
 	opts.OS = strings.TrimSpace(body.ClientOS)
 	opts.Arch = strings.TrimSpace(body.ClientArch)
 	opts.Force = body.Force
-	opts.NoStart = body.Start != nil && !*body.Start
 	opts.Bundles = body.Bundles
-	opts.SetupScripts = body.SetupScripts
-	opts.SetupProvided = body.SetupScripts != nil
-	opts.ClientHome = strings.TrimSpace(body.ClientHome)
 
 	job := s.Jobs.Start(context.Background(), "app-install", ref.String(), func(ctx context.Context, emit func(string, string)) error {
 		svc := s.appService()
@@ -222,6 +215,7 @@ func (s *Server) appLifecycle(w http.ResponseWriter, r *http.Request, action str
 		writeJSON(w, http.StatusAccepted, map[string]any{"job_id": job.ID, "state": job.State})
 		return
 	}
+	svc.Out = LogSink()
 	st, err := runAppLifecycleState(r.Context(), svc, action, key, setup)
 	if err != nil {
 		writeError(w, http.StatusConflict, err)
@@ -267,11 +261,13 @@ func (s *Server) appUninstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	purge := r.URL.Query().Get("purge_models") == "1"
+	fmt.Fprintf(LogSink(), "app uninstall %s (purge_models=%t)\n", key, purge)
 	st, err := svc.Uninstall(r.Context(), key, purge)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	fmt.Fprintf(LogSink(), "app uninstalled %s\n", key)
 	writeJSON(w, http.StatusOK, map[string]any{"app": key, "state": "uninstalled", "models": len(st.Models)})
 }
 

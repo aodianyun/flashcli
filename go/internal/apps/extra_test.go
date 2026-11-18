@@ -41,7 +41,7 @@ func TestManifestValidationErrors(t *testing.T) {
 	}
 }
 
-func TestInstallPreparesThenStartsInOrder(t *testing.T) {
+func TestInstallPreparesInOrderWithoutStarting(t *testing.T) {
 	var mu sync.Mutex
 	var events []string
 	launcher := &fakeLauncher{onStart: func(ref string) {
@@ -59,7 +59,7 @@ func TestInstallPreparesThenStartsInOrder(t *testing.T) {
 	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{Yes: true}); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"prepare:a/one:1", "prepare:a/two:1", "start:a/one:1", "start:a/two:1"}
+	want := []string{"prepare:a/one:1", "prepare:a/two:1"}
 	if len(events) != len(want) {
 		t.Fatalf("events = %v", events)
 	}
@@ -68,9 +68,12 @@ func TestInstallPreparesThenStartsInOrder(t *testing.T) {
 			t.Fatalf("events = %v, want %v", events, want)
 		}
 	}
+	if len(launcher.procs) != 0 {
+		t.Fatalf("install started %d models", len(launcher.procs))
+	}
 }
 
-func TestInstallForceRestarts(t *testing.T) {
+func TestInstallForceRerunsWithoutStarting(t *testing.T) {
 	launcher := &fakeLauncher{}
 	svc, prepared := newTestService(t, manifestJSON("a/one:1"), launcher)
 	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{Yes: true}); err != nil {
@@ -79,8 +82,8 @@ func TestInstallForceRestarts(t *testing.T) {
 	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{Yes: true, Force: true}); err != nil {
 		t.Fatal(err)
 	}
-	if len(launcher.procs) != 2 {
-		t.Fatalf("force did not restart the model (procs=%d)", len(launcher.procs))
+	if len(launcher.procs) != 0 {
+		t.Fatalf("install started %d models", len(launcher.procs))
 	}
 	if len(*prepared) != 1 {
 		t.Fatalf("already prepared bundle was pulled again: %v", *prepared)
@@ -129,7 +132,6 @@ func TestInstallUsesClientPlatformAndHandlesScript(t *testing.T) {
 		OS:            "windows",
 		Arch:          "x86_64",
 		ScriptHandled: true,
-		NoStart:       true,
 	})
 	if err != nil {
 		t.Fatalf("windows app on a linux host: %v", err)
@@ -165,7 +167,6 @@ func TestInstallHandledUrlIsRecordedAsExecuted(t *testing.T) {
 		OS:            "windows",
 		Arch:          "x86_64",
 		ScriptHandled: true,
-		NoStart:       true,
 	})
 	if err != nil {
 		t.Fatal(err)

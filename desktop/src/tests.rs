@@ -315,19 +315,21 @@ fn app_last_log_reads_the_state_tail() {
 
 #[test]
 fn app_install_body_makes_the_script_decision_explicit() {
-    let scripts = vec!["workbuddy".to_string()];
-    let ran = app_install_body("1.0.0", true, true, &scripts);
+    let ran = app_install_body("1.0.0", true, true);
     assert_eq!(ran["version"], "1.0.0");
     assert_eq!(ran["install_command"], "client");
     assert_eq!(ran["client_os"], app_os_key());
     assert_eq!(ran["client_arch"], app_arch_key());
     assert_eq!(ran["force"], true);
-    assert_eq!(ran["setup_scripts"][0], "workbuddy");
-    let skip = app_install_body("1.0.0", false, false, &[]);
+    // Install does not start the models, so it must not carry a setup
+    // selection; that belongs to the start action.
+    assert!(ran.get("setup_scripts").is_none());
+    assert!(ran.get("client_home").is_none());
+    let skip = app_install_body("1.0.0", false, false);
     assert_eq!(skip["install_command"], "skip");
     assert_eq!(skip["client_os"], app_os_key());
     assert_eq!(skip["force"], false);
-    assert_eq!(skip["setup_scripts"].as_array().unwrap().len(), 0);
+    assert!(skip.get("setup_scripts").is_none());
 }
 
 #[test]

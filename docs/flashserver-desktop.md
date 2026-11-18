@@ -25,14 +25,15 @@ for commands. Install/build details are in [../desktop/README.md](../desktop/REA
   `/v1/apps`. 安装 first shows the manifest install step: a script runs, or an
   installer URL is downloaded and run, on the client OS (a Windows app installs
   on Windows, not in WSL) — only after 运行脚本并安装 / 下载并安装; 跳过 installs the
-  models without it, and a plain page URL opens in the browser. The application
-  install always finishes before the daemon prepares/starts the models, and the
+  models without it, and a plain page URL opens in the browser. Install only
+  installs the application and **prepares** the model bundles; it does not start
+  them — 启动 is a separate action and the point where `setup.scripts` run. The
   daemon rejects an install without that explicit decision
   (`install_command: client | run | skip`). Progress streams into the detail pane.
-  When the manifest declares `setup.scripts`, a manual start or install asks
-  which scripts to run; after the models are ready the daemon runs them in
-  manifest order, verifies `sha256`, and maps the client home into WSL so the
-  application's real config is written. The confirmed definitions, keys and
+  When the manifest declares `setup.scripts`, a manual start asks which scripts
+  to run; after the models are ready the daemon runs them in manifest order,
+  verifies `sha256`, and maps the client home into WSL so the application's real
+  config is written. The confirmed definitions, keys and
   client home are saved; a daemon restart restores the app and automatically
   re-runs the same scripts for the new connection (no manifest fetch). A failure
   is logged, shown on the app, and stops the remaining scripts; a ready app also
@@ -47,12 +48,13 @@ for commands. Install/build details are in [../desktop/README.md](../desktop/REA
   "同时删除模型缓存" checkbox also deletes that app's bundle/weight caches
   (a reinstall downloads them again). The app's own installed program and its
   data are never removed.
-- **Logs** — three sources: the app install/prepare log (last 8 lines in the
-  app detail plus 查看完整日志, up to 300 lines, copyable), per-model serve logs
-  (模型 → 更多 → 查看日志, with 另存为), and the daemon journal (日志 page, clear /
-  save).
-- **Logs** — service journal or a model's serve log, with clear and native
-  Save-As.
+- **Logs** — the service log (日志 page, clear / Save-As) and a model's serve
+  log (模型 → 更多 → 查看日志, with 另存为). The service log covers API calls
+  (method/path/status/duration, credentials redacted), background job steps
+  (app install/start/stop, model load/pull/smoke), setup-script output and
+  clean/uninstall, and is persisted to `~/.flashcli/logs/flashserver.log`
+  (4 MiB rotation with a `.1` backup), so it survives a daemon restart. The app
+  detail also keeps the last start log with its own 查看完整日志 entry.
 - **Settings** — service start/stop, auto-start, domestic mirrors, shared-cache
   cleanup, WSL resources and firewall ports, theme (`Ctrl+T`), API docs.
 

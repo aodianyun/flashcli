@@ -136,7 +136,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /v1/apps/{org}/{name}", s.appUninstall)
 	mux.HandleFunc("POST /v1/ui/chat", s.uiChat)
 	mux.HandleFunc("GET /", s.ui)
-	return s.authorize(mux)
+	return s.logRequests(s.authorize(mux))
 }
 
 func (s *Server) authorize(next http.Handler) http.Handler {
@@ -163,6 +163,9 @@ func (s *Server) authorize(next http.Handler) http.Handler {
 }
 
 func (s *Server) Run(ctx context.Context) error {
+	// Persist the service log (API calls, job steps, scripts) so a restart
+	// still shows earlier activity.
+	InitLogFile(filepath.Join(paths.Home(), "logs", "flashserver.log"))
 	s.startGPUHistory(ctx)
 	go s.forwardJobs(ctx)
 	// Go treats the IPv4 wildcard 0.0.0.0 as a wildcard and may bind a

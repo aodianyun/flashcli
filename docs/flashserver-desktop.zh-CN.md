@@ -21,10 +21,11 @@ Windows 安装包内置 `flashcli-desktop.exe`（Rust + egui/eframe，不用 Web
   `flashserver` 的 `/v1/apps`。点「安装」会先展示 manifest 的安装步骤：脚本在
   **客户端 OS 本地执行**（Windows 应用装在 Windows，不在 WSL；其他系统用 `sh -c`），
   安装包 URL（.exe/.msi/.dmg/.pkg）在确认后**下载并运行**，普通页面链接在浏览器打开；
-  只有选择「运行脚本并安装 / 下载并安装」才会执行，「跳过」则只准备模型。应用安装完成
-  之后才准备并启动模型；守护进程收到缺少 `install_command`（`client`/`run`/`skip`）
+  只有选择「运行脚本并安装 / 下载并安装」才会执行，「跳过」则只准备模型。安装只负责
+  安装应用并**准备**模型 bundle，**不会启动**模型；「启动」是单独操作，也是执行
+  `setup.scripts` 的时机。守护进程收到缺少 `install_command`（`client`/`run`/`skip`）
   的安装请求会拒绝执行。平台校验与命令选择使用客户端 OS/arch
-  （`client_os`/`client_arch`）。若 manifest 声明 `setup.scripts`，手动启动/安装时会
+  （`client_os`/`client_arch`）。若 manifest 声明 `setup.scripts`，手动启动时会
   弹出确认框选择要执行的脚本；模型就绪后按顺序执行，先校验 `sha256`，并把客户端 home
   映射到 WSL 写入应用配置。确认的脚本定义、key 与客户端 home 会被保存；daemon 重启恢复
   应用后会自动执行同一组脚本（无需重新拉取 manifest），使用新接入地址。某个脚本失败会
@@ -37,7 +38,11 @@ Windows 安装包内置 `flashcli-desktop.exe`（Rust + egui/eframe，不用 Web
   bundle/权重缓存（重新安装需重新下载），但不会卸载应用自身安装的程序与数据。
   日志分三类：应用安装/准备日志（详情区显示最近 8 行，点「查看完整日志」看全部、可复制）、
   模型 serve 日志（模型页 → 更多 → 查看日志，可另存为）、服务日志（左侧「日志」页）。
-- **日志** —— 服务日志或单个模型的 serve 日志，可清空和另存为。
+- **日志** —— 服务日志（左侧「日志」页，可清空/另存为）与模型 serve 日志
+  （模型页 → 更多 → 查看日志）。服务日志包含 API 调用（方法/路径/状态/耗时，敏感字段
+  脱敏）、后台任务步骤（应用安装/启动/停止、模型加载/pull/冒烟）、setup 脚本输出、
+  清理/卸载，并持久化到 `~/.flashcli/logs/flashserver.log`（4 MiB 轮转，保留 `.1`），
+  重启后仍可查看。应用详情另有最近启动日志与「查看完整日志」。
 - **设置** —— 服务启停、开机启动、国内镜像、共享缓存清理、WSL 资源与防火墙端口、
   主题（`Ctrl+T`）、API 文档。
 

@@ -106,7 +106,7 @@ def test_app_install_url_and_uninstall(flashcli_bin, cli_env, tmp_path):
     try:
         proc = run_cli(
             flashcli_bin, env, "app", "install", "xym/demo",
-            "--no-model", "--no-start", timeout=180,
+            "--no-model", timeout=180,
         )
         assert proc.returncode == 0, proc.stderr
         assert "Download page" in proc.stdout
@@ -114,12 +114,12 @@ def test_app_install_url_and_uninstall(flashcli_bin, cli_env, tmp_path):
         state_path = home / "flashserver" / "apps.json"
         assert state_path.exists()
         state = json.loads(state_path.read_text(encoding="utf-8"))["apps"]["xym/demo:1.0.0"]
-        assert state["state"] == "ready"
+        assert state["state"] == "prepared"
         assert state["install"]["skipped"] is True
 
         proc = run_cli(flashcli_bin, env, "app", "status", "xym/demo", timeout=120)
         assert proc.returncode == 0, proc.stderr
-        assert "ready" in proc.stdout
+        assert "prepared" in proc.stdout
 
         proc = run_cli(flashcli_bin, env, "app", "uninstall", "xym/demo", "--yes", timeout=120)
         assert proc.returncode == 0, proc.stderr
@@ -140,7 +140,7 @@ def test_app_install_skips_shell_without_yes(flashcli_bin, cli_env, tmp_path):
     try:
         proc = run_cli(
             flashcli_bin, env, "app", "install", "xym/demo",
-            "--no-model", "--no-start", timeout=180,
+            "--no-model", timeout=180,
             # stdin is not a TTY here: the command must be skipped, not run.
         )
         assert proc.returncode == 0, proc.stderr
@@ -170,7 +170,7 @@ def test_app_install_confirms_shell_interactively(flashcli_bin, cli_env, tmp_pat
     try:
         proc = run_cli(
             flashcli_bin, env, "app", "install", "xym/demo",
-            "--no-model", "--no-start", timeout=180, input="y\n",
+            "--no-model", timeout=180, input="y\n",
         )
         assert proc.returncode == 0, proc.stderr
         assert "Run this command? [y/N]" in proc.stdout

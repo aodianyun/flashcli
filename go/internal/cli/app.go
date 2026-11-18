@@ -151,7 +151,7 @@ func appInstallCmd() *cobra.Command {
 			}
 			out := cmd.OutOrStdout()
 			if res.AlreadyReady {
-				fmt.Fprintf(out, "%s %s is already ready.\n", res.State.Key, res.State.Version)
+				fmt.Fprintf(out, "%s %s is already installed (state: %s).\n", res.State.Key, res.State.Version, res.State.State)
 			}
 			return nil
 		},
@@ -162,8 +162,6 @@ func appInstallCmd() *cobra.Command {
 	f.BoolVar(&opts.Force, "force", false, "Re-run the install command and refresh models")
 	f.BoolVar(&opts.NoInstall, "no-install", false, "Skip the application install command")
 	f.BoolVar(&opts.NoModel, "no-model", false, "Skip preparing the model bundles")
-	f.BoolVar(&opts.NoStart, "no-start", false, "Prepare models without starting them")
-	f.BoolVar(&opts.KeepPartial, "keep-partial", false, "Keep models started before a failure")
 	f.StringArrayVar(&opts.Bundles, "bundle", nil, "Override the default bundles (repeatable)")
 	return cmd
 }

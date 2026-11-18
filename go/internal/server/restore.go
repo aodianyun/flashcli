@@ -74,6 +74,7 @@ func (s *Server) restoreOnStart(ctx context.Context) {
 		}
 		for _, key := range keys {
 			svc := s.appService()
+			svc.Out = LogSink()
 			if _, err := svc.Start(ctx, key, false); err != nil {
 				log.Printf("restore app %s: %v", key, err)
 			}

@@ -79,8 +79,9 @@ flowchart LR
 
 - host 准备**所有** `default: true` 的 bundle；`--bundle` 可覆盖选择；
   若没有任何 default，则使用第一个
-- 逐个**串行**准备（bundle 树、venv、权重）
-- 全部准备完成后，作为**一组**启动：自动分配端口，逐个健康检查
+- 逐个**串行**准备（bundle 树、venv、权重）；安装到此为止，**不会启动**模型
+- `flashcli app start`（或桌面「启动」）再用自动分配的端口把准备好的模型作为一组启动，
+  并逐个健康检查
 - `serve.options` 以 `--flag value` 形式转发；选项名与默认值仍由 bundle 的
   `serve_options` 决定
 
@@ -96,9 +97,10 @@ bundle 版本是**不可变**的：cache key、marker 和权重 store 都由版�
    同时发布新的应用版本）。
 3. 重新安装应用（桌面端「重新安装」，或 `flashcli app install <app> --force`）。
 
-重新安装会重新拉取 manifest、停止不再被引用的旧模型（释放槽位/显存，保留缓存）、
-准备并启动新 bundle，然后针对新的接入地址执行已确认的配置脚本。旧缓存不会自动删除，
-确认不再需要时用 `flashcli bundle clean --all <old-ref>` 清理。
+重新安装会重新拉取 manifest、停止该应用正在运行的模型（释放槽位/显存，保留缓存）、
+准备新 bundle；安装**不会启动**模型，随后点「启动」才会启动并针对新的接入地址执行
+已确认的配置脚本。旧缓存不会自动删除，确认不再需要时用
+`flashcli bundle clean --all <old-ref>` 清理。
 
 新的**应用**版本是一个新的 app key：安装新版本并停止/卸载旧版本。同一应用版本下直接
 更新 bundle ref 也支持重新安装，但发布新应用版本才是符合不可变约定的路径。
@@ -148,7 +150,7 @@ bundle 版本是**不可变**的：cache key、marker 和权重 store 都由版�
 - 脚本在**客户端 home 上下文**中、模型就绪后执行；桌面端负责确认，flashserver 在
   WSL 中运行时会把 `HOME` 映射到客户端 home，从而写入应用的真实配置。端口会变，
   脚本必须可重复执行；daemon 重启恢复时会自动重跑已勾选的脚本
-- 每次手动启动/安装时确认选择（桌面端确认框；CLI 对每个脚本提示）。确认的脚本定义
+- 每次手动启动时确认选择（桌面端确认框；CLI 对每个脚本提示）。确认的脚本定义
   （URL/`sha256`/args）、key 和客户端 home 都会持久化，daemon 重启恢复应用后会在模型
   就绪时自动执行同一组脚本（无需重新拉取 manifest；脚本仍会拿到新的
   `{base_url}`/`{model}`/`{api_key}`）。全部不选则清空保存的选择。

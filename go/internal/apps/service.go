@@ -101,14 +101,12 @@ func lockApp(key string) func() {
 
 // InstallOptions controls `app install`.
 type InstallOptions struct {
-	Yes         bool
-	DryRun      bool
-	Force       bool
-	NoInstall   bool
-	NoModel     bool
-	NoStart     bool
-	KeepPartial bool
-	Bundles     []string
+	Yes       bool
+	DryRun    bool
+	Force     bool
+	NoInstall bool
+	NoModel   bool
+	Bundles   []string
 	// Confirm is asked before executing a shell install command. Nil means
 	// "skip unless Yes".
 	Confirm func(command string) bool
@@ -122,13 +120,9 @@ type InstallOptions struct {
 	// ScriptHandled records that the caller already executed the platform
 	// install command on its own platform; the host only records it.
 	ScriptHandled bool
-	// SetupScripts lists the setup script keys the user confirmed for this run
-	// (empty = run none). ClientHome is the caller's OS home, used to write the
-	// application's real config when the daemon runs in WSL. SetupProvided
-	// distinguishes an explicit empty selection from "no selection supplied".
-	SetupScripts  []string
-	ClientHome    string
-	SetupProvided bool
+	// PrepareOnly downloads/prepares the bundles without changing a running
+	// app's state (the /prepare endpoint).
+	PrepareOnly bool
 }
 
 // InstallResult describes what an install run did.
@@ -219,8 +213,8 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 	if err != nil {
 		return InstallResult{}, err
 	}
-	if found && existing.State == StateReady && !opts.Force {
-		fmt.Fprintf(out, "\n%s %s is already installed and ready (use --force to re-run).\n", key, m.Version)
+	if found && (existing.State == StateReady || existing.State == StatePrepared) && !opts.Force {
+		fmt.Fprintf(out, "\n%s %s is already installed (use --force to re-run).\n", key, m.Version)
 		return InstallResult{State: existing, AlreadyReady: true}, nil
 	}
 
@@ -228,19 +222,15 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 	state.Key = key
 	state.Version = m.Version
 	state.State = StatePlanned
-	// A reinstall can point at new bundle versions. Stop models that are no
-	// longer in the manifest so their slots/VRAM are released (caches stay).
-	if found {
-		keep := make(map[string]bool, len(refs))
-		for _, ref := range refs {
-			keep[ref] = true
-		}
+	// Install never starts models: a reinstall stops whatever is still running
+	// so the prepared set can be started explicitly afterwards. Caches stay.
+	if found && !opts.PrepareOnly {
 		for i := range existing.Models {
 			old := existing.Models[i]
-			if keep[old.Ref] {
+			if old.PID == 0 && old.Endpoint == "" {
 				continue
 			}
-			fmt.Fprintf(out, "\nRemoving model %s (no longer in the manifest)\n", old.Ref)
+			fmt.Fprintf(out, "\nStopping model %s for the reinstall\n", old.Ref)
 			s.stopModel(ctx, &old)
 		}
 	}
@@ -322,46 +312,25 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 		}
 	}
 
-	if !opts.NoStart {
-		state.State = StateStarting
-		state.SetupError = ""
-		state.UpdatedAt = s.now().UTC().Format(time.RFC3339)
-		s.save(&state)
-		if err := s.startModels(ctx, &state, opts.KeepPartial); err != nil {
-			if ctx.Err() != nil {
-				// Interrupted by a shutdown; the next daemon start resumes the
-				// start (the models are already prepared).
-				state.State = StateStarting
-				state.UpdatedAt = s.now().UTC().Format(time.RFC3339)
-				s.save(&state)
-				return res, err
-			}
-			state.State = StateFailed
-			state.Error = err.Error()
-			s.save(&state)
-			return res, err
-		}
-	}
-
 	now := s.now().UTC().Format(time.RFC3339)
 	if state.InstalledAt == "" {
 		state.InstalledAt = now
 	}
 	state.UpdatedAt = now
-	state.State = StateReady
+	if opts.PrepareOnly && found {
+		// Keep the live state/connection of an installed app while its bundles
+		// are refreshed in the background.
+		state.State = existing.State
+		state.Connection = existing.Connection
+	} else {
+		state.State = StatePrepared
+		// Nothing is running yet; the connection appears on the first start.
+		state.Connection = Connection{}
+	}
 	state.Error = ""
-	state.Connection = connectionFor(key, m.Version, state.Models)
 	s.save(&state)
 
-	if !opts.NoStart {
-		s.applySetupScripts(ctx, key, &state, SetupOptions{
-			Scripts:    opts.SetupScripts,
-			ClientHome: opts.ClientHome,
-			Provided:   opts.SetupProvided,
-		}, m)
-	}
-
-	fmt.Fprintf(out, "\nInstalled %s %s\n", key, m.Version)
+	fmt.Fprintf(out, "\nInstalled %s %s (models prepared; not started)\n", key, m.Version)
 	fmt.Fprintf(out, "Models:\n")
 	for _, mdl := range state.Models {
 		fmt.Fprintf(out, "  - %s  %s  (%s)\n", mdl.ID, mdl.Endpoint, mdl.Ref)

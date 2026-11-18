@@ -389,8 +389,6 @@ struct AppInstallPrompt {
     bundles: Vec<String>,
     command: Option<String>,
     force: bool,
-    setup_scripts: Vec<AppSetupScript>,
-    setup_run: bool,
 }
 
 /// A pending application uninstall.
@@ -1991,7 +1989,7 @@ impl App {
         let mut open_uninstall = false;
         let mut open_log = false;
         let wait_hint = "已有应用正在安装，请等待完成";
-        let can_start = installed && matches!(local_state.as_str(), "stopped" | "failed");
+        let can_start = installed && matches!(local_state.as_str(), "stopped" | "prepared" | "failed");
         let can_stop = installed && matches!(local_state.as_str(), "ready" | "failed");
         ui.add_space(8.0);
         ui.horizontal_wrapped(|ui| {
@@ -2355,8 +2353,6 @@ impl App {
                 bundles: default_app_bundles(manifest),
                 command: install_command(manifest),
                 force: installed,
-                setup_scripts: app_setup_scripts(manifest),
-                setup_run: true,
             });
         }
         if open_uninstall {
@@ -4471,7 +4467,6 @@ impl App {
         let installer = url_command.as_deref().map(installer_kind);
         let mut close = false;
         let mut choice: Option<AppInstallAction> = None;
-        let mut setup_run = prompt.setup_run;
         modal_backdrop(ctx, dark, &mut close);
         egui::Window::new("app_install_dialog")
             .title_bar(false)
@@ -4541,7 +4536,7 @@ impl App {
                     ui.add_space(6.0);
                     ui.label(
                         egui::RichText::new(
-                            "脚本会以当前用户权限执行，可以修改系统文件或写入应用目录。\n只在信任该应用来源时继续；也可以跳过脚本，仅安装并启动模型。",
+                            "脚本会以当前用户权限执行，可以修改系统文件或写入应用目录。\n只在信任该应用来源时继续；也可以跳过脚本，仅安装并准备模型（不启动）。",
                         )
                         .weak()
                         .small(),
@@ -4562,9 +4557,9 @@ impl App {
                     ui.add_space(6.0);
                     ui.label(
                         egui::RichText::new(if runnable {
-                            "将下载安装程序并以当前用户权限运行（可能弹出 UAC）。\n只在信任该应用来源时继续；也可以跳过，仅安装并启动模型。"
+                            "将下载安装程序并以当前用户权限运行（可能弹出 UAC）。\n只在信任该应用来源时继续；也可以跳过，仅安装并准备模型（不启动）。"
                         } else {
-                            "将在浏览器中打开下载页；flashcli 不会自动下载。\n也可以跳过，仅安装并启动模型。"
+                            "将在浏览器中打开下载页；flashcli 不会自动下载。\n也可以跳过，仅安装并准备模型（不启动）。"
                         })
                         .weak()
                         .small(),
@@ -4572,7 +4567,7 @@ impl App {
                 } else {
                     ui.add_space(12.0);
                     ui.label(
-                        egui::RichText::new("该应用在当前平台不需要安装脚本，将直接安装并启动模型。")
+                        egui::RichText::new("该应用在当前平台不需要安装脚本，将直接安装并准备模型（不启动）。")
                             .weak()
                             .small(),
                     );
@@ -4580,31 +4575,9 @@ impl App {
                 if prompt.force {
                     ui.add_space(8.0);
                     ui.label(
-                        egui::RichText::new("应用已安装：将重新执行安装流程并重启模型。")
+                        egui::RichText::new("应用已安装：将重新执行安装流程并准备模型（不自动启动）。")
                             .weak()
                             .small(),
-                    );
-                }
-                if !prompt.setup_scripts.is_empty() {
-                    ui.add_space(12.0);
-                    ui.label(
-                        egui::RichText::new("应用配置脚本（模型启动完成后按顺序执行）").strong(),
-                    );
-                    ui.checkbox(&mut setup_run, "执行配置脚本（本次操作）");
-                    for script in &prompt.setup_scripts {
-                        ui.label(
-                            egui::RichText::new(format!("  · {}  {}", script.key, script.url))
-                                .monospace()
-                                .small()
-                                .weak(),
-                        );
-                    }
-                    ui.label(
-                        egui::RichText::new(
-                            "每次安装/启动都会再次确认；脚本下载后先校验 sha256，失败会写入日志并停止后续脚本。",
-                        )
-                        .weak()
-                        .small(),
                     );
                 }
                 ui.add_space(14.0);
@@ -4672,20 +4645,9 @@ impl App {
             });
         if close {
             self.app_install = None;
-        } else if let Some(p) = self.app_install.as_mut() {
-            p.setup_run = setup_run;
         }
         if let Some(action) = choice {
             self.app_install = None;
-            let setup_keys = if setup_run {
-                prompt
-                    .setup_scripts
-                    .iter()
-                    .map(|script| script.key.clone())
-                    .collect()
-            } else {
-                Vec::new()
-            };
             let key = app_reference(&prompt.org, &prompt.name, &prompt.version);
             // Show the install progress immediately; the status card is only
             // rendered for installed applications.
@@ -4708,7 +4670,6 @@ impl App {
                 prompt.version,
                 action,
                 prompt.force,
-                setup_keys,
             );
         }
     }
@@ -6301,15 +6262,13 @@ fn default_app_bundles(manifest: &Value) -> Vec<String> {
 /// command itself and tells the daemon `client` (already handled) or `skip`
 /// (do not run it). The daemon gets the client platform for the manifest check
 /// and only prepares/starts the models.
-fn app_install_body(version: &str, ran_script: bool, force: bool, setup_scripts: &[String]) -> Value {
+fn app_install_body(version: &str, ran_script: bool, force: bool) -> Value {
     serde_json::json!({
         "version": version,
         "install_command": if ran_script { "client" } else { "skip" },
         "client_os": app_os_key(),
         "client_arch": app_arch_key(),
         "force": force,
-        "setup_scripts": setup_scripts,
-        "client_home": client_home(),
     })
 }
 
@@ -6317,6 +6276,7 @@ fn app_install_body(version: &str, ran_script: bool, force: bool, setup_scripts:
 fn app_state_badge(state: &str, ui: &egui::Ui) -> Option<(&'static str, egui::Color32)> {
     Some(match state {
         "ready" => ("运行中", green(ui)),
+        "prepared" => ("已准备", ui.visuals().weak_text_color()),
         "stopped" => ("已停止", ui.visuals().weak_text_color()),
         "failed" => ("失败", red(ui)),
         "starting" => ("启动中…", accent(ui)),
@@ -6741,7 +6701,6 @@ fn spawn_app_install(
     version: String,
     action: AppInstallAction,
     force: bool,
-    setup_scripts: Vec<String>,
 ) {
     std::thread::spawn(move || {
         let verb = "安装".to_string();
@@ -6787,7 +6746,7 @@ fn spawn_app_install(
             }
         };
         let path = format!("/v1/apps/{org}/{name}/install");
-        let body = app_install_body(&version, handled, force, &setup_scripts);
+        let body = app_install_body(&version, handled, force);
         match post_json_timeout(&path, &body, 120) {
             Ok(v) => match v["job_id"].as_str().filter(|id| !id.is_empty()) {
                 Some(job_id) => {

@@ -324,8 +324,9 @@ paths:
         daemon cannot ask. When `client_os`/`client_arch` are given, they are
         used for the manifest platform check and command selection (default: the
         daemon's own platform). URL commands are never fetched — they are
-        reported as a download page. The daemon then prepares every
-        `default: true` bundle and starts its models (unless `start` is false).
+        reported as a download page. Install only prepares every
+        `default: true` bundle; it never starts the models. Use the start
+        endpoint for that (and for `setup.scripts`).
       requestBody:
         required: true
         content:
@@ -343,12 +344,6 @@ paths:
                 client_os: { type: string, description: "Platform that owns the application (e.g. windows)" }
                 client_arch: { type: string, description: "arch as used by manifests: x86_64 / arm64" }
                 force: { type: boolean, default: false }
-                start: { type: boolean, default: true }
-                setup_scripts:
-                  type: array
-                  items: { type: string }
-                  description: "Confirmed setup script keys; they run in manifest order after the models are ready"
-                client_home: { type: string, description: "Client OS home used by setup scripts (a Windows path is mapped to /mnt/<drive>/... in WSL)" }
       responses:
         '202':
           description: Job accepted

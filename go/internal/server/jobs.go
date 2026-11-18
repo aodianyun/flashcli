@@ -44,6 +44,9 @@ func (j *Job) emit(phase, message string) {
 	}
 	state := j.State
 	j.mu.Unlock()
+	// Mirror job progress into the service log so the 日志 page shows model,
+	// app, pull and smoke activity, not only daemon startup lines.
+	fmt.Fprintf(LogSink(), "%s %s [%s] %s\n", j.Type, j.Ref, phase, message)
 	if j.onEvent != nil {
 		j.onEvent(state, ev)
 	}
@@ -73,6 +76,7 @@ func (j *Job) finish(err error) {
 	}
 	j.subs = nil
 	j.mu.Unlock()
+	fmt.Fprintf(LogSink(), "%s %s [%s] %s\n", j.Type, j.Ref, ev.Phase, ev.Message)
 	if j.onEvent != nil {
 		j.onEvent(state, ev)
 	}

@@ -192,8 +192,8 @@ func TestAppInstallUsesClientPlatform(t *testing.T) {
 	if st.Install.Command != "echo should-not-run" {
 		t.Fatalf("recorded command = %q", st.Install.Command)
 	}
-	if st.State != "ready" || len(st.Models) != 1 || !st.Models[0].Prepared {
-		t.Fatalf("install did not prepare/start the models: %+v", st)
+	if st.State != "prepared" || len(st.Models) != 1 || !st.Models[0].Prepared {
+		t.Fatalf("install did not prepare the models: %+v", st)
 	}
 }
 
@@ -276,11 +276,11 @@ func TestAppInstallRunsConfirmedScript(t *testing.T) {
 	if !st.Install.Executed || st.Install.Skipped {
 		t.Fatalf("run state = %+v", st.Install)
 	}
-	if st.State != "ready" || len(st.Models) != 1 || st.Models[0].Endpoint == "" {
+	if st.State != "prepared" || len(st.Models) != 1 || st.Models[0].Endpoint != "" {
 		t.Fatalf("install state = %+v", st)
 	}
-	if len(launcher.procs) != 1 {
-		t.Fatalf("launcher started %d models", len(launcher.procs))
+	if len(launcher.procs) != 0 {
+		t.Fatalf("install started %d models", len(launcher.procs))
 	}
 }
 

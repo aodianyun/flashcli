@@ -116,19 +116,19 @@ func TestInstallHappyPath(t *testing.T) {
 	if !res.InstallRan {
 		t.Fatal("install command did not run")
 	}
-	if res.State.State != StateReady || len(res.State.Models) != 2 {
+	if res.State.State != StatePrepared || len(res.State.Models) != 2 {
 		t.Fatalf("state = %+v", res.State)
 	}
-	if len(*prepared) != 2 || len(launcher.procs) != 2 {
+	if len(*prepared) != 2 || len(launcher.procs) != 0 {
 		t.Fatalf("prepared=%v procs=%d", *prepared, len(launcher.procs))
 	}
 	for _, m := range res.State.Models {
-		if m.PID == 0 || m.Endpoint == "" || !m.Prepared {
-			t.Fatalf("model not recorded: %+v", m)
+		if m.PID != 0 || m.Endpoint != "" || !m.Prepared {
+			t.Fatalf("model not recorded as prepared-only: %+v", m)
 		}
 	}
-	if !strings.HasPrefix(res.State.Connection.BaseURL, "http://127.0.0.1:") {
-		t.Fatalf("connection = %+v", res.State.Connection)
+	if res.State.Connection.BaseURL != "" {
+		t.Fatalf("install advertised a connection: %+v", res.State.Connection)
 	}
 	if _, err := os.Stat(svc.Registry.Path); err != nil {
 		t.Fatalf("registry not written: %v", err)
@@ -144,7 +144,7 @@ func TestInstallSkipsScriptWithoutConfirmation(t *testing.T) {
 	if res.InstallRan || !res.InstallSkipped || !res.State.Install.Skipped {
 		t.Fatalf("install = %+v skipped=%v", res, res.State.Install.Skipped)
 	}
-	if res.State.State != StateReady {
+	if res.State.State != StatePrepared {
 		t.Fatalf("state = %s", res.State.State)
 	}
 }
@@ -169,8 +169,10 @@ func TestInstallScriptFailureAborts(t *testing.T) {
 func TestStartFailureRollsBack(t *testing.T) {
 	launcher := &fakeLauncher{failRef: "a/two:1"}
 	svc, _ := newTestService(t, manifestJSON("a/one:1", "a/two:1"), launcher)
-	_, err := svc.Install(context.Background(), "xym/demo", InstallOptions{Yes: true})
-	if err == nil {
+	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{Yes: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Start(context.Background(), "xym/demo:1.0.0", false); err == nil {
 		t.Fatal("expected start failure")
 	}
 	if len(launcher.procs) != 1 || !launcher.procs[0].stopped {
@@ -182,10 +184,13 @@ func TestStartFailureRollsBack(t *testing.T) {
 	}
 }
 
-func TestReinstallStopsModelsRemovedFromManifest(t *testing.T) {
+func TestReinstallStopsRunningModels(t *testing.T) {
 	launcher := &fakeLauncher{}
 	svc, _ := newTestService(t, manifestJSON("a/one:1"), launcher)
 	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{Yes: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Start(context.Background(), "xym/demo:1.0.0", false); err != nil {
 		t.Fatal(err)
 	}
 	if len(launcher.procs) != 1 {
@@ -201,13 +206,16 @@ func TestReinstallStopsModelsRemovedFromManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !old.stopped {
-		t.Fatal("old model was not stopped after the bundle changed")
+		t.Fatal("old model was not stopped by the reinstall")
 	}
 	if len(res.State.Models) != 1 || res.State.Models[0].Ref != "b/two:2" {
 		t.Fatalf("models = %+v", res.State.Models)
 	}
-	if len(launcher.procs) != 2 {
-		t.Fatalf("procs = %d, want old + new", len(launcher.procs))
+	if res.State.State != StatePrepared {
+		t.Fatalf("reinstall state = %q", res.State.State)
+	}
+	if len(launcher.procs) != 1 {
+		t.Fatalf("reinstall started a model (procs=%d)", len(launcher.procs))
 	}
 }
 
@@ -224,7 +232,7 @@ func TestReinstallIsIdempotent(t *testing.T) {
 	if !res.AlreadyReady {
 		t.Fatal("second install was not reported as ready")
 	}
-	if len(*prepared) != 1 || len(launcher.procs) != 1 {
+	if len(*prepared) != 1 || len(launcher.procs) != 0 {
 		t.Fatalf("prepared=%v procs=%d", *prepared, len(launcher.procs))
 	}
 }
@@ -290,6 +298,9 @@ func TestStatusDowngradesReadyWhenModelsAreGone(t *testing.T) {
 	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{Yes: true}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := svc.Start(context.Background(), "xym/demo:1.0.0", false); err != nil {
+		t.Fatal(err)
+	}
 	st, err := svc.Status(context.Background(), "xym/demo:1.0.0")
 	if err != nil {
 		t.Fatal(err)
@@ -313,7 +324,7 @@ func TestStatusDowngradesReadyWhenModelsAreGone(t *testing.T) {
 // by a status query (the UI polls it while the operation runs).
 func TestStatusKeepsFreshTransitionalState(t *testing.T) {
 	svc, _ := newTestService(t, manifestJSON("a/one:1"), &fakeLauncher{})
-	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{Yes: true, NoStart: true}); err != nil {
+	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{Yes: true}); err != nil {
 		t.Fatal(err)
 	}
 	st, ok, err := svc.Registry.Get("xym/demo:1.0.0")
@@ -388,7 +399,7 @@ func TestConcurrentStartsAreSerialized(t *testing.T) {
 	launcher := &concurrentLauncher{}
 	svc, _ := newTestService(t, manifestJSON("a/one:1"), &fakeLauncher{})
 	svc.Launcher = launcher
-	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{Yes: true, NoStart: true}); err != nil {
+	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{Yes: true}); err != nil {
 		t.Fatal(err)
 	}
 	var wg sync.WaitGroup

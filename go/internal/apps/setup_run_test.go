@@ -113,7 +113,7 @@ func TestStartRunsConfirmedSetupScripts(t *testing.T) {
     }`, srv.URL, hex.EncodeToString(sum[:]))
 	svc, _ := newTestService(t, []byte(setupManifest(scriptJSON)), &fakeLauncher{})
 	if _, err := svc.Install(context.Background(), "xym/workbuddy", InstallOptions{
-		Yes: true, NoStart: true, OS: "windows", Arch: "x86_64",
+		Yes: true, OS: "windows", Arch: "x86_64",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestSetupScriptsRunInOrderAndStopOnFailure(t *testing.T) {
 	}
 }
 
-func TestInstallRunsConfirmedSetupScripts(t *testing.T) {
+func TestInstallDoesNotRunSetupScripts(t *testing.T) {
 	if _, err := setupPython(); err != nil {
 		t.Skip(err)
 	}
@@ -238,26 +238,27 @@ func TestInstallRunsConfirmedSetupScripts(t *testing.T) {
       "sha256": %q,
       "args": ["{base_url}", "{model}", "--api-key {api_key}"]
     }`, srv.URL, hex.EncodeToString(sum[:]))
-	svc, _ := newTestService(t, []byte(setupManifest(scriptJSON)), &fakeLauncher{})
+	launcher := &fakeLauncher{}
+	svc, _ := newTestService(t, []byte(setupManifest(scriptJSON)), launcher)
 	home := t.TempDir()
 	res, err := svc.Install(context.Background(), "xym/workbuddy", InstallOptions{
 		Yes: true, OS: "windows", Arch: "x86_64",
-		SetupScripts: []string{"workbuddy"}, ClientHome: home, SetupProvided: true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(home, "setup.json")); err != nil {
-		t.Fatalf("setup script did not run during install: %v", err)
+	if res.State.State != StatePrepared {
+		t.Fatalf("state = %q", res.State.State)
 	}
-	if len(res.State.SetupScripts) != 1 || res.State.SetupScripts[0] != "workbuddy" {
-		t.Fatalf("setup_scripts = %#v", res.State.SetupScripts)
+	if len(launcher.procs) != 0 {
+		t.Fatalf("install started %d models", len(launcher.procs))
 	}
-	if res.State.SetupClientHome != home {
-		t.Fatalf("setup_client_home = %q, want %q", res.State.SetupClientHome, home)
+	// Setup needs the running connection, so install must not have run it.
+	if _, err := os.Stat(filepath.Join(home, "setup.json")); !os.IsNotExist(err) {
+		t.Fatal("install ran a setup script")
 	}
-	if len(res.State.SetupPlan) != 1 || res.State.SetupPlan[0].URL != srv.URL {
-		t.Fatalf("setup_plan = %#v", res.State.SetupPlan)
+	if len(res.State.SetupScripts) != 0 || len(res.State.SetupPlan) != 0 {
+		t.Fatalf("install recorded a setup selection: %v %v", res.State.SetupScripts, res.State.SetupPlan)
 	}
 }
 
@@ -284,7 +285,7 @@ func TestRestoreReplaysSavedSetupScripts(t *testing.T) {
     }`, srv.URL, hex.EncodeToString(sum[:]))
 	svc, _ := newTestService(t, []byte(setupManifest(scriptJSON)), &fakeLauncher{})
 	if _, err := svc.Install(context.Background(), "xym/workbuddy", InstallOptions{
-		Yes: true, NoStart: true, OS: "windows", Arch: "x86_64",
+		Yes: true, OS: "windows", Arch: "x86_64",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -329,7 +330,7 @@ func TestStartCanceledKeepsIntent(t *testing.T) {
 	launcher := &fakeLauncher{failRef: "a/one:1"}
 	svc, _ := newTestService(t, manifestJSON("a/one:1"), launcher)
 	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{
-		Yes: true, NoStart: true,
+		Yes: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -359,7 +360,7 @@ func TestSetupFailureIgnoresInterruptedContext(t *testing.T) {
 func TestStartClearsStaleSetupError(t *testing.T) {
 	svc, _ := newTestService(t, manifestJSON("a/one:1"), &fakeLauncher{})
 	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{
-		Yes: true, NoStart: true,
+		Yes: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -395,7 +396,7 @@ func TestExplicitEmptySetupSelectionClearsSavedPlan(t *testing.T) {
     }`
 	svc, _ := newTestService(t, []byte(setupManifest(scriptJSON)), &fakeLauncher{})
 	if _, err := svc.Install(context.Background(), "xym/workbuddy", InstallOptions{
-		Yes: true, NoStart: true, OS: "windows", Arch: "x86_64",
+		Yes: true, OS: "windows", Arch: "x86_64",
 	}); err != nil {
 		t.Fatal(err)
 	}

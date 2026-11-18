@@ -166,8 +166,8 @@ the connection or the setup config pointing at different ports.
 
 After the models become ready, the host runs the manifest's `setup.scripts` in
 manifest order for the keys the user confirmed **for this run**. The client (the
-desktop dialog on every start/install, or the CLI prompt per script) is the
-confirmation point. Each script is downloaded, verified against `sha256`, and
+desktop dialog on a start, or the CLI prompt per script) is the confirmation
+point. Each script is downloaded, verified against `sha256`, and
 executed with the explicit argv template (`{base_url}`, `{model}`, `{api_key}`).
 A failure is written to the app job log and stops the remaining scripts; the
 running app is not marked failed. Apps without `setup.scripts` skip this step.
@@ -182,8 +182,8 @@ manifest fetch.
 - **Prepare failure** aborts; already prepared bundles stay cached (re-run resumes).
 - **Start/health failure** stops the models started by that run
   (`--keep-partial` keeps them for debugging).
-- Re-running `app install` is idempotent: it fills missing steps, reuses running
-  models, and only re-runs the install script with `--force`.
+- Re-running `app install` is idempotent: it fills missing prepare steps and
+  only re-runs the install script with `--force`; it never starts models.
 
 ## Commands
 
@@ -191,8 +191,7 @@ manifest fetch.
 flashcli app list   [--json]
 flashcli app show   <key> [--json]
 flashcli app install <key> [--yes|-y] [--dry-run] [--force]
-                     [--bundle REF]... [--no-install] [--no-model] [--no-start]
-                     [--keep-partial]
+                     [--bundle REF]... [--no-install] [--no-model]
 flashcli app status <key> [--json]
 flashcli app start|stop|restart <key>
 flashcli app logs   <key> [--ref REF] [--lines N] [-f]
