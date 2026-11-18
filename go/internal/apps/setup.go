@@ -160,15 +160,23 @@ func setupPython() (string, error) {
 // setupEnv maps the client OS home into the daemon's filesystem so a client-side
 // script writes the application's real config (Windows path -> /mnt/<drive>/...).
 func setupEnv(clientHome string) []string {
-	env := os.Environ()
 	home := strings.TrimSpace(clientHome)
 	if home == "" {
-		return env
+		return os.Environ()
 	}
 	if runtime.GOOS != "windows" && len(home) >= 2 && home[1] == ':' {
 		drive := strings.ToLower(home[:1])
 		rest := strings.ReplaceAll(home[2:], `\`, "/")
 		home = "/mnt/" + drive + rest
+	}
+	// Replace any existing HOME/USERPROFILE: duplicate entries in the child
+	// environment are ambiguous and the script must see the client home.
+	env := make([]string, 0, len(os.Environ())+2)
+	for _, item := range os.Environ() {
+		if strings.HasPrefix(item, "HOME=") || strings.HasPrefix(item, "USERPROFILE=") {
+			continue
+		}
+		env = append(env, item)
 	}
 	env = append(env, "HOME="+home)
 	if strings.Contains(clientHome, `\`) {
