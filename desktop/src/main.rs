@@ -1124,20 +1124,7 @@ impl App {
                 running: true,
                 log: String::new(),
             });
-        if !line.is_empty() {
-            append_app_log(&mut job.log, line);
-            // A new stage starts with its own progress; the previous stage's
-            // percentage (e.g. a finished download) must not stay at 100%.
-            let phase = app_job_phase(line, &job.phase);
-            if phase != job.phase {
-                job.phase = phase;
-                job.percent = None;
-            }
-            if let Some(pct) = parse_pct(line) {
-                job.percent = Some(pct);
-            }
-        }
-        job.running = running;
+        apply_job_event(job, verb, line, running);
     }
 
     /// Merge a fresh local state into the detail pane and the list row.
@@ -5847,6 +5834,32 @@ fn app_arch_key() -> &'static str {
         "aarch64" => "arm64",
         other => other,
     }
+}
+
+/// Merge one job event. A new action (verb change or a job that had finished)
+/// must not keep the previous verb/log: stop-then-start used to show 正在停止
+/// while the start was already running.
+fn apply_job_event(job: &mut AppJobState, verb: &str, line: &str, running: bool) {
+    if !job.running || job.verb != verb {
+        job.verb = verb.to_string();
+        job.phase = default_app_job_phase(verb);
+        job.percent = None;
+        job.log.clear();
+    }
+    if !line.is_empty() {
+        append_app_log(&mut job.log, line);
+        // A new stage starts with its own progress; the previous stage's
+        // percentage (e.g. a finished download) must not stay at 100%.
+        let phase = app_job_phase(line, &job.phase);
+        if phase != job.phase {
+            job.phase = phase;
+            job.percent = None;
+        }
+        if let Some(pct) = parse_pct(line) {
+            job.percent = Some(pct);
+        }
+    }
+    job.running = running;
 }
 
 fn app_setup_scripts(manifest: &Value) -> Vec<AppSetupScript> {

@@ -244,6 +244,27 @@ fn transitional_states_and_model_ref() {
 }
 
 #[test]
+fn a_new_action_resets_the_previous_job_verb_and_log() {
+    let mut job = AppJobState {
+        verb: "停止".to_string(),
+        phase: "启动模型".to_string(),
+        percent: Some(50.0),
+        running: false,
+        log: "stopping x ...\n".to_string(),
+    };
+    apply_job_event(&mut job, "启动", "", true);
+    assert_eq!(job.verb, "启动");
+    assert_eq!(job.phase, "启动模型");
+    assert!(job.log.is_empty());
+    assert!(job.running);
+    apply_job_event(&mut job, "启动", "starting x ...", true);
+    assert!(job.log.contains("starting x"));
+    apply_job_event(&mut job, "启动", "", false);
+    assert!(!job.running);
+    assert!(job.log.contains("starting x"));
+}
+
+#[test]
 fn installer_kinds_follow_the_extension() {
     assert!(matches!(
         installer_kind("https://x/a.exe?token=1"),
