@@ -178,7 +178,7 @@ def test_server_apps_list_and_manifest(flashserver_bin, flashcli_bin, cli_env, t
         hub.shutdown()
 
 
-def _wait_job(base: str, job_id: str, timeout: float = 120.0) -> tuple[str, dict]:
+def _wait_job(base: str, job_id: str, timeout: float = 600.0) -> tuple[str, dict]:
     deadline = time.time() + timeout
     state, job = "", {}
     while time.time() < deadline:

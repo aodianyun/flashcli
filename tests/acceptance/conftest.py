@@ -57,6 +57,9 @@ def cli_env(home: Path) -> dict[str, str]:
     env.update(
         {
             "FLASHCLI_HOME": str(home / "home"),
+            # The venv lives in each test's temp home, but the uv package cache
+            # must be shared or every install re-downloads the Python stack.
+            "UV_CACHE_DIR": str(home / "home" / "cache" / "uv"),
             "FLASHCLI_BUNDLE_PIP_SPEC": str(ROOT / "flashcli-bundle"),
             "FLASHCLI_SKIP_CUDA_USERLAND": "1",
             "FLASHCLI_SKIP_WEIGHTS": "1",
