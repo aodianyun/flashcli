@@ -267,6 +267,11 @@ Shared by the CLI and the daemon at `$FLASHCLI_HOME/flashserver/apps.json`
   the slots and the 模型 page list stay accurate even though the daemon builds a
   short-lived app service per request.
 - Auto ports are recorded; on restart the recorded port is reused when free.
+- On daemon start, apps that were ready with live models are started again
+  (models loaded from the 模型 page are restored from
+  `~/.flashcli/flashserver/models.json`). This runs in the background through
+  normal admission; the OS autostart toggle only decides whether the daemon
+  starts at boot.
 
 ## Configuration (deferred)
 

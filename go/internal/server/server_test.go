@@ -138,6 +138,10 @@ func (f *fakeLauncher) Start(_ context.Context, ref string, port int) (ServeProc
 	return p, nil
 }
 
+func (f *fakeLauncher) StartWithOptions(ctx context.Context, ref string, opts modelrun.LoadOptions) (ServeProcess, error) {
+	return f.Start(ctx, ref, opts.Port)
+}
+
 func fakeInspect(string) (BundleInfo, error) { return BundleInfo{}, nil }
 
 func TestLoadRejectsRunOnly(t *testing.T) {
@@ -511,6 +515,89 @@ func TestManagerClaimOnlyForResidentModels(t *testing.T) {
 	}
 	if l.procs[0].stopped {
 		t.Fatal("model stopped while claim owner app:b is present")
+	}
+}
+
+// A model-page load is persisted and restored by the next daemon; app-only
+// models are restored from the app registry instead.
+func TestManagerRestoresModelPageState(t *testing.T) {
+	state := filepath.Join(t.TempDir(), "models.json")
+	l := &fakeLauncher{}
+	m := NewManagerWithOptions(l, ManagerOptions{Inspect: fakeInspect, StatePath: state})
+	if _, err := m.Load(context.Background(), "demo:1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.LoadFor(context.Background(), "app:1", "app:a"); err != nil {
+		t.Fatal(err)
+	}
+	blob, err := os.ReadFile(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(blob), "demo:1") {
+		t.Fatalf("model-page ref not persisted: %s", blob)
+	}
+	if strings.Contains(string(blob), "app:1") {
+		t.Fatalf("app-owned model must not be persisted as a model-page load: %s", blob)
+	}
+
+	l2 := &fakeLauncher{}
+	m2 := NewManagerWithOptions(l2, ManagerOptions{Inspect: fakeInspect, StatePath: state})
+	if errs := m2.RestoreModels(context.Background()); len(errs) != 0 {
+		t.Fatalf("restore errors: %v", errs)
+	}
+	if _, ok := m2.Endpoint("demo:1"); !ok {
+		t.Fatal("demo:1 not restored")
+	}
+	if len(l2.procs) != 1 {
+		t.Fatalf("restored processes = %d, want 1", len(l2.procs))
+	}
+	if err := m2.Unload(context.Background(), "demo:1"); err != nil {
+		t.Fatal(err)
+	}
+	blob, _ = os.ReadFile(state)
+	if strings.Contains(string(blob), "demo:1") {
+		t.Fatalf("unload did not persist: %s", blob)
+	}
+}
+
+// A failed restore keeps the saved intent so the next start can retry.
+func TestManagerRestoreKeepsFailedModels(t *testing.T) {
+	state := filepath.Join(t.TempDir(), "models.json")
+	if err := os.WriteFile(state, []byte(`{"models":["ok:1","bad:1"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := NewManagerWithOptions(&fakeLauncher{}, ManagerOptions{
+		StatePath: state,
+		Inspect: func(refStr string) (BundleInfo, error) {
+			if refStr == "bad:1" {
+				return BundleInfo{}, errors.New("boom")
+			}
+			return BundleInfo{}, nil
+		},
+	})
+	errs := m.RestoreModels(context.Background())
+	if len(errs) != 1 {
+		t.Fatalf("restore errors = %v, want one", errs)
+	}
+	blob, _ := os.ReadFile(state)
+	if !strings.Contains(string(blob), "ok:1") || !strings.Contains(string(blob), "bad:1") {
+		t.Fatalf("saved intent changed after a partial restore: %s", blob)
+	}
+}
+
+func TestRestoreAppsOnlyWhenModelsWereRunning(t *testing.T) {
+	running := apps.AppState{State: apps.StateReady, Models: []apps.ModelState{{Ref: "a/one:1", PID: 12}}}
+	prepared := apps.AppState{State: apps.StateReady, Models: []apps.ModelState{{Ref: "a/one:1", Prepared: true}}}
+	stopped := apps.AppState{State: apps.StateStopped, Models: []apps.ModelState{{Ref: "a/one:1", PID: 12}}}
+	if !appWasRunning(running) {
+		t.Fatal("running app not detected")
+	}
+	if appWasRunning(prepared) {
+		t.Fatal("start=false app must not be restored")
+	}
+	if appWasRunning(stopped) {
+		t.Fatal("stopped app must not be restored")
 	}
 }
 

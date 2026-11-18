@@ -2,8 +2,13 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,6 +44,10 @@ type ManagerOptions struct {
 	Inspect func(string) (BundleInfo, error)
 	// ServeSettings stores per-model host/port/serve options. Nil disables them.
 	ServeSettings *serveSettingsStore
+	// StatePath persists the model-page loaded set so a daemon restart (for
+	// example after a reboot with autostart enabled) restores it. Empty
+	// disables persistence.
+	StatePath string
 }
 
 // Manager owns resident serve processes.
@@ -49,6 +58,9 @@ type Manager struct {
 	launcher  Launcher
 	opts      ManagerOptions
 	pending   int
+	// restoring suppresses persistence while RestoreModels replays the saved
+	// set, so a model that fails to load now is not dropped from the file.
+	restoring bool
 }
 
 type instance struct {
@@ -109,6 +121,9 @@ func (m *Manager) loadOwned(ctx context.Context, refStr, owner string, progress 
 			// be handed out as a live instance: reload instead.
 			if inst.process.Running() {
 				addOwnerLocked(inst, owner)
+				if owner == ownerModel && !m.restoring {
+					m.persistModelsLocked()
+				}
 				info := infoFor(inst)
 				m.mu.Unlock()
 				return &info, nil
@@ -138,6 +153,9 @@ func (m *Manager) loadOwned(ctx context.Context, refStr, owner string, progress 
 		if err == nil {
 			if inst, ok := m.instances[refStr]; ok {
 				addOwnerLocked(inst, owner)
+				if owner == ownerModel && !m.restoring {
+					m.persistModelsLocked()
+				}
 				info = infoFor(inst)
 			}
 		}
@@ -281,6 +299,7 @@ func (m *Manager) UnloadIfLoaded(ctx context.Context, refStr string) (bool, erro
 	inst, ok := m.instances[refStr]
 	if ok {
 		delete(m.instances, refStr)
+		m.persistModelsLocked()
 	}
 	m.mu.Unlock()
 	if !ok {
@@ -307,6 +326,7 @@ func (m *Manager) ReleaseFor(ctx context.Context, refStr, owner string) (bool, e
 		return true, nil
 	}
 	delete(m.instances, refStr)
+	m.persistModelsLocked()
 	m.mu.Unlock()
 	return true, inst.process.Stop(ctx)
 }
@@ -411,6 +431,89 @@ func (m *Manager) Close(ctx context.Context) {
 	for _, inst := range instances {
 		_ = inst.process.Stop(ctx)
 	}
+}
+
+// modelsStateFile is the persisted model-page intent.
+type modelsStateFile struct {
+	Models []string `json:"models"`
+}
+
+// persistModelsLocked writes the model-page loaded set (models with the "model"
+// owner); app-only models are restored from the app registry instead.
+func (m *Manager) persistModelsLocked() {
+	if m.opts.StatePath == "" || m.restoring {
+		return
+	}
+	refs := make([]string, 0, len(m.instances))
+	for refStr, inst := range m.instances {
+		if _, ok := inst.owners[ownerModel]; ok {
+			refs = append(refs, refStr)
+		}
+	}
+	m.writeModelsStateLocked(refs)
+}
+
+func (m *Manager) writeModelsStateLocked(refs []string) {
+	if m.opts.StatePath == "" {
+		return
+	}
+	sort.Strings(refs)
+	blob, err := json.MarshalIndent(modelsStateFile{Models: refs}, "", "  ")
+	if err != nil {
+		log.Printf("persist loaded models: %v", err)
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(m.opts.StatePath), 0o755); err != nil {
+		log.Printf("persist loaded models: %v", err)
+		return
+	}
+	tmp := m.opts.StatePath + ".tmp"
+	if err := os.WriteFile(tmp, append(blob, '\n'), 0o644); err != nil {
+		log.Printf("persist loaded models: %v", err)
+		return
+	}
+	if err := os.Rename(tmp, m.opts.StatePath); err != nil {
+		log.Printf("persist loaded models: %v", err)
+	}
+}
+
+// RestoreModels loads the model-page set saved before the daemon stopped (for
+// example after a reboot with autostart enabled). Failures are returned; the
+// saved set is kept so a later start can retry.
+func (m *Manager) RestoreModels(ctx context.Context) []error {
+	if m.opts.StatePath == "" {
+		return nil
+	}
+	blob, err := os.ReadFile(m.opts.StatePath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return []error{err}
+	}
+	var file modelsStateFile
+	if err := json.Unmarshal(blob, &file); err != nil {
+		return []error{fmt.Errorf("parse %s: %w", m.opts.StatePath, err)}
+	}
+	if len(file.Models) == 0 {
+		return nil
+	}
+	m.mu.Lock()
+	m.restoring = true
+	m.mu.Unlock()
+	var errs []error
+	for _, refStr := range file.Models {
+		if _, err := m.Load(ctx, refStr); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", refStr, err))
+		}
+	}
+	m.mu.Lock()
+	m.restoring = false
+	// Keep the original intent; a model that could not load now is retried on
+	// the next daemon start instead of silently disappearing.
+	m.writeModelsStateLocked(file.Models)
+	m.mu.Unlock()
+	return errs
 }
 
 func (m *Manager) checkCapacityLocked(ctx context.Context, b BundleInfo) error {

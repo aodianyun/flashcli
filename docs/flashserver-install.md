@@ -104,6 +104,21 @@ Service state and auto-start are independent: stopping never disables auto-start
 and toggling auto-start never starts or stops the service. `/v1/system` reports
 the current auto-start state (`enabled`, `disabled`, `unknown`).
 
+### Restart behavior
+
+On service start, `flashserver` resumes the previous session:
+
+- models loaded from the 模型 page are reloaded (the set is recorded in
+  `~/.flashcli/flashserver/models.json`; a model that fails now stays in the
+  file and is retried on the next start);
+- applications whose stored state is `ready` with recorded models are started
+  again, through the same slot/VRAM admission and owner tracking.
+
+Restores run in the background and sequentially, so a slow model does not block
+the HTTP API; an app restore failure is logged and marks the app `failed`.
+Auto-start only controls whether the service starts at boot — the client
+application itself (WorkBuddy, Grok CLI, …) keeps its own autostart.
+
 ## Uninstall
 
 ```bash

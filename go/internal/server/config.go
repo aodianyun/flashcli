@@ -3,8 +3,10 @@ package server
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 
 	"github.com/aodianyun/flashcli/go/internal/modelrun"
+	"github.com/aodianyun/flashcli/go/internal/paths"
 )
 
 // Config is the on-disk flashserver configuration written by flashserver-setup.
@@ -48,6 +50,7 @@ func NewFromConfig(cfg Config) *Server {
 			MaxLoaded:     cfg.MaxLoaded,
 			GPU:           s.GPU,
 			ServeSettings: s.ServeSettings,
+			StatePath:     filepath.Join(paths.Home(), "flashserver", "models.json"),
 		})
 	}
 	return s

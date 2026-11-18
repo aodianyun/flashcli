@@ -195,6 +195,7 @@ func (s *Server) Run(ctx context.Context) error {
 			s.Manager.Close(shutdownCtx)
 		}
 	}()
+	s.restoreOnStart(ctx)
 	log.Printf("flashserver %s listening on http://%s", version.Version, ln.Addr())
 	err = srv.Serve(ln)
 	if errors.Is(err, http.ErrServerClosed) {
