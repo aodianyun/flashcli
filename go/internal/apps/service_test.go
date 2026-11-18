@@ -214,6 +214,9 @@ func TestReinstallStopsRunningModels(t *testing.T) {
 	if res.State.State != StatePrepared {
 		t.Fatalf("reinstall state = %q", res.State.State)
 	}
+	if res.State.Models[0].PID != 0 || res.State.Models[0].Endpoint != "" {
+		t.Fatalf("reinstall kept a stale runtime: %+v", res.State.Models[0])
+	}
 	if len(launcher.procs) != 1 {
 		t.Fatalf("reinstall started a model (procs=%d)", len(launcher.procs))
 	}

@@ -4592,7 +4592,7 @@ impl App {
                     let skip_label = if shell_command.is_some() {
                         "跳过脚本安装"
                     } else if url_command.is_some() {
-                        "跳过，仅安装模型"
+                        "跳过，仅准备模型"
                     } else {
                         ""
                     };

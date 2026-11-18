@@ -226,12 +226,12 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 	// so the prepared set can be started explicitly afterwards. Caches stay.
 	if found && !opts.PrepareOnly {
 		for i := range existing.Models {
-			old := existing.Models[i]
+			old := &existing.Models[i]
 			if old.PID == 0 && old.Endpoint == "" {
 				continue
 			}
 			fmt.Fprintf(out, "\nStopping model %s for the reinstall\n", old.Ref)
-			s.stopModel(ctx, &old)
+			s.stopModel(ctx, old)
 		}
 	}
 	state.Models = planModels(refs, existing.Models)
@@ -333,7 +333,11 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 	fmt.Fprintf(out, "\nInstalled %s %s (models prepared; not started)\n", key, m.Version)
 	fmt.Fprintf(out, "Models:\n")
 	for _, mdl := range state.Models {
-		fmt.Fprintf(out, "  - %s  %s  (%s)\n", mdl.ID, mdl.Endpoint, mdl.Ref)
+		if mdl.Endpoint != "" {
+			fmt.Fprintf(out, "  - %s  %s  (%s)\n", mdl.ID, mdl.Endpoint, mdl.Ref)
+		} else {
+			fmt.Fprintf(out, "  - %s  (%s) prepared\n", mdl.ID, mdl.Ref)
+		}
 	}
 	if state.Connection.BaseURL != "" {
 		fmt.Fprintf(out, "Connection: %s (api_key=%s)\n", state.Connection.BaseURL, state.Connection.APIKey)
