@@ -39,10 +39,13 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 
 ## Shared host services (CLI + flashserver)
 
-`flashcli` (CLI) and `flashserver` (resident daemon) are two frontends over the same on-disk state. All cache-facing decisions live in **`go/internal/host`**; the frontends must not duplicate them:
+`flashcli` (CLI) and `flashserver` (resident daemon) are two frontends over the same on-disk state. **Any behavior needed by both MUST be implemented once in a shared package and called from both**; a second implementation in `go/internal/cli` or `go/internal/server` is a defect, even if the two copies agree today.
 
 | Capability | Shared API | CLI use | flashserver use |
 |------------|------------|---------|-----------------|
+| Pull / runtime + venv preparation / weights | `host.Pull`, `host.EnsureRuntime`, `host.ResolveWeights` | `flashcli pull`, `run`/`serve` | `/v1/pull`, app prepare, Manager |
+| Serve log name / tail / readiness | `modelrun.LogName`, `modelrun.TailLines`, `modelrun.WaitHealthy` | serve child, `app logs` | `/v1/logs`, Manager/app start |
+| App install/start/stop/state/restore | `apps.Service`, `apps.WasRunning` | `flashcli app ...` | `/v1/apps`, restore-on-start |
 | Cache areas + unique allocated bytes | `host.Storage()` | `flashcli du` | `GET /v1/storage` |
 | Cached models, sizes, readiness, runtime bytes | `host.ListModels()` | `flashcli models list` | `GET /v1/models` |
 | Bundle usability / serve capability | `host.BundleRootUsable`, `host.ListModels` | `models list/show` | `/v1/models` |
@@ -50,15 +53,18 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 | Canonical ref/cache key | `host.RefCacheKey` | ref resolution | cleanup/API refs |
 | Cleanup path selection + removal | `host.RefPaths`, `host.RuntimePaths`, `host.OrphanPaths`, `host.AllDataPaths`, `host.SharedCachePaths`, `host.RemovePaths` | `flashcli bundle clean`, `flashcli cache clean` | `/v1/models/clean`, `/v1/storage/clean` |
 | Remove model cache | `host.RemoveCachedRef` | `bundle clean` semantics | `/v1/models/clean` |
+| GPU / system probes | `gpu.*`, `preflight.*`, `host.EnsureSystemRequirements` | run/serve, models | Manager admission, `/v1/system` |
 
 Rules:
 
-- **Do not** add another marker walker, weights-readiness check, directory-size walker, or cleanup path resolver under `go/internal/cli` or `go/internal/server`.
-- Add the behavior once in `host`, then expose it through both frontends. Presentation-only helpers (tables, colors, prompts) stay in the frontend.
+- **Do not** add another marker walker, weights-readiness check, directory-size walker, cleanup path resolver, pull orchestration, log-name sanitizer/tailer, readiness loop, or app-state predicate under `go/internal/cli` or `go/internal/server`.
+- Add the behavior once in the shared package, then expose it through both frontends. Presentation-only helpers (tables, colors, prompts) stay in the frontend.
 - **Pull/prepare is one pipeline:** `host.Pull` is used by `flashcli pull`, `/v1/pull` and app preparation; `host.EnsureRuntime` is the runtime/venv preparation used by pull, and must stay aligned with `flashcli serve` (system requirements, protocol cache schema, CUDA).
 - **Serve children** use `modelrun.LogName`/`modelrun.TailLines` for log file naming/tailing and `modelrun.WaitHealthy` for readiness. Serve logs live under the canonical `~/.flashcli/logs/serve` (config `log_dir` overrides); both `flashcli app logs` and `/v1/logs` read the same name.
 - **App state predicates** (running/restore) live in `apps` (`apps.WasRunning`); the daemon restore and the desktop must not re-derive them.
+- **Isolation:** the daemon may wrap a shared service with a Launcher/Stopper (for example owner-aware Manager admission), but the lifecycle logic itself stays in `apps`; the CLI must not grow a parallel copy.
 - `flashcli cache clean` removes the shared cache group (`cache` + base Python + uv), matching `/v1/storage/clean {"targets":["cache"]}`. Model data/runtimes use `flashcli bundle clean` / `/v1/models/clean`; shared weights/runtime are reference-counted and kept. Disk accounting and ref-path selection are shared in `host`.
+- **Guard:** `go test ./internal/architecture/...` fails on the mechanical re-introductions (direct `nvidia-smi`, log-name `NewReplacer`, `filepath.Walk*`, `.flashcli_download.incomplete`). Add a pattern there when a new class of duplication is found.
 - Tests: `go test ./...`; host tests cover accounting/cleanup, CLI tests exercise `du`, `models list`, and `bundle clean` through the host functions. See [module_layers.md](module_layers.md).
 
 **Protocol cache schema:** the venv fingerprint tracks only manifest `python_dependencies` — it does **not** track the `flashcli-bundle` git ref. When the on-disk cache layout changes (`flashcli_bundle.version.CACHE_SCHEMA_VERSION`), `venv.EnsureProtocolCacheSchema` upgrades `flashcli-bundle` in an existing venv **in place** (`pip install --upgrade --force-reinstall --no-deps`, from the same source) before re-exec, so old venvs keep matching the host's cache paths without a full rebuild (no torch/dependency reinstall).

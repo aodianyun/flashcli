@@ -38,10 +38,13 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 
 ## 共用 host 服务（CLI + flashserver）
 
-`flashcli`（CLI）与 `flashserver`（常驻服务）是同一份磁盘状态的两个前端。所有缓存相关判断都在 **`go/internal/host`**，前端不得重复实现：
+`flashcli`（CLI）与 `flashserver`（常驻服务）是同一份磁盘状态的两个前端。**两个前端都需要的行为必须在共享包实现一次并由双方调用**；在 `go/internal/cli` 或 `go/internal/server` 再写一份（即使当前行为一致）也视为缺陷。
 
 | 能力 | 共享 API | CLI | flashserver |
 |------|----------|-----|-------------|
+| Pull / 运行时 + venv 准备 / 权重 | `host.Pull`、`host.EnsureRuntime`、`host.ResolveWeights` | `flashcli pull`、`run`/`serve` | `/v1/pull`、应用准备、Manager |
+| Serve 日志名 / tail / 就绪 | `modelrun.LogName`、`modelrun.TailLines`、`modelrun.WaitHealthy` | serve 子进程、`app logs` | `/v1/logs`、Manager/应用启动 |
+| 应用安装/启动/停止/状态/恢复 | `apps.Service`、`apps.WasRunning` | `flashcli app ...` | `/v1/apps`、启动恢复 |
 | 缓存区域 + 唯一分配字节 | `host.Storage()` | `flashcli du` | `GET /v1/storage` |
 | 缓存模型、大小、就绪、运行时字节 | `host.ListModels()` | `flashcli models list` | `GET /v1/models` |
 | Bundle 可用性 / serve 能力 | `host.BundleRootUsable`、`host.ListModels` | `models list/show` | `/v1/models` |
@@ -49,15 +52,18 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 | 规范 ref/cache key | `host.RefCacheKey` | ref 解析 | 清理/API ref |
 | 清理路径选择 + 删除 | `host.RefPaths`、`host.RuntimePaths`、`host.OrphanPaths`、`host.AllDataPaths`、`host.SharedCachePaths`、`host.RemovePaths` | `flashcli bundle clean`、`flashcli cache clean` | `/v1/models/clean`、`/v1/storage/clean` |
 | 删除模型缓存 | `host.RemoveCachedRef` | `bundle clean` 语义 | `/v1/models/clean` |
+| GPU / 系统探测 | `gpu.*`、`preflight.*`、`host.EnsureSystemRequirements` | run/serve、models | Manager 准入、`/v1/system` |
 
 规则：
 
-- **禁止**在 `go/internal/cli` 或 `go/internal/server` 再写 marker 遍历、权重就绪判断、目录大小遍历、清理路径解析。
-- 新行为只在 `host` 实现一次，再由两个前端暴露；表格、颜色、提示等纯展示逻辑留在前端。
+- **禁止**在 `go/internal/cli` 或 `go/internal/server` 再写 marker 遍历、权重就绪判断、目录大小遍历、清理路径解析、pull 编排、日志名/tail、健康等待循环、应用状态判定。
+- 新行为只在共享包实现一次，再由两个前端暴露；表格、颜色、提示等纯展示逻辑留在前端。
 - **Pull/准备只有一条流水线**：`flashcli pull`、`/v1/pull`、应用准备都走 `host.Pull`；`host.EnsureRuntime` 负责运行时/venv 准备，必须与 `flashcli serve` 保持一致（system 能力、协议缓存 schema、CUDA）。
 - **Serve 子进程**的日志命名/尾部读取统一用 `modelrun.LogName`/`modelrun.TailLines`，就绪等待统一用 `modelrun.WaitHealthy`。日志目录固定为 `~/.flashcli/logs/serve`（配置 `log_dir` 可覆盖），`flashcli app logs` 与 `/v1/logs` 读同一路径。
 - **应用状态判定**（是否在运行/是否恢复）只在 `apps`（`apps.WasRunning`）实现，daemon 恢复和桌面端不得各自推导。
+- **隔离**：daemon 可以用 Launcher/Stopper 包装共享服务（例如带 owner 的 Manager 准入），但生命周期逻辑仍在 `apps`；CLI 不得另写一份。
 - `flashcli cache clean` 只清理共享缓存（`cache` + 基础 Python + uv），对应 `/v1/storage/clean {"targets":["cache"]}`。模型数据/运行时使用 `flashcli bundle clean` / `/v1/models/clean`；共享权重/运行时按引用保留。磁盘统计和 ref 路径选择在 `host` 共享。
+- **防跑偏测试**：`go test ./internal/architecture/...` 会拦截机械性重复（直接 `nvidia-smi`、日志名 `NewReplacer`、`filepath.Walk*`、`.flashcli_download.incomplete`）。发现新的重复类型时，把模式补进该测试。
 - 测试：`go test ./...`；host 测试覆盖统计/清理，CLI 测试通过 host 函数覆盖 `du`、`models list`、`bundle clean`。详见 [module_layers.zh-CN.md](module_layers.zh-CN.md)。
 
 **协议缓存 schema：** venv 的 fingerprint 只跟踪 manifest `python_dependencies`，**不跟踪** `flashcli-bundle` 的 git ref。当磁盘缓存布局变化（`flashcli_bundle.version.CACHE_SCHEMA_VERSION`）时，`venv.EnsureProtocolCacheSchema` 会在 re-exec 前把已有 venv 里的 `flashcli-bundle` **就地升级**（`pip install --upgrade --force-reinstall --no-deps`，来源不变），使旧 venv 无需整体重建即可与主机缓存路径保持一致（不重装 torch/依赖）。
