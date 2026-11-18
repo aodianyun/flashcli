@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestServerLogPersistsAcrossRestart(t *testing.T) {
@@ -46,5 +47,30 @@ func TestRequestLogRedactsSecrets(t *testing.T) {
 	}
 	if !strings.Contains(text, "***") {
 		t.Fatalf("redaction marker missing: %q", text)
+	}
+
+	// Status/log polling must not fill the service log.
+	req = httptest.NewRequest(http.MethodGet, "/v1/version", nil)
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	text = strings.Join(serverLogLines(20), "\n")
+	if strings.Contains(text, "GET /v1/version") {
+		t.Fatalf("successful poll was logged: %q", text)
+	}
+}
+
+func TestLogSubscribersReceiveLines(t *testing.T) {
+	InitLogFile("")
+	defer InitLogFile("")
+	ch, cancel := SubscribeLogs()
+	defer cancel()
+	fmt.Fprintln(LogSink(), "live line")
+	select {
+	case line := <-ch:
+		if line != "live line" {
+			t.Fatalf("line = %q", line)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("subscriber did not receive the line")
 	}
 }

@@ -20,6 +20,7 @@ var (
 	logFile    *os.File
 	logPath    string
 	logWritten int64
+	logSubs    = map[chan string]struct{}{}
 )
 
 type ringWriter struct{}
@@ -32,6 +33,12 @@ func (ringWriter) Write(p []byte) (int, error) {
 			continue
 		}
 		logRing = append(logRing, line)
+		for ch := range logSubs {
+			select {
+			case ch <- line:
+			default: // slow subscriber: drop rather than block logging
+			}
+		}
 		if logFile != nil {
 			if _, err := logFile.WriteString(line + "\n"); err != nil {
 				_ = logFile.Close()
@@ -132,6 +139,22 @@ func rotateLogLocked() {
 // LogSink returns a writer that keeps the most recent daemon log lines for the
 // local console and persists them to the initialized log file.
 func LogSink() io.Writer { return ringWriter{} }
+
+// SubscribeLogs streams new service-log lines to WebSocket clients.
+func SubscribeLogs() (<-chan string, func()) {
+	ch := make(chan string, 256)
+	logRingMu.Lock()
+	logSubs[ch] = struct{}{}
+	logRingMu.Unlock()
+	return ch, func() {
+		logRingMu.Lock()
+		if _, ok := logSubs[ch]; ok {
+			delete(logSubs, ch)
+			close(ch)
+		}
+		logRingMu.Unlock()
+	}
+}
 
 func serverLogLines(n int) []string {
 	if n <= 0 {

@@ -53,8 +53,10 @@ for commands. Install/build details are in [../desktop/README.md](../desktop/REA
   (method/path/status/duration, credentials redacted), background job steps
   (app install/start/stop, model load/pull/smoke), setup-script output and
   clean/uninstall, and is persisted to `~/.flashcli/logs/flashserver.log`
-  (4 MiB rotation with a `.1` backup), so it survives a daemon restart. The app
-  detail also keeps the last start log with its own 查看完整日志 entry.
+  (4 MiB rotation with a `.1` backup), so it survives a daemon restart. The
+  page loads once and then appends new lines over `/v1/ws`; successful status
+  and log polling requests are not written to the log. The app detail also
+  keeps the last start log with its own 查看完整日志 entry.
 - **Settings** — service start/stop, auto-start, domestic mirrors, shared-cache
   cleanup, WSL resources and firewall ports, theme (`Ctrl+T`), API docs.
 

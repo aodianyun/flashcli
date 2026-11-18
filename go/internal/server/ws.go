@@ -58,6 +58,8 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	client := &wsClient{conn: conn, out: make(chan []byte, 64)}
 	s.addWSClient(client)
 	defer s.removeWSClient(client)
+	logCh, unsubscribe := SubscribeLogs()
+	defer unsubscribe()
 
 	ctx := r.Context()
 	go func() {
@@ -89,6 +91,11 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 			client.send(map[string]any{"type": "system", "data": s.systemSnapshot(ctx)})
 		case <-snapTicker.C:
 			s.sendWSSnapshots(ctx, client)
+		case line, ok := <-logCh:
+			if !ok {
+				return
+			}
+			client.send(map[string]any{"type": "logs", "data": map[string]any{"lines": []string{line}}})
 		}
 	}
 }

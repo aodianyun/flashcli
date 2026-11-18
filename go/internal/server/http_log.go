@@ -76,6 +76,11 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 		if status == 0 {
 			status = http.StatusOK
 		}
+		// Successful reads are mostly status/log polling; keep the log focused
+		// on operations and failures (errors are still recorded).
+		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && status < http.StatusBadRequest {
+			return
+		}
 		query := ""
 		if r.URL.RawQuery != "" {
 			query = "?" + redactQuery(r.URL.RawQuery)

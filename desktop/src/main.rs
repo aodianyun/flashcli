@@ -227,6 +227,7 @@ enum Event {
     Storage(Value),
     Mirror(Value),
     Logs(Option<String>),
+    LogLines(Vec<String>),
     LogsNote(String),
     CleanNote(String),
     StorageNote(String),
@@ -681,6 +682,21 @@ impl App {
                     }
                     self.logs_busy = false;
                     self.logs_at = Some(Instant::now());
+                }
+                Event::LogLines(lines) => {
+                    if self.tab == Tab::Logs && self.logs_ref.is_none() {
+                        for line in lines {
+                            self.logs.push_str(&line);
+                            self.logs.push('\n');
+                        }
+                        // Keep the view bounded like the initial 300-line load.
+                        let all: Vec<&str> = self.logs.lines().collect();
+                        if all.len() > 300 {
+                            let keep = all.len() - 300;
+                            self.logs = all[keep..].join("\n");
+                            self.logs.push('\n');
+                        }
+                    }
                 }
                 Event::LogsNote(note) => self.logs_note = note,
                 Event::CleanNote(note) => self.models_note = note,
@@ -1932,6 +1948,9 @@ impl App {
         let job_key = app_reference(&org_name, &app_name, &app_version);
         let job = self.app_jobs.get(&job_key).cloned();
         let busy = job.as_ref().map(|j| j.running).unwrap_or(false);
+        // The daemon may not have written the app state on the first install
+        // poll yet; an active job still has status to show.
+        let show_status = installed || busy;
         // One install at a time: preparing/starting two applications at once
         // would fight over disk, ports and GPU memory.
         let other_install = self
@@ -2057,7 +2076,7 @@ impl App {
         // operation with progress, recent log lines and the full-log entry
         // point. Model loading can take a minute, so a silent spinner is not
         // enough. An app that is not installed has nothing to report here.
-        if installed {
+        if show_status {
             ui.add_space(10.0);
             egui::Frame::NONE
             .fill(ui.visuals().faint_bg_color)
@@ -3638,7 +3657,8 @@ impl App {
             self.logs.clear();
             self.logs_since = Some(now_epoch());
             self.logs_note = "已清空当前显示，仅显示之后的新日志。".into();
-            self.logs_at = None;
+            // Do not reload the ring: new lines arrive over WebSocket.
+            self.logs_at = Some(Instant::now());
         }
         if reset {
             self.logs_since = None;
@@ -4978,10 +4998,15 @@ impl eframe::App for App {
             self.set_theme(ctx, dark);
         }
         if self.tab == Tab::Logs && !self.logs_busy {
-            let due = self
-                .logs_at
-                .map(|t| t.elapsed() >= Duration::from_secs(1))
-                .unwrap_or(true);
+            let due = if self.logs_ref.is_some() {
+                // Serve logs are files; keep polling only those.
+                self.logs_at
+                    .map(|t| t.elapsed() >= Duration::from_secs(1))
+                    .unwrap_or(true)
+            } else {
+                // Service log: one initial load, then live WebSocket lines.
+                self.logs_at.is_none()
+            };
             if due {
                 self.logs_busy = true;
                 spawn_logs(
@@ -5660,6 +5685,19 @@ fn start_ws(tx: Sender<Event>, ctx: egui::Context) {
                                             }
                                             "mirror" => {
                                                 let _ = tx.send(Event::Mirror(v["data"].clone()));
+                                            }
+                                            "logs" => {
+                                                let lines = v["data"]["lines"]
+                                                    .as_array()
+                                                    .map(|items| {
+                                                        items
+                                                            .iter()
+                                                            .filter_map(|l| l.as_str())
+                                                            .map(str::to_string)
+                                                            .collect()
+                                                    })
+                                                    .unwrap_or_default();
+                                                let _ = tx.send(Event::LogLines(lines));
                                             }
                                             "job" => {
                                                 let data = &v["data"];
