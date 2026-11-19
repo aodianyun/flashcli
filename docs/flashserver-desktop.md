@@ -43,7 +43,11 @@ for commands. Install/build details are in [../desktop/README.md](../desktop/REA
   One application installs at a time: while a job runs, its card shows
   `安装中 · 阶段 xx%` with a bar, a banner appears above the grid, and the other
   apps' actions are disabled.
-  Everything is served by `flashserver` (`/v1/apps`).
+  Everything is served by `flashserver` (`/v1/apps`). The application list and
+  manifests are fetched from FlashHub on every request (no local manifest
+  cache); the desktop keeps the current list/detail in memory, so use 刷新 or
+  reselect after a manifest change. App versions are immutable: publish a new
+  version instead of editing one in place.
   Uninstall stops the app's models and removes its install record; the optional
   "同时删除模型缓存" checkbox also deletes that app's bundle/weight caches
   (a reinstall downloads them again). The app's own installed program and its

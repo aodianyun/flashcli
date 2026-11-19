@@ -18,7 +18,10 @@ Windows 安装包内置 `flashcli-desktop.exe`（Rust + egui/eframe，不用 Web
   版本 · domain、简介；搜索与 domain 过滤各占一行）+ 详情区展示能拿到的信息
   （组织/下载量/状态、简介、supported OS/arch、各平台安装命令、依赖模型与
   serve options、本地状态与模型、接入地址），并支持安装/启动/停止/卸载；数据全部来自
-  `flashserver` 的 `/v1/apps`。点「安装」会先展示 manifest 的安装步骤：脚本在
+  `flashserver` 的 `/v1/apps`。应用列表和 manifest 每次请求都从 FlashHub 实时获取
+  （本地不缓存 manifest）；桌面端在内存中保留当前列表/详情，修改 manifest 后请点
+  「刷新」或重新选择应用。应用版本不可变，应发布新版本而不是原地修改。点「安装」会先展示
+  manifest 的安装步骤：脚本在
   **客户端 OS 本地执行**（Windows 应用装在 Windows，不在 WSL；其他系统用 `sh -c`），
   安装包 URL（.exe/.msi/.dmg/.pkg）在确认后**下载并运行**，普通页面链接在浏览器打开；
   只有选择「运行脚本并安装 / 下载并安装」才会执行，「跳过」则只准备模型。安装只负责

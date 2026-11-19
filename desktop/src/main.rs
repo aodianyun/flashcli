@@ -1732,6 +1732,17 @@ impl App {
             if ui.add_sized([64.0, 26.0], egui::Button::new("搜索")).clicked() {
                 self.reload_apps(ui.ctx());
             }
+            if ui
+                .add_sized([64.0, 26.0], egui::Button::new("刷新"))
+                .on_hover_text("重新拉取应用列表和当前详情（manifest 不落盘缓存）")
+                .clicked()
+            {
+                self.reload_apps(ui.ctx());
+                if let Some(detail) = self.app_detail.clone() {
+                    let (org, name, version) = app_identity(&detail);
+                    spawn_app_detail(self.tx.clone(), ui.ctx().clone(), org, name, version);
+                }
+            }
             if self.apps_loading {
                 ui.add(egui::Spinner::new().size(14.0));
             }
