@@ -85,7 +85,7 @@ func upgradeCmd() *cobra.Command {
 						return err
 					}
 				}
-				asset = selfupdate.AssetName(goruntime.GOOS, goruntime.GOARCH, ver)
+				asset = selfupdate.AssetName(goruntime.GOOS, goruntime.GOARCH)
 				url = selfupdate.ReleaseURL(base, ver, asset)
 				if want == "" {
 					sumsURL := selfupdate.ReleaseURL(base, ver, checksumsAsset)

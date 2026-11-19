@@ -70,8 +70,9 @@ bash scripts/verify_e2e.sh # tier 2 (Linux/WSL; builds dist/go)
 ### Binaries and the desktop client
 
 `bash scripts/build_go.sh` builds three commands into `dist/go/` (version from
-`pyproject.toml`). Release assets are renamed to `<name>-v<version>` by
-`scripts/release_go.sh`:
+`pyproject.toml`). `scripts/release_go.sh` publishes them under **stable,
+unversioned names** so `releases/latest/download/<name>` always resolves to the
+current release:
 
 | Binary | What it is |
 |--------|------------|
@@ -204,6 +205,7 @@ unpublished test/draft releases.
 5. Write release notes per the standard below on **both** platforms. `--notes-file` uses the same body for GitHub and Gitee; if omitted, the script uses a minimal generated note.
 6. **Gate:** before step 4 (publishing), run the full acceptance gate on `main`: `bash scripts/verify_e2e.sh --heavy --network`. It must be all green; `release_go.sh --upload` refuses without the matching `dist/e2e-pass.json`. Then verify the published assets in a clean environment: `bash scripts/verify_release.sh --version X` (isolated prefix; add `--mirror` for Gitee).
 7. Sanity-check the published Windows installer name/SHA256 and that `flashcli-linux-{amd64,arm64}` + `flashserver-*` assets are present on both hosts.
+8. Published asset names are **stable and unversioned** (the release tag carries the version). Share stable links: `https://github.com/aodianyun/flashcli/releases/latest/download/<name>` and `https://gitee.com/aodiansoft/flashcli/releases/download/latest/<name>`. Do not add `-v<version>` to published asset names.
 
 - **Bundles**: follow the maintainer checklist below and [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md).
 
@@ -223,13 +225,13 @@ Concise; **Features** and **Fixes** only. Bold the key terms. Same text on GitHu
 - **<area>**: <what was broken → fixed>
 
 ## Assets
-- `flashcli-linux-amd64-v<version>` sha256 `<…>`
-- `flashcli-linux-arm64-v<version>` sha256 `<…>`
-- `flashserver-linux-amd64-v<version>` sha256 `<…>`
-- `flashserver-linux-arm64-v<version>` sha256 `<…>`
-- `flashserver-setup-linux-amd64-v<version>` sha256 `<…>`
-- `flashserver-setup-linux-arm64-v<version>` sha256 `<…>`
-- `flashserver-setup-windows-amd64-v<version>.exe` sha256 `<…>`
+- `flashcli-linux-amd64` sha256 `<…>`
+- `flashcli-linux-arm64` sha256 `<…>`
+- `flashserver-linux-amd64` sha256 `<…>`
+- `flashserver-linux-arm64` sha256 `<…>`
+- `flashserver-setup-linux-amd64` sha256 `<…>`
+- `flashserver-setup-linux-arm64` sha256 `<…>`
+- `flashserver-setup-windows-amd64.exe` sha256 `<…>`
 
 **Full Changelog**: <compare or commits link>
 ```

@@ -30,10 +30,10 @@
 #   PYTHON_BIN                   Python for JSON helpers (default python3/python).
 #
 # Artifacts (dist/release/):
-#   flashcli-<os>-<arch>-v<version>          (raw binary; consumed by install.sh)
-#   flashserver-<os>-<arch>-v<version>       (resident scheduler)
-#   flashserver-setup-<os>-<arch>-v<version> (installer)
-#   sha256sums.txt
+#   flashcli-<os>-<arch>                     (stable name; releases/latest/download/<name>)
+#   flashserver-<os>-<arch>                  (stable name)
+#   flashserver-setup-<os>-<arch>            (stable name)
+#   sha256sums.txt                           (stable names only)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -120,32 +120,29 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE"
 
 WIN_ASSET="flashserver-setup-windows-amd64-v${VERSION}.exe"
-versioned_asset() {
-  case "$1" in
-    *.exe) printf '%s-v%s.exe\n' "${1%.exe}" "$VERSION" ;;
-    *) printf '%s-v%s\n' "$1" "$VERSION" ;;
-  esac
-}
+WIN_STABLE="flashserver-setup-windows-amd64.exe"
 if [ -z "$WINDOWS_INSTALLER" ] && [ -n "${FLASHCLI_WINDOWS_INSTALLER:-}" ]; then
   WINDOWS_INSTALLER="$FLASHCLI_WINDOWS_INSTALLER"
 fi
+# Publish stable, unversioned names so releases/latest/download/<name> always
+# works; the release tag carries the version.
 for f in "$OUT"/flashcli-* "$OUT"/flashserver-*; do
   [ -f "$f" ] || continue
   name="$(basename "$f")"
   if [ -n "$WINDOWS_INSTALLER" ] && [ "$name" = "flashserver-setup-windows-amd64.exe" ]; then
     continue
   fi
-  cp "$f" "$STAGE/$(versioned_asset "$name")"
+  cp "$f" "$STAGE/$name"
 done
 if [ -n "$WINDOWS_INSTALLER" ]; then
   [ -f "$WINDOWS_INSTALLER" ] || die "Windows installer not found: $WINDOWS_INSTALLER"
   [ "$(basename "$WINDOWS_INSTALLER")" = "$WIN_ASSET" ] \
     || die "Windows installer must be named $WIN_ASSET"
-  cp "$WINDOWS_INSTALLER" "$STAGE/$WIN_ASSET"
+  cp "$WINDOWS_INSTALLER" "$STAGE/$WIN_STABLE"
   if command -v sha256sum >/dev/null 2>&1; then
-    echo "Windows installer sha256: $(sha256sum "$STAGE/$WIN_ASSET" | awk '{print $1}')"
+    echo "Windows installer sha256: $(sha256sum "$STAGE/$WIN_STABLE" | awk '{print $1}')"
   elif command -v shasum >/dev/null 2>&1; then
-    echo "Windows installer sha256: $(shasum -a 256 "$STAGE/$WIN_ASSET" | awk '{print $1}')"
+    echo "Windows installer sha256: $(shasum -a 256 "$STAGE/$WIN_STABLE" | awk '{print $1}')"
   fi
 fi
 

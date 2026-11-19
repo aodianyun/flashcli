@@ -32,8 +32,8 @@ func TestEnsureAssetBinariesLocal(t *testing.T) {
 
 func TestEnsureAssetBinariesDownload(t *testing.T) {
 	remote := map[string][]byte{
-		"flashcli-linux-amd64-v1.0.0":    []byte("cli"),
-		"flashserver-linux-amd64-v1.0.0": []byte("server"),
+		"flashcli-linux-amd64":    []byte("cli"),
+		"flashserver-linux-amd64": []byte("server"),
 	}
 	var sums string
 	for name, data := range remote {

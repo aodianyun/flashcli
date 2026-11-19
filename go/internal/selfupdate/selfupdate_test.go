@@ -52,9 +52,9 @@ func TestReplace(t *testing.T) {
 	}
 }
 
-func TestAssetNameIncludesVersion(t *testing.T) {
-	got := AssetName("linux", "amd64", "v1.0.7.20261111")
-	want := "flashcli-linux-amd64-v1.0.7.20261111"
+func TestAssetNameIsStable(t *testing.T) {
+	got := AssetName("linux", "amd64")
+	want := "flashcli-linux-amd64"
 	if got != want {
 		t.Fatalf("AssetName = %q, want %q", got, want)
 	}

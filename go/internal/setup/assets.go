@@ -116,7 +116,7 @@ func downloadAssets(ctx context.Context, opts *Options, names []string, dir stri
 	}
 	sums := selfupdate.ParseChecksums(string(sumsBlob))
 	for _, baseName := range names {
-		name := versionedAssetName(baseName, ver)
+		name := baseName
 		url := selfupdate.ReleaseURL(base, ver, name)
 		if _, err := fmt.Fprintf(out, "download %s\n", url); err != nil {
 			return err
@@ -137,12 +137,4 @@ func downloadAssets(ctx context.Context, opts *Options, names []string, dir stri
 		}
 	}
 	return nil
-}
-
-// versionedAssetName appends the release version before the extension:
-// flashcli-linux-amd64-v1.0.7.20261111.
-func versionedAssetName(name, ver string) string {
-	ver = strings.TrimPrefix(strings.TrimSpace(ver), "v")
-	ext := filepath.Ext(name)
-	return strings.TrimSuffix(name, ext) + "-v" + ver + ext
 }
