@@ -54,19 +54,17 @@ and that `name`/`version` match the key. See
 
 ## Install flow
 
-Steps (all state transitions are persisted so `status` and re-runs work). The
-order is fixed: **the application is installed first; no bundle is prepared
-until that step succeeded** (or the user explicitly skipped it).
+Install and start are **separate operations**. Install resolves and validates the
+manifest, installs the application itself, and prepares the model bundles. It
+never starts a model and never runs setup scripts. Starting is an explicit
+action (desktop 启动 / `flashcli app start`).
 
 ```text
 RESOLVE → VALIDATE → PLATFORM → PREFLIGHT → PLAN
   → CONFIRM_INSTALL (shell command or installer download; page URL: manual)
   → INSTALL_APP (script: run | installer URL: download + run | page: open/copy)
   → PREPARE_MODELS (every default bundle, serial)
-  → START_MODELS (one group, auto ports)
-  → HEALTH (per model)
-  → APPLY_CONFIG (skipped in v1)
-  → READY
+  → PREPARED (cached; nothing running)
 ```
 
 ```mermaid
@@ -76,7 +74,7 @@ sequenceDiagram
   participant CLI as CLI / desktop
   participant A as internal/apps
   participant FH as FlashHub
-  participant H as internal/host + modelrun
+  participant H as internal/host
   participant REG as apps.json (locked)
 
   U->>CLI: app install xym/workbuddy [--yes] [--dry-run]
@@ -110,20 +108,22 @@ sequenceDiagram
     H-->>A: progress
     A->>REG: bundle=prepared
   end
-  A->>H: start group (auto ports)
-  loop every bundle
-    H-->>A: pid + endpoint
-    A->>H: health check
-    A->>REG: model=running
-  end
-  opt any start/health failure
-    A->>H: stop the models started by this run
-    A->>REG: state=FAILED
-  end
-  A->>A: APPLY_CONFIG (skip in v1)
-  A->>REG: state=READY + connection
-  A-->>CLI: base_url / model ids / state dir
+  A->>REG: state=PREPARED (no connection, no pid/endpoint)
+  A-->>CLI: prepared models / state dir
 ```
+
+### Start flow (separate action)
+
+```text
+START → START_MODELS (one group, auto ports) → HEALTH
+  → READY + connection → SETUP_SCRIPTS (confirmed, manifest order)
+```
+
+A start/health failure rolls back the models started by that run. Setup scripts
+run only after `READY`, because they need `{base_url}`/`{model}`/`{api_key}`; a
+setup failure is logged and leaves the app `READY` (it does not roll back the
+models). A reinstall stops the app's running models first, keeps caches, and
+leaves the new set `PREPARED`.
 
 ### State machine
 
@@ -178,10 +178,12 @@ manifest fetch.
 
 ### Failure and rollback
 
-- **Script failure** aborts immediately; no model preparation runs.
-- **Prepare failure** aborts; already prepared bundles stay cached (re-run resumes).
+- **Install-command failure** aborts immediately; no model preparation runs.
+- **Prepare failure** aborts; prepared bundles stay cached (a re-run resumes).
 - **Start/health failure** stops the models started by that run
   (`--keep-partial` keeps them for debugging).
+- **Setup-script failure** is written to the app log, stops the remaining
+  scripts, and leaves the running app `ready` (the models are not rolled back).
 - Re-running `app install` is idempotent: it fills missing prepare steps and
   only re-runs the install script with `--force`; it never starts models.
 
@@ -207,9 +209,10 @@ Rules:
   (.exe/.msi on Windows, .dmg/.pkg on macOS) and opens plain pages in a browser.
 - Bundles are prepared only after the application install succeeded; a failed
   install (script or installer) aborts the whole run.
-- Installs are serialized: one application at a time. `internal/apps` holds a
-  process-wide install lock, and the desktop disables the other apps while an
-  install job runs (its card and the page banner show the progress).
+- Installs are serialized per application; the desktop additionally allows one
+  install at a time and disables the other apps while an install job runs (its
+  card and the page banner show the progress). Start/stop are serialized per
+  application too, so a restore cannot race a manual start.
 - Ports are allocated automatically and recorded; `start` is idempotent.
 - `uninstall` stops the app's models and removes its state; model caches are kept
   unless `--purge-models` is given.
@@ -222,8 +225,9 @@ only the way the install-script decision is obtained differs:
 | Entry point | Install-script decision |
 |---|---|
 | `flashcli app install` | asks `[y/N]` on a terminal; `--yes` runs it; no terminal without `--yes` skips and records `skipped` |
-| `flashserver` `POST /v1/apps/{org}/{name}/install` | body must carry `install_command: "run" \| "skip" \| "client"` (400 otherwise); runs as job `app-install` and streams events |
-| `flashcli-desktop` 应用页 | 安装 dialog shows the command; 运行脚本并安装 runs it **on the client OS** and then sends `client`, 跳过脚本安装 sends `skip`, 取消 does nothing; job progress is polled into the detail pane |
+| `flashserver` `POST /v1/apps/{org}/{name}/install` | body must carry `install_command: "run" \| "skip" \| "client"` (400 otherwise); runs as job `app-install`, prepares models, never starts them |
+| `flashserver` `POST /v1/apps/{org}/{name}/start` | starts models; body may carry `setup_scripts` + `client_home` for the setup confirmation |
+| `flashcli-desktop` 应用页 | 安装 dialog shows the command; 运行脚本并安装 runs it **on the client OS** and then sends `client`, 跳过脚本安装 sends `skip`, 取消 does nothing; 启动 asks which setup scripts to run; job progress is polled into the detail pane |
 
 ### Platform ownership
 
@@ -237,8 +241,8 @@ run in WSL/the daemon host. Therefore:
 - The desktop executes the install command itself (`powershell -Command` on
   Windows, `sh -c` elsewhere) and reports `install_command: "client"`; the
   daemon records the command as executed and never runs a client-side exe.
-- Preparing bundles and starting models stays with the daemon and is unaffected
-  by the client platform.
+- Preparing bundles stays with the daemon and is unaffected by the client
+  platform. Starting models is a separate action, also on the daemon.
 
 Uninstall is exposed on both fronts (`DELETE /v1/apps/{org}/{name}`,
 desktop 卸载 with an optional `purge_models`); it never removes the app's own
@@ -252,20 +256,28 @@ Shared by the CLI and the daemon at `$FLASHCLI_HOME/flashserver/apps.json`
 ```json
 {
   "apps": {
-    "xym/workbuddy": {
+    "xym/workbuddy:1.0.0": {
       "version": "1.0.0",
-      "state": "ready",
+      "state": "prepared",
       "installed_at": "2026-11-17T08:00:00Z",
       "install": {"command": "irm … | iex", "executed": true},
       "models": [
         {"ref": "xym/gemma4_e2b_it:1.0.1", "id": "gemma4_e2b_it",
-         "port": 18100, "endpoint": "http://127.0.0.1:18100"}
+         "prepared": true}
       ],
-      "connection": {"base_url": "http://127.0.0.1:18100/v1", "api_key": "local"}
+      "setup_scripts": ["workbuddy"],
+      "setup_plan": [{"key": "workbuddy", "url": "…", "sha256": "…"}],
+      "setup_client_home": "C:\\Users\\…",
+      "last_log": ["starting …", "setup workbuddy: done"],
+      "connection": {}
     }
   }
 }
 ```
+
+Install leaves `state=prepared` with no `pid`/`endpoint`/connection. A successful
+start records `state=ready`, the allocated endpoint/port and the connection;
+`stop` keeps the entry as `stopped` (models and caches stay).
 
 ## Model lifecycle
 
@@ -320,15 +332,12 @@ connection. There is no `connection.json` writer.
 
 | Tier | Coverage |
 |---|---|
-| T1 | manifest parse/validate, platform command precedence, default bundle selection, state lock/round-trip, shared lifecycle with fakes, install endpoint run/skip/decision-required; desktop helper unit tests (request body decision, URL vs script, log dedupe/cap) |
-| T2 | local fake FlashHub (httptest) + real `flashserver`: prepare → start → status → stop; the install job with `install_command: run` (script output recorded), `skip` (no script), and no decision (400); `--dry-run`; shell prompt/decline; URL is never executed |
+| T1 | manifest parse/validate, platform command precedence, default bundle selection, state lock/round-trip, shared lifecycle with fakes, install endpoint run/skip/decision-required; install leaves `prepared` (no model started); desktop helper unit tests (request body decision, URL vs script, log dedupe/cap, WSL config, `last_log`) |
+| T2 | local fake FlashHub (httptest) + real `flashserver`: install → prepared → start → status → stop; install job with `install_command: run`/`skip`/missing (400); `--dry-run`; shell prompt/decline; URL never executed; setup script order/failure/sha256 retry and verified cache; restore replays the saved setup selection offline; interrupted start/install/stop recovery; per-app serialization; service log persistence and WebSocket log stream |
 | T3 | `FLASHCLI_FLASHHUB_LIVE=1`: live app list/manifest shape contract |
 
 ## Milestones
 
-1. **M1** — extract `internal/modelrun` from the server launcher; `server` uses it (existing tests stay green).
-2. **M2** — `internal/apps`: manifest, install policy, locked registry, `Prepare`.
-3. **M3** — `internal/apps`: `Start`/`Stop`/`Status`/`Uninstall` with auto ports and rollback.
-4. **M4** — `flashcli app` commands calling `internal/apps` directly.
-5. **M5** — `flashserver` `/v1/apps*` handlers (thin) and the desktop 应用 page.
-6. **M6** — docs, OpenAPI, T1/T2/T3, release gate.
+The app pipeline is complete: `internal/modelrun`, `internal/apps`, the
+`flashcli app` commands, the `/v1/apps*` handlers and the desktop 应用 page are
+implemented and covered by T1/T2 plus the release gate.

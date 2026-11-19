@@ -82,10 +82,10 @@ invalid required field is rejected with the field name. An unsupported
 
 ## model.bundles
 
-- The host prepares **every** bundle with `default: true`; `--bundle` overrides
-  the selection. If no bundle is marked default, the first one is used.
-- With `default: true` bundles are prepared sequentially (bundle tree, venv,
-  weights). Preparation stops there: models are **not** started by install.
+- The host prepares **every** bundle with `default: true` sequentially (bundle
+  tree, venv, weights); `--bundle` overrides the selection. If no bundle is
+  marked default, the first one is used. Install stops there: models are **not**
+  started.
 - `flashcli app start` (or the desktop 启动 button) starts the prepared group
   with automatically allocated ports and health-checks each endpoint.
 - `serve.options` values are forwarded as `--flag value`; the bundle's

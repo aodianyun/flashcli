@@ -52,20 +52,17 @@ CLI 的应用操作**不需要**（也不使用）对守护进程的 HTTP 调用
 
 ## 安装流程
 
-每一步都持久化状态，便于 `status` 观察与失败后重入：
+**安装和启动是两个独立操作**。安装负责解析/校验 manifest、安装应用本体、准备模型
+bundle；**不会启动模型，也不会执行 setup 脚本**。启动是显式操作（桌面「启动」/
+`flashcli app start`）。
 
 ```text
 RESOLVE → VALIDATE → PLATFORM → PREFLIGHT → PLAN
   → CONFIRM_INSTALL（shell 命令或安装包下载；普通页面链接：手动）
   → INSTALL_APP（脚本：执行 | 安装包 URL：下载并运行 | 页面：打开/复制）
   → PREPARE_MODELS（所有 default bundle，串行）
-  → START_MODELS（作为一组，自动端口）
-  → HEALTH（逐个模型）
-  → APPLY_CONFIG（v1 跳过）
-  → READY
+  → PREPARED（已缓存，未运行）
 ```
-
-顺序是固定的：**先装应用，安装成功之前不会开始准备任何 bundle**（除非用户明确跳过）。
 
 ```mermaid
 sequenceDiagram
@@ -74,7 +71,7 @@ sequenceDiagram
   participant CLI as CLI / 桌面端
   participant A as internal/apps
   participant FH as FlashHub
-  participant H as internal/host + modelrun
+  participant H as internal/host
   participant REG as apps.json（加锁）
 
   U->>CLI: app install xym/workbuddy [--yes] [--dry-run]
@@ -108,20 +105,20 @@ sequenceDiagram
     H-->>A: 进度
     A->>REG: bundle=prepared
   end
-  A->>H: 按组启动（自动分配端口）
-  loop 每个 bundle
-    H-->>A: pid + endpoint
-    A->>H: 健康检查
-    A->>REG: model=running
-  end
-  opt 任一启动/健康失败
-    A->>H: 停止本次启动的模型
-    A->>REG: state=FAILED
-  end
-  A->>A: APPLY_CONFIG（v1 跳过）
-  A->>REG: state=READY + connection
-  A-->>CLI: base_url / 模型 id / 状态目录
+  A->>REG: state=PREPARED（无连接、无 pid/endpoint）
+  A-->>CLI: 已准备的模型 / 状态目录
 ```
+
+### 启动流程（独立操作）
+
+```text
+START → START_MODELS（作为一组，自动端口）→ HEALTH
+  → READY + connection → SETUP_SCRIPTS（已确认，按 manifest 顺序）
+```
+
+启动/健康失败会回滚本次启动的模型。setup 脚本只在 `READY` 之后执行，因为需要
+`{base_url}`/`{model}`/`{api_key}`；setup 失败只写日志，应用保持 `READY`，不回滚模型。
+重新安装会先停掉该应用正在运行的模型、保留缓存，新模型集合停在 `PREPARED`。
 
 ### 状态机
 
@@ -168,9 +165,10 @@ key 和客户端 home 会持久化；daemon 重启后恢复的应用会在模型
 
 ### 失败与回滚
 
-- **脚本失败**立即终止，不再准备模型
+- **安装命令失败**立即终止，不再准备模型
 - **准备失败**终止；已准备的 bundle 保留缓存，重跑可续
 - **启动/健康失败**停止本次已启动的模型（`--keep-partial` 保留用于排查）
+- **setup 脚本失败**写入应用日志、停止后续脚本，应用保持 `ready`（不回滚模型）
 - 重复执行 `app install` 幂等：补齐缺失的准备步骤；只有 `--force` 才会重跑
   安装脚本；安装从不启动模型
 
@@ -193,8 +191,8 @@ flashcli app uninstall <key> [--yes] [--purge-models]
 - URL 由客户端处理：CLI 只打印链接（不下载）；桌面端在用户确认后下载并运行安装包
   （.exe/.msi → Windows，.dmg/.pkg → macOS），普通页面链接在浏览器打开
 - 应用安装成功后才准备 bundle；安装失败会中止整个流程
-- 同一时间只安装一个应用：`internal/apps` 持有进程级安装锁，桌面端在安装进行中禁用其他应用，
-  并在卡片与页面顶部显示该应用的安装进度
+- 安装/启动/停止按应用串行；桌面端在安装进行中禁用其他应用，并在卡片与页面顶部显示
+  该应用的安装进度
 - 端口自动分配并记录；`start` 幂等
 - `uninstall` 停止该应用模型并移除状态；默认保留模型缓存（`--purge-models` 才清理）
 
@@ -206,8 +204,9 @@ CLI、守护进程、桌面端都调用同一个 `internal/apps`，区别只在�
 | 入口 | 安装脚本决策 |
 |---|---|
 | `flashcli app install` | 终端上询问 `[y/N]`；`--yes` 直接执行；没有终端且无 `--yes` 时跳过并记录 `skipped` |
-| `flashserver` `POST /v1/apps/{org}/{name}/install` | 必须带 `install_command: "run" \| "skip" \| "client"`（否则 400）；作为 `app-install` 作业执行并推送事件 |
-| `flashcli-desktop` 应用页 | 「安装」弹窗展示命令：「运行脚本并安装」在**客户端 OS 本地**执行后发 `client`；「跳过脚本安装」发 `skip`；取消则什么也不做；作业进度轮询显示在详情区 |
+| `flashserver` `POST /v1/apps/{org}/{name}/install` | 必须带 `install_command: "run" \| "skip" \| "client"`（否则 400）；作为 `app-install` 作业准备模型，不启动模型 |
+| `flashserver` `POST /v1/apps/{org}/{name}/start` | 启动模型；body 可带 `setup_scripts` + `client_home` 作为 setup 确认 |
+| `flashcli-desktop` 应用页 | 「安装」弹窗展示命令：「运行脚本并安装」在**客户端 OS 本地**执行后发 `client`；「跳过脚本安装」发 `skip`；取消则什么也不做。启动时询问要执行哪些 setup 脚本；作业进度显示在详情区 |
 
 ### 平台归属
 
@@ -219,7 +218,7 @@ exe），模型跑在 WSL/守护进程所在主机。因此：
 - 安装命令由桌面端自己执行（Windows 用 `powershell -Command`，其他系统用 `sh -c`），
   然后告诉守护进程 `install_command: "client"`；守护进程只记录「已执行」，绝不在
   WSL 里跑客户端 exe。
-- 准备 bundle、启动模型仍由守护进程负责，与客户端平台无关。
+- 准备 bundle 由守护进程负责，与客户端平台无关；启动模型也是独立的守护进程操作。
 
 卸载在三端都可用（`DELETE /v1/apps/{org}/{name}`；桌面「卸载」可选 `purge_models`），
 但都不会卸载应用自身安装的文件。
@@ -232,20 +231,27 @@ rename）：
 ```json
 {
   "apps": {
-    "xym/workbuddy": {
+    "xym/workbuddy:1.0.0": {
       "version": "1.0.0",
-      "state": "ready",
+      "state": "prepared",
       "installed_at": "2026-11-17T08:00:00Z",
       "install": {"command": "irm … | iex", "executed": true},
       "models": [
         {"ref": "xym/gemma4_e2b_it:1.0.1", "id": "gemma4_e2b_it",
-         "port": 18100, "endpoint": "http://127.0.0.1:18100"}
+         "prepared": true}
       ],
-      "connection": {"base_url": "http://127.0.0.1:18100/v1", "api_key": "local"}
+      "setup_scripts": ["workbuddy"],
+      "setup_plan": [{"key": "workbuddy", "url": "…", "sha256": "…"}],
+      "setup_client_home": "C:\\Users\\…",
+      "last_log": ["starting …", "setup workbuddy: done"],
+      "connection": {}
     }
   }
 }
 ```
+
+安装后是 `prepared`，没有 `pid`/`endpoint`/连接；启动成功后写入 `ready`、实际端口/端点
+与连接；停止后保留条目为 `stopped`（模型和缓存保留）。
 
 ## 模型生命周期
 
@@ -288,15 +294,11 @@ v1 的 manifest 发布 `config: []`，host 不解释它。客户端配置由 `se
 
 | 级别 | 覆盖 |
 |---|---|
-| T1 | manifest 解析/校验、平台命令优先级、default bundle 选择、状态锁/读写、共享生命周期的 fake 测试、安装接口的 run/skip/缺少决策；桌面纯函数单测（请求体决策、URL 与脚本区分、日志去重/上限） |
-| T2 | 本地假 FlashHub（httptest）+ 真 `flashserver`：prepare → start → status → stop；安装作业的 `install_command: run`（记录脚本输出）、`skip`（不执行脚本）、缺少决策（400）；`--dry-run`；终端确认/拒绝；URL 不执行 |
+| T1 | manifest 解析/校验、平台命令优先级、default bundle 选择、状态锁/读写、共享生命周期的 fake 测试、安装接口的 run/skip/缺少决策；安装后停在 `prepared`（不启动模型）；桌面纯函数单测（请求体决策、URL 与脚本区分、日志去重/上限、WSL 配置、`last_log`） |
+| T2 | 本地假 FlashHub（httptest）+ 真 `flashserver`：安装 → prepared → 启动 → status → stop；安装作业的 `install_command: run`/`skip`/缺少决策（400）；`--dry-run`；终端确认/拒绝；URL 不执行；setup 脚本顺序/失败/sha256 重试与已验证缓存；恢复自动重放且可离线；启动/安装/停止被中断后的恢复；同应用串行化；服务日志持久化与 WebSocket 推送 |
 | T3 | `FLASHCLI_FLASHHUB_LIVE=1`：线上应用列表/manifest 形状契约 |
 
 ## 里程碑
 
-1. **M1** —— 从 server 抽取 `internal/modelrun`；`server` 改用它（现有测试保持全绿）
-2. **M2** —— `internal/apps`：manifest、安装策略、加锁注册表、`Prepare`
-3. **M3** —— `internal/apps`：`Start`/`Stop`/`Status`/`Uninstall`（自动端口 + 回滚）
-4. **M4** —— `flashcli app` 命令组（直接调用 `internal/apps`）
-5. **M5** —— `flashserver` `/v1/apps*`（薄封装）与桌面「应用」页（左侧菜单）
-6. **M6** —— 文档、OpenAPI、T1/T2/T3、发布门禁
+应用链路已完成：`internal/modelrun`、`internal/apps`、`flashcli app` 命令、
+`/v1/apps*` 接口与桌面「应用」页均已实现，并由 T1/T2 和 release gate 覆盖。

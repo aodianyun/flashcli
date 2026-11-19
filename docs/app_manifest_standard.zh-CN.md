@@ -77,9 +77,9 @@ flowchart LR
 
 ## model.bundles
 
-- host 准备**所有** `default: true` 的 bundle；`--bundle` 可覆盖选择；
-  若没有任何 default，则使用第一个
-- 逐个**串行**准备（bundle 树、venv、权重）；安装到此为止，**不会启动**模型
+- host 逐个**串行**准备**所有** `default: true` 的 bundle（bundle 树、venv、权重）；
+  `--bundle` 可覆盖选择，若没有任何 default 则使用第一个。安装到此为止，
+  **不会启动**模型
 - `flashcli app start`（或桌面「启动」）再用自动分配的端口把准备好的模型作为一组启动，
   并逐个健康检查
 - `serve.options` 以 `--flag value` 形式转发；选项名与默认值仍由 bundle 的
