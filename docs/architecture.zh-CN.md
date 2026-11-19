@@ -87,7 +87,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 ```mermaid
 flowchart LR
   subgraph WIN[Windows 安装包]
-    ISS["flashserver-setup-windows-amd64.exe<br/>Inno Setup"] --> CLIENT[flashcli-desktop.exe]
+    ISS["flashcli-desktop-setup-windows-amd64.exe<br/>Inno Setup"] --> CLIENT[flashcli-desktop.exe]
     ISS --> SETUP[flashserver-setup.exe]
   end
   CLIENT -- "HTTP + /v1/ws" --> SRV["flashserver :8790"]
