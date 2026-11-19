@@ -9,7 +9,7 @@ How to install, configure, run, and remove the resident scheduler. Start with
 
 ### Windows installer
 
-Use `flashserver-setup-windows-amd64.exe` (elevated). It drives
+Use `flashcli-desktop-setup-windows-amd64.exe` (elevated). It drives
 `flashserver-setup` behind a live progress page and then opens the desktop
 client:
 

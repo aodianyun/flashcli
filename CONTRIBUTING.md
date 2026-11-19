@@ -191,15 +191,15 @@ unpublished test/draft releases.
 
 **Host (Go) release checklist:**
 
-1. Bump **both** `[project].version` in `pyproject.toml` and `version` in `desktop/Cargo.toml` on `dev` (desktop uses the three-part prefix, e.g. `1.0.7`); commit (`chore(release): bump version to X`). Packaging fails if they diverge.
+1. Bump **both** `[project].version` in `pyproject.toml` and `version` in `desktop/Cargo.toml` on `dev` (desktop uses the three-part prefix, e.g. `1.0.8`); commit (`chore(release): bump version to X`). Packaging fails if they diverge. The host version is `X.Y.Z.YYYYMMDD` (no dots in the date); the release tag is `v<version>` (e.g. `v1.0.8.20261119`).
 2. Sync `dev` → `main` (squash-and-record, above) so `main` carries the validated commit. Before tagging, also check the live FlashHub index layout (index JSON only, a few KiB): `FLASHCLI_FLASHHUB_LIVE=1 pytest tests/test_flashhub_index_contract.py`.
 3. On Windows from `main`, build the installer:
    `powershell -ExecutionPolicy Bypass -File scripts/build_windows_package.ps1`
-   (client + Go assets + `flashserver-setup-windows-amd64-v<version>.exe`; use `-GoBin` if `go` is not on PATH).
+   (client + Go assets + `flashcli-desktop-setup-windows-amd64-v<version>.exe`; use `-GoBin` if `go` is not on PATH).
    To embed exactly the published binaries (or when Go is not installed on Windows), build them first with
    `bash scripts/build_go.sh` and pass `-SkipGo`; Go builds are reproducible (`-buildvcs=false`).
 4. On Linux/macOS (or Windows Git Bash) from `main`, publish both hosts in one command:
-   `bash scripts/release_go.sh --upload --notes-file <notes.md> --windows-installer dist/windows/flashserver-setup-windows-amd64-v<version>.exe`
+   `bash scripts/release_go.sh --upload --notes-file <notes.md> --windows-installer dist/windows/flashcli-desktop-setup-windows-amd64-v<version>.exe`
    The script requires a clean `main` equal to `origin/main`, creates/pushes tag `vX` at HEAD, builds the Linux/Windows Go assets, uploads them plus the Windows installer, and fails if either GitHub or Gitee upload fails. Use `FLASHCLI_RELEASE_TARGET` only for a different release branch; `--allow-non-target` is for tests only.
    The Linux assets are reproducible; the Inno Setup installer is **not** byte-reproducible, so put its final SHA256 into the notes **after** the last installer build and do not rebuild it afterwards.
 5. Write release notes per the standard below on **both** platforms. `--notes-file` uses the same body for GitHub and Gitee; if omitted, the script uses a minimal generated note.
@@ -224,19 +224,10 @@ Concise; **Features** and **Fixes** only. Bold the key terms. Same text on GitHu
 ## Fixes
 - **<area>**: <what was broken → fixed>
 
-## Assets
-- `flashcli-linux-amd64` sha256 `<…>`
-- `flashcli-linux-arm64` sha256 `<…>`
-- `flashserver-linux-amd64` sha256 `<…>`
-- `flashserver-linux-arm64` sha256 `<…>`
-- `flashserver-setup-linux-amd64` sha256 `<…>`
-- `flashserver-setup-linux-arm64` sha256 `<…>`
-- `flashserver-setup-windows-amd64.exe` sha256 `<…>`
-
 **Full Changelog**: <compare or commits link>
 ```
 
-Rules: short bullets, no raw commit dump, no extra sections; **English only** — no Chinese UI labels or translated summary lines; use English action names (Install, Start, Re-sync, Logs, Settings); include asset sha256.
+Rules: short bullets, no raw commit dump, no extra sections; **English only** — no Chinese UI labels or translated summary lines; use English action names (Install, Start, Re-sync, Logs, Settings). Do not repeat the asset list or sha256: GitHub/Gitee render the uploaded assets automatically.
 
 **Write against the previous release, not against the commits.** The body is a
 comparison: every bullet must be traceable to a difference between the previous
@@ -260,8 +251,8 @@ Procedure:
 4. Verify each claim against the diff or a real run; remove anything you cannot
    demonstrate. Prefer concrete user outcomes ("`du` counted hardlinked layers
    per runtime") over internal names.
-5. Assets: regenerate the hashes from the **last** build and list every uploaded
-   asset. End with the compare link `.../compare/vPREV...vNEW`.
+5. End with the compare link `.../compare/vPREV...vNEW`. Do not repeat the asset
+   list or sha256 — GitHub/Gitee render the uploaded assets automatically.
 
 ## Pull request guidelines
 

@@ -5,7 +5,7 @@
 #   bash scripts/release_go.sh
 #   bash scripts/release_go.sh --upload
 #   bash scripts/release_go.sh --upload --notes-file dist/release-notes.md \
-#     --windows-installer dist/windows/flashserver-setup-windows-amd64-v<version>.exe
+#     --windows-installer dist/windows/flashcli-desktop-setup-windows-amd64-v<version>.exe
 #   FLASHCLI_GO_TARGETS="linux/amd64" bash scripts/release_go.sh
 #
 # Publishing (--upload):
@@ -19,7 +19,7 @@
 # Options:
 #   --upload                     Publish to GitHub + Gitee after building.
 #   --notes-file FILE            Release notes body (Markdown) for both hosts.
-#   --windows-installer FILE     Include flashserver-setup-windows-amd64-v<version>.exe as an asset.
+#   --windows-installer FILE     Include flashcli-desktop-setup-windows-amd64-v<version>.exe as an asset.
 #   --allow-non-target           Allow publishing from a branch other than the target.
 #
 # Environment:
@@ -119,8 +119,8 @@ STAGE="${FLASHCLI_RELEASE_STAGE:-$ROOT/dist/release}"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
 
-WIN_ASSET="flashserver-setup-windows-amd64-v${VERSION}.exe"
-WIN_STABLE="flashserver-setup-windows-amd64.exe"
+WIN_ASSET="flashcli-desktop-setup-windows-amd64-v${VERSION}.exe"
+WIN_STABLE="flashcli-desktop-setup-windows-amd64.exe"
 if [ -z "$WINDOWS_INSTALLER" ] && [ -n "${FLASHCLI_WINDOWS_INSTALLER:-}" ]; then
   WINDOWS_INSTALLER="$FLASHCLI_WINDOWS_INSTALLER"
 fi

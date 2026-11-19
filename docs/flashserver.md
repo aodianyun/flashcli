@@ -31,7 +31,7 @@ flowchart LR
 
 ## Quick start
 
-Windows: run `flashserver-setup-windows-amd64.exe` (admin) and use the
+Windows: run `flashcli-desktop-setup-windows-amd64.exe` (admin) and use the
 client it opens.
 
 Linux:
