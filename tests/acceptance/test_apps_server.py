@@ -223,7 +223,9 @@ def test_server_app_prepare_pulls_bundle(flashserver_bin, flashcli_bin, cli_env,
         status, body = http_json(base + "/v1/apps/xym/demo/prepare", {"version": "1.0.0"})
         assert status == 202, body
         job_id = body["job_id"]
-        deadline = time.time() + 60
+        # A cold uv/venv cache can make the first prepare slower than a warm
+        # run; leave enough headroom without hiding a real hang.
+        deadline = time.time() + 120
         state = ""
         while time.time() < deadline:
             _, job = http_json(f"{base}/v1/jobs/{job_id}")

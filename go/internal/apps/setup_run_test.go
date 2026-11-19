@@ -510,6 +510,32 @@ func TestSetupScriptRetriesTransientMismatch(t *testing.T) {
 	}
 }
 
+func TestSetupScriptMismatchIsNotCached(t *testing.T) {
+	if _, err := setupPython(); err != nil {
+		t.Skip(err)
+	}
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("unexpected body\n"))
+	}))
+	defer srv.Close()
+	previous := http.DefaultTransport
+	http.DefaultTransport = srv.Client().Transport
+	defer func() { http.DefaultTransport = previous }()
+
+	sum := sha256.Sum256([]byte(setupScriptBody))
+	hash := hex.EncodeToString(sum[:])
+	script := SetupScript{Key: "x", Kind: "python", URL: srv.URL, SHA256: hash}
+	svc := &Service{Home: t.TempDir(), Out: io.Discard}
+	conn := Connection{BaseURL: "http://127.0.0.1:1/v1", APIKey: "local", Models: []string{"m"}}
+	err := svc.runSetupScript(context.Background(), script, conn, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "sha256 mismatch") {
+		t.Fatalf("error = %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(svc.Home, "setup-cache", hash+".py")); !os.IsNotExist(statErr) {
+		t.Fatal("a mismatched script was cached")
+	}
+}
+
 func TestSetupEnvMapsWindowsHome(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("windows path is used as-is there")
