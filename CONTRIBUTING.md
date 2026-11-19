@@ -234,7 +234,7 @@ Concise; **Features** and **Fixes** only. Bold the key terms. Same text on GitHu
 **Full Changelog**: <compare or commits link>
 ```
 
-Rules: short bullets, no raw commit dump, no extra sections; English (an optional one-line `> 简体中文` is fine); include asset sha256.
+Rules: short bullets, no raw commit dump, no extra sections; **English only** — no Chinese UI labels or translated summary lines; use English action names (Install, Start, Re-sync, Logs, Settings); include asset sha256.
 
 **Write against the previous release, not against the commits.** The body is a
 comparison: every bullet must be traceable to a difference between the previous
