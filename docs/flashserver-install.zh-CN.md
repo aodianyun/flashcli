@@ -9,7 +9,7 @@
 
 ### Windows 安装包
 
-使用 `flashserver-setup-windows-amd64-v<version>.exe`（管理员）。它以实时进度页驱动
+使用 `flashserver-setup-windows-amd64.exe`（管理员）。它以实时进度页驱动
 `flashserver-setup`，完成后打开桌面客户端：
 
 ```text

@@ -28,7 +28,7 @@ flowchart LR
 
 ## 快速开始
 
-Windows：运行 `flashserver-setup-windows-amd64-v<version>.exe`（管理员），随后使用
+Windows：运行 `flashserver-setup-windows-amd64.exe`（管理员），随后使用
 它打开的客户端。
 
 Linux：

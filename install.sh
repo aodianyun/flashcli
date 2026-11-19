@@ -1,7 +1,7 @@
 #!/bin/sh
 # flashcli installer — installs the Go host binary (`flashcli`).
 #
-# Default: download release assets (flashcli-<os>-<arch>-v<version> + sha256sums.txt).
+# Default: download release assets (flashcli-<os>-<arch> + sha256sums.txt).
 #   -> requires only curl/wget + a sha256 tool (+ ca-certificates). No Go.
 # Source:  pass --from-source (or --source-dir DIR) to clone + build with Go.
 #   -> requires git + Go (auto-installed when possible).
@@ -342,7 +342,7 @@ install_release() {
   fi
   [ -n "$VERSION" ] || die "could not resolve a release version (pass --version or use --from-source)"
   info "installing flashcli $VERSION from release assets"
-  release_asset="${asset}-v${VERSION}"
+  release_asset="${asset}"
   tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
   fetch_retry "${base}/v${VERSION}/${release_asset}" "$tmp/$release_asset" 3 \
     || { warn "falling back to alternate release host: ${alt_base}"; \

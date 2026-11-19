@@ -89,7 +89,7 @@ Three components ship together. None of them duplicates cache logic: they call
 ```mermaid
 flowchart LR
   subgraph WIN[Windows package]
-    ISS["flashserver-setup-windows-amd64-v&lt;version&gt;.exe<br/>Inno Setup"] --> CLIENT[flashcli-desktop.exe]
+    ISS["flashserver-setup-windows-amd64.exe<br/>Inno Setup"] --> CLIENT[flashcli-desktop.exe]
     ISS --> SETUP[flashserver-setup.exe]
   end
   CLIENT -- "HTTP + /v1/ws" --> SRV["flashserver :8790"]

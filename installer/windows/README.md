@@ -1,7 +1,8 @@
 # Windows installer
 
-`flashserver-setup-windows-amd64-v<version>.exe` is the Windows UI entry point. It bundles the
-Linux payload and invokes the same `flashserver-setup` engine used by the CLI.
+`flashserver-setup-windows-amd64.exe` is the published Windows UI entry point. It bundles the
+Linux payload and invokes the same `flashserver-setup` engine used by the CLI. The local
+build artifact keeps a version suffix; `scripts/release_go.sh` publishes the stable name.
 
 ## Build
 
