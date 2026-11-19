@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -51,18 +52,22 @@ func (s *Server) cleanModels(w http.ResponseWriter, r *http.Request) {
 		}
 		if loaded[ref] {
 			results = append(results, cleanResult{Ref: ref, Skipped: "loaded"})
+			fmt.Fprintf(LogSink(), "clean %s skipped: loaded\n", ref)
 			continue
 		}
 		if s.Manager != nil && s.Manager.Busy(ref) {
 			results = append(results, cleanResult{Ref: ref, Skipped: "busy"})
+			fmt.Fprintf(LogSink(), "clean %s skipped: busy\n", ref)
 			continue
 		}
 		res, err := host.RemoveCachedRef(ref)
 		if err != nil {
 			results = append(results, cleanResult{Ref: ref, Skipped: err.Error()})
+			fmt.Fprintf(LogSink(), "clean %s failed: %v\n", ref, err)
 			continue
 		}
 		total += res.FreedBytes
+		fmt.Fprintf(LogSink(), "clean %s removed=%v freed=%d\n", ref, res.Removed, res.FreedBytes)
 		results = append(results, cleanResult{
 			Ref:           ref,
 			Removed:       res.Removed,
@@ -93,5 +98,6 @@ func (s *Server) cleanStorage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	fmt.Fprintf(LogSink(), "clean shared %v freed=%d\n", req.Targets, freed)
 	writeJSON(w, http.StatusOK, map[string]any{"freed_bytes": freed, "targets": req.Targets})
 }

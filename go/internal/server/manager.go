@@ -2,13 +2,13 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
-	"net/http"
+	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,6 +17,7 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/gpu"
 	"github.com/aodianyun/flashcli/go/internal/host"
 	"github.com/aodianyun/flashcli/go/internal/manifest"
+	"github.com/aodianyun/flashcli/go/internal/modelrun"
 	"github.com/aodianyun/flashcli/go/internal/ref"
 	"github.com/aodianyun/flashcli/go/internal/serveopts"
 )
@@ -25,49 +26,28 @@ import (
 // configured slot limit or available GPU memory.
 var ErrResourceExhausted = errors.New("resource exhausted")
 
-// ServeProcess is one `flashcli serve` child process.
-type ServeProcess interface {
-	Ref() string
-	Endpoint() string
-	PID() int
-	Healthy(context.Context) error
-	Running() bool
-	// LastLog returns the tail of the child's log (empty when unavailable).
-	LastLog() string
-	Stop(context.Context) error
-}
-
-// Launcher starts a serve process for a bundle ref on a loopback port.
-type Launcher interface {
-	Start(context.Context, string, int) (ServeProcess, error)
-}
-
-// LoadOptions carries the per-model host, port and manifest serve flags.
-type LoadOptions struct {
-	Host  string
-	Port  int
-	Flags []string
-}
-
-// OptionLauncher is implemented by launchers that accept per-model options.
-// The plain Launcher interface remains for tests and simple launchers.
-type OptionLauncher interface {
-	StartWithOptions(context.Context, string, LoadOptions) (ServeProcess, error)
-}
+// ServeProcess, Launcher, OptionLauncher and LoadOptions are shared with
+// `flashcli app` through internal/modelrun.
+type ServeProcess = modelrun.ServeProcess
+type Launcher = modelrun.Launcher
+type OptionLauncher = modelrun.OptionLauncher
+type LoadOptions = modelrun.LoadOptions
 
 // ManagerOptions controls model admission.
 type ManagerOptions struct {
-	// MaxLoaded is the maximum number of resident models. Zero means only the
-	// GPU memory policy is enforced.
+	// MaxLoaded is the maximum number of resident models. Zero means no slot
+	// limit; admission then relies on the bundle's resources.min_vram_mib.
 	MaxLoaded int
-	// MinFreeVRAMMiB is the safety margin kept free on the GPU.
-	MinFreeVRAMMiB int64
 	// GPU returns the current GPU inventory. Nil falls back to gpu.Probe.
 	GPU func(context.Context) ([]gpu.Device, error)
 	// Inspect reads a bundle's admission metadata. Nil uses inspectBundle.
 	Inspect func(string) (BundleInfo, error)
 	// ServeSettings stores per-model host/port/serve options. Nil disables them.
 	ServeSettings *serveSettingsStore
+	// StatePath persists the model-page loaded set so a daemon restart (for
+	// example after a reboot with autostart enabled) restores it. Empty
+	// disables persistence.
+	StatePath string
 }
 
 // Manager owns resident serve processes.
@@ -78,13 +58,24 @@ type Manager struct {
 	launcher  Launcher
 	opts      ManagerOptions
 	pending   int
+	// restoring suppresses persistence while RestoreModels replays the saved
+	// set, so a model that fails to load now is not dropped from the file.
+	restoring bool
 }
 
 type instance struct {
 	ref      string
 	process  ServeProcess
 	loadedAt time.Time
+	// owners are the applications (and "model" for the model page) that asked
+	// for this instance. The process stops only when the last owner releases it,
+	// so two applications using the same bundle do not kill each other's model.
+	owners map[string]struct{}
 }
+
+// ownerModel marks an instance loaded from the model page, which stays until
+// the user unloads it explicitly.
+const ownerModel = "model"
 
 // NewManager creates a manager with a conservative single-model default.
 func NewManager(l Launcher) *Manager {
@@ -103,17 +94,44 @@ func NewManagerWithOptions(l Launcher, opts ManagerOptions) *Manager {
 
 // Load starts a serve process for ref if it is not already resident.
 func (m *Manager) Load(ctx context.Context, refStr string) (*InstanceInfo, error) {
-	return m.LoadWithProgress(ctx, refStr, nil)
+	return m.loadOwned(ctx, refStr, ownerModel, nil)
 }
 
 // LoadWithProgress is Load with coarse progress events (bundle/weights/venv).
 func (m *Manager) LoadWithProgress(ctx context.Context, refStr string, progress func(phase, message string)) (*InstanceInfo, error) {
+	return m.loadOwned(ctx, refStr, ownerModel, progress)
+}
+
+// LoadFor loads ref on behalf of one application. The application is recorded
+// as an owner; the returned process must be released instead of force-unloaded.
+func (m *Manager) LoadFor(ctx context.Context, refStr, owner string) (*InstanceInfo, error) {
+	return m.loadOwned(ctx, refStr, owner, nil)
+}
+
+// LoadForWithProgress is LoadFor with coarse progress events.
+func (m *Manager) LoadForWithProgress(ctx context.Context, refStr, owner string, progress func(phase, message string)) (*InstanceInfo, error) {
+	return m.loadOwned(ctx, refStr, owner, progress)
+}
+
+func (m *Manager) loadOwned(ctx context.Context, refStr, owner string, progress func(phase, message string)) (*InstanceInfo, error) {
 	for {
 		m.mu.Lock()
 		if inst, ok := m.instances[refStr]; ok {
-			info := infoFor(inst)
+			// A child that died outside the Manager (crash, OOM kill) must not
+			// be handed out as a live instance: reload instead.
+			if inst.process.Running() {
+				addOwnerLocked(inst, owner)
+				if owner == ownerModel && !m.restoring {
+					m.persistModelsLocked()
+				}
+				info := infoFor(inst)
+				m.mu.Unlock()
+				return &info, nil
+			}
+			delete(m.instances, refStr)
 			m.mu.Unlock()
-			return &info, nil
+			_ = inst.process.Stop(context.Background())
+			continue
 		}
 		if wait, ok := m.loading[refStr]; ok {
 			m.mu.Unlock()
@@ -132,12 +150,31 @@ func (m *Manager) LoadWithProgress(ctx context.Context, refStr string, progress 
 		m.mu.Lock()
 		delete(m.loading, refStr)
 		close(wait)
+		if err == nil {
+			if inst, ok := m.instances[refStr]; ok {
+				addOwnerLocked(inst, owner)
+				if owner == ownerModel && !m.restoring {
+					m.persistModelsLocked()
+				}
+				info = infoFor(inst)
+			}
+		}
 		m.mu.Unlock()
 		if err != nil {
 			return nil, err
 		}
 		return &info, nil
 	}
+}
+
+func addOwnerLocked(inst *instance, owner string) {
+	if owner == "" {
+		return
+	}
+	if inst.owners == nil {
+		inst.owners = map[string]struct{}{}
+	}
+	inst.owners[owner] = struct{}{}
 }
 
 func (m *Manager) load(ctx context.Context, refStr string, progress func(phase, message string)) (InstanceInfo, error) {
@@ -181,12 +218,12 @@ func (m *Manager) load(ctx context.Context, refStr string, progress func(phase, 
 	host := strings.TrimSpace(settings.Host)
 	port := settings.Port
 	if port > 0 {
-		if !portAvailable(port) {
+		if !modelrun.PortAvailable(port) {
 			return InstanceInfo{}, fmt.Errorf("serve port %d is already in use", port)
 		}
 	} else {
 		var err error
-		port, err = freePort()
+		port, err = modelrun.FreePort()
 		if err != nil {
 			return InstanceInfo{}, err
 		}
@@ -204,37 +241,16 @@ func (m *Manager) load(ctx context.Context, refStr string, progress func(phase, 
 	if err != nil {
 		return InstanceInfo{}, err
 	}
-	deadline := time.Now().Add(120 * time.Second)
-	lastLog := ""
-	for {
+	// Shared readiness loop with apps.Service: same 250 ms poll and last-log
+	// error, so a model start behaves the same from the 模型 page and an app.
+	err = modelrun.WaitHealthy(ctx, proc, 120*time.Second, func(line string) {
 		if progress != nil {
-			if line := strings.TrimSpace(proc.LastLog()); line != "" && line != lastLog {
-				lastLog = line
-				progress("progress", line)
-			}
+			progress("progress", line)
 		}
-		if err := proc.Healthy(ctx); err == nil {
-			break
-		}
-		// Return the child's own error instead of waiting out the deadline
-		// (e.g. a run-only bundle rejects serve immediately).
-		if !proc.Running() {
-			_ = proc.Stop(context.Background())
-			if detail := strings.TrimSpace(proc.LastLog()); detail != "" {
-				return InstanceInfo{}, fmt.Errorf("serve process for %s exited: %s", refStr, detail)
-			}
-			return InstanceInfo{}, fmt.Errorf("serve process for %s exited before becoming ready", refStr)
-		}
-		if time.Now().After(deadline) {
-			_ = proc.Stop(context.Background())
-			return InstanceInfo{}, fmt.Errorf("serve process for %s did not become healthy", refStr)
-		}
-		select {
-		case <-ctx.Done():
-			_ = proc.Stop(context.Background())
-			return InstanceInfo{}, ctx.Err()
-		case <-time.After(250 * time.Millisecond):
-		}
+	})
+	if err != nil {
+		_ = proc.Stop(context.Background())
+		return InstanceInfo{}, fmt.Errorf("serve process for %s: %w", refStr, err)
 	}
 	inst := &instance{ref: refStr, process: proc, loadedAt: time.Now().UTC()}
 	m.mu.Lock()
@@ -250,18 +266,48 @@ func (m *Manager) load(ctx context.Context, refStr string, progress func(phase, 
 	return info, nil
 }
 
-// Unload stops a resident model.
+// Unload stops a resident model regardless of its owners (model page action).
 func (m *Manager) Unload(ctx context.Context, refStr string) error {
+	_, err := m.UnloadIfLoaded(ctx, refStr)
+	return err
+}
+
+// UnloadIfLoaded stops a resident model and reports whether it was resident.
+func (m *Manager) UnloadIfLoaded(ctx context.Context, refStr string) (bool, error) {
 	m.mu.Lock()
 	inst, ok := m.instances[refStr]
 	if ok {
 		delete(m.instances, refStr)
+		m.persistModelsLocked()
 	}
 	m.mu.Unlock()
 	if !ok {
-		return nil
+		return false, nil
 	}
-	return inst.process.Stop(ctx)
+	return true, inst.process.Stop(ctx)
+}
+
+// ReleaseFor removes one application's claim on a resident model and stops the
+// process only when no owner remains. It reports whether the Manager owned the
+// instance (false means the caller should fall back to a recorded pid).
+func (m *Manager) ReleaseFor(ctx context.Context, refStr, owner string) (bool, error) {
+	m.mu.Lock()
+	inst, ok := m.instances[refStr]
+	if !ok {
+		m.mu.Unlock()
+		return false, nil
+	}
+	if owner != "" {
+		delete(inst.owners, owner)
+	}
+	if len(inst.owners) > 0 {
+		m.mu.Unlock()
+		return true, nil
+	}
+	delete(m.instances, refStr)
+	m.persistModelsLocked()
+	m.mu.Unlock()
+	return true, inst.process.Stop(ctx)
 }
 
 // InstanceInfo is the public view of a resident model.
@@ -278,6 +324,24 @@ func infoFor(inst *instance) InstanceInfo {
 		Ref: inst.ref, State: "ready", Endpoint: inst.process.Endpoint(),
 		PID: inst.process.PID(), LoadedAt: inst.loadedAt,
 	}
+}
+
+// Claim registers an owner on an already resident model without starting one.
+// It reports false when the Manager does not own that ref (for example a serve
+// process started by the CLI), so the caller keeps its own endpoint and the
+// Manager does not spawn a duplicate.
+func (m *Manager) Claim(refStr, owner string) bool {
+	if owner == "" {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	inst, ok := m.instances[refStr]
+	if !ok || !inst.process.Running() {
+		return false
+	}
+	addOwnerLocked(inst, owner)
+	return true
 }
 
 // Slots returns the current resident/pending count and configured slot limit.
@@ -298,12 +362,29 @@ func (m *Manager) Busy(ref string) bool {
 	return ok
 }
 
+// IsRunning reports whether a loaded instance's process is still alive.
+func (m *Manager) IsRunning(refStr string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	inst, ok := m.instances[refStr]
+	if !ok {
+		return false
+	}
+	return inst.process.Running()
+}
+
 // List returns resident models.
 func (m *Manager) List() []InstanceInfo {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	out := make([]InstanceInfo, 0, len(m.instances))
-	for _, inst := range m.instances {
+	for ref, inst := range m.instances {
+		// Drop children that exited without an unload, so the model page does
+		// not advertise a dead instance (and the next load starts fresh).
+		if !inst.process.Running() {
+			delete(m.instances, ref)
+			continue
+		}
 		out = append(out, infoFor(inst))
 	}
 	return out
@@ -331,6 +412,89 @@ func (m *Manager) Close(ctx context.Context) {
 	}
 }
 
+// modelsStateFile is the persisted model-page intent.
+type modelsStateFile struct {
+	Models []string `json:"models"`
+}
+
+// persistModelsLocked writes the model-page loaded set (models with the "model"
+// owner); app-only models are restored from the app registry instead.
+func (m *Manager) persistModelsLocked() {
+	if m.opts.StatePath == "" || m.restoring {
+		return
+	}
+	refs := make([]string, 0, len(m.instances))
+	for refStr, inst := range m.instances {
+		if _, ok := inst.owners[ownerModel]; ok {
+			refs = append(refs, refStr)
+		}
+	}
+	m.writeModelsStateLocked(refs)
+}
+
+func (m *Manager) writeModelsStateLocked(refs []string) {
+	if m.opts.StatePath == "" {
+		return
+	}
+	sort.Strings(refs)
+	blob, err := json.MarshalIndent(modelsStateFile{Models: refs}, "", "  ")
+	if err != nil {
+		log.Printf("persist loaded models: %v", err)
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(m.opts.StatePath), 0o755); err != nil {
+		log.Printf("persist loaded models: %v", err)
+		return
+	}
+	tmp := m.opts.StatePath + ".tmp"
+	if err := os.WriteFile(tmp, append(blob, '\n'), 0o644); err != nil {
+		log.Printf("persist loaded models: %v", err)
+		return
+	}
+	if err := os.Rename(tmp, m.opts.StatePath); err != nil {
+		log.Printf("persist loaded models: %v", err)
+	}
+}
+
+// RestoreModels loads the model-page set saved before the daemon stopped (for
+// example after a reboot with autostart enabled). Failures are returned; the
+// saved set is kept so a later start can retry.
+func (m *Manager) RestoreModels(ctx context.Context) []error {
+	if m.opts.StatePath == "" {
+		return nil
+	}
+	blob, err := os.ReadFile(m.opts.StatePath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return []error{err}
+	}
+	var file modelsStateFile
+	if err := json.Unmarshal(blob, &file); err != nil {
+		return []error{fmt.Errorf("parse %s: %w", m.opts.StatePath, err)}
+	}
+	if len(file.Models) == 0 {
+		return nil
+	}
+	m.mu.Lock()
+	m.restoring = true
+	m.mu.Unlock()
+	var errs []error
+	for _, refStr := range file.Models {
+		if _, err := m.Load(ctx, refStr); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", refStr, err))
+		}
+	}
+	m.mu.Lock()
+	m.restoring = false
+	// Keep the original intent; a model that could not load now is retried on
+	// the next daemon start instead of silently disappearing.
+	m.writeModelsStateLocked(file.Models)
+	m.mu.Unlock()
+	return errs
+}
+
 func (m *Manager) checkCapacityLocked(ctx context.Context, b BundleInfo) error {
 	loaded := len(m.instances) + m.pending
 	maxLoaded := m.opts.MaxLoaded
@@ -354,9 +518,10 @@ func (m *Manager) checkCapacityLocked(ctx context.Context, b BundleInfo) error {
 			free = d.MemoryFree
 		}
 	}
-	need := (b.MinVRAMMiB + m.opts.MinFreeVRAMMiB) * 1024 * 1024
+	// Only the bundle declares its requirement; there is no global margin.
+	need := b.MinVRAMMiB * 1024 * 1024
 	if free < need {
-		return fmt.Errorf("%w: need %d MiB free VRAM, have %d MiB", ErrResourceExhausted, b.MinVRAMMiB+m.opts.MinFreeVRAMMiB, free/(1024*1024))
+		return fmt.Errorf("%w: need %d MiB free VRAM, have %d MiB", ErrResourceExhausted, b.MinVRAMMiB, free/(1024*1024))
 	}
 	return nil
 }
@@ -424,268 +589,5 @@ func numberFromAny(v any) (int64, bool) {
 		return i, err == nil
 	default:
 		return 0, false
-	}
-}
-
-// endpointFromLog extracts the endpoint printed by `flashcli serve` for native
-// backends: "native-exec serve: http://127.0.0.1:1234 (no Python)".
-func endpointFromLog(line string) string {
-	const marker = "native-exec serve:"
-	idx := strings.Index(line, marker)
-	if idx < 0 {
-		return ""
-	}
-	rest := strings.TrimSpace(line[idx+len(marker):])
-	if i := strings.IndexAny(rest, " \t\r\n"); i >= 0 {
-		rest = rest[:i]
-	}
-	if !strings.HasPrefix(rest, "http://") && !strings.HasPrefix(rest, "https://") {
-		return ""
-	}
-	return strings.TrimRight(rest, "/")
-}
-
-// portAvailable reports whether a TCP port can be bound on all interfaces.
-func portAvailable(port int) bool {
-	ln, err := net.Listen("tcp", "0.0.0.0:"+strconv.Itoa(port))
-	if err != nil {
-		return false
-	}
-	_ = ln.Close()
-	return true
-}
-
-// freePort asks the OS for any free TCP port. Explicit user ports are checked
-// with portAvailable before launch.
-func freePort() (int, error) {
-	ln, err := net.Listen("tcp", "0.0.0.0:0")
-	if err != nil {
-		return 0, err
-	}
-	defer ln.Close()
-	return ln.Addr().(*net.TCPAddr).Port, nil
-}
-
-// FlashcliLauncher starts `flashcli serve` as a separate process.
-type FlashcliLauncher struct {
-	Bin        string
-	Host       string
-	PublicHost string
-	LogDir     string
-	ExtraEnv   []string
-}
-
-func resolveFlashcliBin(bin string) (string, error) {
-	bin = strings.TrimSpace(bin)
-	if bin == "" {
-		bin = strings.TrimSpace(os.Getenv("FLASHCLI_BIN"))
-	}
-	if bin == "" {
-		var err error
-		bin, err = exec.LookPath("flashcli")
-		if err != nil {
-			return "", fmt.Errorf("flashcli binary not found (set FLASHCLI_BIN): %w", err)
-		}
-	}
-	return bin, nil
-}
-
-func (l FlashcliLauncher) Start(ctx context.Context, refStr string, port int) (ServeProcess, error) {
-	return l.StartWithOptions(ctx, refStr, LoadOptions{Port: port})
-}
-
-func (l FlashcliLauncher) StartWithOptions(ctx context.Context, refStr string, opts LoadOptions) (ServeProcess, error) {
-	bin, err := resolveFlashcliBin(l.Bin)
-	if err != nil {
-		return nil, err
-	}
-	hostAddr := strings.TrimSpace(opts.Host)
-	if hostAddr == "" {
-		hostAddr = l.Host
-	}
-	if hostAddr == "" {
-		hostAddr = "127.0.0.1"
-	}
-	publicHost := l.PublicHost
-	if publicHost == "" {
-		if hostAddr == "0.0.0.0" || hostAddr == "::" || hostAddr == "[::]" {
-			publicHost = "127.0.0.1"
-		} else {
-			publicHost = hostAddr
-		}
-	}
-	args := []string{"serve", refStr, "--host", hostAddr, "--port", strconv.Itoa(opts.Port)}
-	args = append(args, opts.Flags...)
-	cmd := exec.Command(bin, args...)
-	cmd.Env = append(os.Environ(), l.ExtraEnv...)
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	logPath := ""
-	if l.LogDir != "" {
-		if err := os.MkdirAll(l.LogDir, 0o755); err != nil {
-			return nil, err
-		}
-		name := strings.NewReplacer("/", "_", "\\", "_", ":", "_").Replace(refStr) + ".log"
-		logPath = filepath.Join(l.LogDir, name)
-		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-		if err != nil {
-			return nil, err
-		}
-		cmd.Stdout = f
-		cmd.Stderr = f
-	}
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-	p := &flashcliProcess{
-		ref: refStr, cmd: cmd, port: opts.Port, logPath: logPath,
-		endpoint: "http://" + publicHost + ":" + strconv.Itoa(opts.Port),
-		client:   &http.Client{Timeout: 5 * time.Second},
-		done:     make(chan struct{}),
-	}
-	go func() {
-		p.waitErr = cmd.Wait()
-		close(p.done)
-	}()
-	return p, nil
-}
-
-type flashcliProcess struct {
-	ref     string
-	cmd     *exec.Cmd
-	port    int
-	client  *http.Client
-	logPath string
-	done    chan struct{}
-	waitErr error
-
-	endpointMu sync.Mutex
-	endpoint   string
-}
-
-func (p *flashcliProcess) Ref() string { return p.ref }
-
-func (p *flashcliProcess) Endpoint() string {
-	p.endpointMu.Lock()
-	defer p.endpointMu.Unlock()
-	return p.endpoint
-}
-
-func (p *flashcliProcess) setEndpoint(endpoint string) {
-	p.endpointMu.Lock()
-	p.endpoint = endpoint
-	p.endpointMu.Unlock()
-}
-
-// adoptReportedEndpoint switches to the endpoint a native serve child reported
-// ("native-exec serve: http://host:port"). Native http backends choose their
-// own port, so the allocated port cannot be assumed.
-func (p *flashcliProcess) adoptReportedEndpoint() {
-	if u := endpointFromLog(p.LastLog()); u != "" && u != p.Endpoint() {
-		p.setEndpoint(u)
-	}
-}
-func (p *flashcliProcess) PID() int {
-	if p.cmd.Process == nil {
-		return 0
-	}
-	return p.cmd.Process.Pid
-}
-
-// Running reports whether the child has not exited yet.
-func (p *flashcliProcess) Running() bool {
-	if p.done == nil {
-		return false
-	}
-	select {
-	case <-p.done:
-		return false
-	default:
-		return true
-	}
-}
-
-// LastLog returns the last non-empty line written by the child.
-func (p *flashcliProcess) LastLog() string {
-	if p.logPath == "" {
-		return ""
-	}
-	f, err := os.Open(p.logPath)
-	if err != nil {
-		return ""
-	}
-	defer f.Close()
-	info, err := f.Stat()
-	if err != nil {
-		return ""
-	}
-	const tail = 4096
-	off := info.Size() - tail
-	if off < 0 {
-		off = 0
-	}
-	if _, err := f.Seek(off, 0); err != nil {
-		return ""
-	}
-	blob := make([]byte, info.Size()-off)
-	if _, err := f.Read(blob); err != nil && err.Error() != "EOF" {
-		return ""
-	}
-	lines := strings.Split(strings.TrimSpace(string(blob)), "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		if line := strings.TrimSpace(lines[i]); line != "" {
-			return line
-		}
-	}
-	return ""
-}
-
-func (p *flashcliProcess) Healthy(ctx context.Context) error {
-	// Native http backends report their own endpoint; adopt it before probing.
-	p.adoptReportedEndpoint()
-	// Python serve exposes /health; native serve (abi/exec) exposes /healthz
-	// (docs/bundle_execution_abi.md). Accept either so one supervisor works
-	// for both kinds.
-	var lastErr error
-	for _, path := range []string{"/health", "/healthz"} {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.Endpoint()+path, nil)
-		if err != nil {
-			return err
-		}
-		resp, err := p.client.Do(req)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		_ = resp.Body.Close()
-		if resp.StatusCode == http.StatusOK {
-			return nil
-		}
-		lastErr = fmt.Errorf("%s HTTP %d", path, resp.StatusCode)
-	}
-	return lastErr
-}
-
-func (p *flashcliProcess) Stop(ctx context.Context) error {
-	if p.cmd == nil || p.cmd.Process == nil {
-		return nil
-	}
-	select {
-	case <-p.done:
-		return nil
-	default:
-	}
-	_ = p.cmd.Process.Signal(os.Interrupt)
-	select {
-	case <-p.done:
-		return nil
-	case <-time.After(15 * time.Second):
-		_ = p.cmd.Process.Kill()
-		<-p.done
-		return nil
-	case <-ctx.Done():
-		_ = p.cmd.Process.Kill()
-		<-p.done
-		return nil
 	}
 }

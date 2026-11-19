@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -9,7 +8,6 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/host"
 	"github.com/aodianyun/flashcli/go/internal/manifest"
 	"github.com/aodianyun/flashcli/go/internal/ref"
-	"github.com/aodianyun/flashcli/go/internal/weights"
 )
 
 // ensureBundleRef delegates to the shared host service.
@@ -35,41 +33,37 @@ func applyEnv(m *manifest.Manifest) (*manifest.Manifest, error) {
 func pullCmd() *cobra.Command {
 	var quiet bool
 	var noAutoInstall bool
+	var force bool
 	cmd := &cobra.Command{
 		Use:   "pull <ref>",
 		Short: "Download a bundle's weights into the flashcli cache",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			bundleRoot, ver, variant, err := ensureBundleRef(args[0], quiet, false)
+			// Use the shared pull pipeline so the CLI, the desktop download and
+			// app preparation always sync/prepare the same way.
+			res, err := host.Pull(cmd.Context(), args[0], host.PullOptions{
+				Quiet:         quiet,
+				NoAutoInstall: noAutoInstall,
+				VerifyWeights: true,
+				Force:         force,
+				Progress: func(ev host.PullEvent) {
+					if quiet || ev.Message == "" {
+						return
+					}
+					fmt.Fprintf(cmd.OutOrStdout(), "[%s] %s\n", ev.Phase, ev.Message)
+				},
+			})
 			if err != nil {
 				fmt.Fprintf(cmd.OutOrStderr(), "[!] %s\n", err)
 				return ErrFailed
 			}
-			m, err := manifest.Load(bundleRoot)
-			if err != nil {
-				return failed(cmd, err)
-			}
-			m, err = applyEnv(m)
-			if err != nil {
-				return failed(cmd, err)
-			}
-			if _, err := manifest.ResolveVariant(m, variant); err != nil {
-				return failed(cmd, err)
-			}
-			if _, _, err := ensureBundleRuntime(m, bundleRoot, ver, variant, quiet, noAutoInstall); err != nil {
-				return failed(cmd, err)
-			}
-			checkpoint, _, err := weights.PrepareBundle(context.Background(), m, ver, variant, quiet, true)
-			if err != nil {
-				fmt.Fprintf(cmd.OutOrStderr(), "[!] %s\n", err)
-				return ErrFailed
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "[ok] weights: %s\n", checkpoint)
+			fmt.Fprintf(cmd.OutOrStdout(), "[ok] weights: %s\n", res.Checkpoint)
 			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress output")
 	cmd.Flags().BoolVar(&noAutoInstall, "no-auto-install", false, "Do not auto-install the Python stack")
+	cmd.Flags().BoolVar(&force, "force", false, "Re-download the bundle tree even when it is cached")
 	return cmd
 }
 

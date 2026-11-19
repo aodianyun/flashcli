@@ -36,6 +36,16 @@ GO_ONLY_COMMANDS = {
     "cache clean",
     "cache prune",
     "du",
+    "app",
+    "app list",
+    "app show",
+    "app install",
+    "app status",
+    "app start",
+    "app stop",
+    "app restart",
+    "app logs",
+    "app uninstall",
 }
 
 _COBRA_BUILTINS = {"completion", "help"}

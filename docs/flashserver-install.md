@@ -64,14 +64,16 @@ checks `/health`.
   "public_host": "127.0.0.1",
   "serve_host": "127.0.0.1",
   "log_dir": "/home/me/.flashcli/logs/serve",
-  "max_loaded": 0,
-  "min_free_vram_mib": 2048
+  "max_loaded": 0
 }
 ```
 
-- `max_loaded=0` admits by GPU memory only. A bundle's `resources.min_vram_mib`
-  must fit free VRAM minus `min_free_vram_mib`, otherwise `load` returns
-  `409 RESOURCE_EXHAUSTED`; the slot limit also counts starting models.
+- `max_loaded=0` means no slot limit. VRAM admission uses only each bundle's
+  `resources.min_vram_mib`: a start is admitted when free VRAM on the largest
+  card is at least that value, otherwise `load` returns `409 RESOURCE_EXHAUSTED`.
+  Bundles without the field are always admitted by VRAM; the slot limit still
+  counts starting models. Models started by installed applications use the same
+  admission as the 模型 page.
 - WSL defaults: `addr=0.0.0.0:8790`, `public_host=localhost`,
   `serve_host=0.0.0.0` (Windows reaches the service through localhost forwarding).
 - `token` is optional. When set, every path except `/health`, `/`, `/docs`,
@@ -101,6 +103,21 @@ flashserver-setup.exe --start-service       # enable auto-start and start
 Service state and auto-start are independent: stopping never disables auto-start,
 and toggling auto-start never starts or stops the service. `/v1/system` reports
 the current auto-start state (`enabled`, `disabled`, `unknown`).
+
+### Restart behavior
+
+On service start, `flashserver` resumes the previous session:
+
+- models loaded from the 模型 page are reloaded (the set is recorded in
+  `~/.flashcli/flashserver/models.json`; a model that fails now stays in the
+  file and is retried on the next start);
+- applications whose stored state is `ready` with recorded models are started
+  again, through the same slot/VRAM admission and owner tracking.
+
+Restores run in the background and sequentially, so a slow model does not block
+the HTTP API; an app restore failure is logged and marks the app `failed`.
+Auto-start only controls whether the service starts at boot — the client
+application itself (WorkBuddy, Grok CLI, …) keeps its own autostart.
 
 ## Uninstall
 

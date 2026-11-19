@@ -141,14 +141,13 @@ func installWSL(ctx context.Context, env Env, opts Options, out io.Writer) error
 		return err
 	}
 	cfg, err := json.MarshalIndent(map[string]any{
-		"addr":              exposedAddr(opts.Addr),
-		"token":             opts.Token,
-		"flashcli_bin":      path.Join(binDir, "flashcli"),
-		"public_host":       "localhost",
-		"serve_host":        "0.0.0.0",
-		"log_dir":           path.Join(opts.Home, "logs", "serve"),
-		"max_loaded":        0,
-		"min_free_vram_mib": 2048,
+		"addr":         exposedAddr(opts.Addr),
+		"token":        opts.Token,
+		"flashcli_bin": path.Join(binDir, "flashcli"),
+		"public_host":  "localhost",
+		"serve_host":   "0.0.0.0",
+		"log_dir":      path.Join(opts.Home, "logs", "serve"),
+		"max_loaded":   0,
 	}, "", "  ")
 	if err != nil {
 		return err

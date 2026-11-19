@@ -176,19 +176,49 @@ func Markers() []map[string]any {
 
 func splitMarkers(markers []map[string]any, refArg string) (targets, others []map[string]any) {
 	targetKey := ""
+	local := false
 	if p, err := ref.Parse(refArg); err == nil {
 		targetKey = refCacheKey(p)
+		local = p.Local
 	}
 	for _, marker := range markers {
 		name := stringValue(marker["ref"])
 		key := stringValue(marker["cache_key"])
-		if name == refArg || key == refArg || (targetKey != "" && key == targetKey) {
+		match := name == refArg || key == refArg || (targetKey != "" && key == targetKey)
+		if !match && local {
+			// A local bundle id includes the manifest name and a path digest;
+			// the authoritative link back to the path is the recorded root.
+			match = sameBundleRoot(stringValue(marker["bundle_root"]), refArg)
+		}
+		if match {
 			targets = append(targets, marker)
 		} else {
 			others = append(others, marker)
 		}
 	}
 	return targets, others
+}
+
+func sameBundleRoot(root, refArg string) bool {
+	root = strings.TrimSpace(root)
+	if root == "" {
+		return false
+	}
+	want, err := filepath.Abs(strings.TrimSpace(refArg))
+	if err != nil {
+		return false
+	}
+	have, err := filepath.Abs(root)
+	if err != nil {
+		return false
+	}
+	if resolved, err := filepath.EvalSymlinks(want); err == nil {
+		want = resolved
+	}
+	if resolved, err := filepath.EvalSymlinks(have); err == nil {
+		have = resolved
+	}
+	return want == have
 }
 
 func sharedCacheKeys(others []map[string]any) (bundles, modelWeights, runtimes map[string]bool) {
@@ -228,10 +258,18 @@ func RefCacheKey(p ref.Parsed) string {
 	return refCacheKey(p)
 }
 
-// refCacheKey mirrors the CLI/protocol cache key for a parsed ref.
+// refCacheKey mirrors the CLI/protocol cache key for a parsed ref. A local
+// bundle is keyed by its canonical local bundle id (the same value
+// weights.CacheKeyFor/WriteLocalMarkers write), not by the directory name.
 func refCacheKey(p ref.Parsed) string {
+	if p.Local {
+		body, _, err := ref.SplitVariant(p.Raw)
+		if err == nil && strings.TrimSpace(body) != "" {
+			return weights.TreeKey(runtime.IDFromPath(body, p.Name), "local")
+		}
+	}
 	version := p.Version
-	if p.Local || version == "" {
+	if version == "" {
 		version = "local"
 	}
 	return weights.TreeKey(p.Name, version)

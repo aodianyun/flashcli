@@ -40,6 +40,7 @@ fn api_addr() -> &'static str {
 enum Tab {
     Overview,
     Models,
+    Apps,
     Logs,
     Settings,
 }
@@ -49,6 +50,7 @@ impl Tab {
         match self {
             Tab::Overview => "概览",
             Tab::Models => "模型",
+            Tab::Apps => "应用",
             Tab::Logs => "日志",
             Tab::Settings => "设置",
         }
@@ -210,12 +212,27 @@ struct OptionsDialog {
     start_after_save: bool,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 struct WslConfig {
     memory: String,
     processors: String,
     swap: String,
     mirrored: bool,
+    /// `autoMemoryReclaim=gradual` (on by default): WSL returns idle page
+    /// cache to Windows instead of holding it for the whole session.
+    auto_memory_reclaim: bool,
+}
+
+impl Default for WslConfig {
+    fn default() -> Self {
+        Self {
+            memory: String::new(),
+            processors: String::new(),
+            swap: String::new(),
+            mirrored: false,
+            auto_memory_reclaim: true,
+        }
+    }
 }
 
 enum Event {
@@ -225,6 +242,7 @@ enum Event {
     Storage(Value),
     Mirror(Value),
     Logs(Option<String>),
+    LogLines(Vec<String>),
     LogsNote(String),
     CleanNote(String),
     StorageNote(String),
@@ -239,6 +257,17 @@ enum Event {
     CatalogTags(Vec<(i64, String)>),
     HubDetail(HubDetail),
     HubError(String),
+    Apps(Vec<Value>, u64),
+    AppsError(String, u64),
+    AppCover(String, Option<Vec<u8>>),
+    AppDetail(Value),
+    AppDetailError(String),
+    /// Fresh local state for one app (None = not installed). Lets 启动/停止/卸载
+    /// update the UI immediately without waiting for the FlashHub manifest.
+    AppLocal { key: String, state: Option<Value> },
+    AppAction(String, Result<String, String>),
+    AppJob { verb: String, reference: String, line: String, running: bool },
+    AppModelLog { key: String, lines: Vec<String> },
     ModelOptions { reference: String, result: Result<Value, String> },
     ModelOptionsSaved { reference: String, result: Result<Value, String>, start: bool },
     WslApplied(Result<String, String>),
@@ -280,6 +309,133 @@ struct SmokeState {
     log: String,
 }
 
+/// What the user picked in the install confirmation dialog.
+enum AppInstallAction {
+    /// Install the models only.
+    Skip,
+    /// Run the manifest shell command on this machine.
+    RunScript(String),
+    /// Download the installer behind a URL and run it.
+    Installer { url: String, kind: InstallerKind },
+}
+
+/// Installer type behind an install URL.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum InstallerKind {
+    Exe,
+    Msi,
+    Dmg,
+    Pkg,
+    /// A plain download page: opened in the browser, never fetched.
+    Page,
+}
+
+/// Installer type behind an install URL, by extension (query ignored).
+fn installer_kind(url: &str) -> InstallerKind {
+    let path = url.split(['?', '#']).next().unwrap_or(url).to_ascii_lowercase();
+    if path.ends_with(".exe") {
+        InstallerKind::Exe
+    } else if path.ends_with(".msi") {
+        InstallerKind::Msi
+    } else if path.ends_with(".dmg") {
+        InstallerKind::Dmg
+    } else if path.ends_with(".pkg") {
+        InstallerKind::Pkg
+    } else {
+        InstallerKind::Page
+    }
+}
+
+/// File name for a downloaded installer (last path segment, sanitized).
+fn installer_file_name(url: &str, kind: InstallerKind) -> String {
+    let path = url.split(['?', '#']).next().unwrap_or(url);
+    let name = path.rsplit('/').next().unwrap_or("");
+    let cleaned: String = name
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+        .collect();
+    if cleaned.is_empty() || cleaned.starts_with('.') {
+        match kind {
+            InstallerKind::Msi => "installer.msi".to_string(),
+            InstallerKind::Dmg => "installer.dmg".to_string(),
+            InstallerKind::Pkg => "installer.pkg".to_string(),
+            _ => "installer.exe".to_string(),
+        }
+    } else {
+        cleaned
+    }
+}
+
+/// True when this kind is downloaded and executed (not just opened).
+fn installer_is_runnable(kind: InstallerKind) -> bool {
+    matches!(
+        kind,
+        InstallerKind::Exe | InstallerKind::Msi | InstallerKind::Dmg | InstallerKind::Pkg
+    )
+}
+
+/// One client-side setup script from the app manifest.
+#[derive(Clone)]
+struct AppSetupScript {
+    key: String,
+    url: String,
+    sha256: String,
+}
+
+/// A pending start: the user confirms which setup scripts may run afterwards.
+#[derive(Clone)]
+struct AppSetupPrompt {
+    org: String,
+    name: String,
+    version: String,
+    display_name: String,
+    scripts: Vec<(AppSetupScript, bool)>,
+    /// Re-run the configuration of an application that is already running
+    /// (does not change the model state, only re-applies the scripts).
+    rerun: bool,
+}
+
+/// A pending application install: the user must confirm the install script.
+#[derive(Clone)]
+struct AppInstallPrompt {
+    org: String,
+    name: String,
+    version: String,
+    display_name: String,
+    bundles: Vec<String>,
+    command: Option<String>,
+    force: bool,
+}
+
+/// A pending application uninstall.
+#[derive(Clone)]
+struct AppUninstallPrompt {
+    org: String,
+    name: String,
+    version: String,
+    display_name: String,
+    purge_models: bool,
+}
+
+/// Progress of the install/prepare job for one application.
+#[derive(Clone)]
+struct AppJobState {
+    verb: String,
+    /// Current step: 安装应用 / 准备模型 / 启动模型 / 完成.
+    phase: String,
+    /// 0-100 when the daemon reports a percentage; None = indeterminate.
+    percent: Option<f32>,
+    running: bool,
+    log: String,
+}
+
+/// A downloaded application cover, decoded into a UI texture.
+enum AppCover {
+    Loading,
+    Ready(egui::TextureHandle),
+    Failed,
+}
+
 pub struct App {
     rx: Receiver<Event>,
     tx: Sender<Event>,
@@ -300,6 +456,33 @@ pub struct App {
     hub_busy: bool,
     hub_searched: bool,
     hub_error: String,
+    apps: Vec<Value>,
+    apps_loading: bool,
+    apps_loaded: bool,
+    apps_error: String,
+    apps_search: String,
+    apps_domain: String,
+    apps_domains: Vec<String>,
+    /// Bumped for every list request; stale responses are dropped.
+    apps_req: u64,
+    /// App key -> display name, so the install banner keeps the name even when
+    /// the current filter excludes that app.
+    app_names: HashMap<String, String>,
+    apps_selected: Option<usize>,
+    app_detail: Option<Value>,
+    app_install: Option<AppInstallPrompt>,
+    app_setup: Option<AppSetupPrompt>,
+    app_uninstall: Option<AppUninstallPrompt>,
+    /// Install/prepare progress per application ref (org/name:version).
+    app_jobs: HashMap<String, AppJobState>,
+    /// Recent serve-log lines for apps started by the daemon (restore), keyed
+    /// by app ref. Desktop-initiated jobs already stream their own log.
+    app_model_logs: HashMap<String, Vec<String>>,
+    last_app_poll: Instant,
+    last_apps_poll: Instant,
+    /// Full install log shown in a dialog: (title, text).
+    app_log_dialog: Option<(String, String)>,
+    app_covers: HashMap<String, AppCover>,
     storage: Vec<(String, String)>,
     storage_total: f64,
     storage_sizes: HashMap<String, f64>,
@@ -378,6 +561,26 @@ impl App {
             hub_busy: false,
             hub_searched: false,
             hub_error: String::new(),
+            apps: Vec::new(),
+            apps_loading: false,
+            apps_loaded: false,
+            apps_error: String::new(),
+            apps_search: String::new(),
+            apps_domain: String::new(),
+            apps_domains: Vec::new(),
+            apps_req: 0,
+            app_names: HashMap::new(),
+            apps_selected: None,
+            app_detail: None,
+            app_install: None,
+            app_setup: None,
+            app_uninstall: None,
+            app_jobs: HashMap::new(),
+            app_model_logs: HashMap::new(),
+            last_app_poll: Instant::now(),
+            last_apps_poll: Instant::now(),
+            app_log_dialog: None,
+            app_covers: HashMap::new(),
             storage: Vec::new(),
             storage_total: 0.0,
             storage_sizes: HashMap::new(),
@@ -494,6 +697,21 @@ impl App {
                     }
                     self.logs_busy = false;
                     self.logs_at = Some(Instant::now());
+                }
+                Event::LogLines(lines) => {
+                    if self.tab == Tab::Logs && self.logs_ref.is_none() {
+                        for line in lines {
+                            self.logs.push_str(&line);
+                            self.logs.push('\n');
+                        }
+                        // Keep the view bounded like the initial 300-line load.
+                        let all: Vec<&str> = self.logs.lines().collect();
+                        if all.len() > 300 {
+                            let keep = all.len() - 300;
+                            self.logs = all[keep..].join("\n");
+                            self.logs.push('\n');
+                        }
+                    }
                 }
                 Event::LogsNote(note) => self.logs_note = note,
                 Event::CleanNote(note) => self.models_note = note,
@@ -698,6 +916,98 @@ impl App {
                     self.hub_error = err;
                     self.hub_busy = false;
                 }
+                Event::Apps(list, req) => {
+                    // Drop responses from a superseded request (rapid chip
+                    // switching), otherwise the list would not match the chip.
+                    if req != self.apps_req {
+                        continue;
+                    }
+                    // The unfiltered response defines the domain chips; a
+                    // filtered request would otherwise shrink the list to one.
+                    if self.apps_search.trim().is_empty() && self.apps_domain.is_empty() {
+                        let domains = app_domains(&list);
+                        if !domains.is_empty() {
+                            self.apps_domains = domains;
+                        }
+                    }
+                    for app in &list {
+                        let key = app_list_key(app);
+                        let name = app["display_name"]
+                            .as_str()
+                            .filter(|s| !s.is_empty())
+                            .or_else(|| app["name"].as_str())
+                            .unwrap_or("");
+                        if !name.is_empty() {
+                            self.app_names.insert(key, name.to_string());
+                        }
+                    }
+                    let selected = self
+                        .apps_selected
+                        .and_then(|idx| self.apps.get(idx))
+                        .map(app_list_key);
+                    self.apps = list;
+                    // Keep the selection on the same application; a filter that
+                    // excludes it clears both the highlight and the detail pane.
+                    match selected {
+                        Some(key) => match self.apps.iter().position(|app| app_list_key(app) == key)
+                        {
+                            Some(idx) => self.apps_selected = Some(idx),
+                            None => {
+                                self.apps_selected = None;
+                                self.app_detail = None;
+                            }
+                        },
+                        None => {}
+                    }
+                    self.apps_loading = false;
+                    self.apps_loaded = true;
+                    self.apps_error.clear();
+                    self.load_app_covers(ctx);
+                }
+                Event::AppsError(err, req) => {
+                    if req != self.apps_req {
+                        continue;
+                    }
+                    self.apps_loading = false;
+                    self.apps_error = err;
+                }
+                Event::AppDetailError(err) => {
+                    self.apps_error = err;
+                }
+                Event::AppCover(url, bytes) => {
+                    let cover = match bytes.as_deref().map(|b| decode_cover(ctx, &url, b)) {
+                        Some(Some(tex)) => AppCover::Ready(tex),
+                        _ => AppCover::Failed,
+                    };
+                    self.app_covers.insert(url, cover);
+                }
+                Event::AppDetail(detail) => {
+                    self.app_detail = Some(detail);
+                    // Refresh the local state immediately; this also repairs a
+                    // state left as starting/preparing by an interrupted run.
+                    self.refresh_app_state(ctx);
+                }
+                Event::AppLocal { key, state } => {
+                    self.apply_app_local(&key, state);
+                }
+                Event::AppJob { verb, reference, line, running } => {
+                    self.apply_app_job(&verb, &reference, &line, running);
+                }
+                Event::AppModelLog { key, lines } => {
+                    self.app_model_logs.insert(key, lines);
+                }
+                Event::AppAction(what, result) => match result {
+                    Ok(msg) => {
+                        self.op_note = Some((format!("{what}: {msg}"), true, Instant::now()));
+                        self.refresh_app_state(ctx);
+                        self.refresh_apps_after_action(ctx);
+                    }
+                    Err(err) => {
+                        self.op_note = Some((format!("{what} 失败: {err}"), false, Instant::now()));
+                        self.refresh_app_state(ctx);
+                        self.refresh_apps_after_action(ctx);
+                    }
+                },
             }
         }
     }
@@ -816,6 +1126,169 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// Fetch covers for newly listed apps (each URL once; failures are cached).
+    fn load_app_covers(&mut self, ctx: &egui::Context) {
+        let mut wanted: Vec<String> = Vec::new();
+        for app in &self.apps {
+            if let Some(url) = app_cover_url(app) {
+                if !self.app_covers.contains_key(&url) {
+                    self.app_covers.insert(url.clone(), AppCover::Loading);
+                    wanted.push(url);
+                }
+            }
+        }
+        for url in wanted {
+            spawn_app_cover(self.tx.clone(), ctx.clone(), url);
+        }
+    }
+
+    /// Track install/prepare progress for one application.
+    fn apply_app_job(&mut self, verb: &str, reference: &str, line: &str, running: bool) {
+        let job = self
+            .app_jobs
+            .entry(reference.to_string())
+            .or_insert_with(|| AppJobState {
+                verb: verb.to_string(),
+                phase: default_app_job_phase(verb),
+                percent: None,
+                running: true,
+                log: String::new(),
+            });
+        apply_job_event(job, verb, line, running);
+    }
+
+    /// Merge a fresh local state into the detail pane and the list row.
+    fn apply_app_local(&mut self, key: &str, state: Option<Value>) {
+        if let Some(detail) = self.app_detail.as_mut() {
+            let (org, name, version) = app_identity(detail);
+            if app_reference(&org, &name, &version) == key {
+                merge_detail_local(detail, state.clone());
+            }
+        }
+        if let Some(app) = self.apps.iter_mut().find(|app| app_list_key(app) == key) {
+            let st = state
+                .as_ref()
+                .and_then(|s| s["state"].as_str())
+                .unwrap_or("");
+            merge_list_state(app, state.is_some(), st);
+        }
+    }
+
+    /// Fetch only the local state of the selected app (no FlashHub round trip).
+    fn refresh_app_state(&self, ctx: &egui::Context) {
+        if let Some(detail) = self.app_detail.clone() {
+            let (org, name, version) = app_identity(&detail);
+            if !org.is_empty() && !name.is_empty() {
+                spawn_app_state(self.tx.clone(), ctx.clone(), org, name, version);
+            }
+        }
+    }
+
+    /// The daemon restores previously running apps on startup without a desktop
+    /// job. Keep polling the selected app's status and serve log while it is
+    /// transitional, and refresh stale list states occasionally.
+    fn poll_transitional_app(&mut self, ctx: &egui::Context) {
+        let detail = self.app_detail.clone();
+        let detail_state = detail
+            .as_ref()
+            .and_then(|d| d["local"]["state"].as_str())
+            .unwrap_or("");
+        let selected_transitional = matches!(
+            detail_state,
+            "starting" | "stopping" | "preparing" | "installing"
+        );
+        let list_transitional = self.apps.iter().any(|app| {
+            matches!(
+                app["state"].as_str(),
+                Some("starting" | "stopping" | "preparing" | "installing")
+            )
+        });
+        if !selected_transitional && !list_transitional {
+            return;
+        }
+        if selected_transitional && self.last_app_poll.elapsed() >= Duration::from_millis(900) {
+            self.last_app_poll = Instant::now();
+            self.refresh_app_state(ctx);
+            if let Some(detail) = detail.as_ref() {
+                let (org, name, version) = app_identity(detail);
+                let key = app_reference(&org, &name, &version);
+                if let Some(model) = app_model_ref(detail) {
+                    spawn_app_model_log(self.tx.clone(), ctx.clone(), key, model);
+                }
+            }
+        }
+        if list_transitional && self.last_apps_poll.elapsed() >= Duration::from_secs(5) {
+            self.last_apps_poll = Instant::now();
+            self.reload_apps(ctx);
+        }
+        ctx.request_repaint_after(Duration::from_millis(400));
+    }
+
+    /// One-line status for a daemon-side restore/start (no desktop job).
+    fn transitional_banner(&self) -> Option<String> {
+        if let Some(detail) = &self.app_detail {
+            let state = detail["local"]["state"].as_str().unwrap_or("");
+            if let Some(verb) = transitional_verb(state) {
+                let display = detail["manifest"]["display_name"]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| detail["manifest"]["name"].as_str())
+                    .unwrap_or("应用");
+                let model = app_model_ref(detail).unwrap_or_else(|| "模型".to_string());
+                return Some(format!(
+                    "正在{verb} {display} 应用 · 模型 {model} {verb}中"
+                ));
+            }
+        }
+        let app = self.apps.iter().find(|app| {
+            transitional_verb(app["state"].as_str().unwrap_or("")).is_some()
+        })?;
+        let verb = transitional_verb(app["state"].as_str().unwrap_or(""))?;
+        let display = app["display_name"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .or_else(|| app["name"].as_str())
+            .unwrap_or("应用");
+        let model = app["model_bundles"]
+            .as_array()
+            .and_then(|bundles| {
+                bundles
+                    .iter()
+                    .find(|b| b["is_default"].as_bool().unwrap_or(false))
+                    .or_else(|| bundles.first())
+            })
+            .and_then(|b| b["bundle"].as_str())
+            .unwrap_or("模型");
+        Some(format!(
+            "正在{verb} {display} 应用 · 模型 {model} {verb}中"
+        ))
+    }
+
+    /// Reload the app list and the selected app after an action finished.
+    fn refresh_apps_after_action(&mut self, ctx: &egui::Context) {
+        self.reload_apps(ctx);
+        if let Some(detail) = self.app_detail.clone() {
+            let (org, name, version) = app_identity(&detail);
+            if !org.is_empty() && !name.is_empty() {
+                spawn_app_detail(self.tx.clone(), ctx.clone(), org, name, version);
+            }
+        }
+    }
+
+    /// Request the app list for the current search + domain and remember the
+    /// request id so an older response cannot overwrite it.
+    fn reload_apps(&mut self, ctx: &egui::Context) {
+        self.apps_req = self.apps_req.wrapping_add(1);
+        self.apps_loading = true;
+        spawn_apps(
+            self.tx.clone(),
+            ctx.clone(),
+            self.apps_search.clone(),
+            self.apps_domain.clone(),
+            self.apps_req,
+        );
     }
 
     fn sync_model_selection(&mut self) {
@@ -1242,6 +1715,761 @@ impl App {
         });
     }
 
+
+    fn apps_page(&mut self, ui: &mut egui::Ui) {
+        if !self.apps_loaded && !self.apps_loading {
+            self.reload_apps(ui.ctx());
+        }
+        ui.spacing_mut().interact_size.y = 26.0;
+        ui.horizontal(|ui| {
+            ui.add_sized(
+                [240.0, 26.0],
+                egui::TextEdit::singleline(&mut self.apps_search)
+                    .hint_text("搜索应用")
+                    .vertical_align(egui::Align::Center)
+                    .margin(egui::Margin::symmetric(8, 3)),
+            );
+            if ui.add_sized([64.0, 26.0], egui::Button::new("搜索")).clicked() {
+                self.reload_apps(ui.ctx());
+            }
+            if ui
+                .add_sized([64.0, 26.0], egui::Button::new("刷新"))
+                .on_hover_text("重新拉取应用列表和当前详情（manifest 不落盘缓存）")
+                .clicked()
+            {
+                self.reload_apps(ui.ctx());
+                if let Some(detail) = self.app_detail.clone() {
+                    let (org, name, version) = app_identity(&detail);
+                    spawn_app_detail(self.tx.clone(), ui.ctx().clone(), org, name, version);
+                }
+            }
+            if self.apps_loading {
+                ui.add(egui::Spinner::new().size(14.0));
+            }
+        });
+        ui.add_space(4.0);
+        ui.horizontal_wrapped(|ui| {
+            if ui
+                .selectable_label(self.apps_domain.is_empty(), "全部")
+                .clicked()
+            {
+                self.apps_domain.clear();
+                self.reload_apps(ui.ctx());
+            }
+            let domains = self.apps_domains.clone();
+            for domain in domains {
+                if ui
+                    .selectable_label(self.apps_domain == domain, &domain)
+                    .clicked()
+                {
+                    self.apps_domain = domain.clone();
+                    self.reload_apps(ui.ctx());
+                }
+            }
+        });
+        if let Some((key, job)) = self
+            .app_jobs
+            .iter()
+            .find(|(_, job)| job.running)
+            .map(|(key, job)| (key.clone(), job.clone()))
+        {            // Prefer the cached display name: the current filter may not list
+            // the installing app.
+            let label = self
+                .app_names
+                .get(&key)
+                .cloned()
+                .or_else(|| {
+                    self.apps
+                        .iter()
+                        .find(|app| app_list_key(app) == key)
+                        .map(|app| {
+                            app["display_name"]
+                                .as_str()
+                                .filter(|s| !s.is_empty())
+                                .or_else(|| app["name"].as_str())
+                                .unwrap_or(key.as_str())
+                                .to_string()
+                        })
+                })
+                .unwrap_or_else(|| key.clone());
+            let pct = job
+                .percent
+                .map(|p| format!(" {p:.0}%"))
+                .unwrap_or_default();
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.add(egui::Spinner::new().size(13.0));
+                ui.label(
+                    egui::RichText::new(app_job_status_text(&job, &label, &pct))
+                        .small()
+                        .strong()
+                        .color(accent(ui)),
+                );
+            });
+        } else if let Some(text) = self.transitional_banner() {
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.add(egui::Spinner::new().size(13.0));
+                ui.label(
+                    egui::RichText::new(text)
+                        .small()
+                        .strong()
+                        .color(accent(ui)),
+                );
+            });
+        }
+        if !self.apps_error.is_empty() {
+            ui.add_space(4.0);
+            ui.colored_label(egui::Color32::from_rgb(200, 90, 80), &self.apps_error);
+        }
+        ui.add_space(6.0);
+
+        let height = ui.available_height();
+        let detail_width = (ui.available_width() * 0.34).clamp(380.0, 560.0);
+        let grid_width = (ui.available_width() - detail_width - 16.0).max(320.0);
+        let mut clicked: Option<usize> = None;
+        let cards: Vec<(Value, bool, Option<egui::TextureHandle>, Option<AppJobState>)> = self
+            .apps
+            .iter()
+            .enumerate()
+            .map(|(idx, app)| {
+                let cover = app_cover_url(app).and_then(|url| match self.app_covers.get(&url) {
+                    Some(AppCover::Ready(tex)) => Some(tex.clone()),
+                    _ => None,
+                });
+                let key = app_list_key(app);
+                let job = self.app_jobs.get(&key).cloned();
+                (app.clone(), self.apps_selected == Some(idx), cover, job)
+            })
+            .collect();
+
+        ui.horizontal_top(|ui| {
+            ui.vertical(|ui| {
+                ui.set_width(grid_width);
+                ui.set_min_width(grid_width);
+                ui.set_max_width(grid_width);
+                egui::ScrollArea::vertical()
+                    .id_salt("apps-grid")
+                    .max_height(height)
+                    .max_width(grid_width)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        if cards.is_empty() && !self.apps_loading {
+                            ui.label("没有应用。检查 FlashHub 连接后点击刷新。");
+                        }
+                        // Each card plus the 16 px gap (8 item spacing + 8 added)
+                        // must stay inside the grid column, otherwise the row
+                        // paints over the detail pane.
+                        let step = APP_CARD_WIDTH + 16.0;
+                        let cols = ((grid_width / step).floor() as usize).max(1);
+                        for (row_idx, row) in cards.chunks(cols).enumerate() {
+                            ui.horizontal(|ui| {
+                                for (offset, (app, selected, cover, job)) in row.iter().enumerate() {
+                                    let idx = row_idx * cols + offset;
+                                    if app_card(ui, app, *selected, cover.as_ref(), job.as_ref())
+                                        .clicked()
+                                    {
+                                        clicked = Some(idx);
+                                    }
+                                    ui.add_space(8.0);
+                                }
+                            });
+                            ui.add_space(8.0);
+                        }
+                    });
+            });
+            ui.separator();
+            ui.vertical(|ui| {
+                ui.set_width(detail_width);
+                egui::ScrollArea::vertical()
+                    .id_salt("app-detail")
+                    .max_height(height)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        if let Some(detail) = self.app_detail.clone() {
+                            self.render_app_detail(ui, &detail);
+                        } else {
+                            ui.label("选择左侧应用查看详情。");
+                        }
+                    });
+            });
+        });
+
+        if let Some(idx) = clicked {
+            self.apps_selected = Some(idx);
+            if let Some(app) = self.apps.get(idx).cloned() {
+                spawn_app_detail(
+                    self.tx.clone(),
+                    ui.ctx().clone(),
+                    app["organization"]["name"].as_str().unwrap_or("").to_string(),
+                    app["name"].as_str().unwrap_or("").to_string(),
+                    app["version"].as_str().unwrap_or("").to_string(),
+                );
+            }
+        }
+    }
+
+    fn render_app_detail(&mut self, ui: &mut egui::Ui, detail: &Value) {
+        let manifest = &detail["manifest"];
+        let row = self
+            .apps_selected
+            .and_then(|idx| self.apps.get(idx))
+            .cloned()
+            .unwrap_or(Value::Null);
+        let name = manifest["name"].as_str().unwrap_or("?");
+        let version = manifest["version"].as_str().unwrap_or("");
+        let display = row["display_name"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .or_else(|| manifest["display_name"].as_str().filter(|s| !s.is_empty()))
+            .unwrap_or(name);
+        let (org_name, app_name, app_version) = app_identity(detail);
+        let local_state = detail["local"]["state"].as_str().unwrap_or("").to_string();
+        let installed = !local_state.is_empty();
+        let transitional = matches!(local_state.as_str(), "installing" | "preparing" | "starting" | "stopping");
+        let connection_base = detail["local"]["connection"]["base_url"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        let connection_key = detail["local"]["connection"]["api_key"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        let model_ids = detail["local"]["connection"]["models"]
+            .as_array()
+            .map(|models| {
+                models
+                    .iter()
+                    .filter_map(|v| v.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default();
+        let last_error = detail["local"]["error"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        let setup_keys = detail["local"]["setup_scripts"]
+            .as_array()
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|v| v.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default();
+        let setup_error = detail["local"]["setup_error"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        let last_log = app_last_log(detail);
+        let install_executed = detail["local"]["install"]["executed"]
+            .as_bool()
+            .unwrap_or(false);
+        let recorded_install_command = detail["local"]["install"]["command"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        let job_key = app_reference(&org_name, &app_name, &app_version);
+        let job = self.app_jobs.get(&job_key).cloned();
+        let busy = job.as_ref().map(|j| j.running).unwrap_or(false);
+        // The daemon may not have written the app state on the first install
+        // poll yet; an active job still has status to show.
+        let show_status = installed || busy;
+        // One install at a time: preparing/starting two applications at once
+        // would fight over disk, ports and GPU memory.
+        let other_install = self
+            .app_jobs
+            .iter()
+            .any(|(key, j)| j.running && key != &job_key);
+        let blocked = busy || other_install;
+        let supported = app_platform_supported(manifest);
+        let danger = red(ui);
+
+        ui.horizontal_top(|ui| {
+            let cover = app_cover_url(&row)
+                .and_then(|url| match self.app_covers.get(&url) {
+                    Some(AppCover::Ready(tex)) => Some(tex.clone()),
+                    _ => None,
+                });
+            app_cover_widget(ui, cover.as_ref(), 72.0, 72.0, display);
+            ui.add_space(1.0);
+            ui.vertical(|ui| {
+                ui.label(egui::RichText::new(format!("{display} {version}")).size(18.0).strong());
+                let mut meta: Vec<String> = Vec::new();
+                if let Some(domain) = row["domain"].as_str().filter(|s| !s.is_empty()) {
+                    meta.push(domain.to_string());
+                }
+                if !org_name.is_empty() {
+                    meta.push(org_name.clone());
+                }
+                if let Some(downloads) = row["downloads"].as_i64() {
+                    meta.push(format!("{downloads} 次下载"));
+                }
+                if let Some(status) = row["status"].as_str().filter(|s| !s.is_empty()) {
+                    meta.push(status.to_string());
+                }
+                if !meta.is_empty() {
+                    ui.label(egui::RichText::new(meta.join(" · ")).small().weak());
+                }
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(egui::RichText::new(format!("{org_name}/{name}")).monospace().small());
+                    copy_button(
+                        ui,
+                        &format!("copy-app-key-{job_key}"),
+                        "复制",
+                        &format!("{org_name}/{name}"),
+                        "复制应用标识",
+                    );
+                    if !supported {
+                        ui.label(egui::RichText::new("当前平台不受支持").small().color(danger));
+                    }
+                });
+            });
+        });
+
+        let mut action: Option<&'static str> = None;
+        let mut open_install = false;
+        let mut open_uninstall = false;
+        let mut open_log = false;
+        let wait_hint = "已有应用正在安装，请等待完成";
+        let can_start = installed && matches!(local_state.as_str(), "stopped" | "prepared" | "failed");
+        let can_stop = installed && matches!(local_state.as_str(), "ready" | "failed");
+        ui.add_space(8.0);
+        ui.horizontal_wrapped(|ui| {
+            let install_label = if installed { "重新安装" } else { "安装" };
+            let install = ui
+                .add_enabled(
+                    !blocked && !transitional && supported,
+                    egui::Button::new(install_label),
+                )
+                .on_hover_text("安装会先确认是否执行应用自带的安装脚本")
+                .on_disabled_hover_text(if other_install { wait_hint } else { "" });
+            if install.clicked() {
+                open_install = true;
+            }
+            if ui
+                .add_enabled(
+                    !blocked && !transitional && can_start,
+                    egui::Button::new("启动"),
+                )
+                .on_disabled_hover_text(if other_install { wait_hint } else { "" })
+                .clicked()
+            {
+                action = Some("start");
+            }
+            if ui
+                .add_enabled(
+                    !blocked && !transitional && can_stop,
+                    egui::Button::new("停止"),
+                )
+                .on_disabled_hover_text(if other_install { wait_hint } else { "" })
+                .clicked()
+            {
+                action = Some("stop");
+            }
+            if ui
+                .add_enabled(
+                    !blocked && !transitional && installed,
+                    egui::Button::new(egui::RichText::new("卸载").color(danger)),
+                )
+                .on_disabled_hover_text(if other_install { wait_hint } else { "" })
+                .clicked()
+            {
+                open_uninstall = true;
+            }
+            if local_state == "ready" && !blocked && !transitional {
+                let scripts = app_setup_scripts(manifest);
+                if !scripts.is_empty()
+                    && ui
+                        .add(egui::Button::new("应用配置"))
+                        .on_hover_text("重新执行该应用声明的配置脚本（模型保持运行）")
+                        .clicked()
+                {
+                    self.app_setup = Some(AppSetupPrompt {
+                        org: org_name.clone(),
+                        name: app_name.clone(),
+                        version: app_version.clone(),
+                        display_name: display.to_string(),
+                        scripts: scripts.into_iter().map(|s| (s, true)).collect(),
+                        rerun: true,
+                    });
+                }
+            }
+        });
+        // Run status block for installed applications: state, the current
+        // operation with progress, recent log lines and the full-log entry
+        // point. Model loading can take a minute, so a silent spinner is not
+        // enough. An app that is not installed has nothing to report here.
+        if show_status {
+            ui.add_space(10.0);
+            egui::Frame::NONE
+            .fill(ui.visuals().faint_bg_color)
+            .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
+            .corner_radius(6)
+            .inner_margin(egui::Margin::same(10))
+            .show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(egui::RichText::new("运行状态").strong());
+                if transitional {
+                    ui.add(egui::Spinner::new().size(12.0));
+                }
+                if let Some((label, color)) = app_state_badge(&local_state, ui) {
+                    ui.label(egui::RichText::new(label).strong().color(color));
+                }
+            });
+            // The single place where the model connection is shown: one field
+            // per row, each with its own copy button.
+            if local_state == "ready" {
+                if let Some(base) = &connection_base {
+                    ui.add_space(6.0);
+                    egui::Grid::new(format!("app-connection-{job_key}"))
+                        .num_columns(3)
+                        .spacing([10.0, 4.0])
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new("接入地址").small().weak());
+                            ui.label(egui::RichText::new(base).monospace().small());
+                            copy_button(ui, &format!("copy-base-{job_key}"), "复制", base, "");
+                            ui.end_row();
+                            if !model_ids.is_empty() {
+                                ui.label(egui::RichText::new("模型").small().weak());
+                                ui.label(egui::RichText::new(&model_ids).monospace().small());
+                                copy_button(
+                                    ui,
+                                    &format!("copy-model-{job_key}"),
+                                    "复制",
+                                    &model_ids,
+                                    "",
+                                );
+                                ui.end_row();
+                            }
+                            if let Some(key) = &connection_key {
+                                ui.label(egui::RichText::new("API Key").small().weak());
+                                ui.label(egui::RichText::new(key).monospace().small());
+                                copy_button(
+                                    ui,
+                                    &format!("copy-key-{job_key}"),
+                                    "复制",
+                                    key,
+                                    "",
+                                );
+                                ui.end_row();
+                            }
+                        });
+                    ui.label(
+                        egui::RichText::new("在应用本体中填入上述地址、模型与 API Key 即可连接本地模型。")
+                            .small()
+                            .weak(),
+                    );
+                }
+            }
+            if let Some(job) = job.clone().filter(|job| job.running || !transitional) {
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if job.running {
+                        ui.add(egui::Spinner::new().size(12.0));
+                    }
+                    ui.label(
+                        egui::RichText::new(format!("{} · {}", job.verb, job.phase))
+                            .small()
+                            .strong(),
+                    );
+                    if job.running {
+                        if let Some(pct) = job.percent {
+                            ui.label(egui::RichText::new(format!("{pct:.0}%")).small().strong());
+                        }
+                    } else {
+                        ui.label(egui::RichText::new("已结束").small().weak());
+                    }
+                });
+                if job.running {
+                    let width = ui.available_width().max(120.0);
+                    let bar = match job.percent {
+                        Some(pct) => egui::ProgressBar::new((pct / 100.0).clamp(0.0, 1.0))
+                            .desired_width(width)
+                            .desired_height(6.0)
+                            .corner_radius(egui::CornerRadius::same(3))
+                            .fill(accent(ui)),
+                        None => egui::ProgressBar::new(0.0)
+                            .desired_width(width)
+                            .desired_height(6.0)
+                            .corner_radius(egui::CornerRadius::same(3))
+                            .fill(accent(ui))
+                            .animate(true),
+                    };
+                    ui.add(bar);
+                }
+                for line in app_log_tail(&job.log, 6) {
+                    ui.label(egui::RichText::new(line).monospace().small().weak());
+                }
+                if !job.log.is_empty() && ui.small_button("完整日志").clicked() {
+                    open_log = true;
+                }
+            } else if transitional {
+                let verb = transitional_verb(&local_state).unwrap_or("处理");
+                let model = app_model_ref(detail).unwrap_or_else(|| "模型".to_string());
+                ui.add_space(6.0);
+                ui.label(
+                    egui::RichText::new(format!(
+                        "flashserver 正在{verb} {model}，完成后自动刷新"
+                    ))
+                    .small()
+                    .weak(),
+                );
+                if let Some(lines) = self.app_model_logs.get(&job_key) {
+                    for line in lines.iter().rev().take(4).rev() {
+                        ui.label(egui::RichText::new(line).monospace().small().weak());
+                    }
+                }
+            } else if let Some(err) = &last_error {
+                ui.label(egui::RichText::new(err).small().color(danger));
+            } else if !transitional {
+                if last_log.is_empty() {
+                    ui.label(egui::RichText::new("暂无操作日志").small().weak());
+                } else {
+                    for line in last_log.iter().rev().take(6).rev() {
+                        ui.label(egui::RichText::new(line).monospace().small().weak());
+                    }
+                    if ui.small_button("完整日志").clicked() {
+                        self.app_log_dialog =
+                            Some((format!("{display} · 日志"), last_log.join("\n")));
+                    }
+                }
+            }
+            // The application itself lives on the client OS; a skipped script
+            // means its command still has to be run in a terminal.
+            if !install_executed && !busy {
+                if let Some(command) = &recorded_install_command {
+                    ui.label(egui::RichText::new("应用本体未安装").small().color(danger));
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(egui::RichText::new(command).monospace().small());
+                        copy_button(
+                            ui,
+                            &format!("copy-install-hint-{job_key}"),
+                            "复制安装命令",
+                            command,
+                            "",
+                        );
+                    });
+                }
+            }
+            if local_state == "ready" && !setup_keys.is_empty() {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "配置脚本: {setup_keys}（重启恢复时自动执行）"
+                    ))
+                    .small()
+                    .weak(),
+                );
+            }
+            if let Some(err) = &setup_error {
+                ui.label(
+                    egui::RichText::new(format!("配置脚本失败: {err}"))
+                        .small()
+                        .color(danger),
+                );
+            }
+            });
+        }
+        if other_install {
+            ui.label(
+                egui::RichText::new("已有应用正在安装：完成后再操作此应用。")
+                    .small()
+                    .weak(),
+            );
+        }
+        if open_log {
+            if let Some(job) = &job {
+                self.app_log_dialog = Some((format!("{display} · 日志"), job.log.clone()));
+            }
+        }
+        if !supported {
+            ui.label(
+                egui::RichText::new(format!(
+                    "当前平台 ({}/{}) 不在 supported 列表中，安装已禁用。",
+                    app_os_key(),
+                    app_arch_key()
+                ))
+                .small()
+                .color(danger),
+            );
+        }
+
+        app_section(ui, "简介");
+        if let Some(text) = row["description"].as_str().filter(|s| !s.is_empty()) {
+            ui.add(egui::Label::new(egui::RichText::new(text).small()).wrap());
+        } else {
+            ui.label(egui::RichText::new("（无简介）").small().weak());
+        }
+
+        app_section(ui, "平台");
+        app_field(
+            ui,
+            "supported",
+            &format!(
+                "os {} / arch {}",
+                csv_list(&manifest["supported"]["os"]),
+                csv_list(&manifest["supported"]["arch"])
+            ),
+        );
+        app_field(
+            ui,
+            "当前",
+            &format!(
+                "{}/{} ({})",
+                app_os_key(),
+                app_arch_key(),
+                if supported { "支持" } else { "不支持" }
+            ),
+        );
+
+        app_section(ui, "安装命令");
+        let current_key = app_platform_command_key(manifest);
+        let commands = app_install_commands(manifest);
+        if commands.is_empty() {
+            ui.label(
+                egui::RichText::new("manifest 未声明安装命令（无需安装脚本）")
+                    .small()
+                    .weak(),
+            );
+        }
+        for (key, command) in commands {
+            let current = current_key.as_deref() == Some(key.as_str());
+            ui.horizontal_wrapped(|ui| {
+                let label = if current {
+                    egui::RichText::new(format!("[{key}]")).monospace().small().color(accent(ui))
+                } else {
+                    egui::RichText::new(format!("[{key}]")).monospace().small().weak()
+                };
+                ui.label(label);
+                let kind = if is_url_command(&command) { "下载页" } else { "脚本" };
+                ui.label(egui::RichText::new(kind).small().weak());
+                copy_button(
+                    ui,
+                    &format!("copy-install-{key}-{org_name}-{name}"),
+                    "复制",
+                    &command,
+                    "",
+                );
+            });
+            app_mono(ui, &command);
+        }
+
+        app_section(ui, "依赖模型");
+        match manifest["model"]["bundles"].as_array() {
+            Some(bundles) if !bundles.is_empty() => {
+                for bundle in bundles {
+                    let ref_str = bundle["bundle"].as_str().unwrap_or("");
+                    let default = bundle["default"].as_bool().unwrap_or(false);
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(egui::RichText::new(ref_str).monospace().small());
+                        if default {
+                            ui.label(egui::RichText::new("默认").small().color(accent(ui)));
+                        }
+                        copy_button(
+                            ui,
+                            &format!("copy-bundle-{ref_str}"),
+                            "复制",
+                            ref_str,
+                            "",
+                        );
+                    });
+                    if let Some(options) = bundle["serve"]["options"]
+                        .as_object()
+                        .filter(|o| !o.is_empty())
+                    {
+                        let text = serde_json::to_string(options).unwrap_or_default();
+                        app_mono(ui, &format!("serve.options {text}"));
+                    }
+                }
+            }
+            _ => {
+                ui.label(egui::RichText::new("manifest 未声明依赖模型").small().weak());
+            }
+        }
+
+        if open_install {
+            self.app_install = Some(AppInstallPrompt {
+                org: org_name.clone(),
+                name: app_name.clone(),
+                version: app_version.clone(),
+                display_name: display.to_string(),
+                bundles: default_app_bundles(manifest),
+                command: install_command(manifest),
+                force: installed,
+            });
+        }
+        if open_uninstall {
+            self.app_uninstall = Some(AppUninstallPrompt {
+                org: org_name.clone(),
+                name: app_name.clone(),
+                version: app_version.clone(),
+                display_name: display.to_string(),
+                purge_models: false,
+            });
+        }
+        if let Some(what) = action {
+            if what == "start" {
+                let scripts = app_setup_scripts(manifest);
+                if !scripts.is_empty() {
+                    self.app_setup = Some(AppSetupPrompt {
+                        org: org_name,
+                        name: app_name,
+                        version: app_version,
+                        display_name: display.to_string(),
+                        scripts: scripts.into_iter().map(|s| (s, true)).collect(),
+                        rerun: false,
+                    });
+                    return;
+                }
+            }
+            // Optimistic state so the buttons/status react on the next frame;
+            // refresh_app_state corrects it with the daemon's answer.
+            let interim = match what {
+                "start" => "starting",
+                "stop" => "stopping",
+                _ => "",
+            };
+            if !interim.is_empty() {
+                self.set_app_local_state(&org_name, &app_name, &app_version, interim);
+            }
+            spawn_app_action(
+                self.tx.clone(),
+                ui.ctx().clone(),
+                org_name,
+                app_name,
+                app_version,
+                what,
+                Vec::new(),
+            );
+        }
+    }
+
+    /// Write a state string into the detail and the list row for one app.
+    fn set_app_local_state(&mut self, org: &str, name: &str, version: &str, state: &str) {
+        let key = app_reference(org, name, version);
+        if let Some(detail) = self.app_detail.as_mut() {
+            let (o, n, v) = app_identity(detail);
+            if app_reference(&o, &n, &v) == key {
+                if let Some(obj) = detail.as_object_mut() {
+                    if !obj.contains_key("local") {
+                        obj.insert("local".to_string(), Value::Object(Default::default()));
+                    }
+                    if let Some(local) = obj.get_mut("local").and_then(|v| v.as_object_mut()) {
+                        local.insert("state".to_string(), Value::String(state.to_string()));
+                        local.remove("error");
+                    }
+                }
+            }
+        }
+        if let Some(app) = self.apps.iter_mut().find(|app| app_list_key(app) == key) {
+            if let Some(obj) = app.as_object_mut() {
+                obj.insert("state".to_string(), Value::String(state.to_string()));
+            }
+        }
+    }
+
     fn local_models(&mut self, ui: &mut egui::Ui) {
         let total_bytes = unique_model_bytes(&self.models);
         let ready = self.models.iter().filter(|m| m.ready()).count();
@@ -1326,6 +2554,7 @@ impl App {
         let mut detail_request = None;
         let mut load_request = None;
         let mut pull_request = None;
+        let mut resync_request = None;
         let mut unload_request = None;
         let mut logs_request = None;
         let mut use_request: Option<ModelRow> = None;
@@ -1459,6 +2688,10 @@ impl App {
                                     logs_request = Some(m.name.clone());
                                     ui.close_menu();
                                 }
+                                if m.ready() && !m.loaded && ui.button("重新同步").on_hover_text("重新下载当前版本的 bundle/权重（模型未运行时可用）").clicked() {
+                                    resync_request = Some(m.name.clone());
+                                    ui.close_menu();
+                                }
                                 if m.ready() && !m.serve && ui.button("Run 冒烟测试").clicked()
                                 {
                                     smoke_request = Some(m.clone());
@@ -1537,6 +2770,9 @@ impl App {
         }
         if let Some(name) = pull_request {
             self.spawn_job_ui(ui.ctx(), name, true, "加载");
+        }
+        if let Some(name) = resync_request {
+            self.spawn_job_ui(ui.ctx(), name, true, "重新同步");
         }
         if let Some(name) = unload_request {
             self.dialog = Some(DialogState {
@@ -2294,8 +3530,14 @@ impl App {
                         )
                         .wrap(),
                     );
-                    if button(ui, "复制地址").clicked() {
-                        ui.ctx().copy_text(model.endpoint.clone());
+                    if copy_button_sized(
+                        ui,
+                        "copy-model-endpoint",
+                        "复制地址",
+                        &model.endpoint,
+                        "",
+                        false,
+                    ) {
                         copied = true;
                     }
                 });
@@ -2318,8 +3560,14 @@ impl App {
                     ui.with_layout(
                         egui::Layout::right_to_left(egui::Align::Center),
                         |ui| {
-                            if button(ui, "复制示例").clicked() {
-                                ui.ctx().copy_text(example.clone());
+                            if copy_button_sized(
+                                ui,
+                                "copy-model-example",
+                                "复制示例",
+                                &example,
+                                "",
+                                false,
+                            ) {
                                 copied_example = true;
                             }
                         },
@@ -2435,7 +3683,8 @@ impl App {
             self.logs.clear();
             self.logs_since = Some(now_epoch());
             self.logs_note = "已清空当前显示，仅显示之后的新日志。".into();
-            self.logs_at = None;
+            // Do not reload the ring: new lines arrive over WebSocket.
+            self.logs_at = Some(Instant::now());
         }
         if reset {
             self.logs_since = None;
@@ -2593,6 +3842,12 @@ impl App {
                                 egui::TextEdit::singleline(&mut self.wsl.swap)
                                     .hint_text("默认：内存的 25%（0 关闭）")
                                     .desired_width(220.0),
+                            );
+                            ui.end_row();
+                            ui.label("自动回收内存");
+                            ui.checkbox(
+                                &mut self.wsl.auto_memory_reclaim,
+                                "autoMemoryReclaim=gradual（空闲时把缓存还给 Windows）",
                             );
                             ui.end_row();
                             ui.label("防火墙端口");
@@ -3054,7 +4309,14 @@ impl App {
                             cancel = true;
                         }
                     } else if !smoke.running {
-                        if button(ui, "复制日志").clicked() {
+                        if copy_button_sized(
+                            ui,
+                            "copy-smoke-log",
+                            "复制日志",
+                            &smoke.log,
+                            "",
+                            false,
+                        ) {
                             copy = true;
                         }
                     }
@@ -3074,7 +4336,6 @@ impl App {
                 });
             });
         if copy {
-            ctx.copy_text(smoke.log.clone());
             self.op_note = Some(("测试日志已复制".into(), true, Instant::now()));
         }
         if cancel {
@@ -3088,6 +4349,545 @@ impl App {
         }
         if close {
             self.smoke = None;
+        }
+    }
+
+    /// Confirm an application install. A shell install command only runs when
+    /// the user explicitly picks "运行脚本并安装"; the daemon never decides.
+    fn show_app_setup_dialog(&mut self, ctx: &egui::Context) {
+        let Some(prompt) = self.app_setup.clone() else {
+            return;
+        };
+        let dark = ctx.style().visuals.dark_mode;
+        let mut close = false;
+        let mut start_with: Option<Vec<String>> = None;
+        let mut checked: Vec<bool> = prompt.scripts.iter().map(|(_, c)| *c).collect();
+        modal_backdrop(ctx, dark, &mut close);
+        egui::Window::new("app_setup_dialog")
+            .title_bar(false)
+            .order(egui::Order::Foreground)
+            .frame(dialog_frame(dark))
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.set_width(560.0);
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new(if prompt.rerun {
+                            "应用配置"
+                        } else {
+                            "启动应用"
+                        })
+                        .size(16.0)
+                        .strong(),
+                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(egui::RichText::new("×").size(18.0))
+                                    .min_size(egui::vec2(28.0, 24.0)),
+                            )
+                            .clicked()
+                        {
+                            close = true;
+                        }
+                    });
+                });
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(12.0);
+                ui.label(
+                    egui::RichText::new(format!("{} {}", prompt.display_name, prompt.version))
+                        .strong(),
+                );
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new(if prompt.rerun {
+                        "模型保持运行；确认后将按顺序重新执行所选的配置脚本，使配置与当前接入地址一致。"
+                    } else {
+                        "该应用声明了配置脚本：模型启动完成后会按顺序执行。每次启动都需要确认。"
+                    })
+                    .small()
+                    .weak(),
+                );
+                ui.add_space(8.0);
+                for (i, (script, _)) in prompt.scripts.iter().enumerate() {
+                    let hash = if script.sha256.len() > 12 {
+                        &script.sha256[..12]
+                    } else {
+                        script.sha256.as_str()
+                    };
+                    ui.checkbox(
+                        &mut checked[i],
+                        format!("{}  {}  (sha256 {}…)", script.key, script.url, hash),
+                    );
+                }
+                ui.add_space(8.0);
+                ui.label(
+                    egui::RichText::new(
+                        "脚本会先下载并校验 sha256，再以当前用户权限执行；失败会写入日志并停止后续脚本。",
+                    )
+                    .weak()
+                    .small(),
+                );
+                ui.add_space(14.0);
+                ui.separator();
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    ui.add_space((ui.available_width() - 360.0).max(0.0));
+                    if button(ui, "取消").clicked() {
+                        close = true;
+                    }
+                    if !prompt.rerun {
+                        ui.add_space(8.0);
+                        if button(ui, "跳过脚本并启动").clicked() {
+                            start_with = Some(Vec::new());
+                        }
+                    }
+                    ui.add_space(8.0);
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new(if prompt.rerun {
+                                    "执行配置"
+                                } else {
+                                    "执行并启动"
+                                })
+                                .color(egui::Color32::WHITE),
+                            )
+                            .fill(ui.visuals().widgets.active.bg_fill)
+                            .min_size(egui::vec2(120.0, 28.0)),
+                        )
+                        .clicked()
+                    {
+                        let keys = prompt
+                            .scripts
+                            .iter()
+                            .zip(&checked)
+                            .filter(|(_, run)| **run)
+                            .map(|((script, _), _)| script.key.clone())
+                            .collect();
+                        start_with = Some(keys);
+                    }
+                });
+            });
+        if let Some(p) = self.app_setup.as_mut() {
+            for (i, (_, run)) in p.scripts.iter_mut().enumerate() {
+                *run = checked.get(i).copied().unwrap_or(true);
+            }
+        }
+        if close {
+            self.app_setup = None;
+        }
+        if let Some(keys) = start_with {
+            self.app_setup = None;
+            self.set_app_local_state(
+                &prompt.org,
+                &prompt.name,
+                &prompt.version,
+                "starting",
+            );
+            spawn_app_action(
+                self.tx.clone(),
+                ctx.clone(),
+                prompt.org,
+                prompt.name,
+                prompt.version,
+                "start",
+                keys,
+            );
+        }
+    }
+
+    fn show_app_install_dialog(&mut self, ctx: &egui::Context) {
+        let Some(prompt) = self.app_install.clone() else {
+            return;
+        };
+        let dark = ctx.style().visuals.dark_mode;
+        let danger = egui::Color32::from_rgb(176, 54, 48);
+        let shell_command = prompt
+            .command
+            .as_deref()
+            .filter(|c| !is_url_command(c))
+            .map(|c| c.to_string());
+        let url_command = prompt
+            .command
+            .as_deref()
+            .filter(|c| is_url_command(c))
+            .map(|c| c.to_string());
+        let installer = url_command.as_deref().map(installer_kind);
+        let mut close = false;
+        let mut choice: Option<AppInstallAction> = None;
+        modal_backdrop(ctx, dark, &mut close);
+        egui::Window::new("app_install_dialog")
+            .title_bar(false)
+            .order(egui::Order::Foreground)
+            .frame(dialog_frame(dark))
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.set_width(560.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("安装应用").size(16.0).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(egui::RichText::new("×").size(18.0))
+                                    .min_size(egui::vec2(28.0, 24.0)),
+                            )
+                            .clicked()
+                        {
+                            close = true;
+                        }
+                    });
+                });
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(12.0);
+                ui.label(
+                    egui::RichText::new(format!(
+                        "{} {}",
+                        prompt.display_name,
+                        if prompt.version.is_empty() {
+                            "".to_string()
+                        } else {
+                            format!("({})", prompt.version)
+                        }
+                    ))
+                    .strong(),
+                );
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new("将下载并准备以下默认模型：").weak().small());
+                if prompt.bundles.is_empty() {
+                    ui.label(egui::RichText::new("  (manifest 未声明默认模型)").small().weak());
+                }
+                for bundle in &prompt.bundles {
+                    ui.label(egui::RichText::new(format!("  · {bundle}")).monospace().small());
+                }
+                if let Some(command) = &shell_command {
+                    ui.add_space(12.0);
+                    ui.label(
+                        egui::RichText::new("该应用需要执行安装脚本")
+                            .strong()
+                            .color(danger),
+                    );
+                    ui.add_space(4.0);
+                    egui::Frame::NONE
+                        .fill(if dark {
+                            egui::Color32::from_rgb(48, 40, 40)
+                        } else {
+                            egui::Color32::from_rgb(250, 242, 240)
+                        })
+                        .corner_radius(6)
+                        .inner_margin(egui::Margin::same(10))
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new(command).monospace().small());
+                        });
+                    ui.add_space(6.0);
+                    ui.label(
+                        egui::RichText::new(
+                            "脚本会以当前用户权限执行，可以修改系统文件或写入应用目录。\n只在信任该应用来源时继续；也可以跳过脚本，仅安装并准备模型（不启动）。",
+                        )
+                        .weak()
+                        .small(),
+                    );
+                } else if let Some(url) = &url_command {
+                    ui.add_space(12.0);
+                    let runnable = installer.map(installer_is_runnable).unwrap_or(false);
+                    ui.label(
+                        egui::RichText::new(if runnable {
+                            "该应用通过安装程序安装"
+                        } else {
+                            "该应用的下载页"
+                        })
+                        .strong(),
+                    );
+                    ui.add_space(4.0);
+                    ui.label(egui::RichText::new(url).monospace().small());
+                    ui.add_space(6.0);
+                    ui.label(
+                        egui::RichText::new(if runnable {
+                            "将下载安装程序并以当前用户权限运行（可能弹出 UAC）。\n只在信任该应用来源时继续；也可以跳过，仅安装并准备模型（不启动）。"
+                        } else {
+                            "将在浏览器中打开下载页；flashcli 不会自动下载。\n也可以跳过，仅安装并准备模型（不启动）。"
+                        })
+                        .weak()
+                        .small(),
+                    );
+                } else {
+                    ui.add_space(12.0);
+                    ui.label(
+                        egui::RichText::new("该应用在当前平台不需要安装脚本，将直接安装并准备模型（不启动）。")
+                            .weak()
+                            .small(),
+                    );
+                }
+                if prompt.force {
+                    ui.add_space(8.0);
+                    ui.label(
+                        egui::RichText::new("应用已安装：将重新执行安装流程并准备模型（不自动启动）。")
+                            .weak()
+                            .small(),
+                    );
+                }
+                ui.add_space(14.0);
+                ui.separator();
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    ui.add_space((ui.available_width() - 340.0).max(0.0));
+                    if button(ui, "取消").clicked() {
+                        close = true;
+                    }
+                    ui.add_space(8.0);
+                    let skip_label = if shell_command.is_some() {
+                        "跳过脚本安装"
+                    } else if url_command.is_some() {
+                        "跳过，仅准备模型"
+                    } else {
+                        ""
+                    };
+                    if !skip_label.is_empty() && button(ui, skip_label).clicked() {
+                        choice = Some(AppInstallAction::Skip);
+                    }
+                    ui.add_space(8.0);
+                    let runnable = installer.map(installer_is_runnable).unwrap_or(false);
+                    let (label, fill) = if shell_command.is_some() {
+                        ("运行脚本并安装", danger)
+                    } else if runnable {
+                        ("下载并安装", danger)
+                    } else if url_command.is_some() {
+                        ("打开下载页", ui.visuals().widgets.active.bg_fill)
+                    } else {
+                        ("开始安装", ui.visuals().widgets.active.bg_fill)
+                    };
+                    if ui
+                        .add(
+                            egui::Button::new(egui::RichText::new(label).color(egui::Color32::WHITE))
+                                .fill(fill)
+                                .min_size(egui::vec2(120.0, 28.0)),
+                        )
+                        .clicked()
+                    {
+                        choice = Some(match (&shell_command, &url_command, installer) {
+                            (Some(command), _, _) => AppInstallAction::RunScript(command.clone()),
+                            (None, Some(url), Some(kind)) if installer_is_runnable(kind) => {
+                                AppInstallAction::Installer {
+                                    url: url.clone(),
+                                    kind,
+                                }
+                            }
+                            (None, Some(url), _) => {
+                                // A plain download page: open it instead of
+                                // fetching anything, then prepare the models.
+                                if let Err(err) = webbrowser::open(url) {
+                                    self.op_note = Some((
+                                        format!("无法打开浏览器: {err}"),
+                                        false,
+                                        Instant::now(),
+                                    ));
+                                }
+                                AppInstallAction::Skip
+                            }
+                            _ => AppInstallAction::Skip,
+                        });
+                    }
+                });
+            });
+        if close {
+            self.app_install = None;
+        }
+        if let Some(action) = choice {
+            self.app_install = None;
+            let key = app_reference(&prompt.org, &prompt.name, &prompt.version);
+            // Show the install progress immediately; the status card is only
+            // rendered for installed applications.
+            self.set_app_local_state(&prompt.org, &prompt.name, &prompt.version, "installing");
+            self.app_jobs.insert(
+                key,
+                AppJobState {
+                    verb: "安装".to_string(),
+                    phase: "安装应用".to_string(),
+                    percent: None,
+                    running: true,
+                    log: String::new(),
+                },
+            );
+            spawn_app_install(
+                self.tx.clone(),
+                ctx.clone(),
+                prompt.org,
+                prompt.name,
+                prompt.version,
+                action,
+                prompt.force,
+            );
+        }
+    }
+
+    /// Confirm removing an application (models stop first; caches are optional).
+    fn show_app_uninstall_dialog(&mut self, ctx: &egui::Context) {
+        let Some(prompt) = self.app_uninstall.clone() else {
+            return;
+        };
+        let dark = ctx.style().visuals.dark_mode;
+        let mut close = false;
+        let mut purge = prompt.purge_models;
+        let mut confirm = false;
+        modal_backdrop(ctx, dark, &mut close);
+        egui::Window::new("app_uninstall_dialog")
+            .title_bar(false)
+            .order(egui::Order::Foreground)
+            .frame(dialog_frame(dark))
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.set_width(500.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("卸载应用").size(16.0).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(egui::RichText::new("×").size(18.0))
+                                    .min_size(egui::vec2(28.0, 24.0)),
+                            )
+                            .clicked()
+                        {
+                            close = true;
+                        }
+                    });
+                });
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(12.0);
+                ui.label(
+                    egui::RichText::new(format!(
+                        "卸载 {}？应用内模型会先停止。",
+                        prompt.display_name
+                    ))
+                    .strong(),
+                );
+                ui.add_space(6.0);
+                ui.checkbox(&mut purge, "同时删除模型缓存（重新安装时需要重新下载）");
+                ui.add_space(10.0);
+                ui.label(
+                    egui::RichText::new("默认保留模型缓存；应用自身的安装文件不会被卸载。")
+                        .weak()
+                        .small(),
+                );
+                ui.add_space(14.0);
+                ui.separator();
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    ui.add_space((ui.available_width() - 200.0).max(0.0));
+                    if button(ui, "取消").clicked() {
+                        close = true;
+                    }
+                    ui.add_space(8.0);
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("卸载").color(egui::Color32::WHITE),
+                            )
+                            .fill(egui::Color32::from_rgb(176, 54, 48))
+                            .min_size(egui::vec2(96.0, 28.0)),
+                        )
+                        .clicked()
+                    {
+                        confirm = true;
+                    }
+                });
+            });
+        // Persist the checkbox so the next frame starts from the user's choice
+        // (the dialog is rebuilt from a clone every frame).
+        if let Some(prompt) = self.app_uninstall.as_mut() {
+            prompt.purge_models = purge;
+        }
+        if close {
+            self.app_uninstall = None;
+        }
+        if confirm {
+            self.app_uninstall = None;
+            self.app_jobs
+                .remove(&app_reference(&prompt.org, &prompt.name, &prompt.version));
+            spawn_app_uninstall(
+                self.tx.clone(),
+                ctx.clone(),
+                prompt.org,
+                prompt.name,
+                prompt.version,
+                purge,
+            );
+        }
+    }
+
+    /// Full install/prepare log for one application.
+    fn show_app_log_dialog(&mut self, ctx: &egui::Context) {
+        let Some((title, log)) = self.app_log_dialog.clone() else {
+            return;
+        };
+        let dark = ctx.style().visuals.dark_mode;
+        let mut close = false;
+        modal_backdrop(ctx, dark, &mut close);
+        egui::Window::new("app_log_dialog")
+            .title_bar(false)
+            .order(egui::Order::Foreground)
+            .frame(dialog_frame(dark))
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .collapsible(false)
+            .resizable(true)
+            .show(ctx, |ui| {
+                ui.set_width(760.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(&title).size(16.0).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(egui::RichText::new("×").size(18.0))
+                                    .min_size(egui::vec2(28.0, 24.0)),
+                            )
+                            .clicked()
+                        {
+                            close = true;
+                        }
+                    });
+                });
+                ui.add_space(6.0);
+                ui.separator();
+                ui.add_space(8.0);
+                egui::ScrollArea::vertical()
+                    .id_salt("app-log-scroll")
+                    .max_height(460.0)
+                    .auto_shrink([false, false])
+                    .stick_to_bottom(true)
+                    .show(ui, |ui| {
+                        if log.is_empty() {
+                            ui.label(egui::RichText::new("（暂无日志）").weak());
+                        } else {
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(&log).monospace().small(),
+                                )
+                                .wrap(),
+                            );
+                        }
+                    });
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    ui.add_space((ui.available_width() - 200.0).max(0.0));
+                    copy_button_sized(ui, "copy-app-log", "复制", &log, "", false);
+                    ui.add_space(8.0);
+                    if button(ui, "关闭").clicked() {
+                        close = true;
+                    }
+                });
+            });
+        if close {
+            self.app_log_dialog = None;
         }
     }
 
@@ -3207,6 +5007,7 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.drain_events(ctx);
+        self.poll_transitional_app(ctx);
         if self.health_at.elapsed() >= Duration::from_secs(5) {
             self.health_at = Instant::now();
             spawn_health(self.tx.clone(), ctx.clone());
@@ -3229,10 +5030,15 @@ impl eframe::App for App {
             self.set_theme(ctx, dark);
         }
         if self.tab == Tab::Logs && !self.logs_busy {
-            let due = self
-                .logs_at
-                .map(|t| t.elapsed() >= Duration::from_secs(1))
-                .unwrap_or(true);
+            let due = if self.logs_ref.is_some() {
+                // Serve logs are files; keep polling only those.
+                self.logs_at
+                    .map(|t| t.elapsed() >= Duration::from_secs(1))
+                    .unwrap_or(true)
+            } else {
+                // Service log: one initial load, then live WebSocket lines.
+                self.logs_at.is_none()
+            };
             if due {
                 self.logs_busy = true;
                 spawn_logs(
@@ -3255,7 +5061,7 @@ impl eframe::App for App {
             )
             .show(ctx, |ui| {
                 ui.add_space(8.0);
-                for tab in [Tab::Overview, Tab::Models, Tab::Logs, Tab::Settings] {
+                for tab in [Tab::Overview, Tab::Models, Tab::Apps, Tab::Logs, Tab::Settings] {
                     if nav_item(ui, self.tab == tab, tab.label()).clicked() {
                         self.tab = tab;
                         if tab == Tab::Logs {
@@ -3266,6 +5072,9 @@ impl eframe::App for App {
                                 self.logs_since,
                                 self.logs_ref.clone(),
                             );
+                        }
+                        if tab == Tab::Apps && !self.apps_loaded && !self.apps_loading {
+                            self.reload_apps(ctx);
                         }
                     }
                     ui.add_space(2.0);
@@ -3348,6 +5157,7 @@ impl eframe::App for App {
             match self.tab {
                 Tab::Overview => self.overview(ui),
                 Tab::Models => self.models_page(ui),
+                Tab::Apps => self.apps_page(ui),
                 Tab::Logs => self.logs_page(ui),
                 Tab::Settings => self.settings_page(ui),
             }
@@ -3357,6 +5167,10 @@ impl eframe::App for App {
         self.show_cache_dialog(ctx);
         self.show_smoke_dialog(ctx);
         self.show_options_dialog(ctx);
+        self.show_app_install_dialog(ctx);
+        self.show_app_setup_dialog(ctx);
+        self.show_app_uninstall_dialog(ctx);
+        self.show_app_log_dialog(ctx);
         self.show_dialog(ctx);
         self.show_busy_overlay(ctx);
         self.show_toast(ctx);
@@ -3623,6 +5437,46 @@ fn button(ui: &mut egui::Ui, text: &str) -> egui::Response {
     ui.add_sized([96.0, 28.0], egui::Button::new(text))
 }
 
+/// Copy button with a transient "已复制" label, so every copy is acknowledged.
+fn copy_button(ui: &mut egui::Ui, key: &str, label: &str, text: &str, hover: &str) -> bool {
+    copy_button_sized(ui, key, label, text, hover, true)
+}
+
+/// Copy button using the standard (not small) button size.
+fn copy_button_sized(
+    ui: &mut egui::Ui,
+    key: &str,
+    label: &str,
+    text: &str,
+    hover: &str,
+    small: bool,
+) -> bool {
+    let now = ui.input(|i| i.time);
+    let id = egui::Id::new(("copy-feedback", key));
+    let copied_at = ui.ctx().data(|d| d.get_temp::<f64>(id));
+    let show_done = copied_at.map(|t| now - t < 1.5).unwrap_or(false);
+    let shown = if show_done { "已复制" } else { label };
+    let response = if small {
+        ui.small_button(shown)
+    } else {
+        ui.add_sized([96.0, 28.0], egui::Button::new(shown))
+    };
+    let response = if hover.is_empty() {
+        response
+    } else {
+        response.on_hover_text(hover)
+    };
+    let clicked = response.clicked();
+    if clicked {
+        ui.ctx().copy_text(text.to_string());
+        ui.ctx().data_mut(|d| d.insert_temp(id, now));
+    }
+    if clicked || show_done {
+        ui.ctx().request_repaint_after(Duration::from_millis(100));
+    }
+    clicked
+}
+
 fn primary_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
     ui.add_sized(
         [96.0, 28.0],
@@ -3864,10 +5718,30 @@ fn start_ws(tx: Sender<Event>, ctx: egui::Context) {
                                             "mirror" => {
                                                 let _ = tx.send(Event::Mirror(v["data"].clone()));
                                             }
+                                            "logs" => {
+                                                let lines = v["data"]["lines"]
+                                                    .as_array()
+                                                    .map(|items| {
+                                                        items
+                                                            .iter()
+                                                            .filter_map(|l| l.as_str())
+                                                            .map(str::to_string)
+                                                            .collect()
+                                                    })
+                                                    .unwrap_or_default();
+                                                let _ = tx.send(Event::LogLines(lines));
+                                            }
                                             "job" => {
                                                 let data = &v["data"];
                                                 let kind =
                                                     data["type"].as_str().unwrap_or("").to_string();
+                                                // App install/prepare progress is polled by
+                                                // follow_app_job; feeding it here would also
+                                                // drive the model-loading progress bar.
+                                                if kind.starts_with("app-") {
+                                                    ctx.request_repaint();
+                                                    continue;
+                                                }
                                                 let verb = match kind.as_str() {
                                                     "pull" => "下载",
                                                     "smoke" => "测试",
@@ -4046,7 +5920,11 @@ fn spawn_job(
             kind: kind.to_string(),
             authoritative: true,
         }));
-        let body = serde_json::json!({ "ref": ref_str, "async": true });
+        let body = serde_json::json!({
+            "ref": ref_str,
+            "async": true,
+            "force": pull && verb == "重新同步",
+        });
         match post_json(endpoint, &body) {
             Ok(v) => {
                 let job = v["job_id"].as_str().unwrap_or("");
@@ -4068,6 +5946,1265 @@ fn spawn_job(
         }
         ctx.request_repaint();
     });
+}
+
+
+fn app_os_key() -> &'static str {
+    match std::env::consts::OS {
+        "macos" => "darwin",
+        other => other,
+    }
+}
+
+fn app_arch_key() -> &'static str {
+    match std::env::consts::ARCH {
+        "x86_64" => "x86_64",
+        "aarch64" => "arm64",
+        other => other,
+    }
+}
+
+/// Merge one job event. A new action (verb change or a job that had finished)
+/// must not keep the previous verb/log: stop-then-start used to show 正在停止
+/// while the start was already running.
+fn apply_job_event(job: &mut AppJobState, verb: &str, line: &str, running: bool) {
+    if !job.running || job.verb != verb {
+        job.verb = verb.to_string();
+        job.phase = default_app_job_phase(verb);
+        job.percent = None;
+        job.log.clear();
+    }
+    if !line.is_empty() {
+        append_app_log(&mut job.log, line);
+        // A new stage starts with its own progress; the previous stage's
+        // percentage (e.g. a finished download) must not stay at 100%.
+        let phase = app_job_phase(line, &job.phase);
+        if phase != job.phase {
+            job.phase = phase;
+            job.percent = None;
+        }
+        if let Some(pct) = parse_pct(line) {
+            job.percent = Some(pct);
+        }
+    }
+    job.running = running;
+}
+
+fn app_setup_scripts(manifest: &Value) -> Vec<AppSetupScript> {
+    manifest["setup"]["scripts"]
+        .as_array()
+        .map(|scripts| {
+            scripts
+                .iter()
+                .filter_map(|script| {
+                    let key = script["key"].as_str().filter(|s| !s.is_empty())?;
+                    let url = script["url"].as_str().filter(|s| !s.is_empty())?;
+                    Some(AppSetupScript {
+                        key: key.to_string(),
+                        url: url.to_string(),
+                        sha256: script["sha256"].as_str().unwrap_or("").to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Last start/install output kept on the daemon app state. A restored app has
+/// no desktop job, so the detail pane falls back to this.
+fn app_last_log(detail: &Value) -> Vec<String> {
+    detail["local"]["last_log"]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|v| v.as_str())
+                .map(|s| s.to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn client_home() -> String {
+    std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .unwrap_or_default()
+}
+
+fn install_command(manifest: &Value) -> Option<String> {
+    let key = app_platform_command_key(manifest)?;
+    manifest["install"]["commands"][key.as_str()]
+        .as_str()
+        .map(|s| s.to_string())
+}
+
+/// The `install.commands` key the host uses for this build (`os/arch` then `os`).
+fn app_platform_command_key(manifest: &Value) -> Option<String> {
+    let commands = manifest["install"]["commands"].as_object()?;
+    let os = app_os_key();
+    let arch = app_arch_key();
+    let exact = format!("{os}/{arch}");
+    if commands.contains_key(&exact) {
+        Some(exact)
+    } else if commands.contains_key(os) {
+        Some(os.to_string())
+    } else {
+        None
+    }
+}
+
+/// Every declared install command, sorted by platform key (current one is
+/// highlighted by the UI via `app_platform_command_key`).
+fn app_install_commands(manifest: &Value) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = manifest["install"]["commands"]
+        .as_object()
+        .map(|commands| {
+            commands
+                .iter()
+                .filter_map(|(key, value)| value.as_str().map(|cmd| (key.clone(), cmd.to_string())))
+                .collect()
+        })
+        .unwrap_or_default();
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out
+}
+
+/// `https://…/cover.png` from a list row or manifest; empty values are ignored.
+fn app_cover_url(app: &Value) -> Option<String> {
+    app["cover_url"]
+        .as_str()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+fn csv_list(value: &Value) -> String {
+    value
+        .as_array()
+        .map(|list| {
+            list.iter()
+                .filter_map(|item| item.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default()
+}
+
+/// Key of an app row from the list response: `org/name:version`.
+fn app_list_key(app: &Value) -> String {
+    app_reference(
+        app["organization"]["name"].as_str().unwrap_or(""),
+        app["name"].as_str().unwrap_or(""),
+        app["version"].as_str().unwrap_or(""),
+    )
+}
+
+/// Unique non-empty `domain` values from a list response, first-seen order.
+fn app_domains(list: &[Value]) -> Vec<String> {
+    let mut domains: Vec<String> = Vec::new();
+    for app in list {
+        if let Some(domain) = app["domain"].as_str().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+            if !domains.iter().any(|seen| seen == domain) {
+                domains.push(domain.to_string());
+            }
+        }
+    }
+    domains
+}
+
+/// True when the manifest's platform command is a download page, not a script.
+fn is_url_command(command: &str) -> bool {
+    let c = command.trim().to_ascii_lowercase();
+    c.starts_with("http://") || c.starts_with("https://")
+}
+
+/// True when `supported.os` / `supported.arch` include this build's platform.
+fn app_platform_supported(manifest: &Value) -> bool {
+    let listed = |key: &str, want: &str| {
+        manifest["supported"][key]
+            .as_array()
+            .map(|list| list.iter().any(|v| v.as_str() == Some(want)))
+            .unwrap_or(false)
+    };
+    listed("os", app_os_key()) && listed("arch", app_arch_key())
+}
+
+const APP_CARD_WIDTH: f32 = 160.0;
+const APP_CARD_COVER_HEIGHT: f32 = 80.0;
+const APP_CARD_PADDING: f32 = 8.0;
+const APP_COVER_TEXTURE_PX: u32 = 256;
+
+/// One application card: cover, name, version · domain, org / installed badge.
+fn app_card(
+    ui: &mut egui::Ui,
+    app: &Value,
+    selected: bool,
+    cover: Option<&egui::TextureHandle>,
+    job: Option<&AppJobState>,
+) -> egui::Response {
+    let dark = ui.visuals().dark_mode;
+    let fill = if selected {
+        if dark {
+            egui::Color32::from_rgb(34, 52, 68)
+        } else {
+            egui::Color32::from_rgb(232, 242, 252)
+        }
+    } else if dark {
+        egui::Color32::from_rgb(30, 32, 36)
+    } else {
+        egui::Color32::from_rgb(250, 250, 252)
+    };
+    let stroke = if selected {
+        egui::Stroke::new(1.0_f32, accent(ui))
+    } else if dark {
+        egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(52, 56, 62))
+    } else {
+        egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(222, 226, 232))
+    };
+    let name = app["display_name"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .or_else(|| app["name"].as_str())
+        .unwrap_or("?");
+    let description = app["description"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .unwrap_or("");
+    let installed = app["installed"].as_bool().unwrap_or(false);
+    let inner_width = APP_CARD_WIDTH - APP_CARD_PADDING * 2.0;
+    let inner = egui::Frame::NONE
+        .fill(fill)
+        .stroke(stroke)
+        .corner_radius(6)
+        .inner_margin(egui::Margin::same(APP_CARD_PADDING as i8))
+        .show(ui, |ui| {
+            ui.set_width(inner_width);
+            ui.vertical(|ui| {
+                ui.set_width(inner_width);
+                app_cover_widget(ui, cover, inner_width, APP_CARD_COVER_HEIGHT, name);
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(name).strong().size(12.0))
+                            .truncate(),
+                    );
+                    if job.map(|j| j.running).unwrap_or(false) {
+                        ui.label(egui::RichText::new("安装中").size(10.0).color(accent(ui)));
+                    } else if installed {
+                        ui.label(egui::RichText::new("已安装").size(10.0).color(green(ui)));
+                    }
+                });
+                let version = app["version"].as_str().unwrap_or("");
+                let domain = app["domain"].as_str().unwrap_or("");
+                let line = if domain.is_empty() {
+                    version.to_string()
+                } else {
+                    format!("{version} · {domain}")
+                };
+                ui.add(
+                    egui::Label::new(egui::RichText::new(line).size(10.0).weak()).truncate(),
+                );
+                match job.filter(|j| j.running) {
+                    Some(job) => {
+                        let pct = job
+                            .percent
+                            .map(|p| format!(" {p:.0}%"))
+                            .unwrap_or_default();
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(format!(
+                                    "{} · {}{}",
+                                    job.verb, job.phase, pct
+                                ))
+                                .size(10.0)
+                                .color(accent(ui)),
+                            )
+                            .truncate(),
+                        );
+                        let bar = match job.percent {
+                            Some(pct) => egui::ProgressBar::new((pct / 100.0).clamp(0.0, 1.0))
+                                .desired_height(3.0)
+                                .fill(accent(ui)),
+                            None => egui::ProgressBar::new(0.0)
+                                .desired_height(3.0)
+                                .fill(accent(ui))
+                                .animate(true),
+                        };
+                        ui.add(bar);
+                    }
+                    None => {
+                        if !description.is_empty() {
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(description).size(10.0).weak(),
+                                )
+                                .truncate(),
+                            );
+                        }
+                    }
+                }
+            });
+        });
+    let response = inner.response.interact(egui::Sense::click());
+    if description.is_empty() {
+        response.on_hover_cursor(egui::CursorIcon::PointingHand)
+    } else {
+        response
+            .on_hover_cursor(egui::CursorIcon::PointingHand)
+            .on_hover_text(description)
+    }
+}
+
+/// Cover image scaled to fit the slot (aspect ratio kept, whole image visible)
+/// on a muted tile, or a placeholder with the app's first character.
+fn app_cover_widget(
+    ui: &mut egui::Ui,
+    cover: Option<&egui::TextureHandle>,
+    width: f32,
+    height: f32,
+    fallback: &str,
+) {
+    let (slot, _) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
+    ui.painter()
+        .rect_filled(slot, 4, ui.visuals().faint_bg_color);
+    match cover {
+        Some(texture) => {
+            let original = texture.size_vec2();
+            let scale = (width / original.x).min(height / original.y);
+            let display = original * scale;
+            let rect = egui::Rect::from_center_size(slot.center(), display);
+            ui.put(
+                rect,
+                egui::Image::new(egui::load::SizedTexture::new(texture.id(), display))
+                    .corner_radius(4),
+            );
+        }
+        None => {
+            let initial: String = fallback.chars().next().map(|c| c.to_string()).unwrap_or_default();
+            ui.painter().text(
+                slot.center(),
+                egui::Align2::CENTER_CENTER,
+                initial,
+                egui::FontId::proportional(height.min(width) * 0.4),
+                ui.visuals().weak_text_color(),
+            );
+        }
+    }
+}
+
+fn app_section(ui: &mut egui::Ui, title: &str) {
+    ui.add_space(10.0);
+    ui.separator();
+    ui.label(egui::RichText::new(title).strong());
+    ui.add_space(2.0);
+}
+
+fn app_field(ui: &mut egui::Ui, key: &str, value: &str) {
+    if value.trim().is_empty() {
+        return;
+    }
+    ui.horizontal_wrapped(|ui| {
+        ui.label(egui::RichText::new(key).small().weak());
+        ui.label(egui::RichText::new(value).small());
+    });
+}
+
+fn app_mono(ui: &mut egui::Ui, value: &str) {
+    ui.add(egui::Label::new(egui::RichText::new(value).monospace().small()).wrap());
+}
+
+
+/// Bundle refs the install will prepare (every `default: true` entry).
+fn default_app_bundles(manifest: &Value) -> Vec<String> {
+    manifest["model"]["bundles"]
+        .as_array()
+        .map(|list| {
+            list.iter()
+                .filter(|b| b["default"].as_bool().unwrap_or(false))
+                .filter_map(|b| b["bundle"].as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Install request body for the daemon.
+///
+/// The application is installed on the client OS, so the desktop runs the
+/// command itself and tells the daemon `client` (already handled) or `skip`
+/// (do not run it). The daemon gets the client platform for the manifest check
+/// and only prepares/starts the models.
+fn app_install_body(version: &str, ran_script: bool, force: bool) -> Value {
+    serde_json::json!({
+        "version": version,
+        "install_command": if ran_script { "client" } else { "skip" },
+        "client_os": app_os_key(),
+        "client_arch": app_arch_key(),
+        "force": force,
+    })
+}
+
+/// Human label + colour for an app state (shown next to the app key).
+fn app_state_badge(state: &str, ui: &egui::Ui) -> Option<(&'static str, egui::Color32)> {
+    Some(match state {
+        "ready" => ("运行中", green(ui)),
+        "prepared" => ("已准备", ui.visuals().weak_text_color()),
+        "stopped" => ("已停止", ui.visuals().weak_text_color()),
+        "failed" => ("失败", red(ui)),
+        "starting" => ("启动中…", accent(ui)),
+        "stopping" => ("停止中…", accent(ui)),
+        "preparing" => ("准备中…", accent(ui)),
+        "installing" => ("安装中…", accent(ui)),
+        _ => return None,
+    })
+}
+
+/// Replace the `local` block of an app detail with fresh state (None = not
+/// installed).
+fn merge_detail_local(detail: &mut Value, state: Option<Value>) {
+    let local = state.unwrap_or_else(|| Value::Object(Default::default()));
+    if let Some(obj) = detail.as_object_mut() {
+        obj.insert("local".to_string(), local);
+    }
+}
+
+/// Update one app row in the list overlay.
+fn merge_list_state(app: &mut Value, installed: bool, state: &str) {
+    if let Some(obj) = app.as_object_mut() {
+        obj.insert("installed".to_string(), Value::Bool(installed));
+        obj.insert("state".to_string(), Value::String(state.to_string()));
+    }
+}
+
+/// Job reference in the same shape the daemon reports: `org/name[:version]`.
+fn app_reference(org: &str, name: &str, version: &str) -> String {
+    if version.is_empty() {
+        format!("{org}/{name}")
+    } else {
+        format!("{org}/{name}:{version}")
+    }
+}
+
+/// Append a job log line, ignoring the duplicate the poller re-reads.
+fn append_app_log(log: &mut String, line: &str) {
+    let line = line.trim_end();
+    if line.is_empty() {
+        return;
+    }
+    if log.lines().last() == Some(line) {
+        return;
+    }
+    log.push_str(line);
+    log.push('\n');
+    const MAX_LINES: usize = 300;
+    let lines = log.lines().count();
+    if lines > MAX_LINES {
+        let skip = lines - MAX_LINES;
+        let rest: Vec<&str> = log.lines().skip(skip).collect();
+        *log = rest.join("\n");
+        log.push('\n');
+    }
+}
+
+/// The last `count` log lines, for the detail pane.
+fn app_log_tail(log: &str, count: usize) -> Vec<String> {
+    let all: Vec<&str> = log.lines().filter(|l| !l.trim().is_empty()).collect();
+    let start = all.len().saturating_sub(count);
+    all[start..].iter().map(|l| l.to_string()).collect()
+}
+
+/// Install phase for a progress line (keeps the previous phase when the line
+/// carries no step information).
+/// Status line above the app grid: name the application action first, then the
+/// current sub-step (for example "正在启动 Grok CLI 应用 · 模型 xxx 启动中").
+fn app_job_status_text(job: &AppJobState, label: &str, pct: &str) -> String {
+    let action = match job.verb.as_str() {
+        "启动" => "启动",
+        "停止" => "停止",
+        "准备模型" => "准备",
+        _ => "安装",
+    };
+    format!(
+        "正在{action} {label} 应用 · {}{pct}",
+        app_job_subitem(job)
+    )
+}
+
+fn app_job_subitem(job: &AppJobState) -> String {
+    let model = app_job_model(&job.log);
+    let model_text = model.map(|m| format!("{m} ")).unwrap_or_default();
+    match job.verb.as_str() {
+        "启动" => format!("模型 {model_text}启动中"),
+        "停止" => format!("模型 {model_text}停止中"),
+        "准备模型" => format!("模型 {model_text}准备中"),
+        _ => match job.phase.as_str() {
+            "准备模型" => format!("模型 {model_text}准备中"),
+            "启动模型" => format!("模型 {model_text}启动中"),
+            "安装应用" => "安装应用".to_string(),
+            "完成" => "完成".to_string(),
+            other => other.to_string(),
+        },
+    }
+}
+
+/// The last model ref mentioned by the start/stop/prepare log lines.
+fn app_job_model(log: &str) -> Option<String> {
+    for line in log.lines().rev() {
+        let line = line.trim();
+        for prefix in ["starting ", "stopping ", "Preparing model ", "reuse "] {
+            if let Some(rest) = line.strip_prefix(prefix) {
+                if let Some(first) = rest.split_whitespace().next() {
+                    return Some(first.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+fn app_job_phase(line: &str, current: &str) -> String {    let lower = line.to_ascii_lowercase();
+    if line.starts_with("Application:")
+        || lower.contains("install command")
+        || line.contains("安装程序")
+        || line.starts_with("$ ")
+    {
+        "安装应用".to_string()
+    } else if lower.contains("preparing model") || line.contains("准备模型") {
+        "准备模型".to_string()
+    } else if lower.contains("starting") || lower.contains("started") || line.contains("启动模型") {
+        "启动模型".to_string()
+    } else if lower.contains("stopping") || line.contains("停止模型") {
+        "停止模型".to_string()
+    } else if lower.contains("installed ") || lower.contains("connection:") {
+        "完成".to_string()
+    } else {
+        current.to_string()
+    }
+}
+
+fn default_app_job_phase(verb: &str) -> String {
+    match verb {
+        "准备模型" => "准备模型",
+        "启动" => "启动模型",
+        "停止" => "停止模型",
+        _ => "安装应用",
+    }
+    .to_string()
+}
+
+fn transitional_verb(state: &str) -> Option<&'static str> {
+    match state {
+        "starting" => Some("启动"),
+        "stopping" => Some("停止"),
+        "preparing" => Some("准备"),
+        "installing" => Some("安装"),
+        _ => None,
+    }
+}
+
+fn app_model_ref(detail: &Value) -> Option<String> {
+    detail["local"]["models"]
+        .as_array()
+        .and_then(|models| {
+            models.iter().find_map(|model| {
+                model["ref"]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+            })
+        })
+        .or_else(|| {
+            detail["manifest"]["model"]["bundles"]
+                .as_array()
+                .and_then(|bundles| {
+                    bundles
+                        .iter()
+                        .find(|b| b["default"].as_bool().unwrap_or(false))
+                        .or_else(|| bundles.first())
+                })
+                .and_then(|b| b["bundle"].as_str().map(|s| s.to_string()))
+        })
+}
+
+fn app_identity(detail: &Value) -> (String, String, String) {
+    let manifest = &detail["manifest"];
+    let org = detail["org"].as_str().unwrap_or("").to_string();
+    let name = manifest["name"].as_str().unwrap_or("").to_string();
+    let version = detail["version"]
+        .as_str()
+        .or_else(|| manifest["version"].as_str())
+        .unwrap_or("")
+        .to_string();
+    (org, name, version)
+}
+
+/// Download one cover; the UI thread decodes and uploads it as a texture.
+fn spawn_app_cover(tx: Sender<Event>, ctx: egui::Context, url: String) {
+    std::thread::spawn(move || {
+        let bytes = ureq::AgentBuilder::new()
+            .timeout(Duration::from_secs(20))
+            .build()
+            .get(&url)
+            .call()
+            .ok()
+            .and_then(|resp| {
+                let mut buf = Vec::new();
+                let mut reader = resp.into_reader();
+                std::io::Read::read_to_end(&mut reader, &mut buf)
+                    .ok()
+                    .map(|_| buf)
+            });
+        let _ = tx.send(Event::AppCover(url, bytes));
+        ctx.request_repaint();
+    });
+}
+
+fn decode_cover(ctx: &egui::Context, url: &str, bytes: &[u8]) -> Option<egui::TextureHandle> {
+    let image = image::load_from_memory(bytes).ok()?;
+    let thumb = image
+        .thumbnail(APP_COVER_TEXTURE_PX, APP_COVER_TEXTURE_PX)
+        .to_rgba8();
+    let size = [thumb.width() as usize, thumb.height() as usize];
+    let pixels = egui::ColorImage::from_rgba_unmultiplied(size, thumb.as_raw());
+    Some(ctx.load_texture(url.to_string(), pixels, egui::TextureOptions::LINEAR))
+}
+
+fn spawn_apps(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    search: String,
+    domain: String,
+    req: u64,
+) {
+    std::thread::spawn(move || {
+        let mut params = vec![("page_size", "100".to_string())];
+        if !search.trim().is_empty() {
+            params.push(("search", search.trim().to_string()));
+        }
+        if !domain.trim().is_empty() {
+            params.push(("domain", domain.trim().to_string()));
+        }
+        match get_json_query("/v1/apps", &params) {
+            Some(v) => {
+                let list = v["apps"].as_array().cloned().unwrap_or_default();
+                let _ = tx.send(Event::Apps(list, req));
+            }
+            None => {
+                let _ = tx.send(Event::AppsError(
+                    "无法获取应用列表：请确认 flashserver 正在运行".to_string(),
+                    req,
+                ));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+/// Fetch `/v1/apps/{org}/{name}/status` (local only) and update the detail.
+fn spawn_app_state(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    org: String,
+    name: String,
+    version: String,
+) {
+    std::thread::spawn(move || {
+        let key = app_reference(&org, &name, &version);
+        let mut path = format!("/v1/apps/{org}/{name}/status");
+        if !version.is_empty() {
+            path.push_str(&format!("?version={version}"));
+        }
+        let url = format!("{}{}", api_base(), path);
+        let agent = ureq::AgentBuilder::new()
+            .timeout(Duration::from_secs(20))
+            .build();
+        match agent.get(&url).call() {
+            Ok(resp) => {
+                if let Ok(v) = resp.into_json::<Value>() {
+                    let _ = tx.send(Event::AppLocal {
+                        key,
+                        state: Some(v),
+                    });
+                }
+            }
+            Err(ureq::Error::Status(404, _)) => {
+                // Uninstalled: clear the local state.
+                let _ = tx.send(Event::AppLocal { key, state: None });
+            }
+            Err(_) => {}
+        }
+        ctx.request_repaint();
+    });
+}
+
+/// Poll the serve log of a model started by the daemon (restore/start) so the
+/// status card has content even without a desktop job.
+fn spawn_app_model_log(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    key: String,
+    reference: String,
+) {
+    std::thread::spawn(move || {
+        let params = vec![
+            ("kind", "model".to_string()),
+            ("ref", reference),
+            ("lines", "6".to_string()),
+        ];
+        let lines = get_json_query("/v1/logs", &params)
+            .map(|v| {
+                v["lines"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(|line| line.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let _ = tx.send(Event::AppModelLog { key, lines });
+        ctx.request_repaint();
+    });
+}
+
+fn spawn_app_detail(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    org: String,
+    name: String,
+    version: String,
+) {
+    std::thread::spawn(move || {
+        let path = if version.is_empty() {
+            format!("/v1/apps/{org}/{name}")
+        } else {
+            format!("/v1/apps/{org}/{name}?version={version}")
+        };
+        match get_json(&path) {
+            Some(v) => {
+                let _ = tx.send(Event::AppDetail(v));
+            }
+            None => {
+                let _ = tx.send(Event::AppDetailError("无法获取应用详情".to_string()));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+fn spawn_app_action(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    org: String,
+    name: String,
+    version: String,
+    action: &'static str,
+    setup_scripts: Vec<String>,
+) {
+    let reference = app_reference(&org, &name, &version);
+    let verb = action_label(action).to_string();
+    let lifecycle = matches!(action, "start" | "stop");
+    // Create the status entry before the request leaves, so the pane reacts on
+    // the same frame instead of after the first poll.
+    if lifecycle {
+        let _ = tx.send(Event::AppJob {
+            verb: verb.clone(),
+            reference: reference.clone(),
+            line: String::new(),
+            running: true,
+        });
+    }
+    std::thread::spawn(move || {
+        // start/stop can take a minute (model loading); run them as daemon jobs
+        // so their progress lines stream into the status block.
+        let path = if lifecycle {
+            format!("/v1/apps/{org}/{name}/{action}?async=1")
+        } else {
+            format!("/v1/apps/{org}/{name}/{action}")
+        };
+        let mut body = if action == "prepare" {
+            serde_json::json!({ "version": version })
+        } else {
+            serde_json::json!({})
+        };
+        if action == "start" {
+            body["setup_scripts"] = serde_json::json!(setup_scripts);
+            body["client_home"] = serde_json::json!(client_home());
+        }
+        match post_json_timeout(&path, &body, 180) {
+            Ok(v) => {
+                if let Some(job_id) = v["job_id"].as_str().filter(|id| !id.is_empty()) {
+                    follow_app_job(
+                        tx.clone(),
+                        ctx.clone(),
+                        job_id.to_string(),
+                        verb,
+                        reference,
+                    );
+                    return;
+                }
+                let message = v["state"]
+                    .as_str()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "完成".to_string());
+                let _ = tx.send(Event::AppAction(verb, Ok(message)));
+            }
+            Err(err) => {
+                let _ = tx.send(Event::AppJob {
+                    verb: verb.clone(),
+                    reference: reference.clone(),
+                    line: format!("失败: {err}"),
+                    running: false,
+                });
+                let _ = tx.send(Event::AppAction(verb, Err(err)));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+/// `force` re-runs an already installed app; `run_script` records the user's
+/// explicit decision in the confirmation dialog.
+fn spawn_app_install(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    org: String,
+    name: String,
+    version: String,
+    action: AppInstallAction,
+    force: bool,
+) {
+    std::thread::spawn(move || {
+        let verb = "安装".to_string();
+        let reference = app_reference(&org, &name, &version);
+        let fail = |err: String| {
+            // Close the job (so the pane stops spinning) and keep the reason in
+            // the log, not only in the transient toast.
+            let _ = tx.send(Event::AppJob {
+                verb: verb.clone(),
+                reference: reference.clone(),
+                line: format!("失败: {err}"),
+                running: false,
+            });
+            let _ = tx.send(Event::AppAction(verb.clone(), Err(err)));
+            ctx.request_repaint();
+        };
+        // The application lives on the client OS (for example a Windows exe),
+        // while the models stay in WSL. Install it here, then let the daemon
+        // prepare/start the models with install_command=client.
+        let handled = match &action {
+            AppInstallAction::Skip => false,
+            AppInstallAction::RunScript(command) => {
+                let _ = tx.send(Event::AppJob {
+                    verb: verb.clone(),
+                    reference: reference.clone(),
+                    line: format!("$ {command}"),
+                    running: true,
+                });
+                if let Err(err) = run_local_command(&tx, &ctx, &verb, &reference, command) {
+                    fail(err);
+                    return;
+                }
+                true
+            }
+            AppInstallAction::Installer { url, kind } => {
+                if let Err(err) =
+                    download_and_run_installer(&tx, &ctx, &verb, &reference, url, *kind)
+                {
+                    fail(err);
+                    return;
+                }
+                true
+            }
+        };
+        let path = format!("/v1/apps/{org}/{name}/install");
+        let body = app_install_body(&version, handled, force);
+        match post_json_timeout(&path, &body, 120) {
+            Ok(v) => match v["job_id"].as_str().filter(|id| !id.is_empty()) {
+                Some(job_id) => {
+                    follow_app_job(tx.clone(), ctx.clone(), job_id.to_string(), verb, reference);
+                }
+                None => {
+                    let _ = tx.send(Event::AppAction(verb, Ok("完成".to_string())));
+                }
+            },
+            Err(err) => fail(err),
+        }
+        ctx.request_repaint();
+    });
+}
+
+/// Download an installer URL and run it, reporting progress into the job log.
+fn download_and_run_installer(
+    tx: &Sender<Event>,
+    ctx: &egui::Context,
+    verb: &str,
+    reference: &str,
+    url: &str,
+    kind: InstallerKind,
+) -> Result<(), String> {
+    use std::io::{Read, Write};
+
+    let file_name = installer_file_name(url, kind);
+    let dir = std::env::temp_dir().join("flashcli-apps");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("无法创建临时目录: {e}"))?;
+    let dest = dir.join(&file_name);
+
+    let log = |line: String| {
+        let _ = tx.send(Event::AppJob {
+            verb: verb.to_string(),
+            reference: reference.to_string(),
+            line,
+            running: true,
+        });
+        ctx.request_repaint();
+    };
+    let cached = std::fs::metadata(&dest)
+        .ok()
+        .map(|m| m.len())
+        .filter(|n| *n > 0);
+    if let Some(size) = cached {
+        // A cancelled/failed run leaves the installer behind; do not download
+        // it again (the installer verifies its own integrity).
+        log(format!(
+            "复用已下载的安装程序（{}）：{}",
+            fmt_bytes(size as f64),
+            dest.display()
+        ));
+    } else {
+        log(format!("下载安装程序 {url}"));
+
+        let host = url
+            .split("://")
+            .nth(1)
+            .and_then(|rest| rest.split('/').next())
+            .unwrap_or(url);
+        let agent = ureq::AgentBuilder::new()
+            .timeout_connect(Duration::from_secs(20))
+            .timeout_read(Duration::from_secs(60))
+            .timeout_write(Duration::from_secs(60))
+            .build();
+        // One retry: large installer downloads often fail on a flaky connection.
+        let mut response = None;
+        for attempt in 0..2 {
+            match agent.get(url).call() {
+                Ok(resp) => {
+                    response = Some(resp);
+                    break;
+                }
+                Err(ureq::Error::Status(code, _)) => {
+                    return Err(format!("下载失败（{host}）：HTTP {code}"));
+                }
+                Err(err) => {
+                    if attempt == 1 {
+                        return Err(format!(
+                            "下载失败（{host}）：{err}。可稍后重试，或复制链接手动下载。"
+                        ));
+                    }
+                    log(format!("下载中断（{err}），正在重试…"));
+                    std::thread::sleep(Duration::from_secs(2));
+                }
+            }
+        }
+        let response = response.ok_or_else(|| format!("下载失败（{host}）"))?;
+        let total: Option<u64> = response
+            .header("Content-Length")
+            .and_then(|v| v.parse().ok());
+        let mut reader = response.into_reader();
+        // Write to a .part file first so an interrupted download never looks
+        // like a complete installer.
+        let part = dir.join(format!("{file_name}.part"));
+        let _ = std::fs::remove_file(&part);
+        let mut file =
+            std::fs::File::create(&part).map_err(|e| format!("无法写入 {file_name}: {e}"))?;
+        let mut buf = vec![0_u8; 64 * 1024];
+        let mut written: u64 = 0;
+        let mut last_pct: Option<i64> = None;
+        let mut last_log = std::time::Instant::now();
+        let mut last_bytes: u64 = 0;
+        loop {
+            let read = reader
+                .read(&mut buf)
+                .map_err(|e| format!("下载中断（{host}）：{e}。可重试，或复制链接手动下载。"))?;
+            if read == 0 {
+                break;
+            }
+            file.write_all(&buf[..read])
+                .map_err(|e| format!("写入失败: {e}"))?;
+            written += read as u64;
+            let pct = total
+                .filter(|t| *t > 0)
+                .map(|t| ((written * 100 / t).min(100)) as i64);
+            // Update every 1% or every 2 s (a big installer can take minutes and
+            // a stalled percentage should still show the transfer moving).
+            let advanced = matches!((pct, last_pct), (Some(now), Some(prev)) if now > prev);
+            let due = last_log.elapsed() >= Duration::from_secs(2);
+            if advanced || due {
+                let secs = last_log.elapsed().as_secs_f64().max(0.001);
+                let speed = (written.saturating_sub(last_bytes)) as f64 / secs;
+                let line = match (pct, total) {
+                    (Some(pct), Some(total)) => format!(
+                        "下载中 {pct}%（{} / {}，{}/s）",
+                        fmt_bytes(written as f64),
+                        fmt_bytes(total as f64),
+                        fmt_bytes(speed)
+                    ),
+                    _ => {
+                        format!("下载中 {}（{}/s）", fmt_bytes(written as f64), fmt_bytes(speed))
+                    }
+                };
+                log(line);
+                last_pct = pct;
+                last_bytes = written;
+                last_log = std::time::Instant::now();
+            }
+        }
+        drop(file);
+        std::fs::rename(&part, &dest).map_err(|e| format!("保存安装程序失败: {e}"))?;
+        log(format!(
+            "已下载 {}（{}）",
+            dest.display(),
+            fmt_bytes(written as f64)
+        ));
+    }
+
+    let status = match kind {
+        InstallerKind::Exe => {
+            if !cfg!(windows) {
+                return Err("该安装程序只能在 Windows 上运行".to_string());
+            }
+            std::process::Command::new(&dest)
+                .status()
+                .map_err(|e| format!("无法运行安装程序: {e}"))?
+        }
+        InstallerKind::Msi => {
+            if !cfg!(windows) {
+                return Err("该安装程序只能在 Windows 上运行".to_string());
+            }
+            std::process::Command::new("msiexec")
+                .arg("/i")
+                .arg(&dest)
+                .status()
+                .map_err(|e| format!("无法运行 msiexec: {e}"))?
+        }
+        InstallerKind::Dmg | InstallerKind::Pkg => std::process::Command::new("open")
+            .arg(&dest)
+            .status()
+            .map_err(|e| format!("无法打开安装包: {e}"))?,
+        InstallerKind::Page => return Err("不是安装程序".to_string()),
+    };
+    if !status.success() {
+        return Err(match status.code() {
+            Some(code) => format!("安装程序退出码 {code}"),
+            None => "安装程序被终止".to_string(),
+        });
+    }
+    log("安装程序已结束".to_string());
+    Ok(())
+}
+
+/// Shell that runs an install command on the client OS.
+fn local_command(command: &str) -> (String, Vec<String>) {
+    if cfg!(windows) {
+        (
+            "powershell".to_string(),
+            vec![
+                "-NoProfile".to_string(),
+                "-ExecutionPolicy".to_string(),
+                "Bypass".to_string(),
+                "-Command".to_string(),
+                command.to_string(),
+            ],
+        )
+    } else {
+        ("sh".to_string(), vec!["-c".to_string(), command.to_string()])
+    }
+}
+
+/// Run the install command locally, streaming its output into the app job log.
+fn run_local_command(
+    tx: &Sender<Event>,
+    ctx: &egui::Context,
+    verb: &str,
+    reference: &str,
+    command: &str,
+) -> Result<(), String> {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+
+    let (program, args) = local_command(command);
+    let mut cmd = Command::new(&program);
+    cmd.args(&args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // 0x08000000 = CREATE_NO_WINDOW: no console flash for the GUI client.
+        cmd.creation_flags(0x0800_0000);
+    }
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("无法启动 {program}: {e}"))?;
+
+    let mut readers = Vec::new();
+    if let Some(stdout) = child.stdout.take() {
+        let tx = tx.clone();
+        let ctx = ctx.clone();
+        let verb = verb.to_string();
+        let reference = reference.to_string();
+        readers.push(std::thread::spawn(move || {
+            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                let _ = tx.send(Event::AppJob {
+                    verb: verb.clone(),
+                    reference: reference.clone(),
+                    line,
+                    running: true,
+                });
+                ctx.request_repaint();
+            }
+        }));
+    }
+    if let Some(stderr) = child.stderr.take() {
+        let tx = tx.clone();
+        let ctx = ctx.clone();
+        let verb = verb.to_string();
+        let reference = reference.to_string();
+        readers.push(std::thread::spawn(move || {
+            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                let _ = tx.send(Event::AppJob {
+                    verb: verb.clone(),
+                    reference: reference.clone(),
+                    line,
+                    running: true,
+                });
+                ctx.request_repaint();
+            }
+        }));
+    }
+    for reader in readers {
+        let _ = reader.join();
+    }
+    let status = child
+        .wait()
+        .map_err(|e| format!("安装脚本状态读取失败: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(match status.code() {
+            Some(code) => format!("安装脚本失败（exit {code}）"),
+            None => "安装脚本被终止".to_string(),
+        })
+    }
+}
+
+fn spawn_app_uninstall(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    org: String,
+    name: String,
+    version: String,
+    purge_models: bool,
+) {
+    std::thread::spawn(move || {
+        let mut path = format!("/v1/apps/{org}/{name}");
+        let mut params: Vec<String> = Vec::new();
+        if !version.is_empty() {
+            params.push(format!("version={version}"));
+        }
+        if purge_models {
+            params.push("purge_models=1".to_string());
+        }
+        if !params.is_empty() {
+            path.push('?');
+            path.push_str(&params.join("&"));
+        }
+        let verb = "卸载".to_string();
+        let result = match delete_json(&path) {
+            Ok(_) => Ok("已卸载".to_string()),
+            Err(err) => Err(err),
+        };
+        let _ = tx.send(Event::AppAction(verb, result));
+        ctx.request_repaint();
+    });
+}
+
+/// Follow an install/prepare job over HTTP and stream its lines to the detail
+/// pane. WebSocket job events are not used for app jobs (they would also drive
+/// the model-loading progress bar).
+fn follow_app_job(
+    tx: Sender<Event>,
+    ctx: egui::Context,
+    job_id: String,
+    verb: String,
+    reference: String,
+) {
+    std::thread::spawn(move || {
+        let mut seen = 0usize;
+        loop {
+            let Some(job) = get_json_timeout(&format!("/v1/jobs/{job_id}"), 20) else {
+                let _ = tx.send(Event::AppAction(
+                    verb,
+                    Err("任务状态读取失败（flashserver 可能已停止）".to_string()),
+                ));
+                ctx.request_repaint();
+                return;
+            };
+            let events = job["events"].as_array().cloned().unwrap_or_default();
+            for ev in events.iter().skip(seen) {
+                let message = ev["message"].as_str().unwrap_or("");
+                if !message.is_empty() {
+                    let _ = tx.send(Event::AppJob {
+                        verb: verb.clone(),
+                        reference: reference.clone(),
+                        line: message.to_string(),
+                        running: true,
+                    });
+                }
+            }
+            seen = events.len();
+            let state = job["state"].as_str().unwrap_or("");
+            let done = state == "done" || state == "failed";
+            let _ = tx.send(Event::AppJob {
+                verb: verb.clone(),
+                reference: reference.clone(),
+                line: String::new(),
+                running: !done,
+            });
+            ctx.request_repaint();
+            if done {
+                let result = if state == "done" {
+                    Ok(format!("{verb}完成"))
+                } else {
+                    Err(job["error"]
+                        .as_str()
+                        .filter(|e| !e.is_empty())
+                        .unwrap_or("任务失败")
+                        .to_string())
+                };
+                // Keep the failure reason in the log too.
+                if let Err(err) = &result {
+                    let _ = tx.send(Event::AppJob {
+                        verb: verb.clone(),
+                        reference: reference.clone(),
+                        line: format!("失败: {err}"),
+                        running: false,
+                    });
+                }
+                let _ = tx.send(Event::AppAction(verb, result));
+                ctx.request_repaint();
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(400));
+        }
+    });
+}
+
+fn action_label(action: &str) -> &'static str {
+    match action {
+        "prepare" => "准备模型",
+        "start" => "启动",
+        "stop" => "停止",
+        _ => "操作",
+    }
 }
 
 fn spawn_catalog(tx: Sender<Event>, ctx: egui::Context, query: String, tag: Option<i64>) {
@@ -4390,7 +7527,7 @@ fn put_json_timeout(path: &str, body: &Value, secs: u64) -> Result<Value, String
         .send_json(body)
     {
         Ok(resp) => resp.into_json::<Value>().map_err(|e| e.to_string()),
-        Err(ureq::Error::Status(_, resp)) => Err(resp.into_string().unwrap_or_default()),
+        Err(ureq::Error::Status(_, resp)) => Err(http_error_message(resp)),
         Err(e) => Err(e.to_string()),
     }
 }
@@ -4404,13 +7541,38 @@ fn post_json_timeout(path: &str, body: &Value, secs: u64) -> Result<Value, Strin
         .send_json(body)
     {
         Ok(resp) => resp.into_json::<Value>().map_err(|e| e.to_string()),
-        Err(ureq::Error::Status(_, resp)) => Err(resp.into_string().unwrap_or_default()),
+        Err(ureq::Error::Status(_, resp)) => Err(http_error_message(resp)),
         Err(e) => Err(e.to_string()),
     }
 }
 
-fn spawn_model_options(tx: Sender<Event>, ctx: egui::Context, reference: String) {
-    std::thread::spawn(move || {
+// Prefer the daemon's JSON `error` text over the raw body in toasts.
+fn http_error_message(resp: ureq::Response) -> String {
+    let text = resp.into_string().unwrap_or_default();
+    if let Ok(v) = serde_json::from_str::<Value>(&text) {
+        if let Some(err) = v["error"].as_str().filter(|e| !e.is_empty()) {
+            return err.to_string();
+        }
+    }
+    if text.is_empty() {
+        "请求失败".to_string()
+    } else {
+        text
+    }
+}
+
+fn delete_json(path: &str) -> Result<Value, String> {
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(60))
+        .build();
+    match agent.delete(&format!("{}{}", api_base(), path)).call() {
+        Ok(resp) => resp.into_json::<Value>().map_err(|e| e.to_string()),
+        Err(ureq::Error::Status(_, resp)) => Err(http_error_message(resp)),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+fn spawn_model_options(tx: Sender<Event>, ctx: egui::Context, reference: String) {    std::thread::spawn(move || {
         let result = get_json_query("/v1/models/options", &[("ref", reference.clone())])
             .ok_or_else(|| "读取启动参数失败：服务不可用".to_string());
         let _ = tx.send(Event::ModelOptions { reference, result });
@@ -4735,6 +7897,9 @@ fn parse_wslconfig(text: &str) -> WslConfig {
             "processors" => cfg.processors = value,
             "swap" => cfg.swap = value,
             "networkingmode" => cfg.mirrored = value.eq_ignore_ascii_case("mirrored"),
+            "automemoryreclaim" => {
+                cfg.auto_memory_reclaim = !value.eq_ignore_ascii_case("disabled")
+            }
             _ => {}
         }
     }
@@ -4807,7 +7972,18 @@ fn update_wslconfig(text: &str, cfg: &WslConfig) -> String {
     if cfg.mirrored {
         managed.push("networkingMode=mirrored".to_string());
     }
-    let keys = ["memory", "processors", "swap", "networkingmode"];
+    managed.push(if cfg.auto_memory_reclaim {
+        "autoMemoryReclaim=gradual".to_string()
+    } else {
+        "autoMemoryReclaim=disabled".to_string()
+    });
+    let keys = [
+        "memory",
+        "processors",
+        "swap",
+        "networkingmode",
+        "automemoryreclaim",
+    ];
     let mut out: Vec<String> = Vec::new();
     let mut in_wsl2 = false;
     let mut seen = false;

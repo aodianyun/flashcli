@@ -6,7 +6,6 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"github.com/aodianyun/flashcli/go/internal/gpu"
+	"github.com/aodianyun/flashcli/go/internal/modelrun"
 	"github.com/aodianyun/flashcli/go/internal/preflight"
 	"github.com/aodianyun/flashcli/go/internal/version"
 )
@@ -130,8 +130,12 @@ func (s *Server) logs(w http.ResponseWriter, r *http.Request) {
 	switch kind {
 	case "", "server":
 		lines := serverLogLines(n)
-		if journal, err := journalTail(n, since); err == nil && len(journal) > 0 {
-			lines = journal
+		// The persisted ring is authoritative (it also receives API and job
+		// lines). journald is only a fallback for an early/uninitialized ring.
+		if len(lines) == 0 {
+			if journal, err := journalTail(n, since); err == nil && len(journal) > 0 {
+				lines = journal
+			}
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"kind": "server", "lines": lines})
 	case "model":
@@ -157,7 +161,7 @@ func (s *Server) logs(w http.ResponseWriter, r *http.Request) {
 }
 
 func serveLogName(refStr string) string {
-	return strings.NewReplacer("/", "_", "\\", "_", ":", "_").Replace(refStr) + ".log"
+	return modelrun.LogName(refStr)
 }
 
 // journalTail reads the service log from journald. The in-memory ring buffer is
@@ -204,6 +208,13 @@ func (s *Server) downloadLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if path := LogFilePath(); path != "" {
+		if _, err := os.Stat(path); err == nil {
+			w.Header().Set("Content-Disposition", "attachment; filename=\"flashserver.log\"")
+			http.ServeFile(w, r, path)
+			return
+		}
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	blob, err := exec.CommandContext(ctx, "journalctl", "-u", "flashserver", "--no-pager", "-o", "short-iso").Output()
@@ -216,35 +227,7 @@ func (s *Server) downloadLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func tailFile(path string, n int) ([]string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	info, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-	const window = 256 * 1024
-	off := info.Size() - window
-	if off < 0 {
-		off = 0
-	}
-	if _, err := f.Seek(off, io.SeekStart); err != nil {
-		return nil, err
-	}
-	blob, err := io.ReadAll(f)
-	if err != nil {
-		return nil, err
-	}
-	all := strings.Split(strings.TrimRight(string(blob), "\n"), "\n")
-	if off > 0 && len(all) > 0 {
-		all = all[1:] // drop the partial first line
-	}
-	if n > len(all) {
-		n = len(all)
-	}
-	return all[len(all)-n:], nil
+	return modelrun.TailLines(path, n)
 }
 
 // ui serves the embedded local console.

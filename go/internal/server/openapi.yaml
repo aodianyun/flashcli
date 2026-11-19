@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: FlashServer local API
-  version: 1.0.7.20261113
+  version: 1.0.8.20261119
   description: |
     Local, single-user model scheduler API served by `flashserver` on
     `http://localhost:8790`. The daemon manages model lifecycle and GPU-aware
@@ -230,6 +230,213 @@ paths:
           $ref: '#/components/responses/Error'
         '502':
           $ref: '#/components/responses/Error'
+  /v1/apps:
+    get:
+      summary: List FlashHub applications with local state
+      description: Proxies FlashHub `/api/v1/apps` (5 min cache) and overlays installed state from the shared app registry.
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: domain, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        '200':
+          description: Applications
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  apps:
+                    type: array
+                    items: { $ref: '#/components/schemas/AppSummary' }
+                  total: { type: integer }
+        '502':
+          $ref: '#/components/responses/Error'
+  /v1/apps/installed:
+    get:
+      summary: Installed applications (shared registry)
+      responses:
+        '200':
+          description: Registry keyed by `<org>/<name>:<version>`
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /v1/apps/{org}/{name}:
+    parameters:
+      - { name: org, in: path, required: true, schema: { type: string } }
+      - { name: name, in: path, required: true, schema: { type: string } }
+      - { name: version, in: query, schema: { type: string } }
+    get:
+      summary: Application manifest plus local state
+      description: Manifest format is specified in docs/app_manifest_standard.md.
+      responses:
+        '200':
+          description: Manifest and optional local record
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  manifest: { type: object, additionalProperties: true }
+                  local: { $ref: '#/components/schemas/AppState' }
+        '502':
+          $ref: '#/components/responses/Error'
+    delete:
+      summary: Uninstall the application state
+      description: Stops its models and removes the registry entry; model caches are kept unless `purge_models=1`.
+      parameters:
+        - { name: purge_models, in: query, schema: { type: string, enum: ['1'] } }
+      responses:
+        '200':
+          description: Uninstalled
+        '404':
+          $ref: '#/components/responses/Error'
+  /v1/apps/{org}/{name}/status:
+    parameters:
+      - { name: org, in: path, required: true, schema: { type: string } }
+      - { name: name, in: path, required: true, schema: { type: string } }
+      - { name: version, in: query, schema: { type: string } }
+    get:
+      summary: Application state with live health
+      responses:
+        '200':
+          description: Application state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppState' }
+        '404':
+          $ref: '#/components/responses/Error'
+  /v1/apps/{org}/{name}/install:
+    parameters:
+      - { name: org, in: path, required: true, schema: { type: string } }
+      - { name: name, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Install an application (async job)
+      description: >
+        Two sides are involved. The application itself is installed on the
+        client OS (for example a Windows exe while the daemon runs in WSL), so
+        the client may run the manifest command itself and report `client`
+        (already handled); `skip` means it was not run and `run` lets the daemon
+        host execute it. A missing or invalid value is rejected because the
+        daemon cannot ask. When `client_os`/`client_arch` are given, they are
+        used for the manifest platform check and command selection (default: the
+        daemon's own platform). URL commands are never fetched — they are
+        reported as a download page. Install only prepares every
+        `default: true` bundle; it never starts the models. Use the start
+        endpoint for that (and for `setup.scripts`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [install_command]
+              properties:
+                version: { type: string }
+                bundles: { type: array, items: { type: string } }
+                install_command:
+                  type: string
+                  enum: [run, skip, client]
+                  description: "`client` = the caller already ran the command on its own platform; `run` = let the daemon host run it; `skip` = do not run it"
+                client_os: { type: string, description: "Platform that owns the application (e.g. windows)" }
+                client_arch: { type: string, description: "arch as used by manifests: x86_64 / arm64" }
+                force: { type: boolean, default: false }
+      responses:
+        '202':
+          description: Job accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAccepted' }
+        '400':
+          $ref: '#/components/responses/Error'
+  /v1/apps/{org}/{name}/prepare:
+    parameters:
+      - { name: org, in: path, required: true, schema: { type: string } }
+      - { name: name, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Prepare default model bundles (async job)
+      description: "Pulls every `default: true` bundle. Never runs the manifest install command."
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                version: { type: string }
+                bundles: { type: array, items: { type: string } }
+      responses:
+        '202':
+          description: Job accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAccepted' }
+        '400':
+          $ref: '#/components/responses/Error'
+  /v1/apps/{org}/{name}/start:
+    parameters:
+      - { name: org, in: path, required: true, schema: { type: string } }
+      - { name: name, in: path, required: true, schema: { type: string } }
+      - { name: version, in: query, schema: { type: string } }
+      - name: async
+        in: query
+        description: "`1` returns a job with start progress (model loading can take a minute)."
+        schema: { type: string, enum: ['1'] }
+    post:
+      summary: Start the application's prepared models
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                setup_scripts:
+                  type: array
+                  items: { type: string }
+                  description: "Confirmed setup script keys; they run in manifest order after the models are ready"
+                client_home: { type: string, description: "Client OS home used by setup scripts (a Windows path is mapped to /mnt/<drive>/... in WSL)" }
+      responses:
+        '200':
+          description: Application state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppState' }
+        '202':
+          description: Async job accepted (`async=1`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAccepted' }
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+  /v1/apps/{org}/{name}/stop:
+    parameters:
+      - { name: org, in: path, required: true, schema: { type: string } }
+      - { name: name, in: path, required: true, schema: { type: string } }
+      - { name: version, in: query, schema: { type: string } }
+      - name: async
+        in: query
+        description: "`1` returns a job with stop progress."
+        schema: { type: string, enum: ['1'] }
+    post:
+      summary: Stop the application's models
+      responses:
+        '200':
+          description: Application state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppState' }
+        '202':
+          description: Async job accepted (`async=1`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAccepted' }
+        '404':
+          $ref: '#/components/responses/Error'
   /v1/storage:
     get:
       summary: Disk usage (unique allocated bytes)
@@ -325,6 +532,10 @@ paths:
               required: [ref]
               properties:
                 ref: { type: string }
+                force:
+                  type: boolean
+                  default: false
+                  description: "Re-download the bundle tree/manifest even when the cache marker is present (model page 重新同步). The model must not be running."
       responses:
         '202':
           description: Pull job accepted
@@ -332,7 +543,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/JobRef' }
         '409':
-          description: Another download is already running
+          description: Another download is running, or the model is loaded (unload it first)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -362,7 +573,7 @@ paths:
           schema: { type: string }
       responses:
         '200':
-          description: SSE stream (`event: progress`, JSON Event payloads)
+          description: "SSE stream (`event: progress` events with JSON payloads)"
           content:
             text/event-stream:
               schema: { type: string }
@@ -910,6 +1121,69 @@ components:
         options:
           type: object
           additionalProperties: { type: string }
+    AppSummary:
+      type: object
+      additionalProperties: true
+      properties:
+        name: { type: string }
+        display_name: { type: string }
+        domain: { type: string }
+        version: { type: string }
+        cover_url: { type: string }
+        supported_os: { type: array, items: { type: string } }
+        supported_arch: { type: array, items: { type: string } }
+        install_commands:
+          type: object
+          additionalProperties: { type: string }
+        model_bundles:
+          type: array
+          items:
+            type: object
+            properties:
+              bundle: { type: string }
+              is_default: { type: boolean }
+        installed: { type: boolean }
+        state: { type: string }
+    AppState:
+      type: object
+      additionalProperties: true
+      properties:
+        app: { type: string }
+        version: { type: string }
+        state: { type: string }
+        installed_at: { type: string }
+        error: { type: string }
+        setup_scripts:
+          type: array
+          items: { type: string }
+          description: "Setup script keys the user confirmed for the current run (replayed after a daemon restore)."
+        setup_plan:
+          type: array
+          description: "Pinned definitions of the confirmed setup scripts; a daemon restore runs these without fetching the manifest."
+          items:
+            type: object
+            additionalProperties: true
+        setup_client_home:
+          type: string
+          description: "Client OS home used when the setup scripts last ran."
+        setup_error:
+          type: string
+          description: "Last setup failure; the app itself stays ready."
+        last_log:
+          type: array
+          items: { type: string }
+          description: "Tail of the last start/install output; shown after a daemon restore when no client job exists."
+        models:
+          type: array
+          items:
+            type: object
+            properties:
+              ref: { type: string }
+              id: { type: string }
+              port: { type: integer }
+              pid: { type: integer }
+              endpoint: { type: string }
+              prepared: { type: boolean }
     StorageArea:
       type: object
       properties:

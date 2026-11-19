@@ -8,7 +8,7 @@
   "entry": {
     "run": { "module": "run", "attr": "RunEngine" }
   },
-  "python_dependencies": { "pip": [] },
+  "python_dependencies": { "pip": [], "torch": false },
   "run_options": [
     { "name": "prompt", "type": "string", "default": "hello", "help": "Text to echo.", "phase": "predict" }
   ],

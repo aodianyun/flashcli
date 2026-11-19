@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/signal"
 	"strconv"
@@ -16,6 +15,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/aodianyun/flashcli/go/internal/modelrun"
 )
 
 // TestMain doubles as a fake `flashcli serve`: when FLASHSERVER_TEST_SERVE is
@@ -84,12 +85,12 @@ func waitHealthy(t *testing.T, p ServeProcess) {
 
 func TestFlashcliLauncherStartsRealProcess(t *testing.T) {
 	logDir := t.TempDir()
-	launcher := FlashcliLauncher{
+	launcher := modelrun.FlashcliLauncher{
 		Bin:      os.Args[0],
 		LogDir:   logDir,
 		ExtraEnv: []string{"FLASHSERVER_TEST_SERVE=1"},
 	}
-	port, err := freePort()
+	port, err := modelrun.FreePort()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +107,7 @@ func TestFlashcliLauncherStartsRealProcess(t *testing.T) {
 		t.Fatalf("endpoint = %s, want %s", p.Endpoint(), want)
 	}
 	waitHealthy(t, p)
-	if portAvailable(port) {
+	if modelrun.PortAvailable(port) {
 		t.Fatal("launched process did not bind the port")
 	}
 	if log := p.LastLog(); !strings.Contains(log, "fake serve") {
@@ -124,7 +125,7 @@ func TestFlashcliLauncherStartsRealProcess(t *testing.T) {
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if portAvailable(port) {
+		if modelrun.PortAvailable(port) {
 			return
 		}
 		time.Sleep(25 * time.Millisecond)
@@ -133,13 +134,13 @@ func TestFlashcliLauncherStartsRealProcess(t *testing.T) {
 }
 
 func TestFlashcliLauncherOptionsAndFlags(t *testing.T) {
-	launcher := FlashcliLauncher{
+	launcher := modelrun.FlashcliLauncher{
 		Bin:      os.Args[0],
 		Host:     "0.0.0.0",
 		LogDir:   t.TempDir(),
 		ExtraEnv: []string{"FLASHSERVER_TEST_SERVE=1"},
 	}
-	port, err := freePort()
+	port, err := modelrun.FreePort()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,50 +159,5 @@ func TestFlashcliLauncherOptionsAndFlags(t *testing.T) {
 	waitHealthy(t, p)
 	if log := p.LastLog(); !strings.Contains(log, "--max-seq 128") || !strings.Contains(log, "0.0.0.0") {
 		t.Fatalf("LastLog = %q", log)
-	}
-}
-
-func TestFlashcliProcessHealthAcceptsHealthz(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-	ts := httptest.NewServer(mux)
-	defer ts.Close()
-
-	p := &flashcliProcess{
-		endpoint: ts.URL,
-		client:   &http.Client{Timeout: 2 * time.Second},
-		done:     make(chan struct{}),
-	}
-	if err := p.Healthy(context.Background()); err != nil {
-		t.Fatalf("Healthy with /healthz only: %v", err)
-	}
-
-	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
-	defer bad.Close()
-	p2 := &flashcliProcess{endpoint: bad.URL, client: &http.Client{Timeout: 2 * time.Second}, done: make(chan struct{})}
-	if err := p2.Healthy(context.Background()); err == nil {
-		t.Fatal("Healthy accepted HTTP 503")
-	}
-}
-
-func TestPortHelpers(t *testing.T) {
-	port, err := freePort()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !portAvailable(port) {
-		t.Fatalf("fresh port %d reported busy", port)
-	}
-	ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ln.Close()
-	if portAvailable(port) {
-		t.Fatalf("bound port %d reported free", port)
 	}
 }

@@ -12,9 +12,55 @@ for commands. Install/build details are in [../desktop/README.md](../desktop/REA
   cards, current API URL.
 - **Models** — local cache plus FlashHub search; per-model Bundle / runtime /
   weights sizes; load, start, stop; run/serve smoke tests with a live log;
-  multi-select cache cleanup.
-- **Logs** — service journal or a model's serve log, with clear and native
-  Save-As.
+  multi-select cache cleanup. A cached model that is not running also offers
+  **更多 → 重新同步**, which force-re-downloads its bundle tree/weights
+  (`/v1/pull {"force":true}`); use it only as a repair for a mutable revision,
+  not instead of a new bundle version.
+- **应用** — a sidebar page for FlashHub apps: a cover-card grid
+  (name, version · domain, description; search and domain filters) plus a
+  detail pane with all available metadata — organization/downloads/status,
+  description, supported OS/arch, every platform install command,
+  dependency bundles and serve options, local state/models, connection URL —
+  and install/start/stop/uninstall through
+  `/v1/apps`. 安装 first shows the manifest install step: a script runs, or an
+  installer URL is downloaded and run, on the client OS (a Windows app installs
+  on Windows, not in WSL) — only after 运行脚本并安装 / 下载并安装; 跳过 installs the
+  models without it, and a plain page URL opens in the browser. Install only
+  installs the application and **prepares** the model bundles; it does not start
+  them — 启动 is a separate action and the point where `setup.scripts` run. The
+  daemon rejects an install without that explicit decision
+  (`install_command: client | run | skip`). Progress streams into the detail pane.
+  When the manifest declares `setup.scripts`, a manual start asks which scripts
+  to run; after the models are ready the daemon runs them in manifest order,
+  verifies `sha256`, and maps the client home into WSL so the application's real
+  config is written. The confirmed definitions, keys and
+  client home are saved; a daemon restart restores the app and automatically
+  re-runs the same scripts for the new connection (no manifest fetch). A failure
+  is logged, shown on the app, and stops the remaining scripts; a ready app also
+  offers **应用配置** to re-run the scripts without restarting the models. The
+  last start output is kept on the app (`last_log`), so a restored app still
+  shows recent lines and a full-log entry.
+  One application installs at a time: while a job runs, its card shows
+  `安装中 · 阶段 xx%` with a bar, a banner appears above the grid, and the other
+  apps' actions are disabled.
+  Everything is served by `flashserver` (`/v1/apps`). The application list and
+  manifests are fetched from FlashHub on every request (no local manifest
+  cache); the desktop keeps the current list/detail in memory, so use 刷新 or
+  reselect after a manifest change. App versions are immutable: publish a new
+  version instead of editing one in place.
+  Uninstall stops the app's models and removes its install record; the optional
+  "同时删除模型缓存" checkbox also deletes that app's bundle/weight caches
+  (a reinstall downloads them again). The app's own installed program and its
+  data are never removed.
+- **Logs** — the service log (日志 page, clear / Save-As) and a model's serve
+  log (模型 → 更多 → 查看日志, with 另存为). The service log covers API calls
+  (method/path/status/duration, credentials redacted), background job steps
+  (app install/start/stop, model load/pull/smoke), setup-script output and
+  clean/uninstall, and is persisted to `~/.flashcli/logs/flashserver.log`
+  (4 MiB rotation with a `.1` backup), so it survives a daemon restart. The
+  page loads once and then appends new lines over `/v1/ws`; successful status
+  and log polling requests are not written to the log. The app detail also
+  keeps the last start log with its own 查看完整日志 entry.
 - **Settings** — service start/stop, auto-start, domestic mirrors, shared-cache
   cleanup, WSL resources and firewall ports, theme (`Ctrl+T`), API docs.
 
@@ -59,8 +105,11 @@ Windows localhost forwarding makes `host=0.0.0.0` reachable at
 3. Applying restarts WSL and `flashserver`; running models are interrupted.
 
 The same panel edits `.wslconfig` `memory`/`processors`/`swap` (empty = WSL
-defaults: 50% RAM, all logical CPUs, 25% swap). These apply to every WSL2 distro.
-Mirrored networking requires Windows 11 22H2+. Public internet access additionally
+defaults: 50% RAM, all logical CPUs, 25% swap). `autoMemoryReclaim=gradual` is
+on by default: WSL returns idle page cache to Windows instead of holding it for
+the whole session (reusable pages, so a later model load may read them from disk
+again). These apply to every WSL2 distro and need a WSL restart. Mirrored
+networking requires Windows 11 22H2+. Public internet access additionally
 needs a Public-profile rule and router port forwarding; never expose the API
 without a token.
 

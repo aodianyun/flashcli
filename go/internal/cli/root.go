@@ -38,7 +38,7 @@ func New() *cobra.Command {
 		SilenceErrors: true,
 	}
 	root.SetVersionTemplate("flashcli {{.Version}}\n")
-	root.AddCommand(runCmd(), serveCmd(), pullCmd(), bundleCmd(), weightsCmd(), modelsCmd(), upgradeCmd(), doctorCmd(), cacheCmd(), duCmd(), versionCmd())
+	root.AddCommand(runCmd(), serveCmd(), pullCmd(), bundleCmd(), weightsCmd(), modelsCmd(), upgradeCmd(), doctorCmd(), cacheCmd(), duCmd(), versionCmd(), appCmd())
 	return root
 }
 

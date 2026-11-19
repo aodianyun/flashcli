@@ -13,8 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aodianyun/flashcli/go/internal/apps"
 	"github.com/aodianyun/flashcli/go/internal/gpu"
 	"github.com/aodianyun/flashcli/go/internal/host"
+	"github.com/aodianyun/flashcli/go/internal/modelrun"
 )
 
 type fakeSource struct{}
@@ -134,6 +136,10 @@ func (f *fakeLauncher) Start(_ context.Context, ref string, port int) (ServeProc
 	p := &fakeServe{ref: ref, endpoint: fmt.Sprintf("http://127.0.0.1:%d", port)}
 	f.procs = append(f.procs, p)
 	return p, nil
+}
+
+func (f *fakeLauncher) StartWithOptions(ctx context.Context, ref string, opts modelrun.LoadOptions) (ServeProcess, error) {
+	return f.Start(ctx, ref, opts.Port)
 }
 
 func fakeInspect(string) (BundleInfo, error) { return BundleInfo{}, nil }
@@ -267,6 +273,378 @@ func TestVRAMAdmission(t *testing.T) {
 	if _, err := m.Load(context.Background(), "demo:1"); !errors.Is(err, ErrResourceExhausted) {
 		t.Fatalf("load error = %v", err)
 	}
+}
+
+// Only resources.min_vram_mib gates admission: no declared value means the
+// bundle is admitted, and the exact requirement needs no extra margin.
+func TestVRAMAdmissionUsesBundleRequirementOnly(t *testing.T) {
+	cases := []struct {
+		name  string
+		free  int64
+		min   int64
+		allow bool
+	}{
+		{name: "no requirement", free: 256 * 1024 * 1024, min: 0, allow: true},
+		{name: "exact match", free: 4096 * 1024 * 1024, min: 4096, allow: true},
+		{name: "one MiB short", free: 4095 * 1024 * 1024, min: 4096, allow: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			free := tc.free
+			m := NewManagerWithOptions(&fakeLauncher{}, ManagerOptions{
+				GPU: func(context.Context) ([]gpu.Device, error) {
+					return []gpu.Device{{MemoryFree: free}}, nil
+				},
+				Inspect: func(string) (BundleInfo, error) {
+					return BundleInfo{MinVRAMMiB: tc.min}, nil
+				},
+			})
+			_, err := m.Load(context.Background(), "demo:1")
+			if tc.allow && err != nil {
+				t.Fatalf("expected admission, got %v", err)
+			}
+			if !tc.allow && !errors.Is(err, ErrResourceExhausted) {
+				t.Fatalf("expected ErrResourceExhausted, got %v", err)
+			}
+		})
+	}
+}
+
+// An app model start must go through the same admission as a model-page load.
+func TestManagerLauncherSharesAdmission(t *testing.T) {
+	m := NewManagerWithOptions(&fakeLauncher{}, ManagerOptions{
+		MaxLoaded: 1,
+		GPU: func(context.Context) ([]gpu.Device, error) {
+			return []gpu.Device{{MemoryFree: 1024 * 1024 * 1024}}, nil
+		},
+		Inspect: func(string) (BundleInfo, error) { return BundleInfo{MinVRAMMiB: 2048}, nil },
+	})
+	launcher := managerLauncher{manager: m}
+	if _, err := launcher.StartWithOptions(context.Background(), "demo:1", modelrun.LoadOptions{}); !errors.Is(err, ErrResourceExhausted) {
+		t.Fatalf("app start error = %v", err)
+	}
+	if _, err := launcher.StartWithOptions(context.Background(), "demo:1", modelrun.LoadOptions{}); err == nil {
+		t.Fatal("expected the second start to be rejected too")
+	}
+}
+
+// A successful app start is owned by the Manager; stopping it frees the slot.
+func TestManagerLauncherStopFreesSlot(t *testing.T) {
+	m := NewManagerWithOptions(&fakeLauncher{}, ManagerOptions{
+		MaxLoaded: 1,
+		GPU: func(context.Context) ([]gpu.Device, error) {
+			return []gpu.Device{{MemoryFree: 16 * 1024 * 1024 * 1024}}, nil
+		},
+		Inspect: func(string) (BundleInfo, error) { return BundleInfo{MinVRAMMiB: 1024}, nil },
+	})
+	launcher := managerLauncher{manager: m}
+	proc, err := launcher.StartWithOptions(context.Background(), "demo:1", modelrun.LoadOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if proc.Endpoint() == "" || proc.PID() == 0 {
+		t.Fatalf("proc = %+v", proc)
+	}
+	if loaded, _ := m.Slots(); loaded != 1 {
+		t.Fatalf("loaded = %d, want 1", loaded)
+	}
+	if err := proc.Stop(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if loaded, _ := m.Slots(); loaded != 0 {
+		t.Fatalf("slot not freed: loaded = %d", loaded)
+	}
+}
+
+// UnloadIfLoaded tells a per-request app service whether the Manager owned the
+// model, so a Stop falls back to the recorded PID only when it did not.
+func TestManagerUnloadIfLoaded(t *testing.T) {
+	m := NewManagerWithOptions(&fakeLauncher{}, ManagerOptions{
+		GPU: func(context.Context) ([]gpu.Device, error) {
+			return []gpu.Device{{MemoryFree: 16 * 1024 * 1024 * 1024}}, nil
+		},
+		Inspect: func(string) (BundleInfo, error) { return BundleInfo{}, nil },
+	})
+	if handled, err := m.UnloadIfLoaded(context.Background(), "demo:1"); handled || err != nil {
+		t.Fatalf("unknown ref: handled=%v err=%v", handled, err)
+	}
+	if _, err := m.Load(context.Background(), "demo:1"); err != nil {
+		t.Fatal(err)
+	}
+	if handled, err := m.UnloadIfLoaded(context.Background(), "demo:1"); !handled || err != nil {
+		t.Fatalf("loaded ref: handled=%v err=%v", handled, err)
+	}
+	if loaded, _ := m.Slots(); loaded != 0 {
+		t.Fatalf("slot not freed: loaded = %d", loaded)
+	}
+}
+
+// A child that died outside the Manager must not be reused: Load starts a
+// fresh process, and List stops advertising it.
+func TestManagerDropsDeadInstances(t *testing.T) {
+	l := &fakeLauncher{}
+	m := NewManagerWithOptions(l, ManagerOptions{Inspect: fakeInspect})
+	if _, err := m.Load(context.Background(), "demo:1"); err != nil {
+		t.Fatal(err)
+	}
+	l.procs[0].stopped = true
+	if _, err := m.Load(context.Background(), "demo:1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(l.procs) != 2 {
+		t.Fatalf("processes = %d, want 2 (dead instance was reused)", len(l.procs))
+	}
+	l.procs[1].stopped = true
+	if got := m.List(); len(got) != 0 {
+		t.Fatalf("List = %+v, want no dead instance", got)
+	}
+}
+
+// Two applications using the same bundle share one process; it stops only when
+// the last owner releases it.
+func TestManagerSharedModelStaysUntilLastOwner(t *testing.T) {
+	l := &fakeLauncher{}
+	m := NewManagerWithOptions(l, ManagerOptions{Inspect: fakeInspect})
+	if _, err := m.LoadFor(context.Background(), "demo:1", "app:a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.LoadFor(context.Background(), "demo:1", "app:b"); err != nil {
+		t.Fatal(err)
+	}
+	if len(l.procs) != 1 {
+		t.Fatalf("processes = %d, want 1 shared", len(l.procs))
+	}
+	handled, err := m.ReleaseFor(context.Background(), "demo:1", "app:a")
+	if !handled || err != nil {
+		t.Fatalf("release a: handled=%v err=%v", handled, err)
+	}
+	if l.procs[0].stopped {
+		t.Fatal("model stopped while app:b still owns it")
+	}
+	if loaded, _ := m.Slots(); loaded != 1 {
+		t.Fatalf("loaded = %d, want 1", loaded)
+	}
+	handled, err = m.ReleaseFor(context.Background(), "demo:1", "app:b")
+	if !handled || err != nil {
+		t.Fatalf("release b: handled=%v err=%v", handled, err)
+	}
+	if !l.procs[0].stopped {
+		t.Fatal("last owner did not stop the model")
+	}
+	if loaded, _ := m.Slots(); loaded != 0 {
+		t.Fatalf("loaded = %d, want 0", loaded)
+	}
+}
+
+// A model loaded from the model page is not unloaded when an app that reused it
+// stops; the model page unload is the explicit override.
+func TestManagerModelPageOwnership(t *testing.T) {
+	l := &fakeLauncher{}
+	m := NewManagerWithOptions(l, ManagerOptions{Inspect: fakeInspect})
+	if _, err := m.Load(context.Background(), "demo:1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.LoadFor(context.Background(), "demo:1", "app:a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.ReleaseFor(context.Background(), "demo:1", "app:a"); err != nil {
+		t.Fatal(err)
+	}
+	if l.procs[0].stopped {
+		t.Fatal("model page instance stopped by an app release")
+	}
+	if err := m.Unload(context.Background(), "demo:1"); err != nil {
+		t.Fatal(err)
+	}
+	if !l.procs[0].stopped {
+		t.Fatal("model page unload did not stop the model")
+	}
+}
+
+// The app launcher must record the owner from the request context so stopping
+// one app does not release a model another app still uses.
+func TestManagerLauncherRegistersAppOwner(t *testing.T) {
+	l := &fakeLauncher{}
+	m := NewManagerWithOptions(l, ManagerOptions{Inspect: fakeInspect})
+	launcher := managerLauncher{manager: m}
+	ctxA := apps.WithOwner(context.Background(), "app:a")
+	ctxB := apps.WithOwner(context.Background(), "app:b")
+	a, err := launcher.StartWithOptions(ctxA, "demo:1", modelrun.LoadOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := launcher.StartWithOptions(ctxB, "demo:1", modelrun.LoadOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(l.procs) != 1 {
+		t.Fatalf("processes = %d, want 1 shared", len(l.procs))
+	}
+	if err := a.Stop(ctxA); err != nil {
+		t.Fatal(err)
+	}
+	if l.procs[0].stopped {
+		t.Fatal("stopping app:a stopped a model still owned by app:b")
+	}
+	if err := b.Stop(ctxB); err != nil {
+		t.Fatal(err)
+	}
+	if !l.procs[0].stopped {
+		t.Fatal("stopping the last owner did not stop the model")
+	}
+}
+
+// Claiming a model that the Manager does not own must not start a duplicate.
+func TestManagerClaimOnlyForResidentModels(t *testing.T) {
+	l := &fakeLauncher{}
+	m := NewManagerWithOptions(l, ManagerOptions{Inspect: fakeInspect})
+	if m.Claim("demo:1", "app:a") {
+		t.Fatal("claimed a model that is not resident")
+	}
+	if len(l.procs) != 0 {
+		t.Fatalf("claim started %d processes", len(l.procs))
+	}
+	if _, err := m.LoadFor(context.Background(), "demo:1", "app:a"); err != nil {
+		t.Fatal(err)
+	}
+	if !m.Claim("demo:1", "app:b") {
+		t.Fatal("claim on a resident model failed")
+	}
+	if _, err := m.ReleaseFor(context.Background(), "demo:1", "app:a"); err != nil {
+		t.Fatal(err)
+	}
+	if l.procs[0].stopped {
+		t.Fatal("model stopped while claim owner app:b is present")
+	}
+}
+
+// A model-page load is persisted and restored by the next daemon; app-only
+// models are restored from the app registry instead.
+func TestManagerRestoresModelPageState(t *testing.T) {
+	state := filepath.Join(t.TempDir(), "models.json")
+	l := &fakeLauncher{}
+	m := NewManagerWithOptions(l, ManagerOptions{Inspect: fakeInspect, StatePath: state})
+	if _, err := m.Load(context.Background(), "demo:1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.LoadFor(context.Background(), "app:1", "app:a"); err != nil {
+		t.Fatal(err)
+	}
+	blob, err := os.ReadFile(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(blob), "demo:1") {
+		t.Fatalf("model-page ref not persisted: %s", blob)
+	}
+	if strings.Contains(string(blob), "app:1") {
+		t.Fatalf("app-owned model must not be persisted as a model-page load: %s", blob)
+	}
+
+	l2 := &fakeLauncher{}
+	m2 := NewManagerWithOptions(l2, ManagerOptions{Inspect: fakeInspect, StatePath: state})
+	if errs := m2.RestoreModels(context.Background()); len(errs) != 0 {
+		t.Fatalf("restore errors: %v", errs)
+	}
+	if _, ok := m2.Endpoint("demo:1"); !ok {
+		t.Fatal("demo:1 not restored")
+	}
+	if len(l2.procs) != 1 {
+		t.Fatalf("restored processes = %d, want 1", len(l2.procs))
+	}
+	if err := m2.Unload(context.Background(), "demo:1"); err != nil {
+		t.Fatal(err)
+	}
+	blob, _ = os.ReadFile(state)
+	if strings.Contains(string(blob), "demo:1") {
+		t.Fatalf("unload did not persist: %s", blob)
+	}
+}
+
+// A failed restore keeps the saved intent so the next start can retry.
+func TestManagerRestoreKeepsFailedModels(t *testing.T) {
+	state := filepath.Join(t.TempDir(), "models.json")
+	if err := os.WriteFile(state, []byte(`{"models":["ok:1","bad:1"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := NewManagerWithOptions(&fakeLauncher{}, ManagerOptions{
+		StatePath: state,
+		Inspect: func(refStr string) (BundleInfo, error) {
+			if refStr == "bad:1" {
+				return BundleInfo{}, errors.New("boom")
+			}
+			return BundleInfo{}, nil
+		},
+	})
+	errs := m.RestoreModels(context.Background())
+	if len(errs) != 1 {
+		t.Fatalf("restore errors = %v, want one", errs)
+	}
+	blob, _ := os.ReadFile(state)
+	if !strings.Contains(string(blob), "ok:1") || !strings.Contains(string(blob), "bad:1") {
+		t.Fatalf("saved intent changed after a partial restore: %s", blob)
+	}
+}
+
+func TestRestoreAppsOnlyWhenModelsWereRunning(t *testing.T) {
+	running := apps.AppState{State: apps.StateReady, Models: []apps.ModelState{{Ref: "a/one:1", PID: 12}}}
+	prepared := apps.AppState{State: apps.StateReady, Models: []apps.ModelState{{Ref: "a/one:1", Prepared: true}}}
+	stopped := apps.AppState{State: apps.StateStopped, Models: []apps.ModelState{{Ref: "a/one:1", PID: 12}}}
+	if !appWasRunning(running) {
+		t.Fatal("running app not detected")
+	}
+	if appWasRunning(prepared) {
+		t.Fatal("start=false app must not be restored")
+	}
+	if appWasRunning(stopped) {
+		t.Fatal("stopped app must not be restored")
+	}
+}
+
+// Re-syncing a cached version passes Force to the puller; a loaded model must
+// be unloaded first.
+func TestPullForceAndBusy(t *testing.T) {
+	p := &capturePuller{}
+	s := &Server{Puller: p, Jobs: NewJobManager()}
+	req := httptest.NewRequest(http.MethodPost, "/v1/pull", strings.NewReader(`{"ref":"demo:1","force":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for !p.force && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !p.force {
+		t.Fatal("pull did not receive force")
+	}
+
+	m := NewManagerWithOptions(&fakeLauncher{}, ManagerOptions{Inspect: fakeInspect})
+	if _, err := m.Load(context.Background(), "demo:1"); err != nil {
+		t.Fatal(err)
+	}
+	s.Manager = m
+	req = httptest.NewRequest(http.MethodPost, "/v1/pull", strings.NewReader(`{"ref":"demo:1"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("loaded model pull status = %d, want 409", rec.Code)
+	}
+}
+
+type capturePuller struct {
+	force bool
+}
+
+func (p *capturePuller) Pull(ctx context.Context, ref string, opts host.PullOptions) (host.PullResult, error) {
+	p.force = opts.Force
+	if opts.Progress != nil {
+		opts.Progress(host.PullEvent{Phase: "done", Ref: ref})
+	}
+	return host.PullResult{BundleRoot: "/tmp/bundle", Checkpoint: "/tmp/weights"}, nil
 }
 
 func TestInspectBundleVRAM(t *testing.T) {

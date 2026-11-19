@@ -20,6 +20,8 @@ every file to its audience and content.
 | [environment.md](environment.md) | users | Environment variables the Go host reads, mirrors, cache paths |
 | [model_bundle_standard.md](model_bundle_standard.md) | integrators | Preset ref syntax + end-user runtime flow |
 | [bundle_publish_standard.md](bundle_publish_standard.md) | bundle authors | **Authoritative** manifest, entry, `.so`, FlashHub layout |
+| [app_manifest_standard.md](app_manifest_standard.md) | app authors / integrators | **Authoritative** FlashHub application manifest (v1): fields, install commands, default bundles |
+| [application_install_plan.md](application_install_plan.md) | maintainers | `flashcli app` install flow, state machine, rollback, commands, milestones |
 | [bundle_execution_abi.md](bundle_execution_abi.md) | bundle authors | `entry.kind` backends, native process / `.so` contracts, conformance |
 | [architecture.md](architecture.md) | contributors | Runtime flow, local service stack, host vs bundle, caches, directory layout |
 | [module_layers.md](module_layers.md) | contributors | Host / infer / protocol ownership and the Go package map |

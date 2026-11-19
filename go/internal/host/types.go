@@ -11,7 +11,14 @@ type PullEvent struct {
 type PullOptions struct {
 	Quiet         bool
 	NoAutoInstall bool
-	Progress      func(PullEvent)
+	// VerifyWeights re-lists the remote weights even when the local download
+	// manifest is complete (explicit `flashcli pull`). App installs leave it
+	// false so an already cached model is used without touching the network.
+	VerifyWeights bool
+	// Force re-downloads the bundle tree/manifest even when the cache marker is
+	// present (model-page 重新同步 for an in-place content refresh).
+	Force    bool
+	Progress func(PullEvent)
 }
 
 // PullResult is the materialized bundle/checkpoint after a successful pull.

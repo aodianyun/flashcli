@@ -15,7 +15,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aodianyun/flashcli/go/internal/apps"
 	"github.com/aodianyun/flashcli/go/internal/host"
+	"github.com/aodianyun/flashcli/go/internal/modelrun"
 )
 
 const (
@@ -103,12 +105,12 @@ func (s *Server) smokeLogPath(refStr string) string {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return ""
 	}
-	name := strings.NewReplacer("/", "_", "\\", "_", ":", "_").Replace(refStr) + ".smoke.log"
+	name := modelrun.LogNameSuffix(refStr, ".smoke")
 	return filepath.Join(dir, name)
 }
 
 func (s *Server) smokeRun(ctx context.Context, refStr, logPath string, emit func(string, string)) error {
-	bin, err := resolveFlashcliBin(s.FlashcliBin)
+	bin, err := modelrun.ResolveBin(s.FlashcliBin)
 	if err != nil {
 		appendSmokeLog(logPath, "启动失败: "+err.Error()+"\n")
 		return err
@@ -218,14 +220,7 @@ func serveModelName(ctx context.Context, client *http.Client, endpoint, refStr s
 			}
 		}
 	}
-	name := refStr
-	if i := strings.LastIndex(name, ":"); i > 0 {
-		name = name[:i]
-	}
-	if i := strings.LastIndex(name, "/"); i >= 0 {
-		name = name[i+1:]
-	}
-	return name
+	return apps.ModelName(refStr)
 }
 
 func appendSmokeLog(path, entry string) {

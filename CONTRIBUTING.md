@@ -279,6 +279,23 @@ Procedure:
 6. **Comments** — New code comments and script headers in English.
 7. **Commits** — Follow the [Git workflow](#git-workflow) section: Conventional Commits (`type(scope): imperative`), **one logical change per commit**, no pushed-history rewrites.
 
+### Shared code (CLI + flashserver)
+
+Any behavior needed by both `go/internal/cli` and `go/internal/server` **must be implemented once in a shared package** and called from both. Do not copy a helper, orchestration sequence, path derivation, or state predicate into a frontend "for now".
+
+| Shared concern | Canonical implementation |
+|---|---|
+| Pull / runtime+venv preparation / weights | `host.Pull`, `host.EnsureRuntime`, `host.ResolveWeights` |
+| Cache discovery, keys, sizes, cleanup | `host.*` |
+| Serve log name / tail / readiness | `modelrun.LogName`, `modelrun.TailLines`, `modelrun.WaitHealthy` |
+| App install/start/stop/state/restore predicate | `apps.Service`, `apps.WasRunning` |
+| Manifest/env/variant/entry resolution | `manifest.*`, `host.ApplyEnv` |
+| GPU / system probes | `gpu.*`, `preflight.*`, `host.EnsureSystemRequirements` |
+
+Before adding code, search for an existing shared function; if the behavior is missing, add it to the shared package first. `go test ./internal/architecture/...` fails on the mechanical re-introductions (direct `nvidia-smi`, log-name `NewReplacer`, `filepath.Walk*`, `.flashcli_download.incomplete`). Full rules: [docs/architecture.md → Shared host services](docs/architecture.md#shared-host-services-cli--flashserver).
+
+**Not shared (keep it in the frontend):** HTTP/auth/jobs/websocket, CLI flags/prompts/output formatting, Manager slot/VRAM/owner admission vs. the CLI's single-process launch, daemon restore scheduling/telemetry, desktop UI, and any other frontend-specific orchestration. The test is simple: if both sides must make the *same decision about the same on-disk state or model readiness*, share it; if it is UX, scheduling policy, or presentation, do not force it into a shared package. Adapters (Launcher/Stopper/Log hooks) may differ.
+
 ## Adding a new bundle / preset ref
 
 1. Copy structure from `bundles/pi05_libero/`, `bundles/groot_n16/`, `bundles/groot_n17/`, or `bundles/higgs_audio/`.

@@ -31,14 +31,13 @@ func installLinux(ctx context.Context, env Env, opts Options, out io.Writer) err
 		return err
 	}
 	cfg, err := json.MarshalIndent(map[string]any{
-		"addr":              opts.Addr,
-		"token":             opts.Token,
-		"flashcli_bin":      filepath.Join(binDir, "flashcli"),
-		"public_host":       "127.0.0.1",
-		"serve_host":        "127.0.0.1",
-		"log_dir":           filepath.Join(opts.Home, "logs", "serve"),
-		"max_loaded":        0,
-		"min_free_vram_mib": 2048,
+		"addr":         opts.Addr,
+		"token":        opts.Token,
+		"flashcli_bin": filepath.Join(binDir, "flashcli"),
+		"public_host":  "127.0.0.1",
+		"serve_host":   "127.0.0.1",
+		"log_dir":      filepath.Join(opts.Home, "logs", "serve"),
+		"max_loaded":   0,
 	}, "", "  ")
 	if err != nil {
 		return err

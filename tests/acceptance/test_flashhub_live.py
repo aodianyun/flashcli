@@ -10,7 +10,7 @@ import os
 
 import pytest
 
-from helpers import run_cli
+from helpers import run_cli, skip_without_gpu
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("FLASHCLI_ACCEPTANCE_NETWORK") != "1",
@@ -27,7 +27,20 @@ def test_live_manifest_resolves(flashcli_bin, cli_env, tmp_path):
     proc = run_cli(flashcli_bin, env, "models", "show", REF, timeout=180)
     assert proc.returncode == 0, (proc.stdout + proc.stderr)[-4000:]
     out = proc.stdout
+    skip_without_gpu(out)
     assert "this machine:" in out
     assert "supported (" in out
     # The bundle must declare at least one environment for this host family.
     assert "sm" in out
+
+
+def test_live_app_install_dry_run(flashcli_bin, cli_env, tmp_path):
+    env = dict(cli_env)
+    env.pop("FLASHCLI_RUNTIME_ENV_KEY", None)
+    env["FLASHCLI_HOME"] = str(tmp_path / "home")
+    proc = run_cli(flashcli_bin, env, "app", "install", "xym/grok", "--dry-run", timeout=180)
+    assert proc.returncode == 0, (proc.stdout + proc.stderr)[-4000:]
+    out = proc.stdout
+    assert "DRY RUN" in out
+    assert "Models:" in out
+    assert "windows" in out or "linux" in out or "darwin" in out

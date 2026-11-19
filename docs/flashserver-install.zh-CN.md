@@ -60,14 +60,14 @@ sudo flashserver-setup
   "public_host": "127.0.0.1",
   "serve_host": "127.0.0.1",
   "log_dir": "/home/me/.flashcli/logs/serve",
-  "max_loaded": 0,
-  "min_free_vram_mib": 2048
+  "max_loaded": 0
 }
 ```
 
-- `max_loaded=0` 只按显存准入。bundle 的 `resources.min_vram_mib` 必须能放进
-  「空闲显存 − `min_free_vram_mib`」，否则 `load` 返回 `409 RESOURCE_EXHAUSTED`；
-  槽位上限也把正在启动的模型计入。
+- `max_loaded=0` 表示不限制槽位。显存准入只看每个 bundle 的
+  `resources.min_vram_mib`：最大一张卡的空闲显存不低于该值时准入，否则 `load`
+  返回 `409 RESOURCE_EXHAUSTED`。未声明该字段的 bundle 不做显存准入；槽位上限
+  仍把正在启动的模型计入。应用启动的模型与模型页使用同一准入。
 - WSL 默认：`addr=0.0.0.0:8790`、`public_host=localhost`、`serve_host=0.0.0.0`
   （Windows 通过 localhost 转发访问服务）。
 - `token` 可选。设置后除 `/health`、`/`、`/docs`、`/ui/*`、`/openapi.yaml` 外的所有
@@ -95,6 +95,20 @@ flashserver-setup.exe --start-service       # 开启开机启动并启动服务
 
 服务状态与开机启动相互独立：停止不会关闭开机启动，开自启也不会启停服务。
 `/v1/system` 报告当前自启状态（`enabled`、`disabled`、`unknown`）。
+
+### 重启后的恢复
+
+服务启动时会恢复上一次会话：
+
+- 模型页加载过的模型会重新加载（集合记录在
+  `~/.flashcli/flashserver/models.json`；本次加载失败的模型会保留在文件中，下次启动
+  继续重试）；
+- 状态为 `ready` 且记录了模型的已安装应用会重新启动，仍走同一套槽位/显存准入与
+  owner 机制。
+
+恢复在后台按顺序执行，不会阻塞 HTTP API；应用恢复失败会写入日志并把状态置为
+`failed`。开机启动只决定服务本身是否随系统启动——客户端应用本体（WorkBuddy、
+Grok CLI 等）仍由它自己的开机启动设置决定。
 
 ## 卸载
 

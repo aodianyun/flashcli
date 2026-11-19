@@ -1,6 +1,6 @@
 [package]
 name = "flashcli-desktop"
-version = "1.0.7"
+version = "1.0.8"
 edition = "2021"
 
 [[bin]]
@@ -18,7 +18,7 @@ ureq = { version = "2", features = ["json"] }
 ewebsock = "0.6"
 webbrowser = "1"
 rfd = "0.15"
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 
 [build-dependencies]
 winres = "0.1"

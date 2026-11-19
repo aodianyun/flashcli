@@ -14,9 +14,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/aodianyun/flashcli/go/internal/apps"
 	"github.com/aodianyun/flashcli/go/internal/flashhub"
 	"github.com/aodianyun/flashcli/go/internal/gpu"
 	"github.com/aodianyun/flashcli/go/internal/host"
+	"github.com/aodianyun/flashcli/go/internal/modelrun"
 	"github.com/aodianyun/flashcli/go/internal/paths"
 	"github.com/aodianyun/flashcli/go/internal/version"
 )
@@ -49,6 +51,8 @@ type Server struct {
 	ServeHost     string
 	PublicHost    string
 	ServeSettings *serveSettingsStore
+	// AppService returns the shared application service (nil = default).
+	AppService func() *apps.Service
 
 	pullBusy atomic.Bool
 
@@ -72,14 +76,14 @@ func New(addr string) *Server {
 	}
 	gpuProbe := gpu.Probe
 	store := newServeSettingsStore("")
-	logDir := filepath.Join(paths.Home(), "flashserver", "logs", "serve")
+	logDir := filepath.Join(paths.Home(), "logs", "serve")
 	return &Server{
 		Addr:          addr,
 		Source:        defaultSource{},
 		Puller:        hostPuller{},
 		Catalog:       flashhub.NewClient(),
 		Jobs:          NewJobManager(),
-		Manager:       NewManagerWithOptions(FlashcliLauncher{LogDir: logDir}, ManagerOptions{GPU: gpuProbe, ServeSettings: store}),
+		Manager:       NewManagerWithOptions(modelrun.FlashcliLauncher{LogDir: logDir}, ManagerOptions{GPU: gpuProbe, ServeSettings: store}),
 		GPU:           gpuProbe,
 		Started:       time.Now(),
 		LogDir:        logDir,
@@ -121,9 +125,18 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/models/smoke", s.smokeModel)
 	mux.HandleFunc("POST /v1/models/clean", s.cleanModels)
 	mux.HandleFunc("POST /v1/storage/clean", s.cleanStorage)
+	mux.HandleFunc("GET /v1/apps", s.appList)
+	mux.HandleFunc("GET /v1/apps/installed", s.appInstalled)
+	mux.HandleFunc("GET /v1/apps/{org}/{name}", s.appManifest)
+	mux.HandleFunc("GET /v1/apps/{org}/{name}/status", s.appStatus)
+	mux.HandleFunc("POST /v1/apps/{org}/{name}/install", s.appInstall)
+	mux.HandleFunc("POST /v1/apps/{org}/{name}/prepare", s.appPrepare)
+	mux.HandleFunc("POST /v1/apps/{org}/{name}/start", s.appStart)
+	mux.HandleFunc("POST /v1/apps/{org}/{name}/stop", s.appStop)
+	mux.HandleFunc("DELETE /v1/apps/{org}/{name}", s.appUninstall)
 	mux.HandleFunc("POST /v1/ui/chat", s.uiChat)
 	mux.HandleFunc("GET /", s.ui)
-	return s.authorize(mux)
+	return s.logRequests(s.authorize(mux))
 }
 
 func (s *Server) authorize(next http.Handler) http.Handler {
@@ -150,6 +163,9 @@ func (s *Server) authorize(next http.Handler) http.Handler {
 }
 
 func (s *Server) Run(ctx context.Context) error {
+	// Persist the service log (API calls, job steps, scripts) so a restart
+	// still shows earlier activity.
+	InitLogFile(filepath.Join(paths.Home(), "logs", "flashserver.log"))
 	s.startGPUHistory(ctx)
 	go s.forwardJobs(ctx)
 	// Go treats the IPv4 wildcard 0.0.0.0 as a wildcard and may bind a
@@ -182,6 +198,7 @@ func (s *Server) Run(ctx context.Context) error {
 			s.Manager.Close(shutdownCtx)
 		}
 	}()
+	s.restoreOnStart(ctx)
 	log.Printf("flashserver %s listening on http://%s", version.Version, ln.Addr())
 	err = srv.Serve(ln)
 	if errors.Is(err, http.ErrServerClosed) {

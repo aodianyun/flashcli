@@ -11,6 +11,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests" / "conformance" / "fixtures"
 CELL = "sm89-cu124-linux-x86_64-py312"
@@ -41,8 +43,16 @@ def prepare_bundle(name: str, home: Path) -> Path:
     return dest
 
 
-def run_cli(binary: Path, env: dict[str, str], *args: str, timeout: int = 600):
-    return subprocess.run([str(binary), *args], env=env, capture_output=True, text=True, timeout=timeout)
+def run_cli(binary: Path, env: dict[str, str], *args: str, timeout: int = 600, input: str | None = None):
+    return subprocess.run(
+        [str(binary), *args], env=env, capture_output=True, text=True, timeout=timeout, input=input
+    )
+
+
+def skip_without_gpu(out: str) -> None:
+    """`models show` drops the runtime env block when nvidia-smi is unusable."""
+    if "No NVIDIA GPU detected" in out:
+        pytest.skip("host has no usable NVIDIA GPU (nvidia-smi on PATH?)")
 
 
 def free_port() -> int:
