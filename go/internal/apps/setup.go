@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -45,14 +46,12 @@ func (s *Service) runSetupScript(ctx context.Context, script SetupScript, conn C
 	if strings.TrimSpace(conn.BaseURL) == "" || len(conn.Models) == 0 {
 		return fmt.Errorf("application is not running (no connection)")
 	}
-	blob, err := downloadSetupScript(ctx, script.URL)
+	blob, cached, err := s.setupScriptBytes(ctx, script)
 	if err != nil {
 		return err
 	}
-	sum := sha256.Sum256(blob)
-	actual := hex.EncodeToString(sum[:])
-	if !strings.EqualFold(actual, strings.TrimSpace(script.SHA256)) {
-		return fmt.Errorf("sha256 mismatch: manifest=%s actual=%s", script.SHA256, actual)
+	if cached {
+		fmt.Fprintf(s.out(), "setup %s: using verified cached script\n", script.Key)
 	}
 	args, err := setupArgs(script.Args, conn)
 	if err != nil {
@@ -85,6 +84,60 @@ func (s *Service) runSetupScript(ctx context.Context, script SetupScript, conn C
 		return fmt.Errorf("script failed: %w", err)
 	}
 	return nil
+}
+
+// setupScriptBytes returns a verified script body. The content-addressed cache
+// (by manifest sha256) lets a restore replay without the network and avoids
+// executing a transiently different CDN response.
+func (s *Service) setupScriptBytes(ctx context.Context, script SetupScript) ([]byte, bool, error) {
+	want := strings.ToLower(strings.TrimSpace(script.SHA256))
+	path := ""
+	if want != "" && s.Home != "" {
+		path = filepath.Join(s.Home, "setup-cache", want+".py")
+		if blob, err := os.ReadFile(path); err == nil {
+			if setupHash(blob) == want {
+				return blob, true, nil
+			}
+			// A corrupted cache must not hide a real failure.
+			_ = os.Remove(path)
+		}
+	}
+	blob, err := downloadSetupScript(ctx, script.URL)
+	if err != nil {
+		return nil, false, err
+	}
+	actual := setupHash(blob)
+	if !strings.EqualFold(actual, want) {
+		// CDN edges can briefly serve a stale/partial variant; retry once
+		// before failing the integrity check.
+		time.Sleep(300 * time.Millisecond)
+		if retried, retryErr := downloadSetupScript(ctx, script.URL); retryErr == nil {
+			blob = retried
+			actual = setupHash(blob)
+		}
+	}
+	if !strings.EqualFold(actual, want) {
+		return nil, false, fmt.Errorf(
+			"sha256 mismatch: manifest=%s actual=%s size=%d",
+			strings.TrimSpace(script.SHA256), actual, len(blob),
+		)
+	}
+	if path != "" {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err == nil {
+			tmp := path + ".tmp"
+			if err := os.WriteFile(tmp, blob, 0o600); err == nil {
+				_ = os.Rename(tmp, path)
+			} else {
+				_ = os.Remove(tmp)
+			}
+		}
+	}
+	return blob, false, nil
+}
+
+func setupHash(blob []byte) string {
+	sum := sha256.Sum256(blob)
+	return hex.EncodeToString(sum[:])
 }
 
 func downloadSetupScript(ctx context.Context, url string) ([]byte, error) {

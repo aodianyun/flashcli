@@ -181,9 +181,11 @@ Rules:
   `{api_key}`). Selecting no scripts clears the saved selection.
 - Scripts run in manifest order; the first failure stops the remaining scripts
   and is reported in the app log. The running app stays `ready`.
-- Download and `sha256` verification happen before execution. A mismatch or a
-  non-zero exit is reported in the app log; it does not mark the running app as
-  failed.
+- Download and `sha256` verification happen before execution. A mismatch is
+  retried once (CDN edges can briefly serve a stale variant), then reported in
+  the app log and never executed. A verified script is cached by `sha256`
+  under `~/.flashcli/setup-cache/`, so a restore can replay it without the
+  network; the running app is not marked failed.
 - Scripts must only modify the application's own configuration.
 - App versions are immutable: publish a new app version when adding or changing
   setup scripts.

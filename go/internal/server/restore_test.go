@@ -239,6 +239,16 @@ func TestRestoreReplaysSavedSetupScripts(t *testing.T) {
 	if _, err := os.Stat(file); err != nil {
 		t.Fatalf("restore did not replay the saved setup scripts: %v", err)
 	}
+	// The script writes its output before StartWithSetup returns and stores
+	// last_log; wait for the final state instead of racing that save.
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		st, _, _ = registry.Get(key)
+		if strings.Contains(strings.Join(st.LastLog, "\n"), "setup conf") {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	if st.SetupError != "" {
 		t.Fatalf("setup_error = %q", st.SetupError)
 	}

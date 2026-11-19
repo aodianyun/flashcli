@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/aodianyun/flashcli/go/internal/flashhub"
@@ -423,6 +424,89 @@ func TestExplicitEmptySetupSelectionClearsSavedPlan(t *testing.T) {
 	st, _, _ := svc.Registry.Get("xym/workbuddy:1.0.0")
 	if len(st.SetupScripts) != 0 || len(st.SetupPlan) != 0 {
 		t.Fatalf("explicit empty selection kept scripts=%v plan=%v", st.SetupScripts, st.SetupPlan)
+	}
+}
+
+func TestSetupScriptUsesVerifiedCache(t *testing.T) {
+	if _, err := setupPython(); err != nil {
+		t.Skip(err)
+	}
+	var mu sync.Mutex
+	body := []byte(setupScriptBody)
+	hits := 0
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		hits++
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+	previous := http.DefaultTransport
+	http.DefaultTransport = srv.Client().Transport
+	defer func() { http.DefaultTransport = previous }()
+
+	sum := sha256.Sum256([]byte(setupScriptBody))
+	hash := hex.EncodeToString(sum[:])
+	script := SetupScript{Key: "x", Kind: "python", URL: srv.URL, SHA256: hash}
+	conn := Connection{BaseURL: "http://127.0.0.1:1/v1", APIKey: "local", Models: []string{"m"}}
+	svc := &Service{Home: t.TempDir(), Out: io.Discard}
+	home := t.TempDir()
+	if err := svc.runSetupScript(context.Background(), script, conn, home); err != nil {
+		t.Fatal(err)
+	}
+	cache := filepath.Join(svc.Home, "setup-cache", hash+".py")
+	if _, err := os.Stat(cache); err != nil {
+		t.Fatalf("verified script was not cached: %v", err)
+	}
+
+	// The CDN now serves different bytes; the verified cache must win.
+	mu.Lock()
+	body = []byte("import sys\nsys.exit(9)\n")
+	mu.Unlock()
+	if err := svc.runSetupScript(context.Background(), script, conn, home); err != nil {
+		t.Fatalf("cached script was not used: %v", err)
+	}
+	mu.Lock()
+	count := hits
+	mu.Unlock()
+	if count != 1 {
+		t.Fatalf("script downloaded %d times, want 1", count)
+	}
+}
+
+func TestSetupScriptRetriesTransientMismatch(t *testing.T) {
+	if _, err := setupPython(); err != nil {
+		t.Skip(err)
+	}
+	var mu sync.Mutex
+	hits := 0
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		hits++
+		if hits == 1 {
+			_, _ = w.Write([]byte("stale edge response\n"))
+			return
+		}
+		_, _ = w.Write([]byte(setupScriptBody))
+	}))
+	defer srv.Close()
+	previous := http.DefaultTransport
+	http.DefaultTransport = srv.Client().Transport
+	defer func() { http.DefaultTransport = previous }()
+
+	sum := sha256.Sum256([]byte(setupScriptBody))
+	script := SetupScript{Key: "x", Kind: "python", URL: srv.URL, SHA256: hex.EncodeToString(sum[:])}
+	svc := &Service{Home: t.TempDir(), Out: io.Discard}
+	conn := Connection{BaseURL: "http://127.0.0.1:1/v1", APIKey: "local", Models: []string{"m"}}
+	if err := svc.runSetupScript(context.Background(), script, conn, t.TempDir()); err != nil {
+		t.Fatalf("retry did not recover: %v", err)
+	}
+	mu.Lock()
+	count := hits
+	mu.Unlock()
+	if count != 2 {
+		t.Fatalf("downloads = %d, want 2", count)
 	}
 }
 
