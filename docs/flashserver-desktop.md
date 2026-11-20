@@ -8,7 +8,9 @@ for commands. Install/build details are in [../desktop/README.md](../desktop/REA
 
 ## Features
 
-- **Overview** — GPU/VRAM/CPU/RAM cards and 5-minute charts, service and disk
+Sidebar order: **应用 → 模型 → 状态 → 日志 → 设置**.
+
+- **Status** — GPU/VRAM/CPU/RAM cards and 5-minute charts, service and disk
   cards, current API URL.
 - **Models** — local cache plus FlashHub search; per-model Bundle / runtime /
   weights sizes; load, start, stop; run/serve smoke tests with a live log;
@@ -17,11 +19,12 @@ for commands. Install/build details are in [../desktop/README.md](../desktop/REA
   (`/v1/pull {"force":true}`); use it only as a repair for a mutable revision,
   not instead of a new bundle version.
 - **应用** — a sidebar page for FlashHub apps: a cover-card grid
-  (name, version · domain, description; search and domain filters) plus a
-  detail pane with all available metadata — organization/downloads/status,
-  description, supported OS/arch, every platform install command,
-  dependency bundles and serve options, local state/models, connection URL —
-  and install/start/stop/uninstall through
+  (name, version · domain, description; search and domain filters; category chips
+  are ordered 全部, 通用Agent, 专用Agent, 音视频制作, then extra domains
+  alphabetically) plus a detail pane with all available metadata —
+  organization/downloads/status, description, supported OS/arch, every platform
+  install command, dependency bundles and serve options, local state/models,
+  connection URL — and install/start/stop/uninstall through
   `/v1/apps`. 安装 first shows the manifest install step: a script runs, or an
   installer URL is downloaded and run, on the client OS (a Windows app installs
   on Windows, not in WSL) — only after 运行脚本并安装 / 下载并安装; 跳过 installs the

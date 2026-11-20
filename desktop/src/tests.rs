@@ -108,15 +108,21 @@ fn csv_list_joins_strings_only() {
 }
 
 #[test]
-fn app_domains_are_unique_and_skip_blanks() {
+fn app_domains_are_unique_ordered_and_skip_blanks() {
     let list = vec![
-        serde_json::json!({"domain": "通用Agent"}),
         serde_json::json!({"domain": "专用Agent"}),
+        serde_json::json!({"domain": "Zebra"}),
+        serde_json::json!({"domain": "通用Agent"}),
+        serde_json::json!({"domain": "音视频制作"}),
+        serde_json::json!({"domain": "Alpha"}),
         serde_json::json!({"domain": " 通用Agent "}),
         serde_json::json!({"domain": ""}),
         serde_json::json!({}),
     ];
-    assert_eq!(app_domains(&list), vec!["通用Agent", "专用Agent"]);
+    assert_eq!(
+        app_domains(&list),
+        vec!["通用Agent", "专用Agent", "音视频制作", "Alpha", "Zebra"]
+    );
     assert!(app_domains(&[]).is_empty());
 }
 
