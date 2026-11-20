@@ -117,13 +117,24 @@ Architecture rule: [docs/architecture.md](docs/architecture.md) → Shared host 
 Rules:
 
 - Branch work off `dev`; open PRs **into `dev`**. `main` is updated from `dev` only after validation.
-- Sync `dev` → `main` (**squash-and-record**):
+- Sync `dev` → `main` (**squash-and-record**). The squash commit **must carry a
+  body summarizing the user-visible changes since the previous sync**; do not
+  leave only a `chore(sync)` subject:
 
   ```bash
   # main: collapse dev into a single commit (keeps main linear)
   git switch main && git pull origin main
   git merge --squash dev
-  git commit -m "chore(sync): squash merge dev into main"
+  git commit -F - <<'MSG'
+  chore(sync): merge dev into main (1.0.9.20261120)
+
+  Features:
+  - desktop: sidebar order is Applications, Models, Status, Logs, Settings
+  - desktop: application category chips use a fixed order
+
+  Fixes:
+  - desktop: category chips no longer follow the FlashHub list order
+  MSG
   git push origin main
 
   # dev: record the squash so future syncs don't replay changes / re-conflict
@@ -133,7 +144,10 @@ Rules:
   ```
 
   - `main` gains exactly **one** commit per sync and stays linear; `dev` keeps its granular history.
-  - `dev` individual commit messages are **not** carried into `main` (they remain on `dev`) — this is the accepted trade-off of the squash flow.
+  - The commit body is the audit trail for `main`: group the user-visible
+    Features/Fixes since the previous sync (release notes are a good source);
+    never list raw commit hashes or internal refactors.
+  - `dev` individual commit messages are **not** carried into `main` (they remain on `dev`) — this is the accepted trade-off of the squash flow, which is why the body is required.
   - Always do the `-s ours` record step on `dev` after squashing; otherwise the next `main`→`dev` merge replays squashed changes and conflicts.
 - **Never rewrite pushed history** — no force-push to `main`/`dev`; fix forward with new commits.
 - Rebase your branch on `dev` before merging; resolve conflicts locally (do not merge `main` into a feature branch just to update it).
