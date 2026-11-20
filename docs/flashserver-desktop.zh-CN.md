@@ -8,14 +8,17 @@ Windows 安装包内置 `flashcli-desktop.exe`（Rust + egui/eframe，不用 Web
 
 ## 功能
 
-- **概览** —— GPU/显存/CPU/内存卡片与 5 分钟曲线、服务与磁盘卡片、当前 API 地址。
+侧边栏顺序：**应用 → 模型 → 状态 → 日志 → 设置**。
+
+- **状态** —— GPU/显存/CPU/内存卡片与 5 分钟曲线、服务与磁盘卡片、当前 API 地址。
 - **模型** —— 本地缓存 + FlashHub 搜索；分开展示 Bundle / 运行时 / 权重大小；
   加载、启动、停止；run/serve 冒烟测试带实时日志；多选清理。已缓存且未运行的模型
   还提供 **更多 → 重新同步**，强制重新下载 bundle 树/权重
   （`/v1/pull {"force":true}`）；仅作为可变 revision 的修复手段，正常更新应发布新的
   bundle 版本。
 - **应用** —— 左侧独立菜单页：封面卡片网格（上方封面按原图比例完整显示，下方名称、
-  版本 · domain、简介；搜索与 domain 过滤各占一行）+ 详情区展示能拿到的信息
+  版本 · domain、简介；搜索与 domain 过滤各占一行；分类顺序固定为
+  全部、通用Agent、专用Agent、音视频制作，其余 domain 按字母序追加）+ 详情区展示能拿到的信息
   （组织/下载量/状态、简介、supported OS/arch、各平台安装命令、依赖模型与
   serve options、本地状态与模型、接入地址），并支持安装/启动/停止/卸载；数据全部来自
   `flashserver` 的 `/v1/apps`。应用列表和 manifest 每次请求都从 FlashHub 实时获取

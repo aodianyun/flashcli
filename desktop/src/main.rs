@@ -48,7 +48,7 @@ enum Tab {
 impl Tab {
     fn label(self) -> &'static str {
         match self {
-            Tab::Overview => "概览",
+            Tab::Overview => "状态",
             Tab::Models => "模型",
             Tab::Apps => "应用",
             Tab::Logs => "日志",
@@ -5061,7 +5061,7 @@ impl eframe::App for App {
             )
             .show(ctx, |ui| {
                 ui.add_space(8.0);
-                for tab in [Tab::Overview, Tab::Models, Tab::Apps, Tab::Logs, Tab::Settings] {
+                for tab in [Tab::Apps, Tab::Models, Tab::Overview, Tab::Logs, Tab::Settings] {
                     if nav_item(ui, self.tab == tab, tab.label()).clicked() {
                         self.tab = tab;
                         if tab == Tab::Logs {
@@ -6098,17 +6098,30 @@ fn app_list_key(app: &Value) -> String {
     )
 }
 
-/// Unique non-empty `domain` values from a list response, first-seen order.
+/// Unique non-empty `domain` values from a list response in a stable order:
+/// the known product categories first, then any extras alphabetically.
 fn app_domains(list: &[Value]) -> Vec<String> {
-    let mut domains: Vec<String> = Vec::new();
+    const ORDER: [&str; 3] = ["通用Agent", "专用Agent", "音视频制作"];
+    let mut seen: Vec<String> = Vec::new();
     for app in list {
         if let Some(domain) = app["domain"].as_str().map(|s| s.trim()).filter(|s| !s.is_empty()) {
-            if !domains.iter().any(|seen| seen == domain) {
-                domains.push(domain.to_string());
+            if !seen.iter().any(|known| known == domain) {
+                seen.push(domain.to_string());
             }
         }
     }
-    domains
+    let mut known: Vec<String> = ORDER
+        .iter()
+        .filter(|name| seen.iter().any(|domain| domain == *name))
+        .map(|name| name.to_string())
+        .collect();
+    let mut extras: Vec<String> = seen
+        .into_iter()
+        .filter(|domain| !ORDER.contains(&domain.as_str()))
+        .collect();
+    extras.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+    known.extend(extras);
+    known
 }
 
 /// True when the manifest's platform command is a download page, not a script.
