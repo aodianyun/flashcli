@@ -56,9 +56,9 @@ Write-Host "flashcli Windows package $Version"
 if (-not $SkipClient) {
     Require-Command "cargo" "install the Rust MSVC toolchain (rustup default stable-x86_64-pc-windows-msvc)"
     Write-Host "[1/3] desktop client ..."
-    $runningClient = Get-Process FlashServer -ErrorAction SilentlyContinue
+    $runningClient = Get-Process flashcli-desktop -ErrorAction SilentlyContinue
     if ($runningClient) {
-        Write-Host "stopping running FlashServer client ..."
+        Write-Host "stopping running flashcli-desktop client ..."
         $runningClient | Stop-Process -Force
         Start-Sleep -Milliseconds 400
     }

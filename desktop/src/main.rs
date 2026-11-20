@@ -13,12 +13,31 @@ use serde_json::Value;
 
 static API_BASE: OnceLock<String> = OnceLock::new();
 
+const STATE_DIR_NAME: &str = "flashcli-desktop";
+const LEGACY_STATE_DIR_NAME: &str = "FlashServer";
+
+/// Per-user Windows-side client state (settings, the WSL distro marker and the
+/// setup API URL). The legacy `FlashServer` directory is renamed on first use
+/// so an upgrade keeps its settings and the distro marker.
+fn state_dir() -> Option<PathBuf> {
+    if let Some(base) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from) {
+        let dir = base.join(STATE_DIR_NAME);
+        let legacy = base.join(LEGACY_STATE_DIR_NAME);
+        if !dir.exists() && legacy.exists() && std::fs::rename(&legacy, &dir).is_err() {
+            // A running setup log can hold a handle; keep using the legacy
+            // directory so this run still works.
+            return Some(legacy);
+        }
+        return Some(dir);
+    }
+    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config").join(STATE_DIR_NAME))
+}
+
 /// The setup engine picks a free Windows port when the default 8790 is in a
 /// Hyper-V/WinNAT excluded range and records it here.
 fn api_base() -> &'static str {
     API_BASE.get_or_init(|| {
-        if let Some(dir) = std::env::var_os("LOCALAPPDATA") {
-            let path = PathBuf::from(dir).join("FlashServer").join("api-url.txt");
+        if let Some(path) = state_dir().map(|dir| dir.join("api-url.txt")) {
             if let Ok(text) = std::fs::read_to_string(path) {
                 let url = text.trim().trim_end_matches('/');
                 if url.starts_with("http://") || url.starts_with("https://") {
@@ -7651,8 +7670,7 @@ fn spawn_smoke(tx: Sender<Event>, ctx: egui::Context, ref_str: String) {
 
 #[cfg(windows)]
 fn wsl_distro() -> String {
-    if let Some(dir) = std::env::var_os("LOCALAPPDATA") {
-        let path = PathBuf::from(dir).join("FlashServer").join("distro.txt");
+    if let Some(path) = state_dir().map(|dir| dir.join("distro.txt")) {
         if let Ok(text) = std::fs::read_to_string(path) {
             let name = text.trim();
             if !name.is_empty() {
@@ -8180,10 +8198,7 @@ fn spawn_apply_wsl(
 // ---------- settings / fonts / theme ----------
 
 fn settings_path() -> Option<PathBuf> {
-    let base = std::env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
-    Some(base.join("FlashServer").join("settings.json"))
+    Some(state_dir()?.join("settings.json"))
 }
 
 fn load_settings() -> Settings {

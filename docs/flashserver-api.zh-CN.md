@@ -3,7 +3,7 @@
 <p align="right"><a href="flashserver-api.md">English</a> · <strong>简体中文</strong></p>
 
 守护进程在本机 `127.0.0.1:8790` 提供 HTTP API（Windows 安装器可能选择其他端口，
-见 `%LOCALAPPDATA%\FlashServer\api-url.txt`）。[openapi.yaml](openapi.yaml) 是
+见 `%LOCALAPPDATA%\flashcli-desktop\api-url.txt`）。[openapi.yaml](openapi.yaml) 是
 **权威契约**，服务也在 `/openapi.yaml` 提供；HTML 参考页在 `/docs`。
 
 默认关闭鉴权。配置 token 后，除 `/health`、`/`、`/docs`、`/ui/*`、`/openapi.yaml`
