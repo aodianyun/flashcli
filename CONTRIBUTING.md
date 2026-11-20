@@ -191,7 +191,7 @@ unpublished test/draft releases.
 
 **Host (Go) release checklist:**
 
-1. Bump **both** `[project].version` in `pyproject.toml` and `version` in `desktop/Cargo.toml` on `dev` (desktop uses the three-part prefix, e.g. `1.0.8`); commit (`chore(release): bump version to X`). Packaging fails if they diverge. The host version is `X.Y.Z.YYYYMMDD` (no dots in the date); the release tag is `v<version>` (e.g. `v1.0.8.20261119`).
+1. Bump **both** `[project].version` in `pyproject.toml` and `version` in `desktop/Cargo.toml` on `dev` (desktop uses the three-part prefix, e.g. `1.0.9`); commit (`chore(release): bump version to X`). Packaging fails if they diverge. The host version is `X.Y.Z.YYYYMMDD` (no dots in the date); the release tag is `v<version>` (e.g. `v1.0.9.20261120`).
 2. Sync `dev` → `main` (squash-and-record, above) so `main` carries the validated commit. Before tagging, also check the live FlashHub index layout (index JSON only, a few KiB): `FLASHCLI_FLASHHUB_LIVE=1 pytest tests/test_flashhub_index_contract.py`.
 3. On Windows from `main`, build the installer:
    `powershell -ExecutionPolicy Bypass -File scripts/build_windows_package.ps1`

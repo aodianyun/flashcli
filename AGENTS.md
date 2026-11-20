@@ -87,4 +87,4 @@ Details: `docs/module_layers.md`, `docs/architecture.md`, `docs/bundle_execution
 - Do not commit secrets/tokens, `dist/`, `build/`, `.native-cache/`, `logs/`, weights, or FlashRT source.
 - `bundles/<name>/README.md` is user-facing (FlashHub); `BUILD.md` is maintainer-facing.
 - Do not commit FlashRT source into this repo; it is a sibling clone used only as build input.
-- Version is single-sourced from root `pyproject.toml [project].version`; `scripts/build_go.sh` injects it into the Go binary via `-ldflags`. The host version is `X.Y.Z.YYYYMMDD` (no dots in the date) and the release tag is `v<version>` (for example `v1.0.8.20261119`). The desktop `Cargo.toml` keeps the three-part prefix (for example `1.0.8`) and packaging fails if it does not match.
+- Version is single-sourced from root `pyproject.toml [project].version`; `scripts/build_go.sh` injects it into the Go binary via `-ldflags`. The host version is `X.Y.Z.YYYYMMDD` (no dots in the date) and the release tag is `v<version>` (for example `v1.0.9.20261120`). The desktop `Cargo.toml` keeps the three-part prefix (for example `1.0.9`) and packaging fails if it does not match.
