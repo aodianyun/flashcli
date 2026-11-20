@@ -117,9 +117,12 @@ Architecture rule: [docs/architecture.md](docs/architecture.md) → Shared host 
 Rules:
 
 - Branch work off `dev`; open PRs **into `dev`**. `main` is updated from `dev` only after validation.
-- Sync `dev` → `main` (**squash-and-record**). The squash commit **must carry a
-  body summarizing the user-visible changes since the previous sync**; do not
-  leave only a `chore(sync)` subject:
+- Sync `dev` → `main` (**squash-and-record**). **Do not run this sync or push
+  `main` without explicit maintainer approval.** Prepare the squash locally,
+  show the pending features/commits and the proposed subject/body, and wait for
+  confirmation. The squash commit **must carry a body summarizing the
+  user-visible changes since the previous sync**; do not leave only a
+  `chore(sync)` subject:
 
   ```bash
   # main: collapse dev into a single commit (keeps main linear)
