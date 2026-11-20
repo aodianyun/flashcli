@@ -21,13 +21,15 @@
 - 退出码 **3** 表示需要重启 Windows，重启后再运行一次。重复运行是幂等的，用于修复
   安装，不会重复创建服务。
 - 若 `8790` 被 Windows 保留（Hyper-V/WinNAT），setup 自动选下一个空闲端口并写入
-  `%LOCALAPPDATA%\FlashServer\api-url.txt`；客户端、安装器和 API 文档都读取该文件。
+  `%LOCALAPPDATA%\flashcli-desktop\api-url.txt`；客户端、安装器和 API 文档都读取该文件。
 - 新安装把发行版导入为 `flashserver_ubuntu`；已有 `/etc/flashserver/config.json` 的
-  旧 `Ubuntu` 会被复用。实际名称在 `%LOCALAPPDATA%\FlashServer\distro.txt`。
+  旧 `Ubuntu` 会被复用。实际名称在 `%LOCALAPPDATA%\flashcli-desktop\distro.txt`。
 - 新安装默认启用国内镜像，并添加 `FlashServer models` 防火墙规则
   （Private/Domain，默认放行所有 TCP 端口）。
 - 失败对话框只显示 ASCII 日志片段；完整日志在
-  `%LOCALAPPDATA%\FlashServer\logs\setup.log`。
+  `%LOCALAPPDATA%\flashcli-desktop\logs\setup.log`。
+- Windows 端客户端状态目录为 `%LOCALAPPDATA%\flashcli-desktop`；升级时会自动重命名
+  旧目录 `%LOCALAPPDATA%\FlashServer`。全新安装目录为 `%ProgramFiles%\flashcli-desktop`。
 
 ### Linux
 
@@ -120,7 +122,7 @@ sudo flashserver-setup --uninstall          # 保留模型缓存和发行版
 |---|---|
 | `--purge-models` | `FLASHCLI_HOME`（bundle、权重、运行时、缓存）以及解压出的 `flashcli-bundle` |
 | `--remove-cli` | `/usr/local/bin/flashcli` |
-| `--purge-settings` | 桌面设置和安装日志（`%LOCALAPPDATA%\FlashServer`） |
+| `--purge-settings` | 桌面设置和安装日志（`%LOCALAPPDATA%\flashcli-desktop`） |
 | `--purge-distro` | 当前 WSL 发行版及其 `ext4.vhdx`（内部数据全部丢失；仅 WSL） |
 
 Windows 卸载器提供同样的四项清理和全选；静默卸载保留全部数据。卸载时若模型正在
@@ -129,7 +131,7 @@ Windows 卸载器提供同样的四项清理和全选；静默卸载保留全部
 ## 存储与网络
 
 - **磁盘位置**：权重和运行时在 WSL 的 `ext4.vhdx` 里，默认与安装目录同级
-  （安装在 `Program Files` 下时为 `%LOCALAPPDATA%\FlashServerWSL`）。删除数据不会
+  （安装在 `Program Files` 下时为 `%LOCALAPPDATA%\flashcli-desktop-wsl`）。删除数据不会
   自动缩小：先用 `flashcli du` / `flashcli cache clean` / `flashcli bundle clean`
   清理，再用 `wsl --manage <distro> --set-sparse true` 或 `diskpart` 压缩。
 - **受限网络**：`wsl --install` 无法访问 Store/GitHub（或 90 秒无进度）时，setup 从
@@ -151,8 +153,8 @@ journalctl -u flashserver -n 100 --no-pager
 ```
 
 服务以 root 运行（除非用了 `--home`，`FLASHCLI_HOME=/root/.flashcli`）；实际发行版
-名称见 `%LOCALAPPDATA%\FlashServer\distro.txt`。安装与守护进程日志：Windows 在
-`%LOCALAPPDATA%\FlashServer\logs\setup.log`，发行版内在 `~/.flashcli/logs`。
+名称见 `%LOCALAPPDATA%\flashcli-desktop\distro.txt`。安装与守护进程日志：Windows 在
+`%LOCALAPPDATA%\flashcli-desktop\logs\setup.log`，发行版内在 `~/.flashcli/logs`。
 
 耗时参考（RTX 4060 8 GB、约 100 Mbit/s）：安装器已缓存 4–6 秒（缺少 WSL2 时
 5–15 分钟并通常需重启一次）；Bundle 同步约 46 秒 / 181 MiB；权重约 6–7 分钟 /

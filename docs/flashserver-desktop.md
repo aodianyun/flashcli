@@ -118,11 +118,11 @@ without a token.
 
 ## Settings and files
 
-- `%LOCALAPPDATA%\FlashServer\settings.json` — theme, firewall ports, stop-WSL
+- `%LOCALAPPDATA%\flashcli-desktop\settings.json` — theme, firewall ports, stop-WSL
   behavior.
-- `%LOCALAPPDATA%\FlashServer\distro.txt` — the WSL distro the client controls
+- `%LOCALAPPDATA%\flashcli-desktop\distro.txt` — the WSL distro the client controls
   (`flashserver_ubuntu`, or a legacy `Ubuntu`).
-- `%LOCALAPPDATA%\FlashServer\api-url.txt` — the daemon URL, including a
+- `%LOCALAPPDATA%\flashcli-desktop\api-url.txt` — the daemon URL, including a
   non-default port.
 
 Theme is dark by default and applied at startup (independent of the Windows app

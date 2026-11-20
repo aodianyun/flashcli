@@ -98,10 +98,10 @@ token 的情况下直接暴露 API。
 
 ## 设置与文件
 
-- `%LOCALAPPDATA%\FlashServer\settings.json` —— 主题、防火墙端口、停止时是否关闭 WSL。
-- `%LOCALAPPDATA%\FlashServer\distro.txt` —— 客户端控制的 WSL 发行版
+- `%LOCALAPPDATA%\flashcli-desktop\settings.json` —— 主题、防火墙端口、停止时是否关闭 WSL。
+- `%LOCALAPPDATA%\flashcli-desktop\distro.txt` —— 客户端控制的 WSL 发行版
   （`flashserver_ubuntu`，或旧 `Ubuntu`）。
-- `%LOCALAPPDATA%\FlashServer\api-url.txt` —— 守护进程地址（可能不是默认端口）。
+- `%LOCALAPPDATA%\flashcli-desktop\api-url.txt` —— 守护进程地址（可能不是默认端口）。
 
 主题默认深色，启动时直接应用（不受 Windows 应用主题影响）。服务状态与开机启动相互
 独立：停止不会关闭开机启动，开自启也不会启停服务。服务按钮走 `wsl.exe`（不需要 UAC）；

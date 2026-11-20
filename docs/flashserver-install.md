@@ -22,15 +22,18 @@ client:
 - Exit code **3** means Windows must restart; run the installer again afterwards.
   Re-running is idempotent and repairs the install without duplicating services.
 - If Windows reserves `8790` (Hyper-V/WinNAT), setup picks the next free port and
-  records the URL in `%LOCALAPPDATA%\FlashServer\api-url.txt`; the client,
+  records the URL in `%LOCALAPPDATA%\flashcli-desktop\api-url.txt`; the client,
   installer, and API docs read that file.
 - New installs import the distro as `flashserver_ubuntu`; an existing `Ubuntu`
   that already has `/etc/flashserver/config.json` is reused. The active name is
-  in `%LOCALAPPDATA%\FlashServer\distro.txt`.
+  in `%LOCALAPPDATA%\flashcli-desktop\distro.txt`.
 - New installs enable domestic mirrors and add the `FlashServer models` firewall
   rule (Private/Domain, all TCP by default).
 - The error dialog shows an ASCII-only log tail; the full trace is
-  `%LOCALAPPDATA%\FlashServer\logs\setup.log`.
+  `%LOCALAPPDATA%\flashcli-desktop\logs\setup.log`.
+- Windows-side client state lives in `%LOCALAPPDATA%\flashcli-desktop`; an
+  upgrade renames the legacy `%LOCALAPPDATA%\FlashServer` directory
+  automatically. A clean install uses `%ProgramFiles%\flashcli-desktop`.
 
 ### Linux
 
@@ -129,7 +132,7 @@ sudo flashserver-setup --uninstall          # keeps model caches and the distro
 |---|---|
 | `--purge-models` | `FLASHCLI_HOME` (bundles, weights, runtimes, caches) and the extracted `flashcli-bundle` |
 | `--remove-cli` | `/usr/local/bin/flashcli` |
-| `--purge-settings` | desktop settings and the installer log (`%LOCALAPPDATA%\FlashServer`) |
+| `--purge-settings` | desktop settings and the installer log (`%LOCALAPPDATA%\flashcli-desktop`) |
 | `--purge-distro` | the active WSL distro and its `ext4.vhdx` (all data inside; WSL only) |
 
 The Windows uninstaller offers the same four cleanups plus select-all; a silent
@@ -139,7 +142,7 @@ its jobs first (cached state resumes on the next install).
 ## Storage and networks
 
 - **Disk location**: weights and runtimes live in the WSL `ext4.vhdx`, defaulting
-  to a sibling of the install directory (`%LOCALAPPDATA%\FlashServerWSL` under
+  to a sibling of the install directory (`%LOCALAPPDATA%\flashcli-desktop-wsl` under
   `Program Files`). Deleting data does not shrink it: clean with `flashcli du` /
   `flashcli cache clean` / `flashcli bundle clean`, then compact with
   `wsl --manage <distro> --set-sparse true` or `diskpart`.
@@ -164,8 +167,8 @@ journalctl -u flashserver -n 100 --no-pager
 ```
 
 The service runs as root (`FLASHCLI_HOME=/root/.flashcli` unless `--home` was
-used); the active distro name is in `%LOCALAPPDATA%\FlashServer\distro.txt`.
-Setup and daemon logs: `%LOCALAPPDATA%\FlashServer\logs\setup.log` on Windows,
+used); the active distro name is in `%LOCALAPPDATA%\flashcli-desktop\distro.txt`.
+Setup and daemon logs: `%LOCALAPPDATA%\flashcli-desktop\logs\setup.log` on Windows,
 `~/.flashcli/logs` inside the distro.
 
 Typical timings (RTX 4060 8 GB, ~100 Mbit/s): installer 4–6 s warm (5–15 min and

@@ -49,7 +49,7 @@ Python tests only cover `flashcli_bundle` (protocol/infer) + conformance now; in
 - `go/cmd/flashserver` (daemon), `go/cmd/flashserver-setup` (installer backend), `go/internal/server` (HTTP API + console), `go/internal/setup` (Linux/WSL install), `go/internal/gpu` (nvidia-smi telemetry).
 - The console is embedded from `go/internal/server/web` (`go:embed`); no Node build. API auth is **off by default** (local single-user); `--token` enables `X-Flashcli-Token`/Bearer. `FLASHCLI_WEB_DIR` overrides assets for development.
 - `docs/openapi.yaml` is the authoritative HTTP contract and is served at `/openapi.yaml`. A copy lives at `go/internal/server/openapi.yaml`; `TestOpenAPISpecInSync` fails if they drift — copy the docs file after editing.
-- Windows UI installer: `installer/windows/flashserver.iss` + `scripts/build_windows_installer.ps1` (needs Inno Setup 6). It consumes `dist/go` produced by `scripts/build_go.sh` / a local build.
+- Windows UI installer: `installer/windows/flashcli-desktop.iss` + `scripts/build_windows_installer.ps1` (needs Inno Setup 6). It consumes `dist/go` produced by `scripts/build_go.sh` / a local build.
 - WSL: the setup writes a per-user `ONLOGON` task with a hidden `sleep infinity` keepalive (WSL `vmIdleTimeout` stops the distro otherwise). Service PATH includes `/usr/lib/wsl/lib` for `nvidia-smi`.
 - Go tests for `server`, `cuda`, `nativeabi`, `nativeexec` only build/run on Linux (purego); on Windows run them in WSL, e.g. `cd go && /usr/local/go/bin/go test ./...`.
 
@@ -83,7 +83,7 @@ Details: `docs/module_layers.md`, `docs/architecture.md`, `docs/bundle_execution
 - Code, shell, and JSON/YAML comments in **English**; user docs English with a **`*.zh-CN.md` mirror kept in sync in the same change**.
 - **Docs**: see [CONTRIBUTING.md](CONTRIBUTING.md) → Documentation. Keep docs clear, concise, accurate, complete; one concept per doc, no duplication; **delete/fix outdated content**; update the authoritative spec + bundle README/BUILD + `environment.md` when behavior changes.
 - **Release notes**: follow [CONTRIBUTING.md](CONTRIBUTING.md) → Release notes standard (one-line overview + **Features/Fixes** + Full Changelog; no extra sections; do not repeat the asset list) on **both** GitHub and Gitee; host releases are **incremental** (keep previous releases/tags). Write them as a **comparison with the previous published release** — Features are capabilities absent from `vPREV`, Fixes are `vPREV` behavior that was broken; never dump branch commits.
-- **Git / commits**: see [CONTRIBUTING.md](CONTRIBUTING.md) → Git workflow. In short: branch off `dev`, PR into `dev`; Conventional Commits, **one logical change per commit**; sync `dev` → `main` via squash-and-record; never force-push `main`/`dev`.
+- **Git / commits**: see [CONTRIBUTING.md](CONTRIBUTING.md) → Git workflow. In short: branch off `dev`, PR into `dev`; Conventional Commits, **one logical change per commit**; sync `dev` → `main` via squash-and-record **with a short feature summary in the subject and Features/Fixes in the body**; never force-push `main`/`dev`. **Never push to `main` (including syncs or hotfixes) without explicit maintainer approval** — prepare the commits locally and wait for confirmation.
 - Do not commit secrets/tokens, `dist/`, `build/`, `.native-cache/`, `logs/`, weights, or FlashRT source.
 - `bundles/<name>/README.md` is user-facing (FlashHub); `BUILD.md` is maintainer-facing.
 - Do not commit FlashRT source into this repo; it is a sibling clone used only as build input.

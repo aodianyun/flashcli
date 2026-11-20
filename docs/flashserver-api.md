@@ -3,7 +3,7 @@
 <p align="right"><strong>English</strong> · <a href="flashserver-api.zh-CN.md">简体中文</a></p>
 
 The daemon serves a local HTTP API on `127.0.0.1:8790` (the installer may choose
-another port on Windows — read `%LOCALAPPDATA%\FlashServer\api-url.txt`).
+another port on Windows — read `%LOCALAPPDATA%\flashcli-desktop\api-url.txt`).
 [openapi.yaml](openapi.yaml) is the **authoritative** contract and is also served
 at `/openapi.yaml`; an HTML reference is at `/docs`.
 

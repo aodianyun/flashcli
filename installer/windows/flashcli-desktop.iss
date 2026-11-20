@@ -1,4 +1,4 @@
-﻿; FlashServer Windows UI installer (Inno Setup 6+).
+﻿; flashcli-desktop Windows UI installer (Inno Setup 6+).
 ;
 ; Build on Windows after scripts/build_go.sh has produced dist/go:
 ;   powershell -ExecutionPolicy Bypass -File scripts/build_windows_installer.ps1
@@ -15,13 +15,13 @@
 
 [Setup]
 AppId={{D3F7A5E2-8C1B-4F6A-9E2D-7B4C1A9F3E21}
-AppName=FlashServer
+AppName=flashcli-desktop
 AppVersion={#AppVersion}
-SetupIconFile=flashserver.ico
+SetupIconFile=flashcli-desktop.ico
 AppPublisher=FlashHub
 AppPublisherURL=https://flashhub.top
-DefaultDirName={autopf}\FlashServer
-DefaultGroupName=FlashServer
+DefaultDirName={autopf}\flashcli-desktop
+DefaultGroupName=flashcli-desktop
 DisableProgramGroupPage=yes
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64
@@ -31,7 +31,7 @@ OutputBaseFilename=flashcli-desktop-setup-windows-amd64-v{#AppVersion}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
-UninstallDisplayIcon={app}\payload\flashserver-setup.exe
+UninstallDisplayIcon={app}\flashcli-desktop.exe
 SetupLogging=yes
 UsePreviousAppDir=yes
 CloseApplications=yes
@@ -74,6 +74,22 @@ var
   WSLDirPage: TInputDirWizardPage;
   UninstallForm: TSetupForm;
   CbAll, CbModels, CbCli, CbSettings, CbDistro: TCheckBox;
+
+// The setup engine keeps Windows-side state (client settings, the distro
+// marker and the setup log) under %LOCALAPPDATA%\flashcli-desktop. Older
+// releases used "FlashServer"; the engine migrates it on first use, so reads
+// fall back to the legacy path.
+function StateDir: String;
+begin
+  Result := ExpandConstant('{localappdata}') + '\flashcli-desktop';
+end;
+
+function ReadStateFile(const Name: String; var A: AnsiString): Boolean;
+begin
+  Result := LoadStringFromFile(StateDir + '\' + Name, A);
+  if not Result then
+    Result := LoadStringFromFile(ExpandConstant('{localappdata}') + '\FlashServer\' + Name, A);
+end;
 
 // Extra arguments for `flashserver-setup --uninstall`, decided by the
 // checkboxes shown before the uninstall starts.
@@ -144,7 +160,7 @@ var
 begin
   UninstallForm := CreateCustomForm();
   try
-    UninstallForm.Caption := 'FlashServer 卸载选项';
+    UninstallForm.Caption := 'flashcli-desktop 卸载选项';
     UninstallForm.ClientWidth := ScaleX(540);
     UninstallForm.ClientHeight := ScaleY(304);
     UninstallForm.Position := poScreenCenter;
@@ -162,7 +178,7 @@ begin
     CbAll.Left := ScaleX(16);
     CbAll.Top := ScaleY(46);
     CbAll.Width := ScaleX(508);
-    CbAll.Caption := '全选（删除所有 FlashServer 数据）';
+    CbAll.Caption := '全选（删除所有 flashcli-desktop 数据）';
     CbAll.Checked := False;
     CbAll.OnClick := @SelectAllClick;
 
@@ -187,7 +203,7 @@ begin
     CbSettings.Left := ScaleX(16);
     CbSettings.Top := ScaleY(148);
     CbSettings.Width := ScaleX(508);
-    CbSettings.Caption := '客户端设置（%LOCALAPPDATA%\FlashServer）';
+    CbSettings.Caption := '客户端设置（%LOCALAPPDATA%\flashcli-desktop）';
     CbSettings.Checked := False;
 
     CbDistro := TCheckBox.Create(UninstallForm);
@@ -246,7 +262,7 @@ begin
     else if ResultCode <> 0 then
       MsgBox('flashserver-setup --uninstall exited with code ' +
         IntToStr(ResultCode) + '.' + #13#10#13#10 +
-        'See ' + ExpandConstant('{localappdata}') + '\FlashServer\logs\setup.log.', mbError, MB_OK);
+        'See ' + StateDir + '\logs\setup.log.', mbError, MB_OK);
   end
   else if (CurUninstallStep = usPostUninstall) and PurgeSettings then
   begin
@@ -254,7 +270,10 @@ begin
     // client state can go. Model caches (~/.flashcli) are controlled by
     // --purge-models and must not be removed here.
     if GetEnv('LOCALAPPDATA') <> '' then
-      DelTree(GetEnv('LOCALAPPDATA') + '\FlashServer', True, True, True);
+    begin
+      DelTree(StateDir, True, True, True);
+      DelTree(ExpandConstant('{localappdata}') + '\FlashServer', True, True, True);
+    end;
   end;
 end;
 
@@ -529,7 +548,7 @@ var
   S: String;
 begin
   Result := 'http://127.0.0.1:8790';
-  if LoadStringFromFile(GetEnv('LOCALAPPDATA') + '\FlashServer\api-url.txt', A) then
+  if ReadStateFile('api-url.txt', A) then
   begin
     S := Trim(String(A));
     if (Copy(S, 1, 7) = 'http://') or (Copy(S, 1, 8) = 'https://') then
@@ -543,7 +562,7 @@ var
   S: String;
 begin
   Result := 'Ubuntu';
-  if LoadStringFromFile(ExpandConstant('{localappdata}') + '\FlashServer\distro.txt', A) then
+  if ReadStateFile('distro.txt', A) then
   begin
     S := Trim(String(A));
     if S <> '' then
@@ -568,14 +587,14 @@ begin
   ProgressCancelled := False;
   LastElapsed := -1;
   ProgressPath := ExpandConstant('{tmp}\flashserver-progress.txt');
-  LogPath := ExpandConstant('{localappdata}') + '\FlashServer\logs\setup.log';
+  LogPath := StateDir + '\logs\setup.log';
   DeleteFile(ProgressPath);
   WSLArgs := '';
   if Trim(WSLDirPage.Values[0]) <> '' then
     WSLArgs := ' --wsl-dir "' + WSLDirPage.Values[0] + '"';
 
   ProgressPage.Msg1Label.Caption :=
-    'Preparing the FlashServer environment' + #13#10#13#10 +
+    'Preparing the flashcli-desktop environment' + #13#10#13#10 +
     'Checking WSL2 and Ubuntu. On a new PC this can take several minutes.';
   ProgressPage.Msg2Label.Visible := False;
   ProgressPage.SetProgress(0, 800);
@@ -644,7 +663,7 @@ begin
         else if Elapsed <> LastElapsed then
         begin
           ProgressPage.Msg1Label.Caption :=
-            'Preparing the FlashServer environment (' + IntToStr(Elapsed) + 's)' + CrLf +
+            'Preparing the flashcli-desktop environment (' + IntToStr(Elapsed) + 's)' + CrLf +
             CrLf + 'Starting the setup engine...' + CrLf +
             'Log: ' + LogPath;
           ProgressPage.SetProgress(0, 800);
@@ -676,14 +695,14 @@ begin
             IntToStr(DoneCode) + ').'
         else
         begin
-          ProgressPage.Msg1Label.Caption := 'Verifying the FlashServer environment' +
+          ProgressPage.Msg1Label.Caption := 'Verifying the flashcli-desktop environment' +
             CrLf + CrLf + 'Checking the systemd service and the local API...';
           ProgressPage.SetProgress(800, 800);
           // The setup engine already waited for systemd and /health and printed
           // DONE 0. Do not repeat the WSL check from the 32-bit installer:
           // sysnative/WSL resolution can produce a false negative.
           Sleep(500);
-          ProgressPage.Msg1Label.Caption := 'FlashServer is ready' + #13#10#13#10 +
+          ProgressPage.Msg1Label.Caption := 'flashcli-desktop is ready' + #13#10#13#10 +
             'The service is active and the local API responded during setup.';
           ProgressPage.SetProgress(800, 800);
           Sleep(700);
@@ -700,12 +719,12 @@ begin
     Abort;
   if SetupReboot then
     MsgBox('WSL2 has been enabled, but Windows must be restarted before Ubuntu can be installed.' + #13#10#13#10 +
-      'Restart the computer, then run FlashServer Setup again to finish the installation.',
+      'Restart the computer, then run flashcli-desktop Setup again to finish the installation.',
       mbInformation, MB_OK)
   else if not Result then
   begin
     if SetupError = '' then
-      SetupError := 'FlashServer setup did not complete.';
+      SetupError := 'flashcli-desktop setup did not complete.';
     SetupError := SetupError + #13#10#13#10 +
       'Log: ' + LogPath + #13#10#13#10 +
       'Last output (ASCII only; see setup.log for full text):' + #13#10 + LogTail(LogPath, 1500);
@@ -742,8 +761,8 @@ end;
 
 procedure InitializeWizard;
 begin
-  ProgressPage := CreateOutputProgressPage('Setting up FlashServer',
-    'FlashServer runs inside WSL2. Setup installs Ubuntu and the resident service.');
+  ProgressPage := CreateOutputProgressPage('Setting up flashcli-desktop',
+    'flashcli-desktop runs inside WSL2. Setup installs Ubuntu and the resident service.');
   { The stock output page has two one-line labels. Turn the first one into a
     multi-line log view and move the progress bar below it. }
   ProgressPage.Msg1Label.AutoSize := False;
@@ -764,7 +783,7 @@ begin
   WSLDirPage := CreateInputDirPage(wpSelectDir,
     'WSL data directory',
     'Where should the Ubuntu virtual disk live?',
-    'FlashServer runs inside WSL2. The Ubuntu disk holds model weights and runtimes, so choose a drive with at least 30 GB free. The default is a sibling of the installation directory (FlashServerWSL), or %LOCALAPPDATA%\FlashServerWSL when installing under Program Files; leave it empty to keep the WSL default.',
+    'flashcli-desktop runs inside WSL2. The Ubuntu disk holds model weights and runtimes, so choose a drive with at least 30 GB free. The default is a sibling of the installation directory (flashcli-desktop-wsl), or %LOCALAPPDATA%\flashcli-desktop-wsl when installing under Program Files; leave it empty to keep the WSL default.',
     False, '');
   WSLDirPage.Add('WSL data directory (leave empty for the WSL default):');
 end;
@@ -775,9 +794,9 @@ var
 begin
   Base := AddBackslash(ExtractFileDir(WizardDirValue));
   if Pos('\PROGRAM FILES', Uppercase(Base)) > 0 then
-    Result := ExpandConstant('{localappdata}') + '\FlashServerWSL'
+    Result := ExpandConstant('{localappdata}') + '\flashcli-desktop-wsl'
   else
-    Result := Base + 'FlashServerWSL';
+    Result := Base + 'flashcli-desktop-wsl';
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
@@ -792,22 +811,22 @@ begin
     if SetupReboot then
       WizardForm.FinishedLabel.Caption :=
         'Windows must be restarted to finish enabling WSL2.' + #13#10 + #13#10 +
-        'Restart the computer, then run FlashServer Setup again. The second run installs Ubuntu, ' +
+        'Restart the computer, then run flashcli-desktop Setup again. The second run installs Ubuntu, ' +
         'the service, and verifies readiness.'
     else if SetupOK then
       WizardForm.FinishedLabel.Caption :=
-        'FlashServer is installed and ready.' + #13#10 + #13#10 +
+        'flashcli-desktop is installed and ready.' + #13#10 + #13#10 +
         'Environment: WSL2 + Ubuntu + systemd service (verified)' + #13#10 +
         'Health: ' + ClientAPIURL + '/health' + #13#10 +
         'API docs: ' + ClientAPIURL + '/docs'
     else
       WizardForm.FinishedLabel.Caption :=
-        'FlashServer installation needs attention.' + #13#10 + #13#10 +
-        'Check ' + ExpandConstant('{localappdata}') + '\FlashServer\logs\setup.log and run the installer again.';
+        'flashcli-desktop installation needs attention.' + #13#10 + #13#10 +
+        'Check ' + StateDir + '\logs\setup.log and run the installer again.';
   end;
 end;
 
 [Messages]
-WelcomeLabel2=This will install FlashServer, enable WSL2/Ubuntu when missing, and configure the resident model scheduler.%n%nAdministrator privileges and internet access are required. Enabling WSL2 may require one restart.
-FinishedHeadingLabel=FlashServer Setup
-FinishedLabel=FlashServer is installed and its service has been started.%n%nThe desktop client is opened automatically; API docs are at http://localhost:8790/docs.
+WelcomeLabel2=This will install flashcli-desktop, enable WSL2/Ubuntu when missing, and configure the resident model scheduler.%n%nAdministrator privileges and internet access are required. Enabling WSL2 may require one restart.
+FinishedHeadingLabel=flashcli-desktop Setup
+FinishedLabel=flashcli-desktop is installed and its service has been started.%n%nThe desktop client is opened automatically; API docs are at http://localhost:8790/docs.

@@ -151,12 +151,12 @@ func (w *appendFile) Write(p []byte) (int, error) {
 
 // openSetupLog writes the full setup trace (including WSL/schtasks output) so
 // the UI installer and support can diagnose failures. Windows keeps all
-// Windows-side state under %LOCALAPPDATA%\FlashServer; the Linux setup and
+// Windows-side state under %LOCALAPPDATA%\flashcli-desktop; the Linux setup and
 // flashcli continue to use $FLASHCLI_HOME/logs.
 func openSetupLog() *os.File {
 	dir := filepath.Join(paths.Home(), "logs")
-	if base := os.Getenv("LOCALAPPDATA"); base != "" {
-		dir = filepath.Join(base, "FlashServer", "logs")
+	if state := setup.WindowsStateDir(); state != "" {
+		dir = filepath.Join(state, "logs")
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil

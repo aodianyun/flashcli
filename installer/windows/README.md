@@ -31,10 +31,10 @@ powershell -ExecutionPolicy Bypass -File scripts/build_windows_installer.ps1
 
 ```text
 UI installer (admin)
-  → install payload under %ProgramFiles%\FlashServer\payload
+  → install payload under %ProgramFiles%\flashcli-desktop\payload
   → flashserver-setup.exe --backend wsl --bin-dir ... --progress-file ...
   → [1/8] check/enable WSL2 (`wsl --install --no-distribution`, DISM fallback)
-  → [2/8] register the FlashServer distro (new: import as `flashserver_ubuntu`; legacy `Ubuntu` with config reused)
+  → [2/8] register the flashcli-desktop WSL distro (new: import as `flashserver_ubuntu`; legacy `Ubuntu` with config reused)
   → [3/8] enable systemd
   → [4/8] copy flashcli/flashserver into WSL
   → [5/8] write /etc/flashserver/config.json + systemd unit
@@ -52,8 +52,15 @@ Cancel button. Cancelling or closing the wizard stops the setup engine with
 The API port defaults to `8790`. If Windows has that port in a Hyper-V/WinNAT
 excluded range (bind fails with access denied), setup tries `18790`, `28790`,
 and so on, writes the chosen port into the WSL config, and records the Windows
-URL in `%LOCALAPPDATA%\FlashServer\api-url.txt`. The client and installer read
+URL in `%LOCALAPPDATA%\flashcli-desktop\api-url.txt`. The client and installer read
 that file, so no manual port configuration is needed.
+
+Windows-side state moved from `%LOCALAPPDATA%\FlashServer` to
+`%LOCALAPPDATA%\flashcli-desktop`, and the default WSL data directory from
+`FlashServerWSL` to `flashcli-desktop-wsl`. The setup engine renames the legacy
+state directory on first run, so existing settings, the API URL, and the distro
+marker are kept. An existing install keeps its previous directory on upgrade
+(`UsePreviousAppDir=yes`); a clean install uses `%ProgramFiles%\flashcli-desktop`.
 
 The payload also contains `flashcli-bundle.tar.gz`. Setup extracts it under
 `/usr/local/share/flashcli/flashcli-bundle` and writes
@@ -68,7 +75,7 @@ pair and the network checksum file are not bundled; setup only downloads when
 the matching `--bin-dir` assets are absent.
 
 Uninstall asks four optional cleanup checkboxes (model caches, the `flashcli`
-CLI, client settings, and the whole FlashServer WSL distro) and passes them to
+CLI, client settings, and the whole flashcli-desktop WSL distro) and passes them to
 `flashserver-setup --uninstall` (`--purge-models`, `--remove-cli`,
 `--purge-settings`, `--purge-distro`). A select-all checkbox toggles all four;
 selecting the distro forces (and disables) the model/CLI options because they
@@ -78,19 +85,19 @@ deletes the virtual disk and frees the space immediately, but everything inside
 is lost. The other options only free space inside the VHDX (use `diskpart
 compact` or move the distro to reclaim it). The setup engine runs from
 `CurUninstallStepChanged` because `[UninstallRun]` constants are expanded at
-install time; `--purge-settings` removes `%LOCALAPPDATA%\FlashServer` (client
+install time; `--purge-settings` removes `%LOCALAPPDATA%\flashcli-desktop` (client
 settings and `logs\setup.log`) after setup exits. Model caches in
 `%USERPROFILE%\.flashcli` are only removed by `--purge-models`.
 
 The install wizard also asks for a **WSL data directory** (default: a sibling of
-the install directory, e.g. `D:\software\FlashServerWSL` when installing to
-`D:\software\FlashServer`; `%LOCALAPPDATA%\FlashServerWSL` when installing under
+the install directory, e.g. `D:\software\flashcli-desktop-wsl` when installing to
+`D:\software\flashcli-desktop`; `%LOCALAPPDATA%\flashcli-desktop-wsl` when installing under
 `Program Files`) and passes it as `--wsl-dir`. If `wsl --install`
 cannot reach the Microsoft Store/GitHub, setup downloads the official Ubuntu
 24.04 cloud rootfs (Tsinghua/USTC mirrors, then cloud-images.ubuntu.com) and
 imports it; `--distro-rootfs FILE` selects a local tarball for offline
 installs. Model
-weights and runtimes live inside the FlashServer `ext4.vhdx`, so this is the knob
+weights and runtimes live inside the flashcli-desktop `ext4.vhdx`, so this is the knob
 for keeping C: free; the engine installs the distro and then moves it with
 `wsl --manage <distro> --move`. The VHDX does not shrink when files are deleted
 later; compact it with `wsl --manage <distro> --set-sparse true` (WSL 2.0+) or
@@ -115,13 +122,13 @@ virtualization enabled (VT-x/AMD-V).
 2. Run the installer. The setup progress page must appear; the first run may
    stop at step 1 and ask for a restart.
 3. Restart, run the installer again, and confirm steps 1-8 complete with
-   "FlashServer is installed and ready."
+   "flashcli-desktop is installed and ready."
 4. Verify independently (the installer may have selected a port other than 8790):
    ```powershell
-   $distro = (Get-Content "$env:LOCALAPPDATA\FlashServer\distro.txt").Trim()
+   $distro = (Get-Content "$env:LOCALAPPDATA\flashcli-desktop\distro.txt").Trim()
    wsl.exe -l -v
    wsl.exe -d $distro -u root systemctl is-active flashserver   # active
-   $url = (Get-Content "$env:LOCALAPPDATA\FlashServer\api-url.txt").Trim()
+   $url = (Get-Content "$env:LOCALAPPDATA\flashcli-desktop\api-url.txt").Trim()
    (Invoke-WebRequest -UseBasicParsing "$url/health").StatusCode  # 200
    ```
 5. Confirm the client opens, the overview shows the service running, and

@@ -82,7 +82,7 @@ func TestClientAPIURLRoundtrip(t *testing.T) {
 	if err := writeClientAPI("127.0.0.1:18790"); err != nil {
 		t.Fatalf("writeClientAPI: %v", err)
 	}
-	blob, err := os.ReadFile(filepath.Join(dir, "FlashServer", "api-url.txt"))
+	blob, err := os.ReadFile(filepath.Join(dir, windowsStateDirName, "api-url.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestDistroMarkerAndKeepaliveScript(t *testing.T) {
 	t.Setenv("LOCALAPPDATA", dir)
 
 	writeDistroMarker("flashserver_ubuntu")
-	blob, err := os.ReadFile(filepath.Join(dir, "FlashServer", "distro.txt"))
+	blob, err := os.ReadFile(filepath.Join(dir, windowsStateDirName, "distro.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}

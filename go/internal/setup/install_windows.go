@@ -64,11 +64,10 @@ func wslNamedHasConfig(ctx context.Context, name, config string) bool {
 }
 
 func writeDistroMarker(name string) {
-	base := os.Getenv("LOCALAPPDATA")
-	if base == "" {
+	dir := WindowsStateDir()
+	if dir == "" {
 		return
 	}
-	dir := filepath.Join(base, "FlashServer")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return
 	}
@@ -739,7 +738,10 @@ func createStartupTask(ctx context.Context, opts Options, i *installer, runNow b
 // the distro (and with it the resident service) after a minute without a
 // session, so keep a background `sleep infinity` session alive.
 func wslKeepaliveScript(opts Options) (string, error) {
-	dir := filepath.Join(os.Getenv("LOCALAPPDATA"), "FlashServer")
+	dir := WindowsStateDir()
+	if dir == "" {
+		return "", fmt.Errorf("LOCALAPPDATA is not set")
+	}
 	path := filepath.Join(dir, "wsl-keepalive.vbs")
 	if opts.DryRun {
 		return path, nil
@@ -809,11 +811,10 @@ func writeClientAPI(addr string) error {
 		return err
 	}
 	url := "http://127.0.0.1:" + port
-	dir := os.Getenv("LOCALAPPDATA")
-	if dir == "" {
+	p := WindowsStatePath("api-url.txt")
+	if p == "" {
 		return nil
 	}
-	p := filepath.Join(dir, "FlashServer", "api-url.txt")
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
 	}
@@ -822,9 +823,8 @@ func writeClientAPI(addr string) error {
 
 // clientAPIURL returns the URL written by writeClientAPI (or the default).
 func clientAPIURL() string {
-	dir := os.Getenv("LOCALAPPDATA")
-	if dir != "" {
-		if b, err := os.ReadFile(filepath.Join(dir, "FlashServer", "api-url.txt")); err == nil {
+	if p := WindowsStatePath("api-url.txt"); p != "" {
+		if b, err := os.ReadFile(p); err == nil {
 			s := strings.TrimSpace(string(b))
 			if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
 				return s

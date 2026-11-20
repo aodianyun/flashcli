@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Dist = Join-Path $Root $DistDir
 $Out = Join-Path $Root $OutDir
-$Iss = Join-Path $Root "installer\windows\flashserver.iss"
+$Iss = Join-Path $Root "installer\windows\flashcli-desktop.iss"
 
 $VersionLine = Select-String -Path (Join-Path $Root "pyproject.toml") -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
 if (-not $VersionLine) { throw "cannot read version from pyproject.toml" }
@@ -39,7 +39,7 @@ if (-not $Iscc) {
     throw "Inno Setup 6 (ISCC.exe) not found; install from https://jrsoftware.org/isinfo.php"
 }
 
-$Payload = Join-Path $env:TEMP ("flashserver-installer-payload-" + [guid]::NewGuid().ToString("N"))
+$Payload = Join-Path $env:TEMP ("flashcli-desktop-installer-payload-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $Payload | Out-Null
 try {
     Copy-Item $SetupExe (Join-Path $Payload "flashserver-setup-windows-amd64.exe")

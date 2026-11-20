@@ -95,13 +95,23 @@ func removeWindowsUninstallArtifacts(ctx context.Context, i *installer, opts Opt
 	if err := cmd.Run(); err != nil {
 		i.printf("logon task removal returned: %v\n", err)
 	}
-	_ = os.Remove(filepath.Join(os.Getenv("LOCALAPPDATA"), "FlashServer", "wsl-keepalive.vbs"))
+	_ = os.Remove(WindowsStatePath("wsl-keepalive.vbs"))
 	_ = exec.CommandContext(ctx, sysExe("netsh.exe"),
 		"advfirewall", "firewall", "delete", "rule", "name=FlashServer models").Run()
 	if opts.PurgeSettings {
-		dir := filepath.Join(os.Getenv("LOCALAPPDATA"), "FlashServer")
-		if err := os.RemoveAll(dir); err != nil {
-			i.printf("warn: remove %s: %v\n", dir, err)
+		// Remove the current directory plus the pre-rename legacy one, in case
+		// the migration never ran.
+		dirs := []string{WindowsStateDir()}
+		if base := os.Getenv("LOCALAPPDATA"); base != "" {
+			dirs = append(dirs, filepath.Join(base, legacyWindowsStateDirName))
+		}
+		for _, dir := range dirs {
+			if dir == "" {
+				continue
+			}
+			if err := os.RemoveAll(dir); err != nil {
+				i.printf("warn: remove %s: %v\n", dir, err)
+			}
 		}
 	}
 }
