@@ -126,7 +126,7 @@ Rules:
   git switch main && git pull origin main
   git merge --squash dev
   git commit -F - <<'MSG'
-  chore(sync): merge dev into main (1.0.9.20261120)
+  chore(sync): desktop navigation + app categories (1.0.9.20261120)
 
   Features:
   - desktop: sidebar order is Applications, Models, Status, Logs, Settings
@@ -144,6 +144,9 @@ Rules:
   ```
 
   - `main` gains exactly **one** commit per sync and stays linear; `dev` keeps its granular history.
+  - The **subject** must contain a short user-visible summary (GitHub/Gitee list
+    views show only the subject); put the detailed Features/Fixes in the body.
+    Do not use a bare `chore(sync): merge dev into main`.
   - The commit body is the audit trail for `main`: group the user-visible
     Features/Fixes since the previous sync (release notes are a good source);
     never list raw commit hashes or internal refactors.
