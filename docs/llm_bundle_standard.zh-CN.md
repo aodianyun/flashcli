@@ -59,14 +59,15 @@ Bundle **不得**自行启动 `uvicorn`/`FastAPI` 服务。仅对 host 未提供
 | `openai.images.generations` | `POST /v1/images/generations` | `generate_images(mode="generate")` |
 | `openai.images.edits` | `POST /v1/images/edits` | `generate_images(mode="edit")` |
 | `openai.images.variations` | `POST /v1/images/variations` | `generate_images(mode="variation")` |
-| `openai.videos` | `POST/GET/DELETE /v1/videos...` | `create_video` / `get_video` / `download_video` / `delete_video` |
-| `openai.realtime` | `WS /v1/realtime` | `realtime_session` |
+| `openai.videos` | `GET/POST /v1/videos`、`GET/DELETE /v1/videos/{id}` | `create_video` / `list_videos` / `get_video` / `download_video` / `delete_video` |
+| `openai.realtime` | `WS /v1/realtime` | `realtime_session`（可选） |
 | `anthropic.messages` | `POST /v1/messages` | `chat` / `chat_stream` |
 | `anthropic.count_tokens` | `POST /v1/messages/count_tokens` | `count_tokens` |
 | `anthropic.models` | `GET /v1/models`（带 `anthropic-version`）与 `GET /v1/models/{id}` | `model_id` |
 
-`/health` 与 `/v1/models` 始终可用。`GET /v1/models` 默认返回 OpenAI 结构；当声明
-`anthropic.models` 且请求带 `anthropic-version` 头时返回 Anthropic 结构。
+`/health`、`GET /v1/models`、`GET /v1/models/{id}` 始终可用。模型列表/检索默认返回
+OpenAI 结构；当声明 `anthropic.models` 且请求带 `anthropic-version` 头时返回
+Anthropic 结构。
 
 ## 4. `ServeEngine` 契约
 
@@ -94,14 +95,16 @@ class ServeEngine:
 | `speech(SpeechRequest)` | `SpeechResult` |
 | `generate_images(ImageGenerationRequest)` | `ImageGenerationResult` |
 | `create_video(VideoRequest)` | 含 `id` 的 job `dict` |
+| `list_videos()` | job `dict` 列表 |
 | `get_video(id)` | job `dict`；未知时抛 `KeyError` |
 | `download_video(id)` | `bytes` |
 | `delete_video(id)` | `bool` |
 | `count_tokens(ChatRequest)` | `int` |
 | `realtime_session(websocket, model)` | Realtime 事件协议的 async handler |
 
-缺少可选方法时返回 HTTP `501`；缺少 `realtime_session` 时发送 WebSocket
-`not_implemented` 错误并以 `1011` 关闭。抛出 `NotImplementedError` 或其他异常按该端点
+缺少可选方法时返回 HTTP `501`。未提供 `realtime_session` 时，host 运行自带的文本状态机
+（session、conversation item、输入音频缓冲 + 可选 `transcribe`、response create/cancel）；
+提供 handler 时由 bundle 接管完整事件协议。抛出 `NotImplementedError` 或其他异常按该端点
 的协议错误返回。
 
 ## 5. 请求映射
@@ -115,11 +118,15 @@ class ServeEngine:
 - Anthropic content block 映射为 host chat message：`image` → 图片 URL part，
   `tool_use` → assistant tool call，`tool_result` → tool message，
   `thinking`/`redacted_thinking` → reasoning，`document` → 文本。
-- OpenAI `n > 1` 支持非流式 chat（host 调用 engine `n` 次并合并 usage）；
-  流式 `n > 1` 返回 `501`。
+- Anthropic `cache_control` 标记在 system、text、image、tool_result part 上保留；
+  `tool_result` 内的图片保留为 image part。
+- OpenAI `n > 1` 对 chat 与 completions 的流式和非流式均支持（host 调用 engine `n`
+  次并合并 usage）。
 - `/v1/completions` 拒绝空 prompt 以及 `logprobs`、`best_of`、`suffix`。
-- Realtime：host 只负责 WebSocket 接受、模型选择、能力门控和错误转发；
-  session/事件语义由 bundle 实现。
+- Responses `input_file` 支持 `file_data`（base64 或内联 UTF-8 文本）；`file_id`
+  需要 Files API，返回 `501`。`background: true` 异步执行，支持 retrieve/cancel/delete。
+- Realtime：未提供 `realtime_session` 时由 host 提供文本状态机；音频输入会缓冲，并在
+  engine 支持 `transcribe` 时转写。提供 handler 时宿主状态机被完全替换。
 
 ## 6. 兼容性
 

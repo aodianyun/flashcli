@@ -59,15 +59,16 @@ Bundles must **not** start their own `uvicorn`/`FastAPI` server. Use
 | `openai.images.generations` | `POST /v1/images/generations` | `generate_images(mode="generate")` |
 | `openai.images.edits` | `POST /v1/images/edits` | `generate_images(mode="edit")` |
 | `openai.images.variations` | `POST /v1/images/variations` | `generate_images(mode="variation")` |
-| `openai.videos` | `POST/GET/DELETE /v1/videos...` | `create_video` / `get_video` / `download_video` / `delete_video` |
-| `openai.realtime` | `WS /v1/realtime` | `realtime_session` |
+| `openai.videos` | `GET/POST /v1/videos`, `GET/DELETE /v1/videos/{id}` | `create_video` / `list_videos` / `get_video` / `download_video` / `delete_video` |
+| `openai.realtime` | `WS /v1/realtime` | `realtime_session` (optional) |
 | `anthropic.messages` | `POST /v1/messages` | `chat` / `chat_stream` |
 | `anthropic.count_tokens` | `POST /v1/messages/count_tokens` | `count_tokens` |
 | `anthropic.models` | `GET /v1/models` (with `anthropic-version`) and `GET /v1/models/{id}` | `model_id` |
 
-`/health` and `/v1/models` are always available. `GET /v1/models` returns the
-OpenAI shape by default and the Anthropic shape when the `anthropic-version`
-header is present and `anthropic.models` is declared.
+`/health`, `GET /v1/models`, and `GET /v1/models/{id}` are always available.
+Model list/retrieve return the OpenAI shape by default and the Anthropic shape
+when the `anthropic-version` header is present and `anthropic.models` is
+declared.
 
 ## 4. `ServeEngine` contract
 
@@ -96,16 +97,19 @@ Optional capability methods (duck-typed; sync return or awaitable):
 | `speech(SpeechRequest)` | `SpeechResult` |
 | `generate_images(ImageGenerationRequest)` | `ImageGenerationResult` |
 | `create_video(VideoRequest)` | job `dict` with `id` |
+| `list_videos()` | list of job `dict`s |
 | `get_video(id)` | job `dict`; raise `KeyError` when unknown |
 | `download_video(id)` | `bytes` |
 | `delete_video(id)` | `bool` |
 | `count_tokens(ChatRequest)` | `int` |
 | `realtime_session(websocket, model)` | async handler for the Realtime event protocol |
 
-A missing optional method returns HTTP `501`; a missing `realtime_session`
-sends a WebSocket `not_implemented` error and closes with code `1011`.
-Raising `NotImplementedError`/other exceptions surfaces as the protocol error
-for that endpoint.
+A missing optional method returns HTTP `501`. When `realtime_session` is
+absent the host runs its own text state machine (session, conversation items,
+input audio buffer with optional `transcribe`, response create/cancel); a
+present handler takes over the full event protocol. Raising
+`NotImplementedError`/other exceptions surfaces as the protocol error for that
+endpoint.
 
 ## 5. Request mapping
 
@@ -118,12 +122,17 @@ for that endpoint.
 - Anthropic content blocks are mapped to host chat messages: `image` → image
   URL part, `tool_use` → assistant tool call, `tool_result` → tool message,
   `thinking`/`redacted_thinking` → reasoning, `document` → text.
-- OpenAI `n > 1` is supported for non-streaming chat (the host runs the engine
-  `n` times and merges usage); streaming `n > 1` returns `501`.
+- Anthropic `cache_control` markers are preserved on system, text, image, and
+  tool-result parts; images inside `tool_result` blocks are kept as image parts.
+- OpenAI `n > 1` is supported for chat and completions, streaming and
+  non-streaming (the host runs the engine `n` times and merges usage).
 - `/v1/completions` rejects empty prompts and `logprobs`, `best_of`, `suffix`.
-- Realtime: the host only accepts the WebSocket, selects the model, applies
-  capability gating, and forwards errors. The bundle implements session/event
-  semantics.
+- Responses `input_file` accepts `file_data` (base64 or inline UTF-8 text);
+  `file_id` needs the Files API and returns `501`. `background: true` runs the
+  request asynchronously and supports retrieve/cancel/delete.
+- Realtime: with no `realtime_session`, the host serves the text state machine;
+  audio input is buffered and transcribed through `transcribe` when available.
+  A bundle handler replaces the host state machine entirely.
 
 ## 6. Compatibility
 
