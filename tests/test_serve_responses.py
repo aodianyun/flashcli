@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from flashcli_bundle.protocol import ChatChunk, ChatRequest, ChatResult
@@ -130,10 +132,35 @@ def test_responses_tools_mapping() -> None:
         assert engine.requests[0].tools[0]["function"]["name"] == "lookup"
 
 
-def test_responses_background_returns_501() -> None:
+def test_responses_background_lifecycle() -> None:
     with _client(["openai.responses"]) as client:
         response = client.post("/v1/responses", json={**_body(), "background": True})
-        assert response.status_code == 501
+        assert response.status_code == 200
+        assert response.json()["status"] == "in_progress"
+        response_id = response.json()["id"]
+
+        current = response.json()
+        for _ in range(100):
+            current = client.get(f"/v1/responses/{response_id}").json()
+            if current["status"] == "completed":
+                break
+            time.sleep(0.02)
+        assert current["status"] == "completed"
+        assert current["output_text"] == "hello"
+        assert client.post(f"/v1/responses/{response_id}/cancel").status_code == 400
+        assert client.delete(f"/v1/responses/{response_id}").json()["deleted"] is True
+        assert client.get(f"/v1/responses/{response_id}").status_code == 404
+
+
+def test_responses_retrieve_and_delete_stored_response() -> None:
+    with _client(["openai.responses"]) as client:
+        created = client.post("/v1/responses", json=_body()).json()
+        fetched = client.get(f"/v1/responses/{created['id']}")
+        assert fetched.status_code == 200
+        assert fetched.json()["output_text"] == "hello"
+        assert client.post(f"/v1/responses/{created['id']}/cancel").status_code == 400
+        assert client.delete(f"/v1/responses/{created['id']}").json()["deleted"] is True
+        assert client.get(f"/v1/responses/{created['id']}").status_code == 404
 
 
 def test_responses_is_gated() -> None:

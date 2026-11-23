@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
+import time
 
 import pytest
 
@@ -185,10 +187,20 @@ def test_health_openai_models_and_anthropic_models() -> None:
         assert anthropic_list["first_id"] == "fake-model"
         assert anthropic_list["has_more"] is False
 
-        retrieved = client.get("/v1/models/fake-model")
-        assert retrieved.status_code == 200
-        assert retrieved.json()["type"] == "model"
-        assert client.get("/v1/models/nope").json()["type"] == "error"
+        anthropic_retrieved = client.get(
+            "/v1/models/fake-model", headers={"anthropic-version": "2023-06-01"}
+        )
+        assert anthropic_retrieved.status_code == 200
+        assert anthropic_retrieved.json()["type"] == "model"
+        openai_retrieved = client.get("/v1/models/fake-model")
+        assert openai_retrieved.json()["object"] == "model"
+        assert client.get("/v1/models/nope").json()["error"]["code"] == "model_not_found"
+        assert (
+            client.get(
+                "/v1/models/nope", headers={"anthropic-version": "2023-06-01"}
+            ).json()["type"]
+            == "error"
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -309,7 +321,6 @@ def test_completions_variants() -> None:
             ({"prompt": []}, 400),
             ({"prompt": 3}, 400),
             ({"prompt": "x", "logprobs": 1}, 400),
-            ({"prompt": "x", "n": 2}, 501),
             ({"prompt": "x", "n": -1}, 400),
             ({"prompt": "x", "n": 0}, 400),
             ({"prompt": "x", "n": "abc"}, 400),
@@ -317,12 +328,24 @@ def test_completions_variants() -> None:
         ):
             assert client.post("/v1/completions", json=bad).status_code == code
 
+        multi = client.post(
+            "/v1/completions", json={"prompt": ["a", "b"], "n": 2}
+        ).json()
+        assert [choice["index"] for choice in multi["choices"]] == [0, 1, 2, 3]
+
         streamed = client.post(
             "/v1/completions", json={"prompt": "hi", "stream": True}
         )
         assert streamed.status_code == 200
         assert '"text": "hello"' in streamed.text
         assert "[DONE]" in streamed.text
+
+        streamed_multi = client.post(
+            "/v1/completions", json={"prompt": "hi", "n": 2, "stream": True}
+        )
+        assert streamed_multi.status_code == 200
+        assert '"index": 1' in streamed_multi.text
+        assert "[DONE]" in streamed_multi.text
 
 
 # --------------------------------------------------------------------------- #
@@ -386,11 +409,50 @@ def test_responses_inputs_and_errors() -> None:
         roles = [m.role for m in engine.requests[-1].messages]
         assert roles == ["user", "assistant", "tool", "assistant"]
 
-        assert client.post("/v1/responses", json={"input": "x", "background": True}).status_code == 501
+        encoded = base64.b64encode(b"file text").decode()
+        file_response = client.post(
+            "/v1/responses",
+            json={
+                "input": [{
+                    "type": "message",
+                    "role": "user",
+                    "content": [{
+                        "type": "input_file",
+                        "file_data": encoded,
+                        "filename": "a.txt",
+                    }],
+                }]
+            },
+        )
+        assert file_response.status_code == 200
+        assert "file text" in engine.requests[-1].messages[0].content
         assert client.post(
             "/v1/responses",
             json={"input": [{"type": "message", "content": [{"type": "input_file", "file_id": "f"}]}]},
         ).status_code == 501
+        assert client.post(
+            "/v1/responses",
+            json={"input": "x", "background": True, "stream": True},
+        ).status_code == 400
+
+        background = client.post(
+            "/v1/responses", json={"input": "x", "background": True}
+        )
+        assert background.status_code == 200
+        assert background.json()["status"] == "in_progress"
+        background_id = background.json()["id"]
+        current = background.json()
+        for _ in range(100):
+            current = client.get(f"/v1/responses/{background_id}").json()
+            if current["status"] not in ("in_progress", "queued"):
+                break
+            time.sleep(0.02)
+        assert current["status"] == "completed"
+        assert current["output_text"] == "hello"
+        assert client.post(f"/v1/responses/{background_id}/cancel").status_code == 400
+        assert client.delete(f"/v1/responses/{background_id}").json()["deleted"] is True
+        assert client.get(f"/v1/responses/{background_id}").status_code == 404
+
         assert client.post(
             "/v1/responses",
             json={"input": "x", "tools": [{"type": "web_search"}]},
@@ -536,6 +598,31 @@ def test_videos_multipart_and_lifecycle() -> None:
         assert client.delete("/v1/videos/missing").json()["deleted"] is False
 
 
+def test_videos_list_endpoint() -> None:
+    class ListingEngine(FullEngine):
+        def list_videos(self):  # noqa: ANN001
+            return [
+                {"id": "v1", "status": "completed"},
+                {"id": "v2", "status": "queued"},
+            ]
+
+    with make_client(["openai.videos"], ListingEngine()) as client:
+        body = client.get("/v1/videos").json()
+        assert body["object"] == "list"
+        assert [item["id"] for item in body["data"]] == ["v1", "v2"]
+        limited = client.get("/v1/videos", params={"limit": 1}).json()
+        assert len(limited["data"]) == 1
+        assert limited["has_more"] is True
+        for bad in (0, 101, "x"):
+            assert client.get("/v1/videos", params={"limit": bad}).status_code == 400
+
+    class NoListing(FullEngine):
+        list_videos = None
+
+    with make_client(["openai.videos"], NoListing()) as client:
+        assert client.get("/v1/videos").status_code == 501
+
+
 # --------------------------------------------------------------------------- #
 # Anthropic
 # --------------------------------------------------------------------------- #
@@ -587,6 +674,66 @@ def test_anthropic_messages_all_blocks() -> None:
         assert sent.stop == ["END"]
         assert sent.extras["anthropic_thinking"]["budget_tokens"] == 16
         assert sent.extras["enable_thinking"] is True
+
+
+def test_anthropic_preserves_cache_control_and_tool_result_images() -> None:
+    engine = FullEngine()
+    cache = {"type": "ephemeral"}
+    with make_client(["anthropic.messages"], engine) as client:
+        response = client.post(
+            "/v1/messages",
+            json={
+                "max_tokens": 16,
+                "system": [{"type": "text", "text": "sys", "cache_control": cache}],
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "hi", "cache_control": cache}
+                        ],
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": "t1",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": "ok",
+                                        "cache_control": cache,
+                                    },
+                                    {
+                                        "type": "image",
+                                        "source": {
+                                            "type": "base64",
+                                            "media_type": "image/png",
+                                            "data": "AAA",
+                                        },
+                                    },
+                                ],
+                            }
+                        ],
+                    },
+                ],
+            },
+        )
+        assert response.status_code == 200
+        sent = engine.requests[-1]
+        assert sent.messages[0].role == "system"
+        assert isinstance(sent.messages[0].content, list)
+        assert sent.messages[0].content[0]["cache_control"] == cache
+
+        user = sent.messages[1]
+        assert isinstance(user.content, list)
+        assert user.content[0]["cache_control"] == cache
+
+        tool = sent.messages[2]
+        assert tool.role == "tool"
+        assert isinstance(tool.content, list)
+        assert tool.content[0]["cache_control"] == cache
+        assert any(part.get("type") == "image_url" for part in tool.content)
 
 
 def test_anthropic_stream_and_errors() -> None:
@@ -791,10 +938,13 @@ def test_chat_n_multiple_choices_and_errors() -> None:
                 "/v1/chat/completions",
                 json={"messages": [{"role": "user", "content": "hi"}], "n": bad},
             ).status_code == 400
-        assert client.post(
+        streamed = client.post(
             "/v1/chat/completions",
             json={"messages": [{"role": "user", "content": "hi"}], "n": 2, "stream": True},
-        ).status_code == 501
+        )
+        assert streamed.status_code == 200
+        assert '"index": 1' in streamed.text
+        assert "[DONE]" in streamed.text
 
 
 def test_anthropic_tool_choice_mapping() -> None:

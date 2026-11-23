@@ -80,7 +80,8 @@ def test_embeddings_without_engine_method_returns_501() -> None:
         assert response.status_code == 501
 
 
-def test_models_and_embeddings_are_gated() -> None:
+def test_models_always_available_and_embeddings_gated() -> None:
     with _client([]) as client:
-        assert client.get("/v1/models/fake").status_code == 404
+        assert client.get("/v1/models/fake").json()["object"] == "model"
+        assert client.get("/v1/models/missing").status_code == 404
         assert client.post("/v1/embeddings", json={"input": "a"}).status_code == 404
