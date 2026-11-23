@@ -15,6 +15,16 @@ def _job_payload(job: dict[str, Any]) -> dict[str, Any]:
     return dict(job)
 
 
+def _coerce_job(job: Any) -> dict[str, Any]:
+    if not isinstance(job, dict):
+        job = getattr(job, "__dict__", None) or {}
+    payload = _job_payload(job)
+    payload.setdefault("object", "video")
+    payload.setdefault("status", "queued")
+    payload.setdefault("created_at", int(time.time()))
+    return payload
+
+
 def mount(app: FastAPI, engine: Any) -> None:
     async def create(req: VideoRequest) -> Any:
         method = getattr(engine, "create_video", None)
@@ -64,6 +74,36 @@ def mount(app: FastAPI, engine: Any) -> None:
                 extras={k: v for k, v in body.items() if k not in {"prompt", "model", "seconds", "size"} and v is not None},
             )
         return await create(req)
+
+    @app.get("/v1/videos")
+    async def list_videos(request: Request):
+        method = getattr(engine, "list_videos", None)
+        if method is None:
+            return JSONResponse(
+                status_code=501,
+                content={"error": {"message": "the bundle does not expose video listing", "type": "not_implemented"}},
+            )
+        raw_limit = request.query_params.get("limit")
+        try:
+            limit = int(raw_limit) if raw_limit is not None else 20
+        except ValueError:
+            raise HTTPException(400, "limit must be an integer") from None
+        if limit < 1 or limit > 100:
+            raise HTTPException(400, "limit must be between 1 and 100")
+        try:
+            jobs = method()
+            if hasattr(jobs, "__await__"):
+                jobs = await jobs
+        except Exception as exc:
+            raise HTTPException(500, f"video list failed: {exc}") from exc
+        if not isinstance(jobs, (list, tuple)):
+            raise HTTPException(500, "engine list_videos() must return a list")
+        data = [_coerce_job(job) for job in jobs]
+        return {
+            "object": "list",
+            "data": data[:limit],
+            "has_more": len(data) > limit,
+        }
 
     @app.get("/v1/videos/{video_id}")
     async def get_video(video_id: str):

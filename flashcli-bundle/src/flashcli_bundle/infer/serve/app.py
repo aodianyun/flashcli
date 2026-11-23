@@ -8,7 +8,7 @@ import uuid
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from flashcli_bundle.capabilities import (
@@ -39,7 +39,6 @@ from flashcli_bundle.infer.serve.openai_bridge import (
 from flashcli_bundle.infer.serve.protocols.anthropic import (
     mount_count_tokens,
     mount_messages,
-    mount_models,
 )
 from flashcli_bundle.infer.serve.protocols.openai_audio import (
     mount_speech,
@@ -232,6 +231,52 @@ def build_app(
             ],
         }
 
+    @app.get("/v1/models/{model_id}")
+    async def retrieve_model(model_id: str, request: Request):
+        anthropic = (
+            ANTHROPIC_MODELS in capabilities
+            and bool(request.headers.get("anthropic-version"))
+        )
+        if model_id != engine.model_id:
+            if anthropic:
+                return JSONResponse(
+                    status_code=404,
+                    content={
+                        "type": "error",
+                        "error": {
+                            "type": "not_found_error",
+                            "message": f"model {model_id!r} not found",
+                        },
+                    },
+                )
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "error": {
+                        "message": f"The model '{model_id}' does not exist",
+                        "type": "invalid_request_error",
+                        "param": None,
+                        "code": "model_not_found",
+                    }
+                },
+            )
+        if anthropic:
+            from datetime import datetime, timezone
+
+            created = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            return {
+                "type": "model",
+                "id": engine.model_id,
+                "display_name": engine.model_id,
+                "created_at": created,
+            }
+        return {
+            "id": engine.model_id,
+            "object": "model",
+            "created": int(time.time()),
+            "owned_by": "flashcli",
+        }
+
     def _parse_chat_request(body: dict[str, Any]) -> ChatRequest:
         try:
             return parse_chat_completions_body(body)
@@ -293,8 +338,6 @@ def build_app(
             raise HTTPException(400, "n must be an integer") from None
         if n < 1:
             raise HTTPException(400, "n must be >= 1")
-        if n > 1 and req.stream:
-            raise HTTPException(501, "streaming n>1 is not implemented yet")
 
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
         created = int(time.time())
@@ -370,6 +413,157 @@ def build_app(
             payload["choices"] = choices
             payload["usage"] = usage
             return payload
+
+        if n > 1:
+            async def stream_choices():
+                for index in range(n):
+                    try:
+                        await gate.acquire(req_id)
+                    except GpuBusyError:
+                        err = {
+                            "error": {
+                                "message": "GPU inference slot is busy; retry after "
+                                "the current request finishes.",
+                                "type": "server_busy",
+                                "code": "gpu_busy",
+                                "model": engine.model_id,
+                            }
+                        }
+                        yield f"data: {json.dumps(err)}\n\n"
+                        yield "data: [DONE]\n\n"
+                        return
+                    try:
+                        first_delta: dict[str, Any] = {"role": "assistant"}
+                        if thinking_value:
+                            first_delta["reasoning_content"] = ""
+                            first_delta["reasoning"] = ""
+                        else:
+                            first_delta["content"] = ""
+                        yield (
+                            "data: "
+                            + json.dumps(
+                                {
+                                    "id": completion_id,
+                                    "object": "chat.completion.chunk",
+                                    "created": created,
+                                    "model": engine.model_id,
+                                    "choices": [
+                                        {
+                                            "index": index,
+                                            "delta": first_delta,
+                                            "finish_reason": None,
+                                        }
+                                    ],
+                                }
+                            )
+                            + "\n\n"
+                        )
+                        async for chunk in iter_on_inference_loop(
+                            lambda: _chunk_iter(req),
+                        ):
+                            if chunk.reasoning_delta:
+                                yield (
+                                    "data: "
+                                    + json.dumps(
+                                        {
+                                            "id": completion_id,
+                                            "object": "chat.completion.chunk",
+                                            "created": created,
+                                            "model": engine.model_id,
+                                            "choices": [
+                                                {
+                                                    "index": index,
+                                                    "delta": {
+                                                        "reasoning_content": chunk.reasoning_delta,
+                                                        "reasoning": chunk.reasoning_delta,
+                                                    },
+                                                    "finish_reason": None,
+                                                }
+                                            ],
+                                        }
+                                    )
+                                    + "\n\n"
+                                )
+                            if chunk.content_delta:
+                                yield (
+                                    "data: "
+                                    + json.dumps(
+                                        {
+                                            "id": completion_id,
+                                            "object": "chat.completion.chunk",
+                                            "created": created,
+                                            "model": engine.model_id,
+                                            "choices": [
+                                                {
+                                                    "index": index,
+                                                    "delta": {"content": chunk.content_delta},
+                                                    "finish_reason": None,
+                                                }
+                                            ],
+                                        }
+                                    )
+                                    + "\n\n"
+                                )
+                            for tc in chunk.tool_calls:
+                                yield (
+                                    "data: "
+                                    + json.dumps(
+                                        {
+                                            "id": completion_id,
+                                            "object": "chat.completion.chunk",
+                                            "created": created,
+                                            "model": engine.model_id,
+                                            "choices": [
+                                                {
+                                                    "index": index,
+                                                    "delta": {"tool_calls": [tc]},
+                                                    "finish_reason": None,
+                                                }
+                                            ],
+                                        }
+                                    )
+                                    + "\n\n"
+                                )
+                            if chunk.finish_reason:
+                                last: dict[str, Any] = {
+                                    "id": completion_id,
+                                    "object": "chat.completion.chunk",
+                                    "created": created,
+                                    "model": engine.model_id,
+                                    "choices": [
+                                        {
+                                            "index": index,
+                                            "delta": {},
+                                            "finish_reason": chunk.finish_reason,
+                                        }
+                                    ],
+                                }
+                                if chunk.usage:
+                                    last["usage"] = dict(chunk.usage)
+                                yield f"data: {json.dumps(last)}\n\n"
+                                break
+                    except Exception as exc:
+                        err = {
+                            "error": {
+                                "message": f"inference failed: {exc}",
+                                "type": "server_error",
+                                "code": "inference_failed",
+                            }
+                        }
+                        yield f"data: {json.dumps(err)}\n\n"
+                    finally:
+                        gate.release()
+                yield "data: [DONE]\n\n"
+
+            return StreamingResponse(
+                stream_choices(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",
+                },
+            )
 
         try:
             await gate.acquire(req_id)
@@ -588,8 +782,6 @@ def build_app(
         mount_messages(app, engine, gate)
     if ANTHROPIC_COUNT_TOKENS in capabilities:
         mount_count_tokens(app, engine)
-    if ANTHROPIC_MODELS in capabilities:
-        mount_models(app, engine)
     if OPENAI_EMBEDDINGS in capabilities:
         mount_embeddings(app, engine)
     if OPENAI_AUDIO_TRANSCRIPTIONS in capabilities or OPENAI_AUDIO_TRANSLATIONS in capabilities:
@@ -607,7 +799,7 @@ def build_app(
     if OPENAI_VIDEOS in capabilities:
         mount_videos(app, engine)
     if OPENAI_REALTIME in capabilities:
-        mount_realtime(app, engine)
+        mount_realtime(app, engine, gate)
     mount_unimplemented(app, capabilities)
 
     return app

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
+import base64
 import json
 import threading
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from flashcli_bundle.infer.engines.base import ChatMessage, ChatRequest, ChatResult
 from flashcli_bundle.infer.serve.inference import GpuBusyError, InferenceGate
@@ -21,6 +24,35 @@ from flashcli_bundle.infer.serve.protocols.common import (
 
 def _sse(event: str, data: Any) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _input_file_text(item: dict[str, Any]) -> str:
+    data = item.get("file_data")
+    if not isinstance(data, str) or not data:
+        if item.get("file_id"):
+            raise HTTPException(
+                501,
+                "input_file with file_id requires the Files API, which this "
+                "host does not provide; pass file_data instead",
+            )
+        raise HTTPException(400, "input_file requires file_data")
+    payload = data
+    if payload.startswith("data:") and "," in payload:
+        payload = payload.split(",", 1)[1]
+    try:
+        raw = base64.b64decode(payload, validate=True)
+    except Exception:
+        raw = data.encode("utf-8")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            400, "input_file must contain UTF-8 text"
+        ) from exc
+    filename = item.get("filename")
+    if isinstance(filename, str) and filename:
+        return f"[file: {filename}]\n{text}"
+    return text
 
 
 def _content_parts(content: Any) -> str | list[dict[str, Any]]:
@@ -46,7 +78,9 @@ def _content_parts(content: Any) -> str | list[dict[str, Any]]:
                 raise HTTPException(400, "input_image requires image_url")
             parts.append({"type": "image_url", "image_url": {"url": str(image_url)}})
         elif kind == "input_file":
-            raise HTTPException(501, "input_file content is not implemented yet")
+            value = _input_file_text(item)
+            text.append(value)
+            parts.append({"type": "text", "text": value})
         else:
             raise HTTPException(400, f"unsupported content part type {kind!r}")
     if any(p.get("type") == "image_url" for p in parts):
@@ -146,8 +180,7 @@ def _request(body: dict[str, Any]) -> ChatRequest:
     messages.extend(_input_messages(body.get("input", "")))
     if not messages:
         raise HTTPException(400, "input required")
-    if body.get("background"):
-        raise HTTPException(501, "background responses are not implemented yet")
+
     if body.get("previous_response_id"):
         # The store is handled by the mounted route; this flag is resolved there.
         pass
@@ -273,18 +306,49 @@ def _conversation(req: ChatRequest, result: ChatResult) -> list[ChatMessage]:
     return messages
 
 
+@dataclass
+class _Entry:
+    messages: list[ChatMessage]
+    response: dict[str, Any]
+    task: asyncio.Task[Any] | None = None
+    cancel_requested: bool = False
+
+
 class _Store:
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._items: dict[str, tuple[list[ChatMessage], dict[str, Any]]] = {}
+        self._items: dict[str, _Entry] = {}
 
-    def get(self, response_id: str) -> tuple[list[ChatMessage], dict[str, Any]] | None:
+    def get(self, response_id: str) -> _Entry | None:
         with self._lock:
             return self._items.get(response_id)
 
-    def put(self, response_id: str, messages: list[ChatMessage], response: dict[str, Any]) -> None:
+    def put(
+        self,
+        response_id: str,
+        messages: list[ChatMessage],
+        response: dict[str, Any],
+        task: asyncio.Task[Any] | None = None,
+    ) -> _Entry:
+        entry = _Entry(messages=messages, response=response, task=task)
         with self._lock:
-            self._items[response_id] = (messages, response)
+            self._items[response_id] = entry
+        return entry
+
+    def delete(self, response_id: str) -> bool:
+        with self._lock:
+            return self._items.pop(response_id, None) is not None
+
+    def cancel(self, response_id: str) -> _Entry | None:
+        with self._lock:
+            entry = self._items.get(response_id)
+            if entry is None:
+                return None
+            entry.cancel_requested = True
+            task = entry.task
+        if task is not None and not task.done():
+            task.cancel()
+        return entry
 
 
 def mount(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
@@ -298,12 +362,76 @@ def mount(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
             previous = store.get(previous_id)
             if previous is None:
                 raise HTTPException(400, f"previous_response_id {previous_id!r} not found")
-            req.messages = [*previous[0], *req.messages]
+            req.messages = [*previous.messages, *req.messages]
         store_enabled = body.get("store", True) is not False
         model = str(body.get("model") or engine.model_id)
         response_id = new_id("resp")
         created_at = now()
         metadata = body.get("metadata") if isinstance(body.get("metadata"), dict) else None
+        if body.get("background"):
+            if req.stream:
+                raise HTTPException(
+                    400, "background responses do not support streaming"
+                )
+            shell: dict[str, Any] = {
+                "id": response_id,
+                "object": "response",
+                "created_at": created_at,
+                "status": "in_progress",
+                "error": None,
+                "incomplete_details": None,
+                "model": model,
+                "output": [],
+                "output_text": "",
+                "previous_response_id": previous_id,
+                "store": True,
+                "metadata": metadata or {},
+                "parallel_tool_calls": True,
+                "tool_choice": "auto",
+                "tools": [],
+                "truncation": "disabled",
+                "usage": {
+                    "input_tokens": 0,
+                    "input_tokens_details": {"cached_tokens": 0},
+                    "output_tokens": 0,
+                    "output_tokens_details": {"reasoning_tokens": 0},
+                    "total_tokens": 0,
+                },
+            }
+            entry = store.put(response_id, list(req.messages), shell)
+
+            async def run_background() -> None:
+                try:
+                    result = await chat_once(gate, engine, response_id, req)
+                except asyncio.CancelledError:
+                    entry.response["status"] = "cancelled"
+                    raise
+                except Exception as exc:
+                    entry.response["status"] = "failed"
+                    entry.response["error"] = {
+                        "code": "api_error",
+                        "message": str(exc),
+                    }
+                    return
+                if entry.cancel_requested:
+                    entry.response["status"] = "cancelled"
+                    return
+                response = _response(
+                    result,
+                    response_id=response_id,
+                    model=model,
+                    created_at=created_at,
+                    previous_response_id=previous_id,
+                    store=True,
+                    metadata=metadata,
+                )
+                entry.response.clear()
+                entry.response.update(response)
+                entry.messages = _conversation(req, result)
+
+            entry.task = asyncio.create_task(run_background())
+            return entry.response
+
         if not req.stream:
             try:
                 result = await chat_once(
@@ -501,3 +629,56 @@ def mount(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
         )
+
+    def _not_found(response_id: str) -> JSONResponse:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "message": f"Response with id {response_id!r} not found.",
+                    "type": "invalid_request_error",
+                    "param": None,
+                    "code": "response_not_found",
+                }
+            },
+        )
+
+    @app.get("/v1/responses/{response_id}")
+    async def get_response(response_id: str):
+        entry = store.get(response_id)
+        if entry is None:
+            return _not_found(response_id)
+        return entry.response
+
+    @app.delete("/v1/responses/{response_id}")
+    async def delete_response(response_id: str):
+        if not store.delete(response_id):
+            return _not_found(response_id)
+        return {"id": response_id, "object": "response.deleted", "deleted": True}
+
+    @app.post("/v1/responses/{response_id}/cancel")
+    async def cancel_response(response_id: str):
+        entry = store.get(response_id)
+        if entry is None:
+            return _not_found(response_id)
+        status = entry.response.get("status")
+        if status in ("completed", "incomplete", "failed", "cancelled"):
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": {
+                        "message": (
+                            f"Response with id {response_id!r} is not cancellable "
+                            f"(status={status})."
+                        ),
+                        "type": "invalid_request_error",
+                        "param": None,
+                        "code": "response_not_cancellable",
+                    }
+                },
+            )
+        cancelled = store.cancel(response_id)
+        if cancelled is None:
+            return _not_found(response_id)
+        cancelled.response["status"] = "cancelled"
+        return cancelled.response

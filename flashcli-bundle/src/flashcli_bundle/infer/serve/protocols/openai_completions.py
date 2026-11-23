@@ -12,7 +12,6 @@ from flashcli_bundle.infer.serve.inference import InferenceGate
 from flashcli_bundle.infer.serve.protocols.common import (
     chat_chunks,
     chat_once,
-    gpu_busy,
     new_id,
     now,
     sse,
@@ -41,11 +40,7 @@ def _parse(body: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
         raise HTTPException(400, "n must be an integer") from None
     if n < 1:
         raise HTTPException(400, "n must be >= 1")
-    if n > 1 and not body.get("stream"):
-        raise HTTPException(501, "n>1 is not implemented yet")
-    if n > 1:
-        raise HTTPException(501, "streaming n>1 is not implemented yet")
-    return prompts, body
+    return prompts, n, body
 
 
 def _request(prompt: str, body: dict[str, Any]) -> ChatRequest:
@@ -76,31 +71,40 @@ def _request(prompt: str, body: dict[str, Any]) -> ChatRequest:
 def mount(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
     @app.post("/v1/completions")
     async def completions(request: Request, body: dict[str, Any]):
-        prompts, parsed = _parse(body)
+        prompts, n, parsed = _parse(body)
         model = str(body.get("model") or engine.model_id)
         completion_id = new_id("cmpl")
         created = now()
+        request_id = request.headers.get("x-request-id", completion_id)
 
         if not parsed.get("stream"):
-            choices = []
+            choices: list[dict[str, Any]] = []
             usage: dict[str, Any] = {}
-            for index, prompt in enumerate(prompts):
-                try:
-                    result = await chat_once(gate, engine, request.headers.get("x-request-id", completion_id), _request(prompt, body))
-                except HTTPException:
-                    raise
-                except Exception as exc:
-                    raise HTTPException(500, f"inference failed: {exc}") from exc
-                text = result.content or ""
-                if body.get("echo"):
-                    text = prompt + text
-                choices.append({
-                    "text": text,
-                    "index": index,
-                    "logprobs": None,
-                    "finish_reason": result.finish_reason,
-                })
-                usage = result.usage or usage
+            for prompt_index, prompt in enumerate(prompts):
+                for choice_index in range(n):
+                    try:
+                        result = await chat_once(
+                            gate,
+                            engine,
+                            request_id,
+                            _request(prompt, body),
+                        )
+                    except HTTPException:
+                        raise
+                    except Exception as exc:
+                        raise HTTPException(500, f"inference failed: {exc}") from exc
+                    text = result.content or ""
+                    if body.get("echo"):
+                        text = prompt + text
+                    choices.append({
+                        "text": text,
+                        "index": prompt_index * n + choice_index,
+                        "logprobs": None,
+                        "finish_reason": result.finish_reason,
+                    })
+                    for key, value in (result.usage or {}).items():
+                        if isinstance(value, (int, float)):
+                            usage[key] = usage.get(key, 0) + value
             return {
                 "id": completion_id,
                 "object": "text_completion",
@@ -110,37 +114,26 @@ def mount(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
                 "usage": usage,
             }
 
-        prompt = prompts[0]
-        req = _request(prompt, body)
-
         async def stream():
-            yield sse({
-                "id": completion_id,
-                "object": "text_completion",
-                "created": created,
-                "model": model,
-                "choices": [{"text": "", "index": 0, "logprobs": None, "finish_reason": None}],
-            })
-            try:
-                await gate.acquire(request.headers.get("x-request-id", completion_id))
-            except Exception:
-                raise gpu_busy(engine.model_id) from None
-            try:
-                async for chunk in chat_chunks(engine, req):
-                    if chunk.content_delta:
+            for prompt_index, prompt in enumerate(prompts):
+                req = _request(prompt, body)
+                for choice_index in range(n):
+                    index = prompt_index * n + choice_index
+                    try:
+                        await gate.acquire(request_id)
+                    except Exception:
                         yield sse({
-                            "id": completion_id,
-                            "object": "text_completion",
-                            "created": created,
-                            "model": model,
-                            "choices": [{
-                                "text": chunk.content_delta,
-                                "index": 0,
-                                "logprobs": None,
-                                "finish_reason": None,
-                            }],
+                            "error": {
+                                "message": "GPU inference slot is busy; retry after "
+                                "the current request finishes.",
+                                "type": "server_busy",
+                                "code": "gpu_busy",
+                                "model": engine.model_id,
+                            }
                         })
-                    if chunk.finish_reason:
+                        yield "data: [DONE]\n\n"
+                        return
+                    try:
                         yield sse({
                             "id": completion_id,
                             "object": "text_completion",
@@ -148,13 +141,43 @@ def mount(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
                             "model": model,
                             "choices": [{
                                 "text": "",
-                                "index": 0,
+                                "index": index,
                                 "logprobs": None,
-                                "finish_reason": chunk.finish_reason,
+                                "finish_reason": None,
                             }],
                         })
-                yield "data: [DONE]\n\n"
-            finally:
-                gate.release()
+                        async for chunk in chat_chunks(engine, req):
+                            if chunk.content_delta:
+                                yield sse({
+                                    "id": completion_id,
+                                    "object": "text_completion",
+                                    "created": created,
+                                    "model": model,
+                                    "choices": [{
+                                        "text": chunk.content_delta,
+                                        "index": index,
+                                        "logprobs": None,
+                                        "finish_reason": None,
+                                    }],
+                                })
+                            if chunk.finish_reason:
+                                last: dict[str, Any] = {
+                                    "id": completion_id,
+                                    "object": "text_completion",
+                                    "created": created,
+                                    "model": model,
+                                    "choices": [{
+                                        "text": "",
+                                        "index": index,
+                                        "logprobs": None,
+                                        "finish_reason": chunk.finish_reason,
+                                    }],
+                                }
+                                if chunk.usage:
+                                    last["usage"] = dict(chunk.usage)
+                                yield sse(last)
+                    finally:
+                        gate.release()
+            yield "data: [DONE]\n\n"
 
         return StreamingResponse(stream(), media_type="text/event-stream")

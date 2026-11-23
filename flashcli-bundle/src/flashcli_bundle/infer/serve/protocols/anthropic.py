@@ -23,16 +23,43 @@ def _sse(event: str, data: Any) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-def _text_from_blocks(value: Any) -> str:
+def _with_cache(part: dict[str, Any], block: dict[str, Any]) -> dict[str, Any]:
+    cache = block.get("cache_control")
+    if isinstance(cache, dict):
+        part["cache_control"] = cache
+    return part
+
+
+def _blocks_content(value: Any) -> Any:
+    """Convert Anthropic text/image blocks to a string or content-part list.
+
+    ``cache_control`` markers are kept on the converted parts so prompt
+    caching survives the protocol translation. Images are preserved so tool
+    results and system blocks do not silently lose them.
+    """
     if isinstance(value, str):
         return value
     if not isinstance(value, list):
         return ""
-    parts: list[str] = []
+    parts: list[dict[str, Any]] = []
+    texts: list[str] = []
     for block in value:
-        if isinstance(block, dict) and block.get("type") == "text":
-            parts.append(str(block.get("text", "")))
-    return "".join(parts)
+        if not isinstance(block, dict):
+            continue
+        kind = str(block.get("type", "text"))
+        if kind == "text":
+            text = str(block.get("text", ""))
+            texts.append(text)
+            parts.append(_with_cache({"type": "text", "text": text}, block))
+        elif kind == "image":
+            part = _image_part(block)
+            if part is not None:
+                parts.append(part)
+    if any("cache_control" in part for part in parts) or any(
+        part.get("type") == "image_url" for part in parts
+    ):
+        return parts
+    return "".join(texts)
 
 
 def _image_part(block: dict[str, Any]) -> dict[str, Any] | None:
@@ -47,7 +74,7 @@ def _image_part(block: dict[str, Any]) -> dict[str, Any] | None:
         return None
     if not url:
         return None
-    return {"type": "image_url", "image_url": {"url": url}}
+    return _with_cache({"type": "image_url", "image_url": {"url": url}}, block)
 
 
 def _message_from_blocks(role: str, content: Any) -> list[ChatMessage]:
@@ -69,7 +96,9 @@ def _message_from_blocks(role: str, content: Any) -> list[ChatMessage]:
         if kind == "text":
             text = str(block.get("text", ""))
             text_parts.append(text)
-            content_parts.append({"type": "text", "text": text})
+            content_parts.append(
+                _with_cache({"type": "text", "text": text}, block)
+            )
         elif kind == "image":
             part = _image_part(block)
             if part is None:
@@ -93,13 +122,19 @@ def _message_from_blocks(role: str, content: Any) -> list[ChatMessage]:
             tool_call_id = str(block.get("tool_use_id", ""))
             if not tool_call_id:
                 raise HTTPException(400, "tool_result block requires tool_use_id")
-            result_text = _text_from_blocks(block.get("content"))
+            tool_content = _blocks_content(block.get("content"))
             if block.get("is_error"):
-                result_text = f"Error: {result_text}"
+                if isinstance(tool_content, str):
+                    tool_content = f"Error: {tool_content}"
+                else:
+                    tool_content = [
+                        {"type": "text", "text": "Error: "},
+                        *tool_content,
+                    ]
             out.append(
                 ChatMessage(
                     role="tool",
-                    content=result_text,
+                    content=tool_content,
                     tool_call_id=tool_call_id,
                 )
             )
@@ -112,15 +147,18 @@ def _message_from_blocks(role: str, content: Any) -> list[ChatMessage]:
             text = str(source.get("data") or source.get("url") or "")
             if text:
                 text_parts.append(text)
-                content_parts.append({"type": "text", "text": text})
+                content_parts.append(
+                    _with_cache({"type": "text", "text": text}, block)
+                )
         else:
             raise HTTPException(400, f"unsupported content block type {kind!r}")
 
     if text_parts or content_parts:
-        if role == "user" and any(p.get("type") == "image_url" for p in content_parts):
-            content_value: Any = content_parts
-        else:
-            content_value = "".join(text_parts)
+        preserve_parts = any(
+            p.get("type") == "image_url" or "cache_control" in p
+            for p in content_parts
+        )
+        content_value: Any = content_parts if preserve_parts else "".join(text_parts)
         out.insert(
             0,
             ChatMessage(
@@ -190,9 +228,9 @@ def _request(body: dict[str, Any]) -> ChatRequest:
     messages: list[ChatMessage] = []
     system = body.get("system")
     if system:
-        system_text = _text_from_blocks(system)
-        if system_text:
-            messages.append(ChatMessage(role="system", content=system_text))
+        system_content = _blocks_content(system)
+        if system_content:
+            messages.append(ChatMessage(role="system", content=system_content))
     for item in raw_messages:
         if not isinstance(item, dict):
             raise HTTPException(400, "messages must be objects")
@@ -485,31 +523,6 @@ def mount_messages(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
         )
-
-
-def _model_object(model: str) -> dict[str, Any]:
-    from datetime import datetime, timezone
-
-    return {
-        "type": "model",
-        "id": model,
-        "display_name": model,
-        "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-    }
-
-
-def mount_models(app: FastAPI, engine: Any) -> None:
-    @app.get("/v1/models/{model_id}")
-    async def model(model_id: str):
-        if model_id != engine.model_id:
-            return JSONResponse(
-                status_code=404,
-                content={
-                    "type": "error",
-                    "error": {"type": "not_found_error", "message": f"model {model_id!r} not found"},
-                },
-            )
-        return _model_object(engine.model_id)
 
 
 def mount_count_tokens(app: FastAPI, engine: Any) -> None:
