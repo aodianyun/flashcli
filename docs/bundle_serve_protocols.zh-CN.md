@@ -1,0 +1,319 @@
+# Bundle serve 协议对接（OpenAI + Anthropic）
+
+<p align="right"><a href="bundle_serve_protocols.md">English</a> · <strong>简体中文</strong></p>
+
+说明 bundle `ServeEngine` 如何与 host 自有的 `flashcli serve` 对接。Manifest、目录、
+`.so` 与发布规则见 [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)；
+entry 后端见 [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md)。
+
+## 1. 职责归属
+
+| 层 | 负责 |
+|----|------|
+| Host | HTTP/WebSocket 路由、请求解析、SSE/WS 传输、能力门控、单 GPU 槽位、请求日志、协议错误转换 |
+| Bundle `ServeEngine` | 权重、chat template、工具/推理解析、解码、模型专属扩展 |
+| `register_routes(app)` | 可选自定义路由；挂在 host 路由之前并保持优先 |
+
+Bundle 不得自行启动 `uvicorn`/`FastAPI` 服务。
+
+## 2. 能力声明
+
+```json
+"entry": {
+  "serve": {
+    "kind": "python",
+    "module": "serve",
+    "attr": "ServeEngine",
+    "mode": "engine",
+    "capabilities": ["openai.chat", "anthropic.messages"]
+  }
+}
+```
+
+| 规则 | 行为 |
+|------|------|
+| 缺省 `capabilities` | 兼容默认：`["openai.chat"]` |
+| `capabilities: []` | 仅保留 `/health`、`/v1/models`、`/v1/models/{id}` |
+| 非 python 或非 engine serve | `capabilities` 非法 |
+| 未知或重复 ID | `bundle validate` 失败 |
+| 已声明但 host 未实现 | HTTP `501`（`capability_not_implemented`） |
+| `--host` / `--port` | 由 host 提供；禁止在 `serve_options` 声明 `ip`/`host`/`port` |
+
+### 能力 → 端点 → engine 方法
+
+| 能力 | 端点 | Engine 方法 |
+|------|------|-------------|
+| `openai.chat` | `POST /v1/chat/completions` | `chat` / `chat_stream` |
+| `openai.completions` | `POST /v1/completions` | `chat` / `chat_stream` |
+| `openai.responses` | `POST /v1/responses`；`GET/DELETE /v1/responses/{id}`；`POST /v1/responses/{id}/cancel` | `chat` / `chat_stream` |
+| `openai.embeddings` | `POST /v1/embeddings` | `embed` |
+| `openai.moderations` | `POST /v1/moderations` | `moderate` |
+| `openai.audio.transcriptions` | `POST /v1/audio/transcriptions` | `transcribe(task="transcribe")` |
+| `openai.audio.translations` | `POST /v1/audio/translations` | `transcribe(task="translate")` |
+| `openai.audio.speech` | `POST /v1/audio/speech` | `speech` |
+| `openai.images.generations` | `POST /v1/images/generations` | `generate_images(mode="generate")` |
+| `openai.images.edits` | `POST /v1/images/edits` | `generate_images(mode="edit")` |
+| `openai.images.variations` | `POST /v1/images/variations` | `generate_images(mode="variation")` |
+| `openai.videos` | `GET/POST /v1/videos`；`GET/DELETE /v1/videos/{id}`；`GET /v1/videos/{id}/content` | `create_video` / `list_videos` / `get_video` / `download_video` / `delete_video` |
+| `openai.realtime` | `WS /v1/realtime` | `realtime_session`（可选） |
+| `anthropic.messages` | `POST /v1/messages` | `chat` / `chat_stream` |
+| `anthropic.count_tokens` | `POST /v1/messages/count_tokens` | `count_tokens` |
+| `anthropic.models` | `GET /v1/models`（带 `anthropic-version`）；`GET /v1/models/{id}` | `model_id` |
+
+`/health`、`GET /v1/models`、`GET /v1/models/{id}` 始终可用。
+
+## 3. `ServeEngine` 契约
+
+必需成员：
+
+```python
+class ServeEngine:
+    model_id: str
+    def load(self, checkpoint: Path, preset: Preset, **options) -> None: ...
+    def warmup(self, spec: str | None) -> None: ...
+    def chat(self, request: ChatRequest) -> ChatResult: ...
+    def chat_stream(self, request: ChatRequest) -> Iterator[ChatChunk]: ...
+```
+
+可选异步版本优先：`chat_async(request) -> ChatResult`、
+`chat_stream_async(request) -> AsyncIterator[ChatChunk]`。
+
+可选能力方法（鸭子类型；同步返回值或 awaitable）：
+
+| 方法 | 请求 / 结果 |
+|------|-------------|
+| `embed(EmbeddingRequest)` | `EmbeddingResult`；每个输入一个 embedding |
+| `moderate(ModerationRequest)` | `ModerationResult`；每个输入一个结果 |
+| `transcribe(AudioTranscriptionRequest)` | `AudioTranscriptionResult` |
+| `speech(SpeechRequest)` | `SpeechResult` |
+| `generate_images(ImageGenerationRequest)` | `ImageGenerationResult` |
+| `create_video(VideoRequest)` | 含 `id` 的 job `dict` |
+| `list_videos()` | job `dict` 列表 |
+| `get_video(id)` | job `dict`；未知时抛 `KeyError` |
+| `download_video(id)` | `bytes` |
+| `delete_video(id)` | `bool` |
+| `count_tokens(ChatRequest)` | `int` |
+| `realtime_session(websocket, model)` | Realtime 事件协议的 async handler |
+
+缺少可选方法时返回 HTTP `501`。未提供 `realtime_session` 时，host 运行自带文本状态机
+（session、item、音频缓冲 + 可选 `transcribe`、response create/cancel）；提供 handler
+时由 bundle 接管完整事件协议。其他异常按该端点的协议错误返回。
+
+## 4. OpenAI 对接
+
+### 4.0 通用约定
+
+- `model` 可为任意值；chat/completions/responses 的响应使用 `engine.model_id`。
+- 错误：`400` 非法请求、`404` 未知资源、`500` 推理异常、`501` 缺少 engine 方法、
+  `503` + `Retry-After: 5`（GPU busy）。
+- SSE 流以 `data: [DONE]` 结束。
+- 未知请求字段进入 `ChatRequest.extras`，交给 bundle。
+
+### 4.1 `POST /v1/chat/completions`
+
+| 输入 | 说明 |
+|------|------|
+| `messages` | 必填非空；`role`、`content`、`tool_calls`、`tool_call_id`、`name` |
+| `max_tokens` / `max_completion_tokens` | 默认 256 |
+| `temperature`、`top_p`、`top_k`、`stop`（字符串或数组）、`seed` | 映射到 `ChatRequest` |
+| `stream` | SSE |
+| `tools` | 函数工具 |
+| `n` | ≥ 1；流式与非流式均支持多 choice |
+| `tool_choice`、`response_format`、`logprobs`、penalty、`user` | 通过 `extras` 透传 |
+
+输出（非流式）：`chat.completion`，`choices[{index, message, finish_reason}]`，`usage`。
+`message` 含 `content`、可选 `reasoning_content`、`tool_calls`。
+
+输出（流式）：`chat.completion.chunk`；首个 chunk 带 `role`（开启 thinking 时为
+`reasoning_content`/`reasoning`，否则 `content`），随后 delta、finish chunk（
+有 usage 时附带）、`[DONE]`。`choices[].index` 区分 `n>1` 的 choice。
+
+### 4.2 `POST /v1/completions`
+
+| 输入 | 说明 |
+|------|------|
+| `prompt` | 字符串或字符串数组；空串/空数组 → `400` |
+| `max_tokens`、`temperature`、`top_p`、`stop`、`seed`、`stream`、`n`、`echo` | 映射 |
+| `logprobs`、`best_of`、`suffix` | 不支持 → `400` |
+
+输出：`text_completion` / SSE 文本增量。choice 数 = prompts × `n`。
+
+### 4.3 `POST /v1/responses`
+
+| 输入 | 说明 |
+|------|------|
+| `input` | 字符串或 item 数组 |
+| items | `message`（`input_text`/`output_text`/`text`、`input_image`、`input_file`）、`function_call`、`function_call_output`、`reasoning` |
+| `input_file` | 支持 `file_data`（base64 或内联 UTF-8）；`file_id` → `501` |
+| `instructions` | System message |
+| `max_output_tokens`、`temperature`、`top_p` | 映射 |
+| `tools`、`tool_choice` | 仅 function 工具；其他类型 → `400` |
+| `previous_response_id` | 回放存储的会话；未知 → `400` |
+| `metadata`、`store` | 内存存储；`store:false` 不可检索 |
+| `text.format` | 映射为 extras 中的 `response_format` |
+| `reasoning`、`truncation`、`parallel_tool_calls` | 通过 extras 透传 |
+| `background` | 异步执行；与 `stream` 同用 → `400` |
+
+输出：`response` 对象，含 `status`（`completed`/`incomplete`）、`output`
+（`reasoning`/`message`/`function_call`）、`output_text`、`usage`。流式事件：
+`response.created`、`in_progress`、output item/content part add/done、
+`output_text.delta/done`、reasoning delta、`function_call_arguments.done`、
+`response.completed`/`failed`。
+
+| 附加端点 | 输出 |
+|----------|------|
+| `GET /v1/responses/{id}` | 存储的 response，或 `404` |
+| `DELETE /v1/responses/{id}` | `{id, object:"response.deleted", deleted:true}` |
+| `POST /v1/responses/{id}/cancel` | 取消运行中的 background response；已完成/不存在 → `400`/`404` |
+
+`finish_reason == "length"` 时状态为 `incomplete`。
+
+### 4.4 `POST /v1/embeddings`
+
+输入：`input`（字符串 / 字符串数组 / token 数组 / token 数组的数组）、`dimensions`、
+`encoding_format`（`float` 或 `base64`，小端 float32）。输出：`list`，含
+`data[{object:"embedding", embedding, index}]`、`model`、`usage`。engine 返回数量不一致
+→ `500`；缺少方法 → `501`。
+
+### 4.5 `POST /v1/moderations`
+
+输入：`input`（字符串/字符串数组）。输出：`id`、`model`、`results[]`、`usage`。
+
+### 4.6 音频
+
+| 端点 | 输入 | 输出 |
+|------|------|------|
+| `POST /v1/audio/transcriptions` | multipart `file`（必填）、`model`、`language`、`prompt`、`response_format`（`json`/`text`/`srt`/`vtt`/`verbose_json`）、`temperature`、`timestamp_granularities[]` | JSON/文本/字幕；`verbose_json` 含 `task:"transcribe"`、segments、words |
+| `POST /v1/audio/translations` | 同上 | 同上，`verbose_json` 的 `task` 为 `"translate"` |
+| `POST /v1/audio/speech` | JSON `input`（必填）、`model`、`voice`、`response_format`（mp3/opus/aac/flac/wav/pcm）、`speed`、`instructions` | 音频字节 + media type |
+
+### 4.7 图像
+
+| 端点 | 输入 | 输出 |
+|------|------|------|
+| `POST /v1/images/generations` | JSON `prompt`（必填）、`model`、`n`、`size`、`quality`、`style`、`response_format` | `{created, data:[{url|b64_json, revised_prompt?}], usage}` |
+| `POST /v1/images/edits` | multipart `image`（必填）、`mask`、`prompt`（必填）及公共字段 | 同上 |
+| `POST /v1/images/variations` | multipart `image`（必填）及公共字段 | 同上 |
+
+`url` 输出为 `data:image/...;base64,...` URI。
+
+### 4.8 视频
+
+| 端点 | 输入 | 输出 |
+|------|------|------|
+| `POST /v1/videos` | JSON 或 multipart：`prompt`、`model`、`seconds`、`size`、可选 `input_reference` | job `{id, object:"video", status, created_at, ...}` |
+| `GET /v1/videos` | `limit` 1–100（默认 20） | `{object:"list", data:[job], has_more}` |
+| `GET /v1/videos/{id}` | — | job 或 `404` |
+| `GET /v1/videos/{id}/content` | — | `video/mp4` 字节 |
+| `DELETE /v1/videos/{id}` | — | `{id, object:"video.deleted", deleted:bool}` |
+
+### 4.9 `WS /v1/realtime`
+
+若 bundle 实现 `realtime_session(websocket, model)`，由它负责完整事件协议；host 只负责
+接受连接、选模型、能力门控和错误转发。
+
+未提供 handler 时，host 提供文本状态机：
+
+| 方向 | 事件 |
+|------|------|
+| 客户端 → 服务端 | `session.update`、`conversation.item.create/delete/truncate`、`input_audio_buffer.append/commit/clear`、`response.create`、`response.cancel` |
+| 服务端 → 客户端 | `session.created/updated`、`conversation.item.created/deleted/truncated`、`input_audio_buffer.committed/cleared`、`response.created`、`response.output_item.added/done`、`response.content_part.added/done`、`response.output_text.delta/done`、`response.function_call_arguments.done`、`response.done`、`error` |
+
+`session.update` 只接受已知字段（`id`/`object`/`model` 不可改）。`response.create` 可带
+`response` 覆盖（`instructions`、`tools`、`tool_choice`、`temperature`、
+`max_output_tokens`）。音频 `append` 会缓冲；`commit` 生成输入 item，并在 engine 支持
+`transcribe` 时自动转写。
+
+### 4.10 模型
+
+`GET /v1/models` 与 `GET /v1/models/{id}` 始终可用。默认返回 OpenAI 结构；当带
+`anthropic-version` 且声明 `anthropic.models` 时返回 Anthropic 结构。未知 id → `404`
+（`model_not_found` / `not_found_error`）。
+
+## 5. Anthropic 对接
+
+### 5.1 `POST /v1/messages`
+
+| 输入 | 说明 |
+|------|------|
+| `messages` | 必填非空 |
+| blocks | `text`（保留 `cache_control`）、`image`（base64/url，保留 `cache_control`）、`tool_use`、`tool_result`（文本/图片/`is_error`/`cache_control`）、`thinking`/`redacted_thinking`、`document` |
+| `system` | 字符串或 blocks；保留 `cache_control` |
+| `max_tokens`、`temperature`、`top_p`、`top_k`、`stop_sequences` | 映射 |
+| `stream` | SSE |
+| `tools` | `{name, description, input_schema}` → OpenAI function |
+| `tool_choice` | `auto`→`auto`、`any`→`required`、`none`→`none`、`tool`→function 对象 |
+| `thinking` | extras 中写入 `anthropic_thinking`；`enable_thinking` 由 `type != "disabled"` 推导 |
+| `metadata` 等 | extras |
+
+输出（非流式）：`message`，`content` 为 `thinking`/`text`/`tool_use` 块，`stop_reason`
+（`end_turn`、`max_tokens`、`tool_use`、`stop_sequence`、`refusal`）、
+`usage{input_tokens, output_tokens}`。
+
+输出（流式）：SSE `message_start`、`content_block_start`、`content_block_delta`
+（`thinking_delta`/`text_delta`/`input_json_delta`）、`content_block_stop`、
+`message_delta`、`message_stop`、`error`。
+
+`tool_result` 中的图片保留为 image part；`cache_control` 在 system、text、image、
+tool_result part 上保留。
+
+### 5.2 `POST /v1/messages/count_tokens`
+
+与 messages 相同的校验。输出 `{input_tokens:int}`。缺少 `count_tokens` → `501`；
+计数异常 → `500`。
+
+### 5.3 模型
+
+`GET /v1/models` 支持 `limit`（1–1000）与 `before_id`/`after_id`；单模型 host 对任何
+游标返回空页。`GET /v1/models/{id}` 在带 `anthropic-version` 时返回 Anthropic 结构。
+
+## 6. 通用转换规则
+
+| 区域 | 规则 |
+|------|------|
+| `extras` | `tool_choice`、`response_format`、penalty、`user`、Responses 控制字段、Anthropic thinking 参数透传给 bundle |
+| `tool_choice` | Anthropic 归一化为 OpenAI 形式 |
+| 多模态 | Anthropic image block → image URL part；tool_result 图片保留 |
+| 推理 | 结果用 `reasoning_content`；输出为 `thinking` 块 / `reasoning` item |
+| `n > 1` | chat 与 completions 的流式/非流式均支持；usage 合并 |
+| Usage | chat/responses 由 engine usage 推导；缺失字段默认 0 |
+| Busy | 单 GPU 槽位；`503` + `Retry-After: 5` |
+
+## 7. 兼容与门控
+
+- 无 `serve.capabilities` 的旧 manifest 仅保留 `openai.chat`。
+- `[]` 仅保留 health/models，无推理路由。
+- `register_routes` 自定义端点不受门控影响。
+- 未知能力 ID 校验失败。
+
+## 8. 校验与验收
+
+```bash
+flashcli bundle validate <bundle-or-dist>
+pytest tests/test_serve_protocol_matrix.py tests/test_serve_realtime.py
+```
+
+发布前用发布树执行 `flashcli serve`，至少验证非流式 + 流式 chat、工具与 `tool_choice`、
+Anthropic messages 与流式事件、`count_tokens`，以及所有已声明的非 chat 能力。
+
+## 9. 已知限制
+
+| 区域 | 限制 |
+|------|------|
+| Chat | `logprobs`/`response_format` 仅透传，不生成/不强制 |
+| Completions | `logprobs`/`best_of`/`suffix` 被拒绝 |
+| Responses | 不支持 `file_id`/非文本文件；无 input_items/input_tokens/include；无内置工具；background 仅内存 |
+| Audio | 无流式转写/分块；speech 无流式 |
+| Images | 无 stream/background/output format 控制 |
+| Videos | 无 remix 或游标分页 |
+| Realtime | 文本状态机；无 TTS/VAD/音频输出；reasoning 不输出 |
+| Anthropic | 无 batches/files/MCP/container/context_management/output_config；`disable_parallel_tool_use` 丢弃 |
+| 平台 API | OpenAI Batch/Files/Fine-tuning/Assistants/Vector Stores 范围外 |
+| 鉴权/限流 | 本地单用户 CLI，故意不实现 |
+
+## 相关文档
+
+- [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) —— manifest、目录、发布
+- [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) —— entry 后端
+- [module_layers.zh-CN.md](module_layers.zh-CN.md) —— host/infer/protocol 归属
+- [bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md) —— 构建与发布
