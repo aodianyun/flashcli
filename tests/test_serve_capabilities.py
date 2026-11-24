@@ -148,6 +148,38 @@ class _RealtimeEngine(_ModalityEngine):
         pass
 
 
+class _FullModalityEngine(_ModalityEngine):
+    def embed(self, request):  # noqa: ANN001, ANN201
+        return None
+
+    def moderate(self, request):  # noqa: ANN001, ANN201
+        return None
+
+    def transcribe(self, request):  # noqa: ANN001, ANN201
+        return None
+
+    def generate_images(self, request):  # noqa: ANN001, ANN201
+        return None
+
+    def create_video(self, request):  # noqa: ANN001, ANN201
+        return {"id": "v"}
+
+    def list_videos(self):  # noqa: ANN201
+        return []
+
+    def get_video(self, video_id):  # noqa: ANN001, ANN201
+        return {"id": video_id}
+
+    def download_video(self, video_id):  # noqa: ANN001, ANN201
+        return b""
+
+    def delete_video(self, video_id):  # noqa: ANN001, ANN201
+        return True
+
+    def count_tokens(self, request):  # noqa: ANN001, ANN201
+        return 0
+
+
 def test_engine_contract_depends_on_capabilities() -> None:
     from flashcli_bundle.protocol import coerce_serve_engine
 
@@ -163,3 +195,27 @@ def test_engine_contract_depends_on_capabilities() -> None:
     )
     with pytest.raises(TypeError):
         coerce_serve_engine(_ModalityEngine(), capabilities=["openai.realtime"])
+
+
+def test_declared_modality_capabilities_require_methods() -> None:
+    from flashcli_bundle.protocol import coerce_serve_engine
+
+    caps = [
+        "openai.embeddings",
+        "openai.moderations",
+        "openai.audio.transcriptions",
+        "openai.audio.translations",
+        "openai.images.generations",
+        "openai.images.edits",
+        "openai.images.variations",
+        "openai.videos",
+        "anthropic.count_tokens",
+    ]
+    for cap in caps:
+        with pytest.raises(TypeError):
+            coerce_serve_engine(_ModalityEngine(), capabilities=[cap])
+        assert coerce_serve_engine(_FullModalityEngine(), capabilities=[cap])
+    with pytest.raises(TypeError):
+        coerce_serve_engine(
+            _RealtimeEngine(), capabilities=["openai.realtime", "openai.embeddings"]
+        )

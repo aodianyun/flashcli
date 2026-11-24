@@ -131,6 +131,30 @@ class ServeEngine:
 同步方法即使是线程安全的也会串行。`N` 个槽位都占用时，请求按
 `FLASHCLI_SERVE_BUSY_TIMEOUT_SEC` 等待或返回 `503`。
 
+### 各 API 的并发行为
+
+门限是**每个 serve 进程**独立。单个请求内部的 `n`、prompt 数组等仍是串行；
+`concurrency` 只让不同请求重叠。
+
+| API | 占用推理槽位 | 异步方法 | 说明 |
+|-----|--------------|----------|------|
+| `/health`、`/v1/models`、`/v1/models/{id}` | 否 | — | 始终可用 |
+| `POST /v1/chat/completions` | 是 | `chat_async` / `chat_stream_async` | 请求或整个 SSE 流期间占槽位；`n` 个 choice 串行 |
+| `POST /v1/completions` | 是 | `chat_async` / `chat_stream_async` | 单个请求内 prompt × `n` 串行 |
+| `POST /v1/responses` | 是 | `chat_async` / `chat_stream_async` | 流式请求占槽位；后台响应运行期间占槽位 |
+| `POST /v1/messages` | 是 | `chat_async` / `chat_stream_async` | Anthropic SSE 期间占槽位 |
+| `POST /v1/embeddings` | 是 | `embed` | 每请求一次引擎调用 |
+| `POST /v1/moderations` | 是 | `moderate` | 每请求一次引擎调用 |
+| `POST /v1/audio/transcriptions` / `translations` | 是 | `transcribe` | 每请求一次引擎调用 |
+| `POST /v1/audio/speech` | 是 | `speech` | 每请求一次引擎调用 |
+| `POST /v1/images/*` | 是 | `generate_images` | 每请求一次引擎调用；`n` 由引擎处理 |
+| `POST /v1/videos` | 是 | `create_video` | 只有 create 调用占槽位 |
+| `GET/DELETE /v1/videos*`、`/v1/videos/{id}/content` | 否 | — | 任务元数据/下载；引擎后台渲染不在门限内 |
+| `WS /v1/realtime` | 是 | `realtime_session` 或 `chat_async` | 每次 `response.create` 占一个槽位；`N > 1` 可多会话 |
+| `POST /v1/messages/count_tokens` | 否 | `count_tokens` | 元数据操作 |
+| `register_routes` 自定义端点 | 否 | bundle 自有 | 不受门控 |
+| `load` / `warmup` | 否 | — | host 在开始服务前调用一次 |
+
 仅当声明对话类能力（`openai.chat`、`openai.completions`、`openai.responses`、
 `anthropic.messages`），或声明 `openai.realtime` 但 bundle 未提供
 `realtime_session` 时才要求 `chat` / `chat_stream`。仅模态类 bundle
@@ -161,17 +185,19 @@ class ServeEngine:
 | `count_tokens(ChatRequest)` | `int` |
 | `realtime_session(websocket, model)` | Realtime 事件协议的 async handler |
 
-缺少可选方法时返回 HTTP `501`。未提供 `realtime_session` 时，host 运行自带文本状态机
-（session、item、音频缓冲 + 可选 `transcribe`、response create/cancel）；提供 handler
-时由 bundle 接管完整事件协议。其他异常按该端点的协议错误返回。
+声明了能力就必须在 engine 加载时实现对应方法；缺少成员会使 serve 启动失败。
+运行期若方法意外不可用，host 仍会防御性返回 `501`。未提供 `realtime_session` 时，
+host 运行自带文本状态机（session、item、音频缓冲 + 可选 `transcribe`、
+response create/cancel）；提供 handler 时由 bundle 接管完整事件协议。其他异常按该
+端点的协议错误返回。
 
 ## 5. OpenAI 对接（engine 模式）
 
 ### 5.0 通用约定
 
 - `model` 可为任意值；chat/completions/responses 的响应使用 `engine.model_id`。
-- 错误：`400` 非法请求、`404` 未知资源、`500` 推理异常、`501` 缺少 engine 方法、
-  `503` + `Retry-After: 5`（GPU busy）。
+- 错误：`400` 非法请求、`404` 未知资源、`500` 推理异常、`501` host 未实现或
+  防御性缺失 engine 方法、`503` + `Retry-After: 5`（GPU busy）。
 - SSE 流以 `data: [DONE]` 结束。
 - 未知请求字段进入 `ChatRequest.extras`，交给 bundle。
 
@@ -239,7 +265,8 @@ class ServeEngine:
 输入：`input`（字符串 / 字符串数组 / token 数组 / token 数组的数组）、`dimensions`、
 `encoding_format`（`float` 或 `base64`，小端 float32）。输出：`list`，含
 `data[{object:"embedding", embedding, index}]`、`model`、`usage`。engine 返回数量不一致
-→ `500`；缺少方法 → `501`。
+→ `500`；声明 embeddings 能力但没有 `embed` 会使启动失败，运行期方法消失时防御性
+返回 `501`。
 
 ### 5.5 `POST /v1/moderations`
 
@@ -325,8 +352,9 @@ tool_result part 上保留。
 
 ### 6.2 `POST /v1/messages/count_tokens`
 
-与 messages 相同的校验。输出 `{input_tokens:int}`。缺少 `count_tokens` → `501`；
-计数异常 → `500`。
+与 messages 相同的校验。输出 `{input_tokens:int}`。声明 `anthropic.count_tokens`
+能力但没有 `count_tokens` 会使启动失败；计数异常 → `500`，运行期方法消失时防御性
+返回 `501`。
 
 ### 6.3 模型
 
@@ -363,6 +391,12 @@ pytest tests/test_serve_protocol_matrix.py tests/test_serve_realtime.py tests/te
 # 通过 flashcli-bundle.infer serve 启动并做真实 socket 请求。
 FLASHCLI_ACCEPTANCE=1 pytest tests/acceptance/test_serve_bundles.py
 ```
+
+`flashcli bundle validate` 只做静态 manifest/文件检查：能力 ID、重复项、并发值、
+entry 模块文件是否存在。它**不会**导入 engine，也不检查方法实现。`flashcli serve`
+与 `flashserver` 在启动时会加载 engine 并强制检查声明能力的对应方法；声明了能力
+但没实现方法的 bundle 无法启动服务，即使 `bundle validate` 通过。发布前必须用发布树
+实际跑一次 `flashcli serve` smoke。
 
 发布前用发布树执行 `flashcli serve`，至少验证非流式 + 流式 chat、工具与 `tool_choice`、
 Anthropic messages 与流式事件、`count_tokens`，以及所有已声明的非 chat 能力。

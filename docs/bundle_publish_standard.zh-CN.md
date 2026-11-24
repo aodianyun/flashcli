@@ -233,6 +233,8 @@ flashcli run flashcli-bundle/qwen3_8b_nvfp4:1.0.0
 
 `serve.concurrency` 决定 host 共享推理门限的大小（默认 `1`）。所有 host 自有推理路由共用它，包括 chat、embedding、moderation、音频、图像和视频创建。只有引擎方法为异步时，`> 1` 才有实际并行效果；同步方法仍会在推理循环线程上逐个执行。
 
+`flashcli bundle validate` 只检查该 manifest 字段与 entry 文件，不会导入引擎。声明能力的对应方法在 `flashcli serve` / `flashserver` 加载引擎时强制检查；缺少方法会使 serve 启动失败。
+
 ### 3.3 `defaults.python_abi`
 
 ```json

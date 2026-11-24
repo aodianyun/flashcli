@@ -208,6 +208,28 @@ _CHAT_SERVE_CAPABILITIES = frozenset(
     {"openai.chat", "openai.completions", "openai.responses", "anthropic.messages"}
 )
 
+# Declared modality capabilities require their engine methods at load time; a
+# bundle that declares a route without implementing it fails serve startup
+# instead of returning 501 for every request.
+_CAPABILITY_METHODS: dict[str, tuple[str, ...]] = {
+    "openai.embeddings": ("embed",),
+    "openai.moderations": ("moderate",),
+    "openai.audio.transcriptions": ("transcribe",),
+    "openai.audio.translations": ("transcribe",),
+    "openai.audio.speech": ("speech",),
+    "openai.images.generations": ("generate_images",),
+    "openai.images.edits": ("generate_images",),
+    "openai.images.variations": ("generate_images",),
+    "openai.videos": (
+        "create_video",
+        "list_videos",
+        "get_video",
+        "download_video",
+        "delete_video",
+    ),
+    "anthropic.count_tokens": ("count_tokens",),
+}
+
 
 def coerce_serve_engine(
     obj: Any,
@@ -218,8 +240,9 @@ def coerce_serve_engine(
 
     ``model_id``/``load``/``warmup`` are always required. ``chat``/``chat_stream``
     are required only when a chat-based capability is declared (or realtime is
-    declared without a bundle ``realtime_session`` handler). Modality-only
-    bundles therefore do not need chat stubs.
+    declared without a bundle ``realtime_session`` handler). Every declared
+    modality capability also requires its engine method(s); missing members fail
+    serve startup.
     """
     required = ["model_id", "load", "warmup"]
     needs_chat = capabilities is None or any(
@@ -233,6 +256,9 @@ def coerce_serve_engine(
         needs_chat = True
     if needs_chat:
         required.extend(["chat", "chat_stream"])
+    for cap in capabilities or ():
+        required.extend(_CAPABILITY_METHODS.get(cap, ()))
+    required = list(dict.fromkeys(required))
     missing = [name for name in required if not hasattr(obj, name)]
     if missing:
         raise TypeError(

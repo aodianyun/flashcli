@@ -139,6 +139,31 @@ Only async engine methods overlap. A bundle opting into `N > 1` must:
 Synchronous methods serialize even if they are thread-safe. When all `N` slots
 are occupied, requests wait or return `503` according to
 `FLASHCLI_SERVE_BUSY_TIMEOUT_SEC`.
+
+### Per-API concurrency behavior
+
+The gate is **per serve process**. `n` choices, prompt arrays, and other work
+inside one request are sequential; `concurrency` allows different requests to
+overlap.
+
+| API | Uses an inference slot | Async method(s) | Notes |
+|-----|------------------------|-----------------|-------|
+| `/health`, `/v1/models`, `/v1/models/{id}` | no | — | Always available |
+| `POST /v1/chat/completions` | yes | `chat_async` / `chat_stream_async` | Slot held for the request or the whole SSE stream; `n` choices are sequential |
+| `POST /v1/completions` | yes | `chat_async` / `chat_stream_async` | Prompts × `n` are sequential inside one request |
+| `POST /v1/responses` | yes | `chat_async` / `chat_stream_async` | Streaming holds the slot; a background response holds it while running |
+| `POST /v1/messages` | yes | `chat_async` / `chat_stream_async` | Anthropic SSE holds the slot |
+| `POST /v1/embeddings` | yes | `embed` | One engine call per request |
+| `POST /v1/moderations` | yes | `moderate` | One engine call per request |
+| `POST /v1/audio/transcriptions` / `translations` | yes | `transcribe` | One engine call per request |
+| `POST /v1/audio/speech` | yes | `speech` | One engine call per request |
+| `POST /v1/images/*` | yes | `generate_images` | One engine call per request; `n` is handled by the engine |
+| `POST /v1/videos` | yes | `create_video` | Only the create call is gated |
+| `GET/DELETE /v1/videos*`, `/v1/videos/{id}/content` | no | — | Job metadata/download; engine background work is outside the gate |
+| `WS /v1/realtime` | yes | `realtime_session` or `chat_async` | One slot per `response.create`; `N > 1` allows multiple sessions |
+| `POST /v1/messages/count_tokens` | no | `count_tokens` | Metadata operation |
+| `register_routes` custom endpoints | no | Bundle-owned | Not gated |
+| `load` / `warmup` | no | — | Called once by the host before serving |
 `/health`, `/v1/models`, `count_tokens`, and video list/get/download/delete are
 metadata operations and do not take an inference slot; video creation does.
 
@@ -172,10 +197,12 @@ Optional capability methods (duck-typed; sync return or awaitable):
 | `count_tokens(ChatRequest)` | `int` |
 | `realtime_session(websocket, model)` | async handler for the Realtime event protocol |
 
-A missing optional method returns HTTP `501`. When `realtime_session` is
-absent the host runs its own text state machine (session, items, audio buffer
-with optional `transcribe`, response create/cancel); a present handler takes
-over the full event protocol. Other exceptions surface as the endpoint's
+Declared capabilities require their methods when the engine loads; missing
+members fail serve startup. The host still returns `501` defensively if a
+declared method is unavailable at request time. `realtime_session` is optional:
+when absent the host runs its own text state machine (session, items, audio
+buffer with optional `transcribe`, response create/cancel); a present handler
+takes over the full event protocol. Other exceptions surface as the endpoint's
 protocol error.
 
 ## 5. OpenAI integration (engine mode)
@@ -184,7 +211,8 @@ protocol error.
 
 - `model` may be any value; chat/completions/responses use `engine.model_id` in responses.
 - Errors: `400` invalid request, `404` unknown resource, `500` inference error,
-  `501` missing engine method, `503` + `Retry-After: 5` when GPU busy.
+  `501` host-unimplemented or defensively missing engine method, `503` +
+  `Retry-After: 5` when GPU busy.
 - SSE streams end with `data: [DONE]`.
 - Unknown request fields are collected in `ChatRequest.extras` for the bundle.
 
@@ -253,7 +281,8 @@ Output: `response` object with `status` (`completed`/`incomplete`), `output`
 Input: `input` string / string[] / token array / token-array array; `dimensions`;
 `encoding_format` `float` or `base64` (little-endian float32). Output: `list` with
 `data[{object:"embedding", embedding, index}]`, `model`, `usage`. Mismatched
-engine output count → `500`; missing method → `501`.
+engine output count → `500`; a declared embeddings capability without `embed`
+fails startup, with a defensive `501` if the method disappears at runtime.
 
 ### 5.5 `POST /v1/moderations`
 
@@ -341,8 +370,10 @@ system, text, image, and tool-result parts.
 
 ### 6.2 `POST /v1/messages/count_tokens`
 
-Same validation as messages. Output `{input_tokens:int}`. Missing
-`count_tokens` → `501`; counter error → `500`.
+Same validation as messages. Output `{input_tokens:int}`. A declared
+`anthropic.count_tokens` capability without `count_tokens` fails startup;
+counter error → `500`, with a defensive `501` if the method disappears at
+runtime.
 
 ### 6.3 Models
 
@@ -381,6 +412,14 @@ pytest tests/test_serve_protocol_matrix.py tests/test_serve_realtime.py tests/te
 # starts each through flashcli-bundle.infer serve, and exercises real sockets.
 FLASHCLI_ACCEPTANCE=1 pytest tests/acceptance/test_serve_bundles.py
 ```
+
+`flashcli bundle validate` is a static manifest/file check: capability IDs,
+duplicates, concurrency value, and entry module existence. It does **not**
+import the engine or verify method bodies. `flashcli serve` and `flashserver`
+load the engine and enforce the declared capability methods at startup; a
+bundle that declares a capability without implementing its methods cannot serve,
+even though `bundle validate` passes. Always run one real serve smoke before
+publishing.
 
 Before publishing, run the published tree through `flashcli serve` and verify
 non-streaming + streaming chat, tools and `tool_choice`, Anthropic messages and

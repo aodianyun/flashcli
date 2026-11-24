@@ -234,6 +234,8 @@ A capability has exactly one implementation. Native backends use the sibling `na
 
 `serve.concurrency` sizes the shared host inference gate (default `1`). Every host-owned inference route uses it, including chat, embeddings, moderation, audio, images, and video creation. Values above `1` only help when the engine methods are async; synchronous methods still run one at a time on the inference-loop thread.
 
+`flashcli bundle validate` checks this manifest field and the entry file, but does not import the engine. Declared capability methods are enforced when `flashcli serve` / `flashserver` loads the engine; a missing method fails serve startup.
+
 ### 3.3 `defaults.python_abi`
 
 ```json
