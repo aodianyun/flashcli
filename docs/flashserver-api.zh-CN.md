@@ -23,6 +23,10 @@
 | 镜像 | `GET /v1/mirror`、`POST /v1/mirror` | 对新下载启用/关闭国内镜像 |
 | 实时 / 界面 | `GET /v1/ws`、`GET /`、`GET /docs`、`GET /openapi.yaml`、`POST /v1/ui/chat` | WebSocket 状态与内置控制台 |
 
+`GET /v1/models` 与 `GET /v1/models/loaded` 的模型对象包含 `capabilities` 数组。
+`null` 表示 host 不拥有该 serve 条目的路由（script/native 或未知）；`[]` 表示显式关闭
+host 推理路由。
+
 ## 示例
 
 ```bash

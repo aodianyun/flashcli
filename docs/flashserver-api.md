@@ -25,6 +25,10 @@ Authentication is off by default. With a token, every path except `/health`, `/`
 | Mirror | `GET /v1/mirror`, `POST /v1/mirror` | Domestic mirrors for new downloads |
 | Live / UI | `GET /v1/ws`, `GET /`, `GET /docs`, `GET /openapi.yaml`, `POST /v1/ui/chat` | WebSocket state; embedded console |
 
+Model objects in `GET /v1/models` and `GET /v1/models/loaded` include a
+`capabilities` array. `null` means the host does not own routes for that serve
+entry (script/native or unknown); `[]` means host inference routes are disabled.
+
 ## Examples
 
 ```bash
