@@ -69,7 +69,7 @@ Engine 模式下 bundle 不得自行启动 `uvicorn`/`FastAPI` 服务。
 | 缺省 `capabilities` | 兼容默认：`["openai.chat"]` |
 | `capabilities: []` | 仅保留 `/health`、`/v1/models`、`/v1/models/{id}` |
 | 缺省 `concurrency` | `1`（同一时间一个 host 自有推理调用） |
-| `concurrency: N` | 最多 `N` 个并发推理调用；`N >= 1`。仅对异步或线程安全的引擎方法有效 |
+| `concurrency: N` | 最多 `N` 个并发推理调用；`N >= 1`。只有异步引擎方法会重叠；同步方法仍串行 |
 | 非 python 或非 engine serve | `capabilities` / `concurrency` 非法 |
 | 未知或重复 ID | `bundle validate` 失败 |
 | 已声明但 host 未实现 | HTTP `501`（`capability_not_implemented`） |
@@ -112,9 +112,24 @@ class ServeEngine:
 所有 host 自有推理路由共用一个由 `serve.concurrency` 决定大小的门限。
 `N > 1` 时，异步引擎方法（`chat_async`、异步 `embed` / `transcribe` /
 `speech` / `generate_images` / 视频方法）可以重叠执行；同步方法仍会在专用推理循环
-线程上逐个执行，因此只有异步或线程安全的引擎才能从 `N > 1` 受益。
+线程上逐个执行，因此只有异步引擎才能从 `N > 1` 受益。
 `/health`、`/v1/models`、`count_tokens` 以及视频的 list/get/download/delete
 属于元数据操作，不占推理槽位；视频创建会占用。
+
+### 并发要求（`serve.concurrency > 1`）
+
+只有异步引擎方法会重叠。声明 `N > 1` 的 bundle 必须：
+
+- chat 能力实现 `chat_async` / `chat_stream_async`，其它能力使用 `async def`
+  实现 `embed`、`moderate`、`transcribe`、`speech`、`generate_images` 及所声明的
+  视频方法；
+- 支持重叠请求与流：不能假设同时只有一个请求，每请求状态相互独立，并为 `N`
+  个调用准备足够的 GPU 显存 / KV cache；
+- `load` / `warmup` 不在门限内（host 只调用一次）；
+- 只有 `create_video` 调用占门限；引擎自己的后台渲染在门限之外。
+
+同步方法即使是线程安全的也会串行。`N` 个槽位都占用时，请求按
+`FLASHCLI_SERVE_BUSY_TIMEOUT_SEC` 等待或返回 `503`。
 
 仅当声明对话类能力（`openai.chat`、`openai.completions`、`openai.responses`、
 `anthropic.messages`），或声明 `openai.realtime` 但 bundle 未提供

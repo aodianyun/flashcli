@@ -75,7 +75,7 @@ In engine mode bundles must not start their own `uvicorn`/`FastAPI` server.
 | `capabilities` absent | Legacy default: `["openai.chat"]` |
 | `capabilities: []` | Only `/health`, `/v1/models`, `/v1/models/{id}` |
 | `concurrency` absent | `1` (one host-owned inference call at a time) |
-| `concurrency: N` | Up to `N` simultaneous inference calls; `N >= 1`. Only effective for async or thread-safe engine methods |
+| `concurrency: N` | Up to `N` simultaneous inference calls; `N >= 1`. Only async engine methods overlap; sync methods stay serialized |
 | Non-python or non-engine serve | `capabilities` / `concurrency` invalid |
 | Unknown or duplicate ID | `bundle validate` fails |
 | Declared but host-unimplemented | HTTP `501` (`capability_not_implemented`) |
@@ -120,7 +120,25 @@ All host-owned inference routes share one gate sized by `serve.concurrency`.
 With `N > 1`, async engine methods (`chat_async`, async `embed` / `transcribe` /
 `speech` / `generate_images` / video methods) can overlap. Synchronous methods
 still run one at a time on the dedicated inference-loop thread, so declaring
-`N > 1` only helps when the engine is async or otherwise thread-safe.
+`N > 1` only helps when the engine methods are async.
+
+### Concurrency requirements (`serve.concurrency > 1`)
+
+Only async engine methods overlap. A bundle opting into `N > 1` must:
+
+- implement `chat_async` / `chat_stream_async` for chat capabilities, and
+  `async def` for `embed`, `moderate`, `transcribe`, `speech`,
+  `generate_images`, and the video methods it declares;
+- support overlapping requests and streams: no single-in-flight assumption,
+  independent per-request state, and enough GPU memory / KV cache for `N`
+  calls;
+- keep `load` / `warmup` outside the gate (the host calls them once);
+- treat `create_video` as the gated call; engine-owned background rendering
+  runs outside the gate.
+
+Synchronous methods serialize even if they are thread-safe. When all `N` slots
+are occupied, requests wait or return `503` according to
+`FLASHCLI_SERVE_BUSY_TIMEOUT_SEC`.
 `/health`, `/v1/models`, `count_tokens`, and video list/get/download/delete are
 metadata operations and do not take an inference slot; video creation does.
 
