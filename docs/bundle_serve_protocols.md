@@ -421,12 +421,13 @@ FLASHCLI_ACCEPTANCE=1 pytest tests/acceptance/test_serve_bundles.py
 ```
 
 `flashcli bundle validate` is a static manifest/file check: capability IDs,
-duplicates, concurrency value, and entry module existence. It does **not**
-import the engine or verify method bodies. `flashcli serve` and `flashserver`
-load the engine and enforce the declared capability methods at startup; a
-bundle that declares a capability without implementing its methods cannot serve,
-even though `bundle validate` passes. Always run one real serve smoke before
-publishing.
+duplicates, concurrency value, and entry module existence. When a Python
+interpreter is available (no venv required), it also performs a best-effort AST
+check of directly defined `ServeEngine` classes against the declared capability
+methods. Imported, inherited, or dynamic classes and missing Python interpreters
+are skipped; `flashcli serve` and `flashserver` remain authoritative. A bundle
+that declares a capability without implementing its methods fails `bundle
+validate` when the class is directly visible, and always fails serve startup.
 
 Before publishing, run the published tree through `flashcli serve` and verify
 non-streaming + streaming chat, tools and `tool_choice`, Anthropic messages and

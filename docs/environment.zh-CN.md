@@ -75,6 +75,7 @@ ModelScope：
 | `FLASHCLI_INSTALL_REPO` / `FLASHCLI_INSTALL_REF` | 来自 `~/.flashcli/install.env` | 发布安装时 `flashcli-bundle[infer]` 的 git 回退来源；源码构建改写 `FLASHCLI_BUNDLE_PIP_SPEC`。 |
 | `FLASHCLI_INSTALL_COMMIT` | 来自 `~/.flashcli/install.env` | 源码构建 commit（诊断用，不参与解析）。 |
 | `FLASHCLI_BASE_PYTHON` | 自动 | bundle venv 的基础解释器。 |
+| `FLASHCLI_PYTHON` | 自动 | `bundle validate` 的 serve 静态 AST 检查使用的解释器；回退 `python3` / `python` / `py`。 |
 | `FLASHCLI_PY<abi>_BIN` | 自动 | 固定某 `python_abi` 的解释器（如 `FLASHCLI_PY312_BIN`、`FLASHCLI_PY310_BIN`）。 |
 | `FLASHCLI_FORCE_VENV` | `0` | 重建 bundle venv。 |
 | `FLASHCLI_SKIP_VENV_SETUP` | `0` | 跳过 venv 创建/安装（调试；用已有 venv）。 |

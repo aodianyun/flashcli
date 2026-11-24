@@ -99,9 +99,10 @@ func bundleValidateCmd() *cobra.Command {
 	var asJSON bool
 	var executionOnly bool
 	var skipABIProbe bool
+	var skipStaticServe bool
 	cmd := &cobra.Command{
 		Use:   "validate [path]",
-		Short: "Validate a local bundle manifest",
+		Short: "Validate a local bundle manifest and serve capability methods",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := "."
@@ -116,6 +117,9 @@ func bundleValidateCmd() *cobra.Command {
 				errs = manifest.ValidateExecution(m)
 			} else {
 				errs = manifest.Validate(m)
+				if !skipStaticServe {
+					errs = append(errs, manifest.ValidateServeMethods(m)...)
+				}
 				if !skipABIProbe {
 					errs = append(errs, native.ProbeRuntimeABI(m.Root, m.RuntimeMap(), func(minor string) (string, bool) {
 						if p, perr := venv.ResolveBasePython(minor); perr == nil {
@@ -151,6 +155,7 @@ func bundleValidateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit machine-readable JSON")
 	cmd.Flags().BoolVar(&executionOnly, "execution-only", false, "Validate only the execution ABI (docs/bundle_execution_abi.md)")
 	cmd.Flags().BoolVar(&skipABIProbe, "skip-abi-probe", false, "Skip load-testing each runtime/*.so with its tagged Python")
+	cmd.Flags().BoolVar(&skipStaticServe, "skip-static-serve", false, "Skip the Python AST check for declared serve capability methods")
 	return cmd
 }
 

@@ -399,10 +399,11 @@ FLASHCLI_ACCEPTANCE=1 pytest tests/acceptance/test_serve_bundles.py
 ```
 
 `flashcli bundle validate` 只做静态 manifest/文件检查：能力 ID、重复项、并发值、
-entry 模块文件是否存在。它**不会**导入 engine，也不检查方法实现。`flashcli serve`
-与 `flashserver` 在启动时会加载 engine 并强制检查声明能力的对应方法；声明了能力
-但没实现方法的 bundle 无法启动服务，即使 `bundle validate` 通过。发布前必须用发布树
-实际跑一次 `flashcli serve` smoke。
+entry 模块文件是否存在。若有可用的 Python 解释器（不需要 venv），还会对直接定义的
+`ServeEngine` 类做 best-effort AST 方法检查。导入/继承/动态类以及没有 Python 的
+环境会跳过该检查；`flashcli serve` 与 `flashserver` 的加载检查仍是权威。直接可见的
+类缺少声明能力的方法时 `bundle validate` 会失败；无论如何，serve 启动都会再次强制
+检查。
 
 发布前用发布树执行 `flashcli serve`，至少验证非流式 + 流式 chat、工具与 `tool_choice`、
 Anthropic messages 与流式事件、`count_tokens`，以及所有已声明的非 chat 能力。
