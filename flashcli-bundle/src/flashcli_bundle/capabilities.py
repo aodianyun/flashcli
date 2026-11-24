@@ -45,6 +45,27 @@ SERVE_CAPABILITIES = frozenset(
 # Legacy manifests without serve.capabilities keep the pre-capability host API.
 LEGACY_SERVE_CAPABILITIES = (OPENAI_CHAT,)
 
+# Capabilities whose requests/jobs hold an inference slot. Metadata-only
+# capabilities are not listed.
+GATED_SERVE_CAPABILITIES = frozenset(
+    {
+        OPENAI_CHAT,
+        OPENAI_RESPONSES,
+        OPENAI_COMPLETIONS,
+        OPENAI_EMBEDDINGS,
+        OPENAI_MODERATIONS,
+        OPENAI_AUDIO_TRANSCRIPTIONS,
+        OPENAI_AUDIO_TRANSLATIONS,
+        OPENAI_AUDIO_SPEECH,
+        OPENAI_IMAGES_GENERATIONS,
+        OPENAI_IMAGES_EDITS,
+        OPENAI_IMAGES_VARIATIONS,
+        OPENAI_VIDEOS,
+        OPENAI_REALTIME,
+        ANTHROPIC_MESSAGES,
+    }
+)
+
 
 def parse_serve_capabilities(raw: Any) -> tuple[list[str] | None, str | None]:
     """Parse an explicit serve.capabilities value.
@@ -139,6 +160,12 @@ def validate_serve_concurrency(
     mode = getattr(spec, "mode", "engine")
     if kind != "python" or mode != "engine":
         return [f"{label}.concurrency is only valid for python engine serve"]
+    if getattr(spec, "concurrency", 1) > 1:
+        caps = effective_serve_capabilities(spec)
+        if not any(cap in GATED_SERVE_CAPABILITIES for cap in caps):
+            return [
+                f"{label}.concurrency > 1 requires at least one gated inference capability"
+            ]
     return []
 
 

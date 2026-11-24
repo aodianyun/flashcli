@@ -252,6 +252,10 @@ class AsyncLLMEngine(LLMEngine):
         await asyncio.sleep(0.3)
         return super().chat(request)
 
+    async def chat_stream(self, request: ChatRequest):
+        for chunk in super().chat_stream(request):
+            yield chunk
+
 
 class CodeEngine(LLMEngine):
     model_id = "code-fixture"

@@ -148,7 +148,18 @@ class _RealtimeEngine(_ModalityEngine):
         pass
 
 
+class _SyncRealtimeEngine(_ModalityEngine):
+    def realtime_session(self, websocket, model) -> None:  # noqa: ANN001
+        pass
+
+
 class _FullModalityEngine(_ModalityEngine):
+    def chat(self, request):  # noqa: ANN001, ANN201
+        return ChatResult(content="ok")
+
+    def chat_stream(self, request):  # noqa: ANN001, ANN201
+        yield ChatChunk(content_delta="ok", finish_reason="stop")
+
     def embed(self, request):  # noqa: ANN001, ANN201
         return None
 
@@ -178,6 +189,32 @@ class _FullModalityEngine(_ModalityEngine):
 
     def count_tokens(self, request):  # noqa: ANN001, ANN201
         return 0
+
+
+class _AsyncFullModalityEngine(_FullModalityEngine):
+    async def chat(self, request):  # noqa: ANN001, ANN201
+        return ChatResult(content="ok")
+
+    async def chat_stream(self, request):  # noqa: ANN001, ANN201
+        yield ChatChunk(content_delta="ok", finish_reason="stop")
+
+    async def embed(self, request):  # noqa: ANN001, ANN201
+        return None
+
+    async def moderate(self, request):  # noqa: ANN001, ANN201
+        return None
+
+    async def transcribe(self, request):  # noqa: ANN001, ANN201
+        return None
+
+    async def speech(self, request):  # noqa: ANN001, ANN201
+        return None
+
+    async def generate_images(self, request):  # noqa: ANN001, ANN201
+        return None
+
+    async def create_video(self, request):  # noqa: ANN001, ANN201
+        return {"id": "v"}
 
 
 def test_engine_contract_depends_on_capabilities() -> None:
@@ -218,4 +255,70 @@ def test_declared_modality_capabilities_require_methods() -> None:
     with pytest.raises(TypeError):
         coerce_serve_engine(
             _RealtimeEngine(), capabilities=["openai.realtime", "openai.embeddings"]
+        )
+
+
+def test_concurrency_requires_async_gated_methods() -> None:
+    from flashcli_bundle.protocol import coerce_serve_engine
+
+    with pytest.raises(TypeError, match="async"):
+        coerce_serve_engine(
+            _FullModalityEngine(),
+            capabilities=["openai.chat"],
+            concurrency=2,
+        )
+    assert coerce_serve_engine(
+        _AsyncFullModalityEngine(),
+        capabilities=["openai.chat"],
+        concurrency=2,
+    )
+    with pytest.raises(TypeError, match="async"):
+        coerce_serve_engine(
+            _FullModalityEngine(),
+            capabilities=["openai.embeddings"],
+            concurrency=2,
+        )
+    assert coerce_serve_engine(
+        _AsyncFullModalityEngine(),
+        capabilities=["openai.embeddings"],
+        concurrency=2,
+    )
+    with pytest.raises(TypeError, match="async"):
+        coerce_serve_engine(
+            _FullModalityEngine(),
+            capabilities=["openai.videos"],
+            concurrency=2,
+        )
+    assert coerce_serve_engine(
+        _AsyncFullModalityEngine(),
+        capabilities=["openai.videos"],
+        concurrency=2,
+    )
+    assert coerce_serve_engine(
+        _AsyncFullModalityEngine(),
+        capabilities=["openai.realtime"],
+        concurrency=2,
+    )
+    assert coerce_serve_engine(
+        _RealtimeEngine(),
+        capabilities=["openai.realtime"],
+        concurrency=2,
+    )
+    with pytest.raises(TypeError, match="async"):
+        coerce_serve_engine(
+            _SyncRealtimeEngine(),
+            capabilities=["openai.realtime"],
+            concurrency=2,
+        )
+    with pytest.raises(TypeError, match="gated"):
+        coerce_serve_engine(
+            _AsyncFullModalityEngine(),
+            capabilities=["anthropic.count_tokens"],
+            concurrency=2,
+        )
+    with pytest.raises(TypeError, match="gated"):
+        coerce_serve_engine(
+            _AsyncFullModalityEngine(),
+            capabilities=[],
+            concurrency=2,
         )

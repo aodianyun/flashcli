@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -16,24 +17,32 @@ import (
 const serveStaticScript = `
 import ast, json, sys
 
-path, attr, caps = sys.argv[1], sys.argv[2], json.loads(sys.argv[3])
-required = set()
-if "openai.chat" in caps or "openai.completions" in caps or "openai.responses" in caps or "anthropic.messages" in caps:
-    required.update(("chat", "chat_stream"))
-if "openai.embeddings" in caps:
-    required.add("embed")
-if "openai.moderations" in caps:
-    required.add("moderate")
-if "openai.audio.transcriptions" in caps or "openai.audio.translations" in caps:
-    required.add("transcribe")
-if "openai.audio.speech" in caps:
-    required.add("speech")
-if any(c.startswith("openai.images.") for c in caps):
-    required.add("generate_images")
-if "openai.videos" in caps:
-    required.update(("create_video", "list_videos", "get_video", "download_video", "delete_video"))
-if "anthropic.count_tokens" in caps:
-    required.add("count_tokens")
+path, attr, caps_json, concurrency = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
+caps = json.loads(caps_json)
+chat_caps = {"openai.chat", "openai.completions", "openai.responses", "anthropic.messages"}
+method_map = {
+    "openai.embeddings": ("embed",),
+    "openai.moderations": ("moderate",),
+    "openai.audio.transcriptions": ("transcribe",),
+    "openai.audio.translations": ("transcribe",),
+    "openai.audio.speech": ("speech",),
+    "openai.images.generations": ("generate_images",),
+    "openai.images.edits": ("generate_images",),
+    "openai.images.variations": ("generate_images",),
+    "openai.videos": ("create_video", "list_videos", "get_video", "download_video", "delete_video"),
+    "anthropic.count_tokens": ("count_tokens",),
+}
+gated_map = {
+    "openai.embeddings": ("embed",),
+    "openai.moderations": ("moderate",),
+    "openai.audio.transcriptions": ("transcribe",),
+    "openai.audio.translations": ("transcribe",),
+    "openai.audio.speech": ("speech",),
+    "openai.images.generations": ("generate_images",),
+    "openai.images.edits": ("generate_images",),
+    "openai.images.variations": ("generate_images",),
+    "openai.videos": ("create_video",),
+}
 
 try:
     tree = ast.parse(open(path, encoding="utf-8").read(), filename=path)
@@ -50,29 +59,68 @@ if any(base not in ("object", "") for base in bases):
     print(json.dumps({"skip": "class uses inheritance"}))
     raise SystemExit(0)
 
-methods = set()
+methods = {}
 for node in cls.body:
-    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-        methods.add(node.name)
+    if isinstance(node, ast.FunctionDef):
+        methods[node.name] = False
+    elif isinstance(node, ast.AsyncFunctionDef):
+        methods[node.name] = True
     elif isinstance(node, (ast.Assign, ast.AnnAssign)):
         targets = node.targets if isinstance(node, ast.Assign) else [node.target]
         for target in targets:
             if isinstance(target, ast.Name):
-                methods.add(target.id)
+                methods[target.id] = False
 if "__getattr__" in methods or "__getattribute__" in methods:
     print(json.dumps({"skip": "class is dynamic"}))
     raise SystemExit(0)
 
+needs_chat = any(cap in chat_caps for cap in caps)
 if "openai.realtime" in caps and "realtime_session" not in methods:
-    required.update(("chat", "chat_stream"))
-missing = sorted(required.difference(methods))
-print(json.dumps({"missing": missing}))
+    needs_chat = True
+
+missing = []
+if needs_chat:
+    if not any(name in methods for name in ("chat", "chat_async")):
+        missing.append("chat or chat_async")
+    if not any(name in methods for name in ("chat_stream", "chat_stream_async")):
+        missing.append("chat_stream or chat_stream_async")
+for cap in caps:
+    for name in method_map.get(cap, ()):
+        if name not in methods:
+            missing.append(name)
+if missing:
+    print(json.dumps({"missing": sorted(set(missing))}))
+    raise SystemExit(0)
+
+if concurrency <= 1:
+    print(json.dumps({}))
+    raise SystemExit(0)
+
+gated = {}
+if needs_chat:
+    gated["chat"] = ("chat_async", "chat")
+    gated["chat_stream"] = ("chat_stream_async", "chat_stream")
+for cap in caps:
+    for name in gated_map.get(cap, ()):
+        gated[name] = (name,)
+if "openai.realtime" in caps:
+    if "realtime_session" in methods:
+        gated["realtime_session"] = ("realtime_session",)
+    else:
+        gated["chat"] = ("chat_async", "chat")
+        gated["chat_stream"] = ("chat_stream_async", "chat_stream")
+not_async = sorted(
+    name for name, aliases in gated.items()
+    if not any(methods.get(alias) is True for alias in aliases)
+)
+print(json.dumps({"not_async": not_async}))
 `
 
 type serveStaticResult struct {
-	Missing []string `json:"missing"`
-	Skip    string   `json:"skip"`
-	Error   string   `json:"error"`
+	Missing  []string `json:"missing"`
+	NotAsync []string `json:"not_async"`
+	Skip     string   `json:"skip"`
+	Error    string   `json:"error"`
 }
 
 // ValidateServeMethods performs a best-effort AST check of declared capability
@@ -120,7 +168,7 @@ func ValidateServeMethods(m *Manifest) []string {
 		if spec == nil || spec.Kind != "python" || spec.Mode != "engine" {
 			continue
 		}
-		key := spec.Module + "|" + spec.Attr + "|" + strings.Join(spec.EffectiveServeCapabilities(), ",")
+		key := spec.Module + "|" + spec.Attr + "|" + strings.Join(spec.EffectiveServeCapabilities(), ",") + "|" + strconv.Itoa(spec.EffectiveServeConcurrency())
 		if seen[key] {
 			continue
 		}
@@ -133,7 +181,9 @@ func ValidateServeMethods(m *Manifest) []string {
 		if err != nil {
 			continue
 		}
-		args := append(append([]string{}, prefix...), "-c", serveStaticScript, file, spec.Attr, string(caps))
+		concurrency := spec.EffectiveServeConcurrency()
+		args := append(append([]string{}, prefix...),
+			"-c", serveStaticScript, file, spec.Attr, string(caps), strconv.Itoa(concurrency))
 		cmd := exec.Command(python, args...)
 		out, err := cmd.Output()
 		if err != nil {
@@ -155,6 +205,13 @@ func ValidateServeMethods(m *Manifest) []string {
 				spec.Attr,
 				strings.Join(result.Missing, ", "),
 				strings.Join(spec.EffectiveServeCapabilities(), ", "),
+			))
+		}
+		if len(result.NotAsync) > 0 {
+			errors = append(errors, fmt.Sprintf(
+				"%s: serve.concurrency > 1 requires async methods; sync or missing: %s",
+				item.label,
+				strings.Join(result.NotAsync, ", "),
 			))
 		}
 	}

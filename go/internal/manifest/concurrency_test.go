@@ -62,3 +62,27 @@ func TestServeConcurrencyRejectsInvalidValues(t *testing.T) {
 		t.Fatalf("script concurrency accepted: %v", joined)
 	}
 }
+
+func TestServeConcurrencyRequiresGatedCapability(t *testing.T) {
+	cases := []struct {
+		caps []string
+		want bool
+	}{
+		{[]string{ServeCapAnthropicCountTokens}, true},
+		{[]string{ServeCapAnthropicModels}, true},
+		{[]string{}, true},
+		{[]string{ServeCapOpenAIChat}, false},
+		{[]string{ServeCapOpenAIEmbeddings}, false},
+		{[]string{ServeCapAnthropicMessages}, false},
+	}
+	for _, tc := range cases {
+		spec := &EntrySpec{
+			Kind: "python", Mode: "engine", ConcurrencySet: true, Concurrency: 2,
+			CapabilitiesSet: true, Capabilities: tc.caps,
+		}
+		joined := strings.Join(validateOneServeConcurrency("entry.serve", spec), "\n")
+		if got := strings.Contains(joined, "gated"); got != tc.want {
+			t.Fatalf("caps %v errors = %v, want gated=%v", tc.caps, joined, tc.want)
+		}
+	}
+}

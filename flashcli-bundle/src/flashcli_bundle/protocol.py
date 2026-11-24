@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, AsyncIterator, Iterator, Protocol, runtime_checkable
@@ -230,20 +231,62 @@ _CAPABILITY_METHODS: dict[str, tuple[str, ...]] = {
     "anthropic.count_tokens": ("count_tokens",),
 }
 
+# Methods that hold an inference slot. Video list/get/download/delete and
+# count_tokens are metadata operations and do not need to be async.
+_GATED_METHODS: dict[str, tuple[str, ...]] = {
+    "openai.embeddings": ("embed",),
+    "openai.moderations": ("moderate",),
+    "openai.audio.transcriptions": ("transcribe",),
+    "openai.audio.translations": ("transcribe",),
+    "openai.audio.speech": ("speech",),
+    "openai.images.generations": ("generate_images",),
+    "openai.images.edits": ("generate_images",),
+    "openai.images.variations": ("generate_images",),
+    "openai.videos": ("create_video",),
+}
+
+_CHAT_METHOD_ALIASES = {
+    "chat": ("chat_async", "chat"),
+    "chat_stream": ("chat_stream_async", "chat_stream"),
+}
+
+
+def _has_any(obj: Any, names: tuple[str, ...]) -> bool:
+    return any(hasattr(obj, name) for name in names)
+
+
+def _async_method(obj: Any, names: tuple[str, ...]) -> str | None:
+    for name in names:
+        if not hasattr(obj, name):
+            continue
+        fn = getattr(obj, name)
+        if inspect.iscoroutinefunction(fn) or inspect.isasyncgenfunction(fn):
+            return name
+    return None
+
 
 def coerce_serve_engine(
     obj: Any,
     *,
     capabilities: list[str] | None = None,
+    concurrency: int | None = None,
 ) -> ServeEngine:
     """Validate a serve engine against the capabilities it must implement.
 
-    ``model_id``/``load``/``warmup`` are always required. ``chat``/``chat_stream``
-    are required only when a chat-based capability is declared (or realtime is
-    declared without a bundle ``realtime_session`` handler). Every declared
-    modality capability also requires its engine method(s); missing members fail
-    serve startup.
+    ``model_id``/``load``/``warmup`` are always required. Chat capabilities
+    require ``chat`` or ``chat_async`` plus ``chat_stream`` or
+    ``chat_stream_async``. Every declared modality capability also requires its
+    engine method(s); missing members fail serve startup.
+
+    When ``concurrency > 1`` the methods that hold an inference slot must be
+    async (or the async chat variants). Sync methods cannot overlap on the
+    single inference loop, so a bundle that declares concurrency must implement
+    async gated methods.
     """
+    try:
+        limit = max(1, int(concurrency or 1))
+    except (TypeError, ValueError):
+        limit = 1
     required = ["model_id", "load", "warmup"]
     needs_chat = capabilities is None or any(
         cap in _CHAT_SERVE_CAPABILITIES for cap in capabilities
@@ -254,14 +297,50 @@ def coerce_serve_engine(
         and not hasattr(obj, "realtime_session")
     ):
         needs_chat = True
+
+    missing: list[str] = []
+    for name in required:
+        if not hasattr(obj, name):
+            missing.append(name)
     if needs_chat:
-        required.extend(["chat", "chat_stream"])
+        for name, aliases in _CHAT_METHOD_ALIASES.items():
+            if not _has_any(obj, aliases):
+                missing.append(f"{name} or {aliases[0]}")
     for cap in capabilities or ():
-        required.extend(_CAPABILITY_METHODS.get(cap, ()))
-    required = list(dict.fromkeys(required))
-    missing = [name for name in required if not hasattr(obj, name)]
+        for name in _CAPABILITY_METHODS.get(cap, ()):
+            if not hasattr(obj, name):
+                missing.append(name)
     if missing:
         raise TypeError(
             f"Serve engine is missing required members {missing}: {type(obj)!r}"
+        )
+
+    if limit <= 1:
+        return obj
+
+    gated: dict[str, tuple[str, ...]] = {}
+    if needs_chat:
+        gated.update(_CHAT_METHOD_ALIASES)
+    for cap in capabilities or ():
+        for name in _GATED_METHODS.get(cap, ()):
+            gated[name] = _CHAT_METHOD_ALIASES.get(name, (name,))
+    if "openai.realtime" in (capabilities or ()):
+        if hasattr(obj, "realtime_session"):
+            gated["realtime_session"] = ("realtime_session",)
+        else:
+            gated.update(_CHAT_METHOD_ALIASES)
+    if not gated:
+        raise TypeError(
+            "serve.concurrency > 1 requires at least one gated inference capability"
+        )
+    not_async = [
+        name
+        for name, aliases in gated.items()
+        if _async_method(obj, aliases) is None
+    ]
+    if not_async:
+        raise TypeError(
+            "serve.concurrency > 1 requires async methods; "
+            f"sync or missing: {not_async}"
         )
     return obj

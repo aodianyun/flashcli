@@ -43,6 +43,17 @@ def test_concurrency_parsing_and_defaults() -> None:
     assert "only valid for python engine serve" in "\n".join(
         validate_serve_concurrency(script)
     )
+    assert "gated" in "\n".join(
+        validate_serve_concurrency(_serve(capabilities=[], concurrency=2))
+    )
+    assert "gated" in "\n".join(
+        validate_serve_concurrency(
+            _serve(capabilities=["anthropic.count_tokens"], concurrency=2)
+        )
+    )
+    assert not validate_serve_concurrency(
+        _serve(capabilities=["openai.chat"], concurrency=2)
+    )
 
 
 class _BaseEngine:

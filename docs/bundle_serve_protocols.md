@@ -75,7 +75,7 @@ In engine mode bundles must not start their own `uvicorn`/`FastAPI` server.
 | `capabilities` absent | Legacy default: `["openai.chat"]` |
 | `capabilities: []` | Only `/health`, `/v1/models`, `/v1/models/{id}` |
 | `concurrency` absent | `1` (one host-owned inference call at a time) |
-| `concurrency: N` | Up to `N` simultaneous inference calls; `N >= 1`. Only async engine methods overlap; sync methods stay serialized |
+| `concurrency: N` | Up to `N` simultaneous inference calls; `N >= 1`. `N > 1` requires async gated methods; sync methods are rejected |
 | Non-python or non-engine serve | `capabilities` / `concurrency` invalid |
 | Unknown or duplicate ID | `bundle validate` fails |
 | Declared but host-unimplemented | HTTP `501` (`capability_not_implemented`) |
@@ -125,9 +125,8 @@ class ServeEngine:
 
 All host-owned inference routes share one gate sized by `serve.concurrency`.
 With `N > 1`, async engine methods (`chat_async`, async `embed` / `transcribe` /
-`speech` / `generate_images` / video methods) can overlap. Synchronous methods
-still run one at a time on the dedicated inference-loop thread, so declaring
-`N > 1` only helps when the engine methods are async.
+`speech` / `generate_images` / video methods) can overlap. Sync gated methods are
+**rejected** when `N > 1`; use `N = 1` for a synchronous engine.
 
 ### Concurrency requirements (`serve.concurrency > 1`)
 
@@ -143,9 +142,9 @@ Only async engine methods overlap. A bundle opting into `N > 1` must:
 - treat `create_video` as the gated call; engine-owned background rendering
   runs outside the gate.
 
-Synchronous methods serialize even if they are thread-safe. When all `N` slots
-are occupied, requests wait or return `503` according to
-`FLASHCLI_SERVE_BUSY_TIMEOUT_SEC`.
+Synchronous gated methods are rejected when `N > 1`; use `N = 1` for a
+synchronous engine. When all `N` slots are occupied, requests wait or return
+`503` according to `FLASHCLI_SERVE_BUSY_TIMEOUT_SEC`.
 
 ### Per-API concurrency behavior
 
@@ -184,8 +183,9 @@ bundles (ASR/TTS/image/video/embedding-only) do **not** need chat stubs.
     def chat_stream(self, request: ChatRequest) -> Iterator[ChatChunk]: ...
 ```
 
-Optional async variants take precedence: `chat_async(request) -> ChatResult`,
-`chat_stream_async(request) -> AsyncIterator[ChatChunk]`.
+Chat capabilities require `chat` + `chat_stream`, or the async variants
+`chat_async` + `chat_stream_async`. Optional async variants take precedence:
+`chat_async(request) -> ChatResult`, `chat_stream_async(request) -> AsyncIterator[ChatChunk]`.
 
 Optional capability methods (duck-typed; sync return or awaitable):
 
@@ -424,10 +424,11 @@ FLASHCLI_ACCEPTANCE=1 pytest tests/acceptance/test_serve_bundles.py
 duplicates, concurrency value, and entry module existence. When a Python
 interpreter is available (no venv required), it also performs a best-effort AST
 check of directly defined `ServeEngine` classes against the declared capability
-methods. Imported, inherited, or dynamic classes and missing Python interpreters
-are skipped; `flashcli serve` and `flashserver` remain authoritative. A bundle
-that declares a capability without implementing its methods fails `bundle
-validate` when the class is directly visible, and always fails serve startup.
+methods, including async gated methods when `concurrency > 1`. Imported,
+inherited, or dynamic classes and missing Python interpreters are skipped;
+`flashcli serve` and `flashserver` remain authoritative. A bundle that declares
+a capability without implementing its methods fails `bundle validate` when the
+class is directly visible, and always fails serve startup.
 
 Before publishing, run the published tree through `flashcli serve` and verify
 non-streaming + streaming chat, tools and `tool_choice`, Anthropic messages and
@@ -451,7 +452,7 @@ implement anything in the bundle.
 | Platform APIs | OpenAI Batch/Files/Fine-tuning/Assistants/Vector Stores are out of scope |
 | Auth/limits | Local single-user CLI; intentionally omitted |
 | Serve forms | Native `native-exec` stdio and `native-abi` serve are not implemented |
-| Concurrency | `serve.concurrency > 1` only overlaps async engine methods; sync methods stay serialized on the inference-loop thread |
+| Concurrency | `serve.concurrency > 1` requires async gated methods; sync gated methods are rejected |
 
 ## Related docs
 

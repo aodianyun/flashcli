@@ -225,15 +225,15 @@ flashcli run flashcli-bundle/qwen3_8b_nvfp4:1.0.0
 | `attr` | 类/可调用名（`RunEngine`/`ServeEngine` 或 script `main`） |
 | `mode` | `engine`（默认）或 `script`（仅 Python） |
 | `capabilities` | 仅 Python engine serve：要启用的 host 自有协议路由。缺省保持老行为 `["openai.chat"]`；显式 `[]` 关闭 host 推理路由。 |
-| `concurrency` | 仅 Python engine serve：host 自有推理的并发数（默认 `1`）。`N > 1` 要求引擎方法为异步；同步方法仍串行。 |
+| `concurrency` | 仅 Python engine serve：host 自有推理的并发数（默认 `1`）。`N > 1` 要求受门控方法为异步；同步方法会被拒绝。 |
 
 一个 capability 只能有一个实现。native 后端使用 [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) 定义的 `native` 块。
 
 `serve.capabilities` 只控制 host 自有路由（`/health`、`/v1/models`、`/v1/models/{id}` 始终保留）。当前能力 ID 包括 `openai.chat`、`openai.responses`、`openai.completions`、`openai.embeddings`、`openai.moderations`、`openai.audio.*`、`openai.images.*`、`openai.videos`、`openai.realtime`、`anthropic.messages`、`anthropic.count_tokens`、`anthropic.models`。未知或重复 ID 会使 `bundle validate` 失败。`register_routes` 仍用于自定义路由，并保持优先于 host 路由。能力行为与 `ServeEngine` 契约见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)。
 
-`serve.concurrency` 决定 host 共享推理门限的大小（默认 `1`）。所有 host 自有推理路由共用它，包括 chat、embedding、moderation、音频、图像和视频创建。只有引擎方法为异步时，`> 1` 才有实际并行效果；同步方法仍会在推理循环线程上逐个执行。
+`serve.concurrency` 决定 host 共享推理门限的大小（默认 `1`）。所有 host 自有推理路由共用它，包括 chat、embedding、moderation、音频、图像和视频创建。`> 1` 要求受门控方法为异步；`concurrency > 1` 时同步方法会被拒绝。
 
-`flashcli bundle validate` 只检查该 manifest 字段、entry 文件，并对直接定义的 Python `ServeEngine` 类做 best-effort AST 方法检查（不需要 venv；导入/继承/动态类会跳过）。声明能力的对应方法还会在 `flashcli serve` / `flashserver` 加载引擎时强制检查；缺少方法会使 serve 启动失败。
+`flashcli bundle validate` 只检查该 manifest 字段、entry 文件，并对直接定义的 Python `ServeEngine` 类做 best-effort AST 方法检查（不需要 venv；导入/继承/动态类会跳过）。`concurrency > 1` 时同时检查受门控方法是否为异步；声明能力的对应方法还会在 `flashcli serve` / `flashserver` 加载引擎时强制检查；缺少方法或方法非异步会使 serve 启动失败。
 
 ### 3.3 `defaults.python_abi`
 
@@ -528,7 +528,7 @@ script 模式不得通过环境变量或手动 `dlopen` 加载 `.so`。
 
 ### 4.3 Engine 模式
 
-`RunEngine.load(checkpoint, preset, **options)` 加载权重；`RunEngine.predict(...)` 推理。`ServeEngine` 始终需要 `model_id`、`load`、`warmup`；仅对话类能力（或实时能力未提供 handler）才要求 `chat`/`chat_stream`。声明能力后可增加 `embed`、`moderate`、`transcribe`、`speech`、`generate_images`、视频方法、`count_tokens` 和 `realtime_session`。完整契约与能力到端点的映射见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)。默认值从 manifest 读取，不要在代码里重复。
+`RunEngine.load(checkpoint, preset, **options)` 加载权重；`RunEngine.predict(...)` 推理。`ServeEngine` 始终需要 `model_id`、`load`、`warmup`；对话类能力要求 `chat`/`chat_stream` 或 `chat_async`/`chat_stream_async`。声明能力后可增加 `embed`、`moderate`、`transcribe`、`speech`、`generate_images`、视频方法、`count_tokens` 和 `realtime_session`。完整契约与能力到端点的映射见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)。默认值从 manifest 读取，不要在代码里重复。
 
 ### 4.4 Script 模式
 

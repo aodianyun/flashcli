@@ -51,6 +51,34 @@ var ServeCapabilitySet = map[string]bool{
 // LegacyServeCapabilities is the implicit route set for old manifests.
 var LegacyServeCapabilities = []string{ServeCapOpenAIChat}
 
+// gatedServeCapabilities are the capabilities whose requests or jobs hold an
+// inference slot. Metadata-only capabilities are not listed.
+var gatedServeCapabilities = map[string]bool{
+	ServeCapOpenAIChat:              true,
+	ServeCapOpenAIResponses:         true,
+	ServeCapOpenAICompletions:       true,
+	ServeCapOpenAIEmbeddings:        true,
+	ServeCapOpenAIModerations:       true,
+	ServeCapOpenAIAudioTranscribe:   true,
+	ServeCapOpenAIAudioTranslate:    true,
+	ServeCapOpenAIAudioSpeech:       true,
+	ServeCapOpenAIImagesGenerations: true,
+	ServeCapOpenAIImagesEdits:       true,
+	ServeCapOpenAIImagesVariations:  true,
+	ServeCapOpenAIVideos:            true,
+	ServeCapOpenAIRealtime:          true,
+	ServeCapAnthropicMessages:       true,
+}
+
+func hasGatedCapability(caps []string) bool {
+	for _, cap := range caps {
+		if gatedServeCapabilities[cap] {
+			return true
+		}
+	}
+	return false
+}
+
 // EffectiveServeCapabilities resolves host-owned protocol routes for a serve
 // entry. Native and script entries expose no host-owned protocol routes.
 func (e *EntrySpec) EffectiveServeCapabilities() []string {
@@ -148,6 +176,12 @@ func validateOneServeConcurrency(label string, spec *EntrySpec) []string {
 	}
 	if spec.Kind != "python" || spec.Mode != "engine" {
 		return []string{fmt.Sprintf("%s.concurrency is only valid for python engine serve", label)}
+	}
+	if spec.Concurrency > 1 && !hasGatedCapability(spec.EffectiveServeCapabilities()) {
+		return []string{fmt.Sprintf(
+			"%s.concurrency > 1 requires at least one gated inference capability",
+			label,
+		)}
 	}
 	return nil
 }

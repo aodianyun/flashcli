@@ -69,7 +69,7 @@ Engine 模式下 bundle 不得自行启动 `uvicorn`/`FastAPI` 服务。
 | 缺省 `capabilities` | 兼容默认：`["openai.chat"]` |
 | `capabilities: []` | 仅保留 `/health`、`/v1/models`、`/v1/models/{id}` |
 | 缺省 `concurrency` | `1`（同一时间一个 host 自有推理调用） |
-| `concurrency: N` | 最多 `N` 个并发推理调用；`N >= 1`。只有异步引擎方法会重叠；同步方法仍串行 |
+| `concurrency: N` | 最多 `N` 个并发推理调用；`N >= 1`。`N > 1` 要求受门控方法为异步；同步方法会被拒绝 |
 | 非 python 或非 engine serve | `capabilities` / `concurrency` 非法 |
 | 未知或重复 ID | `bundle validate` 失败 |
 | 已声明但 host 未实现 | HTTP `501`（`capability_not_implemented`） |
@@ -117,8 +117,8 @@ class ServeEngine:
 
 所有 host 自有推理路由共用一个由 `serve.concurrency` 决定大小的门限。
 `N > 1` 时，异步引擎方法（`chat_async`、异步 `embed` / `transcribe` /
-`speech` / `generate_images` / 视频方法）可以重叠执行；同步方法仍会在专用推理循环
-线程上逐个执行，因此只有异步引擎才能从 `N > 1` 受益。
+`speech` / `generate_images` / 视频方法）可以重叠执行；受门控的同步方法在
+`N > 1` 时会被**拒绝**，同步引擎请使用 `N = 1`。
 `/health`、`/v1/models`、`count_tokens` 以及视频的 list/get/download/delete
 属于元数据操作，不占推理槽位；视频创建会占用。
 
@@ -134,7 +134,7 @@ class ServeEngine:
 - `load` / `warmup` 不在门限内（host 只调用一次）；
 - 只有 `create_video` 调用占门限；引擎自己的后台渲染在门限之外。
 
-同步方法即使是线程安全的也会串行。`N` 个槽位都占用时，请求按
+受门控的同步方法在 `N > 1` 时会被拒绝；同步引擎请使用 `N = 1`。`N` 个槽位都占用时，请求按
 `FLASHCLI_SERVE_BUSY_TIMEOUT_SEC` 等待或返回 `503`。
 
 ### 各 API 的并发行为
@@ -171,7 +171,8 @@ class ServeEngine:
     def chat_stream(self, request: ChatRequest) -> Iterator[ChatChunk]: ...
 ```
 
-可选异步版本优先：`chat_async(request) -> ChatResult`、
+对话类能力要求 `chat` + `chat_stream`，或异步版本 `chat_async` +
+`chat_stream_async`。异步版本优先：`chat_async(request) -> ChatResult`、
 `chat_stream_async(request) -> AsyncIterator[ChatChunk]`。
 
 可选能力方法（鸭子类型；同步返回值或 awaitable）：
@@ -400,10 +401,10 @@ FLASHCLI_ACCEPTANCE=1 pytest tests/acceptance/test_serve_bundles.py
 
 `flashcli bundle validate` 只做静态 manifest/文件检查：能力 ID、重复项、并发值、
 entry 模块文件是否存在。若有可用的 Python 解释器（不需要 venv），还会对直接定义的
-`ServeEngine` 类做 best-effort AST 方法检查。导入/继承/动态类以及没有 Python 的
-环境会跳过该检查；`flashcli serve` 与 `flashserver` 的加载检查仍是权威。直接可见的
-类缺少声明能力的方法时 `bundle validate` 会失败；无论如何，serve 启动都会再次强制
-检查。
+`ServeEngine` 类做 best-effort AST 方法检查；`concurrency > 1` 时同时检查受门控方法
+是否为异步。导入/继承/动态类以及没有 Python 的环境会跳过该检查；`flashcli serve` 与
+`flashserver` 的加载检查仍是权威。直接可见的类缺少声明能力的方法时 `bundle validate`
+会失败；无论如何，serve 启动都会再次强制检查。
 
 发布前用发布树执行 `flashcli serve`，至少验证非流式 + 流式 chat、工具与 `tool_choice`、
 Anthropic messages 与流式事件、`count_tokens`，以及所有已声明的非 chat 能力。
@@ -425,7 +426,7 @@ Anthropic messages 与流式事件、`count_tokens`，以及所有已声明的�
 | 平台 API | OpenAI Batch/Files/Fine-tuning/Assistants/Vector Stores 范围外 |
 | 鉴权/限流 | 本地单用户 CLI，故意不实现 |
 | Serve 形式 | `native-exec` stdio 与 `native-abi` 的 serve 尚未实现 |
-| 并发 | `serve.concurrency > 1` 只让异步引擎方法重叠；同步方法仍在推理循环线程上串行 |
+| 并发 | `serve.concurrency > 1` 要求受门控方法为异步；同步受门控方法会被拒绝 |
 
 ## 相关文档
 
