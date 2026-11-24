@@ -4,16 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from flashcli_bundle.infer.engines.base import ModerationRequest, ModerationResult
-from flashcli_bundle.infer.serve.protocols.common import new_id
+from flashcli_bundle.infer.serve.inference import InferenceGate
+from flashcli_bundle.infer.serve.protocols.common import call_engine, new_id
 
 
-def mount(app: FastAPI, engine: Any) -> None:
+def mount(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
     @app.post("/v1/moderations")
-    async def moderations(body: dict[str, Any]):
+    async def moderations(request: Request, body: dict[str, Any]):
         raw = body.get("input")
         if isinstance(raw, str):
             inputs = [raw]
@@ -35,9 +36,15 @@ def mount(app: FastAPI, engine: Any) -> None:
             extras={k: v for k, v in body.items() if k not in {"input", "model"} and v is not None},
         )
         try:
-            result = method(req)
-            if hasattr(result, "__await__"):
-                result = await result
+            result = await call_engine(
+                gate,
+                engine,
+                request.headers.get("x-request-id") or new_id("modr"),
+                method,
+                req,
+            )
+        except HTTPException:
+            raise
         except Exception as exc:
             raise HTTPException(500, f"moderation failed: {exc}") from exc
         if not isinstance(result, ModerationResult):

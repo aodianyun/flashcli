@@ -2,6 +2,9 @@
 
 <p align="right"><a href="llm_bundle_standard.md">English</a> · <strong>简体中文</strong></p>
 
+> **已归档。** 本页仅保留作历史参考，不在文档索引中。权威规范见
+> [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)。
+
 适用于通过 `flashcli serve` 对外提供 OpenAI 和/或 Anthropic API 的模型 bundle：
 文本 LLM、embedding、moderation、音频、图像、视频和 realtime。通用打包规则
 （manifest、目录结构、`.so`、权重、发布）见
@@ -38,7 +41,7 @@ Bundle **不得**自行启动 `uvicorn`/`FastAPI` 服务。仅对 host 未提供
 | 规则 | 行为 |
 |------|------|
 | 缺省 `capabilities` | 兼容默认：`["openai.chat"]` |
-| `capabilities: []` | 仅保留 `/health` 与 `/v1/models`，无推理路由 |
+| `capabilities: []` | 仅保留 `/health`、`/v1/models`、`/v1/models/{id}`，无推理路由 |
 | 非 python 或非 engine serve | `capabilities` 非法 |
 | 未知或重复 ID | `flashcli bundle validate` 失败 |
 | 已声明但 host 未实现 | HTTP `501`（`capability_not_implemented`） |

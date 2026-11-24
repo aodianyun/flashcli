@@ -9,6 +9,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 
 from flashcli_bundle.infer.engines.base import VideoRequest
+from flashcli_bundle.infer.serve.inference import InferenceGate
+from flashcli_bundle.infer.serve.protocols.common import call_engine, new_id
 
 
 def _job_payload(job: dict[str, Any]) -> dict[str, Any]:
@@ -25,8 +27,8 @@ def _coerce_job(job: Any) -> dict[str, Any]:
     return payload
 
 
-def mount(app: FastAPI, engine: Any) -> None:
-    async def create(req: VideoRequest) -> Any:
+def mount(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
+    async def create(req: VideoRequest, request_id: str) -> Any:
         method = getattr(engine, "create_video", None)
         if method is None:
             return JSONResponse(
@@ -34,9 +36,9 @@ def mount(app: FastAPI, engine: Any) -> None:
                 content={"error": {"message": "the bundle does not expose video generation", "type": "not_implemented"}},
             )
         try:
-            job = method(req)
-            if hasattr(job, "__await__"):
-                job = await job
+            job = await call_engine(gate, engine, request_id, method, req)
+        except HTTPException:
+            raise
         except Exception as exc:
             raise HTTPException(500, f"video creation failed: {exc}") from exc
         if not isinstance(job, dict):
@@ -73,7 +75,7 @@ def mount(app: FastAPI, engine: Any) -> None:
                 size=str(body["size"]) if body.get("size") else None,
                 extras={k: v for k, v in body.items() if k not in {"prompt", "model", "seconds", "size"} and v is not None},
             )
-        return await create(req)
+        return await create(req, request.headers.get("x-request-id") or new_id("video"))
 
     @app.get("/v1/videos")
     async def list_videos(request: Request):

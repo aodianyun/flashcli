@@ -225,11 +225,14 @@ Script contracts:
 | `module` | Python module name relative to the bundle root (Python only) |
 | `attr` | Class/callable name (`RunEngine`/`ServeEngine` or script `main`) |
 | `mode` | `engine` (default) or `script` (Python only) |
-| `capabilities` | no | Python engine serve only: host-owned protocol routes to enable. Absent keeps the legacy `["openai.chat"]` behavior; `[]` disables host inference routes. |
+| `capabilities` | Python engine serve only: host-owned protocol routes to enable. Absent keeps the legacy `["openai.chat"]` behavior; `[]` disables host inference routes. |
+| `concurrency` | Python engine serve only: simultaneous host-owned inference calls (default `1`). `N > 1` requires async or otherwise thread-safe engine methods. |
 
 A capability has exactly one implementation. Native backends use the sibling `native` block defined in [bundle_execution_abi.md](bundle_execution_abi.md).
 
 `serve.capabilities` controls only host-owned routes (`/health`, `/v1/models`, and `/v1/models/{id}` stay enabled). Current capability IDs are `openai.chat`, `openai.responses`, `openai.completions`, `openai.embeddings`, `openai.moderations`, `openai.audio.*`, `openai.images.*`, `openai.videos`, `openai.realtime`, `anthropic.messages`, `anthropic.count_tokens`, and `anthropic.models`. Unknown or duplicate IDs fail `bundle validate`. `register_routes` remains available for custom routes and keeps its legacy priority over host routes. Capability behavior and the `ServeEngine` contract are specified in [bundle_serve_protocols.md](bundle_serve_protocols.md).
+
+`serve.concurrency` sizes the shared host inference gate (default `1`). Every host-owned inference route uses it, including chat, embeddings, moderation, audio, images, and video creation. Values above `1` are only useful when the engine methods are async or thread-safe; synchronous methods still run one at a time on the inference-loop thread.
 
 ### 3.3 `defaults.python_abi`
 

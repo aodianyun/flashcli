@@ -7,12 +7,18 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
+from flashcli_bundle.capabilities import (
+    OPENAI_AUDIO_TRANSCRIPTIONS,
+    OPENAI_AUDIO_TRANSLATIONS,
+)
 from flashcli_bundle.infer.engines.base import (
     AudioTranscriptionRequest,
     AudioTranscriptionResult,
     SpeechRequest,
     SpeechResult,
 )
+from flashcli_bundle.infer.serve.inference import InferenceGate
+from flashcli_bundle.infer.serve.protocols.common import call_engine, new_id
 
 _AUDIO_TYPES = {
     "mp3": "audio/mpeg",
@@ -124,7 +130,12 @@ def _transcription_response(
     return {"text": result.text}
 
 
-def mount_transcriptions(app: FastAPI, engine: Any) -> None:
+def mount_transcriptions(
+    app: FastAPI,
+    engine: Any,
+    gate: InferenceGate,
+    capabilities: set[str],
+) -> None:
     async def handle(request: Request, task: str):
         method = getattr(engine, "transcribe", None)
         if method is None:
@@ -134,28 +145,31 @@ def mount_transcriptions(app: FastAPI, engine: Any) -> None:
             )
         form = await request.form()
         req = await _transcription_request(form, task)
+        request_id = request.headers.get("x-request-id") or new_id("asr")
         try:
-            result = method(req)
-            if hasattr(result, "__await__"):
-                result = await result
+            result = await call_engine(gate, engine, request_id, method, req)
+        except HTTPException:
+            raise
         except Exception as exc:
             raise HTTPException(500, f"transcription failed: {exc}") from exc
         if not isinstance(result, AudioTranscriptionResult):
             raise HTTPException(500, "engine transcribe() must return AudioTranscriptionResult")
         return _transcription_response(result, req.response_format, task=task)
 
-    @app.post("/v1/audio/transcriptions")
-    async def transcriptions(request: Request):
-        return await handle(request, "transcribe")
+    if OPENAI_AUDIO_TRANSCRIPTIONS in capabilities:
+        @app.post("/v1/audio/transcriptions")
+        async def transcriptions(request: Request):
+            return await handle(request, "transcribe")
 
-    @app.post("/v1/audio/translations")
-    async def translations(request: Request):
-        return await handle(request, "translate")
+    if OPENAI_AUDIO_TRANSLATIONS in capabilities:
+        @app.post("/v1/audio/translations")
+        async def translations(request: Request):
+            return await handle(request, "translate")
 
 
-def mount_speech(app: FastAPI, engine: Any) -> None:
+def mount_speech(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
     @app.post("/v1/audio/speech")
-    async def speech(body: dict[str, Any]):
+    async def speech(request: Request, body: dict[str, Any]):
         text = body.get("input")
         if not isinstance(text, str) or not text:
             raise HTTPException(400, "input is required")
@@ -174,10 +188,11 @@ def mount_speech(app: FastAPI, engine: Any) -> None:
             instructions=body.get("instructions"),
             extras={k: v for k, v in body.items() if k not in {"input", "model", "voice", "response_format", "speed", "instructions"}},
         )
+        request_id = request.headers.get("x-request-id") or new_id("tts")
         try:
-            result = method(req)
-            if hasattr(result, "__await__"):
-                result = await result
+            result = await call_engine(gate, engine, request_id, method, req)
+        except HTTPException:
+            raise
         except Exception as exc:
             raise HTTPException(500, f"speech failed: {exc}") from exc
         if not isinstance(result, SpeechResult):

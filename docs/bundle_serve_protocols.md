@@ -49,7 +49,7 @@ The remainder of this document describes **only Python engine mode**.
 
 | Layer | Owns |
 |-------|------|
-| Host | HTTP/WS routing, request parsing, SSE/WS transport, capability gating, single GPU slot, request log, protocol-error translation |
+| Host | HTTP/WS routing, request parsing, SSE/WS transport, capability gating, `serve.concurrency` inference slots (default 1), request log, protocol-error translation |
 | Bundle `ServeEngine` | Weights, chat template, tools/reasoning parsing, decoding, model-specific extras |
 | `register_routes(app)` | Optional custom routes; mounted before host routes and keeps priority |
 
@@ -64,7 +64,8 @@ In engine mode bundles must not start their own `uvicorn`/`FastAPI` server.
     "module": "serve",
     "attr": "ServeEngine",
     "mode": "engine",
-    "capabilities": ["openai.chat", "anthropic.messages"]
+    "capabilities": ["openai.chat", "anthropic.messages"],
+    "concurrency": 1
   }
 }
 ```
@@ -73,7 +74,9 @@ In engine mode bundles must not start their own `uvicorn`/`FastAPI` server.
 |------|----------|
 | `capabilities` absent | Legacy default: `["openai.chat"]` |
 | `capabilities: []` | Only `/health`, `/v1/models`, `/v1/models/{id}` |
-| Non-python or non-engine serve | `capabilities` invalid |
+| `concurrency` absent | `1` (one host-owned inference call at a time) |
+| `concurrency: N` | Up to `N` simultaneous inference calls; `N >= 1`. Only effective for async or thread-safe engine methods |
+| Non-python or non-engine serve | `capabilities` / `concurrency` invalid |
 | Unknown or duplicate ID | `bundle validate` fails |
 | Declared but host-unimplemented | HTTP `501` (`capability_not_implemented`) |
 | `--host` / `--port` | Provided by host; never declare `ip`/`host`/`port` in `serve_options` |
@@ -112,6 +115,14 @@ class ServeEngine:
     def load(self, checkpoint: Path, preset: Preset, **options) -> None: ...
     def warmup(self, spec: str | None) -> None: ...
 ```
+
+All host-owned inference routes share one gate sized by `serve.concurrency`.
+With `N > 1`, async engine methods (`chat_async`, async `embed` / `transcribe` /
+`speech` / `generate_images` / video methods) can overlap. Synchronous methods
+still run one at a time on the dedicated inference-loop thread, so declaring
+`N > 1` only helps when the engine is async or otherwise thread-safe.
+`/health`, `/v1/models`, `count_tokens`, and video list/get/download/delete are
+metadata operations and do not take an inference slot; video creation does.
 
 `chat` / `chat_stream` are required only when declaring a chat-based capability
 (`openai.chat`, `openai.completions`, `openai.responses`, `anthropic.messages`)
@@ -346,7 +357,7 @@ returns the Anthropic shape with `anthropic-version`.
 
 ```bash
 flashcli bundle validate <bundle-or-dist>
-pytest tests/test_serve_protocol_matrix.py tests/test_serve_realtime.py
+pytest tests/test_serve_protocol_matrix.py tests/test_serve_realtime.py tests/test_serve_concurrency.py
 
 # Real bundle acceptance: builds llm/code/anthropic/asr/tts/audio/image/video/legacy fixtures,
 # starts each through flashcli-bundle.infer serve, and exercises real sockets.
@@ -375,6 +386,7 @@ implement anything in the bundle.
 | Platform APIs | OpenAI Batch/Files/Fine-tuning/Assistants/Vector Stores are out of scope |
 | Auth/limits | Local single-user CLI; intentionally omitted |
 | Serve forms | Native `native-exec` stdio and `native-abi` serve are not implemented |
+| Concurrency | `serve.concurrency > 1` only overlaps async engine methods; sync methods stay serialized on the inference-loop thread |
 
 ## Related docs
 

@@ -107,3 +107,49 @@ def effective_serve_capabilities(spec: Any) -> list[str]:
     if caps is None:
         return list(LEGACY_SERVE_CAPABILITIES)
     return list(caps)
+
+
+def parse_serve_concurrency(raw: Any) -> tuple[int | None, str | None]:
+    """Parse an explicit serve.concurrency value.
+
+    Returns ``(None, None)`` when the field is absent, ``(value, None)`` for a
+    valid integer, and ``(None, error)`` for a malformed value.
+    """
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        return None, "serve.concurrency must be an integer"
+    if raw < 1:
+        return None, "serve.concurrency must be >= 1"
+    return raw, None
+
+
+def validate_serve_concurrency(
+    spec: Any,
+    *,
+    label: str = "entry.serve",
+) -> list[str]:
+    """Validate the concurrency of one serve entry."""
+    if spec is None:
+        return []
+    invalid = getattr(spec, "concurrency_invalid", None)
+    if invalid:
+        return [f"{label}.concurrency: {invalid}"]
+    if getattr(spec, "concurrency", None) is None:
+        return []
+    kind = getattr(spec, "kind", "python")
+    mode = getattr(spec, "mode", "engine")
+    if kind != "python" or mode != "engine":
+        return [f"{label}.concurrency is only valid for python engine serve"]
+    return []
+
+
+def effective_serve_concurrency(spec: Any) -> int:
+    """Resolve the inference concurrency for a serve entry (default 1)."""
+    if spec is None:
+        return 1
+    value = getattr(spec, "concurrency", None)
+    if value is None:
+        return 1
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return 1

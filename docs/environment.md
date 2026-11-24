@@ -183,7 +183,7 @@ Engine mode does **not** set `FLASHCLI_CHECKPOINT` (weights are passed to `RunEn
 | `HF_DATASETS_OFFLINE` | `1` (set by host) | Same for `datasets`. |
 | `FLASHCLI_SERVE_LOG_LEVEL` | `INFO` | Application log level for `flashcli serve`. |
 | `FLASHCLI_UVICORN_LOG_LEVEL` | `info` | Uvicorn access/error level. |
-| `FLASHCLI_SERVE_BUSY_TIMEOUT_SEC` | `0` | Max wait when the engine is busy (`0` = no limit). |
+| `FLASHCLI_SERVE_BUSY_TIMEOUT_SEC` | `0` | How long a request waits for a free inference slot before `503` (`0` = fail immediately when busy). |
 
 ## Internal (do not rely on in entry code)
 

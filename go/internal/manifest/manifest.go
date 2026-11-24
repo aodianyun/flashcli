@@ -49,6 +49,12 @@ type EntrySpec struct {
 	Capabilities        []string
 	CapabilitiesSet     bool
 	CapabilitiesInvalid string
+	// Concurrency is the host-owned inference concurrency for this serve entry.
+	// ConcurrencySet distinguishes an absent field (default 1) from an explicit
+	// value.
+	Concurrency        int
+	ConcurrencySet     bool
+	ConcurrencyInvalid string
 }
 
 // IsNative reports whether the capability uses a native backend.
@@ -257,6 +263,25 @@ func entrySpecFromMap(data map[string]any, defaultKind string, defaultNative map
 			spec.CapabilitiesInvalid = "must be an array of strings"
 		}
 	}
+	if rawConc, ok := data["concurrency"]; ok {
+		spec.ConcurrencySet = true
+		switch v := rawConc.(type) {
+		case float64:
+			if v < 1 || v != float64(int64(v)) {
+				spec.ConcurrencyInvalid = "must be an integer >= 1"
+			} else {
+				spec.Concurrency = int(v)
+			}
+		case int:
+			if v < 1 {
+				spec.ConcurrencyInvalid = "must be an integer >= 1"
+			} else {
+				spec.Concurrency = v
+			}
+		default:
+			spec.ConcurrencyInvalid = "must be an integer >= 1"
+		}
+	}
 	return spec
 }
 
@@ -450,6 +475,7 @@ func Validate(m *Manifest) []string {
 	}
 	errors = append(errors, validateEntryFiles(m)...)
 	errors = append(errors, validateAllServeCapabilities(m)...)
+	errors = append(errors, validateAllServeConcurrency(m)...)
 	errors = append(errors, validatePythonDependencies(m)...)
 	errors = append(errors, validateRuntimeSuffix(m)...)
 	errors = append(errors, validateSystemRequirements(m)...)

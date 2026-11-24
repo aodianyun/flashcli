@@ -9,7 +9,14 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from flashcli_bundle.capabilities import (
+    OPENAI_IMAGES_EDITS,
+    OPENAI_IMAGES_GENERATIONS,
+    OPENAI_IMAGES_VARIATIONS,
+)
 from flashcli_bundle.infer.engines.base import ImageGenerationRequest, ImageGenerationResult
+from flashcli_bundle.infer.serve.inference import InferenceGate
+from flashcli_bundle.infer.serve.protocols.common import call_engine, new_id
 
 
 def _str(form: Any, key: str, default: str | None = None) -> str | None:
@@ -58,7 +65,12 @@ def _response(request: ImageGenerationRequest, result: ImageGenerationResult) ->
     }
 
 
-def mount(app: FastAPI, engine: Any) -> None:
+def mount(
+    app: FastAPI,
+    engine: Any,
+    gate: InferenceGate,
+    capabilities: set[str],
+) -> None:
     method = getattr(engine, "generate_images", None)
 
     def unavailable() -> JSONResponse:
@@ -67,39 +79,42 @@ def mount(app: FastAPI, engine: Any) -> None:
             content={"error": {"message": "the bundle does not expose images", "type": "not_implemented"}},
         )
 
-    async def call(req: ImageGenerationRequest) -> Any:
+    async def call(req: ImageGenerationRequest, request_id: str) -> Any:
         if method is None:
             return unavailable()
         try:
-            result = method(req)
-            if hasattr(result, "__await__"):
-                result = await result
+            result = await call_engine(gate, engine, request_id, method, req)
+        except HTTPException:
+            raise
         except Exception as exc:
             raise HTTPException(500, f"image generation failed: {exc}") from exc
         if not isinstance(result, ImageGenerationResult):
             raise HTTPException(500, "engine generate_images() must return ImageGenerationResult")
         return _response(req, result)
 
-    @app.post("/v1/images/generations")
-    async def generations(body: dict[str, Any]):
-        prompt = body.get("prompt")
-        if not isinstance(prompt, str) or not prompt:
-            raise HTTPException(400, "prompt is required")
-        return await call(
-            ImageGenerationRequest(
-                prompt=prompt,
-                model=str(body.get("model", "")),
-                mode="generate",
-                n=int(body.get("n", 1) or 1),
-                size=str(body.get("size", "1024x1024")),
-                quality=str(body.get("quality", "auto")),
-                style=body.get("style"),
-                response_format=str(body.get("response_format", "url") or "url"),
-                extras={k: v for k, v in body.items() if k not in {
-                    "prompt", "model", "n", "size", "quality", "style", "response_format"
-                }},
+    if OPENAI_IMAGES_GENERATIONS in capabilities:
+        @app.post("/v1/images/generations")
+        async def generations(request: Request, body: dict[str, Any]):
+            prompt = body.get("prompt")
+            if not isinstance(prompt, str) or not prompt:
+                raise HTTPException(400, "prompt is required")
+            request_id = request.headers.get("x-request-id") or new_id("img")
+            return await call(
+                ImageGenerationRequest(
+                    prompt=prompt,
+                    model=str(body.get("model", "")),
+                    mode="generate",
+                    n=int(body.get("n", 1) or 1),
+                    size=str(body.get("size", "1024x1024")),
+                    quality=str(body.get("quality", "auto")),
+                    style=body.get("style"),
+                    response_format=str(body.get("response_format", "url") or "url"),
+                    extras={k: v for k, v in body.items() if k not in {
+                        "prompt", "model", "n", "size", "quality", "style", "response_format"
+                    }},
+                ),
+                request_id,
             )
-        )
 
     async def form_request(request: Request, mode: str) -> ImageGenerationRequest:
         form = await request.form()
@@ -126,10 +141,16 @@ def mount(app: FastAPI, engine: Any) -> None:
             }},
         )
 
-    @app.post("/v1/images/edits")
-    async def edits(request: Request):
-        return await call(await form_request(request, "edit"))
+    if OPENAI_IMAGES_EDITS in capabilities:
+        @app.post("/v1/images/edits")
+        async def edits(request: Request):
+            req = await form_request(request, "edit")
+            request_id = request.headers.get("x-request-id") or new_id("img")
+            return await call(req, request_id)
 
-    @app.post("/v1/images/variations")
-    async def variations(request: Request):
-        return await call(await form_request(request, "variation"))
+    if OPENAI_IMAGES_VARIATIONS in capabilities:
+        @app.post("/v1/images/variations")
+        async def variations(request: Request):
+            req = await form_request(request, "variation")
+            request_id = request.headers.get("x-request-id") or new_id("img")
+            return await call(req, request_id)

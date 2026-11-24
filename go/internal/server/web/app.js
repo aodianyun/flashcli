@@ -3,7 +3,7 @@
   const TOKEN = window.FLASHSERVER_TOKEN || "";
   const $ = (sel) => document.querySelector(sel);
   const state = { sys: null, models: [], loaded: [], storage: [], gpuProcs: [], history: [], tab: "overview", lang: localStorage.getItem("fs.lang") || "zh", online: null };
-  const canChat = (m) => !m.capabilities || !m.capabilities.length || m.capabilities.includes("openai.chat");
+  const canChat = (m) => m.capabilities == null || m.capabilities.includes("openai.chat");
   const capabilityText = (m) => (m.capabilities || []).join(", ");
 
   const I18N = {

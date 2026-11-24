@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import time
 import uuid
@@ -101,13 +102,18 @@ def build_app(
     engine: ServeEngine,
     *,
     serve_capabilities: list[str] | None = None,
+    serve_concurrency: int = 1,
 ) -> FastAPI:
     capabilities = set(
         LEGACY_SERVE_CAPABILITIES
         if serve_capabilities is None
         else serve_capabilities
     )
-    gate = InferenceGate()
+    try:
+        concurrency = max(1, int(serve_concurrency))
+    except (TypeError, ValueError):
+        concurrency = 1
+    gate = InferenceGate(limit=concurrency)
     app = FastAPI(title="flashcli unified serve")
 
     class AccessLogMiddleware(BaseHTTPMiddleware):
@@ -286,7 +292,10 @@ def build_app(
     async def _chat_result(req: ChatRequest) -> Any:
         if hasattr(engine, "chat_async"):
             return await engine.chat_async(req)
-        return engine.chat(req)
+        result = engine.chat(req)
+        if inspect.isawaitable(result):
+            result = await result
+        return result
 
     async def _chunk_iter(req: ChatRequest):
         if hasattr(engine, "chat_stream_async"):
@@ -783,21 +792,21 @@ def build_app(
     if ANTHROPIC_COUNT_TOKENS in capabilities:
         mount_count_tokens(app, engine)
     if OPENAI_EMBEDDINGS in capabilities:
-        mount_embeddings(app, engine)
+        mount_embeddings(app, engine, gate)
     if OPENAI_AUDIO_TRANSCRIPTIONS in capabilities or OPENAI_AUDIO_TRANSLATIONS in capabilities:
-        mount_transcriptions(app, engine)
+        mount_transcriptions(app, engine, gate, capabilities)
     if OPENAI_AUDIO_SPEECH in capabilities:
-        mount_speech(app, engine)
+        mount_speech(app, engine, gate)
     if (
         OPENAI_IMAGES_GENERATIONS in capabilities
         or OPENAI_IMAGES_EDITS in capabilities
         or OPENAI_IMAGES_VARIATIONS in capabilities
     ):
-        mount_images(app, engine)
+        mount_images(app, engine, gate, capabilities)
     if OPENAI_MODERATIONS in capabilities:
-        mount_moderations(app, engine)
+        mount_moderations(app, engine, gate)
     if OPENAI_VIDEOS in capabilities:
-        mount_videos(app, engine)
+        mount_videos(app, engine, gate)
     if OPENAI_REALTIME in capabilities:
         mount_realtime(app, engine, gate)
     mount_unimplemented(app, capabilities)

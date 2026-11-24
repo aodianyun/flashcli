@@ -175,7 +175,7 @@ engine 模式**不**设置 `FLASHCLI_CHECKPOINT`（权重经 `RunEngine.load(...
 | `HF_DATASETS_OFFLINE` | `1`（host 设置） | 同上（`datasets`）。 |
 | `FLASHCLI_SERVE_LOG_LEVEL` | `INFO` | `flashcli serve` 应用日志级别。 |
 | `FLASHCLI_UVICORN_LOG_LEVEL` | `info` | Uvicorn 日志级别。 |
-| `FLASHCLI_SERVE_BUSY_TIMEOUT_SEC` | `0` | 引擎忙时最大等待秒数（`0` = 无限）。 |
+| `FLASHCLI_SERVE_BUSY_TIMEOUT_SEC` | `0` | 引擎忙时等待空闲推理槽位的最长秒数；超时返回 `503`（`0` = 忙时立即失败）。 |
 
 ## 内部（entry 代码不要依赖）
 

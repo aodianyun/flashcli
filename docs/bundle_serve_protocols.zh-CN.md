@@ -43,7 +43,7 @@ host 打印 bundle 端点且不做反向代理，协议完全由 bundle 拥有�
 
 | 层 | 负责 |
 |----|------|
-| Host | HTTP/WS 路由、请求解析、SSE/WS 传输、能力门控、单 GPU 槽位、请求日志、协议错误转换 |
+| Host | HTTP/WS 路由、请求解析、SSE/WS 传输、能力门控、`serve.concurrency` 推理槽位（默认 1）、请求日志、协议错误转换 |
 | Bundle `ServeEngine` | 权重、chat template、工具/推理解析、解码、模型专属扩展 |
 | `register_routes(app)` | 可选自定义路由；挂在 host 路由之前并保持优先 |
 
@@ -58,7 +58,8 @@ Engine 模式下 bundle 不得自行启动 `uvicorn`/`FastAPI` 服务。
     "module": "serve",
     "attr": "ServeEngine",
     "mode": "engine",
-    "capabilities": ["openai.chat", "anthropic.messages"]
+    "capabilities": ["openai.chat", "anthropic.messages"],
+    "concurrency": 1
   }
 }
 ```
@@ -67,7 +68,9 @@ Engine 模式下 bundle 不得自行启动 `uvicorn`/`FastAPI` 服务。
 |------|------|
 | 缺省 `capabilities` | 兼容默认：`["openai.chat"]` |
 | `capabilities: []` | 仅保留 `/health`、`/v1/models`、`/v1/models/{id}` |
-| 非 python 或非 engine serve | `capabilities` 非法 |
+| 缺省 `concurrency` | `1`（同一时间一个 host 自有推理调用） |
+| `concurrency: N` | 最多 `N` 个并发推理调用；`N >= 1`。仅对异步或线程安全的引擎方法有效 |
+| 非 python 或非 engine serve | `capabilities` / `concurrency` 非法 |
 | 未知或重复 ID | `bundle validate` 失败 |
 | 已声明但 host 未实现 | HTTP `501`（`capability_not_implemented`） |
 | `--host` / `--port` | 由 host 提供；禁止在 `serve_options` 声明 `ip`/`host`/`port` |
@@ -105,6 +108,13 @@ class ServeEngine:
     def load(self, checkpoint: Path, preset: Preset, **options) -> None: ...
     def warmup(self, spec: str | None) -> None: ...
 ```
+
+所有 host 自有推理路由共用一个由 `serve.concurrency` 决定大小的门限。
+`N > 1` 时，异步引擎方法（`chat_async`、异步 `embed` / `transcribe` /
+`speech` / `generate_images` / 视频方法）可以重叠执行；同步方法仍会在专用推理循环
+线程上逐个执行，因此只有异步或线程安全的引擎才能从 `N > 1` 受益。
+`/health`、`/v1/models`、`count_tokens` 以及视频的 list/get/download/delete
+属于元数据操作，不占推理槽位；视频创建会占用。
 
 仅当声明对话类能力（`openai.chat`、`openai.completions`、`openai.responses`、
 `anthropic.messages`），或声明 `openai.realtime` 但 bundle 未提供
@@ -332,7 +342,7 @@ tool_result part 上保留。
 
 ```bash
 flashcli bundle validate <bundle-or-dist>
-pytest tests/test_serve_protocol_matrix.py tests/test_serve_realtime.py
+pytest tests/test_serve_protocol_matrix.py tests/test_serve_realtime.py tests/test_serve_concurrency.py
 
 # 真实 bundle 验收：生成 llm/code/anthropic/asr/tts/audio/image/video/legacy 测试 bundle，
 # 通过 flashcli-bundle.infer serve 启动并做真实 socket 请求。
@@ -359,6 +369,7 @@ Anthropic messages 与流式事件、`count_tokens`，以及所有已声明的�
 | 平台 API | OpenAI Batch/Files/Fine-tuning/Assistants/Vector Stores 范围外 |
 | 鉴权/限流 | 本地单用户 CLI，故意不实现 |
 | Serve 形式 | `native-exec` stdio 与 `native-abi` 的 serve 尚未实现 |
+| 并发 | `serve.concurrency > 1` 只让异步引擎方法重叠；同步方法仍在推理循环线程上串行 |
 
 ## 相关文档
 

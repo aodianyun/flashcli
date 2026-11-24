@@ -25,7 +25,7 @@ type Model struct {
 	BundleCached  bool     `json:"bundle_cached"`
 	WeightsCached bool     `json:"weights_cached"`
 	Serve         bool     `json:"serve"`
-	Capabilities  []string `json:"capabilities,omitempty"`
+	Capabilities  []string `json:"capabilities"`
 	BundleBytes   int64    `json:"bundle_bytes"`
 	RuntimeID     string   `json:"runtime_id,omitempty"`
 	RuntimeBytes  int64    `json:"runtime_bytes"`

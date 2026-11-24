@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import time
 import uuid
@@ -49,6 +50,34 @@ async def chat_once(gate: InferenceGate, engine: Any, request_id: str, req: Chat
 
     try:
         return await gate.run(request_id, _run())
+    except GpuBusyError:
+        raise gpu_busy(engine.model_id) from None
+
+
+async def call_engine(
+    gate: InferenceGate,
+    engine: Any,
+    request_id: str,
+    method: Any,
+    *args: Any,
+    **kwargs: Any,
+) -> Any:
+    """Run one engine method on the inference loop behind the shared gate.
+
+    Sync engine methods run on the dedicated inference-loop thread; async
+    methods are awaited there. The gate size comes from ``serve.concurrency``,
+    so multiple requests can overlap when the bundle declares it and implements
+    async (or otherwise thread-safe) methods.
+    """
+
+    async def _call() -> Any:
+        result = method(*args, **kwargs)
+        if inspect.isawaitable(result):
+            result = await result
+        return result
+
+    try:
+        return await gate.run(request_id, _call())
     except GpuBusyError:
         raise gpu_busy(engine.model_id) from None
 

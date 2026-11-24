@@ -2,6 +2,10 @@
 
 <p align="right"><strong>English</strong> · <a href="llm_bundle_standard.zh-CN.md">简体中文</a></p>
 
+> **Archived.** This page is kept for historical reference only and is not part
+> of the doc index. The authoritative spec is
+> [bundle_serve_protocols.md](bundle_serve_protocols.md).
+
 Applies to model bundles served by `flashcli serve` that expose OpenAI and/or
 Anthropic APIs: text LLMs, embeddings, moderation, audio, images, video, and
 realtime. Generic packaging (manifest, directory layout, `.so`, weights,
@@ -38,7 +42,7 @@ Bundles must **not** start their own `uvicorn`/`FastAPI` server. Use
 | Rule | Behavior |
 |------|----------|
 | `capabilities` absent | Legacy default: `["openai.chat"]` |
-| `capabilities: []` | Only `/health` and `/v1/models`; no inference routes |
+| `capabilities: []` | Only `/health`, `/v1/models`, and `/v1/models/{id}`; no inference routes |
 | Non-python or non-engine serve | `capabilities` is invalid |
 | Unknown or duplicate ID | `flashcli bundle validate` fails |
 | Declared but host-unimplemented | HTTP `501` (`capability_not_implemented`) |

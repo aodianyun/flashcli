@@ -55,6 +55,8 @@ func TestServeCapabilitiesExplicitAndEmpty(t *testing.T) {
 	}
 	if got := m.ServeCapabilities(); len(got) != 0 {
 		t.Fatalf("explicit empty capabilities = %v", got)
+	} else if got == nil {
+		t.Fatal("explicit empty capabilities must stay a non-nil empty slice")
 	}
 }
 

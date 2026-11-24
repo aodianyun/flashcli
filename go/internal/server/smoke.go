@@ -217,7 +217,7 @@ func smokeTextRequest(capabilities []string, modelName string) (string, []byte, 
 		return false
 	}
 	// Old server/model data has no capability list; preserve the chat default.
-	if len(capabilities) == 0 || has("openai.chat") {
+	if capabilities == nil || has("openai.chat") {
 		body, _ := json.Marshal(map[string]any{
 			"model":      modelName,
 			"messages":   []map[string]string{{"role": "user", "content": "ping"}},

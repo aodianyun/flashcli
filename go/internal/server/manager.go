@@ -321,7 +321,7 @@ type InstanceInfo struct {
 	Endpoint     string    `json:"endpoint"`
 	PID          int       `json:"pid"`
 	LoadedAt     time.Time `json:"loaded_at"`
-	Capabilities []string  `json:"capabilities,omitempty"`
+	Capabilities []string  `json:"capabilities"`
 }
 
 func infoFor(inst *instance) InstanceInfo {

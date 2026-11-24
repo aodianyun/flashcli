@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: FlashServer local API
-  version: 1.0.10.20261120
+  version: 1.0.11.20261124
   description: |
     Local, single-user model scheduler API served by `flashserver` on
     `http://localhost:8790`. The daemon manages model lifecycle and GPU-aware
@@ -1073,9 +1073,9 @@ components:
         weights_cached: { type: boolean }
         serve: { type: boolean, description: Bundle declares a serve entry }
         capabilities:
-          type: array
+          type: [array, "null"]
           items: { type: string }
-          description: Host-owned serve protocol capabilities
+          description: Host-owned serve protocol capabilities; null for script/native serve
         bundle_bytes: { type: integer, format: int64 }
         runtime_id: { type: string, description: Per-bundle/version runtime directory id }
         runtime_bytes: { type: integer, format: int64, description: Allocated bytes of this model's runtime directory }
@@ -1094,9 +1094,9 @@ components:
         pid: { type: integer }
         loaded_at: { type: string, format: date-time }
         capabilities:
-          type: array
+          type: [array, "null"]
           items: { type: string }
-          description: Host-owned serve protocol capabilities
+          description: Host-owned serve protocol capabilities; null for script/native serve
     ServeOption:
       type: object
       properties:

@@ -6,10 +6,12 @@ import base64
 import struct
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from flashcli_bundle.infer.engines.base import EmbeddingRequest, EmbeddingResult
+from flashcli_bundle.infer.serve.inference import InferenceGate
+from flashcli_bundle.infer.serve.protocols.common import call_engine, new_id
 
 
 def _parse(body: dict[str, Any]) -> EmbeddingRequest:
@@ -61,9 +63,9 @@ def _encode(values: list[float], encoding: str) -> Any:
     return values
 
 
-def mount(app: FastAPI, engine: Any) -> None:
+def mount(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
     @app.post("/v1/embeddings")
-    async def embeddings(body: dict[str, Any]):
+    async def embeddings(request: Request, body: dict[str, Any]):
         req = _parse(body)
         method = getattr(engine, "embed", None)
         if method is None:
@@ -77,10 +79,11 @@ def mount(app: FastAPI, engine: Any) -> None:
                     }
                 },
             )
+        request_id = request.headers.get("x-request-id") or new_id("embd")
         try:
-            result = method(req)
-            if hasattr(result, "__await__"):
-                result = await result
+            result = await call_engine(gate, engine, request_id, method, req)
+        except HTTPException:
+            raise
         except Exception as exc:
             raise HTTPException(500, f"embedding failed: {exc}") from exc
         if not isinstance(result, EmbeddingResult):

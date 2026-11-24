@@ -35,8 +35,8 @@ flashcli **distributes and loads** Model Bundles; inference lives in bundle `ent
 cd flashcli
 ./install.sh --from-source          # build+install the Go host (or: bash scripts/build_go.sh)
 pip install -e "./flashcli-bundle"   # protocol (for pytest)
-# To run infer module tests locally:
-pip install -e "./flashcli-bundle[infer]"
+# To run infer module and HTTP protocol tests locally (pytest/httpx/numpy):
+pip install -e "./flashcli-bundle[infer,test]"
 flashcli doctor
 ```
 

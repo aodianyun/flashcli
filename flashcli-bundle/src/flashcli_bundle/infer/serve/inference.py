@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import os
 import threading
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -76,10 +77,16 @@ def get_inference_loop() -> InferenceLoop:
 
 
 class InferenceGate:
-    """Batch-1 inference slot on the HTTP event loop (batch=1 GPU jobs)."""
+    """GPU inference slots shared by every host-owned route."""
 
-    def __init__(self, *, busy_timeout: float | None = None) -> None:
-        self._sem = asyncio.Semaphore(1)
+    def __init__(
+        self,
+        *,
+        limit: int = 1,
+        busy_timeout: float | None = None,
+    ) -> None:
+        self.limit = max(1, int(limit))
+        self._sem = asyncio.Semaphore(self.limit)
         self._busy_timeout = (
             busy_timeout if busy_timeout is not None else default_busy_timeout_sec()
         )
@@ -114,7 +121,13 @@ class InferenceGate:
         self._sem.release()
 
     async def run(self, request_id: str, coro: Awaitable[T]) -> T:
-        await self.acquire(request_id)
+        try:
+            await self.acquire(request_id)
+        except GpuBusyError:
+            # The caller built the coroutine before we knew the slot was busy.
+            if inspect.iscoroutine(coro):
+                coro.close()
+            raise
         try:
             return await get_inference_loop().run(coro)
         finally:
