@@ -98,6 +98,12 @@ Engine 模式下 bundle 不得自行启动 `uvicorn`/`FastAPI` 服务。
 
 Engine 模式下 `/health`、`GET /v1/models`、`GET /v1/models/{id}` 始终可用。
 
+声明能力时必须实现该能力对应的所有 engine 方法。具体来说，`openai.videos`
+需要 `create_video`、`list_videos`、`get_video`、`download_video`、
+`delete_video`；三个 image 能力都需要 `generate_images`；audio 需要
+`transcribe` / `speech`；`anthropic.count_tokens` 需要 `count_tokens`。这些在
+engine 加载时检查。
+
 ## 4. `ServeEngine` 契约（engine 模式）
 
 始终必需：

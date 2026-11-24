@@ -105,6 +105,13 @@ In engine mode bundles must not start their own `uvicorn`/`FastAPI` server.
 `/health`, `GET /v1/models`, and `GET /v1/models/{id}` are always available in
 engine mode.
 
+Declaring a capability requires every engine method listed for it. In
+particular, `openai.videos` requires `create_video`, `list_videos`,
+`get_video`, `download_video`, and `delete_video`; the three image capabilities
+all require `generate_images`; audio requires `transcribe` / `speech`; and
+`anthropic.count_tokens` requires `count_tokens`. These are checked when the
+engine loads.
+
 ## 4. `ServeEngine` contract (engine mode)
 
 Always required:
