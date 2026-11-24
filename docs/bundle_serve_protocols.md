@@ -342,7 +342,7 @@ returns the Anthropic shape with `anthropic-version`.
 | Reasoning | `reasoning_content` on results; `thinking` blocks / `reasoning` items on output |
 | `n > 1` | Chat and completions support streaming and non-streaming; usage merged |
 | Usage | Chat/responses derive from engine usage; missing keys default to 0 |
-| Busy | Single GPU slot; `503` with `Retry-After: 5` |
+| Busy | `serve.concurrency` inference slots; `503` with `Retry-After: 5` |
 
 ## 8. Compatibility and gating (engine mode)
 

@@ -17,7 +17,7 @@ Host 负责 HTTP 接口，bundle 负责推理。
 
 | 层 | 负责 |
 |----|------|
-| `flashcli` host | HTTP 路由、请求/响应解析、SSE、WebSocket transport、能力门控、单 GPU 槽位、请求日志 |
+| `flashcli` host | HTTP 路由、请求/响应解析、SSE、WebSocket transport、能力门控、`serve.concurrency` 推理槽位（默认 1）、请求日志 |
 | Bundle `ServeEngine` | 权重、chat template、工具/推理解析、解码、模型专属扩展 |
 | `register_routes(app)` | 可选自定义路由；挂在 host 路由之前并保持优先 |
 

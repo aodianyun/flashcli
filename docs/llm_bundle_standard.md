@@ -18,7 +18,7 @@ The host owns the HTTP surface. The bundle owns inference.
 
 | Layer | Owns |
 |-------|------|
-| `flashcli` host | HTTP routes, request/response parsing, SSE, WebSocket transport, capability gating, single GPU slot, request logging |
+| `flashcli` host | HTTP routes, request/response parsing, SSE, WebSocket transport, capability gating, `serve.concurrency` inference slots (default 1), request logging |
 | Bundle `ServeEngine` | Weights, chat template, tool/reasoning parsing, decoding, model-specific extras |
 | `register_routes(app)` | Optional custom routes; mounted before host routes and keeps priority |
 

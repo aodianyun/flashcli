@@ -328,7 +328,7 @@ tool_result part 上保留。
 | 推理 | 结果用 `reasoning_content`；输出为 `thinking` 块 / `reasoning` item |
 | `n > 1` | chat 与 completions 的流式/非流式均支持；usage 合并 |
 | Usage | chat/responses 由 engine usage 推导；缺失字段默认 0 |
-| Busy | 单 GPU 槽位；`503` + `Retry-After: 5` |
+| Busy | 由 `serve.concurrency` 决定的推理槽位；`503` + `Retry-After: 5` |
 
 ## 8. 兼容与门控（engine 模式）
 
