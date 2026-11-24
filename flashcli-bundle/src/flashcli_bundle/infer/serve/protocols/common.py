@@ -46,7 +46,10 @@ async def chat_once(gate: InferenceGate, engine: Any, request_id: str, req: Chat
     async def _run() -> ChatResult:
         if hasattr(engine, "chat_async"):
             return await engine.chat_async(req)
-        return engine.chat(req)
+        result = engine.chat(req)
+        if inspect.isawaitable(result):
+            result = await result
+        return result
 
     try:
         return await gate.run(request_id, _run())
