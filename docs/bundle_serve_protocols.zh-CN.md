@@ -334,7 +334,7 @@ tool_result part 上保留。
 flashcli bundle validate <bundle-or-dist>
 pytest tests/test_serve_protocol_matrix.py tests/test_serve_realtime.py
 
-# 真实 bundle 验收：生成 llm/asr/tts/image/video/legacy 测试 bundle，
+# 真实 bundle 验收：生成 llm/code/anthropic/asr/tts/audio/image/video/legacy 测试 bundle，
 # 通过 flashcli-bundle.infer serve 启动并做真实 socket 请求。
 FLASHCLI_ACCEPTANCE=1 pytest tests/acceptance/test_serve_bundles.py
 ```

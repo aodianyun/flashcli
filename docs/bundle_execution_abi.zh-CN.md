@@ -4,7 +4,7 @@
 
 flashcli **如何调用某个 bundle 的推理入口**的权威契约，且与实现语言无关。bundle 可以使用 Python `entry`（`python -m flashcli_bundle.infer`）或原生 `entry.kind`；本层让 bundle 可以交付原生进程或原生库 —— 且**不改变用户输入的命令**。
 
-相关文档：[bundle_publish_standard.md](bundle_publish_standard.md)（manifest 字段）、[architecture.md](architecture.md)（运行时流程）、[module_layers.md](module_layers.md)（模块分层）。
+相关文档：[bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)（manifest 字段）、[bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)（engine 模式 serve 协议）、[architecture.zh-CN.md](architecture.zh-CN.md)（运行时流程）、[module_layers.zh-CN.md](module_layers.zh-CN.md)（模块分层）。
 
 ---
 

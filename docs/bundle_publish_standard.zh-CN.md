@@ -228,7 +228,7 @@ flashcli run flashcli-bundle/qwen3_8b_nvfp4:1.0.0
 
 一个 capability 只能有一个实现。native 后端使用 [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) 定义的 `native` 块。
 
-`serve.capabilities` 只控制 host 自有路由（`/health` 和 `/v1/models` 始终保留）。当前能力 ID 包括 `openai.chat`、`openai.responses`、`openai.completions`、`openai.embeddings`、`openai.moderations`、`openai.audio.*`、`openai.images.*`、`openai.videos`、`openai.realtime`、`anthropic.messages`、`anthropic.count_tokens`、`anthropic.models`。未知或重复 ID 会使 `bundle validate` 失败。`register_routes` 仍用于自定义路由，并保持优先于 host 路由。能力行为与 `ServeEngine` 契约见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)。
+`serve.capabilities` 只控制 host 自有路由（`/health`、`/v1/models`、`/v1/models/{id}` 始终保留）。当前能力 ID 包括 `openai.chat`、`openai.responses`、`openai.completions`、`openai.embeddings`、`openai.moderations`、`openai.audio.*`、`openai.images.*`、`openai.videos`、`openai.realtime`、`anthropic.messages`、`anthropic.count_tokens`、`anthropic.models`。未知或重复 ID 会使 `bundle validate` 失败。`register_routes` 仍用于自定义路由，并保持优先于 host 路由。能力行为与 `ServeEngine` 契约见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)。
 
 ### 3.3 `defaults.python_abi`
 
@@ -633,5 +633,6 @@ native-only bundle 省略 `-py{PY}`。允许非 NVIDIA platform_tail（如 `gfx9
 | [bundle_publish_standard.md](bundle_publish_standard.md) | 英文版 |
 | [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | ref 与终端用户运行时流程 |
 | [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) | native entry 契约 |
+| [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md) | engine 模式 OpenAI/Anthropic serve 对接 |
 | [bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md) | 维护者构建/发布流程 |
 | [flashcli-bundle/README.md](../flashcli-bundle/README.md) | `flashcli_bundle` Python API |

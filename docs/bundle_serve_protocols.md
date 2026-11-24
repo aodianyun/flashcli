@@ -348,7 +348,7 @@ returns the Anthropic shape with `anthropic-version`.
 flashcli bundle validate <bundle-or-dist>
 pytest tests/test_serve_protocol_matrix.py tests/test_serve_realtime.py
 
-# Real bundle acceptance: builds llm/asr/tts/image/video/legacy fixtures,
+# Real bundle acceptance: builds llm/code/anthropic/asr/tts/audio/image/video/legacy fixtures,
 # starts each through flashcli-bundle.infer serve, and exercises real sockets.
 FLASHCLI_ACCEPTANCE=1 pytest tests/acceptance/test_serve_bundles.py
 ```
