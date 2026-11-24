@@ -321,7 +321,10 @@ class _Store:
 
     def get(self, response_id: str) -> _Entry | None:
         with self._lock:
-            return self._items.get(response_id)
+            entry = self._items.get(response_id)
+            if entry is None or entry.response.get("store") is False:
+                return None
+            return entry
 
     def put(
         self,
@@ -337,12 +340,16 @@ class _Store:
 
     def delete(self, response_id: str) -> bool:
         with self._lock:
-            return self._items.pop(response_id, None) is not None
+            entry = self._items.get(response_id)
+            if entry is None or entry.response.get("store") is False:
+                return False
+            self._items.pop(response_id, None)
+            return True
 
     def cancel(self, response_id: str) -> _Entry | None:
         with self._lock:
             entry = self._items.get(response_id)
-            if entry is None:
+            if entry is None or entry.response.get("store") is False:
                 return None
             entry.cancel_requested = True
             task = entry.task
@@ -384,7 +391,7 @@ def mount(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
                 "output": [],
                 "output_text": "",
                 "previous_response_id": previous_id,
-                "store": True,
+                "store": store_enabled,
                 "metadata": metadata or {},
                 "parallel_tool_calls": True,
                 "tool_choice": "auto",
@@ -422,7 +429,7 @@ def mount(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
                     model=model,
                     created_at=created_at,
                     previous_response_id=previous_id,
-                    store=True,
+                    store=store_enabled,
                     metadata=metadata,
                 )
                 entry.response.clear()

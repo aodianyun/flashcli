@@ -152,6 +152,18 @@ def test_responses_background_lifecycle() -> None:
         assert client.get(f"/v1/responses/{response_id}").status_code == 404
 
 
+def test_responses_background_store_false_is_not_retrievable() -> None:
+    with _client(["openai.responses"]) as client:
+        response = client.post(
+            "/v1/responses", json={**_body(), "background": True, "store": False}
+        )
+        assert response.status_code == 200
+        assert response.json()["store"] is False
+        response_id = response.json()["id"]
+        assert client.get(f"/v1/responses/{response_id}").status_code == 404
+        assert client.delete(f"/v1/responses/{response_id}").status_code == 404
+
+
 def test_responses_retrieve_and_delete_stored_response() -> None:
     with _client(["openai.responses"]) as client:
         created = client.post("/v1/responses", json=_body()).json()
