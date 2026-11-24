@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, AsyncIterator, Iterator, Protocol, runtime_checkable
@@ -14,6 +15,9 @@ class ChatMessage:
     role: str
     content: str | list | None = None
     tool_calls: list[dict[str, Any]] | None = None
+    tool_call_id: str | None = None
+    name: str | None = None
+    reasoning_content: str | None = None
 
 
 @dataclass
@@ -38,6 +42,123 @@ class ChatResult:
     usage: dict[str, Any] = field(default_factory=dict)
     reasoning_content: str | None = None
     extensions: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ModerationRequest:
+    input: list[str]
+    model: str = ""
+    extras: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ModerationResult:
+    results: list[dict[str, Any]]
+    usage: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class VideoRequest:
+    prompt: str
+    model: str = ""
+    seconds: int | None = None
+    size: str | None = None
+    input_reference: bytes | None = None
+    extras: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class VideoJob:
+    id: str
+    status: str = "queued"
+    progress: float = 0.0
+    created_at: int = 0
+    completed_at: int | None = None
+    expires_at: int | None = None
+    model: str = ""
+    error: dict[str, Any] | None = None
+    extras: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class AudioTranscriptionRequest:
+    task: str = "transcribe"  # transcribe | translate
+    file: bytes = b""
+    filename: str = "audio"
+    model: str = ""
+    language: str | None = None
+    prompt: str | None = None
+    response_format: str = "json"
+    temperature: float | None = None
+    timestamp_granularities: list[str] | None = None
+    extras: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class AudioTranscriptionResult:
+    text: str
+    language: str | None = None
+    duration: float | None = None
+    segments: list[dict[str, Any]] = field(default_factory=list)
+    words: list[dict[str, Any]] = field(default_factory=list)
+    usage: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class SpeechRequest:
+    input: str
+    model: str = ""
+    voice: str = "alloy"
+    response_format: str = "mp3"
+    speed: float = 1.0
+    instructions: str | None = None
+    extras: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class SpeechResult:
+    audio: bytes
+    media_type: str = ""
+    usage: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ImageGenerationRequest:
+    prompt: str
+    model: str = ""
+    mode: str = "generate"  # generate | edit | variation
+    n: int = 1
+    size: str = "1024x1024"
+    quality: str = "auto"
+    style: str | None = None
+    response_format: str = "url"  # url | b64_json
+    images: list[bytes] = field(default_factory=list)
+    mask: bytes | None = None
+    extras: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ImageGenerationResult:
+    images: list[bytes | str]
+    response_format: str = "url"
+    revised_prompt: str | None = None
+    usage: dict[str, Any] = field(default_factory=dict)
+    media_type: str = "image/png"
+
+
+@dataclass
+class EmbeddingRequest:
+    input: list[str] | list[list[int]]
+    model: str = ""
+    dimensions: int | None = None
+    encoding_format: str = "float"
+    extras: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class EmbeddingResult:
+    embeddings: list[list[float]]
+    usage: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -84,9 +205,142 @@ def coerce_run_engine(obj: Any) -> RunEngine:
     return obj
 
 
-def coerce_serve_engine(obj: Any) -> ServeEngine:
-    if not isinstance(obj, ServeEngine):
+_CHAT_SERVE_CAPABILITIES = frozenset(
+    {"openai.chat", "openai.completions", "openai.responses", "anthropic.messages"}
+)
+
+# Declared modality capabilities require their engine methods at load time; a
+# bundle that declares a route without implementing it fails serve startup
+# instead of returning 501 for every request.
+_CAPABILITY_METHODS: dict[str, tuple[str, ...]] = {
+    "openai.embeddings": ("embed",),
+    "openai.moderations": ("moderate",),
+    "openai.audio.transcriptions": ("transcribe",),
+    "openai.audio.translations": ("transcribe",),
+    "openai.audio.speech": ("speech",),
+    "openai.images.generations": ("generate_images",),
+    "openai.images.edits": ("generate_images",),
+    "openai.images.variations": ("generate_images",),
+    "openai.videos": (
+        "create_video",
+        "list_videos",
+        "get_video",
+        "download_video",
+        "delete_video",
+    ),
+    "anthropic.count_tokens": ("count_tokens",),
+}
+
+# Methods that hold an inference slot. Video list/get/download/delete and
+# count_tokens are metadata operations and do not need to be async.
+_GATED_METHODS: dict[str, tuple[str, ...]] = {
+    "openai.embeddings": ("embed",),
+    "openai.moderations": ("moderate",),
+    "openai.audio.transcriptions": ("transcribe",),
+    "openai.audio.translations": ("transcribe",),
+    "openai.audio.speech": ("speech",),
+    "openai.images.generations": ("generate_images",),
+    "openai.images.edits": ("generate_images",),
+    "openai.images.variations": ("generate_images",),
+    "openai.videos": ("create_video",),
+}
+
+_CHAT_METHOD_ALIASES = {
+    "chat": ("chat_async", "chat"),
+    "chat_stream": ("chat_stream_async", "chat_stream"),
+}
+
+
+def _has_any(obj: Any, names: tuple[str, ...]) -> bool:
+    return any(hasattr(obj, name) for name in names)
+
+
+def _async_method(obj: Any, names: tuple[str, ...]) -> str | None:
+    for name in names:
+        if not hasattr(obj, name):
+            continue
+        fn = getattr(obj, name)
+        if inspect.iscoroutinefunction(fn) or inspect.isasyncgenfunction(fn):
+            return name
+    return None
+
+
+def coerce_serve_engine(
+    obj: Any,
+    *,
+    capabilities: list[str] | None = None,
+    concurrency: int | None = None,
+) -> ServeEngine:
+    """Validate a serve engine against the capabilities it must implement.
+
+    ``model_id``/``load``/``warmup`` are always required. Chat capabilities
+    require ``chat`` or ``chat_async`` plus ``chat_stream`` or
+    ``chat_stream_async``. Every declared modality capability also requires its
+    engine method(s); missing members fail serve startup.
+
+    When ``concurrency > 1`` the methods that hold an inference slot must be
+    async (or the async chat variants). Sync methods cannot overlap on the
+    single inference loop, so a bundle that declares concurrency must implement
+    async gated methods.
+    """
+    try:
+        limit = max(1, int(concurrency or 1))
+    except (TypeError, ValueError):
+        limit = 1
+    required = ["model_id", "load", "warmup"]
+    needs_chat = capabilities is None or any(
+        cap in _CHAT_SERVE_CAPABILITIES for cap in capabilities
+    )
+    if (
+        capabilities is not None
+        and "openai.realtime" in capabilities
+        and not hasattr(obj, "realtime_session")
+    ):
+        needs_chat = True
+
+    missing: list[str] = []
+    for name in required:
+        if not hasattr(obj, name):
+            missing.append(name)
+    if needs_chat:
+        for name, aliases in _CHAT_METHOD_ALIASES.items():
+            if not _has_any(obj, aliases):
+                missing.append(f"{name} or {aliases[0]}")
+    for cap in capabilities or ():
+        for name in _CAPABILITY_METHODS.get(cap, ()):
+            if not hasattr(obj, name):
+                missing.append(name)
+    if missing:
         raise TypeError(
-            f"Serve engine must implement ServeEngine protocol, got {type(obj)!r}"
+            f"Serve engine is missing required members {missing}: {type(obj)!r}"
+        )
+
+    if limit <= 1:
+        return obj
+
+    gated: dict[str, tuple[str, ...]] = {}
+    if needs_chat:
+        gated.update(_CHAT_METHOD_ALIASES)
+    for cap in capabilities or ():
+        for name in _GATED_METHODS.get(cap, ()):
+            gated[name] = _CHAT_METHOD_ALIASES.get(name, (name,))
+    if "openai.realtime" in (capabilities or ()):
+        if hasattr(obj, "realtime_session"):
+            gated["realtime_session"] = ("realtime_session",)
+        else:
+            gated.update(_CHAT_METHOD_ALIASES)
+    if not gated:
+        raise TypeError(
+            "serve.concurrency > 1 requires at least one gated inference capability"
+        )
+    not_async = [
+        name
+        for name, aliases in gated.items()
+        if _async_method(obj, aliases) is None
+    ]
+    if not_async:
+        raise TypeError(
+            "serve.concurrency > 1 requires async methods; "
+            f"sync or missing: {not_async}"
         )
     return obj

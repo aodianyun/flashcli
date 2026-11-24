@@ -4,7 +4,7 @@
 
 Authoritative contract for **how flashcli invokes a bundle's inference entry**, independent of the implementation language. Bundles may use the Python `entry` (`python -m flashcli_bundle.infer`) or a native `entry.kind`; this layer lets a bundle ship a native process or native library — **without changing what end users type**.
 
-Related: [bundle_publish_standard.md](bundle_publish_standard.md) (manifest fields), [architecture.md](architecture.md) (runtime flow), [module_layers.md](module_layers.md) (module placement).
+Related: [bundle_publish_standard.md](bundle_publish_standard.md) (manifest fields), [bundle_serve_protocols.md](bundle_serve_protocols.md) (engine-mode serve protocols), [architecture.md](architecture.md) (runtime flow), [module_layers.md](module_layers.md) (module placement).
 
 ---
 

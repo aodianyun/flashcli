@@ -2,21 +2,71 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import time
 import uuid
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from flashcli_bundle.capabilities import (
+    ANTHROPIC_COUNT_TOKENS,
+    ANTHROPIC_MESSAGES,
+    ANTHROPIC_MODELS,
+    OPENAI_AUDIO_SPEECH,
+    OPENAI_AUDIO_TRANSCRIPTIONS,
+    OPENAI_AUDIO_TRANSLATIONS,
+    OPENAI_EMBEDDINGS,
+    OPENAI_IMAGES_EDITS,
+    OPENAI_IMAGES_GENERATIONS,
+    OPENAI_IMAGES_VARIATIONS,
+    OPENAI_MODERATIONS,
+    OPENAI_REALTIME,
+    OPENAI_VIDEOS,
+    LEGACY_SERVE_CAPABILITIES,
+    OPENAI_CHAT,
+    OPENAI_COMPLETIONS,
+    OPENAI_RESPONSES,
+)
 from flashcli_bundle.infer.engines.base import ChatRequest, ServeEngine
 from flashcli_bundle.infer.serve.inference import GpuBusyError, InferenceGate, iter_on_inference_loop
 from flashcli_bundle.infer.serve.openai_bridge import (
     chat_result_to_completion_payload,
     parse_chat_completions_body,
 )
+from flashcli_bundle.infer.serve.protocols.anthropic import (
+    mount_count_tokens,
+    mount_messages,
+)
+from flashcli_bundle.infer.serve.protocols.openai_audio import (
+    mount_speech,
+    mount_transcriptions,
+)
+from flashcli_bundle.infer.serve.protocols.openai_embeddings import (
+    mount as mount_embeddings,
+)
+from flashcli_bundle.infer.serve.protocols.openai_images import (
+    mount as mount_images,
+)
+from flashcli_bundle.infer.serve.protocols.openai_moderations import (
+    mount as mount_moderations,
+)
+from flashcli_bundle.infer.serve.protocols.openai_realtime import (
+    mount as mount_realtime,
+)
+from flashcli_bundle.infer.serve.protocols.openai_videos import (
+    mount as mount_videos,
+)
+from flashcli_bundle.infer.serve.protocols.openai_completions import (
+    mount as mount_openai_completions,
+)
+from flashcli_bundle.infer.serve.protocols.openai_responses import (
+    mount as mount_openai_responses,
+)
+from flashcli_bundle.infer.serve.protocols.registry import mount_unimplemented
 from flashcli_bundle.infer.serve.request_log import (
     RequestTimer,
     client_label,
@@ -48,8 +98,22 @@ def _gpu_busy_response(model_id: str) -> HTTPException:
     )
 
 
-def build_app(engine: ServeEngine) -> FastAPI:
-    gate = InferenceGate()
+def build_app(
+    engine: ServeEngine,
+    *,
+    serve_capabilities: list[str] | None = None,
+    serve_concurrency: int = 1,
+) -> FastAPI:
+    capabilities = set(
+        LEGACY_SERVE_CAPABILITIES
+        if serve_capabilities is None
+        else serve_capabilities
+    )
+    try:
+        concurrency = max(1, int(serve_concurrency))
+    except (TypeError, ValueError):
+        concurrency = 1
+    gate = InferenceGate(limit=concurrency)
     app = FastAPI(title="flashcli unified serve")
 
     class AccessLogMiddleware(BaseHTTPMiddleware):
@@ -125,7 +189,42 @@ def build_app(engine: ServeEngine) -> FastAPI:
         return payload
 
     @app.get("/v1/models")
-    async def list_models():
+    async def list_models(request: Request):
+        if ANTHROPIC_MODELS in capabilities and request.headers.get("anthropic-version"):
+            from datetime import datetime, timezone
+
+            raw_limit = request.query_params.get("limit")
+            try:
+                limit = int(raw_limit) if raw_limit is not None else 20
+            except ValueError:
+                raise HTTPException(
+                    400, "limit must be an integer between 1 and 1000"
+                ) from None
+            if limit < 1 or limit > 1000:
+                raise HTTPException(400, "limit must be between 1 and 1000")
+
+            cursor = request.query_params.get("after_id") or request.query_params.get(
+                "before_id"
+            )
+            # A single-model host has no page after/before a cursor id.
+            items = [] if cursor is not None else [engine.model_id]
+            items = items[:limit]
+            created = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            data = [
+                {
+                    "type": "model",
+                    "id": model_id,
+                    "display_name": model_id,
+                    "created_at": created,
+                }
+                for model_id in items
+            ]
+            return {
+                "data": data,
+                "has_more": False,
+                "first_id": data[0]["id"] if data else None,
+                "last_id": data[-1]["id"] if data else None,
+            }
         return {
             "object": "list",
             "data": [
@@ -138,6 +237,52 @@ def build_app(engine: ServeEngine) -> FastAPI:
             ],
         }
 
+    @app.get("/v1/models/{model_id}")
+    async def retrieve_model(model_id: str, request: Request):
+        anthropic = (
+            ANTHROPIC_MODELS in capabilities
+            and bool(request.headers.get("anthropic-version"))
+        )
+        if model_id != engine.model_id:
+            if anthropic:
+                return JSONResponse(
+                    status_code=404,
+                    content={
+                        "type": "error",
+                        "error": {
+                            "type": "not_found_error",
+                            "message": f"model {model_id!r} not found",
+                        },
+                    },
+                )
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "error": {
+                        "message": f"The model '{model_id}' does not exist",
+                        "type": "invalid_request_error",
+                        "param": None,
+                        "code": "model_not_found",
+                    }
+                },
+            )
+        if anthropic:
+            from datetime import datetime, timezone
+
+            created = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            return {
+                "type": "model",
+                "id": engine.model_id,
+                "display_name": engine.model_id,
+                "created_at": created,
+            }
+        return {
+            "id": engine.model_id,
+            "object": "model",
+            "created": int(time.time()),
+            "owned_by": "flashcli",
+        }
+
     def _parse_chat_request(body: dict[str, Any]) -> ChatRequest:
         try:
             return parse_chat_completions_body(body)
@@ -147,7 +292,10 @@ def build_app(engine: ServeEngine) -> FastAPI:
     async def _chat_result(req: ChatRequest) -> Any:
         if hasattr(engine, "chat_async"):
             return await engine.chat_async(req)
-        return engine.chat(req)
+        result = engine.chat(req)
+        if inspect.isawaitable(result):
+            result = await result
+        return result
 
     async def _chunk_iter(req: ChatRequest):
         if hasattr(engine, "chat_stream_async"):
@@ -162,7 +310,6 @@ def build_app(engine: ServeEngine) -> FastAPI:
         async for chunk in _sync_bridge():
             yield chunk
 
-    @app.post("/v1/chat/completions")
     async def chat_completions(request: Request, body: dict[str, Any]):
         req_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex[:12]
         timer: RequestTimer = getattr(request.state, "timer", None) or RequestTimer()
@@ -193,12 +340,22 @@ def build_app(engine: ServeEngine) -> FastAPI:
             )
             raise
 
+        raw_n = body.get("n")
+        try:
+            n = int(raw_n) if raw_n is not None else 1
+        except (TypeError, ValueError):
+            raise HTTPException(400, "n must be an integer") from None
+        if n < 1:
+            raise HTTPException(400, "n must be >= 1")
+
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
         created = int(time.time())
 
         if not req.stream:
             try:
-                result = await gate.run(req_id, _chat_result(req))
+                results = [
+                    await gate.run(req_id, _chat_result(req)) for _ in range(n)
+                ]
             except GpuBusyError:
                 log.warning(
                     "chat END | id=%s | from=%s | status=503 gpu_busy | %.1f ms | %s",
@@ -226,6 +383,7 @@ def build_app(engine: ServeEngine) -> FastAPI:
                 )
                 raise HTTPException(500, f"inference failed: {exc}") from exc
 
+            result = results[0]
             usage_line = usage_summary(result.usage)
             log.info(
                 "chat END | id=%s | from=%s | status=200 | %.1f ms | "
@@ -238,11 +396,182 @@ def build_app(engine: ServeEngine) -> FastAPI:
                 usage_line,
                 f" | {summary}" if not usage_line else "",
             )
-            return chat_result_to_completion_payload(
+            payload = chat_result_to_completion_payload(
                 result,
                 completion_id=completion_id,
                 model_id=engine.model_id,
                 created=created,
+            )
+            if n == 1:
+                return payload
+
+            choices: list[dict[str, Any]] = []
+            usage: dict[str, Any] = {}
+            for index, item in enumerate(results):
+                choice = chat_result_to_completion_payload(
+                    item,
+                    completion_id=completion_id,
+                    model_id=engine.model_id,
+                    created=created,
+                )["choices"][0]
+                choice["index"] = index
+                choices.append(choice)
+                for key, value in (item.usage or {}).items():
+                    if isinstance(value, (int, float)):
+                        usage[key] = usage.get(key, 0) + value
+            payload["choices"] = choices
+            payload["usage"] = usage
+            return payload
+
+        if n > 1:
+            async def stream_choices():
+                for index in range(n):
+                    try:
+                        await gate.acquire(req_id)
+                    except GpuBusyError:
+                        err = {
+                            "error": {
+                                "message": "GPU inference slot is busy; retry after "
+                                "the current request finishes.",
+                                "type": "server_busy",
+                                "code": "gpu_busy",
+                                "model": engine.model_id,
+                            }
+                        }
+                        yield f"data: {json.dumps(err)}\n\n"
+                        yield "data: [DONE]\n\n"
+                        return
+                    try:
+                        first_delta: dict[str, Any] = {"role": "assistant"}
+                        if thinking_value:
+                            first_delta["reasoning_content"] = ""
+                            first_delta["reasoning"] = ""
+                        else:
+                            first_delta["content"] = ""
+                        yield (
+                            "data: "
+                            + json.dumps(
+                                {
+                                    "id": completion_id,
+                                    "object": "chat.completion.chunk",
+                                    "created": created,
+                                    "model": engine.model_id,
+                                    "choices": [
+                                        {
+                                            "index": index,
+                                            "delta": first_delta,
+                                            "finish_reason": None,
+                                        }
+                                    ],
+                                }
+                            )
+                            + "\n\n"
+                        )
+                        async for chunk in iter_on_inference_loop(
+                            lambda: _chunk_iter(req),
+                        ):
+                            if chunk.reasoning_delta:
+                                yield (
+                                    "data: "
+                                    + json.dumps(
+                                        {
+                                            "id": completion_id,
+                                            "object": "chat.completion.chunk",
+                                            "created": created,
+                                            "model": engine.model_id,
+                                            "choices": [
+                                                {
+                                                    "index": index,
+                                                    "delta": {
+                                                        "reasoning_content": chunk.reasoning_delta,
+                                                        "reasoning": chunk.reasoning_delta,
+                                                    },
+                                                    "finish_reason": None,
+                                                }
+                                            ],
+                                        }
+                                    )
+                                    + "\n\n"
+                                )
+                            if chunk.content_delta:
+                                yield (
+                                    "data: "
+                                    + json.dumps(
+                                        {
+                                            "id": completion_id,
+                                            "object": "chat.completion.chunk",
+                                            "created": created,
+                                            "model": engine.model_id,
+                                            "choices": [
+                                                {
+                                                    "index": index,
+                                                    "delta": {"content": chunk.content_delta},
+                                                    "finish_reason": None,
+                                                }
+                                            ],
+                                        }
+                                    )
+                                    + "\n\n"
+                                )
+                            for tc in chunk.tool_calls:
+                                yield (
+                                    "data: "
+                                    + json.dumps(
+                                        {
+                                            "id": completion_id,
+                                            "object": "chat.completion.chunk",
+                                            "created": created,
+                                            "model": engine.model_id,
+                                            "choices": [
+                                                {
+                                                    "index": index,
+                                                    "delta": {"tool_calls": [tc]},
+                                                    "finish_reason": None,
+                                                }
+                                            ],
+                                        }
+                                    )
+                                    + "\n\n"
+                                )
+                            if chunk.finish_reason:
+                                last: dict[str, Any] = {
+                                    "id": completion_id,
+                                    "object": "chat.completion.chunk",
+                                    "created": created,
+                                    "model": engine.model_id,
+                                    "choices": [
+                                        {
+                                            "index": index,
+                                            "delta": {},
+                                            "finish_reason": chunk.finish_reason,
+                                        }
+                                    ],
+                                }
+                                if chunk.usage:
+                                    last["usage"] = dict(chunk.usage)
+                                yield f"data: {json.dumps(last)}\n\n"
+                                break
+                    except Exception as exc:
+                        err = {
+                            "error": {
+                                "message": f"inference failed: {exc}",
+                                "type": "server_error",
+                                "code": "inference_failed",
+                            }
+                        }
+                        yield f"data: {json.dumps(err)}\n\n"
+                    finally:
+                        gate.release()
+                yield "data: [DONE]\n\n"
+
+            return StreamingResponse(
+                stream_choices(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",
+                },
             )
 
         try:
@@ -451,5 +780,35 @@ def build_app(engine: ServeEngine) -> FastAPI:
                 "X-Accel-Buffering": "no",
             },
         )
+
+    if OPENAI_CHAT in capabilities:
+        app.add_api_route("/v1/chat/completions", chat_completions, methods=["POST"])
+    if OPENAI_COMPLETIONS in capabilities:
+        mount_openai_completions(app, engine, gate)
+    if OPENAI_RESPONSES in capabilities:
+        mount_openai_responses(app, engine, gate)
+    if ANTHROPIC_MESSAGES in capabilities:
+        mount_messages(app, engine, gate)
+    if ANTHROPIC_COUNT_TOKENS in capabilities:
+        mount_count_tokens(app, engine)
+    if OPENAI_EMBEDDINGS in capabilities:
+        mount_embeddings(app, engine, gate)
+    if OPENAI_AUDIO_TRANSCRIPTIONS in capabilities or OPENAI_AUDIO_TRANSLATIONS in capabilities:
+        mount_transcriptions(app, engine, gate, capabilities)
+    if OPENAI_AUDIO_SPEECH in capabilities:
+        mount_speech(app, engine, gate)
+    if (
+        OPENAI_IMAGES_GENERATIONS in capabilities
+        or OPENAI_IMAGES_EDITS in capabilities
+        or OPENAI_IMAGES_VARIATIONS in capabilities
+    ):
+        mount_images(app, engine, gate, capabilities)
+    if OPENAI_MODERATIONS in capabilities:
+        mount_moderations(app, engine, gate)
+    if OPENAI_VIDEOS in capabilities:
+        mount_videos(app, engine, gate)
+    if OPENAI_REALTIME in capabilities:
+        mount_realtime(app, engine, gate)
+    mount_unimplemented(app, capabilities)
 
     return app

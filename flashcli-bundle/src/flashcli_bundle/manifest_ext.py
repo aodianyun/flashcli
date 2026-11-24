@@ -7,6 +7,10 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from flashcli_bundle.capabilities import (
+    validate_serve_capabilities,
+    validate_serve_concurrency,
+)
 from flashcli_bundle.manifest import (
     BUNDLE_FORMAT,
     BUNDLE_FORMAT_VERSION,
@@ -199,6 +203,8 @@ def validate_bundle_layout(
             allow_empty=True,
         )
     )
+    errors.extend(validate_serve_capabilities(bundle.entry_serve, label="entry.serve"))
+    errors.extend(validate_serve_concurrency(bundle.entry_serve, label="entry.serve"))
     errors.extend(validate_weights_spec(bundle))
     errors.extend(validate_bundle_options(bundle))
     errors.extend(validate_bundle_protocol_version(bundle))

@@ -14,6 +14,7 @@ flashcli is the host CLI that distributes and runs FlashRT **Model Bundles**. It
 ```bash
 pip install -e "./flashcli-bundle"           # protocol (for pytest)
 pip install -e "./flashcli-bundle[infer]"    # optional, to run infer subprocess tests
+pip install -e "./flashcli-bundle[test]"     # optional, pytest/httpx/numpy for the full suite
 ```
 Go host needs Go >= 1.24. In CN networks set `GOPROXY=https://goproxy.cn,direct` (and `GOSUMDB=sum.golang.google.cn`). Module path: `go/`.
 

@@ -97,9 +97,24 @@ struct ModelRow {
     endpoint: String,
     pid: i64,
     loaded_at: String,
+    capabilities: Option<Vec<String>>,
+}
+
+fn capabilities_allow_chat(caps: Option<&[String]>) -> bool {
+    caps.map_or(true, |items| items.iter().any(|c| c == "openai.chat"))
 }
 
 impl ModelRow {
+    fn can_chat(&self) -> bool {
+        capabilities_allow_chat(self.capabilities.as_deref())
+    }
+
+    fn has_capability(&self, name: &str) -> bool {
+        self.capabilities
+            .as_ref()
+            .is_some_and(|items| items.iter().any(|c| c == name))
+    }
+
     fn total_bytes(&self) -> f64 {
         self.bundle_bytes + self.runtime_bytes + self.weights_bytes
     }
@@ -3566,9 +3581,28 @@ impl App {
                     "{}/v1/chat/completions",
                     model.endpoint.trim_end_matches('/')
                 );
-                let example = format!(
-                    "curl {models_url}\n\ncurl {chat_url} -H 'Content-Type: application/json' \\\n  -d '{{\"model\":\"<model-id>\",\"messages\":[{{\"role\":\"user\",\"content\":\"Hello\"}}]}}'"
+                let embeddings_url = format!(
+                    "{}/v1/embeddings",
+                    model.endpoint.trim_end_matches('/')
                 );
+                let example = if model.can_chat() {
+                    format!(
+                        "curl {models_url}\n\ncurl {chat_url} -H 'Content-Type: application/json' \\\n  -d '{{\"model\":\"<model-id>\",\"messages\":[{{\"role\":\"user\",\"content\":\"Hello\"}}]}}'"
+                    )
+                } else if model.has_capability("openai.embeddings") {
+                    format!(
+                        "curl {models_url}\n\ncurl {embeddings_url} -H 'Content-Type: application/json' \\\n  -d '{{\"model\":\"<model-id>\",\"input\":\"Hello\"}}'"
+                    )
+                } else {
+                    let caps = model
+                        .capabilities
+                        .as_ref()
+                        .map(|items| items.join(", "))
+                        .unwrap_or_default();
+                    format!(
+                        "curl {models_url}\n\n# This model does not declare openai.chat.\n# capabilities: {caps}"
+                    )
+                };
                 ui.horizontal(|ui| {
                     ui.label(
                         egui::RichText::new("OpenAI 兼容接口")
@@ -5599,6 +5633,12 @@ fn parse_models(v: &Value, system: Option<&Value>) -> Vec<ModelRow> {
                         endpoint: info.as_ref().map(|i| i.0.clone()).unwrap_or_default(),
                         pid: info.as_ref().map(|i| i.1).unwrap_or(0),
                         loaded_at: info.as_ref().map(|i| i.2.clone()).unwrap_or_default(),
+                        capabilities: m["capabilities"].as_array().map(|items| {
+                            items
+                                .iter()
+                                .filter_map(|c| c.as_str().map(str::to_string))
+                                .collect()
+                        }),
                     }
                 })
                 .collect()

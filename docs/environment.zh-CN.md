@@ -75,6 +75,7 @@ ModelScope：
 | `FLASHCLI_INSTALL_REPO` / `FLASHCLI_INSTALL_REF` | 来自 `~/.flashcli/install.env` | 发布安装时 `flashcli-bundle[infer]` 的 git 回退来源；源码构建改写 `FLASHCLI_BUNDLE_PIP_SPEC`。 |
 | `FLASHCLI_INSTALL_COMMIT` | 来自 `~/.flashcli/install.env` | 源码构建 commit（诊断用，不参与解析）。 |
 | `FLASHCLI_BASE_PYTHON` | 自动 | bundle venv 的基础解释器。 |
+| `FLASHCLI_PYTHON` | 自动 | `bundle validate` 的 serve 静态 AST 检查使用的解释器；回退 `python3` / `python` / `py`。 |
 | `FLASHCLI_PY<abi>_BIN` | 自动 | 固定某 `python_abi` 的解释器（如 `FLASHCLI_PY312_BIN`、`FLASHCLI_PY310_BIN`）。 |
 | `FLASHCLI_FORCE_VENV` | `0` | 重建 bundle venv。 |
 | `FLASHCLI_SKIP_VENV_SETUP` | `0` | 跳过 venv 创建/安装（调试；用已有 venv）。 |
@@ -175,7 +176,7 @@ engine 模式**不**设置 `FLASHCLI_CHECKPOINT`（权重经 `RunEngine.load(...
 | `HF_DATASETS_OFFLINE` | `1`（host 设置） | 同上（`datasets`）。 |
 | `FLASHCLI_SERVE_LOG_LEVEL` | `INFO` | `flashcli serve` 应用日志级别。 |
 | `FLASHCLI_UVICORN_LOG_LEVEL` | `info` | Uvicorn 日志级别。 |
-| `FLASHCLI_SERVE_BUSY_TIMEOUT_SEC` | `0` | 引擎忙时最大等待秒数（`0` = 无限）。 |
+| `FLASHCLI_SERVE_BUSY_TIMEOUT_SEC` | `0` | 引擎忙时等待空闲推理槽位的最长秒数；超时返回 `503`（`0` = 忙时立即失败）。 |
 
 ## 内部（entry 代码不要依赖）
 

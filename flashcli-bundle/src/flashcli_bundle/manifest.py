@@ -9,6 +9,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from flashcli_bundle.capabilities import (
+    parse_serve_capabilities,
+    parse_serve_concurrency,
+)
+
 BUNDLE_FORMAT = "flashcli-model-bundle"
 BUNDLE_FORMAT_VERSION = 3
 SUPPORTED_FORMAT_VERSIONS = frozenset({3, 4})
@@ -45,6 +50,10 @@ class EntrySpec:
     mode: EntryMode = "engine"
     kind: str = "python"
     native: dict[str, Any] = field(default_factory=dict)
+    capabilities: list[str] | None = None
+    capabilities_invalid: str | None = None
+    concurrency: int | None = None
+    concurrency_invalid: str | None = None
 
     @property
     def is_native(self) -> bool:
@@ -70,7 +79,25 @@ class EntrySpec:
             mode = raw_mode  # type: ignore[assignment]
         if kind == "python" and (not mod or not attr):
             return None
-        return cls(module=mod, attr=attr, mode=mode, kind=kind, native=native)
+        caps: list[str] | None = None
+        caps_err: str | None = None
+        if "capabilities" in data:
+            caps, caps_err = parse_serve_capabilities(data.get("capabilities"))
+        conc: int | None = None
+        conc_err: str | None = None
+        if "concurrency" in data:
+            conc, conc_err = parse_serve_concurrency(data.get("concurrency"))
+        return cls(
+            module=mod,
+            attr=attr,
+            mode=mode,
+            kind=kind,
+            native=native,
+            capabilities=caps,
+            capabilities_invalid=caps_err,
+            concurrency=conc,
+            concurrency_invalid=conc_err,
+        )
 
 
 def entry_mode_for_capability(bundle: BundleManifest, capability: str) -> EntryMode:

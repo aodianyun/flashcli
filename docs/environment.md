@@ -79,6 +79,7 @@ ModelScope:
 | `FLASHCLI_INSTALL_REPO` / `FLASHCLI_INSTALL_REF` | from `~/.flashcli/install.env` | Release-install fallback for `flashcli-bundle[infer]`; source builds write `FLASHCLI_BUNDLE_PIP_SPEC` instead. |
 | `FLASHCLI_INSTALL_COMMIT` | from `~/.flashcli/install.env` | Source-build commit (diagnostics; not used for resolution). |
 | `FLASHCLI_BASE_PYTHON` | auto | Base interpreter for the bundle venv. |
+| `FLASHCLI_PYTHON` | auto | Interpreter used by `bundle validate`'s best-effort serve AST check; falls back to `python3` / `python` / `py`. |
 | `FLASHCLI_PY<abi>_BIN` | auto | Pin the interpreter for a `python_abi` (e.g. `FLASHCLI_PY312_BIN`, `FLASHCLI_PY310_BIN`). |
 | `FLASHCLI_FORCE_VENV` | `0` | Rebuild the bundle venv. |
 | `FLASHCLI_SKIP_VENV_SETUP` | `0` | Skip venv creation/installs (debug; use an existing venv). |
@@ -183,7 +184,7 @@ Engine mode does **not** set `FLASHCLI_CHECKPOINT` (weights are passed to `RunEn
 | `HF_DATASETS_OFFLINE` | `1` (set by host) | Same for `datasets`. |
 | `FLASHCLI_SERVE_LOG_LEVEL` | `INFO` | Application log level for `flashcli serve`. |
 | `FLASHCLI_UVICORN_LOG_LEVEL` | `info` | Uvicorn access/error level. |
-| `FLASHCLI_SERVE_BUSY_TIMEOUT_SEC` | `0` | Max wait when the engine is busy (`0` = no limit). |
+| `FLASHCLI_SERVE_BUSY_TIMEOUT_SEC` | `0` | How long a request waits for a free inference slot before `503` (`0` = fail immediately when busy). |
 
 ## Internal (do not rely on in entry code)
 

@@ -23,6 +23,10 @@
 | 镜像 | `GET /v1/mirror`、`POST /v1/mirror` | 对新下载启用/关闭国内镜像 |
 | 实时 / 界面 | `GET /v1/ws`、`GET /`、`GET /docs`、`GET /openapi.yaml`、`POST /v1/ui/chat` | WebSocket 状态与内置控制台 |
 
+`GET /v1/models` 与 `GET /v1/models/loaded` 的模型对象包含 `capabilities` 数组。
+`null` 表示 host 不拥有该 serve 条目的路由（script/native 或未知）；`[]` 表示显式关闭
+host 推理路由。
+
 ## 示例
 
 ```bash
@@ -38,8 +42,9 @@ curl http://127.0.0.1:18100/v1/chat/completions ...
   （`bundle "..." is run-only (no serve entry)`），请改用 `flashcli run`。
 - 没有 `/v1/infer`，加载后直接访问返回的 `endpoint`。
 - `POST /v1/models/smoke` 对 run-only bundle 以低优先级执行 `flashcli run`，或对已启动的
-  serve 模型发送一次 `ping` 对话请求；进度通过 `/v1/ws` 推送并追加到
-  `<ref>.smoke.log`。
+  serve 模型按能力发送一次 `ping` 请求（chat、completions、responses、Anthropic
+  messages、embeddings 或 moderations）；没有这些能力的纯模态模型会明确报错。
+  进度通过 `/v1/ws` 推送并追加到 `<ref>.smoke.log`。
 - 当 `addr` 绑定 `0.0.0.0` 且没有配置 token 时，局域网内其他设备可直接访问 API。
 
 ## 清理语义

@@ -25,6 +25,10 @@ Authentication is off by default. With a token, every path except `/health`, `/`
 | Mirror | `GET /v1/mirror`, `POST /v1/mirror` | Domestic mirrors for new downloads |
 | Live / UI | `GET /v1/ws`, `GET /`, `GET /docs`, `GET /openapi.yaml`, `POST /v1/ui/chat` | WebSocket state; embedded console |
 
+Model objects in `GET /v1/models` and `GET /v1/models/loaded` include a
+`capabilities` array. `null` means the host does not own routes for that serve
+entry (script/native or unknown); `[]` means host inference routes are disabled.
+
 ## Examples
 
 ```bash
@@ -40,8 +44,11 @@ curl http://127.0.0.1:18100/v1/chat/completions ...
   `bundle "..." is run-only (no serve entry)` — use `flashcli run` instead.
 - There is no `/v1/infer`; call the returned `endpoint` directly.
 - `POST /v1/models/smoke` runs `flashcli run` at low priority for run-only
-  bundles, or one `ping` chat request for a started serve model; progress streams
-  over `/v1/ws` and is appended to `<ref>.smoke.log`.
+  bundles, or one capability-appropriate `ping` request for a started serve
+  model (chat, completions, responses, Anthropic messages, embeddings, or
+  moderations); modality-only models without one of those capabilities report
+  an explicit error. Progress streams over `/v1/ws` and is appended to
+  `<ref>.smoke.log`.
 - When `addr` is bound to `0.0.0.0`, other devices on the LAN can reach the API
   without a token unless one is configured.
 

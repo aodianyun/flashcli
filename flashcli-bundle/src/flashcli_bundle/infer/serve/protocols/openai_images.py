@@ -1,0 +1,172 @@
+"""OpenAI image generation/edit/variation host routes."""
+
+from __future__ import annotations
+
+import base64
+import time
+from typing import Any
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+
+from flashcli_bundle.capabilities import (
+    OPENAI_IMAGES_EDITS,
+    OPENAI_IMAGES_GENERATIONS,
+    OPENAI_IMAGES_VARIATIONS,
+)
+from flashcli_bundle.infer.engines.base import ImageGenerationRequest, ImageGenerationResult
+from flashcli_bundle.infer.serve.inference import InferenceGate
+from flashcli_bundle.infer.serve.protocols.common import call_engine, new_id
+
+
+def _str(form: Any, key: str, default: str | None = None) -> str | None:
+    value = form.get(key)
+    if value is None or value == "":
+        return default
+    return str(value)
+
+
+def _int(form: Any, key: str, default: int) -> int:
+    value = _str(form, key)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        raise HTTPException(400, f"{key} must be an integer") from None
+
+
+def _body_int(body: dict[str, Any], key: str, default: int) -> int:
+    value = body.get(key)
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise HTTPException(400, f"{key} must be an integer") from None
+
+
+async def _files(form: Any, key: str) -> list[bytes]:
+    values = form.getlist(key) or form.getlist(f"{key}[]")
+    out: list[bytes] = []
+    for value in values:
+        if hasattr(value, "read"):
+            out.append(await value.read())
+    return out
+
+
+def _data(request: ImageGenerationRequest, result: ImageGenerationResult) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for image in result.images:
+        item: dict[str, Any] = {}
+        if isinstance(image, bytes):
+            if request.response_format == "b64_json" or result.response_format == "b64_json":
+                item["b64_json"] = base64.b64encode(image).decode()
+            else:
+                media_type = result.media_type or "image/png"
+                item["url"] = f"data:{media_type};base64," + base64.b64encode(image).decode()
+        else:
+            item["b64_json" if request.response_format == "b64_json" else "url"] = image
+        if result.revised_prompt:
+            item["revised_prompt"] = result.revised_prompt
+        out.append(item)
+    return out
+
+
+def _response(request: ImageGenerationRequest, result: ImageGenerationResult) -> dict[str, Any]:
+    return {
+        "created": int(time.time()),
+        "data": _data(request, result),
+        "usage": result.usage,
+    }
+
+
+def mount(
+    app: FastAPI,
+    engine: Any,
+    gate: InferenceGate,
+    capabilities: set[str],
+) -> None:
+    method = getattr(engine, "generate_images", None)
+
+    def unavailable() -> JSONResponse:
+        return JSONResponse(
+            status_code=501,
+            content={"error": {"message": "the bundle does not expose images", "type": "not_implemented"}},
+        )
+
+    async def call(req: ImageGenerationRequest, request_id: str) -> Any:
+        if method is None:
+            return unavailable()
+        try:
+            result = await call_engine(gate, engine, request_id, method, req)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(500, f"image generation failed: {exc}") from exc
+        if not isinstance(result, ImageGenerationResult):
+            raise HTTPException(500, "engine generate_images() must return ImageGenerationResult")
+        return _response(req, result)
+
+    if OPENAI_IMAGES_GENERATIONS in capabilities:
+        @app.post("/v1/images/generations")
+        async def generations(request: Request, body: dict[str, Any]):
+            prompt = body.get("prompt")
+            if not isinstance(prompt, str) or not prompt:
+                raise HTTPException(400, "prompt is required")
+            request_id = request.headers.get("x-request-id") or new_id("img")
+            return await call(
+                ImageGenerationRequest(
+                    prompt=prompt,
+                    model=str(body.get("model", "")),
+                    mode="generate",
+                    n=_body_int(body, "n", 1),
+                    size=str(body.get("size", "1024x1024")),
+                    quality=str(body.get("quality", "auto")),
+                    style=body.get("style"),
+                    response_format=str(body.get("response_format", "url") or "url"),
+                    extras={k: v for k, v in body.items() if k not in {
+                        "prompt", "model", "n", "size", "quality", "style", "response_format"
+                    }},
+                ),
+                request_id,
+            )
+
+    async def form_request(request: Request, mode: str) -> ImageGenerationRequest:
+        form = await request.form()
+        prompt = _str(form, "prompt", "") or ""
+        if mode == "edit" and not prompt:
+            raise HTTPException(400, "prompt is required")
+        images = await _files(form, "image")
+        if not images:
+            raise HTTPException(400, "image is required")
+        masks = await _files(form, "mask")
+        return ImageGenerationRequest(
+            prompt=prompt,
+            model=_str(form, "model", "") or "",
+            mode=mode,
+            n=_int(form, "n", 1),
+            size=_str(form, "size", "1024x1024") or "1024x1024",
+            quality=_str(form, "quality", "auto") or "auto",
+            style=_str(form, "style"),
+            response_format=_str(form, "response_format", "url") or "url",
+            images=images,
+            mask=masks[0] if masks else None,
+            extras={str(k): str(v) for k, v in form.items() if not hasattr(v, "read") and k not in {
+                "prompt", "model", "n", "size", "quality", "style", "response_format"
+            }},
+        )
+
+    if OPENAI_IMAGES_EDITS in capabilities:
+        @app.post("/v1/images/edits")
+        async def edits(request: Request):
+            req = await form_request(request, "edit")
+            request_id = request.headers.get("x-request-id") or new_id("img")
+            return await call(req, request_id)
+
+    if OPENAI_IMAGES_VARIATIONS in capabilities:
+        @app.post("/v1/images/variations")
+        async def variations(request: Request):
+            req = await form_request(request, "variation")
+            request_id = request.headers.get("x-request-id") or new_id("img")
+            return await call(req, request_id)

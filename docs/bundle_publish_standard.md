@@ -225,8 +225,21 @@ Script contracts:
 | `module` | Python module name relative to the bundle root (Python only) |
 | `attr` | Class/callable name (`RunEngine`/`ServeEngine` or script `main`) |
 | `mode` | `engine` (default) or `script` (Python only) |
+| `capabilities` | Python engine serve only: host-owned protocol routes to enable. Absent keeps the legacy `["openai.chat"]` behavior; `[]` disables host inference routes. |
+| `concurrency` | Python engine serve only: simultaneous host-owned inference calls (default `1`). `N > 1` requires async gated methods; synchronous methods are rejected. |
 
 A capability has exactly one implementation. Native backends use the sibling `native` block defined in [bundle_execution_abi.md](bundle_execution_abi.md).
+
+`serve.capabilities` controls only host-owned routes (`/health`, `/v1/models`, and `/v1/models/{id}` stay enabled). Current capability IDs are `openai.chat`, `openai.responses`, `openai.completions`, `openai.embeddings`, `openai.moderations`, `openai.audio.*`, `openai.images.*`, `openai.videos`, `openai.realtime`, `anthropic.messages`, `anthropic.count_tokens`, and `anthropic.models`. Unknown or duplicate IDs fail `bundle validate`. `register_routes` remains available for custom routes and keeps its legacy priority over host routes. Capability behavior and the `ServeEngine` contract are specified in [bundle_serve_protocols.md](bundle_serve_protocols.md).
+
+`serve.concurrency` sizes the shared host inference gate (default `1`). Every host-owned inference route uses it, including chat, embeddings, moderation, audio, images, and video creation. Values above `1` require async gated methods; synchronous methods are rejected when `concurrency > 1`.
+
+`flashcli bundle validate` checks this manifest field, the entry file, and a
+best-effort AST check of directly defined Python `ServeEngine` classes (no venv;
+imported/inherited/dynamic classes are skipped). When `concurrency > 1`, it also
+checks that the gated methods are async. Declared capability methods are also
+enforced when `flashcli serve` / `flashserver` loads the engine; a missing or
+synchronous gated method fails serve startup.
 
 ### 3.3 `defaults.python_abi`
 
@@ -526,11 +539,13 @@ Script mode must not load `.so` through environment variables or manual `dlopen`
 
 ### 4.3 Engine mode
 
-`RunEngine.load(checkpoint, preset, **options)` loads weights; `RunEngine.predict(...)` runs inference. `ServeEngine` exposes `model_id`, `load`, `warmup`, `chat`, and `chat_stream`. Read defaults via `flashcli_bundle` helpers; do not duplicate manifest defaults in code.
+`RunEngine.load(checkpoint, preset, **options)` loads weights; `RunEngine.predict(...)` runs inference. `ServeEngine` always requires `model_id`, `load`, and `warmup`; chat capabilities require `chat`/`chat_stream` or `chat_async`/`chat_stream_async`. Declared capabilities may add `embed`, `moderate`, `transcribe`, `speech`, `generate_images`, video methods, `count_tokens`, and `realtime_session`. See [bundle_serve_protocols.md](bundle_serve_protocols.md) for the full contract and capability-to-endpoint mapping. Read defaults via `flashcli_bundle` helpers; do not duplicate manifest defaults in code.
 
 ### 4.4 Script mode
 
 `def main(argv: list[str] | None = None) -> int | None` receives bundle flags; weights come from environment variables. `run_options`/`serve_options` are documentation-only in script mode.
+
+In `serve`, script mode owns the HTTP server, routes, SSE/WS, and protocol; the host does not mount `/health`, `/v1/models`, or OpenAI/Anthropic routes, and `serve.capabilities` is invalid. See [bundle_serve_protocols.md](bundle_serve_protocols.md) §1.
 
 ### 4.5 Entry environment variables
 
@@ -634,5 +649,6 @@ Native-only bundles omit the `-py{PY}` segment. Non-NVIDIA platform tails are al
 | [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) | 简体中文 |
 | [model_bundle_standard.md](model_bundle_standard.md) | Refs and end-user runtime flow |
 | [bundle_execution_abi.md](bundle_execution_abi.md) | Native entry contracts |
+| [bundle_serve_protocols.md](bundle_serve_protocols.md) | Engine-mode OpenAI/Anthropic serve integration |
 | [bundle_builder_guide.md](bundle_builder_guide.md) | Maintainer build/release workflow |
 | [flashcli-bundle/README.md](../flashcli-bundle/README.md) | `flashcli_bundle` Python API |
