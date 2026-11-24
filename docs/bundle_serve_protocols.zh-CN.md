@@ -404,7 +404,8 @@ entry 模块文件是否存在。若有可用的 Python 解释器（不需要 ve
 `ServeEngine` 类做 best-effort AST 方法检查；`concurrency > 1` 时同时检查受门控方法
 是否为异步。导入/继承/动态类以及没有 Python 的环境会跳过该检查；`flashcli serve` 与
 `flashserver` 的加载检查仍是权威。直接可见的类缺少声明能力的方法时 `bundle validate`
-会失败；无论如何，serve 启动都会再次强制检查。
+会失败；无论如何，serve 启动都会再次强制检查。可用 `--skip-static-serve`
+跳过 AST 检查；用 `FLASHCLI_PYTHON` 指定解释器。
 
 发布前用发布树执行 `flashcli serve`，至少验证非流式 + 流式 chat、工具与 `tool_choice`、
 Anthropic messages 与流式事件、`count_tokens`，以及所有已声明的非 chat 能力。

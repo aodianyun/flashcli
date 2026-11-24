@@ -428,7 +428,9 @@ methods, including async gated methods when `concurrency > 1`. Imported,
 inherited, or dynamic classes and missing Python interpreters are skipped;
 `flashcli serve` and `flashserver` remain authoritative. A bundle that declares
 a capability without implementing its methods fails `bundle validate` when the
-class is directly visible, and always fails serve startup.
+class is directly visible, and always fails serve startup. Use
+`--skip-static-serve` to skip the AST check; set `FLASHCLI_PYTHON` to choose the
+interpreter.
 
 Before publishing, run the published tree through `flashcli serve` and verify
 non-streaming + streaming chat, tools and `tool_choice`, Anthropic messages and
