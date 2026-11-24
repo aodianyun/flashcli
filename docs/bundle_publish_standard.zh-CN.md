@@ -529,6 +529,8 @@ script 模式不得通过环境变量或手动 `dlopen` 加载 `.so`。
 
 `def main(argv: list[str] | None = None) -> int | None` 接收 bundle 参数；权重从环境变量读取。script 模式下 `run_options`/`serve_options` 仅用于帮助文档。
 
+在 `serve` 中，script 模式由 bundle 自行拥有 HTTP 服务、路由、SSE/WS 与协议；host 不挂载 `/health`、`/v1/models` 或 OpenAI/Anthropic 路由，`serve.capabilities` 非法。见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md) §1。
+
 ### 4.5 Entry 环境变量
 
 | 变量 | 模式 | 说明 |

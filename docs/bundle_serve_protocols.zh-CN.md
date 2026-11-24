@@ -2,21 +2,54 @@
 
 <p align="right"><a href="bundle_serve_protocols.md">English</a> · <strong>简体中文</strong></p>
 
-说明 bundle `ServeEngine` 如何与 host 自有的 `flashcli serve` 对接。Manifest、目录、
-`.so` 与发布规则见 [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)；
-entry 后端见 [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md)。
+**范围：Python `serve` 入口的 `engine` 模式（`ServeEngine`）。** 只有该模式由 host 拥有
+HTTP/WebSocket 接口，并按 `serve.capabilities` 挂载 OpenAI/Anthropic 路由。其他 serve
+入口形式由 bundle 自行接管服务；见 [§1](#1-集成模式先读这里)。
 
-## 1. 职责归属
+Manifest、目录与发布规则见
+[bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)；entry 后端见
+[bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md)。
+
+## 1. 集成模式（先读这里）
+
+`entry.serve` 可以是 Python 或 native，Python 又分 `engine`/`script`。只有
+**Python + engine** 才获得本文描述的 host 自有协议面。
+
+| `entry.serve` | Host HTTP/WS 服务 | 谁实现 OpenAI/Anthropic | `serve.capabilities` |
+|---------------|-------------------|--------------------------|----------------------|
+| `kind:"python"`、`mode:"engine"` | Host（`build_app` + uvicorn） | Host 路由 + `ServeEngine` 方法 | **有效；本文范围** |
+| `kind:"python"`、`mode:"script"` | 无（bundle 自行启动） | Bundle `main(argv)` | 非法 |
+| `kind:"native-exec"`、`transport:"http"` | 无（host 仅监管） | Bundle 进程端点 | 不适用 |
+| `kind:"native-exec"`、`transport:"stdio"` | — | serve 尚未实现 | 不适用 |
+| `kind:"native-abi"` | — | serve 尚未实现 | 不适用 |
+
+**Engine 模式（本文）。** Host 加载 `ServeEngine`，调用 `load`/`warmup`，构建 FastAPI
+应用，并按能力挂载路由。`/health` 与模型端点为 host 自有。
+
+**Script 模式由 bundle 全接管。** Host 只准备 bundle/权重、注入
+`FLASHCLI_CHECKPOINT` / `FLASHCLI_BUNDLE_ROOT` / `FLASHCLI_PRESET`，并把剩余 argv
+（含 `--host`/`--port`）透传给 `main(argv)`。脚本必须自行启动并拥有 HTTP 服务、路由、
+SSE/WS、鉴权、错误、`/health` 和模型端点。Host 不会挂载 `/health`、`/v1/models` 或任何
+OpenAI/Anthropic 路由。`serve.capabilities` 在 script 模式下非法（`bundle validate`
+会拒绝），`serve_options` 仅为文档说明。
+
+**Native serve。** `native-exec` + `transport:"http"` 由 host 启动、等待 ready、随后监管；
+host 打印 bundle 端点且不做反向代理，协议完全由 bundle 拥有。`native-exec` stdio 与
+`native-abi` 的 serve 尚未实现。
+
+本文以下内容**仅描述 Python engine 模式**。
+
+## 2. 职责归属（engine 模式）
 
 | 层 | 负责 |
 |----|------|
-| Host | HTTP/WebSocket 路由、请求解析、SSE/WS 传输、能力门控、单 GPU 槽位、请求日志、协议错误转换 |
+| Host | HTTP/WS 路由、请求解析、SSE/WS 传输、能力门控、单 GPU 槽位、请求日志、协议错误转换 |
 | Bundle `ServeEngine` | 权重、chat template、工具/推理解析、解码、模型专属扩展 |
 | `register_routes(app)` | 可选自定义路由；挂在 host 路由之前并保持优先 |
 
-Bundle 不得自行启动 `uvicorn`/`FastAPI` 服务。
+Engine 模式下 bundle 不得自行启动 `uvicorn`/`FastAPI` 服务。
 
-## 2. 能力声明
+## 3. 能力声明（engine 模式）
 
 ```json
 "entry": {
@@ -60,9 +93,9 @@ Bundle 不得自行启动 `uvicorn`/`FastAPI` 服务。
 | `anthropic.count_tokens` | `POST /v1/messages/count_tokens` | `count_tokens` |
 | `anthropic.models` | `GET /v1/models`（带 `anthropic-version`）；`GET /v1/models/{id}` | `model_id` |
 
-`/health`、`GET /v1/models`、`GET /v1/models/{id}` 始终可用。
+Engine 模式下 `/health`、`GET /v1/models`、`GET /v1/models/{id}` 始终可用。
 
-## 3. `ServeEngine` 契约
+## 4. `ServeEngine` 契约（engine 模式）
 
 必需成员：
 
@@ -99,9 +132,9 @@ class ServeEngine:
 （session、item、音频缓冲 + 可选 `transcribe`、response create/cancel）；提供 handler
 时由 bundle 接管完整事件协议。其他异常按该端点的协议错误返回。
 
-## 4. OpenAI 对接
+## 5. OpenAI 对接（engine 模式）
 
-### 4.0 通用约定
+### 5.0 通用约定
 
 - `model` 可为任意值；chat/completions/responses 的响应使用 `engine.model_id`。
 - 错误：`400` 非法请求、`404` 未知资源、`500` 推理异常、`501` 缺少 engine 方法、
@@ -109,7 +142,7 @@ class ServeEngine:
 - SSE 流以 `data: [DONE]` 结束。
 - 未知请求字段进入 `ChatRequest.extras`，交给 bundle。
 
-### 4.1 `POST /v1/chat/completions`
+### 5.1 `POST /v1/chat/completions`
 
 | 输入 | 说明 |
 |------|------|
@@ -128,7 +161,7 @@ class ServeEngine:
 `reasoning_content`/`reasoning`，否则 `content`），随后 delta、finish chunk（
 有 usage 时附带）、`[DONE]`。`choices[].index` 区分 `n>1` 的 choice。
 
-### 4.2 `POST /v1/completions`
+### 5.2 `POST /v1/completions`
 
 | 输入 | 说明 |
 |------|------|
@@ -138,7 +171,7 @@ class ServeEngine:
 
 输出：`text_completion` / SSE 文本增量。choice 数 = prompts × `n`。
 
-### 4.3 `POST /v1/responses`
+### 5.3 `POST /v1/responses`
 
 | 输入 | 说明 |
 |------|------|
@@ -168,18 +201,18 @@ class ServeEngine:
 
 `finish_reason == "length"` 时状态为 `incomplete`。
 
-### 4.4 `POST /v1/embeddings`
+### 5.4 `POST /v1/embeddings`
 
 输入：`input`（字符串 / 字符串数组 / token 数组 / token 数组的数组）、`dimensions`、
 `encoding_format`（`float` 或 `base64`，小端 float32）。输出：`list`，含
 `data[{object:"embedding", embedding, index}]`、`model`、`usage`。engine 返回数量不一致
 → `500`；缺少方法 → `501`。
 
-### 4.5 `POST /v1/moderations`
+### 5.5 `POST /v1/moderations`
 
 输入：`input`（字符串/字符串数组）。输出：`id`、`model`、`results[]`、`usage`。
 
-### 4.6 音频
+### 5.6 音频
 
 | 端点 | 输入 | 输出 |
 |------|------|------|
@@ -187,7 +220,7 @@ class ServeEngine:
 | `POST /v1/audio/translations` | 同上 | 同上，`verbose_json` 的 `task` 为 `"translate"` |
 | `POST /v1/audio/speech` | JSON `input`（必填）、`model`、`voice`、`response_format`（mp3/opus/aac/flac/wav/pcm）、`speed`、`instructions` | 音频字节 + media type |
 
-### 4.7 图像
+### 5.7 图像
 
 | 端点 | 输入 | 输出 |
 |------|------|------|
@@ -197,7 +230,7 @@ class ServeEngine:
 
 `url` 输出为 `data:image/...;base64,...` URI。
 
-### 4.8 视频
+### 5.8 视频
 
 | 端点 | 输入 | 输出 |
 |------|------|------|
@@ -207,7 +240,7 @@ class ServeEngine:
 | `GET /v1/videos/{id}/content` | — | `video/mp4` 字节 |
 | `DELETE /v1/videos/{id}` | — | `{id, object:"video.deleted", deleted:bool}` |
 
-### 4.9 `WS /v1/realtime`
+### 5.9 `WS /v1/realtime`
 
 若 bundle 实现 `realtime_session(websocket, model)`，由它负责完整事件协议；host 只负责
 接受连接、选模型、能力门控和错误转发。
@@ -224,15 +257,15 @@ class ServeEngine:
 `max_output_tokens`）。音频 `append` 会缓冲；`commit` 生成输入 item，并在 engine 支持
 `transcribe` 时自动转写。
 
-### 4.10 模型
+### 5.10 模型
 
-`GET /v1/models` 与 `GET /v1/models/{id}` 始终可用。默认返回 OpenAI 结构；当带
-`anthropic-version` 且声明 `anthropic.models` 时返回 Anthropic 结构。未知 id → `404`
+Engine 模式下 `GET /v1/models` 与 `GET /v1/models/{id}` 始终可用。默认返回 OpenAI 结构；
+当带 `anthropic-version` 且声明 `anthropic.models` 时返回 Anthropic 结构。未知 id → `404`
 （`model_not_found` / `not_found_error`）。
 
-## 5. Anthropic 对接
+## 6. Anthropic 对接（engine 模式）
 
-### 5.1 `POST /v1/messages`
+### 6.1 `POST /v1/messages`
 
 | 输入 | 说明 |
 |------|------|
@@ -257,17 +290,17 @@ class ServeEngine:
 `tool_result` 中的图片保留为 image part；`cache_control` 在 system、text、image、
 tool_result part 上保留。
 
-### 5.2 `POST /v1/messages/count_tokens`
+### 6.2 `POST /v1/messages/count_tokens`
 
 与 messages 相同的校验。输出 `{input_tokens:int}`。缺少 `count_tokens` → `501`；
 计数异常 → `500`。
 
-### 5.3 模型
+### 6.3 模型
 
 `GET /v1/models` 支持 `limit`（1–1000）与 `before_id`/`after_id`；单模型 host 对任何
 游标返回空页。`GET /v1/models/{id}` 在带 `anthropic-version` 时返回 Anthropic 结构。
 
-## 6. 通用转换规则
+## 7. 通用转换规则（engine 模式）
 
 | 区域 | 规则 |
 |------|------|
@@ -279,14 +312,15 @@ tool_result part 上保留。
 | Usage | chat/responses 由 engine usage 推导；缺失字段默认 0 |
 | Busy | 单 GPU 槽位；`503` + `Retry-After: 5` |
 
-## 7. 兼容与门控
+## 8. 兼容与门控（engine 模式）
 
 - 无 `serve.capabilities` 的旧 manifest 仅保留 `openai.chat`。
 - `[]` 仅保留 health/models，无推理路由。
 - `register_routes` 自定义端点不受门控影响。
 - 未知能力 ID 校验失败。
+- Script 与 native serve 不使用该门控模型，由自身实现端点。
 
-## 8. 校验与验收
+## 9. 校验与验收（engine 模式）
 
 ```bash
 flashcli bundle validate <bundle-or-dist>
@@ -296,7 +330,9 @@ pytest tests/test_serve_protocol_matrix.py tests/test_serve_realtime.py
 发布前用发布树执行 `flashcli serve`，至少验证非流式 + 流式 chat、工具与 `tool_choice`、
 Anthropic messages 与流式事件、`count_tokens`，以及所有已声明的非 chat 能力。
 
-## 9. 已知限制
+## 10. 已知限制
+
+以下限制针对 **engine 模式的 host 协议面**；script/native serve 可在 bundle 内自行实现。
 
 | 区域 | 限制 |
 |------|------|
@@ -310,10 +346,11 @@ Anthropic messages 与流式事件、`count_tokens`，以及所有已声明的�
 | Anthropic | 无 batches/files/MCP/container/context_management/output_config；`disable_parallel_tool_use` 丢弃 |
 | 平台 API | OpenAI Batch/Files/Fine-tuning/Assistants/Vector Stores 范围外 |
 | 鉴权/限流 | 本地单用户 CLI，故意不实现 |
+| Serve 形式 | `native-exec` stdio 与 `native-abi` 的 serve 尚未实现 |
 
 ## 相关文档
 
 - [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) —— manifest、目录、发布
-- [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) —— entry 后端
+- [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) —— entry kind 与 native serve 行为
 - [module_layers.zh-CN.md](module_layers.zh-CN.md) —— host/infer/protocol 归属
 - [bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md) —— 构建与发布

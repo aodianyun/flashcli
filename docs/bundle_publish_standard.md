@@ -535,6 +535,8 @@ Script mode must not load `.so` through environment variables or manual `dlopen`
 
 `def main(argv: list[str] | None = None) -> int | None` receives bundle flags; weights come from environment variables. `run_options`/`serve_options` are documentation-only in script mode.
 
+In `serve`, script mode owns the HTTP server, routes, SSE/WS, and protocol; the host does not mount `/health`, `/v1/models`, or OpenAI/Anthropic routes, and `serve.capabilities` is invalid. See [bundle_serve_protocols.md](bundle_serve_protocols.md) §1.
+
 ### 4.5 Entry environment variables
 
 | Variable | Mode | Description |

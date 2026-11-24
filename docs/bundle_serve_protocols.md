@@ -2,22 +2,60 @@
 
 <p align="right"><strong>English</strong> · <a href="bundle_serve_protocols.zh-CN.md">简体中文</a></p>
 
-How a bundle `ServeEngine` integrates with host-owned `flashcli serve`. Manifest,
-layout, `.so`, and publishing rules live in
+**Scope: Python `serve` entry in `engine` mode (`ServeEngine`).** In this mode
+the host owns the HTTP/WebSocket surface and mounts OpenAI/Anthropic routes
+according to `serve.capabilities`. Other serve entry forms own the server
+themselves; see [§1](#1-integration-modes-read-first).
+
+Manifest, layout, and publishing rules live in
 [bundle_publish_standard.md](bundle_publish_standard.md); entry backends live in
 [bundle_execution_abi.md](bundle_execution_abi.md).
 
-## 1. Ownership
+## 1. Integration modes (read first)
+
+`entry.serve` can be Python or native, and Python has `engine`/`script` modes.
+Only **Python + engine** gets the host-owned protocol surface described in this
+document.
+
+| `entry.serve` | Host HTTP/WS server | Who implements OpenAI/Anthropic | `serve.capabilities` |
+|---------------|---------------------|--------------------------------|----------------------|
+| `kind:"python"`, `mode:"engine"` | Host (`build_app` + uvicorn) | Host routes + `ServeEngine` methods | **Valid; this document** |
+| `kind:"python"`, `mode:"script"` | None (bundle runs its own) | Bundle `main(argv)` | Invalid |
+| `kind:"native-exec"`, `transport:"http"` | None (host supervises) | Bundle process endpoint | Not applicable |
+| `kind:"native-exec"`, `transport:"stdio"` | — | Serve not implemented | Not applicable |
+| `kind:"native-abi"` | — | Serve not implemented | Not applicable |
+
+**Engine mode (this document).** The host loads `ServeEngine`, calls
+`load`/`warmup`, builds the FastAPI app, and mounts routes by capability.
+`/health` and the model endpoints are host-owned.
+
+**Script mode is bundle-owned.** The host only prepares the bundle/weights,
+injects `FLASHCLI_CHECKPOINT` / `FLASHCLI_BUNDLE_ROOT` / `FLASHCLI_PRESET`, and
+forwards the remaining argv (including `--host`/`--port`) to
+`main(argv)`. The script must start and own its HTTP server, routes, SSE/WS,
+auth, errors, `/health`, and model endpoints. The host does not mount
+`/health`, `/v1/models`, or any OpenAI/Anthropic route. `serve.capabilities` is
+invalid for script mode (`bundle validate` rejects it), and `serve_options` are
+documentation-only.
+
+**Native serve.** `native-exec` with `transport:"http"` is spawned, awaited for
+readiness, then supervised; the host prints the bundle endpoint and does not
+proxy, so the bundle owns the entire protocol. `native-exec` over stdio and
+`native-abi` serve are not implemented yet.
+
+The remainder of this document describes **only Python engine mode**.
+
+## 2. Ownership (engine mode)
 
 | Layer | Owns |
 |-------|------|
-| Host | HTTP/WebSocket routing, request parsing, SSE/WS transport, capability gating, single GPU slot, request log, protocol-error translation |
+| Host | HTTP/WS routing, request parsing, SSE/WS transport, capability gating, single GPU slot, request log, protocol-error translation |
 | Bundle `ServeEngine` | Weights, chat template, tools/reasoning parsing, decoding, model-specific extras |
 | `register_routes(app)` | Optional custom routes; mounted before host routes and keeps priority |
 
-Bundles must not start their own `uvicorn`/`FastAPI` server.
+In engine mode bundles must not start their own `uvicorn`/`FastAPI` server.
 
-## 2. Capability declaration
+## 3. Capability declaration (engine mode)
 
 ```json
 "entry": {
@@ -61,9 +99,10 @@ Bundles must not start their own `uvicorn`/`FastAPI` server.
 | `anthropic.count_tokens` | `POST /v1/messages/count_tokens` | `count_tokens` |
 | `anthropic.models` | `GET /v1/models` (with `anthropic-version`); `GET /v1/models/{id}` | `model_id` |
 
-`/health`, `GET /v1/models`, and `GET /v1/models/{id}` are always available.
+`/health`, `GET /v1/models`, and `GET /v1/models/{id}` are always available in
+engine mode.
 
-## 3. `ServeEngine` contract
+## 4. `ServeEngine` contract (engine mode)
 
 Required members:
 
@@ -102,9 +141,9 @@ with optional `transcribe`, response create/cancel); a present handler takes
 over the full event protocol. Other exceptions surface as the endpoint's
 protocol error.
 
-## 4. OpenAI integration
+## 5. OpenAI integration (engine mode)
 
-### 4.0 Shared conventions
+### 5.0 Shared conventions
 
 - `model` may be any value; chat/completions/responses use `engine.model_id` in responses.
 - Errors: `400` invalid request, `404` unknown resource, `500` inference error,
@@ -112,7 +151,7 @@ protocol error.
 - SSE streams end with `data: [DONE]`.
 - Unknown request fields are collected in `ChatRequest.extras` for the bundle.
 
-### 4.1 `POST /v1/chat/completions`
+### 5.1 `POST /v1/chat/completions`
 
 | Input | Notes |
 |-------|-------|
@@ -132,7 +171,7 @@ Output (stream): `chat.completion.chunk` events; first chunk carries `role`
 delta events, a finish chunk (`usage` when provided), and `[DONE]`. `choices[].index`
 distinguishes `n>1` choices.
 
-### 4.2 `POST /v1/completions`
+### 5.2 `POST /v1/completions`
 
 | Input | Notes |
 |-------|-------|
@@ -142,7 +181,7 @@ distinguishes `n>1` choices.
 
 Output: `text_completion` / SSE text deltas. Choice count = prompts × `n`.
 
-### 4.3 `POST /v1/responses`
+### 5.3 `POST /v1/responses`
 
 | Input | Notes |
 |-------|-------|
@@ -172,18 +211,18 @@ Output: `response` object with `status` (`completed`/`incomplete`), `output`
 
 `finish_reason == "length"` produces `status:"incomplete"`.
 
-### 4.4 `POST /v1/embeddings`
+### 5.4 `POST /v1/embeddings`
 
 Input: `input` string / string[] / token array / token-array array; `dimensions`;
 `encoding_format` `float` or `base64` (little-endian float32). Output: `list` with
 `data[{object:"embedding", embedding, index}]`, `model`, `usage`. Mismatched
 engine output count → `500`; missing method → `501`.
 
-### 4.5 `POST /v1/moderations`
+### 5.5 `POST /v1/moderations`
 
 Input: `input` string/string[]. Output: `id`, `model`, `results[]`, `usage`.
 
-### 4.6 Audio
+### 5.6 Audio
 
 | Endpoint | Input | Output |
 |----------|-------|--------|
@@ -191,7 +230,7 @@ Input: `input` string/string[]. Output: `id`, `model`, `results[]`, `usage`.
 | `POST /v1/audio/translations` | Same multipart fields | Same, `verbose_json` uses `task:"translate"` |
 | `POST /v1/audio/speech` | JSON `input` (required), `model`, `voice`, `response_format` (mp3/opus/aac/flac/wav/pcm), `speed`, `instructions` | Audio bytes with media type |
 
-### 4.7 Images
+### 5.7 Images
 
 | Endpoint | Input | Output |
 |----------|-------|--------|
@@ -201,7 +240,7 @@ Input: `input` string/string[]. Output: `id`, `model`, `results[]`, `usage`.
 
 `url` output is a `data:image/...;base64,...` URI.
 
-### 4.8 Videos
+### 5.8 Videos
 
 | Endpoint | Input | Output |
 |----------|-------|--------|
@@ -211,7 +250,7 @@ Input: `input` string/string[]. Output: `id`, `model`, `results[]`, `usage`.
 | `GET /v1/videos/{id}/content` | — | `video/mp4` bytes |
 | `DELETE /v1/videos/{id}` | — | `{id, object:"video.deleted", deleted:bool}` |
 
-### 4.9 `WS /v1/realtime`
+### 5.9 `WS /v1/realtime`
 
 If the bundle implements `realtime_session(websocket, model)`, it owns the full
 event protocol; the host only accepts, selects the model, gates the capability,
@@ -229,16 +268,16 @@ Without a handler the host serves a text state machine:
 `tool_choice`, `temperature`, `max_output_tokens`). Audio appends are buffered;
 `commit` creates an input item and transcribes via `transcribe` when available.
 
-### 4.10 Models
+### 5.10 Models
 
-`GET /v1/models` and `GET /v1/models/{id}` are always available. They return the
-OpenAI shape by default and the Anthropic shape when `anthropic-version` is
-present and `anthropic.models` is declared. Unknown id → `404`
-(`model_not_found` / `not_found_error`).
+`GET /v1/models` and `GET /v1/models/{id}` are always available in engine mode.
+They return the OpenAI shape by default and the Anthropic shape when
+`anthropic-version` is present and `anthropic.models` is declared. Unknown id →
+`404` (`model_not_found` / `not_found_error`).
 
-## 5. Anthropic integration
+## 6. Anthropic integration (engine mode)
 
-### 5.1 `POST /v1/messages`
+### 6.1 `POST /v1/messages`
 
 | Input | Notes |
 |-------|-------|
@@ -263,18 +302,18 @@ Output (stream): SSE `message_start`, `content_block_start`, `content_block_delt
 `tool_result` images are kept as image parts; `cache_control` is preserved on
 system, text, image, and tool-result parts.
 
-### 5.2 `POST /v1/messages/count_tokens`
+### 6.2 `POST /v1/messages/count_tokens`
 
 Same validation as messages. Output `{input_tokens:int}`. Missing
 `count_tokens` → `501`; counter error → `500`.
 
-### 5.3 Models
+### 6.3 Models
 
 `GET /v1/models` supports `limit` (1–1000) and `before_id`/`after_id`; a
 single-model host returns an empty page for any cursor. `GET /v1/models/{id}`
 returns the Anthropic shape with `anthropic-version`.
 
-## 6. Shared translation rules
+## 7. Shared translation rules (engine mode)
 
 | Area | Rule |
 |------|------|
@@ -286,14 +325,16 @@ returns the Anthropic shape with `anthropic-version`.
 | Usage | Chat/responses derive from engine usage; missing keys default to 0 |
 | Busy | Single GPU slot; `503` with `Retry-After: 5` |
 
-## 7. Compatibility and gating
+## 8. Compatibility and gating (engine mode)
 
 - Legacy manifests without `serve.capabilities` keep only `openai.chat`.
 - `[]` keeps only health/models; no inference routes.
 - `register_routes` custom endpoints are not gated.
 - Unknown capability IDs fail validation.
+- Script and native serve entries do not use this gating model; they own their
+  own endpoints.
 
-## 8. Validation and acceptance
+## 9. Validation and acceptance (engine mode)
 
 ```bash
 flashcli bundle validate <bundle-or-dist>
@@ -304,7 +345,10 @@ Before publishing, run the published tree through `flashcli serve` and verify
 non-streaming + streaming chat, tools and `tool_choice`, Anthropic messages and
 streaming events, `count_tokens`, and every declared non-chat capability.
 
-## 9. Known limitations
+## 10. Known limitations
+
+These apply to the **engine-mode host surface**; script/native serve can
+implement anything in the bundle.
 
 | Area | Limitation |
 |------|------------|
@@ -314,14 +358,15 @@ streaming events, `count_tokens`, and every declared non-chat capability.
 | Audio | No streaming transcription/chunking; no streaming speech |
 | Images | No stream/background/output format controls |
 | Videos | No remix or cursor pagination |
-| Realtime | Text state machine; no TTS/VAD/audio output; reasons not emitted |
+| Realtime | Text state machine; no TTS/VAD/audio output; reasoning not emitted |
 | Anthropic | No batches/files/MCP/container/context_management/output_config; `disable_parallel_tool_use` dropped |
 | Platform APIs | OpenAI Batch/Files/Fine-tuning/Assistants/Vector Stores are out of scope |
 | Auth/limits | Local single-user CLI; intentionally omitted |
+| Serve forms | Native `native-exec` stdio and `native-abi` serve are not implemented |
 
 ## Related docs
 
 - [bundle_publish_standard.md](bundle_publish_standard.md) — manifest, layout, publishing
-- [bundle_execution_abi.md](bundle_execution_abi.md) — entry backends
+- [bundle_execution_abi.md](bundle_execution_abi.md) — entry kinds and native serve behavior
 - [module_layers.md](module_layers.md) — host/infer/protocol ownership
 - [bundle_builder_guide.md](bundle_builder_guide.md) — build and release
