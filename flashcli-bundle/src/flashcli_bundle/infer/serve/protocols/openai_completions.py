@@ -16,11 +16,12 @@ from flashcli_bundle.infer.serve.protocols.common import (
     now,
     sse,
 )
+from flashcli_bundle.openai_compat import parse_bool_field
 
 _UNSUPPORTED = ("logprobs", "best_of", "suffix")
 
 
-def _parse(body: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
+def _parse(body: dict[str, Any]) -> tuple[list[str], int, dict[str, Any]]:
     prompt = body.get("prompt")
     if isinstance(prompt, str):
         prompts = [prompt]
@@ -47,12 +48,18 @@ def _request(prompt: str, body: dict[str, Any]) -> ChatRequest:
     stop = body.get("stop")
     if isinstance(stop, str):
         stop = [stop]
+    try:
+        max_tokens = int(body.get("max_tokens", 16) or 16)
+        temperature = float(body.get("temperature", 0.0) or 0.0)
+        top_p = float(body.get("top_p", 1.0) or 1.0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "max_tokens/temperature/top_p must be numeric") from None
     return ChatRequest(
         messages=[ChatMessage(role="user", content=prompt)],
-        max_tokens=int(body.get("max_tokens", 16) or 16),
-        temperature=float(body.get("temperature", 0.0) or 0.0),
-        top_p=float(body.get("top_p", 1.0) or 1.0),
-        stream=bool(body.get("stream")),
+        max_tokens=max_tokens,
+        temperature=temperature,
+        top_p=top_p,
+        stream=parse_bool_field(body.get("stream")) or False,
         stop=stop if isinstance(stop, list) else None,
         seed=body.get("seed"),
         extras={
@@ -72,12 +79,13 @@ def mount(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
     @app.post("/v1/completions")
     async def completions(request: Request, body: dict[str, Any]):
         prompts, n, parsed = _parse(body)
+        stream = parse_bool_field(parsed.get("stream")) or False
         model = str(body.get("model") or engine.model_id)
         completion_id = new_id("cmpl")
         created = now()
         request_id = request.headers.get("x-request-id", completion_id)
 
-        if not parsed.get("stream"):
+        if not stream:
             choices: list[dict[str, Any]] = []
             usage: dict[str, Any] = {}
             for prompt_index, prompt in enumerate(prompts):

@@ -8,6 +8,7 @@ host protocol surface can be exercised with realistic inputs and outputs.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import struct
@@ -240,6 +241,16 @@ class LLMEngine:
         return ModerationResult(
             results=results, usage={"total_tokens": len(request.input)}
         )
+
+
+class AsyncLLMEngine(LLMEngine):
+    """Async chat engine used to exercise serve.concurrency > 1."""
+
+    model_id = "async-fixture"
+
+    async def chat(self, request: ChatRequest) -> ChatResult:
+        await asyncio.sleep(0.3)
+        return super().chat(request)
 
 
 class CodeEngine(LLMEngine):

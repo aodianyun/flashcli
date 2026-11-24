@@ -494,3 +494,11 @@ fn wslconfig_reads_auto_memory_reclaim() {
     // Missing key: reclaim is on by default.
     assert!(parse_wslconfig("").auto_memory_reclaim);
 }
+
+#[test]
+fn capabilities_gate_chat_example() {
+    assert!(capabilities_allow_chat(None));
+    assert!(capabilities_allow_chat(Some(&["openai.chat".to_string()])));
+    assert!(!capabilities_allow_chat(Some(&[])));
+    assert!(!capabilities_allow_chat(Some(&["openai.embeddings".to_string()])));
+}

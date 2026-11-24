@@ -130,6 +130,8 @@ func TestSmokeTextRequestCapabilities(t *testing.T) {
 		{"completions", []string{"openai.completions"}, "/v1/completions", ""},
 		{"responses", []string{"openai.responses"}, "/v1/responses", ""},
 		{"anthropic", []string{"anthropic.messages"}, "/v1/messages", "2023-06-01"},
+		{"embeddings", []string{"openai.embeddings"}, "/v1/embeddings", ""},
+		{"moderations", []string{"openai.moderations"}, "/v1/moderations", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -147,5 +149,8 @@ func TestSmokeTextRequestCapabilities(t *testing.T) {
 	}
 	if _, _, _, err := smokeTextRequest([]string{"openai.audio.speech"}, "m"); err == nil {
 		t.Fatal("expected unsupported text capability error")
+	}
+	if _, _, _, err := smokeTextRequest([]string{}, "m"); err == nil {
+		t.Fatal("explicit empty capabilities must not fall back to chat")
 	}
 }

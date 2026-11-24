@@ -28,7 +28,22 @@ def _str(form: Any, key: str, default: str | None = None) -> str | None:
 
 def _int(form: Any, key: str, default: int) -> int:
     value = _str(form, key)
-    return int(value) if value is not None else default
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        raise HTTPException(400, f"{key} must be an integer") from None
+
+
+def _body_int(body: dict[str, Any], key: str, default: int) -> int:
+    value = body.get(key)
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise HTTPException(400, f"{key} must be an integer") from None
 
 
 async def _files(form: Any, key: str) -> list[bytes]:
@@ -48,7 +63,8 @@ def _data(request: ImageGenerationRequest, result: ImageGenerationResult) -> lis
             if request.response_format == "b64_json" or result.response_format == "b64_json":
                 item["b64_json"] = base64.b64encode(image).decode()
             else:
-                item["url"] = "data:image/png;base64," + base64.b64encode(image).decode()
+                media_type = result.media_type or "image/png"
+                item["url"] = f"data:{media_type};base64," + base64.b64encode(image).decode()
         else:
             item["b64_json" if request.response_format == "b64_json" else "url"] = image
         if result.revised_prompt:
@@ -104,7 +120,7 @@ def mount(
                     prompt=prompt,
                     model=str(body.get("model", "")),
                     mode="generate",
-                    n=int(body.get("n", 1) or 1),
+                    n=_body_int(body, "n", 1),
                     size=str(body.get("size", "1024x1024")),
                     quality=str(body.get("quality", "auto")),
                     style=body.get("style"),

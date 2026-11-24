@@ -49,6 +49,8 @@ def mount(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
             raise HTTPException(500, f"moderation failed: {exc}") from exc
         if not isinstance(result, ModerationResult):
             raise HTTPException(500, "engine moderate() must return ModerationResult")
+        if len(result.results) != len(inputs):
+            raise HTTPException(500, "engine returned a different number of moderation results")
         return {
             "id": new_id("modr"),
             "model": req.model or engine.model_id,

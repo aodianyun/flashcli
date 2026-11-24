@@ -36,7 +36,10 @@ def _parse(body: dict[str, Any]) -> EmbeddingRequest:
         raise HTTPException(400, "input must not be empty")
     dimensions = body.get("dimensions")
     if dimensions is not None:
-        dimensions = int(dimensions)
+        try:
+            dimensions = int(dimensions)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "dimensions must be an integer") from None
         if dimensions <= 0:
             raise HTTPException(400, "dimensions must be > 0")
     encoding = str(body.get("encoding_format", "float") or "float")

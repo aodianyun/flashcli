@@ -39,7 +39,22 @@ def _str(form: Any, key: str, default: str | None = None) -> str | None:
 
 def _float(form: Any, key: str) -> float | None:
     value = _str(form, key)
-    return float(value) if value is not None else None
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        raise HTTPException(400, f"{key} must be a number") from None
+
+
+def _body_float(body: dict[str, Any], key: str, default: float) -> float:
+    value = body.get(key)
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        raise HTTPException(400, f"{key} must be a number") from None
 
 
 async def _transcription_request(form: Any, task: str) -> AudioTranscriptionRequest:
@@ -184,7 +199,7 @@ def mount_speech(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
             model=str(body.get("model", "")),
             voice=str(body.get("voice", "alloy")),
             response_format=str(body.get("response_format", "mp3") or "mp3"),
-            speed=float(body.get("speed", 1.0) or 1.0),
+            speed=_body_float(body, "speed", 1.0),
             instructions=body.get("instructions"),
             extras={k: v for k, v in body.items() if k not in {"input", "model", "voice", "response_format", "speed", "instructions"}},
         )

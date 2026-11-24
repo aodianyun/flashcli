@@ -117,7 +117,7 @@ class SpeechRequest:
 @dataclass
 class SpeechResult:
     audio: bytes
-    media_type: str = "audio/mpeg"
+    media_type: str = ""
     usage: dict[str, Any] = field(default_factory=dict)
 
 
@@ -142,6 +142,7 @@ class ImageGenerationResult:
     response_format: str = "url"
     revised_prompt: str | None = None
     usage: dict[str, Any] = field(default_factory=dict)
+    media_type: str = "image/png"
 
 
 @dataclass

@@ -745,7 +745,7 @@ paths:
   /v1/models/smoke:
     post:
       summary: Start a smoke test job for a ready model
-      description: "Run-only bundles execute `flashcli run <ref>`; started serve bundles receive one OpenAI-compatible chat request. Progress/output is streamed as a `smoke` job over /v1/ws and appended to <ref>.smoke.log."
+      description: "Run-only bundles execute `flashcli run <ref>`; started serve bundles receive one capability-appropriate ping request (chat, completions, responses, Anthropic messages, embeddings, or moderations) and modality-only models without one of those capabilities report an explicit error. Progress/output is streamed as a `smoke` job over /v1/ws and appended to <ref>.smoke.log."
       requestBody:
         required: true
         content:

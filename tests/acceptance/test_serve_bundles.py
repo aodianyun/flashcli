@@ -16,6 +16,7 @@ import socket
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -66,8 +67,12 @@ BUNDLES: dict[str, tuple[list[str] | None, str]] = {
     "audio": (AUDIO_CAPS, "AudioEngine"),
     "image": (IMAGE_CAPS, "ImageEngine"),
     "video": (VIDEO_CAPS, "VideoEngine"),
+    "embedding": (["openai.embeddings"], "LLMEngine"),
+    "concurrent": (["openai.chat"], "AsyncLLMEngine"),
     "legacy": (None, "LLMEngine"),
 }
+
+CONCURRENCY = {"concurrent": 2}
 
 
 def _free_port() -> int:
@@ -83,6 +88,7 @@ def _write_bundle(
     engine_class: str,
     *,
     mode: str = "engine",
+    concurrency: int | None = None,
 ) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     entry: dict[str, Any] = {
@@ -93,6 +99,8 @@ def _write_bundle(
     }
     if caps is not None:
         entry["capabilities"] = caps
+    if concurrency is not None:
+        entry["concurrency"] = concurrency
     manifest = {
         "format": "flashcli-model-bundle",
         "format_version": 4,
@@ -235,7 +243,13 @@ def _anthropic_events(raw: str) -> list[str]:
 def serve_bundles(tmp_path_factory: pytest.TempPathFactory):
     root = tmp_path_factory.mktemp("serve_bundles")
     built = {
-        kind: _write_bundle(root / kind, kind, caps, engine_class)
+        kind: _write_bundle(
+            root / kind,
+            kind,
+            caps,
+            engine_class,
+            concurrency=CONCURRENCY.get(kind),
+        )
         for kind, (caps, engine_class) in BUNDLES.items()
     }
     servers: dict[str, dict[str, Any]] = {}
@@ -788,12 +802,44 @@ def test_anthropic_only_bundle(serve_bundles) -> None:
 def test_capability_gating_by_bundle(serve_bundles) -> None:
     chat = {"messages": [{"role": "user", "content": "hi"}]}
     with httpx.Client(timeout=10.0) as client:
-        for kind in ("asr", "tts", "audio", "image", "video"):
+        for kind in ("asr", "tts", "audio", "image", "video", "embedding"):
             base = serve_bundles["servers"][kind]["base"]
             assert client.post(f"{base}/v1/chat/completions", json=chat).status_code == 404
             assert client.post(f"{base}/v1/messages", json=chat).status_code == 404
         code_base = serve_bundles["servers"]["code"]["base"]
         assert client.post(f"{code_base}/v1/messages", json=chat).status_code == 404
+
+
+def test_embedding_only_bundle_mounts_only_embeddings(serve_bundles) -> None:
+    base = serve_bundles["servers"]["embedding"]["base"]
+    with httpx.Client(timeout=10.0) as client:
+        response = client.post(f"{base}/v1/embeddings", json={"input": "hi", "model": "llm-fixture"})
+        assert response.status_code == 200
+        assert response.json()["data"][0]["embedding"]
+        assert client.post(
+            f"{base}/v1/audio/translations",
+            files={"file": ("a.wav", b"RIFF", "audio/wav")},
+        ).status_code == 404
+        assert client.post(
+            f"{base}/v1/images/edits",
+            files={"image": ("a.png", b"png", "image/png")},
+            data={"prompt": "x"},
+        ).status_code == 404
+
+
+def test_configured_concurrency_overlaps_requests(serve_bundles) -> None:
+    base = serve_bundles["servers"]["concurrent"]["base"]
+    body = {"messages": [{"role": "user", "content": "hi"}], "model": "async-fixture"}
+
+    def request() -> int:
+        return httpx.post(f"{base}/v1/chat/completions", json=body, timeout=10.0).status_code
+
+    started = time.perf_counter()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        statuses = list(pool.map(lambda _: request(), range(2)))
+    elapsed = time.perf_counter() - started
+    assert statuses == [200, 200]
+    assert elapsed < 0.55, f"concurrency=2 did not overlap: {elapsed:.2f}s"
 
 
 def test_legacy_bundle_gating(serve_bundles) -> None:

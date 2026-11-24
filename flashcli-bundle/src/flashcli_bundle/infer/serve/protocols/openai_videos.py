@@ -27,6 +27,15 @@ def _coerce_job(job: Any) -> dict[str, Any]:
     return payload
 
 
+def _optional_int(value: Any, key: str) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise HTTPException(400, f"{key} must be an integer") from None
+
+
 def mount(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
     async def create(req: VideoRequest, request_id: str) -> Any:
         method = getattr(engine, "create_video", None)
@@ -61,7 +70,7 @@ def mount(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
             req = VideoRequest(
                 prompt=prompt,
                 model=str(form.get("model", "")),
-                seconds=int(form["seconds"]) if form.get("seconds") else None,
+                seconds=_optional_int(form.get("seconds"), "seconds"),
                 size=str(form["size"]) if form.get("size") else None,
                 input_reference=payload,
                 extras={str(k): str(v) for k, v in form.items() if not hasattr(v, "read") and k not in {"prompt", "model", "seconds", "size"}},
@@ -71,7 +80,7 @@ def mount(app: FastAPI, engine: Any, gate: InferenceGate) -> None:
             req = VideoRequest(
                 prompt=str(body.get("prompt", "")),
                 model=str(body.get("model", "")),
-                seconds=int(body["seconds"]) if body.get("seconds") is not None else None,
+                seconds=_optional_int(body.get("seconds"), "seconds"),
                 size=str(body["size"]) if body.get("size") else None,
                 extras={k: v for k, v in body.items() if k not in {"prompt", "model", "seconds", "size"} and v is not None},
             )

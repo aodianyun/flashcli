@@ -11,6 +11,31 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/runtime"
 )
 
+func TestModelCapabilitiesJSONDistinguishesEmpty(t *testing.T) {
+	blob, err := json.Marshal(Model{Capabilities: []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(blob, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(fields["capabilities"]); got != "[]" {
+		t.Fatalf("empty capabilities JSON = %s, want []", got)
+	}
+
+	blob, err = json.Marshal(Model{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(blob, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(fields["capabilities"]); got != "null" {
+		t.Fatalf("nil capabilities JSON = %s, want null", got)
+	}
+}
+
 func TestEmptyCache(t *testing.T) {
 	t.Setenv("FLASHCLI_HOME", t.TempDir())
 	models, err := ListModels()

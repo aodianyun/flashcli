@@ -244,6 +244,14 @@ func smokeTextRequest(capabilities []string, modelName string) (string, []byte, 
 		})
 		return "/v1/messages", body, map[string]string{"anthropic-version": "2023-06-01"}, nil
 	}
+	if has("openai.embeddings") {
+		body, _ := json.Marshal(map[string]any{"model": modelName, "input": "ping"})
+		return "/v1/embeddings", body, nil, nil
+	}
+	if has("openai.moderations") {
+		body, _ := json.Marshal(map[string]any{"model": modelName, "input": "ping"})
+		return "/v1/moderations", body, nil, nil
+	}
 	return "", nil, nil, fmt.Errorf("serve smoke has no supported text capability (capabilities: %s)", strings.Join(capabilities, ", "))
 }
 
