@@ -128,3 +128,38 @@ def test_register_routes_survives_capability_gating() -> None:
     assert "/v1/chat/completions" not in paths
     assert "/health" in paths
     assert "/v1/models" in paths
+
+
+class _ModalityEngine:
+    model_id = "m"
+
+    def load(self, checkpoint, preset, **options) -> None:  # noqa: ANN001
+        pass
+
+    def warmup(self, spec: str | None) -> None:
+        pass
+
+    def speech(self, request):  # noqa: ANN001, ANN201
+        return None
+
+
+class _RealtimeEngine(_ModalityEngine):
+    async def realtime_session(self, websocket, model) -> None:  # noqa: ANN001
+        pass
+
+
+def test_engine_contract_depends_on_capabilities() -> None:
+    from flashcli_bundle.protocol import coerce_serve_engine
+
+    assert coerce_serve_engine(
+        _ModalityEngine(), capabilities=["openai.audio.speech"]
+    )
+    with pytest.raises(TypeError):
+        coerce_serve_engine(_ModalityEngine(), capabilities=None)
+    with pytest.raises(TypeError):
+        coerce_serve_engine(_ModalityEngine(), capabilities=["openai.chat"])
+    assert coerce_serve_engine(
+        _RealtimeEngine(), capabilities=["openai.realtime"]
+    )
+    with pytest.raises(TypeError):
+        coerce_serve_engine(_ModalityEngine(), capabilities=["openai.realtime"])

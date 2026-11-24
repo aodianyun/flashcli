@@ -203,9 +203,38 @@ def coerce_run_engine(obj: Any) -> RunEngine:
     return obj
 
 
-def coerce_serve_engine(obj: Any) -> ServeEngine:
-    if not isinstance(obj, ServeEngine):
+_CHAT_SERVE_CAPABILITIES = frozenset(
+    {"openai.chat", "openai.completions", "openai.responses", "anthropic.messages"}
+)
+
+
+def coerce_serve_engine(
+    obj: Any,
+    *,
+    capabilities: list[str] | None = None,
+) -> ServeEngine:
+    """Validate a serve engine against the capabilities it must implement.
+
+    ``model_id``/``load``/``warmup`` are always required. ``chat``/``chat_stream``
+    are required only when a chat-based capability is declared (or realtime is
+    declared without a bundle ``realtime_session`` handler). Modality-only
+    bundles therefore do not need chat stubs.
+    """
+    required = ["model_id", "load", "warmup"]
+    needs_chat = capabilities is None or any(
+        cap in _CHAT_SERVE_CAPABILITIES for cap in capabilities
+    )
+    if (
+        capabilities is not None
+        and "openai.realtime" in capabilities
+        and not hasattr(obj, "realtime_session")
+    ):
+        needs_chat = True
+    if needs_chat:
+        required.extend(["chat", "chat_stream"])
+    missing = [name for name in required if not hasattr(obj, name)]
+    if missing:
         raise TypeError(
-            f"Serve engine must implement ServeEngine protocol, got {type(obj)!r}"
+            f"Serve engine is missing required members {missing}: {type(obj)!r}"
         )
     return obj

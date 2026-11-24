@@ -97,13 +97,21 @@ Engine 模式下 `/health`、`GET /v1/models`、`GET /v1/models/{id}` 始终可�
 
 ## 4. `ServeEngine` 契约（engine 模式）
 
-必需成员：
+始终必需：
 
 ```python
 class ServeEngine:
     model_id: str
     def load(self, checkpoint: Path, preset: Preset, **options) -> None: ...
     def warmup(self, spec: str | None) -> None: ...
+```
+
+仅当声明对话类能力（`openai.chat`、`openai.completions`、`openai.responses`、
+`anthropic.messages`），或声明 `openai.realtime` 但 bundle 未提供
+`realtime_session` 时才要求 `chat` / `chat_stream`。仅模态类 bundle
+（ASR/TTS/图像/视频/仅 embedding）**不需要** chat 桩。
+
+```python
     def chat(self, request: ChatRequest) -> ChatResult: ...
     def chat_stream(self, request: ChatRequest) -> Iterator[ChatChunk]: ...
 ```
@@ -325,6 +333,10 @@ tool_result part 上保留。
 ```bash
 flashcli bundle validate <bundle-or-dist>
 pytest tests/test_serve_protocol_matrix.py tests/test_serve_realtime.py
+
+# 真实 bundle 验收：生成 llm/asr/tts/image/video/legacy 测试 bundle，
+# 通过 flashcli-bundle.infer serve 启动并做真实 socket 请求。
+FLASHCLI_ACCEPTANCE=1 pytest tests/acceptance/test_serve_bundles.py
 ```
 
 发布前用发布树执行 `flashcli serve`，至少验证非流式 + 流式 chat、工具与 `tool_choice`、

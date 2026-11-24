@@ -529,7 +529,7 @@ Script mode must not load `.so` through environment variables or manual `dlopen`
 
 ### 4.3 Engine mode
 
-`RunEngine.load(checkpoint, preset, **options)` loads weights; `RunEngine.predict(...)` runs inference. `ServeEngine` requires `model_id`, `load`, `warmup`, `chat`, and `chat_stream`; declared capabilities may add `embed`, `moderate`, `transcribe`, `speech`, `generate_images`, video methods, `count_tokens`, and `realtime_session`. See [bundle_serve_protocols.md](bundle_serve_protocols.md) for the full contract and capability-to-endpoint mapping. Read defaults via `flashcli_bundle` helpers; do not duplicate manifest defaults in code.
+`RunEngine.load(checkpoint, preset, **options)` loads weights; `RunEngine.predict(...)` runs inference. `ServeEngine` always requires `model_id`, `load`, and `warmup`; `chat`/`chat_stream` are required only for chat-based capabilities (or realtime without a handler). Declared capabilities may add `embed`, `moderate`, `transcribe`, `speech`, `generate_images`, video methods, `count_tokens`, and `realtime_session`. See [bundle_serve_protocols.md](bundle_serve_protocols.md) for the full contract and capability-to-endpoint mapping. Read defaults via `flashcli_bundle` helpers; do not duplicate manifest defaults in code.
 
 ### 4.4 Script mode
 

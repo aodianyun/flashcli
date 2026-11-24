@@ -37,7 +37,7 @@ def load_run_engine(spec: EntrySpec) -> RunEngine:
 def load_serve_engine(spec: EntrySpec) -> ServeEngine:
     obj = load_entry(spec, kind="serve")
     if isinstance(obj, type):
-        return coerce_serve_engine(obj())
+        return coerce_serve_engine(obj(), capabilities=spec.capabilities)
     if callable(obj):
-        return coerce_serve_engine(obj())
-    return coerce_serve_engine(obj)
+        return coerce_serve_engine(obj(), capabilities=spec.capabilities)
+    return coerce_serve_engine(obj, capabilities=spec.capabilities)

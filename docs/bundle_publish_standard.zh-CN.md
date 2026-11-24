@@ -523,7 +523,7 @@ script 模式不得通过环境变量或手动 `dlopen` 加载 `.so`。
 
 ### 4.3 Engine 模式
 
-`RunEngine.load(checkpoint, preset, **options)` 加载权重；`RunEngine.predict(...)` 推理。`ServeEngine` 必须提供 `model_id`、`load`、`warmup`、`chat`、`chat_stream`；声明能力后可增加 `embed`、`moderate`、`transcribe`、`speech`、`generate_images`、视频方法、`count_tokens` 和 `realtime_session`。完整契约与能力到端点的映射见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)。默认值从 manifest 读取，不要在代码里重复。
+`RunEngine.load(checkpoint, preset, **options)` 加载权重；`RunEngine.predict(...)` 推理。`ServeEngine` 始终需要 `model_id`、`load`、`warmup`；仅对话类能力（或实时能力未提供 handler）才要求 `chat`/`chat_stream`。声明能力后可增加 `embed`、`moderate`、`transcribe`、`speech`、`generate_images`、视频方法、`count_tokens` 和 `realtime_session`。完整契约与能力到端点的映射见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)。默认值从 manifest 读取，不要在代码里重复。
 
 ### 4.4 Script 模式
 

@@ -104,13 +104,21 @@ engine mode.
 
 ## 4. `ServeEngine` contract (engine mode)
 
-Required members:
+Always required:
 
 ```python
 class ServeEngine:
     model_id: str
     def load(self, checkpoint: Path, preset: Preset, **options) -> None: ...
     def warmup(self, spec: str | None) -> None: ...
+```
+
+`chat` / `chat_stream` are required only when declaring a chat-based capability
+(`openai.chat`, `openai.completions`, `openai.responses`, `anthropic.messages`)
+or `openai.realtime` without a bundle `realtime_session` handler. Modality-only
+bundles (ASR/TTS/image/video/embedding-only) do **not** need chat stubs.
+
+```python
     def chat(self, request: ChatRequest) -> ChatResult: ...
     def chat_stream(self, request: ChatRequest) -> Iterator[ChatChunk]: ...
 ```
@@ -339,6 +347,10 @@ returns the Anthropic shape with `anthropic-version`.
 ```bash
 flashcli bundle validate <bundle-or-dist>
 pytest tests/test_serve_protocol_matrix.py tests/test_serve_realtime.py
+
+# Real bundle acceptance: builds llm/asr/tts/image/video/legacy fixtures,
+# starts each through flashcli-bundle.infer serve, and exercises real sockets.
+FLASHCLI_ACCEPTANCE=1 pytest tests/acceptance/test_serve_bundles.py
 ```
 
 Before publishing, run the published tree through `flashcli serve` and verify
