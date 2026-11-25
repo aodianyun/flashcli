@@ -209,8 +209,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/apps/{org}/{name}/status", s.appStatus)
 	mux.HandleFunc("POST /api/v1/apps/{org}/{name}/install", s.appInstall)
 	mux.HandleFunc("POST /api/v1/apps/{org}/{name}/prepare", s.appPrepare)
-	mux.HandleFunc("POST /api/v1/apps/{org}/{name}/start", s.appStart)
-	mux.HandleFunc("POST /api/v1/apps/{org}/{name}/stop", s.appStop)
+	mux.HandleFunc("POST /api/v1/apps/{org}/{name}/activate", s.appActivate)
+	mux.HandleFunc("POST /api/v1/apps/{org}/{name}/deactivate", s.appDeactivate)
 	mux.HandleFunc("DELETE /api/v1/apps/{org}/{name}", s.appUninstall)
 	mux.HandleFunc("POST /api/v1/ui/chat", s.uiChat)
 

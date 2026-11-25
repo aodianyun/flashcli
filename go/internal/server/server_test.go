@@ -597,21 +597,6 @@ func TestManagerRestoreKeepsFailedModels(t *testing.T) {
 	}
 }
 
-func TestRestoreAppsOnlyWhenModelsWereRunning(t *testing.T) {
-	running := apps.AppState{State: apps.StateReady, Models: []apps.ModelState{{Ref: "a/one:1", PID: 12}}}
-	prepared := apps.AppState{State: apps.StateReady, Models: []apps.ModelState{{Ref: "a/one:1", Prepared: true}}}
-	stopped := apps.AppState{State: apps.StateStopped, Models: []apps.ModelState{{Ref: "a/one:1", PID: 12}}}
-	if !appWasRunning(running) {
-		t.Fatal("running app not detected")
-	}
-	if appWasRunning(prepared) {
-		t.Fatal("start=false app must not be restored")
-	}
-	if appWasRunning(stopped) {
-		t.Fatal("stopped app must not be restored")
-	}
-}
-
 // Re-syncing a cached version passes Force to the puller; a loaded model must
 // be unloaded first.
 func TestPullForceAndBusy(t *testing.T) {

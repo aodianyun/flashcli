@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 
@@ -14,8 +15,8 @@ import (
 )
 
 // appService returns the shared application service (tests may override it).
-// It installs a Manager-backed launcher so app models share the daemon's
-// slot/VRAM admission with the 模型 page.
+// Apps reach inference through the OpenAI gateway; the daemon does not start or
+// stop their models.
 func (s *Server) appService() *apps.Service {
 	if s.AppService != nil {
 		return s.AppService()
@@ -24,27 +25,33 @@ func (s *Server) appService() *apps.Service {
 	if s.LogDir != "" {
 		svc.LogDir = s.LogDir
 	}
-	if s.Manager != nil {
-		svc.Launcher = managerLauncher{
-			manager: s.Manager,
-			Log: func(line string) {
-				if svc.Out != nil {
-					fmt.Fprintln(svc.Out, line)
-				}
-			},
-		}
-		// App models the model page loaded are not in this service's process
-		// map; release them through the Manager (keeping models another app
-		// still owns resident).
-		svc.Stopper = func(ctx context.Context, refStr string) (bool, error) {
-			return s.Manager.ReleaseFor(ctx, refStr, apps.OwnerFrom(ctx))
-		}
-		svc.Claim = func(ctx context.Context, refStr string) error {
-			s.Manager.Claim(refStr, apps.OwnerFrom(ctx))
-			return nil
+	svc.GatewayBaseURL = s.gatewayBaseURL()
+	return svc
+}
+
+// gatewayBaseURL is the OpenAI gateway URL handed to installed applications.
+// PublicHost (when configured) is what other machines can reach.
+func (s *Server) gatewayBaseURL() string {
+	host := strings.TrimSpace(s.PublicHost)
+	if host == "" {
+		host = strings.TrimSpace(s.Addr)
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
 		}
 	}
-	return svc
+	host = strings.TrimPrefix(strings.TrimPrefix(host, "http://"), "https://")
+	host = strings.TrimRight(host, "/")
+	if host == "" || host == "0.0.0.0" || host == "::" || host == "[::]" {
+		host = "127.0.0.1"
+	}
+	port := "8790"
+	if _, p, err := net.SplitHostPort(strings.TrimSpace(s.Addr)); err == nil && p != "" {
+		port = p
+	}
+	if h, p, err := net.SplitHostPort(host); err == nil {
+		host, port = h, p
+	}
+	return "http://" + net.JoinHostPort(host, port) + "/v1"
 }
 
 // appList serves GET /v1/apps: FlashHub applications with local state overlay.
@@ -173,20 +180,20 @@ func (s *Server) appInstall(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]any{"job_id": job.ID, "state": job.State})
 }
 
-// appStart serves POST /v1/apps/{org}/{name}/start.
-func (s *Server) appStart(w http.ResponseWriter, r *http.Request) {
-	s.appLifecycle(w, r, "start")
+// appActivate serves POST /api/v1/apps/{org}/{name}/activate. It marks the app
+// ready for the gateway and runs setup scripts; it never starts models.
+func (s *Server) appActivate(w http.ResponseWriter, r *http.Request) {
+	s.appLifecycle(w, r, "activate")
 }
 
-// appStop serves POST /v1/apps/{org}/{name}/stop.
-func (s *Server) appStop(w http.ResponseWriter, r *http.Request) {
-	s.appLifecycle(w, r, "stop")
+// appDeactivate serves POST /api/v1/apps/{org}/{name}/deactivate.
+func (s *Server) appDeactivate(w http.ResponseWriter, r *http.Request) {
+	s.appLifecycle(w, r, "deactivate")
 }
 
-// appLifecycle starts or stops an application. The default response is the
-// resulting AppState; `?async=1` returns a job whose events carry the start or
-// stop progress (a model can take a minute to load, and a silent spinner is
-// indistinguishable from a hang).
+// appLifecycle activates or deactivates an application. The default response
+// is the resulting AppState; `?async=1` returns a job whose events carry the
+// setup progress.
 func (s *Server) appLifecycle(w http.ResponseWriter, r *http.Request, action string) {
 	svc := s.appService()
 	key, err := s.resolveAppKey(r, svc)
@@ -230,10 +237,10 @@ func runAppLifecycle(ctx context.Context, svc *apps.Service, action, key string,
 }
 
 func runAppLifecycleState(ctx context.Context, svc *apps.Service, action, key string, setup apps.SetupOptions) (apps.AppState, error) {
-	if action == "stop" {
-		return svc.Stop(ctx, key)
+	if action == "deactivate" {
+		return svc.Deactivate(ctx, key)
 	}
-	return svc.StartWithSetup(ctx, key, false, setup)
+	return svc.ActivateWithSetup(ctx, key, setup)
 }
 
 // appStatus serves GET /v1/apps/{org}/{name}/status.

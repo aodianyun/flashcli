@@ -63,7 +63,7 @@ Authentication is off by default. With a token, every path except `/health`, `/`
 | Logs | `GET /api/v1/logs`, `GET /api/v1/logs/download` | `?kind=server\|model&ref=…&lines=N` |
 | Catalog | `GET /api/v1/catalog`, `GET /api/v1/catalog/tags`, `GET /api/v1/catalog/{id}` | FlashHub proxy |
 | Mirror | `GET /api/v1/mirror`, `POST /api/v1/mirror` | Domestic mirrors for new downloads |
-| Apps | `GET/POST/DELETE /api/v1/apps/*` | Install/prepare apps; inference always goes through `/v1` |
+| Apps | `GET/POST/DELETE /api/v1/apps/*`, `POST /api/v1/apps/{org}/{name}/activate\|deactivate` | Install/prepare and activate apps; inference always goes through `/v1` |
 | Live / UI | `GET /api/v1/ws`, `GET /`, `GET /docs`, `GET /openapi.yaml`, `POST /api/v1/ui/chat` | WebSocket state; embedded console |
 
 Model objects in `GET /api/v1/models` and `GET /api/v1/models/loaded` include a

@@ -715,17 +715,18 @@ paths:
               schema: { $ref: '#/components/schemas/JobAccepted' }
         '400':
           $ref: '#/components/responses/Error'
-  /api/v1/apps/{org}/{name}/start:
+  /api/v1/apps/{org}/{name}/activate:
     parameters:
       - { name: org, in: path, required: true, schema: { type: string } }
       - { name: name, in: path, required: true, schema: { type: string } }
       - { name: version, in: query, schema: { type: string } }
       - name: async
         in: query
-        description: "`1` returns a job with start progress (model loading can take a minute)."
+        description: "`1` returns a job with setup progress."
         schema: { type: string, enum: ['1'] }
     post:
-      summary: Start the application's prepared models
+      summary: Activate an application (setup only; never starts a model)
+      description: Marks the app ready, records the flashserver gateway connection, and runs confirmed setup scripts.
       requestBody:
         required: false
         content:
@@ -736,7 +737,7 @@ paths:
                 setup_scripts:
                   type: array
                   items: { type: string }
-                  description: "Confirmed setup script keys; they run in manifest order after the models are ready"
+                  description: "Confirmed setup script keys; they run in manifest order"
                 client_home: { type: string, description: "Client OS home used by setup scripts (a Windows path is mapped to /mnt/<drive>/... in WSL)" }
       responses:
         '200':
@@ -753,17 +754,17 @@ paths:
           $ref: '#/components/responses/Error'
         '409':
           $ref: '#/components/responses/Error'
-  /api/v1/apps/{org}/{name}/stop:
+  /api/v1/apps/{org}/{name}/deactivate:
     parameters:
       - { name: org, in: path, required: true, schema: { type: string } }
       - { name: name, in: path, required: true, schema: { type: string } }
       - { name: version, in: query, schema: { type: string } }
       - name: async
         in: query
-        description: "`1` returns a job with stop progress."
+        description: "`1` returns a job."
         schema: { type: string, enum: ['1'] }
     post:
-      summary: Stop the application's models
+      summary: Deactivate an application (no model process is stopped)
       responses:
         '200':
           description: Application state

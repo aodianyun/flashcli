@@ -3196,8 +3196,12 @@ impl App {
                         .num_columns(2)
                         .spacing([18.0, 7.0])
                         .show(ui, |ui| {
-                            kv(ui, "Endpoint", &model.endpoint);
-                            kv(ui, "PID", &model.pid.to_string());
+                            kv(
+                                ui,
+                                "推理入口",
+                                &format!("{}/v1", api_base().trim_end_matches('/')),
+                            );
+                            kv(ui, "模型 ID", &model.name);
                             kv(ui, "启动时间", &model.loaded_at);
                         });
                 }
@@ -3551,16 +3555,18 @@ impl App {
                 );
                 ui.add_space(12.0);
                 ui.label(
-                    egui::RichText::new("目标 Serve 地址")
+                    egui::RichText::new("OpenAI 网关地址")
                         .size(12.0)
                         .strong()
                         .color(ui.visuals().weak_text_color()),
                 );
                 ui.add_space(4.0);
+                let gateway_base = api_base();
+                let gateway_v1 = format!("{}/v1", gateway_base.trim_end_matches('/'));
                 ui.horizontal(|ui| {
                     ui.add(
                         egui::Label::new(
-                            egui::RichText::new(&model.endpoint).monospace().size(14.0),
+                            egui::RichText::new(&gateway_v1).monospace().size(14.0),
                         )
                         .wrap(),
                     );
@@ -3568,7 +3574,7 @@ impl App {
                         ui,
                         "copy-model-endpoint",
                         "复制地址",
-                        &model.endpoint,
+                        &gateway_v1,
                         "",
                         false,
                     ) {
@@ -3576,22 +3582,24 @@ impl App {
                     }
                 });
                 ui.add_space(12.0);
-                let models_url = format!("{}/v1/models", model.endpoint.trim_end_matches('/'));
+                let models_url = format!("{}/models", gateway_v1.trim_end_matches('/'));
                 let chat_url = format!(
-                    "{}/v1/chat/completions",
-                    model.endpoint.trim_end_matches('/')
+                    "{}/chat/completions",
+                    gateway_v1.trim_end_matches('/')
                 );
                 let embeddings_url = format!(
-                    "{}/v1/embeddings",
-                    model.endpoint.trim_end_matches('/')
+                    "{}/embeddings",
+                    gateway_v1.trim_end_matches('/')
                 );
                 let example = if model.can_chat() {
                     format!(
-                        "curl {models_url}\n\ncurl {chat_url} -H 'Content-Type: application/json' \\\n  -d '{{\"model\":\"<model-id>\",\"messages\":[{{\"role\":\"user\",\"content\":\"Hello\"}}]}}'"
+                        "curl {models_url}\n\ncurl {chat_url} -H 'Content-Type: application/json' \\\n  -d '{{\"model\":\"{}\",\"messages\":[{{\"role\":\"user\",\"content\":\"Hello\"}}]}}'",
+                        model.name
                     )
                 } else if model.has_capability("openai.embeddings") {
                     format!(
-                        "curl {models_url}\n\ncurl {embeddings_url} -H 'Content-Type: application/json' \\\n  -d '{{\"model\":\"<model-id>\",\"input\":\"Hello\"}}'"
+                        "curl {models_url}\n\ncurl {embeddings_url} -H 'Content-Type: application/json' \\\n  -d '{{\"model\":\"{}\",\"input\":\"Hello\"}}'",
+                        model.name
                     )
                 } else {
                     let caps = model
@@ -3649,7 +3657,7 @@ impl App {
                     if button(ui, "打开 API 文档").clicked() {
                         let _ = webbrowser::open(&format!(
                             "{}/docs",
-                            model.endpoint.trim_end_matches('/')
+                            gateway_base.trim_end_matches('/')
                         ));
                     }
                     if button(ui, "打开模型列表").clicked() {
@@ -6785,12 +6793,17 @@ fn spawn_app_action(
         });
     }
     std::thread::spawn(move || {
-        // start/stop can take a minute (model loading); run them as daemon jobs
-        // so their progress lines stream into the status block.
+        // Activation runs setup scripts; deactivate only changes app state. The
+        // gateway owns model start/stop, so neither is a long model load.
+        let endpoint_action = match action {
+            "start" => "activate",
+            "stop" => "deactivate",
+            other => other,
+        };
         let path = if lifecycle {
-            format!("/api/v1/apps/{org}/{name}/{action}?async=1")
+            format!("/api/v1/apps/{org}/{name}/{endpoint_action}?async=1")
         } else {
-            format!("/api/v1/apps/{org}/{name}/{action}")
+            format!("/api/v1/apps/{org}/{name}/{endpoint_action}")
         };
         let mut body = if action == "prepare" {
             serde_json::json!({ "version": version })

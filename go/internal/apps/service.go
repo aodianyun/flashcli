@@ -42,6 +42,10 @@ type Service struct {
 	Launcher Launcher
 	Prepare  func(context.Context, string) error
 	Fetch    func(context.Context, flashhub.AppRef) ([]byte, error)
+	// GatewayBaseURL is what setup scripts receive as {base_url}. Apps call the
+	// flashserver OpenAI gateway; they never receive a model's child endpoint.
+	// Empty uses http://127.0.0.1:8790/v1.
+	GatewayBaseURL string
 	// Stopper stops a model that this service instance did not start (for
 	// example after a daemon restart or a shared Manager). It reports whether
 	// the reference was handled; false falls back to the recorded PID.
@@ -324,8 +328,8 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 		state.Connection = existing.Connection
 	} else {
 		state.State = StatePrepared
-		// Nothing is running yet; the connection appears on the first start.
-		state.Connection = Connection{}
+		// No model process exists; apps reach the gateway once activated.
+		state.Connection = s.gatewayConnection(state.Models)
 	}
 	state.Error = ""
 	s.save(&state)
@@ -606,7 +610,7 @@ func (s *Service) Status(ctx context.Context, key string) (AppState, error) {
 	}
 	// Endpoints change on every start (the Manager picks the port), so the
 	// advertised connection must never be a port from a previous run.
-	if conn := connectionFor(key, st.Version, st.Models); !reflect.DeepEqual(conn, st.Connection) {
+	if conn := s.gatewayConnection(st.Models); !reflect.DeepEqual(conn, st.Connection) {
 		st.Connection = conn
 		changed = true
 	}
@@ -739,6 +743,90 @@ func connectionFor(key, version string, models []ModelState) Connection {
 	_ = key
 	_ = version
 	return conn
+}
+
+func (s *Service) gatewayBaseURL() string {
+	if v := strings.TrimSpace(s.GatewayBaseURL); v != "" {
+		v = strings.TrimRight(v, "/")
+		if strings.HasSuffix(v, "/v1") {
+			return v
+		}
+		return v + "/v1"
+	}
+	return "http://127.0.0.1:8790/v1"
+}
+
+// gatewayConnection describes how an app reaches the flashserver gateway.
+func (s *Service) gatewayConnection(models []ModelState) Connection {
+	conn := Connection{BaseURL: s.gatewayBaseURL(), APIKey: "local"}
+	for _, m := range models {
+		conn.Models = append(conn.Models, m.ID)
+		conn.ModelRefs = append(conn.ModelRefs, m.Ref)
+	}
+	return conn
+}
+
+// Activate marks an installed app ready and runs its confirmed setup scripts.
+// It never starts a model process: inference is served by the gateway.
+func (s *Service) Activate(ctx context.Context, key string) (AppState, error) {
+	return s.ActivateWithSetup(ctx, key, SetupOptions{})
+}
+
+// ActivateWithSetup is Activate with an explicit setup-script selection.
+func (s *Service) ActivateWithSetup(ctx context.Context, key string, setup SetupOptions) (AppState, error) {
+	unlock := lockApp(key)
+	defer unlock()
+	var st AppState
+	var ok bool
+	var err error
+	capture := s.beginCapture()
+	defer func() {
+		s.endCapture(capture)
+		if ok {
+			st.LastLog = tailLog(capture.buf.String(), 100)
+			s.save(&st)
+		}
+	}()
+	st, ok, err = s.Registry.Get(key)
+	if err != nil {
+		return AppState{}, err
+	}
+	if !ok {
+		return AppState{}, fmt.Errorf("application %s is not installed", key)
+	}
+	ctx = WithOwner(ctx, key)
+	st.State = StateReady
+	st.Error = ""
+	st.SetupError = ""
+	st.Connection = s.gatewayConnection(st.Models)
+	st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
+	s.save(&st)
+	m, _ := s.manifestFor(ctx, key)
+	s.applySetupScripts(ctx, key, &st, setup, m)
+	st.LastLog = tailLog(capture.buf.String(), 100)
+	s.save(&st)
+	return st, nil
+}
+
+// Deactivate marks an app stopped. Models belong to the gateway, so no process
+// is stopped here.
+func (s *Service) Deactivate(ctx context.Context, key string) (AppState, error) {
+	unlock := lockApp(key)
+	defer unlock()
+	st, ok, err := s.Registry.Get(key)
+	if err != nil {
+		return AppState{}, err
+	}
+	if !ok {
+		return AppState{}, fmt.Errorf("application %s is not installed", key)
+	}
+	st.State = StateStopped
+	st.Error = ""
+	st.SetupError = ""
+	st.Connection = s.gatewayConnection(st.Models)
+	st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
+	s.save(&st)
+	return st, nil
 }
 
 func (s *Service) startModels(ctx context.Context, st *AppState, keepPartial bool) error {

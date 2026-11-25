@@ -25,7 +25,7 @@ func appCmd() *cobra.Command {
 	}
 	cmd.AddCommand(
 		appListCmd(), appShowCmd(), appInstallCmd(), appStatusCmd(),
-		appStartCmd(), appStopCmd(), appRestartCmd(), appLogsCmd(), appUninstallCmd(),
+		appLogsCmd(), appUninstallCmd(),
 	)
 	return cmd
 }
@@ -35,6 +35,7 @@ func newAppService(cmd *cobra.Command) *apps.Service {
 	svc.Out = cmd.OutOrStdout()
 	svc.Stdin = os.Stdin
 	svc.Bin = strings.TrimSpace(os.Getenv("FLASHCLI_BIN"))
+	svc.GatewayBaseURL = strings.TrimSpace(os.Getenv("FLASHCLI_API_BASE"))
 	svc.ConfirmSetup = func(script apps.SetupScript) bool {
 		fmt.Fprintf(cmd.OutOrStdout(), "Setup script %s: %s\n", script.Key, script.URL)
 		fmt.Fprintf(cmd.OutOrStdout(), "Execute it now? [y/N]: ")
@@ -218,70 +219,6 @@ func appStatusCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit machine-readable JSON")
-	return cmd
-}
-
-func appStartCmd() *cobra.Command {
-	var keepPartial bool
-	cmd := &cobra.Command{
-		Use:   "start <namespace/name[:version]>",
-		Short: "Start an installed application's models",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return withAppKey(cmd, args[0], func(svc *apps.Service, key string) error {
-				st, err := svc.Start(cmd.Context(), key, keepPartial)
-				if err != nil {
-					return failed(cmd, err)
-				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%s started (%d models)\n", st.Key, len(st.Models))
-				return nil
-			})
-		},
-	}
-	cmd.Flags().BoolVar(&keepPartial, "keep-partial", false, "Keep models started before a failure")
-	return cmd
-}
-
-func appStopCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "stop <namespace/name[:version]>",
-		Short: "Stop an installed application's models",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return withAppKey(cmd, args[0], func(svc *apps.Service, key string) error {
-				st, err := svc.Stop(cmd.Context(), key)
-				if err != nil {
-					return failed(cmd, err)
-				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%s stopped\n", st.Key)
-				return nil
-			})
-		},
-	}
-	return cmd
-}
-
-func appRestartCmd() *cobra.Command {
-	var keepPartial bool
-	cmd := &cobra.Command{
-		Use:   "restart <namespace/name[:version]>",
-		Short: "Restart an installed application's models",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return withAppKey(cmd, args[0], func(svc *apps.Service, key string) error {
-				if _, err := svc.Stop(cmd.Context(), key); err != nil {
-					return failed(cmd, err)
-				}
-				st, err := svc.Start(cmd.Context(), key, keepPartial)
-				if err != nil {
-					return failed(cmd, err)
-				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%s restarted (%d models)\n", st.Key, len(st.Models))
-				return nil
-			})
-		},
-	}
-	cmd.Flags().BoolVar(&keepPartial, "keep-partial", false, "Keep models started before a failure")
 	return cmd
 }
 

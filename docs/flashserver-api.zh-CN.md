@@ -54,7 +54,7 @@
 | 日志 | `GET /api/v1/logs`、`GET /api/v1/logs/download` | `?kind=server\|model&ref=…&lines=N` |
 | 目录 | `GET /api/v1/catalog`、`GET /api/v1/catalog/tags`、`GET /api/v1/catalog/{id}` | FlashHub 代理 |
 | 镜像 | `GET /api/v1/mirror`、`POST /api/v1/mirror` | 对新下载启用/关闭国内镜像 |
-| 应用 | `GET/POST/DELETE /api/v1/apps/*` | 安装/准备应用；推理一律走 `/v1` |
+| 应用 | `GET/POST/DELETE /api/v1/apps/*`、`POST /api/v1/apps/{org}/{name}/activate\|deactivate` | 安装/准备/启用应用；推理一律走 `/v1` |
 | 实时 / 界面 | `GET /api/v1/ws`、`GET /`、`GET /docs`、`GET /openapi.yaml`、`POST /api/v1/ui/chat` | WebSocket 状态与内置控制台 |
 
 `GET /api/v1/models` 与 `GET /api/v1/models/loaded` 的模型对象包含 `capabilities` 数组。

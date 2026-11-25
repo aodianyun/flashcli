@@ -127,8 +127,8 @@ func TestInstallHappyPath(t *testing.T) {
 			t.Fatalf("model not recorded as prepared-only: %+v", m)
 		}
 	}
-	if res.State.Connection.BaseURL != "" {
-		t.Fatalf("install advertised a connection: %+v", res.State.Connection)
+	if res.State.Connection.BaseURL != "http://127.0.0.1:8790/v1" {
+		t.Fatalf("install did not advertise the gateway: %+v", res.State.Connection)
 	}
 	if _, err := os.Stat(svc.Registry.Path); err != nil {
 		t.Fatalf("registry not written: %v", err)
@@ -318,8 +318,8 @@ func TestStatusDowngradesReadyWhenModelsAreGone(t *testing.T) {
 	if !st.Models[0].Prepared {
 		t.Fatalf("prepared flag lost: %+v", st.Models[0])
 	}
-	if st.Connection.BaseURL != "" {
-		t.Fatalf("stale connection kept: %+v", st.Connection)
+	if st.Connection.BaseURL != "http://127.0.0.1:8790/v1" {
+		t.Fatalf("gateway connection missing: %+v", st.Connection)
 	}
 }
 

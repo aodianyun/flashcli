@@ -14,7 +14,7 @@ Native desktop client for `flashserver`, built with Rust + [egui/eframe](https:/
     OS/arch vs this build, every platform install command (current one
     highlighted, script vs download page), dependency bundles with their
     serve options, install/prepare progress, local state and models, and the
-    connection URL/api_key. Install/start/stop/uninstall go through `/api/v1/apps`
+    connection URL/api_key. Install/activate/deactivate/uninstall go through `/api/v1/apps`
     (bundle preparation is part of install); 安装 opens a confirmation dialog that
     shows the install step and runs it on the client OS — a shell script, or an
     installer URL downloaded and executed (exe/msi on Windows, dmg/pkg on macOS;
