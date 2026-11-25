@@ -14,7 +14,7 @@ Sidebar order: **应用 → 模型 → 状态 → 日志 → 设置**.
   cards, current API URL.
 - **Models** — local cache plus FlashHub search; per-model Bundle / runtime /
   weights sizes; disk **preload/unload**; resident state from the scheduler;
-  run/serve smoke tests with a live log; multi-select cache cleanup. A cached
+  multi-select cache cleanup. A cached
   model also offers **更多 → 重新同步**, which force-re-downloads its bundle
   tree/weights (`/api/v1/pull {"force":true}`); use it only as a repair for a
   mutable revision, not instead of a new bundle version. Inference is served by
@@ -26,22 +26,22 @@ Sidebar order: **应用 → 模型 → 状态 → 日志 → 设置**.
   alphabetically) plus a detail pane with all available metadata —
   organization/downloads/status, description, supported OS/arch, every platform
   install command, dependency bundles and serve options, local state/models,
-  gateway connection URL — and install/activate/deactivate/uninstall through
+  gateway connection URL — and install/setup/uninstall through
   `/api/v1/apps`. 安装 first shows the manifest install step: a script runs, or an
   installer URL is downloaded and run, on the client OS (a Windows app installs
   on Windows, not in WSL) — only after 运行脚本并安装 / 下载并安装; 跳过 installs the
   models without it, and a plain page URL opens in the browser. Install only
   installs the application and **prepares** the model bundles; it does not start
-  them. 启用 is a separate action that writes the flashserver gateway connection
+  them. 应用配置 writes the flashserver gateway connection
   (`http://<host>:8790/v1`) and runs `setup.scripts`; it never starts a model.
   The daemon rejects an install without an explicit decision
   (`install_command: client | run | skip`). Progress streams into the detail pane.
-  When the manifest declares `setup.scripts`, 启用 asks which scripts to run; the
+  When the manifest declares `setup.scripts`, 应用配置 asks which scripts to run; the
   daemon runs them in manifest order, verifies `sha256`, and maps the client home
   into WSL so the application's real config is written. The confirmed
   definitions, keys and client home are saved. A failure is logged, shown on the
   app, and stops the remaining scripts; an active app also offers **应用配置** to
-  re-run the scripts. The last activation output is kept on the app (`last_log`),
+  re-run the scripts. The last setup output is kept on the app (`last_log`),
   so the detail pane still shows recent lines and a full-log entry.
   One application installs at a time: while a job runs, its card shows
   `安装中 · 阶段 xx%` with a bar, a banner appears above the grid, and the other
@@ -58,12 +58,12 @@ Sidebar order: **应用 → 模型 → 状态 → 日志 → 设置**.
 - **Logs** — the service log (日志 page, clear / Save-As) and a model's serve
   log (模型 → 更多 → 查看日志, with 另存为). The service log covers API calls
   (method/path/status/duration, credentials redacted), background job steps
-  (app install/activate, model preload/unload/pull/smoke), setup-script output
+  (app install/setup, model preload/unload/pull), setup-script output
   and clean/uninstall, and is persisted to `~/.flashcli/logs/flashserver.log`
   (4 MiB rotation with a `.1` backup), so it survives a daemon restart. The
   page loads once and then appends new lines over `/api/v1/ws`; successful status
   and log polling requests are not written to the log. The app detail also
-  keeps the last activation log with its own 查看完整日志 entry.
+  keeps the last setup log with its own 查看完整日志 entry.
 - **Settings** — service start/stop, auto-start, domestic mirrors, shared-cache
   cleanup, WSL resources and firewall ports, theme (`Ctrl+T`), API docs.
 

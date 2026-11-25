@@ -404,11 +404,9 @@ func (s *Service) manifestFor(ctx context.Context, key string) (*Manifest, error
 
 // Status returns the stored state with interrupted transitions normalized.
 //
-// The recorded state is reconciled with reality: after a daemon restart (or a
-// crash/manual kill) an app can be stored as ready while its model process is
-// gone. Reporting it as ready would disable 启动 and advertise a dead endpoint,
-// so a ready app with no healthy model becomes stopped, and a partially healthy
-// app becomes failed.
+// Apps no longer own model processes, so readiness is not reconciled against a
+// process table: the flashserver scheduler owns the resident lifecycle. Only an
+// interrupted install/prepare transition is reported as failed.
 func (s *Service) Status(_ context.Context, key string) (AppState, error) {
 	st, ok, err := s.Registry.Get(key)
 	if err != nil {
@@ -564,14 +562,14 @@ func (s *Service) gatewayConnection(models []ModelState) Connection {
 	return conn
 }
 
-// Activate marks an installed app ready and runs its confirmed setup scripts.
+// Setup marks an installed app configured and runs its confirmed setup scripts.
 // It never starts a model process: inference is served by the gateway.
-func (s *Service) Activate(ctx context.Context, key string) (AppState, error) {
-	return s.ActivateWithSetup(ctx, key, SetupOptions{})
+func (s *Service) Setup(ctx context.Context, key string) (AppState, error) {
+	return s.SetupWithSetup(ctx, key, SetupOptions{})
 }
 
-// ActivateWithSetup is Activate with an explicit setup-script selection.
-func (s *Service) ActivateWithSetup(ctx context.Context, key string, setup SetupOptions) (AppState, error) {
+// SetupWithSetup is Setup with an explicit setup-script selection.
+func (s *Service) SetupWithSetup(ctx context.Context, key string, setup SetupOptions) (AppState, error) {
 	unlock := lockApp(key)
 	defer unlock()
 	var st AppState
@@ -602,27 +600,6 @@ func (s *Service) ActivateWithSetup(ctx context.Context, key string, setup Setup
 	m, _ := s.manifestFor(ctx, key)
 	s.applySetupScripts(ctx, key, &st, setup, m)
 	st.LastLog = tailLog(capture.buf.String(), 100)
-	s.save(&st)
-	return st, nil
-}
-
-// Deactivate marks an app stopped. Models belong to the gateway, so no process
-// is stopped here.
-func (s *Service) Deactivate(ctx context.Context, key string) (AppState, error) {
-	unlock := lockApp(key)
-	defer unlock()
-	st, ok, err := s.Registry.Get(key)
-	if err != nil {
-		return AppState{}, err
-	}
-	if !ok {
-		return AppState{}, fmt.Errorf("application %s is not installed", key)
-	}
-	st.State = StateStopped
-	st.Error = ""
-	st.SetupError = ""
-	st.Connection = s.gatewayConnection(st.Models)
-	st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 	s.save(&st)
 	return st, nil
 }

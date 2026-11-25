@@ -47,19 +47,19 @@
 | 分组 | 端点 | 说明 |
 |---|---|---|
 | 健康 / 版本 | `GET /health`、`GET /api/v1/version` | `/health` 不需要鉴权 |
-| 模型 | `GET /api/v1/models`、`GET /api/v1/models/loaded`、`POST /api/v1/models/preload`、`POST /api/v1/models/unload`、`POST /api/v1/models/smoke`、`POST /api/v1/models/clean` | schema 见 [openapi.yaml](openapi.yaml) |
+| 模型 | `GET /api/v1/models`、`POST /api/v1/models/preload`、`POST /api/v1/models/unload`、`POST /api/v1/models/clean` | schema 见 [openapi.yaml](openapi.yaml) |
 | 模型参数 | `GET/PUT/DELETE /api/v1/models/options` | `serve_options` + 已保存的 host/port，见 [flashserver-desktop.zh-CN.md](flashserver-desktop.zh-CN.md#启动参数与局域网访问) |
 | 任务 | `POST /api/v1/pull`、`GET /api/v1/jobs/{id}`、`GET /api/v1/jobs/{id}/events`、`POST /api/v1/jobs/{id}/cancel` | 异步任务，进度也通过 `/api/v1/ws` 推送 |
 | 系统 | `GET /api/v1/system`、`GET /api/v1/gpu`、`GET /api/v1/gpu/history`、`GET /api/v1/resources`、`GET /api/v1/devices`、`GET /api/v1/scheduler`、`GET /api/v1/storage` | 遥测、设备盘点与 placement 结果 |
 | 日志 | `GET /api/v1/logs`、`GET /api/v1/logs/download` | `?kind=server\|model&ref=…&lines=N` |
 | 目录 | `GET /api/v1/catalog`、`GET /api/v1/catalog/tags`、`GET /api/v1/catalog/{id}` | FlashHub 代理 |
 | 镜像 | `GET /api/v1/mirror`、`POST /api/v1/mirror` | 对新下载启用/关闭国内镜像 |
-| 应用 | `GET/POST/DELETE /api/v1/apps/*`、`POST /api/v1/apps/{org}/{name}/activate\|deactivate` | 安装/准备/启用应用；推理一律走 `/v1` |
-| 实时 / 界面 | `GET /api/v1/ws`、`GET /`、`GET /docs`、`GET /openapi.yaml`、`POST /api/v1/ui/chat` | WebSocket 状态与内置控制台 |
+| 应用 | `GET/POST/DELETE /api/v1/apps/*`、`POST /api/v1/apps/{org}/{name}/setup` | 安装/准备/配置应用；推理一律走 `/v1` |
+| 实时 / 界面 | `GET /api/v1/ws`、`GET /`、`GET /docs`、`GET /openapi.yaml` | WebSocket 状态与内置控制台 |
 
-`GET /api/v1/models` 与 `GET /api/v1/models/loaded` 的模型对象包含 `capabilities` 数组。
-`null` 表示 host 不拥有该 serve 条目的路由（script/native 或未知）；`[]` 表示显式关闭
-host 推理路由。
+`GET /api/v1/models` 的模型对象包含 `capabilities` 数组。`null` 表示 host 不拥有该
+serve 条目的路由（script/native 或未知）；`[]` 表示显式关闭 host 推理路由。响应中的
+`loaded` 字段列出 resident 实例。
 
 ## 设备与 placement
 
@@ -101,9 +101,6 @@ curl -H 'Content-Type: application/json' \
   http://127.0.0.1:8790/v1/chat/completions
 ```
 
-- `POST /api/v1/models/smoke` 对 run-only bundle 以低优先级执行 `flashcli run`，或对已启动的
-  serve 模型按能力发送一次 `ping` 请求；没有可声明路由的纯模态模型会明确报错。
-  进度通过 `/api/v1/ws` 推送并追加到 `<ref>.smoke.log`。
 - 当 `addr` 绑定 `0.0.0.0` 且没有配置 token 时，局域网内其他设备可直接访问 API。
 
 ## 清理语义

@@ -14,25 +14,25 @@ Native desktop client for `flashserver`, built with Rust + [egui/eframe](https:/
     OS/arch vs this build, every platform install command (current one
     highlighted, script vs download page), dependency bundles with their
     serve options, install/prepare progress, local state and models, and the
-    connection URL/api_key. Install/activate/deactivate/uninstall go through `/api/v1/apps`
+    connection URL/api_key. Install/setup/uninstall go through `/api/v1/apps`
     (bundle preparation is part of install); 安装 opens a confirmation dialog that
     shows the install step and runs it on the client OS — a shell script, or an
     installer URL downloaded and executed (exe/msi on Windows, dmg/pkg on macOS;
     a plain page opens in the browser). Only after the application install
-    succeeds does the daemon prepare/start the models; 跳过 prepares them without
+    succeeds does the daemon prepare the models; 跳过 prepares them without
     installing the app. Progress (phase, percent, MiB/GiB, speed) streams into the
     detail pane and 查看完整日志 opens the full install log; per-model serve logs
     are under 模型 → 更多 → 查看日志 and the daemon journal is on the 日志 page.
-  - Local: bundle/runtime/weight readiness, serve capability (run-only bundles are marked "仅 run"), separate bundle/runtime/weight sizes, total size, ready/started state, async load (bundle/runtime/weights) and start (serve) progress, row actions (使用 / 更多 → 查看信息 / 查看日志 / Run 冒烟测试 / 停止), and multi-select cache cleanup (all cleanable rows selected by default; started models are skipped). "加载" prepares a model to the ready state; only then can it be started with "启动". Ready run-only models offer a `flashcli run` smoke test in the 更多 menu behind a confirmation; it runs at low CPU priority, streams output live to a log dialog, and is cancelled when the dialog or the main window is closed. Started serve models offer one OpenAI-compatible request test inside the 使用 dialog. The 使用 dialog shows the model's serve endpoint, OpenAI-compatible curl examples, API docs, model list, local console, and the request test.
+  - Local: bundle/runtime/weight readiness, serve capability (run-only bundles are marked "仅 run"), separate bundle/runtime/weight sizes, total size, resident state, async preload (bundle/runtime/weights) progress, row actions (使用 / 更多 → 查看信息 / 查看日志 / 重新同步 / 卸载), and multi-select cache cleanup (all cleanable rows selected by default; resident models are skipped). "加载" prepares a model to the ready state; serving and the resident lifecycle belong to the flashserver scheduler, started on demand by gateway requests. Serve models offer one OpenAI-compatible request test inside the 使用 dialog. The 使用 dialog shows the model's gateway endpoint, OpenAI-compatible curl examples, API docs, model list, local console, and the request test.
   - FlashHub: nothing is listed until you search or pick a category; then browse versions with size/file count and download a version. A search with no matches shows "no results" (not a request failure); clicking a repository expands its version list and 关闭 (or clicking the row again) collapses it. Load it from the Local tab, which shows "仅 run" and hides the start action for bundles without a serve entry.
 - Logs: server `journalctl` tail or a specific started model's serve log (返回服务日志 switches back), "清空" for server logs, and "另存为…" saves the full log via a native file dialog.
 - Settings: start/stop the daemon without elevation; enable/disable auto-start (UAC) through `flashserver-setup`; enable domestic mirrors (pip/HuggingFace/GitHub) for new downloads; clean the shared cache (download cache, base Python, uv) with per-item sizing; dark/light theme (the saved choice is applied at startup regardless of the Windows app theme); API docs; quit. Model bundles/weights/runtimes are cleaned from the Models page (multi-select), not from Settings.
 - API URL: reads `%LOCALAPPDATA%\FlashServer\api-url.txt` (written by setup when the default port 8790 is reserved) and falls back to `http://127.0.0.1:8790`. The settings page shows the selected address.
 - Copy actions (Serve address, usage example) show a result toast; the usage example is also selectable.
-- Destructive actions (stop service, disable auto-start, stop model, quit) require confirmation.
+- Destructive actions (stop service, disable auto-start, unload model, quit) require confirmation.
 - Live data: WebSocket `/api/v1/ws` streams system, model, storage, mirror and job state; HTTP is used for commands and on-demand queries only (no polling).
-- Load/start progress shows the bundle ref, current phase (bundle sync, Python runtime/venv, weights for load; serve/health for start), file/byte counts and percentage. Checksum-mismatched downloads are retried. A completed load/start banner disappears after a few seconds.
-- Downloads are serialized; load/download/start actions are disabled while a job is active and the current row shows "加载中…/下载中…/启动中…".
+- Load progress shows the bundle ref, current phase (bundle sync, Python runtime/venv, weights), file/byte counts and percentage. Checksum-mismatched downloads are retried. A completed load banner disappears after a few seconds.
+- Downloads are serialized; load/download actions are disabled while a job is active and the current row shows "加载中…/下载中…".
 - Model size is Bundle + per-model runtime + weights. Weights are shared by `source/repo@revision` and may be repeated across rows, while model totals de-dupe by weights key. Runtime directories are per bundle/version. Settings shows the grouped shared cache (downloads + base Python + uv); model bundles/weights/runtimes are cleaned from the Models page.
 
 ## Build (Windows)

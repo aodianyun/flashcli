@@ -52,9 +52,9 @@ CLI 的应用操作**不需要**（也不使用）对守护进程的 HTTP 调用
 
 ## 安装流程
 
-**安装和启用是两个独立操作**。安装负责解析/校验 manifest、安装应用本体、准备模型
-bundle；**不会启动模型，也不会执行 setup 脚本**。启用是显式操作（桌面「启用」/
-`POST /api/v1/apps/.../activate`），会针对 flashserver 网关执行已确认的 setup 脚本。
+**安装和配置是两个独立操作**。安装负责解析/校验 manifest、安装应用本体、准备模型
+bundle；**不会启动模型，也不会执行 setup 脚本**。配置是显式操作（桌面「应用配置」/
+`POST /api/v1/apps/.../setup`），会针对 flashserver 网关执行已确认的 setup 脚本。
 
 ```text
 RESOLVE → VALIDATE → PLATFORM → PREFLIGHT → PLAN
@@ -109,16 +109,15 @@ sequenceDiagram
   A-->>CLI: 已准备的模型 / 状态目录
 ```
 
-### 启用流程（独立操作）
+### 配置流程（独立操作）
 
 ```text
-ACTIVATE → READY + 网关连接 → SETUP_SCRIPTS（已确认，按 manifest 顺序）
+SETUP → READY + 网关连接 → SETUP_SCRIPTS（已确认，按 manifest 顺序）
 ```
 
-启用**不会启动模型**：它把应用标为 ready、写入网关连接（`http://<host>:<port>/v1`），
+配置**不会启动模型**：它把应用标为 ready、写入网关连接（`http://<host>:<port>/v1`），
 并按确认结果执行 setup 脚本，`{base_url}` 指向该网关。setup 失败只写日志，应用保持
-`READY`。停用把应用标为 `STOPPED`，不停止任何进程（模型归 flashserver 调度器管理）。
-重新安装保留缓存，并把应用恢复到 `PREPARED`。
+`READY`。应用不再有停用状态；卸载即移除。重新安装保留缓存，并把应用恢复到 `PREPARED`。
 
 ### 状态机
 
@@ -133,13 +132,11 @@ stateDiagram-v2
   INSTALLING --> FAILED: 命令失败（终止）
   PREPARING --> PREPARED: 所有 default bundle 就绪
   PREPARING --> FAILED: 某个 bundle 失败（终止）
-  PREPARED --> READY: 启用（setup 脚本）
-  READY --> STOPPED: 停用
-  STOPPED --> READY: 启用
+  PREPARED --> READY: 配置（setup 脚本）
   READY --> [*]: app uninstall
 ```
 
-`status` 返回已记录的启用状态。启用/停用按应用串行化。应用不保存模型 PID 或 child
+`status` 返回已记录的配置状态。配置按应用串行化。应用不保存模型 PID 或 child
 endpoint；网关连接稳定，推理在请求时按需启动。
 
 daemon 启动时，被中断的 `installing`/`preparing` 变为 `failed` 并提示重新安装；
@@ -147,12 +144,12 @@ daemon 启动时，被中断的 `installing`/`preparing` 变为 `failed` 并提�
 
 ### 配置脚本（可选）
 
-启用时，host 按 manifest 顺序执行 `setup.scripts`，只执行用户**本次**确认过的脚本。
-确认点是客户端（桌面端启用时的确认框，或 CLI 对每个脚本的提示）。每个脚本都会下载、
+配置时，host 按 manifest 顺序执行 `setup.scripts`，只执行用户**本次**确认过的脚本。
+确认点是客户端（桌面端应用配置时的确认框，或 CLI 对每个脚本的提示）。每个脚本都会下载、
 校验 `sha256`，并用显式 argv 模板执行
 （`{base_url}` = flashserver 网关、`{model}`、`{api_key}`）。失败会写入应用 job 日志并
 停止后续脚本，但应用保持 `READY`；没有 `setup.scripts` 的应用跳过此步骤。确认的选择
-会持久化，供下一次启用使用。
+会持久化，供下一次配置使用。
 
 ### 失败与回滚
 
@@ -170,6 +167,7 @@ flashcli app show   <key> [--json]
 flashcli app install <key> [--yes|-y] [--dry-run] [--force]
                      [--bundle REF]... [--no-install] [--no-model]
 flashcli app status <key> [--json]
+flashcli app setup  <key>
 flashcli app logs   <key> [--ref REF] [--lines N] [-f]
 flashcli app uninstall <key> [--yes] [--purge-models]
 ```
@@ -180,7 +178,7 @@ flashcli app uninstall <key> [--yes] [--purge-models]
 - URL 由客户端处理：CLI 只打印链接（不下载）；桌面端在用户确认后下载并运行安装包
   （.exe/.msi → Windows，.dmg/.pkg → macOS），普通页面链接在浏览器打开
 - 应用安装成功后才准备 bundle；安装失败会中止整个流程
-- 安装/启用/停用按应用串行；桌面端在安装进行中禁用其他应用，并在卡片与页面顶部显示
+- 安装/配置按应用串行；桌面端在安装进行中禁用其他应用，并在卡片与页面顶部显示
   该应用的安装进度
 - 推理通过 flashserver 网关按需启动；应用没有自己的模型端口，也没有模型 start/stop 命令
 - `uninstall` 移除应用状态；默认保留模型缓存（`--purge-models` 才清理）
@@ -194,9 +192,8 @@ CLI、守护进程、桌面端都调用同一个 `internal/apps`，区别只在�
 |---|---|
 | `flashcli app install` | 终端上询问 `[y/N]`；`--yes` 直接执行；没有终端且无 `--yes` 时跳过并记录 `skipped` |
 | `flashserver` `POST /api/v1/apps/{org}/{name}/install` | 必须带 `install_command: "run" \| "skip" \| "client"`（否则 400）；作为 `app-install` 作业准备模型，不启动模型 |
-| `flashserver` `POST /api/v1/apps/{org}/{name}/activate` | 标记应用 ready、写入网关连接、执行 `setup_scripts` + `client_home`（作业 `app-activate`）；不启动模型 |
-| `flashserver` `POST /api/v1/apps/{org}/{name}/deactivate` | 标记应用 stopped；不停止任何模型进程 |
-| `flashcli-desktop` 应用页 | 「安装」弹窗展示命令：「运行脚本并安装」在**客户端 OS 本地**执行后发 `client`；「跳过脚本安装」发 `skip`；取消则什么也不做。启用时询问要执行哪些 setup 脚本；作业进度显示在详情区 |
+| `flashserver` `POST /api/v1/apps/{org}/{name}/setup` | 写入网关连接、执行 `setup_scripts` + `client_home`（作业 `app-setup`）；不启动模型 |
+| `flashcli-desktop` 应用页 | 「安装」弹窗展示命令：「运行脚本并安装」在**客户端 OS 本地**执行后发 `client`；「跳过脚本安装」发 `skip`；取消则什么也不做。应用配置时询问要执行哪些 setup 脚本；作业进度显示在详情区 |
 
 ### 平台归属
 
@@ -243,8 +240,8 @@ rename）：
 }
 ```
 
-安装后是 `prepared`，已记录网关连接，没有 `pid`/`endpoint`；启用写入 `ready`，
-停用写入 `stopped`。应用不拥有模型进程或 child endpoint。
+安装后是 `prepared`，已记录网关连接，没有 `pid`/`endpoint`；应用配置写入 `ready`。
+应用不拥有模型进程或 child endpoint，也没有 stopped 状态。
 
 ## 模型生命周期
 
@@ -258,7 +255,7 @@ rename）：
 - 声明同一 bundle 的多个应用共享同一个网关模型；没有 per-app owner、child endpoint
   或 pid 记录
 - daemon 启动时只恢复模型页保存在 `~/.flashcli/flashserver/models.json` 的常驻模型；
-  应用保留启用状态，不会代其启动模型
+  应用保留配置状态，不会代其启动模型
 
 ## 配置
 

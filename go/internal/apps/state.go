@@ -69,10 +69,9 @@ const (
 	StateInstalling = "installing"
 	StatePreparing  = "preparing"
 	StatePrepared   = "prepared"
-	StateStarting   = "starting"
+	StateStarting   = "starting" // legacy: apps no longer start models
 	StateReady      = "ready"
-	StateStopped    = "stopped"
-	StateStopping   = "stopping"
+	StateStopping   = "stopping" // legacy: apps no longer stop models
 	StateFailed     = "failed"
 )
 

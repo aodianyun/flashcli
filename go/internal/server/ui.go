@@ -1,11 +1,8 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"embed"
-	"encoding/json"
-	"errors"
 	"net/http"
 	"os"
 	"os/exec"
@@ -280,77 +277,4 @@ func readWeb(name string) ([]byte, error) {
 		}
 	}
 	return webFS.ReadFile("web/" + name)
-}
-
-// uiChat forwards one OpenAI chat request through the scheduler so the local
-// console can talk to a model without CORS or child endpoints. It starts the
-// resident on demand.
-func (s *Server) uiChat(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Ref  string          `json:"ref"`
-		Body json.RawMessage `json:"body"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Ref == "" || len(req.Body) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "ref and body are required"})
-		return
-	}
-	if s.Scheduler == nil || s.Manager == nil {
-		writeError(w, http.StatusNotImplemented, errors.New("scheduler is not configured"))
-		return
-	}
-	if ready, jobID, err := s.ensurePreload(r.Context(), req.Ref); err != nil {
-		writeGatewayError(w, http.StatusServiceUnavailable, "model_preparing", "server_busy", err.Error(), req.Ref, "", 5)
-		return
-	} else if !ready {
-		writeGatewayError(w, http.StatusServiceUnavailable, "model_preparing", "server_busy",
-			"model is being preloaded", req.Ref, jobID, s.preloadRetryAfter(jobID))
-		return
-	}
-	lease, gerr := s.acquireForRequest(r.Context(), req.Ref)
-	if gerr != nil {
-		gerr.write(w)
-		return
-	}
-	defer lease.Release()
-	endpoint, ok := s.Manager.Endpoint(req.Ref)
-	if !ok {
-		writeGatewayError(w, http.StatusServiceUnavailable, "model_starting", "server_busy",
-			"model endpoint is not ready", req.Ref, "", 2)
-		return
-	}
-	up, err := http.NewRequestWithContext(r.Context(), http.MethodPost, endpoint+"/v1/chat/completions", bytes.NewReader(req.Body))
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	up.Header.Set("Content-Type", "application/json")
-	if accept := r.Header.Get("Accept"); accept != "" {
-		up.Header.Set("Accept", accept)
-	}
-	resp, err := http.DefaultClient.Do(up)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, err)
-		return
-	}
-	defer resp.Body.Close()
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		w.Header().Set("Content-Type", ct)
-	}
-	w.WriteHeader(resp.StatusCode)
-	flusher, _ := w.(http.Flusher)
-	buf := make([]byte, 32*1024)
-	for {
-		n, readErr := resp.Body.Read(buf)
-		if n > 0 {
-			if _, err := w.Write(buf[:n]); err != nil {
-				return
-			}
-			if flusher != nil {
-				flusher.Flush()
-			}
-		}
-		if readErr != nil {
-			return
-		}
-	}
 }

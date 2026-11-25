@@ -14,13 +14,13 @@ func TestServerLogPersistsAcrossRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "flashserver.log")
 	InitLogFile(path)
 	defer InitLogFile("")
-	fmt.Fprintln(LogSink(), "api POST /api/v1/apps/xym/demo/activate -> 202 (1ms, 10B)")
+	fmt.Fprintln(LogSink(), "api POST /api/v1/apps/xym/demo/setup -> 202 (1ms, 10B)")
 	fmt.Fprintln(LogSink(), "setup workbuddy: done")
 
 	// Simulate the next daemon process: re-init from the same file.
 	InitLogFile(path)
 	text := strings.Join(serverLogLines(20), "\n")
-	if !strings.Contains(text, "POST /api/v1/apps/xym/demo/activate") {
+	if !strings.Contains(text, "POST /api/v1/apps/xym/demo/setup") {
 		t.Fatalf("api line lost: %q", text)
 	}
 	if !strings.Contains(text, "setup workbuddy: done") {

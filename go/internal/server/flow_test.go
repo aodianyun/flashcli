@@ -111,29 +111,6 @@ func TestModelLifecycleOverHTTP(t *testing.T) {
 		t.Fatalf("model preload state = %v", m)
 	}
 
-	// Inference starts the resident on demand; the console never needs an
-	// exposed child endpoint.
-	rec, body = call(t, h, http.MethodPost, "/api/v1/ui/chat",
-		`{"ref":"demo:1","body":{"model":"demo","messages":[]}}`)
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"id":"chat"`) {
-		t.Fatalf("ui chat = %d: %s", rec.Code, rec.Body.String())
-	}
-
-	rec, body = call(t, h, http.MethodGet, "/api/v1/models/loaded", "")
-	if rec.Code != http.StatusOK || len(body["models"].([]any)) != 1 {
-		t.Fatalf("loaded = %d: %s", rec.Code, rec.Body.String())
-	}
-
-	rec, body = call(t, h, http.MethodGet, "/api/v1/resources", "")
-	if rec.Code != http.StatusOK || body["loaded_count"].(float64) != 1 {
-		t.Fatalf("resources = %d: %s", rec.Code, rec.Body.String())
-	}
-
-	rec, _ = call(t, h, http.MethodPost, "/api/v1/ui/chat", `{"body":{}}`)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("ui chat missing ref = %d", rec.Code)
-	}
-
 	rec, _ = call(t, h, http.MethodPost, "/api/v1/models/preload", `{}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("load without ref = %d", rec.Code)
@@ -142,8 +119,8 @@ func TestModelLifecycleOverHTTP(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("unload = %d: %s", rec.Code, rec.Body.String())
 	}
-	rec, body = call(t, h, http.MethodGet, "/api/v1/models/loaded", "")
-	if rec.Code != http.StatusOK || len(body["models"].([]any)) != 0 {
+	rec, body = call(t, h, http.MethodGet, "/api/v1/models", "")
+	if rec.Code != http.StatusOK || len(body["loaded"].([]any)) != 0 {
 		t.Fatalf("loaded after unload = %s", rec.Body.String())
 	}
 }

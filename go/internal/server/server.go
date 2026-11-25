@@ -180,7 +180,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/logs", s.logs)
 	mux.HandleFunc("GET /api/v1/logs/download", s.downloadLogs)
 	mux.HandleFunc("GET /api/v1/models", s.models)
-	mux.HandleFunc("GET /api/v1/models/loaded", s.loadedModels)
 	mux.HandleFunc("GET /api/v1/catalog", s.catalogRepos)
 	mux.HandleFunc("GET /api/v1/catalog/tags", s.catalogTags)
 	mux.HandleFunc("GET /api/v1/catalog/{id}", s.catalogRepo)
@@ -203,7 +202,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/models/options", s.getModelOptions)
 	mux.HandleFunc("PUT /api/v1/models/options", s.putModelOptions)
 	mux.HandleFunc("DELETE /api/v1/models/options", s.deleteModelOptions)
-	mux.HandleFunc("POST /api/v1/models/smoke", s.smokeModel)
 	mux.HandleFunc("POST /api/v1/models/clean", s.cleanModels)
 	mux.HandleFunc("POST /api/v1/storage/clean", s.cleanStorage)
 	mux.HandleFunc("GET /api/v1/apps", s.appList)
@@ -212,10 +210,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/apps/{org}/{name}/status", s.appStatus)
 	mux.HandleFunc("POST /api/v1/apps/{org}/{name}/install", s.appInstall)
 	mux.HandleFunc("POST /api/v1/apps/{org}/{name}/prepare", s.appPrepare)
-	mux.HandleFunc("POST /api/v1/apps/{org}/{name}/activate", s.appActivate)
-	mux.HandleFunc("POST /api/v1/apps/{org}/{name}/deactivate", s.appDeactivate)
+	mux.HandleFunc("POST /api/v1/apps/{org}/{name}/setup", s.appSetup)
 	mux.HandleFunc("DELETE /api/v1/apps/{org}/{name}", s.appUninstall)
-	mux.HandleFunc("POST /api/v1/ui/chat", s.uiChat)
 
 	// Local console assets.
 	mux.HandleFunc("GET /ui/", s.ui)
@@ -316,10 +312,6 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 		"models": s.modelViews(r.Context(), models),
 		"loaded": s.loaded(),
 	})
-}
-
-func (s *Server) loadedModels(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"models": s.loaded()})
 }
 
 func (s *Server) loaded() []InstanceInfo {

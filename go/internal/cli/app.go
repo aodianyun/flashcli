@@ -24,7 +24,7 @@ func appCmd() *cobra.Command {
 		Short: "FlashHub application utilities",
 	}
 	cmd.AddCommand(
-		appListCmd(), appShowCmd(), appInstallCmd(), appStatusCmd(),
+		appListCmd(), appShowCmd(), appInstallCmd(), appStatusCmd(), appSetupCmd(),
 		appLogsCmd(), appUninstallCmd(),
 	)
 	return cmd
@@ -218,6 +218,25 @@ func appStatusCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit machine-readable JSON")
+	return cmd
+}
+
+func appSetupCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "setup <namespace/name[:version]>",
+		Short: "Configure an installed application's setup scripts",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return withAppKey(cmd, args[0], func(svc *apps.Service, key string) error {
+				st, err := svc.Setup(cmd.Context(), key)
+				if err != nil {
+					return failed(cmd, err)
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "%s configured\n", st.Key)
+				return nil
+			})
+		},
+	}
 	return cmd
 }
 

@@ -39,7 +39,7 @@ func manifestJSONFor(goos, command string, bundles ...string) []byte {
 }
 
 // fakeProc/fakeLauncher keep the old test helpers for assertions that an
-// install/activate never starts a model. The service no longer owns processes.
+// install/setup never starts a model. The service no longer owns processes.
 type fakeProc struct{}
 
 type fakeLauncher struct {
@@ -146,31 +146,23 @@ func TestReinstallIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestActivateDeactivateUninstall(t *testing.T) {
+func TestSetupUninstall(t *testing.T) {
 	svc, _ := newTestService(t, manifestJSON("a/one:1"), &fakeLauncher{})
 	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{Yes: true}); err != nil {
 		t.Fatal(err)
 	}
-	st, err := svc.Activate(context.Background(), "xym/demo:1.0.0")
+	st, err := svc.Setup(context.Background(), "xym/demo:1.0.0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if st.State != StateReady {
-		t.Fatalf("activate state = %+v", st)
+		t.Fatalf("setup state = %+v", st)
 	}
 	if st.Connection.BaseURL != "http://127.0.0.1:8790/v1" {
 		t.Fatalf("gateway connection = %+v", st.Connection)
 	}
 	if st.Models[0].PID != 0 || st.Models[0].Endpoint != "" {
-		t.Fatalf("activation recorded a process: %+v", st.Models[0])
-	}
-
-	st, err = svc.Deactivate(context.Background(), "xym/demo:1.0.0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if st.State != StateStopped {
-		t.Fatalf("deactivate state = %+v", st)
+		t.Fatalf("setup recorded a process: %+v", st.Models[0])
 	}
 
 	if _, err := svc.Uninstall(context.Background(), "xym/demo:1.0.0", false); err != nil {

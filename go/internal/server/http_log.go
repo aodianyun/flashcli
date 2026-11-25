@@ -50,7 +50,7 @@ func (r *statusRecorder) Write(p []byte) (int, error) {
 	return n, err
 }
 
-// Flush keeps SSE endpoints (`/v1/jobs/{id}/events`, `/v1/ui/chat`) working
+// Flush keeps SSE endpoints (`/v1/jobs/{id}/events`, gateway SSE) working
 // through the logging wrapper.
 func (r *statusRecorder) Flush() {
 	if f, ok := r.ResponseWriter.(http.Flusher); ok {

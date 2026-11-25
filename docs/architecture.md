@@ -45,7 +45,7 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 |------------|------------|---------|-----------------|
 | Pull / runtime + venv preparation / weights | `host.Pull`, `host.EnsureRuntime`, `host.ResolveWeights` | `flashcli pull`, `run`/`serve` | `/api/v1/pull`, app prepare, Manager |
 | Serve log name / tail / readiness | `modelrun.LogName`, `modelrun.TailLines`, `modelrun.WaitHealthy` | serve child, `app logs` | `/api/v1/logs`, Manager/scheduler |
-| App install/activate/state | `apps.Service` | `flashcli app ...` | `/api/v1/apps`, gateway setup |
+| App install/setup/state | `apps.Service` | `flashcli app ...` | `/api/v1/apps`, gateway setup |
 | Cache areas + unique allocated bytes | `host.Storage()` | `flashcli du` | `GET /api/v1/storage` |
 | Cached models, sizes, readiness, runtime bytes | `host.ListModels()` | `flashcli models list` | `GET /api/v1/models` |
 | Bundle usability / serve capability | `host.BundleRootUsable`, `host.ListModels` | `models list/show` | `/api/v1/models` |

@@ -57,7 +57,7 @@ and that `name`/`version` match the key. See
 Install and activation are **separate operations**. Install resolves and
 validates the manifest, installs the application itself, and prepares the model
 bundles. It never starts a model and never runs setup scripts. Activation is an
-explicit action (desktop 启用 / `POST /api/v1/apps/.../activate`) that runs the
+explicit action (desktop 应用配置 / `POST /api/v1/apps/.../setup`) that runs the
 confirmed setup scripts against the flashserver gateway.
 
 ```text
@@ -116,15 +116,15 @@ sequenceDiagram
 ### Activation flow (separate action)
 
 ```text
-ACTIVATE → READY + gateway connection → SETUP_SCRIPTS (confirmed, manifest order)
+SETUP → READY + gateway connection → SETUP_SCRIPTS (confirmed, manifest order)
 ```
 
-Activation does **not** start a model. It marks the app ready, writes the
-gateway connection (`http://<host>:<port>/v1`) and runs the confirmed setup
-scripts with `{base_url}` bound to that gateway. A setup failure leaves the app
-`READY` with `setup_error`. Deactivation marks the app `STOPPED`; no process is
-stopped because models belong to the flashserver scheduler. Reinstalling keeps
-caches and returns the app to `PREPARED`.
+Setup does **not** start a model. It marks the app ready, writes the gateway
+connection (`http://<host>:<port>/v1`) and runs the confirmed setup scripts with
+`{base_url}` bound to that gateway. A setup failure leaves the app `READY` with
+`setup_error`. There is no stopped state or deactivate action: models belong to
+the flashserver scheduler and the app is removed by uninstalling. Reinstalling
+keeps caches and returns the app to `PREPARED`.
 
 ### State machine
 
@@ -139,38 +139,34 @@ stateDiagram-v2
   INSTALLING --> FAILED: command failed (abort)
   PREPARING --> PREPARED: all default bundles prepared
   PREPARING --> FAILED: a bundle failed (abort)
-  PREPARED --> READY: activate (setup scripts)
-  READY --> STOPPED: deactivate
-  STOPPED --> READY: activate
+  PREPARED --> READY: setup (setup scripts)
   READY --> [*]: uninstall
 ```
 
-`status` reports the stored activation state. Activation and deactivation are
-serialized per application. Apps never store a model PID or child endpoint; the
-gateway connection is stable and inference starts on demand.
+`status` reports the stored setup state. Setup is serialized per application.
+Apps never store a model PID or child endpoint; the gateway connection is stable
+and inference starts on demand.
 
 On daemon start, an interrupted `installing`/`preparing` becomes `failed` with a
 reinstall hint; `starting`/`stopping` are no longer used for app models.
 
 ### Setup scripts (optional)
 
-On activation the host runs the manifest's `setup.scripts` in manifest order for
+On setup the host runs the manifest's `setup.scripts` in manifest order for
 the keys the user confirmed **for this run**. The client (the desktop dialog or
 the CLI prompt per script) is the confirmation point. Each script is downloaded,
 verified against `sha256`, and executed with the explicit argv template
 (`{base_url}` = flashserver gateway, `{model}`, `{api_key}`). A failure is
 written to the app job log and stops the remaining scripts; the app stays
 `READY`. Apps without `setup.scripts` skip this step. The confirmed selection is
-persisted for the next activation.
+persisted for the next setup.
 
 ### Failure and rollback
 
 - **Install-command failure** aborts immediately; no model preparation runs.
 - **Prepare failure** aborts; prepared bundles stay cached (a re-run resumes).
-- **Start/health failure** stops the models started by that run
-  (`--keep-partial` keeps them for debugging).
 - **Setup-script failure** is written to the app log, stops the remaining
-  scripts, and leaves the running app `ready` (the models are not rolled back).
+  scripts, and leaves the app `ready` (no model is started or rolled back).
 - Re-running `app install` is idempotent: it fills missing prepare steps and
   only re-runs the install script with `--force`; it never starts models.
 
@@ -182,6 +178,7 @@ flashcli app show   <key> [--json]
 flashcli app install <key> [--yes|-y] [--dry-run] [--force]
                      [--bundle REF]... [--no-install] [--no-model]
 flashcli app status <key> [--json]
+flashcli app setup  <key>
 flashcli app logs   <key> [--ref REF] [--lines N] [-f]
 flashcli app uninstall <key> [--yes] [--purge-models]
 ```
@@ -197,8 +194,8 @@ Rules:
   install (script or installer) aborts the whole run.
 - Installs are serialized per application; the desktop additionally allows one
   install at a time and disables the other apps while an install job runs (its
-  card and the page banner show the progress). Activation/deactivation are
-  serialized per application too.
+  card and the page banner show the progress). Setup is serialized per
+  application too.
 - Inference starts on demand through the flashserver gateway; the app has no
   allocated model port and no model start/stop command.
 - `uninstall` removes the app state; model caches are kept unless
@@ -213,9 +210,8 @@ only the way the install-script decision is obtained differs:
 |---|---|
 | `flashcli app install` | asks `[y/N]` on a terminal; `--yes` runs it; no terminal without `--yes` skips and records `skipped` |
 | `flashserver` `POST /api/v1/apps/{org}/{name}/install` | body must carry `install_command: "run" \| "skip" \| "client"` (400 otherwise); runs as job `app-install`, prepares models, never starts them |
-| `flashserver` `POST /api/v1/apps/{org}/{name}/activate` | marks the app ready, writes the gateway connection, runs `setup_scripts` + `client_home` (job `app-activate`); never starts a model |
-| `flashserver` `POST /api/v1/apps/{org}/{name}/deactivate` | marks the app stopped; no model process is stopped |
-| `flashcli-desktop` 应用页 | 安装 dialog shows the command; 运行脚本并安装 runs it **on the client OS** and then sends `client`, 跳过脚本安装 sends `skip`, 取消 does nothing; 启用 asks which setup scripts to run; job progress is polled into the detail pane |
+| `flashserver` `POST /api/v1/apps/{org}/{name}/setup` | writes the gateway connection and runs `setup_scripts` + `client_home` (job `app-setup`); never starts a model |
+| `flashcli-desktop` 应用页 | 安装 dialog shows the command; 运行脚本并安装 runs it **on the client OS** and then sends `client`, 跳过脚本安装 sends `skip`, 取消 does nothing; 应用配置 asks which setup scripts to run; job progress is polled into the detail pane |
 
 ### Platform ownership
 
@@ -267,8 +263,8 @@ Shared by the CLI and the daemon at `$FLASHCLI_HOME/flashserver/apps.json`
 ```
 
 Install leaves `state=prepared` with the gateway connection and no
-`pid`/`endpoint`. Activation sets `state=ready`; deactivation sets
-`state=stopped`. Apps never own a model process or a child endpoint.
+`pid`/`endpoint`. Setup sets `state=ready`. Apps never own a model process or a
+child endpoint and have no stopped state.
 
 ## Model lifecycle
 
@@ -311,7 +307,7 @@ connection. There is no `connection.json` writer.
 | Tier | Coverage |
 |---|---|
 | T1 | manifest parse/validate, platform command precedence, default bundle selection, state lock/round-trip, shared lifecycle with fakes, install endpoint run/skip/decision-required; install leaves `prepared` (no model started); desktop helper unit tests (request body decision, URL vs script, log dedupe/cap, WSL config, `last_log`) |
-| T2 | local fake FlashHub (httptest) + real `flashserver`: install → prepared → activate → status; install job with `install_command: run`/`skip`/missing (400); `--dry-run`; shell prompt/decline; URL never executed; setup script order/failure/sha256 retry and verified cache; gateway connection and no model start; interrupted install recovery; per-app serialization; service log persistence and WebSocket log stream |
+| T2 | local fake FlashHub (httptest) + real `flashserver`: install → prepared → setup → status; install job with `install_command: run`/`skip`/missing (400); `--dry-run`; shell prompt/decline; URL never executed; setup script order/failure/sha256 retry and verified cache; gateway connection and no model start; interrupted install recovery; per-app serialization; service log persistence and WebSocket log stream |
 | T3 | `FLASHCLI_FLASHHUB_LIVE=1`: live app list/manifest shape contract |
 
 ## Milestones

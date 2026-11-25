@@ -56,19 +56,20 @@ Authentication is off by default. With a token, every path except `/health`, `/`
 | Group | Endpoints | Notes |
 |---|---|---|
 | Health / version | `GET /health`, `GET /api/v1/version` | `health` is unauthenticated |
-| Models | `GET /api/v1/models`, `GET /api/v1/models/loaded`, `POST /api/v1/models/preload`, `POST /api/v1/models/unload`, `POST /api/v1/models/smoke`, `POST /api/v1/models/clean` | Schema in [openapi.yaml](openapi.yaml) |
+| Models | `GET /api/v1/models`, `POST /api/v1/models/preload`, `POST /api/v1/models/unload`, `POST /api/v1/models/clean` | Schema in [openapi.yaml](openapi.yaml) |
 | Model options | `GET/PUT/DELETE /api/v1/models/options` | `serve_options` + saved host/port, see [flashserver-desktop.md](flashserver-desktop.md#startup-parameters-and-lan-access) |
 | Jobs | `POST /api/v1/pull`, `GET /api/v1/jobs/{id}`, `GET /api/v1/jobs/{id}/events`, `POST /api/v1/jobs/{id}/cancel` | Async work; progress also streams over `/api/v1/ws` |
 | System | `GET /api/v1/system`, `GET /api/v1/gpu`, `GET /api/v1/gpu/history`, `GET /api/v1/resources`, `GET /api/v1/devices`, `GET /api/v1/scheduler`, `GET /api/v1/storage` | Telemetry, device inventory, and placement answers |
 | Logs | `GET /api/v1/logs`, `GET /api/v1/logs/download` | `?kind=server\|model&ref=…&lines=N` |
 | Catalog | `GET /api/v1/catalog`, `GET /api/v1/catalog/tags`, `GET /api/v1/catalog/{id}` | FlashHub proxy |
 | Mirror | `GET /api/v1/mirror`, `POST /api/v1/mirror` | Domestic mirrors for new downloads |
-| Apps | `GET/POST/DELETE /api/v1/apps/*`, `POST /api/v1/apps/{org}/{name}/activate\|deactivate` | Install/prepare and activate apps; inference always goes through `/v1` |
-| Live / UI | `GET /api/v1/ws`, `GET /`, `GET /docs`, `GET /openapi.yaml`, `POST /api/v1/ui/chat` | WebSocket state; embedded console |
+| Apps | `GET/POST/DELETE /api/v1/apps/*`, `POST /api/v1/apps/{org}/{name}/setup` | Install/prepare and configure apps; inference always goes through `/v1` |
+| Live / UI | `GET /api/v1/ws`, `GET /`, `GET /docs`, `GET /openapi.yaml` | WebSocket state; embedded console |
 
-Model objects in `GET /api/v1/models` and `GET /api/v1/models/loaded` include a
-`capabilities` array. `null` means the host does not own routes for that serve
-entry (script/native or unknown); `[]` means host inference routes are disabled.
+Model objects in `GET /api/v1/models` include a `capabilities` array. `null`
+means the host does not own routes for that serve entry (script/native or
+unknown); `[]` means host inference routes are disabled. The same payload also
+contains `loaded` (resident instances).
 
 ## Devices and placement
 
@@ -119,11 +120,6 @@ curl -H 'Content-Type: application/json' \
   http://127.0.0.1:8790/v1/chat/completions
 ```
 
-- `POST /api/v1/models/smoke` runs `flashcli run` at low priority for run-only
-  bundles, or one capability-appropriate `ping` request for a started serve
-  model; modality-only models without a declarable route report an explicit
-  error. Progress streams over `/api/v1/ws` and is appended to
-  `<ref>.smoke.log`.
 - When `addr` is bound to `0.0.0.0`, other devices on the LAN can reach the API
   without a token unless one is configured.
 

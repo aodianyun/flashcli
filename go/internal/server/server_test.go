@@ -238,7 +238,7 @@ func TestResourcesAndLoaded(t *testing.T) {
 	s := &Server{Source: fakeSource{}, GPU: func(context.Context) ([]gpu.Device, error) {
 		return []gpu.Device{{Index: 0, Name: "GPU", MemoryFree: 1024}}, nil
 	}, Manager: NewManager(&fakeLauncher{})}
-	for _, path := range []string{"/api/v1/resources", "/api/v1/models/loaded", "/api/v1/version"} {
+	for _, path := range []string{"/api/v1/resources", "/api/v1/version"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
 		s.Handler().ServeHTTP(rec, req)

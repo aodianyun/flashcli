@@ -326,29 +326,21 @@ func TestAppEndpointsLifecycle(t *testing.T) {
 		t.Fatalf("installed = %d %v", status, body)
 	}
 
-	status, body = appRequest(t, http.MethodPost, base+"/api/v1/apps/xym/demo/activate?version=1.0.0", "")
+	status, body = appRequest(t, http.MethodPost, base+"/api/v1/apps/xym/demo/setup?version=1.0.0", "")
 	if status != 200 || body["state"] != "ready" {
-		t.Fatalf("activate = %d %v", status, body)
+		t.Fatalf("setup = %d %v", status, body)
 	}
 	conn, _ := body["connection"].(map[string]any)
 	if conn == nil || !strings.HasSuffix(conn["base_url"].(string), "/v1") {
 		t.Fatalf("gateway connection = %v", body["connection"])
 	}
 	if len(launcher.procs) != 0 {
-		t.Fatalf("activate started %d models", len(launcher.procs))
+		t.Fatalf("setup started %d models", len(launcher.procs))
 	}
 
 	status, body = appRequest(t, http.MethodGet, base+"/api/v1/apps/xym/demo/status?version=1.0.0", "")
 	if status != 200 || len(body["models"].([]any)) != 1 {
 		t.Fatalf("status = %d %v", status, body)
-	}
-
-	status, body = appRequest(t, http.MethodPost, base+"/api/v1/apps/xym/demo/deactivate?version=1.0.0", "")
-	if status != 200 || body["state"] != "stopped" {
-		t.Fatalf("deactivate = %d %v", status, body)
-	}
-	if len(launcher.procs) != 0 {
-		t.Fatal("deactivate started a model")
 	}
 
 	status, _ = appRequest(t, http.MethodDelete, base+"/api/v1/apps/xym/demo?version=1.0.0", "")

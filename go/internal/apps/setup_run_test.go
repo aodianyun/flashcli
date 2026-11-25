@@ -93,7 +93,7 @@ func TestRunSetupScriptRejectsHashMismatch(t *testing.T) {
 	}
 }
 
-func TestActivateRunsConfirmedSetupScripts(t *testing.T) {
+func TestSetupRunsConfirmedSetupScripts(t *testing.T) {
 	if _, err := setupPython(); err != nil {
 		t.Skip(err)
 	}
@@ -119,7 +119,7 @@ func TestActivateRunsConfirmedSetupScripts(t *testing.T) {
 		t.Fatal(err)
 	}
 	home := t.TempDir()
-	started, err := svc.ActivateWithSetup(context.Background(), "xym/workbuddy:1.0.0", SetupOptions{
+	started, err := svc.SetupWithSetup(context.Background(), "xym/workbuddy:1.0.0", SetupOptions{
 		Scripts:    []string{"workbuddy"},
 		ClientHome: home,
 		Provided:   true,
@@ -265,7 +265,7 @@ func TestInstallDoesNotRunSetupScripts(t *testing.T) {
 
 // Activation with no explicit selection must replay the scripts the user
 // confirmed previously (pinned definitions, no manifest fetch).
-func TestActivateReplaysSavedSetupScripts(t *testing.T) {
+func TestSetupReplaysSavedSetupScripts(t *testing.T) {
 	if _, err := setupPython(); err != nil {
 		t.Skip(err)
 	}
@@ -313,7 +313,7 @@ func TestActivateReplaysSavedSetupScripts(t *testing.T) {
 	svc.Fetch = func(context.Context, flashhub.AppRef) ([]byte, error) {
 		return nil, fmt.Errorf("offline: manifest fetch must not be needed on restore")
 	}
-	started, err := svc.Activate(context.Background(), "xym/workbuddy:1.0.0")
+	started, err := svc.Setup(context.Background(), "xym/workbuddy:1.0.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,7 +337,7 @@ func TestSetupFailureIgnoresInterruptedContext(t *testing.T) {
 }
 
 // A failure from an earlier run is cleared as soon as the app starts again.
-func TestActivateClearsStaleSetupError(t *testing.T) {
+func TestSetupClearsStaleSetupError(t *testing.T) {
 	svc, _ := newTestService(t, manifestJSON("a/one:1"), &fakeLauncher{})
 	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{
 		Yes: true,
@@ -355,7 +355,7 @@ func TestActivateClearsStaleSetupError(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Activate(context.Background(), "xym/demo:1.0.0"); err != nil {
+	if _, err := svc.Setup(context.Background(), "xym/demo:1.0.0"); err != nil {
 		t.Fatal(err)
 	}
 	st, _, _ := svc.Registry.Get("xym/demo:1.0.0")
@@ -395,7 +395,7 @@ func TestExplicitEmptySetupSelectionClearsSavedPlan(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.ActivateWithSetup(context.Background(), "xym/workbuddy:1.0.0", SetupOptions{
+	if _, err := svc.SetupWithSetup(context.Background(), "xym/workbuddy:1.0.0", SetupOptions{
 		Provided: true,
 	}); err != nil {
 		t.Fatal(err)

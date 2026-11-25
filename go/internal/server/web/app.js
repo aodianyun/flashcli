@@ -120,17 +120,16 @@
 
   async function refresh() {
     try {
-      const [sys, models, loaded, storage, gpu, hist] = await Promise.all([
+      const [sys, models, storage, gpu, hist] = await Promise.all([
         api("/api/v1/system").then((r) => r.json()),
         api("/api/v1/models").then((r) => r.json()),
-        api("/api/v1/models/loaded").then((r) => r.json()),
         api("/api/v1/storage").then((r) => r.json()),
         api("/api/v1/gpu").then((r) => r.json()).catch(() => ({ devices: [], processes: [] })),
         api("/api/v1/system/history?seconds=300").then((r) => r.json()).catch(() => ({ samples: [] })),
       ]);
       state.sys = sys;
       state.models = models.models || [];
-      state.loaded = loaded.models || (models.loaded || []);
+      state.loaded = models.loaded || [];
       state.storage = storage.areas || [];
       state.gpuProcs = gpu.processes || [];
       state.history = hist.samples || [];
@@ -480,16 +479,13 @@
     $("#btn-send").disabled = true;
     try {
       const body = {
-        ref: refStr,
-        body: {
-          model: refStr,
-          messages: [{ role: "user", content: text }],
-          max_tokens: Number($("#chat-max-tokens").value) || 128,
-          temperature: Number($("#chat-temp").value) || 0,
-          stream: true,
-        },
+        model: refStr,
+        messages: [{ role: "user", content: text }],
+        max_tokens: Number($("#chat-max-tokens").value) || 128,
+        temperature: Number($("#chat-temp").value) || 0,
+        stream: true,
       };
-      const res = await api("/api/v1/ui/chat", { method: "POST", body: JSON.stringify(body) });
+      const res = await api("/v1/chat/completions", { method: "POST", body: JSON.stringify(body) });
       if (!res.ok) throw new Error(await readError(res));
       const reader = res.body.getReader();
       const dec = new TextDecoder();

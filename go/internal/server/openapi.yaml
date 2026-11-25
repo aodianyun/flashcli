@@ -477,20 +477,6 @@ paths:
                   loaded:
                     type: array
                     items: { $ref: '#/components/schemas/LoadedModel' }
-  /api/v1/models/loaded:
-    get:
-      summary: Loaded model instances
-      responses:
-        '200':
-          description: Loaded models
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  models:
-                    type: array
-                    items: { $ref: '#/components/schemas/LoadedModel' }
   /api/v1/catalog:
     get:
       summary: Search the public FlashHub catalog
@@ -717,7 +703,7 @@ paths:
               schema: { $ref: '#/components/schemas/JobAccepted' }
         '400':
           $ref: '#/components/responses/Error'
-  /api/v1/apps/{org}/{name}/activate:
+  /api/v1/apps/{org}/{name}/setup:
     parameters:
       - { name: org, in: path, required: true, schema: { type: string } }
       - { name: name, in: path, required: true, schema: { type: string } }
@@ -727,8 +713,8 @@ paths:
         description: "`1` returns a job with setup progress."
         schema: { type: string, enum: ['1'] }
     post:
-      summary: Activate an application (setup only; never starts a model)
-      description: Marks the app ready, records the flashserver gateway connection, and runs confirmed setup scripts.
+      summary: Configure an application (setup only; never starts a model)
+      description: Records the flashserver gateway connection and runs confirmed setup scripts.
       requestBody:
         required: false
         content:
@@ -755,30 +741,6 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
         '409':
-          $ref: '#/components/responses/Error'
-  /api/v1/apps/{org}/{name}/deactivate:
-    parameters:
-      - { name: org, in: path, required: true, schema: { type: string } }
-      - { name: name, in: path, required: true, schema: { type: string } }
-      - { name: version, in: query, schema: { type: string } }
-      - name: async
-        in: query
-        description: "`1` returns a job."
-        schema: { type: string, enum: ['1'] }
-    post:
-      summary: Deactivate an application (no model process is stopped)
-      responses:
-        '200':
-          description: Application state
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/AppState' }
-        '202':
-          description: Async job accepted (`async=1`)
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/JobAccepted' }
-        '404':
           $ref: '#/components/responses/Error'
   /api/v1/storage:
     get:
@@ -1103,38 +1065,6 @@ paths:
                   results:
                     type: array
                     items: { $ref: '#/components/schemas/CleanResult' }
-  /api/v1/models/smoke:
-    post:
-      summary: Start a smoke test job for a ready model
-      description: "Run-only bundles execute `flashcli run <ref>`; started serve bundles receive one capability-appropriate ping request (chat, completions, responses, Anthropic messages, embeddings, or moderations) and modality-only models without one of those capabilities report an explicit error. Progress/output is streamed as a `smoke` job over /api/v1/ws and appended to <ref>.smoke.log."
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [ref]
-              properties:
-                ref: { type: string }
-      responses:
-        '202':
-          description: Smoke job accepted
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  job_id: { type: string }
-                  state: { type: string }
-                  kind: { type: string, enum: [run, serve] }
-                  ref: { type: string }
-                  log_path: { type: string }
-        '400':
-          $ref: '#/components/responses/Error'
-        '404':
-          $ref: '#/components/responses/Error'
-        '409':
-          $ref: '#/components/responses/Error'
   /api/v1/logs:
     get:
       summary: Tail daemon or per-model logs
@@ -1189,28 +1119,6 @@ paths:
               schema: { type: string }
         '400':
           $ref: '#/components/responses/Error'
-        '404':
-          $ref: '#/components/responses/Error'
-  /api/v1/ui/chat:
-    post:
-      summary: Console helper that forwards one chat completion
-      description: |
-        Same-origin helper used by the local console so browser clients do not
-        need CORS on model servers. External clients should call the loaded
-        model's `endpoint` directly.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [ref, body]
-              properties:
-                ref: { type: string }
-                body: { type: object, additionalProperties: true }
-      responses:
-        '200':
-          description: Streaming or non-streaming completion passthrough
         '404':
           $ref: '#/components/responses/Error'
   /api/v1/ws:

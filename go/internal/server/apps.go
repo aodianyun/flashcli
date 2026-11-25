@@ -180,20 +180,14 @@ func (s *Server) appInstall(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]any{"job_id": job.ID, "state": job.State})
 }
 
-// appActivate serves POST /api/v1/apps/{org}/{name}/activate. It marks the app
-// ready for the gateway and runs setup scripts; it never starts models.
-func (s *Server) appActivate(w http.ResponseWriter, r *http.Request) {
-	s.appLifecycle(w, r, "activate")
+// appSetup serves POST /api/v1/apps/{org}/{name}/setup. It records the gateway
+// connection and runs setup scripts; it never starts models.
+func (s *Server) appSetup(w http.ResponseWriter, r *http.Request) {
+	s.appLifecycle(w, r, "setup")
 }
 
-// appDeactivate serves POST /api/v1/apps/{org}/{name}/deactivate.
-func (s *Server) appDeactivate(w http.ResponseWriter, r *http.Request) {
-	s.appLifecycle(w, r, "deactivate")
-}
-
-// appLifecycle activates or deactivates an application. The default response
-// is the resulting AppState; `?async=1` returns a job whose events carry the
-// setup progress.
+// appLifecycle runs setup for an application. The default response is the
+// resulting AppState; `?async=1` returns a job whose events carry progress.
 func (s *Server) appLifecycle(w http.ResponseWriter, r *http.Request, action string) {
 	svc := s.appService()
 	key, err := s.resolveAppKey(r, svc)
@@ -237,10 +231,7 @@ func runAppLifecycle(ctx context.Context, svc *apps.Service, action, key string,
 }
 
 func runAppLifecycleState(ctx context.Context, svc *apps.Service, action, key string, setup apps.SetupOptions) (apps.AppState, error) {
-	if action == "deactivate" {
-		return svc.Deactivate(ctx, key)
-	}
-	return svc.ActivateWithSetup(ctx, key, setup)
+	return svc.SetupWithSetup(ctx, key, setup)
 }
 
 // appStatus serves GET /v1/apps/{org}/{name}/status.

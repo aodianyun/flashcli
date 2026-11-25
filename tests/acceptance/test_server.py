@@ -99,8 +99,8 @@ def test_server_preload_is_disk_only(flashserver_bin, flashcli_bin, cli_env, hom
         assert model["resident"] == "stopped"
 
         # Preload never spawns a serve process.
-        _, loaded = http_json(f"{base}/api/v1/models/loaded")
-        assert loaded["models"] == []
+        _, models = http_json(f"{base}/api/v1/models")
+        assert models["loaded"] == []
 
         _, gateway = http_json(f"{base}/v1/models")
         assert any(item["id"] == ref for item in gateway["data"])
