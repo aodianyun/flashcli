@@ -347,14 +347,25 @@ func (s *Server) proxyGateway(w http.ResponseWriter, r *http.Request, endpoint, 
 
 	contentType := resp.Header.Get("Content-Type")
 	flusher, _ := w.(http.Flusher)
+	hintOOM := false
+	if resp.StatusCode >= http.StatusBadRequest {
+		hintOOM = s.legacyNoVRAM(refStr)
+	}
 	switch {
 	case strings.Contains(contentType, "text/event-stream"):
-		rewriteSSEModel(resp.Body, w, refStr, flusher)
+		rewriteSSEModel(resp.Body, w, refStr, flusher, hintOOM)
 	case strings.Contains(contentType, "application/json"):
-		rewriteJSONModel(resp.Body, w, refStr)
+		rewriteJSONModel(resp.Body, w, refStr, hintOOM)
 	default:
 		_, _ = io.Copy(w, resp.Body)
 	}
+}
+
+// legacyNoVRAM reports whether ref has no declared VRAM requirement. It is only
+// called for error responses, so the extra manifest read is rare.
+func (s *Server) legacyNoVRAM(refStr string) bool {
+	info, err := s.inspectRef(refStr)
+	return err == nil && info.MinVRAMMiB <= 0
 }
 
 func (s *Server) preloadRetryAfter(jobID string) int {
@@ -461,16 +472,46 @@ func copyGatewayHeaders(dst, src http.Header) {
 	}
 }
 
-func rewriteJSONModel(src io.Reader, w io.Writer, refStr string) {
+func rewriteJSONModel(src io.Reader, w io.Writer, refStr string, hintOOM bool) {
 	blob, err := io.ReadAll(io.LimitReader(src, gatewayMaxBody))
 	if err != nil {
 		return
+	}
+	if hintOOM && looksLikeOOM(string(blob)) {
+		blob = addOOMHint(blob)
 	}
 	if out, ok := rewriteModelBlob(blob, refStr); ok {
 		_, _ = w.Write(out)
 		return
 	}
 	_, _ = w.Write(blob)
+}
+
+// addOOMHint appends actionable guidance to an error payload from a legacy
+// bundle that does not declare resources.min_vram_mib.
+func addOOMHint(blob []byte) []byte {
+	const hint = "the bundle does not declare resources.min_vram_mib; set it to its measured peak VRAM so flashserver can place it safely"
+	var v map[string]any
+	if err := json.Unmarshal(blob, &v); err != nil {
+		return blob
+	}
+	switch errValue := v["error"].(type) {
+	case map[string]any:
+		if msg, ok := errValue["message"].(string); ok && msg != "" {
+			errValue["message"] = msg + " (" + hint + ")"
+		} else {
+			errValue["hint"] = hint
+		}
+	case string:
+		v["error"] = errValue + " (" + hint + ")"
+	default:
+		v["hint"] = hint
+	}
+	out, err := json.Marshal(v)
+	if err != nil {
+		return blob
+	}
+	return out
 }
 
 func rewriteModelBlob(blob []byte, refStr string) ([]byte, bool) {
@@ -489,7 +530,7 @@ func rewriteModelBlob(blob []byte, refStr string) ([]byte, bool) {
 	return out, true
 }
 
-func rewriteSSEModel(src io.Reader, w io.Writer, refStr string, flusher http.Flusher) {
+func rewriteSSEModel(src io.Reader, w io.Writer, refStr string, flusher http.Flusher, hintOOM bool) {
 	scanner := bufio.NewScanner(src)
 	scanner.Buffer(make([]byte, 64*1024), gatewayMaxBody)
 	for scanner.Scan() {
@@ -497,6 +538,9 @@ func rewriteSSEModel(src io.Reader, w io.Writer, refStr string, flusher http.Flu
 		if strings.HasPrefix(line, "data:") {
 			payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 			if payload != "" && payload != "[DONE]" {
+				if hintOOM && looksLikeOOM(payload) {
+					payload = string(addOOMHint([]byte(payload)))
+				}
 				if out, ok := rewriteModelBlob([]byte(payload), refStr); ok {
 					line = "data: " + string(out)
 				}

@@ -573,3 +573,27 @@ func TestGatewayTokenAndHeaderStripping(t *testing.T) {
 		t.Fatalf("client token leaked to the child: %q", upstreamAuth)
 	}
 }
+
+func TestGatewayLegacyOOMErrorAddsMinVRAMHint(t *testing.T) {
+	child := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = io.WriteString(w, `{"error":{"message":"CUDA out of memory"}}`)
+	}))
+	defer child.Close()
+
+	refStr := "flashcli-bundle/demo:1.0.0"
+	caps := []string{"openai.chat"}
+	source := &flipSource{ref: refStr, caps: caps}
+	source.ready.Store(true)
+	legacy := placementManifest(t, []string{"sm89-cu124-linux-x86_64-py312"}, nil)
+	s := gatewayTestServer(t, source, &gatewayLauncher{endpoint: child.URL}, gatewayInspect(caps, legacy))
+	rec, _ := call(t, s.Handler(), http.MethodPost, "/v1/chat/completions",
+		`{"model":"`+refStr+`","messages":[]}`)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "min_vram_mib") {
+		t.Fatalf("OOM hint missing: %s", rec.Body.String())
+	}
+}
