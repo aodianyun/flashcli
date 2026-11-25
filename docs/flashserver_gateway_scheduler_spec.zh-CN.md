@@ -320,7 +320,7 @@ GPU runtime 必填：
 ```json
 {
   "max_loaded": 2,
-  "vram_headroom_mib": 2048,
+  "vram_headroom_mib": 6144,
   "idle_stop_seconds": 600,
   "resident_start_wait_seconds": 10,
   "queue_timeout_seconds": 30,
@@ -331,7 +331,7 @@ GPU runtime 必填：
 }
 ```
 
-- `vram_headroom_mib` 默认 2048 MiB，可用 `FLASHCLI_VRAM_HEADROOM_MIB`（或配置文件）覆盖。
+- `vram_headroom_mib` 默认 6144 MiB，可用 `FLASHCLI_VRAM_HEADROOM_MIB`（或配置文件）覆盖。
 - `cpu_fallback` 默认 `no-gpu-runtime`，或 `disabled`；容量不足永不触发 CPU 回退。
 - `auto_pull_wait_seconds=0` 立即返回标准 503；正数用于小模型的有界等待。
 - 启动时校验配置，非法值直接失败。

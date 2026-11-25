@@ -83,7 +83,7 @@ type schedulerResponse struct {
 	Requirements    []ResourceRequirement `json:"requirements"`
 }
 
-const defaultVRAMHeadroomMiB int64 = 2048
+const defaultVRAMHeadroomMiB int64 = 6144
 
 func (s *Server) vramHeadroomMiB() int64 {
 	if s.VRAMHeadroomMiB > 0 {

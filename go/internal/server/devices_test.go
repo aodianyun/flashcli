@@ -208,8 +208,8 @@ func TestSchedulerEndpointReportsPlacement(t *testing.T) {
 
 func TestVRAMHeadroomDefaultAndEnv(t *testing.T) {
 	s := &Server{}
-	if got := s.vramHeadroomMiB(); got != 2048 {
-		t.Fatalf("default headroom = %d, want 2048", got)
+	if got := s.vramHeadroomMiB(); got != 6144 {
+		t.Fatalf("default headroom = %d, want 6144", got)
 	}
 	t.Setenv("FLASHCLI_VRAM_HEADROOM_MIB", "4096")
 	if got := s.vramHeadroomMiB(); got != 4096 {
