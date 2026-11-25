@@ -114,7 +114,9 @@ type fakeServe struct {
 	endpoint string
 	stopped  bool
 	// healthy blocks Healthy until closed when non-nil (startup in progress).
-	healthy chan struct{}
+	healthy    chan struct{}
+	healthyErr error
+	lastLog    string
 }
 
 func (f *fakeServe) Ref() string      { return f.ref }
@@ -128,10 +130,10 @@ func (f *fakeServe) Healthy(ctx context.Context) error {
 			return ctx.Err()
 		}
 	}
-	return nil
+	return f.healthyErr
 }
 func (f *fakeServe) Running() bool              { return !f.stopped }
-func (f *fakeServe) LastLog() string            { return "" }
+func (f *fakeServe) LastLog() string            { return f.lastLog }
 func (f *fakeServe) Stop(context.Context) error { f.stopped = true; return nil }
 
 type fakeLauncher struct {
@@ -276,7 +278,7 @@ func TestAuth(t *testing.T) {
 func TestVRAMAdmission(t *testing.T) {
 	m := NewManagerWithOptions(&fakeLauncher{}, ManagerOptions{
 		GPU: func(context.Context) ([]gpu.Device, error) {
-			return []gpu.Device{{MemoryFree: 1024 * 1024 * 1024}}, nil
+			return []gpu.Device{{MemoryTotal: 1024 * 1024 * 1024}}, nil
 		},
 		Inspect: func(string) (BundleInfo, error) { return BundleInfo{MinVRAMMiB: 2048}, nil },
 	})
@@ -285,25 +287,27 @@ func TestVRAMAdmission(t *testing.T) {
 	}
 }
 
-// Only resources.min_vram_mib gates admission: no declared value means the
-// bundle is admitted, and the exact requirement needs no extra margin.
-func TestVRAMAdmissionUsesBundleRequirementOnly(t *testing.T) {
+// The explicit management load is a feasibility check against the largest
+// GPU's total VRAM; free VRAM and headroom belong to the scheduler.
+func TestVRAMFeasibilityUsesLargestTotal(t *testing.T) {
 	cases := []struct {
 		name  string
+		total int64
 		free  int64
 		min   int64
 		allow bool
 	}{
-		{name: "no requirement", free: 256 * 1024 * 1024, min: 0, allow: true},
-		{name: "exact match", free: 4096 * 1024 * 1024, min: 4096, allow: true},
-		{name: "one MiB short", free: 4095 * 1024 * 1024, min: 4096, allow: false},
+		{name: "no requirement", total: 256 * 1024 * 1024, min: 0, allow: true},
+		{name: "exact match", total: 4096 * 1024 * 1024, min: 4096, allow: true},
+		{name: "one MiB short", total: 4095 * 1024 * 1024, min: 4096, allow: false},
+		{name: "free VRAM does not matter", total: 4096 * 1024 * 1024, free: 0, min: 4096, allow: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			free := tc.free
+			total, free := tc.total, tc.free
 			m := NewManagerWithOptions(&fakeLauncher{}, ManagerOptions{
 				GPU: func(context.Context) ([]gpu.Device, error) {
-					return []gpu.Device{{MemoryFree: free}}, nil
+					return []gpu.Device{{MemoryTotal: total, MemoryFree: free}}, nil
 				},
 				Inspect: func(string) (BundleInfo, error) {
 					return BundleInfo{MinVRAMMiB: tc.min}, nil
@@ -320,7 +324,28 @@ func TestVRAMAdmissionUsesBundleRequirementOnly(t *testing.T) {
 	}
 }
 
-// An app model start must go through the same admission as a model-page load.
+// A legacy bundle without min_vram_mib that OOMs during load must return the
+// reason and tell the bundle author to declare the requirement.
+func TestLegacyOOMErrorSuggestsMinVRAM(t *testing.T) {
+	launcher := &oomLauncher{}
+	m := NewManagerWithOptions(launcher, ManagerOptions{
+		Inspect: func(string) (BundleInfo, error) { return BundleInfo{}, nil },
+	})
+	_, err := m.Load(context.Background(), "demo:1")
+	if err == nil || !strings.Contains(err.Error(), "min_vram_mib") {
+		t.Fatalf("error = %v, want min_vram_mib guidance", err)
+	}
+}
+
+type oomLauncher struct{}
+
+func (oomLauncher) Start(context.Context, string, int) (ServeProcess, error) {
+	return &fakeServe{
+		ref: "demo:1", endpoint: "http://127.0.0.1:1", stopped: true,
+		healthyErr: errors.New("unhealthy"), lastLog: "CUDA out of memory",
+	}, nil
+}
+
 func TestManagerUnloadIfLoaded(t *testing.T) {
 	m := NewManagerWithOptions(&fakeLauncher{}, ManagerOptions{
 		GPU: func(context.Context) ([]gpu.Device, error) {

@@ -205,3 +205,22 @@ func TestSchedulerEndpointReportsPlacement(t *testing.T) {
 		t.Fatalf("requirement = %v", req)
 	}
 }
+
+func TestVRAMHeadroomDefaultAndEnv(t *testing.T) {
+	s := &Server{}
+	if got := s.vramHeadroomMiB(); got != 2048 {
+		t.Fatalf("default headroom = %d, want 2048", got)
+	}
+	t.Setenv("FLASHCLI_VRAM_HEADROOM_MIB", "4096")
+	if got := s.vramHeadroomMiB(); got != 4096 {
+		t.Fatalf("env headroom = %d, want 4096", got)
+	}
+	t.Setenv("FLASHCLI_VRAM_HEADROOM_MIB", "0")
+	if got := s.vramHeadroomMiB(); got != 0 {
+		t.Fatalf("explicit env headroom = %d, want 0", got)
+	}
+	s.VRAMHeadroomMiB = 1024
+	if got := s.vramHeadroomMiB(); got != 1024 {
+		t.Fatalf("config headroom = %d, want 1024", got)
+	}
+}

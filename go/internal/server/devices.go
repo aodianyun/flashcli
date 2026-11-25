@@ -83,14 +83,18 @@ type schedulerResponse struct {
 	Requirements    []ResourceRequirement `json:"requirements"`
 }
 
+const defaultVRAMHeadroomMiB int64 = 2048
+
 func (s *Server) vramHeadroomMiB() int64 {
-	if s.VRAMHeadroomMiB < 0 {
-		return 0
+	if s.VRAMHeadroomMiB > 0 {
+		return int64(s.VRAMHeadroomMiB)
 	}
-	if s.VRAMHeadroomMiB == 0 {
-		return 512
+	if raw := strings.TrimSpace(os.Getenv("FLASHCLI_VRAM_HEADROOM_MIB")); raw != "" {
+		if v, err := strconv.ParseInt(raw, 10, 64); err == nil && v >= 0 {
+			return v
+		}
 	}
-	return int64(s.VRAMHeadroomMiB)
+	return defaultVRAMHeadroomMiB
 }
 
 // inventory probes the devices visible to WSL: NVIDIA dGPUs plus CPU/RAM and

@@ -63,7 +63,7 @@ sudo flashserver-setup
   "serve_host": "127.0.0.1",
   "log_dir": "/home/me/.flashcli/logs/serve",
   "max_loaded": 0,
-  "vram_headroom_mib": 512,
+  "vram_headroom_mib": 2048,
   "idle_stop_seconds": 600,
   "resident_start_wait_seconds": 10,
   "queue_timeout_seconds": 30,
@@ -74,7 +74,8 @@ sudo flashserver-setup
 ```
 
 - `max_loaded=0` 表示不限制槽位。显存准入按每个 bundle 的
-  `resources.min_vram_mib`（每张 GPU）加 `vram_headroom_mib`（默认 512）：某张兼容
+  `resources.min_vram_mib`（每张 GPU）加 `vram_headroom_mib`（默认 2048，可用
+  `FLASHCLI_VRAM_HEADROOM_MIB` 覆盖）：某张兼容
   GPU 的空闲显存足够时准入。声明了 `resources` 块的 bundle 若为 GPU runtime 必须声明
   `min_vram_mib`；没有该块的 legacy bundle 只产生校验警告，按未声明显存要求准入。
   槽位上限仍把正在启动的模型计入。应用调用网关，与模型页共享同一调度器。

@@ -1,7 +1,7 @@
-"""Real ``flashserver`` daemon: start, load a bundle, call the API, unload.
+"""Real ``flashserver`` daemon: start, preload a bundle, call the API, unload.
 
-Uses the built ``flashserver`` binary and a local native bundle; the daemon
-spawns the real ``flashcli serve`` child. No HTTP handlers are stubbed.
+Uses the built ``flashserver`` binary and a local native bundle. Preload is a
+disk operation; resident start/stop is scheduler-owned.
 """
 
 from __future__ import annotations
@@ -9,8 +9,6 @@ from __future__ import annotations
 import json
 import subprocess
 import time
-import urllib.parse
-import urllib.request
 
 from helpers import free_port, http_json, prepare_bundle, wait_json
 
@@ -49,7 +47,8 @@ def _stop(proc):
         proc.kill()
 
 
-def test_server_load_native_bundle_over_http(flashserver_bin, flashcli_bin, cli_env, home):
+def test_server_load_aliases_disk_preload(flashserver_bin, flashcli_bin, cli_env, home):
+    """The legacy /models/load is disk preload; it never starts a resident."""
     port = free_port()
     server = _start_server(flashserver_bin, flashcli_bin, cli_env, home, port)
     base = f"http://127.0.0.1:{port}"
@@ -62,45 +61,28 @@ def test_server_load_native_bundle_over_http(flashserver_bin, flashcli_bin, cli_
         status, version = http_json(f"{base}/api/v1/version")
         assert status == 200 and version["version"]
 
-        status, loaded = http_json(f"{base}/api/v1/models/load", {"ref": ref})
-        assert status == 200, loaded
-        assert loaded["state"] == "ready"
-        endpoint = loaded["endpoint"]
-        assert endpoint.startswith("http://127.0.0.1:")
+        status, body = http_json(f"{base}/api/v1/models/load", {"ref": ref})
+        assert status in (200, 202), body
+        if status == 202:
+            deadline = time.time() + 60
+            while time.time() < deadline:
+                _, job = http_json(f"{base}/api/v1/jobs/{body['job_id']}")
+                if job["state"] in ("done", "failed"):
+                    break
+                time.sleep(0.2)
+            assert job["state"] == "done", job
 
-        # The child reports its own endpoint; the daemon must use it.
-        with urllib.request.urlopen(endpoint + "/healthz", timeout=10) as resp:
-            assert resp.status == 200
-
-        status, current = http_json(f"{base}/api/v1/models/loaded")
-        assert status == 200
-        assert any(item["ref"] == ref for item in current["models"])
-
-        status, logs = http_json(f"{base}/api/v1/logs?kind=model&ref={urllib.parse.quote(ref)}&lines=20")
-        assert status == 200 and logs["kind"] == "model"
-        assert logs["lines"], "per-model serve log was not captured"
+        model = _wait_disk_state(base, ref, "preloaded")
+        assert model["resident"] == "stopped"
+        _, loaded = http_json(f"{base}/api/v1/models/loaded")
+        assert loaded["models"] == []
 
         status, storage = http_json(f"{base}/api/v1/storage")
         assert status == 200 and storage["areas"]
 
-        status, unloaded = http_json(f"{base}/api/v1/models/unload", {"ref": ref, "force": True})
+        status, unloaded = http_json(f"{base}/api/v1/models/unload", {"ref": ref})
         assert status == 200 and unloaded["preload"] == "absent"
-
-        status, current = http_json(f"{base}/api/v1/models/loaded")
-        assert status == 200 and current["models"] == []
-    finally:
-        _stop(server)
-
-
-def test_server_rejects_run_only_bundle(flashserver_bin, flashcli_bin, cli_env, home):
-    port = free_port()
-    server = _start_server(flashserver_bin, flashcli_bin, cli_env, home, port)
-    base = f"http://127.0.0.1:{port}"
-    bundle = prepare_bundle("python_echo", home)
-    try:
-        status, body = http_json(f"{base}/api/v1/models/load", {"ref": str(bundle)})
-        assert status >= 400
-        assert "run-only" in json.dumps(body)
+        assert bundle.exists()
     finally:
         _stop(server)
 

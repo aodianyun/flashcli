@@ -278,7 +278,13 @@ func (m *Manager) load(ctx context.Context, refStr string, progress func(phase, 
 		}
 	})
 	if err != nil {
+		logTail := strings.TrimSpace(proc.LastLog())
 		_ = proc.Stop(context.Background())
+		if bundle.MinVRAMMiB <= 0 && looksLikeOOM(err.Error()+" "+logTail) {
+			return InstanceInfo{}, fmt.Errorf(
+				"serve process for %s failed: %w (the bundle does not declare resources.min_vram_mib; set it to the measured peak VRAM so flashserver can place it safely)",
+				refStr, err)
+		}
 		return InstanceInfo{}, fmt.Errorf("serve process for %s: %w", refStr, err)
 	}
 	inst := &instance{
@@ -546,16 +552,18 @@ func (m *Manager) checkCapacityLocked(ctx context.Context, b BundleInfo) error {
 	if err != nil {
 		return fmt.Errorf("%w: cannot inspect GPU memory: %v", ErrResourceExhausted, err)
 	}
-	var free int64
+	var total int64
 	for _, d := range devices {
-		if d.MemoryFree > free {
-			free = d.MemoryFree
+		if d.MemoryTotal > total {
+			total = d.MemoryTotal
 		}
 	}
-	// Only the bundle declares its requirement; there is no global margin.
+	// The explicit management load is a capability/feasibility check: it only
+	// verifies that the largest GPU can ever hold the declared requirement.
+	// Free-VRAM admission and placement belong to the scheduler.
 	need := b.MinVRAMMiB * 1024 * 1024
-	if free < need {
-		return fmt.Errorf("%w: need %d MiB free VRAM, have %d MiB", ErrResourceExhausted, b.MinVRAMMiB, free/(1024*1024))
+	if total < need {
+		return fmt.Errorf("%w: need %d MiB VRAM, largest GPU has %d MiB total", ErrResourceExhausted, b.MinVRAMMiB, total/(1024*1024))
 	}
 	return nil
 }
@@ -608,4 +616,27 @@ func inspectBundle(refStr string) (BundleInfo, error) {
 		Capabilities: m.ServeCapabilities(),
 		Manifest:     m,
 	}, nil
+}
+
+func looksLikeOOM(text string) bool {
+	lower := strings.ToLower(text)
+	for _, marker := range []string{
+		"out of memory",
+		"outofmemory",
+		"cuda_error_out_of_memory",
+		"cublas_status_alloc_failed",
+		"hip error: out of memory",
+		"hiperroroutofmemory",
+		"std::bad_alloc",
+		"cannot allocate memory",
+		"memory allocation failed",
+		"failed to allocate",
+		"oom-kill",
+		"killed process",
+	} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
 }

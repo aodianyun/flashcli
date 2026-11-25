@@ -43,12 +43,16 @@ sudo flashserver-setup
 curl -s http://127.0.0.1:8790/health
 ```
 
-加载模型（桌面：模型 → 加载 → 启动）：
+预加载模型（桌面：模型 → 加载）；resident 由调度器按需启动：
 
 ```bash
 curl -H 'Content-Type: application/json' \
   -d '{"ref":"flashcli-bundle/<name>:<version>"}' \
-  http://127.0.0.1:8790/api/v1/models/load
+  http://127.0.0.1:8790/api/v1/models/preload
+
+curl -H 'Content-Type: application/json' \
+  -d '{"model":"flashcli-bundle/<name>:<version>","messages":[{"role":"user","content":"Hello"}]}' \
+  http://127.0.0.1:8790/v1/chat/completions
 ```
 
 ## 文档导航

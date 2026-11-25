@@ -120,6 +120,7 @@ Standalone Python provisioning (when the bundle `python_abi` is missing):
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `FLASHCLI_QUIET` | `0` | Less output from `run`/`serve`/`pull`/`sync`. |
+| `FLASHCLI_VRAM_HEADROOM_MIB` | `2048` | Free VRAM reserved on top of a bundle's `resources.min_vram_mib` by the flashserver scheduler. Ignored when the config file sets a positive `vram_headroom_mib`. |
 | `FLASHCLI_GO_RELEASE_BASE` / `FLASHCLI_GO_RELEASE_API` | GitHub releases; Gitee when mirror mode is on | Override for `flashcli upgrade` (e.g. Gitee). |
 
 ## Mirrors (China-friendly)

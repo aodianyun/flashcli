@@ -92,7 +92,8 @@ entry (script/native or unknown); `[]` means host inference routes are disabled.
   returns a job while running.
 - `POST /api/v1/pull` is the legacy low-level download job; `preload` is the
   gateway-facing disk operation.
-- `POST /api/v1/models/load` starts a resident serve process for the model page.
+- `POST /api/v1/models/load` is a legacy alias for disk preload; resident
+  start/stop is owned by the scheduler and starts on demand.
 - `POST /api/v1/models/unload` stops the resident process and deletes bundle,
   weights, runtime, and cache records. It returns `409 model_busy` while the
   model is resident or has active requests; `wait_seconds` waits and `force`
@@ -120,9 +121,10 @@ curl -H 'Content-Type: application/json' \
   http://127.0.0.1:8790/v1/chat/completions
 ```
 
-- `POST /api/v1/models/load` starts a resident model explicitly for the model
-  page and requires a `serve` entry: run-only bundles are rejected with
-  `bundle "..." is run-only (no serve entry)` — use `flashcli run` instead.
+- `POST /api/v1/models/load` is a preload alias for older clients; the model
+  page and apps use `/preload` directly. Resident start/stop is scheduler-owned,
+  and run-only bundles are valid for preload (the gateway rejects a chat request
+  only when the bundle has no serve entry).
 - `POST /api/v1/models/smoke` runs `flashcli run` at low priority for run-only
   bundles, or one capability-appropriate `ping` request for a started serve
   model; modality-only models without a declarable route report an explicit

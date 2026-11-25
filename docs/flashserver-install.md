@@ -68,7 +68,7 @@ checks `/health`.
   "serve_host": "127.0.0.1",
   "log_dir": "/home/me/.flashcli/logs/serve",
   "max_loaded": 0,
-  "vram_headroom_mib": 512,
+  "vram_headroom_mib": 2048,
   "idle_stop_seconds": 600,
   "resident_start_wait_seconds": 10,
   "queue_timeout_seconds": 30,
@@ -79,7 +79,8 @@ checks `/health`.
 ```
 
 - `max_loaded=0` means no slot limit. VRAM admission uses each bundle's
-  `resources.min_vram_mib` per GPU plus `vram_headroom_mib` (default 512): a
+  `resources.min_vram_mib` per GPU plus `vram_headroom_mib` (default 2048,
+  override with `FLASHCLI_VRAM_HEADROOM_MIB`): a
   start is admitted when a compatible GPU has that much free VRAM. Bundles with
   a `resources` block must declare `min_vram_mib` for a GPU runtime; legacy
   bundles without the block validate with a warning and are admitted without a

@@ -282,9 +282,9 @@ func readWeb(name string) ([]byte, error) {
 	return webFS.ReadFile("web/" + name)
 }
 
-// uiChat forwards one OpenAI chat request to a loaded model. It exists so the
-// local console can talk to model endpoints without CORS; the public contract
-// remains "load returns an endpoint".
+// uiChat forwards one OpenAI chat request through the scheduler so the local
+// console can talk to a model without CORS or child endpoints. It starts the
+// resident on demand.
 func (s *Server) uiChat(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Ref  string          `json:"ref"`
@@ -294,13 +294,28 @@ func (s *Server) uiChat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "ref and body are required"})
 		return
 	}
-	if s.Manager == nil {
-		writeError(w, http.StatusNotImplemented, errors.New("model manager is not configured"))
+	if s.Scheduler == nil || s.Manager == nil {
+		writeError(w, http.StatusNotImplemented, errors.New("scheduler is not configured"))
 		return
 	}
+	if ready, jobID, err := s.ensurePreload(r.Context(), req.Ref); err != nil {
+		writeGatewayError(w, http.StatusServiceUnavailable, "model_preparing", "server_busy", err.Error(), req.Ref, "", 5)
+		return
+	} else if !ready {
+		writeGatewayError(w, http.StatusServiceUnavailable, "model_preparing", "server_busy",
+			"model is being preloaded", req.Ref, jobID, s.preloadRetryAfter(jobID))
+		return
+	}
+	lease, gerr := s.acquireForRequest(r.Context(), req.Ref)
+	if gerr != nil {
+		gerr.write(w)
+		return
+	}
+	defer lease.Release()
 	endpoint, ok := s.Manager.Endpoint(req.Ref)
 	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": "model is not loaded"})
+		writeGatewayError(w, http.StatusServiceUnavailable, "model_starting", "server_busy",
+			"model endpoint is not ready", req.Ref, "", 2)
 		return
 	}
 	up, err := http.NewRequestWithContext(r.Context(), http.MethodPost, endpoint+"/v1/chat/completions", bytes.NewReader(req.Body))

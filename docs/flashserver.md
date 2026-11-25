@@ -46,12 +46,16 @@ Check the service:
 curl -s http://127.0.0.1:8790/health
 ```
 
-Load a model (desktop: Models → Load → Start):
+Preload a model (desktop: Models → Load); the scheduler starts it on demand:
 
 ```bash
 curl -H 'Content-Type: application/json' \
   -d '{"ref":"flashcli-bundle/<name>:<version>"}' \
-  http://127.0.0.1:8790/api/v1/models/load
+  http://127.0.0.1:8790/api/v1/models/preload
+
+curl -H 'Content-Type: application/json' \
+  -d '{"model":"flashcli-bundle/<name>:<version>","messages":[{"role":"user","content":"Hello"}]}' \
+  http://127.0.0.1:8790/v1/chat/completions
 ```
 
 ## Documentation

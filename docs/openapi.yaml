@@ -946,11 +946,12 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/models/load:
     post:
-      summary: Load a model
+      summary: Preload a model (legacy load alias)
       description: |
-        Requires a bundle with a `serve` entry. Run-only bundles are rejected
-        immediately with the bundle's own error message. With `"async": true`
-        the request returns a job id to poll via `/api/v1/jobs/{id}`.
+        Disk preload: downloads the bundle/weights and prepares the runtime/venv.
+        It never starts a serve process; resident start/stop is scheduler-owned
+        and starts on demand. The `async` field is accepted for old clients but
+        preload is always asynchronous.
       requestBody:
         required: true
         content:
@@ -963,22 +964,24 @@ paths:
                 async: { type: boolean, default: false }
       responses:
         '200':
-          description: Model ready (synchronous mode)
+          description: Already preloaded
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/LoadedModel' }
+              schema:
+                type: object
+                properties:
+                  ref: { type: string }
+                  preload: { type: string, const: preloaded }
+                  state: { type: string, const: preloaded }
         '202':
-          description: Load job accepted (async mode)
+          description: Preload job accepted or already running
           content:
             application/json:
               schema: { $ref: '#/components/schemas/JobRef' }
         '400':
           $ref: '#/components/responses/Error'
-        '409':
-          description: Resource exhausted (slot limit or free VRAM)
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
+        '501':
+          $ref: '#/components/responses/Error'
   /api/v1/models/options:
     get:
       summary: Read manifest serve options and saved values

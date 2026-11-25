@@ -112,7 +112,7 @@ func New(addr string) *Server {
 		LogDir:          logDir,
 		ServeSettings:   store,
 		Preload:         newPreloadStore(filepath.Join(paths.Home(), "flashserver", "preload.json")),
-		VRAMHeadroomMiB: 512,
+		VRAMHeadroomMiB: 0,
 
 		IdleStopSeconds:          600,
 		ResidentStartWaitSeconds: 10,
@@ -285,7 +285,6 @@ func (s *Server) Run(ctx context.Context) error {
 			s.Manager.Close(shutdownCtx)
 		}
 	}()
-	s.restoreOnStart(ctx)
 	log.Printf("flashserver %s listening on http://%s", version.Version, ln.Addr())
 	err = srv.Serve(ln)
 	if errors.Is(err, http.ErrServerClosed) {

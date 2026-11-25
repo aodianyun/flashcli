@@ -341,7 +341,7 @@ Telemetry is exposed at `/api/v1/devices` and `/api/v1/scheduler`.
 ```json
 {
   "max_loaded": 2,
-  "vram_headroom_mib": 512,
+  "vram_headroom_mib": 2048,
   "idle_stop_seconds": 600,
   "resident_start_wait_seconds": 10,
   "queue_timeout_seconds": 30,
@@ -352,6 +352,8 @@ Telemetry is exposed at `/api/v1/devices` and `/api/v1/scheduler`.
 }
 ```
 
+- `vram_headroom_mib` defaults to 2048 MiB and can be overridden by
+  `FLASHCLI_VRAM_HEADROOM_MIB` (or the config file).
 - `cpu_fallback` is `no-gpu-runtime` (default) or `disabled`; capacity never
   triggers CPU fallback.
 - `auto_pull_wait_seconds=0` returns the standard 503 immediately; a positive

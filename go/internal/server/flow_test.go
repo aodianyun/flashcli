@@ -39,11 +39,18 @@ func newFlowServer(t *testing.T, l Launcher) *Server {
 	t.Helper()
 	t.Setenv("FLASHCLI_HOME", t.TempDir())
 	store := newServeSettingsStore(filepath.Join(t.TempDir(), "serve-options.json"))
+	manager := NewManagerWithOptions(l, ManagerOptions{Inspect: fakeInspect, ServeSettings: store})
+	scheduler := NewScheduler(manager, SchedulerOptions{
+		Inspect:         fakeInspect,
+		Inventory:       func(context.Context) DeviceInventory { return inventoryFrom(nil, "") },
+		IdleStopSeconds: 3600,
+	})
 	return &Server{
 		Source:        fakeSource{},
 		Puller:        fakePuller{},
 		Jobs:          NewJobManager(),
-		Manager:       NewManagerWithOptions(l, ManagerOptions{Inspect: fakeInspect, ServeSettings: store}),
+		Manager:       manager,
+		Scheduler:     scheduler,
 		GPU:           func(context.Context) ([]gpu.Device, error) { return []gpu.Device{}, nil },
 		LogDir:        t.TempDir(),
 		Started:       time.Now(),
@@ -84,17 +91,32 @@ func TestModelLifecycleOverHTTP(t *testing.T) {
 	s := newFlowServer(t, &staticLauncher{endpoint: model.URL})
 	h := s.Handler()
 
-	rec, body := call(t, h, http.MethodPost, "/api/v1/models/load", `{"ref":"demo:1"}`)
-	if rec.Code != http.StatusOK {
+	rec, body := call(t, h, http.MethodPost, "/api/v1/models/load", `{"ref":"demo:1","async":true}`)
+	if rec.Code != http.StatusAccepted {
 		t.Fatalf("load = %d: %s", rec.Code, rec.Body.String())
 	}
-	if body["endpoint"] != model.URL {
-		t.Fatalf("endpoint = %v", body["endpoint"])
+	jobID, _ := body["job_id"].(string)
+	if jobID == "" || waitJobState(t, s.Jobs, jobID) != "done" {
+		t.Fatalf("load job = %v", body)
 	}
 
 	rec, body = call(t, h, http.MethodGet, "/api/v1/models", "")
-	if rec.Code != http.StatusOK || len(body["loaded"].([]any)) != 1 {
+	if rec.Code != http.StatusOK {
 		t.Fatalf("models = %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(body["loaded"].([]any)) != 0 {
+		t.Fatalf("preload started a resident: %s", rec.Body.String())
+	}
+	if m := findModel(t, body, "demo:1"); m == nil || m["preload"] != preloadReady {
+		t.Fatalf("model preload state = %v", m)
+	}
+
+	// Inference starts the resident on demand; the console never needs an
+	// exposed child endpoint.
+	rec, body = call(t, h, http.MethodPost, "/api/v1/ui/chat",
+		`{"ref":"demo:1","body":{"model":"demo","messages":[]}}`)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"id":"chat"`) {
+		t.Fatalf("ui chat = %d: %s", rec.Code, rec.Body.String())
 	}
 
 	rec, body = call(t, h, http.MethodGet, "/api/v1/models/loaded", "")
@@ -107,16 +129,6 @@ func TestModelLifecycleOverHTTP(t *testing.T) {
 		t.Fatalf("resources = %d: %s", rec.Code, rec.Body.String())
 	}
 
-	rec, body = call(t, h, http.MethodPost, "/api/v1/ui/chat",
-		`{"ref":"demo:1","body":{"model":"demo","messages":[]}}`)
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"id":"chat"`) {
-		t.Fatalf("ui chat = %d: %s", rec.Code, rec.Body.String())
-	}
-
-	rec, _ = call(t, h, http.MethodPost, "/api/v1/ui/chat", `{"ref":"other:1","body":{}}`)
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("ui chat unknown ref = %d", rec.Code)
-	}
 	rec, _ = call(t, h, http.MethodPost, "/api/v1/ui/chat", `{"body":{}}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("ui chat missing ref = %d", rec.Code)
