@@ -38,7 +38,7 @@
 | 分组 | 端点 | 说明 |
 |---|---|---|
 | 健康 / 版本 | `GET /health`、`GET /api/v1/version` | `/health` 不需要鉴权 |
-| 模型 | `GET /api/v1/models`、`GET /api/v1/models/loaded`、`POST /api/v1/models/load`、`POST /api/v1/models/unload`、`POST /api/v1/models/smoke`、`POST /api/v1/models/clean` | schema 见 [openapi.yaml](openapi.yaml) |
+| 模型 | `GET /api/v1/models`、`GET /api/v1/models/loaded`、`POST /api/v1/models/preload`、`POST /api/v1/models/load`、`POST /api/v1/models/unload`、`POST /api/v1/models/smoke`、`POST /api/v1/models/clean` | schema 见 [openapi.yaml](openapi.yaml) |
 | 模型参数 | `GET/PUT/DELETE /api/v1/models/options` | `serve_options` + 已保存的 host/port，见 [flashserver-desktop.zh-CN.md](flashserver-desktop.zh-CN.md#启动参数与局域网访问) |
 | 任务 | `POST /api/v1/pull`、`GET /api/v1/jobs/{id}`、`GET /api/v1/jobs/{id}/events`、`POST /api/v1/jobs/{id}/cancel` | 异步任务，进度也通过 `/api/v1/ws` 推送 |
 | 系统 | `GET /api/v1/system`、`GET /api/v1/gpu`、`GET /api/v1/gpu/history`、`GET /api/v1/resources`、`GET /api/v1/storage` | 遥测与容量 |
@@ -54,23 +54,25 @@ host 推理路由。
 
 ## 缓存模型生命周期
 
-- `POST /api/v1/pull` 下载 bundle、运行时和权重，不启动 serve。
+- `POST /api/v1/models/preload` 下载 bundle 和权重、准备运行时/venv，不启动 serve。
+  幂等；运行中返回 job。
+- `POST /api/v1/pull` 是底层下载任务；网关面向的磁盘操作是 `preload`。
 - `POST /api/v1/models/load` 为模型页显式启动 resident serve。
-- `POST /api/v1/models/unload` 停止 resident，缓存资产保留。
-- `POST /api/v1/models/clean` 删除 bundle、权重、运行时和缓存记录；仍被其他 ref
-  引用的共享权重/运行时保留。
+- `POST /api/v1/models/unload` 停止 resident 并删除 bundle、权重、运行时和缓存记录。
+  resident 或有 active 请求时返回 `409 model_busy`；`wait_seconds` 等待，`force`
+  先停止。仍被其他 ref 引用的共享 bundle/权重/运行时保留。
+- `POST /api/v1/models/clean` 是多 ref 清理版本；resident 模型会被跳过。
 
-网关契约在此基础上增加磁盘 `preload`、busy 感知的 `unload` 和由调度器管理的
-resident 启停；见
+网关契约在此基础上增加由调度器管理的 resident 启停；见
 [flashserver_gateway_scheduler_spec.zh-CN.md](flashserver_gateway_scheduler_spec.zh-CN.md)。
 
 ## 示例
 
 ```bash
-# 下载 bundle/运行时/权重，不启动模型
+# 预加载磁盘资产，不启动模型
 curl -H 'Content-Type: application/json' \
   -d '{"ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.0"}' \
-  http://127.0.0.1:8790/api/v1/pull
+  http://127.0.0.1:8790/api/v1/models/preload
 
 # 通过网关推理（调度器自动启动 resident）
 curl -H 'Content-Type: application/json' \

@@ -132,7 +132,7 @@ paths:
                     items: { $ref: '#/components/schemas/GpuSample' }
   /api/v1/system/history:
     get:
-      summary: Recent GPU + CPU telemetry samples (alias of /v1/gpu/history)
+      summary: Recent GPU + CPU telemetry samples (alias of /api/v1/gpu/history)
       parameters:
         - name: seconds
           in: query
@@ -198,7 +198,7 @@ paths:
           schema: { type: string }
         - name: tag
           in: query
-          description: Tag id from /v1/catalog/tags
+          description: Tag id from /api/v1/catalog/tags
           schema: { type: integer }
         - name: sort
           in: query
@@ -523,7 +523,7 @@ paths:
   /api/v1/storage/clean:
     post:
       summary: Remove the shared cache
-      description: "`cache` removes the download cache, base Python, and uv tools. Model bundles/weights/runtimes are removed per ref via /v1/models/clean. Legacy `python`/`tools` targets are accepted for older clients."
+      description: "`cache` removes the download cache, base Python, and uv tools. Model bundles/weights/runtimes are removed per ref via /api/v1/models/clean. Legacy `python`/`tools` targets are accepted for older clients."
       requestBody:
         required: true
         content:
@@ -646,7 +646,7 @@ paths:
       description: |
         Requires a bundle with a `serve` entry. Run-only bundles are rejected
         immediately with the bundle's own error message. With `"async": true`
-        the request returns a job id to poll via `/v1/jobs/{id}`.
+        the request returns a job id to poll via `/api/v1/jobs/{id}`.
       requestBody:
         required: true
         content:
@@ -729,9 +729,14 @@ paths:
                   ref: { type: string }
                   state: { type: string, const: defaults }
         '400': { $ref: '#/components/responses/Error' }
-  /api/v1/models/unload:
+  /api/v1/models/preload:
     post:
-      summary: Unload a model
+      summary: Preload a model's disk assets
+      description: |
+        Asynchronously downloads the bundle and weights and prepares the
+        runtime/venv. Never starts a serve process or reserves VRAM. Idempotent:
+        a running preload returns its job, and a completed preload returns
+        `preloaded` without a new job.
       requestBody:
         required: true
         content:
@@ -743,16 +748,64 @@ paths:
                 ref: { type: string }
       responses:
         '200':
-          description: Unloaded
+          description: Already preloaded
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   ref: { type: string }
-                  state: { type: string, const: unloaded }
-        '400':
-          $ref: '#/components/responses/Error'
+                  preload: { type: string, const: preloaded }
+        '202':
+          description: Preload job started or already running
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ref: { type: string }
+                  preload: { type: string, const: preloading }
+                  job_id: { type: string }
+                  state: { type: string }
+        '400': { $ref: '#/components/responses/Error' }
+        '501': { $ref: '#/components/responses/Error' }
+  /api/v1/models/unload:
+    post:
+      summary: Stop a resident model and delete its disk assets
+      description: |
+        Refused with `409 model_busy` while the model is resident or has active
+        requests. `wait_seconds` waits for it to become idle; `force` stops the
+        resident before deleting. Shared bundle/weights/runtime stay while
+        another cached ref references them.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ref]
+              properties:
+                ref: { type: string }
+                wait_seconds: { type: integer, minimum: 0, default: 0 }
+                force: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Unloaded (or already absent)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ref: { type: string }
+                  preload: { type: string, const: absent }
+                  removed: { type: boolean }
+                  freed_bytes: { type: integer, format: int64 }
+                  shared_bundle: { type: boolean }
+                  shared_weights: { type: boolean }
+                  shared_runtime: { type: boolean }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
   /api/v1/models/clean:
     post:
       summary: Remove local bundle/weights/runtime cache for models
@@ -784,7 +837,7 @@ paths:
   /api/v1/models/smoke:
     post:
       summary: Start a smoke test job for a ready model
-      description: "Run-only bundles execute `flashcli run <ref>`; started serve bundles receive one capability-appropriate ping request (chat, completions, responses, Anthropic messages, embeddings, or moderations) and modality-only models without one of those capabilities report an explicit error. Progress/output is streamed as a `smoke` job over /v1/ws and appended to <ref>.smoke.log."
+      description: "Run-only bundles execute `flashcli run <ref>`; started serve bundles receive one capability-appropriate ping request (chat, completions, responses, Anthropic messages, embeddings, or moderations) and modality-only models without one of those capabilities report an explicit error. Progress/output is streamed as a `smoke` job over /api/v1/ws and appended to <ref>.smoke.log."
       requestBody:
         required: true
         content:
@@ -1124,6 +1177,16 @@ components:
         weights_source: { type: string }
         weights_repo: { type: string }
         weights_revision: { type: string }
+        preload:
+          type: string
+          enum: [absent, preloading, preloaded, unloading]
+          description: Disk preload state (independent of resident state)
+        resident:
+          type: string
+          enum: [stopped, starting, ready, busy, stopping]
+          description: Resident lifecycle state owned by the scheduler
+        active_requests: { type: integer }
+        last_used: { type: string, format: date-time }
     LoadedModel:
       type: object
       properties:

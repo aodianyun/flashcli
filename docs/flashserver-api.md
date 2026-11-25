@@ -43,7 +43,7 @@ Authentication is off by default. With a token, every path except `/health`, `/`
 | Group | Endpoints | Notes |
 |---|---|---|
 | Health / version | `GET /health`, `GET /api/v1/version` | `health` is unauthenticated |
-| Models | `GET /api/v1/models`, `GET /api/v1/models/loaded`, `POST /api/v1/models/load`, `POST /api/v1/models/unload`, `POST /api/v1/models/smoke`, `POST /api/v1/models/clean` | Schema in [openapi.yaml](openapi.yaml) |
+| Models | `GET /api/v1/models`, `GET /api/v1/models/loaded`, `POST /api/v1/models/preload`, `POST /api/v1/models/load`, `POST /api/v1/models/unload`, `POST /api/v1/models/smoke`, `POST /api/v1/models/clean` | Schema in [openapi.yaml](openapi.yaml) |
 | Model options | `GET/PUT/DELETE /api/v1/models/options` | `serve_options` + saved host/port, see [flashserver-desktop.md](flashserver-desktop.md#startup-parameters-and-lan-access) |
 | Jobs | `POST /api/v1/pull`, `GET /api/v1/jobs/{id}`, `GET /api/v1/jobs/{id}/events`, `POST /api/v1/jobs/{id}/cancel` | Async work; progress also streams over `/api/v1/ws` |
 | System | `GET /api/v1/system`, `GET /api/v1/gpu`, `GET /api/v1/gpu/history`, `GET /api/v1/resources`, `GET /api/v1/storage` | Telemetry and capacity |
@@ -59,25 +59,31 @@ entry (script/native or unknown); `[]` means host inference routes are disabled.
 
 ## Cached model lifecycle
 
-- `POST /api/v1/pull` downloads the bundle, runtime, and weights without
-  starting a serve process.
+- `POST /api/v1/models/preload` downloads the bundle and weights and prepares
+  the runtime/venv without starting a serve process. It is idempotent and
+  returns a job while running.
+- `POST /api/v1/pull` is the legacy low-level download job; `preload` is the
+  gateway-facing disk operation.
 - `POST /api/v1/models/load` starts a resident serve process for the model page.
-- `POST /api/v1/models/unload` stops the resident process; cached assets remain.
-- `POST /api/v1/models/clean` deletes bundle, weights, runtime, and cache
-  records. Shared weights/runtime are kept while another cached ref references
-  them.
+- `POST /api/v1/models/unload` stops the resident process and deletes bundle,
+  weights, runtime, and cache records. It returns `409 model_busy` while the
+  model is resident or has active requests; `wait_seconds` waits and `force`
+  stops it first. Shared bundle/weights/runtime are kept while another cached
+  ref references them.
+- `POST /api/v1/models/clean` is the multi-ref cleanup variant; resident models
+  are skipped.
 
-The gateway contract adds disk `preload`, busy-aware `unload`, and scheduler-owned
-resident start/stop on top of these primitives; see
+The gateway contract adds scheduler-owned resident start/stop on top of these
+disk primitives; see
 [flashserver_gateway_scheduler_spec.md](flashserver_gateway_scheduler_spec.md).
 
 ## Examples
 
 ```bash
-# download bundle/runtime/weights without starting the model
+# preload disk assets without starting the model
 curl -H 'Content-Type: application/json' \
   -d '{"ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.0"}' \
-  http://127.0.0.1:8790/api/v1/pull
+  http://127.0.0.1:8790/api/v1/models/preload
 
 # inference through the gateway (the scheduler starts the resident)
 curl -H 'Content-Type: application/json' \

@@ -1,6 +1,7 @@
 package host
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,10 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/paths"
 )
 
+// ErrNotCached reports that a ref has no cached bundle marker (nothing to
+// remove). Unload treats it as an idempotent success.
+var ErrNotCached = errors.New("model is not cached")
+
 // RemoveResult reports what was removed for one model reference.
 type RemoveResult struct {
 	Ref           string `json:"ref"`
@@ -17,6 +22,7 @@ type RemoveResult struct {
 	FreedBytes    int64  `json:"freed_bytes"`
 	SharedBundle  bool   `json:"shared_bundle,omitempty"`
 	SharedWeights bool   `json:"shared_weights,omitempty"`
+	SharedRuntime bool   `json:"shared_runtime,omitempty"`
 }
 
 // RemoveCachedRef deletes the cached bundle/weights for every marker of ref.
@@ -30,11 +36,12 @@ func RemoveCachedRef(ref string) (RemoveResult, error) {
 	}
 	targets, others := splitMarkers(Markers(), ref)
 	if len(targets) == 0 {
-		return RemoveResult{}, fmt.Errorf("model %q is not cached", ref)
+		return RemoveResult{}, fmt.Errorf("%w: %q", ErrNotCached, ref)
 	}
 
 	bundlesRoot := paths.Bundles()
-	sharedBundles, sharedWeights, _ := sharedCacheKeys(others)
+	sharedBundles, sharedWeights, sharedRuntimes := sharedCacheKeys(others)
+	rtIndex := readRuntimeIndex()
 	res := RemoveResult{Ref: ref, Removed: true}
 	for _, marker := range targets {
 		key := stringValue(marker["cache_key"])
@@ -51,6 +58,9 @@ func RemoveCachedRef(ref string) (RemoveResult, error) {
 		weightsKey := markerWeightsKey(marker, key, stringValue(marker["bundle_root"]))
 		if weightsKey != "" && sharedWeights[weightsKey] {
 			res.SharedWeights = true
+		}
+		if runtimeID := markerRuntimeID(marker, rtIndex); runtimeID != "" && sharedRuntimes[runtimeID] {
+			res.SharedRuntime = true
 		}
 	}
 

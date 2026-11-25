@@ -37,6 +37,7 @@ func (l *staticLauncher) Start(_ context.Context, refStr string, _ int) (ServePr
 
 func newFlowServer(t *testing.T, l Launcher) *Server {
 	t.Helper()
+	t.Setenv("FLASHCLI_HOME", t.TempDir())
 	store := newServeSettingsStore(filepath.Join(t.TempDir(), "serve-options.json"))
 	return &Server{
 		Source:        fakeSource{},
@@ -47,6 +48,7 @@ func newFlowServer(t *testing.T, l Launcher) *Server {
 		LogDir:        t.TempDir(),
 		Started:       time.Now(),
 		ServeSettings: store,
+		Preload:       newPreloadStore(filepath.Join(t.TempDir(), "preload.json")),
 	}
 }
 
@@ -124,7 +126,7 @@ func TestModelLifecycleOverHTTP(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("load without ref = %d", rec.Code)
 	}
-	rec, _ = call(t, h, http.MethodPost, "/api/v1/models/unload", `{"ref":"demo:1"}`)
+	rec, _ = call(t, h, http.MethodPost, "/api/v1/models/unload", `{"ref":"demo:1","force":true}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("unload = %d: %s", rec.Code, rec.Body.String())
 	}

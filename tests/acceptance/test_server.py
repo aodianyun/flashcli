@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 import urllib.parse
 import urllib.request
 
@@ -82,8 +83,8 @@ def test_server_load_native_bundle_over_http(flashserver_bin, flashcli_bin, cli_
         status, storage = http_json(f"{base}/api/v1/storage")
         assert status == 200 and storage["areas"]
 
-        status, unloaded = http_json(f"{base}/api/v1/models/unload", {"ref": ref})
-        assert status == 200 and unloaded["state"] == "unloaded"
+        status, unloaded = http_json(f"{base}/api/v1/models/unload", {"ref": ref, "force": True})
+        assert status == 200 and unloaded["preload"] == "absent"
 
         status, current = http_json(f"{base}/api/v1/models/loaded")
         assert status == 200 and current["models"] == []
@@ -100,5 +101,56 @@ def test_server_rejects_run_only_bundle(flashserver_bin, flashcli_bin, cli_env, 
         status, body = http_json(f"{base}/api/v1/models/load", {"ref": str(bundle)})
         assert status >= 400
         assert "run-only" in json.dumps(body)
+    finally:
+        _stop(server)
+
+
+def _wait_disk_state(base, ref, want, timeout=60):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        _, body = http_json(f"{base}/api/v1/models")
+        for model in body["models"]:
+            if model["ref"] == ref and model.get("preload") == want:
+                return model
+        time.sleep(0.2)
+    raise AssertionError(f"{ref} did not reach preload={want}")
+
+
+def test_server_preload_is_disk_only(flashserver_bin, flashcli_bin, cli_env, home):
+    port = free_port()
+    server = _start_server(flashserver_bin, flashcli_bin, cli_env, home, port)
+    base = f"http://127.0.0.1:{port}"
+    bundle = prepare_bundle("exec_echo_http", home)
+    ref = str(bundle)
+    try:
+        status, body = http_json(f"{base}/api/v1/models/preload", {"ref": ref})
+        assert status in (200, 202), body
+        job_id = body.get("job_id")
+        if job_id:
+            deadline = time.time() + 60
+            while time.time() < deadline:
+                _, job = http_json(f"{base}/api/v1/jobs/{job_id}")
+                if job["state"] in ("done", "failed"):
+                    break
+                time.sleep(0.2)
+            assert job["state"] == "done", job
+
+        model = _wait_disk_state(base, ref, "preloaded")
+        assert model["resident"] == "stopped"
+
+        # Preload never spawns a serve process.
+        _, loaded = http_json(f"{base}/api/v1/models/loaded")
+        assert loaded["models"] == []
+
+        _, gateway = http_json(f"{base}/v1/models")
+        assert any(item["id"] == ref for item in gateway["data"])
+
+        # A local dev bundle has no cache marker; unload removes only the record
+        # and leaves the source tree alone.
+        status, body = http_json(f"{base}/api/v1/models/unload", {"ref": ref})
+        assert status == 200 and body["preload"] == "absent"
+        assert bundle.exists()
+        _, body = http_json(f"{base}/api/v1/models")
+        assert all(item["ref"] != ref for item in body["models"])
     finally:
         _stop(server)

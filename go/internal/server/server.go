@@ -54,7 +54,12 @@ type Server struct {
 	// AppService returns the shared application service (nil = default).
 	AppService func() *apps.Service
 
+	// Preload persists explicit disk-preload intent across restarts.
+	Preload *preloadStore
+
 	pullBusy atomic.Bool
+
+	preloadMu sync.Mutex
 
 	histMu   sync.Mutex
 	history  []GpuSample
@@ -88,6 +93,7 @@ func New(addr string) *Server {
 		Started:       time.Now(),
 		LogDir:        logDir,
 		ServeSettings: store,
+		Preload:       newPreloadStore(filepath.Join(paths.Home(), "flashserver", "preload.json")),
 	}
 }
 
@@ -126,6 +132,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/jobs/{id}/events", s.jobEvents)
 	mux.HandleFunc("POST /api/v1/jobs/{id}/cancel", s.cancelJob)
 	mux.HandleFunc("POST /api/v1/models/load", s.loadModel)
+	mux.HandleFunc("POST /api/v1/models/preload", s.preloadModel)
 	mux.HandleFunc("POST /api/v1/models/unload", s.unloadModel)
 	mux.HandleFunc("GET /api/v1/models/options", s.getModelOptions)
 	mux.HandleFunc("PUT /api/v1/models/options", s.putModelOptions)
@@ -178,6 +185,7 @@ func (s *Server) Run(ctx context.Context) error {
 	// still shows earlier activity.
 	InitLogFile(filepath.Join(paths.Home(), "logs", "flashserver.log"))
 	s.startGPUHistory(ctx)
+	s.reconcilePreloads(ctx)
 	go s.forwardJobs(ctx)
 	// Go treats the IPv4 wildcard 0.0.0.0 as a wildcard and may bind a
 	// dual-stack socket. Windows' WSL localhost relay then exposes only ::1,
@@ -227,12 +235,19 @@ func (s *Server) version(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) models(w http.ResponseWriter, r *http.Request) {
-	models, err := s.Source.Models(r.Context())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
+	var models []host.Model
+	if s.Source != nil {
+		var err error
+		models, err = s.Source.Models(r.Context())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"models": models, "loaded": s.loaded()})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"models": s.modelViews(r.Context(), models),
+		"loaded": s.loaded(),
+	})
 }
 
 func (s *Server) loadedModels(w http.ResponseWriter, _ *http.Request) {
