@@ -61,6 +61,6 @@ curl -H 'Content-Type: application/json' \
 |---|---|
 | 安装、配置、端口、磁盘、生命周期、卸载、排障 | [flashserver-install.zh-CN.md](flashserver-install.zh-CN.md) |
 | 桌面客户端与按模型启动参数 | [flashserver-desktop.zh-CN.md](flashserver-desktop.zh-CN.md) |
-| HTTP API 目录与示例 | [flashserver-api.zh-CN.md](flashserver-api.zh-CN.md) · [openapi.yaml](openapi.yaml) |
+| HTTP API 目录与示例 | [flashserver-api.zh-CN.md](flashserver-api.zh-CN.md) · [openapi.yaml](../go/internal/server/openapi.yaml) |
 | 内部实现（进程模型、共享 host 层） | [architecture.zh-CN.md](architecture.zh-CN.md#本地服务栈desktopflashserverflashserver-setup) |
 | 干净虚拟机上的安装验收 | [installer/windows/README.md](../installer/windows/README.md) |

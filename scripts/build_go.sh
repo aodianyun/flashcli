@@ -29,7 +29,8 @@ if [ -z "$VERSION" ]; then
   echo "error: empty version" >&2
   exit 1
 fi
-echo "flashcli-go version: $VERSION"
+GO="${GO:-go}"
+echo "flashcli-go version: $VERSION (go: $GO)"
 
 mkdir -p "$OUT"
 targets=("${FLASHCLI_GO_TARGETS:-linux/amd64 linux/arm64}")
@@ -40,14 +41,14 @@ for target in ${targets[*]}; do
     name="${cmd}-${goos}-${goarch}"
     echo "building $name ..."
     ( cd "$ROOT/go" && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-        go build -trimpath -buildvcs=false -ldflags "-s -w -X ${GO_PKG}=${VERSION}" \
+        "$GO" build -trimpath -buildvcs=false -ldflags "-s -w -X ${GO_PKG}=${VERSION}" \
         -o "$OUT/$name" "./cmd/$cmd" )
   done
   setup_name="flashserver-setup-${goos}-${goarch}"
   [ "$goos" = "windows" ] && setup_name="${setup_name}.exe"
   echo "building $setup_name ..."
   ( cd "$ROOT/go" && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-      go build -trimpath -buildvcs=false -ldflags "-s -w -X ${GO_PKG}=${VERSION}" \
+      "$GO" build -trimpath -buildvcs=false -ldflags "-s -w -X ${GO_PKG}=${VERSION}" \
       -o "$OUT/$setup_name" ./cmd/flashserver-setup )
 done
 
@@ -59,7 +60,7 @@ for target in ${FLASHCLI_SETUP_WINDOWS_TARGETS:-windows/amd64}; do
   name="flashserver-setup-${goos}-${goarch}.exe"
   echo "building $name ..."
   ( cd "$ROOT/go" && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-      go build -trimpath -buildvcs=false -ldflags "-s -w -X ${GO_PKG}=${VERSION}" \
+      "$GO" build -trimpath -buildvcs=false -ldflags "-s -w -X ${GO_PKG}=${VERSION}" \
       -o "$OUT/$name" ./cmd/flashserver-setup )
 done
 

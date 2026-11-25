@@ -72,6 +72,16 @@ echo "[e2e] flashserver=$FLASHSERVER_BIN"
 echo "[e2e] heavy=$HEAVY network=$NETWORK home=$FLASHCLI_ACCEPTANCE_HOME"
 "$PY" -m pytest "$ROOT/tests/acceptance" -q
 
+if [ "$HEAVY" = 1 ]; then
+  echo "[e2e] network requirement checks"
+  "$PY" -m pytest -o addopts= "$ROOT/tests/test_bundle_requirement_import.py" -m network -q
+fi
+
+if [ "$NETWORK" = 1 ]; then
+  echo "[e2e] release-only build checks"
+  "$PY" -m pytest -o addopts= "$ROOT/tests/test_build_go.py" -m release -q
+fi
+
 commit="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
 mkdir -p "$ROOT/dist"
 cat > "$ROOT/dist/e2e-pass.json" <<JSON

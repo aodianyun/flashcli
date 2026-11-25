@@ -1,6 +1,8 @@
-"""M6 gate: the Go release build injects the pyproject version and checksums.
+"""Release-only build checks: version injection and source install.
 
-Skipped when the Go toolchain or bash is unavailable.
+These run real release/install builds, so they are marked `release` and excluded
+from the default Tier 1 run. Run them with `pytest -m release tests/` in the
+release gate.
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ def _pyproject_version() -> str:
     return match.group(1)
 
 
+@pytest.mark.release
 def test_build_go_injects_version(tmp_path: Path) -> None:
     if shutil.which("go") is None or shutil.which("bash") is None:
         pytest.skip("go toolchain or bash not available")
@@ -62,6 +65,7 @@ def test_installer_scripts_syntax() -> None:
             assert proc.returncode == 0, f"{script}: {proc.stderr}"
 
 
+@pytest.mark.release
 def test_install_sh_builds_from_source(tmp_path: Path) -> None:
     if shutil.which("sh") is None or shutil.which("go") is None or shutil.which("bash") is None:
         pytest.skip("sh/go/bash not available")

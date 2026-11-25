@@ -77,9 +77,9 @@ Rules:
 
 ## 7. Contract documentation sync
 
-- `docs/openapi.yaml` is the source of truth for the HTTP contract. Copy it to
-  `go/internal/server/openapi.yaml` in the same change; `TestOpenAPISpecInSync`
-  fails if they drift.
+- `go/internal/server/openapi.yaml` is the **single** source of truth for the
+  HTTP contract. It is embedded in the daemon and served at `/openapi.yaml`.
+  Do not keep a second copy under `docs/`.
 - An endpoint or schema change also updates `docs/flashserver-api.md` +
   `.zh-CN.md` and the embedded console reference
   `go/internal/server/web/docs.html`. These are not generated from OpenAPI.

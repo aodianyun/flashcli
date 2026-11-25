@@ -155,5 +155,5 @@ pytest tests/test_serve_protocols.py tests/test_serve_protocol_matrix.py
 
 - [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) —— manifest、目录、发布
 - [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) —— `entry.kind` 后端
-- [openapi.yaml](openapi.yaml) —— `flashserver` 的 host HTTP 契约（非 bundle serve）
+- [openapi.yaml](../go/internal/server/openapi.yaml) —— `flashserver` 的 host HTTP 契约（非 bundle serve）
 - [bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md) —— 构建与发布流程

@@ -12,7 +12,7 @@ Two namespaces share the port:
 - `/api/v1/*` — **management API**: cached models, disk preload/unload, jobs,
   applications, telemetry, logs, and the management WebSocket.
 
-[openapi.yaml](openapi.yaml) is the **authoritative** contract and is also served
+[openapi.yaml](../go/internal/server/openapi.yaml) is the **authoritative** contract and is also served
 at `/openapi.yaml`; an HTML reference is at `/docs`. Gateway and scheduler
 behavior is specified in
 [flashserver_gateway_scheduler_spec.md](flashserver_gateway_scheduler_spec.md).
@@ -56,7 +56,7 @@ Authentication is off by default. With a token, every path except `/health`, `/`
 | Group | Endpoints | Notes |
 |---|---|---|
 | Health / version | `GET /health`, `GET /api/v1/version` | `health` is unauthenticated |
-| Models | `GET /api/v1/models`, `POST /api/v1/models/preload`, `POST /api/v1/models/unload`, `POST /api/v1/models/clean` | Schema in [openapi.yaml](openapi.yaml) |
+| Models | `GET /api/v1/models`, `POST /api/v1/models/preload`, `POST /api/v1/models/unload`, `POST /api/v1/models/clean` | Schema in [openapi.yaml](../go/internal/server/openapi.yaml) |
 | Model options | `GET/PUT/DELETE /api/v1/models/options` | `serve_options` + saved host/port, see [flashserver-desktop.md](flashserver-desktop.md#startup-parameters-and-lan-access) |
 | Jobs | `GET /api/v1/jobs/{id}`, `GET /api/v1/jobs/{id}/events`, `POST /api/v1/jobs/{id}/cancel` | Async job handles for preload, install/prepare/setup; progress also streams over `/api/v1/ws` |
 | System | `GET /api/v1/system`, `GET /api/v1/gpu`, `GET /api/v1/gpu/history`, `GET /api/v1/resources`, `GET /api/v1/devices`, `GET /api/v1/scheduler`, `GET /api/v1/storage` | Telemetry, device inventory, and placement answers |
@@ -146,4 +146,4 @@ curl -H 'Content-Type: application/json' \
 
 Disk accounting and cleanup paths come from the shared `host` layer, so the CLI
 and the API always agree. Idempotency, error codes, and payloads are specified in
-[openapi.yaml](openapi.yaml).
+[openapi.yaml](../go/internal/server/openapi.yaml).

@@ -53,16 +53,6 @@ func TestServerLogRing(t *testing.T) {
 	}
 }
 
-func TestOpenAPISpecInSync(t *testing.T) {
-	doc, err := os.ReadFile(filepath.Join("..", "..", "..", "docs", "openapi.yaml"))
-	if err != nil {
-		t.Fatalf("read docs/openapi.yaml: %v", err)
-	}
-	if string(doc) != string(openapiDoc) {
-		t.Fatal("docs/openapi.yaml and go/internal/server/openapi.yaml differ; copy the docs file into the server package")
-	}
-}
-
 func TestGpuHistorySamples(t *testing.T) {
 	util := 37
 	s := &Server{GPU: func(context.Context) ([]gpu.Device, error) {

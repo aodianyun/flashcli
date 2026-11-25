@@ -69,8 +69,8 @@
 
 ## 7. 契约文档同步
 
-- `docs/openapi.yaml` 是 HTTP 契约的唯一来源。修改时必须在同一次变更中复制到
-  `go/internal/server/openapi.yaml`；两者不一致会导致 `TestOpenAPISpecInSync` 失败。
+- `go/internal/server/openapi.yaml` 是 HTTP 契约的**唯一**来源，嵌入 daemon 并通过
+  `/openapi.yaml` 提供。不要在 `docs/` 下再存一份。
 - 端点或 schema 变更还要更新 `docs/flashserver-api.md` + `.zh-CN.md`，以及内嵌控制台
   参考页 `go/internal/server/web/docs.html`。它们不会从 OpenAPI 自动生成。
 - 删除或重命名端点时，全仓搜索旧路径，增加验收测试确认已不可用，并确认返回 404。

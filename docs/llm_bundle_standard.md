@@ -163,5 +163,5 @@ capability. Use `FLASHCLI_SERVE_BUSY_TIMEOUT_SEC` to tune busy behavior
 
 - [bundle_publish_standard.md](bundle_publish_standard.md) — manifest, layout, publishing
 - [bundle_execution_abi.md](bundle_execution_abi.md) — `entry.kind` backends
-- [openapi.yaml](openapi.yaml) — host HTTP surface for `flashserver` (not bundle serve)
+- [openapi.yaml](../go/internal/server/openapi.yaml) — host HTTP surface for `flashserver` (not bundle serve)
 - [bundle_builder_guide.md](bundle_builder_guide.md) — build and release workflow

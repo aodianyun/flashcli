@@ -10,7 +10,7 @@
 - `/api/v1/*` — **管理 API**：缓存模型、磁盘 preload/unload、任务、应用、遥测、日志
   和管理 WebSocket。
 
-[openapi.yaml](openapi.yaml) 是**权威契约**，服务也在 `/openapi.yaml` 提供；HTML 参考页在
+[openapi.yaml](../go/internal/server/openapi.yaml) 是**权威契约**，服务也在 `/openapi.yaml` 提供；HTML 参考页在
 `/docs`。网关与调度行为以
 [flashserver_gateway_scheduler_spec.zh-CN.md](flashserver_gateway_scheduler_spec.zh-CN.md)
 为准。
@@ -47,7 +47,7 @@
 | 分组 | 端点 | 说明 |
 |---|---|---|
 | 健康 / 版本 | `GET /health`、`GET /api/v1/version` | `/health` 不需要鉴权 |
-| 模型 | `GET /api/v1/models`、`POST /api/v1/models/preload`、`POST /api/v1/models/unload`、`POST /api/v1/models/clean` | schema 见 [openapi.yaml](openapi.yaml) |
+| 模型 | `GET /api/v1/models`、`POST /api/v1/models/preload`、`POST /api/v1/models/unload`、`POST /api/v1/models/clean` | schema 见 [openapi.yaml](../go/internal/server/openapi.yaml) |
 | 模型参数 | `GET/PUT/DELETE /api/v1/models/options` | `serve_options` + 已保存的 host/port，见 [flashserver-desktop.zh-CN.md](flashserver-desktop.zh-CN.md#启动参数与局域网访问) |
 | 任务 | `GET /api/v1/jobs/{id}`、`GET /api/v1/jobs/{id}/events`、`POST /api/v1/jobs/{id}/cancel` | preload、install/prepare/setup 的异步任务句柄，进度也通过 `/api/v1/ws` 推送 |
 | 系统 | `GET /api/v1/system`、`GET /api/v1/gpu`、`GET /api/v1/gpu/history`、`GET /api/v1/resources`、`GET /api/v1/devices`、`GET /api/v1/scheduler`、`GET /api/v1/storage` | 遥测、设备盘点与 placement 结果 |
@@ -123,4 +123,4 @@ curl -H 'Content-Type: application/json' \
   ref 引用的共享权重/运行时保留；两个接口都返回释放字节数。
 
 磁盘统计和清理路径来自共享的 `host` 层，因此 CLI 与 API 始终一致。幂等性、错误码和
-请求/响应结构以 [openapi.yaml](openapi.yaml) 为准。
+请求/响应结构以 [openapi.yaml](../go/internal/server/openapi.yaml) 为准。

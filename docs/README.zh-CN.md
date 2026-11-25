@@ -10,10 +10,13 @@
 | 文档 | 受众 | 内容 |
 |------|------|------|
 | [../README.zh-CN.md](../README.zh-CN.md) | 用户 | 安装、`run`/`serve`、更新动态、文档入口 |
-| [../CONTRIBUTING.md](../CONTRIBUTING.md) | 贡献者 | 仓库结构、开发环境、二进制/桌面构建、Git 流程、发布清单与说明规范 |
+| [../CONTRIBUTING.md](../CONTRIBUTING.md) | 贡献者 | 仓库结构、开发环境、Git 流程、PR 规则、验证文档索引 |
 | [documentation_standard.zh-CN.md](documentation_standard.zh-CN.md) | 贡献者 | **权威** 文档目录、命名、镜像、索引与检查清单 |
+| [development_verification_standard.zh-CN.md](development_verification_standard.zh-CN.md) | 贡献者 | **权威** 合并前验证分层、测试二进制、契约检查、PR 完成标准 |
+| [release_verification_standard.zh-CN.md](release_verification_standard.zh-CN.md) | 维护者 | **权威** 发布门禁、版本号、资产、发布、说明与发布后检查 |
 | [flashserver.zh-CN.md](flashserver.zh-CN.md) | 用户 / 集成方 | `flashserver`、`flashserver-setup`、桌面客户端：安装、API、启动参数、生命周期、排障 |
-| [openapi.yaml](openapi.yaml) | 集成方 | **权威** HTTP 契约（也通过 `/openapi.yaml` 提供） |
+| [flashserver-api.zh-CN.md](flashserver-api.zh-CN.md) | 集成方 | API 端点索引与示例；schema 见 openapi.yaml |
+| [../go/internal/server/openapi.yaml](../go/internal/server/openapi.yaml) | 集成方 | **权威** HTTP 契约（嵌入并通过 `/openapi.yaml` 提供） |
 | [environment.zh-CN.md](environment.zh-CN.md) | 用户 | Go host 读取的环境变量、镜像、缓存路径 |
 | [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md) | 集成方 | preset ref 语法 + 终端用户运行时流程 |
 | [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) | bundle 作者 | **权威** manifest、entry、`.so`、FlashHub 布局 |
@@ -38,9 +41,9 @@
   上对应的 bundle 页面（ref、模型参数）→ [environment.zh-CN.md](environment.zh-CN.md)
   （镜像与缓存位置）。
 - **本地服务用户** —— 根 README → [flashserver.zh-CN.md](flashserver.zh-CN.md)
-  （安装包、桌面客户端、API、启动参数）→ 集成时读 [openapi.yaml](openapi.yaml)。
+  （安装包、桌面客户端、API、启动参数）→ 集成时读 [openapi.yaml](../go/internal/server/openapi.yaml)。
 - **集成方** —— [model_bundle_standard.zh-CN.md](model_bundle_standard.zh-CN.md)（ref）→
-  [openapi.yaml](openapi.yaml)（HTTP）→ [environment.zh-CN.md](environment.zh-CN.md)。
+  [openapi.yaml](../go/internal/server/openapi.yaml)（HTTP）→ [environment.zh-CN.md](environment.zh-CN.md)。
 - **bundle 作者** —— [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) →
   [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) →
   [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)（LLM/音频/图像/视频 serve）→

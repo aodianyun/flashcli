@@ -64,6 +64,6 @@ curl -H 'Content-Type: application/json' \
 |---|---|
 | Install, config, ports, disk, lifecycle, uninstall, troubleshooting | [flashserver-install.md](flashserver-install.md) |
 | Desktop client and per-model startup parameters | [flashserver-desktop.md](flashserver-desktop.md) |
-| HTTP API index and examples | [flashserver-api.md](flashserver-api.md) · [openapi.yaml](openapi.yaml) |
+| HTTP API index and examples | [flashserver-api.md](flashserver-api.md) · [openapi.yaml](../go/internal/server/openapi.yaml) |
 | Internals (process model, shared host layer) | [architecture.md](architecture.md#local-service-stack-desktop-flashserver-flashserver-setup) |
 | Installer acceptance on a clean VM | [installer/windows/README.md](../installer/windows/README.md) |

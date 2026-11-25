@@ -103,7 +103,7 @@ flowchart LR
 `flashserver` never imports Python infer code: it prepares and serves models by
 running `flashcli`, so both frontends share one cache implementation. Its state
 lives under `$FLASHCLI_HOME/flashserver/` (`serve-options.json`, per-model serve
-logs). The HTTP contract is [openapi.yaml](openapi.yaml); user-facing behavior is
+logs). The HTTP contract is [openapi.yaml](../go/internal/server/openapi.yaml); user-facing behavior is
 [flashserver.md](flashserver.md).
 
 ### Data plane vs control plane

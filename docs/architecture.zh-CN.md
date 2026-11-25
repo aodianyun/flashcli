@@ -98,7 +98,7 @@ flowchart LR
   SRV --> HOST
 ```
 
-`flashserver` 不导入任何 Python infer 代码：它通过运行 `flashcli` 来准备并服务模型，因此两个前端共用同一套缓存实现。其状态位于 `$FLASHCLI_HOME/flashserver/`（`serve-options.json`、每模型 serve 日志）。HTTP 契约见 [openapi.yaml](openapi.yaml)，面向用户的行为见 [flashserver.zh-CN.md](flashserver.zh-CN.md)。
+`flashserver` 不导入任何 Python infer 代码：它通过运行 `flashcli` 来准备并服务模型，因此两个前端共用同一套缓存实现。其状态位于 `$FLASHCLI_HOME/flashserver/`（`serve-options.json`、每模型 serve 日志）。HTTP 契约见 [openapi.yaml](../go/internal/server/openapi.yaml)，面向用户的行为见 [flashserver.zh-CN.md](flashserver.zh-CN.md)。
 
 ### 数据面与控制面
 

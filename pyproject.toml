@@ -16,4 +16,8 @@ dependencies = []
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["--ignore=tests/bench"]
+addopts = ["--ignore=tests/bench", "-m", "not release and not network"]
+markers = [
+  "release: release-only build and packaging checks",
+  "network: requires PyPI/network access (venv pip install)",
+]

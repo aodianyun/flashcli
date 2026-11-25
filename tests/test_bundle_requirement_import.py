@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from flashcli_bundle.runtime.requirements_spec import (
     import_name_for_requirement,
     requirement_import_failure_reason,
@@ -29,6 +31,7 @@ def test_opencv_contrib_import_name() -> None:
     assert import_name_for_requirement("opencv-contrib-python") == "cv2"
 
 
+@pytest.mark.network
 def test_requirement_satisfied_dm_tree_when_installed(tmp_path: Path) -> None:
     venv = tmp_path / "venv"
     subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
@@ -37,6 +40,7 @@ def test_requirement_satisfied_dm_tree_when_installed(tmp_path: Path) -> None:
     assert requirement_import_satisfied("dm-tree", python=py)
 
 
+@pytest.mark.network
 def test_requirement_satisfied_opencv_headless_when_installed(tmp_path: Path) -> None:
     venv = tmp_path / "venv"
     subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
@@ -48,6 +52,7 @@ def test_requirement_satisfied_opencv_headless_when_installed(tmp_path: Path) ->
     assert requirement_import_satisfied("opencv-python-headless>=4.5,<4.13", python=py)
 
 
+@pytest.mark.network
 def test_requirement_satisfied_by_distribution_metadata(tmp_path: Path) -> None:
     venv = tmp_path / "venv"
     subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
@@ -56,6 +61,7 @@ def test_requirement_satisfied_by_distribution_metadata(tmp_path: Path) -> None:
     assert requirement_import_satisfied("packaging>=23.0", python=py)
 
 
+@pytest.mark.network
 def test_requirement_unsatisfied_when_version_below_specifier(tmp_path: Path) -> None:
     venv = tmp_path / "venv"
     subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
@@ -79,6 +85,7 @@ def test_requirement_unsatisfied_when_metadata_ok_but_import_missing(tmp_path: P
     assert not requirement_import_satisfied("click==8.1.8", python=py)
 
 
+@pytest.mark.network
 def test_requirement_satisfied_when_bundle_root_shadows_pypi_name(
     tmp_path: Path,
 ) -> None:
@@ -137,6 +144,7 @@ def test_requirement_failure_reason_reports_missing_distribution(tmp_path: Path)
     assert "not installed" in reason
 
 
+@pytest.mark.network
 def test_requirement_satisfied_ignores_host_pythonpath_shadow(tmp_path: Path) -> None:
     venv = tmp_path / "venv"
     shadow = tmp_path / "shadow"

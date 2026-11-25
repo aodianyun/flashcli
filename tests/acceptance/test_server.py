@@ -89,6 +89,13 @@ def test_server_settings(flashserver_bin, flashcli_bin, cli_env, home):
         )
         assert status == 400, "scheduler settings must be read-only"
 
+        # The single embedded OpenAPI document is what the daemon serves.
+        with urllib.request.urlopen(base + "/openapi.yaml", timeout=10) as resp:
+            contract = resp.read().decode()
+        assert "/api/v1/settings" in contract
+        assert "/api/v1/pull" not in contract
+        assert "/api/v1/mirror" not in contract
+
         # The old one-off endpoints are gone, not merely undocumented.
         for path, payload in (
             ("/api/v1/mirror", {"enabled": True}),

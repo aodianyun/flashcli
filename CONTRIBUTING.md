@@ -33,11 +33,15 @@ flashcli **distributes and loads** Model Bundles; inference lives in bundle `ent
 
 | Phase | Steps |
 |---|---|
-| **Develop** | Branch off `dev` → code → tier 1 (`go test ./...`, `pytest tests/`, `gofmt -l .`) → apply the change-impact checklist → PR into `dev`. |
+| **Develop** | Branch off `dev` → code → tier 1 (`go test ./...`, `pytest tests/`, `gofmt -l .`) → apply the contract checklist → PR into `dev`. |
 | **Integrate** | Review → tier 2 (`verify_e2e.sh`) → rebase/squash into `dev`; run tier 2h (`--heavy`) before `main` or a release candidate. |
 | **Release** | Bump versions on `dev` → sync `dev` → `main` (maintainer approval) → live index check → tier 3 gate (`--heavy --network`) → Windows installer → release notes → `release_go.sh --upload` → `verify_release.sh`. |
 
-Details: [Development setup](#development-setup) · [Git workflow](#git-workflow) · [Releases](#releases).
+Branch exception: local-only, unpushed maintenance explicitly requested by the
+maintainer may be committed directly on `dev`. Shared work uses a feature branch
+and a PR.
+
+Details: [development_verification_standard.md](docs/development_verification_standard.md) · [release_verification_standard.md](docs/release_verification_standard.md) · [Git workflow](#git-workflow).
 
 ## Development setup
 
@@ -51,66 +55,30 @@ pip install -e "./flashcli-bundle[infer,test]"
 flashcli doctor
 ```
 
-Run tests in tiers — do not run the heavy tier for every edit:
+Verification has two authoritative process documents:
 
-| Tier | Command | When |
-|------|---------|------|
-| **1 — code** (default) | `cd go && go test ./...` · `pytest tests/` · `gofmt -l .` | Every change / PR |
-| **2 — acceptance** (offline) | `bash scripts/verify_e2e.sh` | Any change to the CLI, daemon API, scheduling, or cache behavior |
-| **2h — heavy acceptance** | `bash scripts/verify_e2e.sh --heavy` | Before merging to `main`, before a release candidate |
-| **3 — release gate** (network) | `bash scripts/verify_e2e.sh --heavy --network` | Required before publishing; writes `dist/e2e-pass.json` |
+- [development_verification_standard.md](docs/development_verification_standard.md) — tiers 1/2/2h, test binaries, contract checks, PR definition of done.
+- [release_verification_standard.md](docs/release_verification_standard.md) — tier 3 gate, versioning, release sequence, artifacts, notes, post-release checks.
 
-Tier 1 is unit/integration with fixtures. Tier 2 runs the **real binaries**:
-`flashcli version/doctor/bundle validate/models show`, an offline FlashHub sync
-through a local HTTP index (both CDN layouts), and a real `flashserver` daemon
-exercising `preload → request → logs → unload` over HTTP. `--heavy` adds real
-`run` on v3 and v4 Python bundles plus a native bundle (creates venvs). Tier 3
-adds the live FlashHub manifest check (`FLASHCLI_ACCEPTANCE_NETWORK=1`).
-
-#### Test binaries (development vs release)
-
-- `bash scripts/build_dev_bins.sh` builds **only** the two Linux/amd64
-  binaries pytest uses: `dist/go/flashcli-linux-amd64` and
-  `dist/go/flashserver-linux-amd64`. `scripts/verify_e2e.sh` calls it by default.
-- `bash scripts/build_go.sh` builds **release assets** for Linux amd64/arm64
-  plus the Windows setup binary. Do **not** run it just to test: those other
-  targets are never used by pytest and only add build time.
-- Acceptance refuses `dist/go` binaries older than `go/` sources. With
-  `--no-build`, `verify_e2e.sh` fails fast with the rebuild command instead of
-  silently testing stale code.
-- If you point `FLASHCLI_GO_BIN` / `FLASHSERVER_BIN` at custom binaries, that
-  path is trusted and the freshness check is skipped.
-- `GO=/path/to/go` selects the Go toolchain for `build_dev_bins.sh`;
-  `PYTHON_BIN=/path/to/python` selects the interpreter for `verify_e2e.sh`
-  (useful when pytest lives in a venv).
-
-**Publishing is gated on the full run.** `scripts/release_go.sh --upload`
-refuses to publish unless `dist/e2e-pass.json` records a `--heavy --network`
-pass for the exact commit being released (`FLASHCLI_SKIP_E2E_GATE=1` exists only
-for pipeline tests). Do not tag or replace release assets before that run is
-green.
+Quick commands:
 
 ```bash
-pytest tests/                 # tier 1 (excludes tests/bench)
-pytest tests/bench/           # bench script helpers (scripts/bench_*.py)
-bash scripts/build_dev_bins.sh  # only the two test binaries
-bash scripts/verify_e2e.sh      # tier 2 (Linux/WSL; builds dev binaries)
-bash scripts/verify_e2e.sh --heavy  # tier 2h
+bash scripts/build_dev_bins.sh          # only the two test binaries
+bash scripts/verify_e2e.sh              # tier 2 (Linux/WSL)
+bash scripts/verify_e2e.sh --heavy      # tier 2h (before main / RC)
+bash scripts/verify_e2e.sh --heavy --network  # tier 3 (release only)
 ```
+
+`scripts/build_go.sh` is **release-only** (Linux amd64/arm64 + Windows setup);
+do not use it just to run tests. Acceptance refuses `dist/go` binaries older than
+`go/` sources.
 
 ### Binaries and the desktop client
 
-`bash scripts/build_go.sh` builds the **release** assets into `dist/go/`
-(Linux amd64/arm64 plus the Windows setup binary; version from
-`pyproject.toml`). For local tests use `scripts/build_dev_bins.sh` instead.
-`scripts/release_go.sh` publishes them under **stable, unversioned names** so
-`releases/latest/download/<name>` always resolves to the current release:
-
-| Binary | What it is |
-|--------|------------|
-| `flashcli-<os>-<arch>` | CLI: pull/run/serve/models/cache/… |
-| `flashserver-<os>-<arch>` | Resident scheduler + local console (`127.0.0.1:8790`, `docs/openapi.yaml`) |
-| `flashserver-setup-<os>-<arch>` | Installer backend: Linux systemd, Windows WSL2 distro/task/firewall |
+Release artifacts, naming, and the publish sequence are defined in
+[release_verification_standard.md](docs/release_verification_standard.md) §6.
+Local tests use `scripts/build_dev_bins.sh`; release assets use
+`scripts/build_go.sh`.
 
 The desktop client lives in `desktop/` (Rust, egui/eframe) and only uses the
 daemon's HTTP API; see [desktop/README.md](desktop/README.md). Build the Windows
@@ -230,125 +198,25 @@ refactor(weights): share cache-key resolution between pull and run
 - `dev` → `main`: **squash-and-record** (see above) — `main` gets one linear squash commit per sync, and `dev` records it with `git merge -s ours main`. Do not `--no-ff` merge or rely on fast-forward, and do not push directly to `main` for routine work.
 - Squash commit summary: `chore(sync): squash merge dev into main` (or a concise `type(scope): …` describing the release).
 
-### Change impact checklist
+### Contract changes
 
-Use this table before committing; it is the contract side of "one logical change".
-
-| Change | Must update / run |
-|---|---|
-| HTTP API (`/v1/*`, `/api/v1/*`) | `docs/openapi.yaml` is authoritative; copy it to `go/internal/server/openapi.yaml` (`TestOpenAPISpecInSync` enforces this). Update `docs/flashserver-api.md` + `.zh-CN.md`, `go/internal/server/web/docs.html`, the desktop caller, and an acceptance/unit test. Grep the repo for the old path and confirm it now returns 404. Run `go test ./internal/server/...`. |
-| CLI command/flag | Command help and CLI tests; `tests/conformance/test_command_parity.py` if the command surface changed. |
-| Desktop behavior | `desktop/README.md`, `docs/flashserver-desktop.md` + `.zh-CN.md`, `cargo test` (and a build for UI changes). |
-| Bundle manifest / execution ABI | Authoritative spec + `.zh-CN.md`, bundle `README`/`BUILD`, `flashcli bundle validate`, conformance fixtures. |
-| Docs only | The [documentation standard](docs/documentation_standard.md) checklist; no code changes. |
-
-Do not land an API change with only the Go handler and test updated: the
-OpenAPI copy, API index, console docs, and zh-CN mirror are part of the same
-change.
+Before committing, follow the change-impact table in
+[development_verification_standard.md](docs/development_verification_standard.md#4-contract-checks-by-change-type).
+Every HTTP/API change updates the single OpenAPI contract, the API index, the
+console reference, the desktop caller, and the zh-CN mirror in the same change.
 
 ### Releases
 
-Releases are cut from **`main`** (stable) only. **Never publish an intermediate release
-from `dev`.** Validate host changes on `dev` with the test tiers above, or install the
-dev build with `bash install.sh --from-source --branch dev`. Note `install.sh
---branch dev` **without** `--from-source` still installs the latest *published*
-release, so it does **not** exercise dev host code.
+Release verification and publishing are defined in
+[release_verification_standard.md](docs/release_verification_standard.md).
 
-Host releases are **incremental**: keep every published release and tag; remove only
-unpublished test/draft releases.
-
-**Host (Go) release checklist:**
-
-1. **Bump versions on `dev`.** Update **both** `[project].version` in
-   `pyproject.toml` and `version` in `desktop/Cargo.toml` (desktop uses the
-   three-part prefix, e.g. `1.0.9`); commit as `chore(release): bump version to X`.
-   Packaging fails if they diverge. The host version is `X.Y.Z.YYYYMMDD` (no
-   dots in the date); the release tag is `v<version>` (e.g. `v1.0.9.20261120`).
-2. **Sync `dev` → `main`** (squash-and-record, above) so `main` carries the
-   validated commit. `main` must be clean and equal to `origin/main` before
-   publishing.
-3. **Check the live FlashHub index contract** (index JSON only, a few KiB):
-   `FLASHCLI_FLASHHUB_LIVE=1 pytest tests/test_flashhub_index_contract.py`.
-4. **Run the full gate on `main`:**
-   `bash scripts/verify_e2e.sh --heavy --network`. It must be all green and
-   writes `dist/e2e-pass.json` for the exact HEAD commit. Do not tag or publish
-   before this passes; `release_go.sh --upload` refuses without it.
-5. **Build the Windows installer from `main`:**
-   `powershell -ExecutionPolicy Bypass -File scripts/build_windows_package.ps1`
-   (client + Go assets + `flashcli-desktop-setup-windows-amd64-v<version>.exe`;
-   use `-GoBin` if `go` is not on PATH). To embed exactly the published binaries
-   (or when Go is not installed on Windows), build them first with
-   `bash scripts/build_go.sh` and pass `-SkipGo`; Go builds are reproducible
-   (`-buildvcs=false`). The Inno Setup installer is **not** byte-reproducible,
-   so build it once and do not rebuild it after uploading.
-6. **Prepare release notes** per the standard below (Features/Fixes against the
-   previous published release, same text for GitHub and Gitee). Pass them as
-   `--notes-file <notes.md>` in the next step.
-7. **Publish from `main`:**
-   `bash scripts/release_go.sh --upload --notes-file <notes.md> --windows-installer dist/windows/flashcli-desktop-setup-windows-amd64-v<version>.exe`
-   The script requires a clean `main` equal to `origin/main`, creates/pushes tag
-   `vX` at HEAD, builds/uploads the Go assets plus the Windows installer, and
-   fails if either GitHub or Gitee upload fails. Use `FLASHCLI_RELEASE_TARGET`
-   only for a different release branch; `--allow-non-target` is for tests only.
-8. **Verify the published assets in a clean environment:**
-   `bash scripts/verify_release.sh --version X` (isolated prefix; add
-   `--mirror` for Gitee).
-9. **Sanity-check** the published Windows installer name/SHA256 and that
-   `flashcli-linux-{amd64,arm64}` + `flashserver-*` assets are present on both
-   hosts. Published asset names are **stable and unversioned** (the release tag
-   carries the version); do not add `-v<version>`. Share
-   `https://github.com/aodianyun/flashcli/releases/latest/download/<name>` and
-   `https://gitee.com/aodiansoft/flashcli/releases/download/latest/<name>`.
-
-- **Bundles**: follow the maintainer checklist below and [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md).
-
-#### Release notes standard
-
-Concise; **Features** and **Fixes** only. Bold the key terms. Same text on GitHub and Gitee; host releases are **incremental** (keep previous releases/tags).
-
-```markdown
-# flashcli <version>
-
-<one-line overview; bold the headline>
-
-## Features
-- **<area>**: <what changed, user-visible>
-
-## Fixes
-<!-- optional: only behavior broken in vPREV; omit this section when empty -->
-- **<area>**: <what was broken → fixed>
-
-**Full Changelog**: <compare or commits link>
-```
-
-Rules: short bullets, no raw commit dump, no extra sections; **English only** — no Chinese UI labels or translated summary lines; use English action names (Install, Start, Re-sync, Logs, Settings). Do not repeat the asset list or sha256: GitHub/Gitee render the uploaded assets automatically.
-
-**Write against the previous release, not against the commits.** The body is a
-comparison: every bullet must be traceable to a difference between the previous
-published tag (`vPREV`) and the new one (`vNEW`). Commit messages are raw
-material only. **Omit `## Fixes` entirely when no `vPREV` behavior was broken**;
-fixes made while building a feature introduced in `vNEW` belong inside that
-Feature bullet.
-
-Procedure:
-
-1. `git log --oneline vPREV..vNEW` — understand what happened (do not copy it).
-2. `git diff --stat vPREV..vNEW` and review the user-visible surface (commands,
-   flags, APIs, manifests, installers). For each bullet ask: *could a user of
-   `vPREV` have done this before?*
-3. Classify honestly:
-   - **Features** — capabilities that did not exist in `vPREV` (new commands,
-     new components, changed defaults, new asset/format contracts).
-   - **Fixes** — behavior that was **broken in `vPREV`** and now works. Include
-     the observed failure (error text / symptom), not the internal commit.
-   - Drop internal churn from developing unreleased code (fixes made while
-     building a brand-new component are part of that feature, not fixes for
-     `vPREV` users), refactors with no visible effect, and test/doc-only work.
-4. Verify each claim against the diff or a real run; remove anything you cannot
-   demonstrate. Prefer concrete user outcomes ("`du` counted hardlinked layers
-   per runtime") over internal names.
-5. End with the compare link `.../compare/vPREV...vNEW`. Do not repeat the asset
-   list or sha256 — GitHub/Gitee render the uploaded assets automatically.
+- Releases are cut from **`main`** only; never publish an intermediate release
+  from `dev`.
+- Host releases are incremental: keep every published release and tag.
+- `release_go.sh --upload` refuses without a full `--heavy --network` gate for
+  the exact commit being published.
+- Release notes follow
+  [release_verification_standard.md §5](docs/release_verification_standard.md#5-release-notes-standard).
 
 ## Pull request guidelines
 
@@ -364,7 +232,7 @@ Procedure:
    Bundle re-exec runs ``python -m flashcli_bundle.infer`` inside the bundle venv. Tests: ``tests/conformance/``. **Do not** prepend host ``site-packages`` or pip-install ``flashcli`` into bundle venvs.
 
 4. **Preset refs** — Upload to [FlashHub](https://flashhub.top); document the ref in the bundle README (and BUILD for maintainers). No bundled catalog file.
-5. **Docs** — Update English docs when behavior or release workflow changes. Mirror important changes in `*.zh-CN.md` when applicable.
+5. **Docs** — Update English docs when behavior or release workflow changes. Mirror important changes in `*.zh-CN.md` when applicable. Verification is defined by [development_verification_standard.md](docs/development_verification_standard.md) and [release_verification_standard.md](docs/release_verification_standard.md); do not duplicate their tiers or checklists elsewhere.
 6. **Comments** — New code comments and script headers in English.
 7. **Commits** — Follow the [Git workflow](#git-workflow) section: Conventional Commits (`type(scope): imperative`), **one logical change per commit**, no pushed-history rewrites.
 8. **flashserver gateway/scheduler** — Follow [docs/flashserver_gateway_scheduler_spec.md](docs/flashserver_gateway_scheduler_spec.md) and [docs/plans/flashserver_gateway_scheduler_plan.md](docs/plans/flashserver_gateway_scheduler_plan.md). `/v1/*` is the OpenAI gateway, `/api/v1/*` is management; applications and the desktop must never start/stop/load/unload models or use child endpoints. Preload/unload are disk operations, resident start/stop is scheduler-owned, and placement is host-only. Update the spec and its zh-CN mirror for every behavior change.
@@ -415,6 +283,7 @@ Matrix constraints: v4 bundles declare supported environments in `flashcli-bundl
 Docs are part of the product and this is a **public repository** — treat them as code. Every doc must be **clear, concise, accurate, and complete**: no verbosity, no redundancy, no stale content.
 
 - **Audience first.** User-facing docs live in root `README` / `bundles/<name>/README.md`; contracts/specs in `docs/`; delivery plans in `docs/plans/`; maintainer workflows in `docs/bundle_builder_guide.md`. Keep `docs/README.md` as the index. Follow [docs/documentation_standard.md](docs/documentation_standard.md) for directories and naming (`*_spec.md`, `plans/*_plan.md`, `*_standard.md`, `*_guide.md`).
+- **Process docs have one home.** Development verification is [docs/development_verification_standard.md](docs/development_verification_standard.md); release verification is [docs/release_verification_standard.md](docs/release_verification_standard.md). Link to them instead of copying their tables into CONTRIBUTING or other docs.
 - **English is authoritative; keep the `*.zh-CN.md` mirror in sync** in the same change (same directory). Missing/outdated zh mirrors are a bug.
 - **Delete or fix outdated content** instead of appending. Prefer editing the authoritative doc over creating a new one; avoid doc proliferation.
 - **One concept, one home.** Do not duplicate a spec across docs — link to the authoritative one. A plan must not redefine behavior; the spec wins.
