@@ -294,6 +294,7 @@ Procedure:
 5. **Docs** — Update English docs when behavior or release workflow changes. Mirror important changes in `*.zh-CN.md` when applicable.
 6. **Comments** — New code comments and script headers in English.
 7. **Commits** — Follow the [Git workflow](#git-workflow) section: Conventional Commits (`type(scope): imperative`), **one logical change per commit**, no pushed-history rewrites.
+8. **flashserver gateway/scheduler** — Follow [docs/flashserver_gateway_scheduler_spec.md](docs/flashserver_gateway_scheduler_spec.md) and [docs/flashserver_gateway_scheduler_plan.md](docs/flashserver_gateway_scheduler_plan.md). `/v1/*` is the OpenAI gateway, `/api/v1/*` is management; applications and the desktop must never start/stop/load/unload models or use child endpoints. Preload/unload are disk operations, resident start/stop is scheduler-owned, and placement is host-only. Update the spec and its zh-CN mirror for every behavior change.
 
 ### Shared code (CLI + flashserver)
 

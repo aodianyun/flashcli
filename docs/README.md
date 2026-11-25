@@ -24,6 +24,8 @@ every file to its audience and content.
 | [application_install_plan.md](application_install_plan.md) | maintainers | `flashcli app` install flow, state machine, rollback, commands, milestones |
 | [bundle_execution_abi.md](bundle_execution_abi.md) | bundle authors | `entry.kind` backends, native process / `.so` contracts, conformance |
 | [bundle_serve_protocols.md](bundle_serve_protocols.md) | bundle authors | **Authoritative** OpenAI/Anthropic serve integration: capabilities, `ServeEngine`, endpoint I/O |
+| [flashserver_gateway_scheduler_spec.md](flashserver_gateway_scheduler_spec.md) | contributors / integrators | **Authoritative** flashserver `/v1` OpenAI gateway, `/api/v1` management, preload/unload, scheduler, placement |
+| [flashserver_gateway_scheduler_plan.md](flashserver_gateway_scheduler_plan.md) | maintainers | Delivery plan and mandatory compliance rules for the gateway/scheduler |
 | [architecture.md](architecture.md) | contributors | Runtime flow, local service stack, host vs bundle, caches, directory layout |
 | [module_layers.md](module_layers.md) | contributors | Host / infer / protocol ownership and the Go package map |
 | [bundle_builder_guide.md](bundle_builder_guide.md) | maintainers | Bundle build, multi-CUDA matrix release, FlashHub upload |

@@ -20,6 +20,8 @@
 | [application_install_plan.zh-CN.md](application_install_plan.zh-CN.md) | 维护者 | `flashcli app` 安装流程、状态机、回滚、命令、里程碑 |
 | [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) | bundle 作者 | `entry.kind` 后端、原生进程/`.so` 契约、conformance |
 | [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md) | bundle 作者 | **权威** OpenAI/Anthropic serve 对接：能力、`ServeEngine`、端点输入输出 |
+| [flashserver_gateway_scheduler_spec.zh-CN.md](flashserver_gateway_scheduler_spec.zh-CN.md) | 贡献者 / 集成方 | **权威** flashserver `/v1` OpenAI 网关、`/api/v1` 管理面、preload/unload、调度与 placement |
+| [flashserver_gateway_scheduler_plan.zh-CN.md](flashserver_gateway_scheduler_plan.zh-CN.md) | 维护者 | 网关/调度交付计划与强制遵守规则 |
 | [architecture.zh-CN.md](architecture.zh-CN.md) | 贡献者 | 运行时流程、本地服务栈、host 与 bundle、缓存、目录布局 |
 | [module_layers.zh-CN.md](module_layers.zh-CN.md) | 贡献者 | host / infer / protocol 归属与 Go 包地图 |
 | [bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md) | 维护者 | bundle 构建、多 CUDA 矩阵发布、FlashHub 上传 |
