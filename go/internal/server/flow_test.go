@@ -91,7 +91,7 @@ func TestModelLifecycleOverHTTP(t *testing.T) {
 	s := newFlowServer(t, &staticLauncher{endpoint: model.URL})
 	h := s.Handler()
 
-	rec, body := call(t, h, http.MethodPost, "/api/v1/models/load", `{"ref":"demo:1","async":true}`)
+	rec, body := call(t, h, http.MethodPost, "/api/v1/models/preload", `{"ref":"demo:1","async":true}`)
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("load = %d: %s", rec.Code, rec.Body.String())
 	}
@@ -134,7 +134,7 @@ func TestModelLifecycleOverHTTP(t *testing.T) {
 		t.Fatalf("ui chat missing ref = %d", rec.Code)
 	}
 
-	rec, _ = call(t, h, http.MethodPost, "/api/v1/models/load", `{}`)
+	rec, _ = call(t, h, http.MethodPost, "/api/v1/models/preload", `{}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("load without ref = %d", rec.Code)
 	}

@@ -47,7 +47,7 @@
 | 分组 | 端点 | 说明 |
 |---|---|---|
 | 健康 / 版本 | `GET /health`、`GET /api/v1/version` | `/health` 不需要鉴权 |
-| 模型 | `GET /api/v1/models`、`GET /api/v1/models/loaded`、`POST /api/v1/models/preload`、`POST /api/v1/models/load`、`POST /api/v1/models/unload`、`POST /api/v1/models/smoke`、`POST /api/v1/models/clean` | schema 见 [openapi.yaml](openapi.yaml) |
+| 模型 | `GET /api/v1/models`、`GET /api/v1/models/loaded`、`POST /api/v1/models/preload`、`POST /api/v1/models/unload`、`POST /api/v1/models/smoke`、`POST /api/v1/models/clean` | schema 见 [openapi.yaml](openapi.yaml) |
 | 模型参数 | `GET/PUT/DELETE /api/v1/models/options` | `serve_options` + 已保存的 host/port，见 [flashserver-desktop.zh-CN.md](flashserver-desktop.zh-CN.md#启动参数与局域网访问) |
 | 任务 | `POST /api/v1/pull`、`GET /api/v1/jobs/{id}`、`GET /api/v1/jobs/{id}/events`、`POST /api/v1/jobs/{id}/cancel` | 异步任务，进度也通过 `/api/v1/ws` 推送 |
 | 系统 | `GET /api/v1/system`、`GET /api/v1/gpu`、`GET /api/v1/gpu/history`、`GET /api/v1/resources`、`GET /api/v1/devices`、`GET /api/v1/scheduler`、`GET /api/v1/storage` | 遥测、设备盘点与 placement 结果 |
@@ -78,7 +78,6 @@ host 推理路由。
 - `POST /api/v1/models/preload` 下载 bundle 和权重、准备运行时/venv，不启动 serve。
   幂等；运行中返回 job。
 - `POST /api/v1/pull` 是底层下载任务；网关面向的磁盘操作是 `preload`。
-- `POST /api/v1/models/load` 是磁盘 preload 的 legacy 别名；resident 启停由调度器按需负责。
 - `POST /api/v1/models/unload` 停止 resident 并删除 bundle、权重、运行时和缓存记录。
   resident 或有 active 请求时返回 `409 model_busy`；`wait_seconds` 等待，`force`
   先停止。仍被其他 ref 引用的共享 bundle/权重/运行时保留。
@@ -102,9 +101,6 @@ curl -H 'Content-Type: application/json' \
   http://127.0.0.1:8790/v1/chat/completions
 ```
 
-- `POST /api/v1/models/load` 是 `preload` 的 legacy 别名；模型页和应用直接使用 `/preload`。
-  resident 启停由调度器负责；run-only bundle 可以 preload，只有网关聊天请求会因缺少
-  serve 入口被拒绝。
 - `POST /api/v1/models/smoke` 对 run-only bundle 以低优先级执行 `flashcli run`，或对已启动的
   serve 模型按能力发送一次 `ping` 请求；没有可声明路由的纯模态模型会明确报错。
   进度通过 `/api/v1/ws` 推送并追加到 `<ref>.smoke.log`。

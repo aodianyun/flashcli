@@ -362,6 +362,34 @@ func (s *Server) ensurePreload(ctx context.Context, refStr string) (ready bool, 
 	return false, job.ID, nil
 }
 
+// checkPreloadVRAM rejects a preload whose declared requirement can never fit
+// on this host. Preload is a disk operation, so it uses total GPU memory (not
+// free memory); free-VRAM admission belongs to the scheduler.
+func (s *Server) checkPreloadVRAM(info BundleInfo) error {
+	if info.MinVRAMMiB <= 0 {
+		return nil
+	}
+	need := info.MinVRAMMiB * 1024 * 1024
+	gpuCount := info.GPUCount
+	if gpuCount < 1 {
+		gpuCount = 1
+	}
+	inv := s.inventory(context.Background())
+	matches := 0
+	for _, d := range inv.Devices {
+		if d.Kind == "cuda" && d.MemoryTotalBytes >= need {
+			matches++
+		}
+	}
+	if matches >= gpuCount {
+		return nil
+	}
+	if matches == 0 {
+		return fmt.Errorf("bundle requires %d MiB VRAM per GPU, but no visible NVIDIA GPU has that total memory", info.MinVRAMMiB)
+	}
+	return fmt.Errorf("bundle requires %d GPU(s) with at least %d MiB total VRAM, but only %d match", gpuCount, info.MinVRAMMiB, matches)
+}
+
 // preloadModel serves POST /api/v1/models/preload: an asynchronous disk
 // prepare (bundle, runtime/venv, weights). It never starts a serve process or
 // reserves VRAM.
@@ -372,6 +400,15 @@ func (s *Server) preloadModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	refStr := strings.TrimSpace(req.Ref)
+	info, err := s.inspectRef(refStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.checkPreloadVRAM(info); err != nil {
+		writeError(w, http.StatusConflict, err)
+		return
+	}
 	ready, jobID, err := s.ensurePreload(r.Context(), refStr)
 	if err != nil {
 		writeError(w, http.StatusNotImplemented, err)

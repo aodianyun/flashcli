@@ -71,6 +71,8 @@ type Server struct {
 
 	// Scheduler owns demand-driven resident lifecycle and leases.
 	Scheduler *Scheduler
+	// Inspect optionally overrides bundle admission metadata (tests).
+	Inspect func(string) (BundleInfo, error)
 
 	// Preload persists explicit disk-preload intent across restarts.
 	Preload *preloadStore
@@ -196,7 +198,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/jobs/{id}", s.job)
 	mux.HandleFunc("GET /api/v1/jobs/{id}/events", s.jobEvents)
 	mux.HandleFunc("POST /api/v1/jobs/{id}/cancel", s.cancelJob)
-	mux.HandleFunc("POST /api/v1/models/load", s.loadModel)
 	mux.HandleFunc("POST /api/v1/models/preload", s.preloadModel)
 	mux.HandleFunc("POST /api/v1/models/unload", s.unloadModel)
 	mux.HandleFunc("GET /api/v1/models/options", s.getModelOptions)

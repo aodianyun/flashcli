@@ -142,6 +142,9 @@ func (s *Server) gatewayModels(w http.ResponseWriter, r *http.Request) {
 // inspectRef resolves bundle admission metadata through the scheduler's
 // injectable inspector (tests) or the real host inspector.
 func (s *Server) inspectRef(refStr string) (BundleInfo, error) {
+	if s.Inspect != nil {
+		return s.Inspect(refStr)
+	}
 	if s.Scheduler != nil && s.Scheduler.opts.Inspect != nil {
 		return s.Scheduler.opts.Inspect(refStr)
 	}

@@ -401,10 +401,16 @@
     jobBox.innerHTML = `<span class="spinner"></span>${t("toast.loading")} <span class="ref">${esc(refStr)}</span>`;
     $("#btn-load").disabled = true;
     try {
-      const res = await api("/api/v1/models/load", { method: "POST", body: JSON.stringify({ ref: refStr, async: true }) });
+      const res = await api("/api/v1/models/preload", { method: "POST", body: JSON.stringify({ ref: refStr, async: true }) });
       if (!res.ok) throw new Error(await readError(res));
       const job = await res.json();
-      await pollJob(job.job_id, refStr);
+      if (job.job_id) {
+        await pollJob(job.job_id, refStr);
+      } else {
+        jobBox.innerHTML = `<span style="color:var(--accent-2)">✓</span> ${t("toast.loaded")} <span class="ref">${esc(refStr)}</span>`;
+        toast(t("toast.loaded") + ": " + refStr, "ok");
+        setTimeout(() => jobBox.classList.add("hidden"), 4000);
+      }
       await refresh();
     } catch (err) {
       jobBox.innerHTML = `<span style="color:var(--danger)">${esc(err.message)}</span>`;

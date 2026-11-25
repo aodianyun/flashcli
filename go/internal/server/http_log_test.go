@@ -32,14 +32,14 @@ func TestRequestLogRedactsSecrets(t *testing.T) {
 	InitLogFile("")
 	defer InitLogFile("")
 	s := &Server{Source: fakeSource{}}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/models/load",
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/models/preload",
 		strings.NewReader(`{"ref":"demo:1","api_key":"super-secret"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
 
 	text := strings.Join(serverLogLines(20), "\n")
-	if !strings.Contains(text, "api POST /api/v1/models/load") {
+	if !strings.Contains(text, "api POST /api/v1/models/preload") {
 		t.Fatalf("request not logged: %q", text)
 	}
 	if strings.Contains(text, "super-secret") {

@@ -47,46 +47,6 @@ def _stop(proc):
         proc.kill()
 
 
-def test_server_load_aliases_disk_preload(flashserver_bin, flashcli_bin, cli_env, home):
-    """The legacy /models/load is disk preload; it never starts a resident."""
-    port = free_port()
-    server = _start_server(flashserver_bin, flashcli_bin, cli_env, home, port)
-    base = f"http://127.0.0.1:{port}"
-    bundle = prepare_bundle("exec_echo_http", home)
-    ref = str(bundle)
-    try:
-        status, health = http_json(f"{base}/health")
-        assert status == 200 and health["status"] == "ok"
-
-        status, version = http_json(f"{base}/api/v1/version")
-        assert status == 200 and version["version"]
-
-        status, body = http_json(f"{base}/api/v1/models/load", {"ref": ref})
-        assert status in (200, 202), body
-        if status == 202:
-            deadline = time.time() + 60
-            while time.time() < deadline:
-                _, job = http_json(f"{base}/api/v1/jobs/{body['job_id']}")
-                if job["state"] in ("done", "failed"):
-                    break
-                time.sleep(0.2)
-            assert job["state"] == "done", job
-
-        model = _wait_disk_state(base, ref, "preloaded")
-        assert model["resident"] == "stopped"
-        _, loaded = http_json(f"{base}/api/v1/models/loaded")
-        assert loaded["models"] == []
-
-        status, storage = http_json(f"{base}/api/v1/storage")
-        assert status == 200 and storage["areas"]
-
-        status, unloaded = http_json(f"{base}/api/v1/models/unload", {"ref": ref})
-        assert status == 200 and unloaded["preload"] == "absent"
-        assert bundle.exists()
-    finally:
-        _stop(server)
-
-
 def test_server_devices_and_scheduler(flashserver_bin, flashcli_bin, cli_env, home):
     port = free_port()
     server = _start_server(flashserver_bin, flashcli_bin, cli_env, home, port)

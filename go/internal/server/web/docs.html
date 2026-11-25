@@ -170,20 +170,19 @@ Content-Type: application/json
     <h2>加载与任务</h2>
 
     <div class="api">
-      <h2><span class="method post">POST</span><span class="path">/api/v1/models/load</span></h2>
-      <p class="desc">加载模型并启动推理服务。FlashHub 引用在首次加载时自动拉取 bundle/权重。</p>
+      <h2><span class="method post">POST</span><span class="path">/api/v1/models/preload</span></h2>
+      <p class="desc">下载 bundle/权重并准备运行时，不启动推理服务。声明了 <code>min_vram_mib</code> 时会检查最大 GPU 总显存是否支持。FlashHub 引用在首次预加载时自动拉取。</p>
       <h3>请求参数</h3>
       <table class="params">
         <tr><th>字段</th><th>类型</th><th>说明</th></tr>
         <tr><td><code>ref</code></td><td>string</td><td>必填。如 <code>flashcli-bundle/qwen3_8b_nvfp4:1.0.6</code>。</td></tr>
-        <tr><td><code>async</code></td><td>bool</td><td>默认 <code>true</code>，返回 <code>job_id</code>。</td></tr>
       </table>
       <h3>请求示例</h3>
-      <pre>curl -X POST http://localhost:8790/api/v1/models/load \
+      <pre>curl -X POST http://localhost:8790/api/v1/models/preload \
   -H 'Content-Type: application/json' \
-  -d '{"ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.6","async":true}'</pre>
+  -d '{"ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.6"}'</pre>
       <h3>响应示例（202）</h3>
-      <pre>{"job_id":"load-1","state":"running"}</pre>
+      <pre>{"ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.6","preload":"preloading","job_id":"preload-1","state":"running"}</pre>
     </div>
 
     <div class="api">
@@ -385,7 +384,7 @@ data: {"time":"2026-11-10T02:31:26Z","phase":"done"}</pre>
       <tr><td><span class="tag">GET</span></td><td><code>/api/v1/models/loaded</code></td><td>已加载实例</td></tr>
       <tr><td><span class="tag">GET</span></td><td><code>/api/v1/storage</code></td><td>缓存目录占用</td></tr>
       <tr><td><span class="tag">POST</span></td><td><code>/api/v1/storage/clean</code></td><td>清理共享缓存（运行时/Python/工具/下载）</td></tr>
-      <tr><td><span class="tag">POST</span></td><td><code>/api/v1/models/load</code></td><td>加载模型（异步任务）</td></tr>
+      <tr><td><span class="tag">POST</span></td><td><code>/api/v1/models/preload</code></td><td>预加载模型（磁盘，异步任务）</td></tr>
       <tr><td><span class="tag">POST</span></td><td><code>/api/v1/models/unload</code></td><td>卸载模型</td></tr>
       <tr><td><span class="tag">POST</span></td><td><code>/api/v1/models/clean</code></td><td>清理本地模型缓存（多选）</td></tr>
       <tr><td><span class="tag">POST</span></td><td><code>/api/v1/pull</code></td><td>下载 bundle/权重（异步任务）</td></tr>

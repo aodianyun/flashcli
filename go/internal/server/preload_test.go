@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/aodianyun/flashcli/go/internal/flashhub"
+	"github.com/aodianyun/flashcli/go/internal/gpu"
 	"github.com/aodianyun/flashcli/go/internal/host"
 	"github.com/aodianyun/flashcli/go/internal/paths"
 	"github.com/aodianyun/flashcli/go/internal/runtime"
@@ -59,6 +61,7 @@ func newPreloadServer(t *testing.T, p Puller) *Server {
 		Preload: newPreloadStore(filepath.Join(t.TempDir(), "preload.json")),
 		LogDir:  t.TempDir(),
 		Started: time.Now(),
+		Inspect: func(string) (BundleInfo, error) { return BundleInfo{}, nil },
 	}
 }
 
@@ -309,5 +312,23 @@ func TestReconcilePreloadsDropsStaleIntent(t *testing.T) {
 	}
 	if got := s.Preload.state("flashcli-bundle/other:1.0.0"); got != preloadAbsent {
 		t.Fatalf("in-flight state = %s", got)
+	}
+}
+
+func TestPreloadRejectsInsufficientTotalVRAM(t *testing.T) {
+	s := newPreloadServer(t, &blockingPuller{})
+	s.GPU = func(context.Context) ([]gpu.Device, error) {
+		return []gpu.Device{{Index: 0, MemoryTotal: 8 << 30}}, nil
+	}
+	s.Inspect = func(string) (BundleInfo, error) {
+		return BundleInfo{MinVRAMMiB: 12288, GPUCount: 1}, nil
+	}
+	rec, body := call(t, s.Handler(), http.MethodPost, "/api/v1/models/preload",
+		`{"ref":"flashcli-bundle/demo:1.0.0"}`)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("preload = %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(body["error"].(string), "12288 MiB") {
+		t.Fatalf("error = %v", body)
 	}
 }
