@@ -1,4 +1,4 @@
-# flashcli Model Bundle publish standard (format_version 4)
+# flashcli Model Bundle publish standard (format_version 4/5)
 
 <p align="right"><strong>English</strong> · <a href="bundle_publish_standard.zh-CN.md">简体中文</a></p>
 
@@ -11,7 +11,7 @@ External specification for **third-party bundle authors**: directory layout, `fl
 | Concept | Description |
 |---------|-------------|
 | **Model Bundle** | A published inference runtime artifact: manifest + Python entry + optional `flash_rt/` + environment-scoped `.so` files |
-| **format_version** | **4** |
+| **format_version** | **5** for new bundles; **4** is legacy-compatible (see §3.4.2) |
 | **protocol_version** | `flashcli-bundle` protocol API version; currently **1** |
 | **Weights** | **Not** shipped in the bundle; declared in the manifest and fetched on first run |
 | **Version** | Pinned by the FlashHub ref (`flashcli-bundle/<name>:<version>`), not by a version file |
@@ -186,7 +186,7 @@ Script contracts:
 | Field | Required | Description |
 |-------|----------|-------------|
 | `format` | yes | Must be `"flashcli-model-bundle"` |
-| `format_version` | yes | Must be **4** |
+| `format_version` | yes | **5** for new bundles; **4** is accepted for already-published bundles (missing `resources.min_vram_mib` only warns) |
 | `protocol_version` | yes | Must be **1** (matches the shipped `flashcli-bundle` protocol) |
 | `name` | yes | Bundle id (descriptive only); matching the FlashHub repo name is a readability convention |
 | `description` | recommended | Human-readable summary |
@@ -314,9 +314,10 @@ policy; the host decides those.
 
 - `min_vram_mib` — free GPU memory (MiB) required **per GPU**. Set it from the
   measured peak usage; the host additionally reserves `vram_headroom_mib`.
-  A GPU runtime must declare it; until every published bundle does, a missing
-  value validates as a warning and is admitted without a declared VRAM
-  requirement.
+  `format_version: 5` requires it for a GPU runtime (`bundle validate` fails).
+  Legacy `format_version: 4` bundles without it validate with a warning and are
+  admitted without a declared VRAM requirement, so published bundles keep
+  running.
 - `gpu_count` — optional, default `1`. Number of GPUs one model spans. The
   scheduler reserves that many GPUs all-or-nothing.
 - `min_ram_mib` — optional, CPU runtime only. Free RAM required for CPU
@@ -485,7 +486,7 @@ Published manifests record the immutable source repositories used to build the b
 ```json
 {
   "format": "flashcli-model-bundle",
-  "format_version": 4,
+  "format_version": 5,
   "protocol_version": 1,
   "name": "pi05_libero",
   "description": "Pi0.5 LIBERO VLA",
@@ -501,6 +502,7 @@ Published manifests record the immutable source repositories used to build the b
   "defaults": {
     "entry": { "run": { "module": "run", "attr": "main", "mode": "script" } },
     "python_abi": "312",
+    "resources": { "min_vram_mib": 12288 },
     "python_dependencies": {
       "torch": { "package": "torch", "index": "auto" },
       "pip": ["numpy", "pyyaml", "safetensors", "pillow"]
@@ -626,7 +628,7 @@ Native-only bundles omit the `-py{PY}` segment. Non-NVIDIA platform tails are al
 
 ## 6. Pre-publish checklist
 
-- [ ] `format_version: 4`, `protocol_version: 1`
+- [ ] `format_version: 5` for new bundles (`4` is legacy), `protocol_version: 1`
 - [ ] `defaults` non-empty; `environments` non-empty
 - [ ] Every native environment has `runtime`; pure-Python/CPU environments may omit it
 - [ ] No `variants`, `backends`, `entries`, or top-level `runtime`

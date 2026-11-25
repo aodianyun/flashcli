@@ -69,11 +69,18 @@ func intValue(v any) (int64, bool) {
 }
 
 // validateResources rejects malformed fields and any attempt to encode device
-// selection or placement. A missing min_vram_mib is a warning, not an error,
-// until every published bundle declares it (see ValidateWarnings).
+// selection or placement. format_version 5 additionally requires
+// min_vram_mib for a GPU runtime; format_version 4 is the legacy contract and
+// only warns (so already-published bundles keep running).
 func validateResources(m *Manifest) []string {
+	strict := m.FormatVersion >= FormatVersionV5
 	raw, exists := m.Raw["resources"]
 	if !exists {
+		if strict && hasGPURuntime(m) {
+			return []string{fmt.Sprintf(
+				"Bundle %q has a GPU runtime but no resources.min_vram_mib; format_version 5 requires it",
+				m.Name)}
+		}
 		return nil
 	}
 	block, ok := raw.(map[string]any)
@@ -100,14 +107,18 @@ func validateResources(m *Manifest) []string {
 			errors = append(errors, fmt.Sprintf("Bundle %q resources.%s must be >= 0", m.Name, key))
 		}
 	}
+	if strict && hasGPURuntime(m) && m.Resources().MinVRAMMiB == 0 {
+		errors = append(errors, fmt.Sprintf(
+			"Bundle %q has a GPU runtime but no resources.min_vram_mib; format_version 5 requires it",
+			m.Name))
+	}
 	return errors
 }
 
-// ValidateWarnings reports advisories that do not fail validation yet. A GPU
-// runtime without resources.min_vram_mib is admitted best-effort until the
-// field becomes mandatory.
+// ValidateWarnings reports advisories that do not fail validation. Legacy
+// format_version 4 GPU bundles without min_vram_mib are admitted best-effort.
 func ValidateWarnings(m *Manifest) []string {
-	if m == nil {
+	if m == nil || m.FormatVersion >= FormatVersionV5 {
 		return nil
 	}
 	r := m.Resources()
@@ -118,7 +129,7 @@ func ValidateWarnings(m *Manifest) []string {
 		return nil
 	}
 	return []string{fmt.Sprintf(
-		"Bundle %q has a GPU runtime but no resources.min_vram_mib; flashserver will admit it without a declared VRAM requirement until the field is added",
+		"Bundle %q is legacy format_version 4 and has no resources.min_vram_mib; flashserver will admit it without a declared VRAM requirement. New bundles should use format_version 5 and declare it",
 		m.Name)}
 }
 

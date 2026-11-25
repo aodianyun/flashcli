@@ -103,17 +103,18 @@ Native-only bundles (`defaults.entry.kind = native-abi|native-exec`) omit `run.p
 
 `flash_rt/` is optional for Python bundles. Each environment's `runtime` path is arbitrary; the root `runtime/<runtime-dir>/` layout is a convention, not a host requirement. For per-environment isolation, set `runtime` to the whole environment directory and put `run.py`, helpers, optional `flash_rt/`, and `.so` files directly there. Files outside every declared runtime directory are common and are downloaded for all environments. See [bundle_publish_standard.md](bundle_publish_standard.md) §2.3.
 
-### 4.1 Manifest essentials (format_version 4)
+### 4.1 Manifest essentials (format_version 5; 4 is legacy)
 
 ```json
 {
   "format": "flashcli-model-bundle",
-  "format_version": 4,
+  "format_version": 5,
   "protocol_version": 1,
   "name": "pi05_libero",
   "description": "Pi0.5 LIBERO VLA",
   "defaults": {
     "python_abi": "312",
+    "resources": { "min_vram_mib": 12288 },
     "run_options": [ "…" ],
     "python_dependencies": { "torch": { "package": "torch", "index": "auto" } },
     "weights": { "source": "huggingface", "repo": "org/model", "revision": "0123456789abcdef0123456789abcdef01234567" }

@@ -120,17 +120,18 @@ pi05_libero/
 
 Python bundle 的 `flash_rt/` 是可选的。每个 environment 的 `runtime` 路径任意；根 `runtime/<runtime-dir>/` 布局只是约定，不是 host 硬要求。需要按 environment 隔离时，把 `runtime` 指向整个 environment 目录，并把 `run.py`、helper、可选 `flash_rt/` 和 `.so` 直接放在该目录下。所有已声明 runtime 目录之外的文件都是公共文件，会为所有 environment 下载。详见 [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) §2.3。
 
-### manifest 必填要点（format_version 4）
+### manifest 必填要点（format_version 5；4 为 legacy）
 
 ```json
 {
   "format": "flashcli-model-bundle",
-  "format_version": 4,
+  "format_version": 5,
   "protocol_version": 1,
   "name": "pi05_libero",
   "description": "Pi0.5 LIBERO VLA",
   "defaults": {
     "python_abi": "312",
+    "resources": { "min_vram_mib": 12288 },
     "run_options": [ ... ],
     "python_dependencies": {
       "torch": { "package": "torch", "index": "auto" }

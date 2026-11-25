@@ -80,10 +80,11 @@ checks `/health`.
 
 - `max_loaded=0` means no slot limit. VRAM admission uses each bundle's
   `resources.min_vram_mib` per GPU plus `vram_headroom_mib` (default 512): a
-  start is admitted when a compatible GPU has that much free VRAM. Bundles
-  without `min_vram_mib` currently validate with a warning and are admitted
-  without a declared VRAM requirement; the slot limit still counts starting
-  models. Applications call the gateway and share the same scheduler.
+  start is admitted when a compatible GPU has that much free VRAM. Legacy
+  format_version 4 bundles without `min_vram_mib` validate with a warning and
+  are admitted without a declared VRAM requirement; new format_version 5
+  bundles must declare it. The slot limit still counts starting models.
+  Applications call the gateway and share the same scheduler.
 - `idle_stop_seconds` (default 600) stops residents with no leases;
   `queue_timeout_seconds`/`queue_max` bound waiting; `auto_pull` (default true)
   preloads an absent model in the background; `cpu_fallback` is

@@ -75,9 +75,9 @@ sudo flashserver-setup
 
 - `max_loaded=0` 表示不限制槽位。显存准入按每个 bundle 的
   `resources.min_vram_mib`（每张 GPU）加 `vram_headroom_mib`（默认 512）：某张兼容
-  GPU 的空闲显存足够时准入。未声明 `min_vram_mib` 的 bundle 目前只产生校验警告，
-  按未声明显存要求准入；槽位上限仍把正在启动的模型计入。应用调用网关，与模型页
-  共享同一调度器。
+  GPU 的空闲显存足够时准入。legacy `format_version: 4` bundle 缺少 `min_vram_mib` 时
+  只产生校验警告，按未声明显存要求准入；新的 `format_version: 5` bundle 必须声明。
+  槽位上限仍把正在启动的模型计入。应用调用网关，与模型页共享同一调度器。
 - `idle_stop_seconds`（默认 600）停止无 lease 的 resident；
   `queue_timeout_seconds`/`queue_max` 限制排队；`auto_pull`（默认 true）在后台准备
   缺失模型；`cpu_fallback` 为 `no-gpu-runtime`（默认）或 `disabled`。

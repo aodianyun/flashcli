@@ -295,8 +295,9 @@ GPU runtime 必填：
 - 不允许设备 ID、placement 列表、CUDA_VISIBLE_DEVICES 或调度策略。
 - runtime matrix 声明设备/OS/arch/runtime 兼容性；没有 CPU runtime cell 就不能
   CPU 回退。
-- 过渡期：尚未声明 `min_vram_mib` 的存量 bundle 只产生校验警告，并按未声明显存
-  要求准入；所有新发布的 GPU bundle 必须声明该字段。
+- 过渡期：`format_version: 5` 的 GPU runtime bundle 必须声明 `min_vram_mib`，否则
+  `bundle validate` 拒绝；legacy `format_version: 4` bundle 缺失时只产生警告，并按
+  未声明显存要求准入，保证已发布 bundle 仍可运行。
 
 ### 8.2 placement（host 内部）
 

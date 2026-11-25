@@ -1,4 +1,4 @@
-# flashcli Model Bundle 发布标准（format_version 4）
+# flashcli Model Bundle 发布标准（format_version 4/5）
 
 <p align="right"><a href="bundle_publish_standard.md">English</a> · <strong>简体中文</strong></p>
 
@@ -11,7 +11,7 @@
 | 概念 | 说明 |
 |------|------|
 | **Model Bundle** | 一次发布的推理 runtime 制品：manifest + Python entry + 可选 `flash_rt/` + 按环境分包的 `.so` |
-| **format_version** | 固定 **4** |
+| **format_version** | 新 bundle 用 **5**；**4** 为兼容的 legacy 格式（见 §3.4.2） |
 | **protocol_version** | `flashcli-bundle` 协议 API 版本，当前为 **1** |
 | **权重** | **不** 打进 bundle；在 manifest 声明，由终端用户首次运行时拉取 |
 | **版本** | 由 FlashHub ref（`flashcli-bundle/<name>:<version>`）固定，不使用版本文件 |
@@ -186,7 +186,7 @@ flashcli run flashcli-bundle/qwen3_8b_nvfp4:1.0.0
 | 字段 | 必填 | 说明 |
 |------|------|------|
 | `format` | 是 | 固定 `"flashcli-model-bundle"` |
-| `format_version` | 是 | 固定 **4** |
+| `format_version` | 是 | 新 bundle 固定 **5**；已发布 bundle 可用 **4**（缺少 `resources.min_vram_mib` 只警告） |
 | `protocol_version` | 是 | 固定 **1**（与 flashcli 所带协议一致） |
 | `name` | 是 | bundle 标识（仅描述）；与 FlashHub 仓库名一致只是可读性约定 |
 | `description` | 建议 | 用户可读说明 |
@@ -304,8 +304,9 @@ GPU id、`CUDA_VISIBLE_DEVICES` 或 placement 策略，这些由 host 决定。
 ```
 
 - `min_vram_mib` — **每张 GPU** 需要的空闲显存（MiB）。按实测峰值填写；host 会额外
-  预留 `vram_headroom_mib`。GPU runtime 必须声明；在全部已发布 bundle 补齐之前，
-  缺失该值只产生校验警告，并按未声明显存要求准入。
+  预留 `vram_headroom_mib`。`format_version: 5` 的 GPU runtime 必须声明，否则
+  `bundle validate` 失败。legacy `format_version: 4` bundle 缺失该值只产生警告，并按
+  未声明显存要求准入，保证已发布 bundle 仍可运行。
 - `gpu_count` — 可选，默认 `1`。一个模型跨多少张 GPU；调度器按全有或全无预留。
 - `min_ram_mib` — 可选，仅 CPU runtime。CPU placement 需要的空闲内存。只有不存在
   兼容 GPU runtime 时才使用 CPU。
@@ -472,7 +473,7 @@ host 提供的 `--checkpoint`、`--host`、`--port` 不在这里声明。environ
 ```json
 {
   "format": "flashcli-model-bundle",
-  "format_version": 4,
+  "format_version": 5,
   "protocol_version": 1,
   "name": "pi05_libero",
   "description": "Pi0.5 LIBERO VLA",
@@ -488,6 +489,7 @@ host 提供的 `--checkpoint`、`--host`、`--port` 不在这里声明。environ
   "defaults": {
     "entry": { "run": { "module": "run", "attr": "main", "mode": "script" } },
     "python_abi": "312",
+    "resources": { "min_vram_mib": 12288 },
     "python_dependencies": {
       "torch": { "package": "torch", "index": "auto" },
       "pip": ["numpy", "pyyaml", "safetensors", "pillow"]
@@ -613,7 +615,7 @@ native-only bundle 省略 `-py{PY}`。允许非 NVIDIA platform_tail（如 `gfx9
 
 ## 6. 发布前自检清单
 
-- [ ] `format_version: 4`、`protocol_version: 1`
+- [ ] 新 bundle 用 `format_version: 5`（`4` 为 legacy）；`protocol_version: 1`
 - [ ] `defaults` 非空；`environments` 非空
 - [ ] 每个 native environment 都有 `runtime`；纯 Python/CPU 环境可省略
 - [ ] 无 `variants`、`backends`、`entries`、顶层 `runtime`

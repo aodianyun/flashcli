@@ -6,6 +6,10 @@ import (
 )
 
 func resourceFixture(envs []string, resources any) map[string]any {
+	return resourceFixtureVersion(envs, resources, FormatVersionV4)
+}
+
+func resourceFixtureVersion(envs []string, resources any, version int) map[string]any {
 	defaults := map[string]any{
 		"python_abi": "312",
 		"entry": map[string]any{
@@ -20,7 +24,7 @@ func resourceFixture(envs []string, resources any) map[string]any {
 		envMap[key] = map[string]any{"runtime": "runtime/" + key}
 	}
 	return map[string]any{
-		"format": Format, "format_version": 4, "protocol_version": 1,
+		"format": Format, "format_version": version, "protocol_version": 1,
 		"name": "demo", "defaults": defaults, "environments": envMap,
 	}
 }
@@ -83,6 +87,44 @@ func TestResourcesRejectInvalidFields(t *testing.T) {
 				t.Fatalf("errors = %v, want %q", errs, tc.want)
 			}
 		})
+	}
+}
+
+func TestResourcesV5RequiresMinVRAM(t *testing.T) {
+	missing, err := LoadData(resourceFixtureVersion([]string{"sm89-cu124-linux-x86_64-py312"}, nil, FormatVersionV5), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := Validate(missing)
+	if !hasErrorContaining(errs, "format_version 5 requires") {
+		t.Fatalf("v5 without min_vram_mib errors = %v", errs)
+	}
+
+	declared, err := LoadData(resourceFixtureVersion(
+		[]string{"sm89-cu124-linux-x86_64-py312"},
+		map[string]any{"min_vram_mib": 8192},
+		FormatVersionV5,
+	), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range Validate(declared) {
+		if strings.Contains(e, "min_vram_mib") {
+			t.Fatalf("v5 with min_vram_mib rejected: %v", e)
+		}
+	}
+	if warnings := ValidateWarnings(declared); len(warnings) != 0 {
+		t.Fatalf("v5 warnings = %v", warnings)
+	}
+
+	cpuOnly, err := LoadData(resourceFixtureVersion([]string{"cpu-linux-x86_64-py312"}, nil, FormatVersionV5), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range Validate(cpuOnly) {
+		if strings.Contains(e, "min_vram_mib") {
+			t.Fatalf("v5 CPU bundle rejected for min_vram_mib: %v", e)
+		}
 	}
 }
 
