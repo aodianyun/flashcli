@@ -521,7 +521,10 @@ func (s *Scheduler) Snapshot() SchedulerSnapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.reconcileLocked()
-	out := SchedulerSnapshot{Reservations: make([]ResidentInfo, 0, len(s.residents))}
+	out := SchedulerSnapshot{
+		Reservations: make([]ResidentInfo, 0, len(s.residents)),
+		Queue:        []string{},
+	}
 	for ref, r := range s.residents {
 		out.Reservations = append(out.Reservations, ResidentInfo{
 			Ref: ref, State: r.state, Devices: append([]string(nil), r.devices...),
