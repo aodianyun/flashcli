@@ -294,7 +294,7 @@ Procedure:
 5. **Docs** — Update English docs when behavior or release workflow changes. Mirror important changes in `*.zh-CN.md` when applicable.
 6. **Comments** — New code comments and script headers in English.
 7. **Commits** — Follow the [Git workflow](#git-workflow) section: Conventional Commits (`type(scope): imperative`), **one logical change per commit**, no pushed-history rewrites.
-8. **flashserver gateway/scheduler** — Follow [docs/flashserver_gateway_scheduler_spec.md](docs/flashserver_gateway_scheduler_spec.md) and [docs/flashserver_gateway_scheduler_plan.md](docs/flashserver_gateway_scheduler_plan.md). `/v1/*` is the OpenAI gateway, `/api/v1/*` is management; applications and the desktop must never start/stop/load/unload models or use child endpoints. Preload/unload are disk operations, resident start/stop is scheduler-owned, and placement is host-only. Update the spec and its zh-CN mirror for every behavior change.
+8. **flashserver gateway/scheduler** — Follow [docs/flashserver_gateway_scheduler_spec.md](docs/flashserver_gateway_scheduler_spec.md) and [docs/plans/flashserver_gateway_scheduler_plan.md](docs/plans/flashserver_gateway_scheduler_plan.md). `/v1/*` is the OpenAI gateway, `/api/v1/*` is management; applications and the desktop must never start/stop/load/unload models or use child endpoints. Preload/unload are disk operations, resident start/stop is scheduler-owned, and placement is host-only. Update the spec and its zh-CN mirror for every behavior change.
 
 ### Shared code (CLI + flashserver)
 
@@ -341,12 +341,12 @@ Matrix constraints: v4 bundles declare supported environments in `flashcli-bundl
 
 Docs are part of the product and this is a **public repository** — treat them as code. Every doc must be **clear, concise, accurate, and complete**: no verbosity, no redundancy, no stale content.
 
-- **Audience first.** User-facing docs live in root `README` / `bundles/<name>/README.md`; contracts/specs in `docs/`; maintainer workflows in `docs/bundle_builder_guide.md`. Keep `docs/README.md` as the index.
-- **English is authoritative; keep the `*.zh-CN.md` mirror in sync** in the same change. Missing/outdated zh mirrors are a bug.
+- **Audience first.** User-facing docs live in root `README` / `bundles/<name>/README.md`; contracts/specs in `docs/`; delivery plans in `docs/plans/`; maintainer workflows in `docs/bundle_builder_guide.md`. Keep `docs/README.md` as the index. Follow [docs/documentation_standard.md](docs/documentation_standard.md) for directories and naming (`*_spec.md`, `plans/*_plan.md`, `*_standard.md`, `*_guide.md`).
+- **English is authoritative; keep the `*.zh-CN.md` mirror in sync** in the same change (same directory). Missing/outdated zh mirrors are a bug.
 - **Delete or fix outdated content** instead of appending. Prefer editing the authoritative doc over creating a new one; avoid doc proliferation.
-- **One concept, one home.** Do not duplicate a spec across docs — link to the authoritative one.
+- **One concept, one home.** Do not duplicate a spec across docs — link to the authoritative one. A plan must not redefine behavior; the spec wins.
 - **Prefer tables and small diagrams** over prose when clearer.
-- **Verify relative links** after moving/renaming files.
+- **Verify relative links** after moving/renaming files (plans refer to root specs as `../<spec>.md`).
 - **When behavior changes**, update together: the authoritative spec (`docs/*.md`), the affected bundle `README`/`BUILD`, and `docs/environment.md` if env vars changed.
 
 ## Reporting issues

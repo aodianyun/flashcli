@@ -2,7 +2,7 @@
 
 <p align="right"><a href="flashserver_gateway_scheduler_plan.md">English</a> · <strong>简体中文</strong></p>
 
-契约见 [flashserver_gateway_scheduler_spec.zh-CN.md](flashserver_gateway_scheduler_spec.zh-CN.md)。本文是执行计划；
+契约见 [../flashserver_gateway_scheduler_spec.zh-CN.md](../flashserver_gateway_scheduler_spec.zh-CN.md)。本文是执行计划；
 出现行为分歧时以规范为准。
 
 ## 1. 目标

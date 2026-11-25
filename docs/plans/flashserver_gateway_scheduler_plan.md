@@ -2,7 +2,7 @@
 
 <p align="right"><strong>English</strong> · <a href="flashserver_gateway_scheduler_plan.zh-CN.md">简体中文</a></p>
 
-The contract is [flashserver_gateway_scheduler_spec.md](flashserver_gateway_scheduler_spec.md). This
+The contract is [../flashserver_gateway_scheduler_spec.md](../flashserver_gateway_scheduler_spec.md). This
 document is the execution plan; the spec wins on every behavior question.
 
 ## 1. Goal
