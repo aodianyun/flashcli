@@ -58,6 +58,17 @@ type Server struct {
 	// choosing a device. Zero uses the 512 MiB default.
 	VRAMHeadroomMiB int
 
+	// Demand-driven scheduler tuning and gateway behavior.
+	IdleStopSeconds          int
+	ResidentStartWaitSeconds int
+	QueueTimeoutSeconds      int
+	QueueMax                 int
+	AutoPull                 bool
+	CPUFallback              string
+
+	// Scheduler owns demand-driven resident lifecycle and leases.
+	Scheduler *Scheduler
+
 	// Preload persists explicit disk-preload intent across restarts.
 	Preload *preloadStore
 
@@ -86,7 +97,7 @@ func New(addr string) *Server {
 	gpuProbe := gpu.Probe
 	store := newServeSettingsStore("")
 	logDir := filepath.Join(paths.Home(), "logs", "serve")
-	return &Server{
+	s := &Server{
 		Addr:            addr,
 		Source:          defaultSource{},
 		Puller:          hostPuller{},
@@ -99,7 +110,43 @@ func New(addr string) *Server {
 		ServeSettings:   store,
 		Preload:         newPreloadStore(filepath.Join(paths.Home(), "flashserver", "preload.json")),
 		VRAMHeadroomMiB: 512,
+
+		IdleStopSeconds:          600,
+		ResidentStartWaitSeconds: 10,
+		QueueTimeoutSeconds:      30,
+		QueueMax:                 16,
+		AutoPull:                 true,
+		CPUFallback:              "no-gpu-runtime",
 	}
+	s.buildScheduler()
+	return s
+}
+
+// buildScheduler (re)builds the resident scheduler from the current Manager and
+// configuration. NewFromConfig calls it after replacing the Manager.
+func (s *Server) buildScheduler() {
+	maxLoaded := 0
+	if s.Manager != nil {
+		_, maxLoaded = s.Manager.Slots()
+	}
+	s.Scheduler = NewScheduler(s.Manager, SchedulerOptions{
+		MaxLoaded:           maxLoaded,
+		VRAMHeadroomMiB:     s.vramHeadroomMiB(),
+		IdleStopSeconds:     s.IdleStopSeconds,
+		QueueTimeoutSeconds: s.QueueTimeoutSeconds,
+		QueueMax:            s.QueueMax,
+		CPUDisabled:         s.CPUFallback == "disabled",
+		Inventory:           s.inventory,
+		Inspect:             inspectBundle,
+		Notify:              s.residentEvent,
+	})
+}
+
+func (s *Server) residentEvent(event string, data map[string]any) {
+	if event == "" {
+		return
+	}
+	s.broadcastWS(map[string]any{"type": "resident", "event": event, "data": data})
 }
 
 func (s *Server) Handler() http.Handler {
@@ -193,6 +240,9 @@ func (s *Server) Run(ctx context.Context) error {
 	InitLogFile(filepath.Join(paths.Home(), "logs", "flashserver.log"))
 	s.startGPUHistory(ctx)
 	s.reconcilePreloads(ctx)
+	if s.Scheduler != nil {
+		s.Scheduler.Start(ctx)
+	}
 	go s.forwardJobs(ctx)
 	// Go treats the IPv4 wildcard 0.0.0.0 as a wildcard and may bind a
 	// dual-stack socket. Windows' WSL localhost relay then exposes only ::1,

@@ -107,6 +107,10 @@ func TestPlacementCPUFallbackOnlyWithoutGPURuntime(t *testing.T) {
 	if req.GPUCompatible || !req.CPUCompatible || !req.CPUAdmitted {
 		t.Fatalf("CPU-only placement = %+v", req)
 	}
+	applyCPUPolicy(&req, true)
+	if req.CPUAdmitted || req.Reason != reasonNoCompatibleRuntime {
+		t.Fatalf("disabled CPU placement = %+v", req)
+	}
 
 	m = placementManifest(t, []string{"sm86-cu124-linux-x86_64-py312"}, nil)
 	req = placementFor("demo:1", m, inv, "124", 512)

@@ -206,10 +206,22 @@ paths:
                     items: { $ref: '#/components/schemas/LoadedModel' }
                   queue:
                     type: array
-                    items: {}
+                    description: Refs waiting for a lease slot
+                    items: { type: string }
                   reservations:
                     type: array
-                    items: {}
+                    description: Scheduler-owned residents and their device reservations
+                    items:
+                      type: object
+                      properties:
+                        ref: { type: string }
+                        state: { type: string, enum: [starting, ready, busy, stopping] }
+                        devices:
+                          type: array
+                          items: { type: string }
+                        active_requests: { type: integer }
+                        started_at: { type: string, format: date-time }
+                        last_used: { type: string, format: date-time }
                   vram_headroom_mib: { type: integer }
                   requirements:
                     type: array

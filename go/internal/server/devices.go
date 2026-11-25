@@ -75,8 +75,8 @@ type devicesResponse struct {
 type schedulerResponse struct {
 	Slots           map[string]int        `json:"slots"`
 	Resident        []InstanceInfo        `json:"resident"`
-	Queue           []any                 `json:"queue"`
-	Reservations    []any                 `json:"reservations"`
+	Queue           []string              `json:"queue"`
+	Reservations    []ResidentInfo        `json:"reservations"`
 	VRAMHeadroomMiB int64                 `json:"vram_headroom_mib"`
 	Requirements    []ResourceRequirement `json:"requirements"`
 }
@@ -245,6 +245,18 @@ func cpuFreeBytes(inv DeviceInventory) int64 {
 	return inv.MemoryFreeBytes
 }
 
+// applyCPUPolicy enforces cpu_fallback=disabled. Compatibility stays visible,
+// but CPU cannot be admitted when no GPU runtime matches.
+func applyCPUPolicy(req *ResourceRequirement, disabled bool) {
+	if !disabled || req.GPUCompatible {
+		return
+	}
+	req.CPUAdmitted = false
+	if req.Reason == "" {
+		req.Reason = reasonNoCompatibleRuntime
+	}
+}
+
 // placementRequirements inspects cached serve bundles. Bundle read failures are
 // skipped: this endpoint is telemetry, not admission.
 func (s *Server) placementRequirements(ctx context.Context, inv DeviceInventory) []ResourceRequirement {
@@ -266,7 +278,9 @@ func (s *Server) placementRequirements(ctx context.Context, inv DeviceInventory)
 		if err != nil {
 			continue
 		}
-		out = append(out, placementFor(model.Ref, m, inv, inv.CUDATag, headroom))
+		req := placementFor(model.Ref, m, inv, inv.CUDATag, headroom)
+		applyCPUPolicy(&req, s.CPUFallback == "disabled")
+		out = append(out, req)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Ref < out[j].Ref })
 	return out
@@ -283,11 +297,15 @@ func (s *Server) scheduler(w http.ResponseWriter, r *http.Request) {
 		used, maxLoaded = s.Manager.Slots()
 	}
 	inv := s.inventory(r.Context())
+	snap := SchedulerSnapshot{Reservations: []ResidentInfo{}, Queue: []string{}}
+	if s.Scheduler != nil {
+		snap = s.Scheduler.Snapshot()
+	}
 	writeJSON(w, http.StatusOK, schedulerResponse{
 		Slots:           map[string]int{"used": used, "max": maxLoaded},
 		Resident:        s.loaded(),
-		Queue:           []any{},
-		Reservations:    []any{},
+		Queue:           snap.Queue,
+		Reservations:    snap.Reservations,
 		VRAMHeadroomMiB: s.vramHeadroomMiB(),
 		Requirements:    s.placementRequirements(r.Context(), inv),
 	})

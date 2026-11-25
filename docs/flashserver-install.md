@@ -67,7 +67,14 @@ checks `/health`.
   "public_host": "127.0.0.1",
   "serve_host": "127.0.0.1",
   "log_dir": "/home/me/.flashcli/logs/serve",
-  "max_loaded": 0
+  "max_loaded": 0,
+  "vram_headroom_mib": 512,
+  "idle_stop_seconds": 600,
+  "resident_start_wait_seconds": 10,
+  "queue_timeout_seconds": 30,
+  "queue_max": 16,
+  "auto_pull": true,
+  "cpu_fallback": "no-gpu-runtime"
 }
 ```
 

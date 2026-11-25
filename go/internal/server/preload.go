@@ -250,6 +250,10 @@ func (s *Server) modelViews(ctx context.Context, models []host.Model) []modelSta
 			resident[inst.Ref] = true
 		}
 	}
+	scheduled := map[string]ResidentInfo{}
+	if s.Scheduler != nil {
+		scheduled = s.Scheduler.States()
+	}
 	seen := map[string]bool{}
 	out := make([]modelStatus, 0, len(models)+len(states))
 	for _, m := range models {
@@ -261,10 +265,17 @@ func (s *Server) modelViews(ctx context.Context, models []host.Model) []modelSta
 			state = preloadReady
 		}
 		view := modelStatus{Model: m, Preload: state, Resident: "stopped"}
-		if resident[m.Ref] {
+		if st, ok := scheduled[m.Ref]; ok {
+			view.Resident = st.State
+			view.ActiveRequests = st.ActiveRequests
+			if !st.LastUsed.IsZero() {
+				t := st.LastUsed
+				view.LastUsed = &t
+			}
+		} else if resident[m.Ref] {
 			view.Resident = "ready"
 		}
-		if e, ok := states[m.Ref]; ok && !e.LastUsed.IsZero() {
+		if e, ok := states[m.Ref]; ok && !e.LastUsed.IsZero() && view.LastUsed == nil {
 			t := e.LastUsed
 			view.LastUsed = &t
 		}
@@ -275,7 +286,14 @@ func (s *Server) modelViews(ctx context.Context, models []host.Model) []modelSta
 			continue
 		}
 		view := modelStatus{Model: host.Model{Ref: refStr}, Preload: e.State, Resident: "stopped"}
-		if resident[refStr] {
+		if st, ok := scheduled[refStr]; ok {
+			view.Resident = st.State
+			view.ActiveRequests = st.ActiveRequests
+			if !st.LastUsed.IsZero() {
+				t := st.LastUsed
+				view.LastUsed = &t
+			}
+		} else if resident[refStr] {
 			view.Resident = "ready"
 		}
 		out = append(out, view)
@@ -382,16 +400,20 @@ func (s *Server) unloadModel(w http.ResponseWriter, r *http.Request) {
 	refStr := strings.TrimSpace(req.Ref)
 	store := s.preloads()
 
-	if s.Manager != nil && s.Manager.Busy(refStr) {
+	if s.modelBusy(refStr) {
 		switch {
 		case req.Force:
-			if err := s.Manager.Unload(r.Context(), refStr); err != nil {
+			if err := s.stopResident(r.Context(), refStr); err != nil {
 				writeError(w, http.StatusInternalServerError, err)
 				return
 			}
 		case req.WaitSeconds > 0:
-			if !s.waitUntilIdle(r.Context(), refStr, time.Duration(req.WaitSeconds)*time.Second) {
-				writeModelBusy(w, refStr, "model is still resident or has active requests")
+			if !s.waitDrained(r.Context(), refStr, time.Duration(req.WaitSeconds)*time.Second) {
+				writeModelBusy(w, refStr, "model still has active requests")
+				return
+			}
+			if err := s.stopResident(r.Context(), refStr); err != nil {
+				writeError(w, http.StatusInternalServerError, err)
 				return
 			}
 		default:
@@ -429,16 +451,36 @@ func (s *Server) unloadModel(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// waitUntilIdle polls the resident manager until the ref is no longer loaded or
-// loading. M3 replaces this with lease-aware waiting.
-func (s *Server) waitUntilIdle(ctx context.Context, refStr string, timeout time.Duration) bool {
-	if s.Manager == nil {
+// modelBusy reports whether ref is resident or has active requests. A ready
+// resident with no leases is still resident for unload purposes.
+func (s *Server) modelBusy(refStr string) bool {
+	if s.Scheduler != nil && s.Scheduler.Resident(refStr) {
+		return true
+	}
+	return s.Manager != nil && s.Manager.Busy(refStr)
+}
+
+// stopResident stops a scheduler-owned resident or an admin-loaded instance.
+func (s *Server) stopResident(ctx context.Context, refStr string) error {
+	if s.Scheduler != nil && s.Scheduler.Resident(refStr) {
+		return s.Scheduler.Stop(ctx, refStr)
+	}
+	if s.Manager != nil {
+		return s.Manager.Unload(ctx, refStr)
+	}
+	return nil
+}
+
+// waitDrained waits for active leases to finish. A ready resident with no
+// leases is already drained and may be stopped by the caller.
+func (s *Server) waitDrained(ctx context.Context, refStr string, timeout time.Duration) bool {
+	if s.Scheduler == nil {
 		return true
 	}
 	deadline := time.Now().Add(timeout)
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
-	for s.Manager.Busy(refStr) {
+	for !s.Scheduler.Drained(refStr) {
 		if time.Now().After(deadline) {
 			return false
 		}

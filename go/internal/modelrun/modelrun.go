@@ -121,11 +121,36 @@ type OptionLauncher interface {
 	StartWithOptions(context.Context, string, LoadOptions) (ServeProcess, error)
 }
 
+// mergeEnv overlays key=value entries, replacing any existing value for the
+// same key so CUDA_VISIBLE_DEVICES cannot be shadowed by the parent process.
+func mergeEnv(base, overlay []string) []string {
+	if len(overlay) == 0 {
+		return base
+	}
+	blocked := map[string]bool{}
+	for _, entry := range overlay {
+		if key, _, ok := strings.Cut(entry, "="); ok {
+			blocked[key] = true
+		}
+	}
+	out := make([]string, 0, len(base)+len(overlay))
+	for _, entry := range base {
+		if key, _, ok := strings.Cut(entry, "="); ok && blocked[key] {
+			continue
+		}
+		out = append(out, entry)
+	}
+	return append(out, overlay...)
+}
+
 // LoadOptions carries the per-model host, port and manifest serve flags.
 type LoadOptions struct {
 	Host  string
 	Port  int
 	Flags []string
+	// Env overrides the child environment (for example CUDA_VISIBLE_DEVICES and
+	// FLASHCLI_RUNTIME_ENV_KEY for scheduler placement). Later entries win.
+	Env []string
 }
 
 // FlashcliLauncher starts `flashcli serve` as a separate process.
@@ -184,6 +209,7 @@ func (l FlashcliLauncher) StartWithOptions(ctx context.Context, refStr string, o
 	args = append(args, opts.Flags...)
 	cmd := exec.Command(bin, args...)
 	cmd.Env = append(os.Environ(), l.ExtraEnv...)
+	cmd.Env = mergeEnv(cmd.Env, opts.Env)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	logPath := ""

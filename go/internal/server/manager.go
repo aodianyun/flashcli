@@ -77,6 +77,18 @@ type instance struct {
 // the user unloads it explicitly.
 const ownerModel = "model"
 
+// ownerScheduler marks a demand-driven resident owned by the scheduler. It is
+// never persisted and keeps the process alive across requests until idle stop
+// or eviction.
+const ownerScheduler = "scheduler"
+
+// loadMode distinguishes admin/model-page loads from scheduler placements.
+type loadMode struct {
+	owner        string
+	env          []string
+	skipCapacity bool
+}
+
 // NewManager creates a manager with a conservative single-model default.
 func NewManager(l Launcher) *Manager {
 	return NewManagerWithOptions(l, ManagerOptions{MaxLoaded: 1})
@@ -94,26 +106,34 @@ func NewManagerWithOptions(l Launcher, opts ManagerOptions) *Manager {
 
 // Load starts a serve process for ref if it is not already resident.
 func (m *Manager) Load(ctx context.Context, refStr string) (*InstanceInfo, error) {
-	return m.loadOwned(ctx, refStr, ownerModel, nil)
+	return m.loadOwnedMode(ctx, refStr, nil, loadMode{owner: ownerModel})
 }
 
 // LoadWithProgress is Load with coarse progress events (bundle/weights/venv).
 func (m *Manager) LoadWithProgress(ctx context.Context, refStr string, progress func(phase, message string)) (*InstanceInfo, error) {
-	return m.loadOwned(ctx, refStr, ownerModel, progress)
+	return m.loadOwnedMode(ctx, refStr, progress, loadMode{owner: ownerModel})
 }
 
 // LoadFor loads ref on behalf of one application. The application is recorded
 // as an owner; the returned process must be released instead of force-unloaded.
 func (m *Manager) LoadFor(ctx context.Context, refStr, owner string) (*InstanceInfo, error) {
-	return m.loadOwned(ctx, refStr, owner, nil)
+	return m.loadOwnedMode(ctx, refStr, nil, loadMode{owner: owner})
 }
 
 // LoadForWithProgress is LoadFor with coarse progress events.
 func (m *Manager) LoadForWithProgress(ctx context.Context, refStr, owner string, progress func(phase, message string)) (*InstanceInfo, error) {
-	return m.loadOwned(ctx, refStr, owner, progress)
+	return m.loadOwnedMode(ctx, refStr, progress, loadMode{owner: owner})
 }
 
-func (m *Manager) loadOwned(ctx context.Context, refStr, owner string, progress func(phase, message string)) (*InstanceInfo, error) {
+// LoadScheduled starts (or joins) a demand-driven resident. The scheduler has
+// already admitted the placement, so the admin slot/VRAM check is skipped and
+// the ref is never persisted as model-page intent.
+func (m *Manager) LoadScheduled(ctx context.Context, refStr string, env []string) (*InstanceInfo, error) {
+	return m.loadOwnedMode(ctx, refStr, nil, loadMode{owner: ownerScheduler, env: env, skipCapacity: true})
+}
+
+func (m *Manager) loadOwnedMode(ctx context.Context, refStr string, progress func(phase, message string), mode loadMode) (*InstanceInfo, error) {
+	owner := mode.owner
 	for {
 		m.mu.Lock()
 		if inst, ok := m.instances[refStr]; ok {
@@ -146,7 +166,7 @@ func (m *Manager) loadOwned(ctx context.Context, refStr, owner string, progress 
 		m.loading[refStr] = wait
 		m.mu.Unlock()
 
-		info, err := m.load(ctx, refStr, progress)
+		info, err := m.load(ctx, refStr, progress, mode)
 		m.mu.Lock()
 		delete(m.loading, refStr)
 		close(wait)
@@ -177,7 +197,7 @@ func addOwnerLocked(inst *instance, owner string) {
 	inst.owners[owner] = struct{}{}
 }
 
-func (m *Manager) load(ctx context.Context, refStr string, progress func(phase, message string)) (InstanceInfo, error) {
+func (m *Manager) load(ctx context.Context, refStr string, progress func(phase, message string), mode loadMode) (InstanceInfo, error) {
 	if m.launcher == nil {
 		return InstanceInfo{}, errors.New("serve launcher is not configured")
 	}
@@ -200,9 +220,11 @@ func (m *Manager) load(ctx context.Context, refStr string, progress func(phase, 
 		return InstanceInfo{}, fmt.Errorf("bundle %q is run-only (no serve entry); use `flashcli run %s`", name, refStr)
 	}
 	m.mu.Lock()
-	if err := m.checkCapacityLocked(ctx, bundle); err != nil {
-		m.mu.Unlock()
-		return InstanceInfo{}, err
+	if !mode.skipCapacity {
+		if err := m.checkCapacityLocked(ctx, bundle); err != nil {
+			m.mu.Unlock()
+			return InstanceInfo{}, err
+		}
 	}
 	m.pending++
 	m.mu.Unlock()
@@ -234,7 +256,7 @@ func (m *Manager) load(ctx context.Context, refStr string, progress func(phase, 
 	}
 	var proc ServeProcess
 	if ol, ok := m.launcher.(OptionLauncher); ok {
-		proc, err = ol.StartWithOptions(ctx, refStr, LoadOptions{Host: host, Port: port, Flags: flags})
+		proc, err = ol.StartWithOptions(ctx, refStr, LoadOptions{Host: host, Port: port, Flags: flags, Env: mode.env})
 	} else {
 		proc, err = m.launcher.Start(ctx, refStr, port)
 	}
@@ -540,6 +562,8 @@ type BundleInfo struct {
 	GPUCount     int
 	ServeOptions []serveopts.Spec
 	Capabilities []string
+	// Manifest is the raw parsed manifest, used by scheduler placement.
+	Manifest *manifest.Manifest
 }
 
 func inspectBundle(refStr string) (BundleInfo, error) {
@@ -575,5 +599,6 @@ func inspectBundle(refStr string) (BundleInfo, error) {
 		GPUCount:     resourceNeeds.GPUCount,
 		ServeOptions: serveopts.FromManifest(m, variant),
 		Capabilities: m.ServeCapabilities(),
+		Manifest:     m,
 	}, nil
 }
