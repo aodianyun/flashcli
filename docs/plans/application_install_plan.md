@@ -3,7 +3,7 @@
 <p align="right"><strong>English</strong> · <a href="application_install_plan.zh-CN.md">简体中文</a></p>
 
 > **Status: implemented (v1).** The manifest schema is specified in
-> [app_manifest_standard.md](app_manifest_standard.md) (v1, matching FlashHub).
+> [app_manifest_standard.md](../app_manifest_standard.md) (v1, matching FlashHub).
 
 ## Goals
 
@@ -50,7 +50,7 @@ No HTTP call from the CLI to the daemon is required (or used) for app operations
 `GET /api/v1/apps/{namespace}/{name}[:version]` returns the manifest. The host
 validates `format`, `app_format_version`, `protocol_version`, required fields,
 and that `name`/`version` match the key. See
-[app_manifest_standard.md](app_manifest_standard.md).
+[app_manifest_standard.md](../app_manifest_standard.md).
 
 ## Install flow
 
@@ -287,7 +287,7 @@ Install leaves `state=prepared` with the gateway connection and no
 
 v1 manifests publish `config: []`; the host does not interpret it. Client
 configuration is done by `setup.scripts` (see
-[app_manifest_standard.md](app_manifest_standard.md)): after the models are
+[app_manifest_standard.md](../app_manifest_standard.md)): after the models are
 ready, the confirmed scripts write the application's own config using the
 connection. There is no `connection.json` writer.
 

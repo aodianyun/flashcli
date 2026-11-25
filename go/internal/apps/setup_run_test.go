@@ -93,7 +93,7 @@ func TestRunSetupScriptRejectsHashMismatch(t *testing.T) {
 	}
 }
 
-func TestStartRunsConfirmedSetupScripts(t *testing.T) {
+func TestActivateRunsConfirmedSetupScripts(t *testing.T) {
 	if _, err := setupPython(); err != nil {
 		t.Skip(err)
 	}
@@ -119,7 +119,7 @@ func TestStartRunsConfirmedSetupScripts(t *testing.T) {
 		t.Fatal(err)
 	}
 	home := t.TempDir()
-	started, err := svc.StartWithSetup(context.Background(), "xym/workbuddy:1.0.0", false, SetupOptions{
+	started, err := svc.ActivateWithSetup(context.Background(), "xym/workbuddy:1.0.0", SetupOptions{
 		Scripts:    []string{"workbuddy"},
 		ClientHome: home,
 		Provided:   true,
@@ -263,9 +263,9 @@ func TestInstallDoesNotRunSetupScripts(t *testing.T) {
 	}
 }
 
-// A daemon restart restores the app with a new connection; Start (no explicit
-// selection) must replay the scripts the user confirmed on the previous start.
-func TestRestoreReplaysSavedSetupScripts(t *testing.T) {
+// Activation with no explicit selection must replay the scripts the user
+// confirmed previously (pinned definitions, no manifest fetch).
+func TestActivateReplaysSavedSetupScripts(t *testing.T) {
 	if _, err := setupPython(); err != nil {
 		t.Skip(err)
 	}
@@ -313,7 +313,7 @@ func TestRestoreReplaysSavedSetupScripts(t *testing.T) {
 	svc.Fetch = func(context.Context, flashhub.AppRef) ([]byte, error) {
 		return nil, fmt.Errorf("offline: manifest fetch must not be needed on restore")
 	}
-	started, err := svc.Start(context.Background(), "xym/workbuddy:1.0.0", false)
+	started, err := svc.Activate(context.Background(), "xym/workbuddy:1.0.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,27 +322,6 @@ func TestRestoreReplaysSavedSetupScripts(t *testing.T) {
 	}
 	if len(started.SetupScripts) != 1 || started.SetupScripts[0] != "workbuddy" {
 		t.Fatalf("setup_scripts = %#v", started.SetupScripts)
-	}
-}
-
-// A start interrupted by shutdown keeps its intent so the next daemon start
-// retries it instead of showing "failed: context canceled".
-func TestStartCanceledKeepsIntent(t *testing.T) {
-	launcher := &fakeLauncher{failRef: "a/one:1"}
-	svc, _ := newTestService(t, manifestJSON("a/one:1"), launcher)
-	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{
-		Yes: true,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if _, err := svc.Start(ctx, "xym/demo:1.0.0", false); err == nil {
-		t.Fatal("expected a start error")
-	}
-	st, _, _ := svc.Registry.Get("xym/demo:1.0.0")
-	if st.State != StateStarting || st.Error != "" {
-		t.Fatalf("interrupted start = state %q error %q", st.State, st.Error)
 	}
 }
 
@@ -358,7 +337,7 @@ func TestSetupFailureIgnoresInterruptedContext(t *testing.T) {
 }
 
 // A failure from an earlier run is cleared as soon as the app starts again.
-func TestStartClearsStaleSetupError(t *testing.T) {
+func TestActivateClearsStaleSetupError(t *testing.T) {
 	svc, _ := newTestService(t, manifestJSON("a/one:1"), &fakeLauncher{})
 	if _, err := svc.Install(context.Background(), "xym/demo", InstallOptions{
 		Yes: true,
@@ -376,7 +355,7 @@ func TestStartClearsStaleSetupError(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Start(context.Background(), "xym/demo:1.0.0", false); err != nil {
+	if _, err := svc.Activate(context.Background(), "xym/demo:1.0.0"); err != nil {
 		t.Fatal(err)
 	}
 	st, _, _ := svc.Registry.Get("xym/demo:1.0.0")
@@ -416,7 +395,7 @@ func TestExplicitEmptySetupSelectionClearsSavedPlan(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.StartWithSetup(context.Background(), "xym/workbuddy:1.0.0", false, SetupOptions{
+	if _, err := svc.ActivateWithSetup(context.Background(), "xym/workbuddy:1.0.0", SetupOptions{
 		Provided: true,
 	}); err != nil {
 		t.Fatal(err)

@@ -4,14 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/url"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,61 +18,40 @@ import (
 	"github.com/aodianyun/flashcli/go/internal/modelrun"
 )
 
-// Launcher starts one model serve process (modelrun by default, fake in tests).
-type Launcher interface {
-	StartWithOptions(context.Context, string, modelrun.LoadOptions) (modelrun.ServeProcess, error)
-}
-
-// Service implements app install and lifecycle for one host.
+// Service implements app install and activation for one host.
 type Service struct {
-	Home       string
-	Bin        string
-	Host       string
-	PublicHost string
-	LogDir     string
-	Out        io.Writer
+	Home   string
+	LogDir string
+	Out    io.Writer
 	// Stdin is given to install commands. The CLI passes its own stdin so a
 	// script may prompt; the daemon leaves it nil (child gets the null device)
 	// so an unattended install can never block on input.
 	Stdin    io.Reader
 	Registry *Registry
-	Launcher Launcher
 	Prepare  func(context.Context, string) error
 	Fetch    func(context.Context, flashhub.AppRef) ([]byte, error)
 	// GatewayBaseURL is what setup scripts receive as {base_url}. Apps call the
 	// flashserver OpenAI gateway; they never receive a model's child endpoint.
 	// Empty uses http://127.0.0.1:8790/v1.
 	GatewayBaseURL string
-	// Stopper stops a model that this service instance did not start (for
-	// example after a daemon restart or a shared Manager). It reports whether
-	// the reference was handled; false falls back to the recorded PID.
-	Stopper func(context.Context, string) (bool, error)
-	// Claim registers this application as an owner of an already healthy
-	// model so another app stopping it does not take it away.
-	Claim func(context.Context, string) error
 	// ConfirmSetup asks the local user before running a setup script. The daemon
 	// leaves it nil (the client sends confirmed script keys); the CLI prompts.
 	ConfirmSetup func(SetupScript) bool
 	Now          func() time.Time
 	StartTimeout time.Duration
-
-	mu    sync.Mutex
-	procs map[string]modelrun.ServeProcess
 }
 
-// New returns a service wired to the shared host/modelrun implementation.
+// New returns a service wired to the shared host implementation.
 func New(home string) *Service {
 	logDir := filepath.Join(home, "logs", "serve")
 	svc := &Service{
 		Home:         home,
-		Host:         "127.0.0.1",
 		LogDir:       logDir,
 		Out:          io.Discard,
 		Registry:     NewRegistry(home),
 		Now:          time.Now,
 		StartTimeout: 120 * time.Second,
 	}
-	svc.Launcher = modelrun.FlashcliLauncher{LogDir: logDir}
 	svc.Fetch = func(ctx context.Context, ref flashhub.AppRef) ([]byte, error) {
 		return flashhub.NewClient().FetchAppManifest(ctx, ref)
 	}
@@ -91,9 +67,8 @@ func New(home string) *Service {
 }
 
 // appLocks serializes mutations of one application. Services are created per
-// request/frontend, so the lock must live at package scope; otherwise a restore
-// and a manual start can run concurrently, start two models, and leave the
-// connection and the setup config pointing at different ports.
+// request/frontend, so the lock must live at package scope; otherwise a
+// restore and a manual activation can run concurrently.
 var appLocks sync.Map
 
 func lockApp(key string) func() {
@@ -137,28 +112,11 @@ type InstallResult struct {
 	AlreadyReady   bool
 }
 
-func (s *Service) setProc(ref string, proc modelrun.ServeProcess) {
-	s.mu.Lock()
-	if s.procs == nil {
-		s.procs = map[string]modelrun.ServeProcess{}
-	}
-	s.procs[ref] = proc
-	s.mu.Unlock()
-}
-
-func (s *Service) takeProc(ref string) modelrun.ServeProcess {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	proc := s.procs[ref]
-	delete(s.procs, ref)
-	return proc
-}
-
-// installMu serializes installs in this process: preparing and starting two
-// applications at once would fight over disk, ports and GPU memory.
+// installMu serializes installs in this process: preparing two applications at
+// once would fight over disk.
 var installMu sync.Mutex
 
-// Install runs the flow from docs/application_install_plan.md.
+// Install runs the flow from docs/plans/application_install_plan.md.
 func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOptions) (InstallResult, error) {
 	installMu.Lock()
 	defer installMu.Unlock()
@@ -226,18 +184,6 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 	state.Key = key
 	state.Version = m.Version
 	state.State = StatePlanned
-	// Install never starts models: a reinstall stops whatever is still running
-	// so the prepared set can be started explicitly afterwards. Caches stay.
-	if found && !opts.PrepareOnly {
-		for i := range existing.Models {
-			old := &existing.Models[i]
-			if old.PID == 0 && old.Endpoint == "" {
-				continue
-			}
-			fmt.Fprintf(out, "\nStopping model %s for the reinstall\n", old.Ref)
-			s.stopModel(ctx, old)
-		}
-	}
 	state.Models = planModels(refs, existing.Models)
 	s.save(&state)
 
@@ -350,69 +296,8 @@ func (s *Service) Install(ctx context.Context, rawRef string, opts InstallOption
 	return res, nil
 }
 
-// Start starts every prepared model of an installed app (idempotent).
-func (s *Service) Start(ctx context.Context, key string, keepPartial bool) (AppState, error) {
-	return s.StartWithSetup(ctx, key, keepPartial, SetupOptions{})
-}
-
-// StartWithSetup starts the app's models and then runs the confirmed setup
-// scripts in manifest order (each run is confirmed by the caller).
-func (s *Service) StartWithSetup(ctx context.Context, key string, keepPartial bool, setup SetupOptions) (AppState, error) {
-	unlock := lockApp(key)
-	defer unlock()
-	var st AppState
-	var ok bool
-	var err error
-	capture := s.beginCapture()
-	defer func() {
-		s.endCapture(capture)
-		if ok {
-			st.LastLog = tailLog(capture.buf.String(), 100)
-			s.save(&st)
-		}
-	}()
-	st, ok, err = s.Registry.Get(key)
-	if err != nil {
-		return AppState{}, err
-	}
-	if !ok {
-		return AppState{}, fmt.Errorf("application %s is not installed", key)
-	}
-	ctx = WithOwner(ctx, key)
-	st.State = StateStarting
-	st.Error = ""
-	// A previous failure belongs to the previous run; do not show it while
-	// this start is in progress (setup runs again once the models are ready).
-	st.SetupError = ""
-	st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
-	s.save(&st)
-	if err := s.startModels(ctx, &st, keepPartial); err != nil {
-		if ctx.Err() != nil {
-			// The daemon is shutting down (or the caller went away). Keep the
-			// start intent so the next daemon start retries it instead of
-			// showing a false "failed: context canceled".
-			st.State = StateStarting
-			st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
-			s.save(&st)
-			return st, err
-		}
-		st.State = StateFailed
-		st.Error = err.Error()
-		st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
-		s.save(&st)
-		return st, err
-	}
-	st.State = StateReady
-	st.Error = ""
-	st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
-	st.Connection = connectionFor(key, st.Version, st.Models)
-	s.save(&st)
-	s.applySetupScripts(ctx, key, &st, setup, nil)
-	return st, nil
-}
-
-// applySetupScripts runs setup scripts after a successful model start. For the
-// CLI, ConfirmSetup prompts for each manifest script; the daemon passes the
+// applySetupScripts runs setup scripts after activation. For the CLI,
+// ConfirmSetup prompts for each manifest script; the daemon passes the
 // already-confirmed keys. A failure is logged and stops the remaining scripts.
 func (s *Service) applySetupScripts(ctx context.Context, key string, st *AppState, setup SetupOptions, m *Manifest) {
 	// A restore (no explicit selection; the daemon has no terminal) replays the
@@ -517,39 +402,14 @@ func (s *Service) manifestFor(ctx context.Context, key string) (*Manifest, error
 	return Parse(raw)
 }
 
-// Stop stops the app's models and marks it stopped.
-func (s *Service) Stop(ctx context.Context, key string) (AppState, error) {
-	unlock := lockApp(key)
-	defer unlock()
-	st, ok, err := s.Registry.Get(key)
-	if err != nil {
-		return AppState{}, err
-	}
-	if !ok {
-		return AppState{}, fmt.Errorf("application %s is not installed", key)
-	}
-	ctx = WithOwner(ctx, key)
-	st.State = StateStopping
-	st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
-	s.save(&st)
-	for i := range st.Models {
-		s.stopModel(ctx, &st.Models[i])
-	}
-	st.State = StateStopped
-	st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
-	st.Connection = connectionFor(key, st.Version, st.Models)
-	s.save(&st)
-	return st, nil
-}
-
-// Status returns the stored state with live health annotations.
+// Status returns the stored state with interrupted transitions normalized.
 //
 // The recorded state is reconciled with reality: after a daemon restart (or a
 // crash/manual kill) an app can be stored as ready while its model process is
 // gone. Reporting it as ready would disable 启动 and advertise a dead endpoint,
 // so a ready app with no healthy model becomes stopped, and a partially healthy
 // app becomes failed.
-func (s *Service) Status(ctx context.Context, key string) (AppState, error) {
+func (s *Service) Status(_ context.Context, key string) (AppState, error) {
 	st, ok, err := s.Registry.Get(key)
 	if err != nil {
 		return AppState{}, err
@@ -560,8 +420,7 @@ func (s *Service) Status(ctx context.Context, key string) (AppState, error) {
 	changed := false
 	now := s.now().UTC().Format(time.RFC3339)
 	// A transitional state left behind by an interrupted run would keep the
-	// UI's actions disabled forever. A live start/stop keeps it while the
-	// operation is within its timeout; only an old one is reported as failed.
+	// UI's actions disabled forever. Only an old one is reported as failed.
 	if isTransitional(st.State) && s.transitionExpired(&st) {
 		st.State = StateFailed
 		if st.Error == "" {
@@ -569,47 +428,6 @@ func (s *Service) Status(ctx context.Context, key string) (AppState, error) {
 		}
 		changed = true
 	}
-	healthy, recorded := 0, 0
-	for i := range st.Models {
-		mdl := &st.Models[i]
-		if mdl.Endpoint == "" {
-			// Prepared but not started (install --no-start / start=false):
-			// Prepared describes the weights cache, not liveness.
-			continue
-		}
-		recorded++
-		if endpointHealthy(ctx, mdl.Endpoint) {
-			healthy++
-			continue
-		}
-		// The recorded process is gone (daemon restart, crash, manual kill).
-		// Drop the stale pid/endpoint so a later Stop cannot signal an
-		// unrelated process and the connection info is not advertised.
-		mdl.PID, mdl.Endpoint = 0, ""
-		changed = true
-	}
-	if recorded > 0 {
-		switch st.State {
-		case StateReady:
-			if healthy == 0 {
-				st.State = StateStopped
-				st.Error = ""
-				changed = true
-			} else if healthy < recorded {
-				st.State = StateFailed
-				st.Error = "some models are not running"
-				changed = true
-			}
-		case StateFailed:
-			if healthy == recorded {
-				st.State = StateReady
-				st.Error = ""
-				changed = true
-			}
-		}
-	}
-	// Endpoints change on every start (the Manager picks the port), so the
-	// advertised connection must never be a port from a previous run.
 	if conn := s.gatewayConnection(st.Models); !reflect.DeepEqual(conn, st.Connection) {
 		st.Connection = conn
 		changed = true
@@ -661,9 +479,6 @@ func (s *Service) Uninstall(ctx context.Context, key string, purgeModels bool) (
 		return AppState{}, fmt.Errorf("application %s is not installed", key)
 	}
 	ctx = WithOwner(ctx, key)
-	for i := range st.Models {
-		s.stopModel(ctx, &st.Models[i])
-	}
 	if purgeModels {
 		for _, mdl := range st.Models {
 			if _, err := host.RemoveCachedRef(mdl.Ref); err != nil {
@@ -726,23 +541,6 @@ func planModels(refs []string, existing []ModelState) []ModelState {
 		out = append(out, st)
 	}
 	return out
-}
-
-func connectionFor(key, version string, models []ModelState) Connection {
-	conn := Connection{APIKey: "local"}
-	for _, m := range models {
-		if m.Endpoint == "" {
-			continue
-		}
-		conn.Models = append(conn.Models, m.ID)
-		conn.ModelRefs = append(conn.ModelRefs, m.Ref)
-		if conn.BaseURL == "" {
-			conn.BaseURL = m.Endpoint + "/v1"
-		}
-	}
-	_ = key
-	_ = version
-	return conn
 }
 
 func (s *Service) gatewayBaseURL() string {
@@ -827,121 +625,6 @@ func (s *Service) Deactivate(ctx context.Context, key string) (AppState, error) 
 	st.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 	s.save(&st)
 	return st, nil
-}
-
-func (s *Service) startModels(ctx context.Context, st *AppState, keepPartial bool) error {
-	var started []*ModelState
-	fail := func(err error) error {
-		if !keepPartial {
-			for _, m := range started {
-				s.stopModel(ctx, m)
-			}
-		}
-		return err
-	}
-	launcher := s.Launcher
-	if launcher == nil {
-		launcher = modelrun.FlashcliLauncher{Bin: s.Bin, Host: s.Host, PublicHost: s.PublicHost, LogDir: s.LogDir}
-	}
-	for i := range st.Models {
-		mdl := &st.Models[i]
-		if mdl.PID > 0 && mdl.Endpoint != "" && endpointHealthy(ctx, mdl.Endpoint) {
-			fmt.Fprintf(s.out(), "  reuse %s at %s\n", mdl.ID, mdl.Endpoint)
-			// Reusing another app's instance still makes this app an owner;
-			// otherwise stopping the other app would unload it underneath us.
-			if s.Claim != nil {
-				if err := s.Claim(ctx, mdl.Ref); err != nil {
-					return fail(fmt.Errorf("claim %s: %w", mdl.Ref, err))
-				}
-			}
-			continue
-		}
-		port := mdl.Port
-		if port <= 0 || !modelrun.PortAvailable(port) {
-			var err error
-			port, err = modelrun.FreePort()
-			if err != nil {
-				return fail(err)
-			}
-		}
-		fmt.Fprintf(s.out(), "starting %s ...\n", mdl.Ref)
-		proc, err := launcher.StartWithOptions(ctx, mdl.Ref, modelrun.LoadOptions{Port: port})
-		if err != nil {
-			return fail(fmt.Errorf("start %s: %w", mdl.Ref, err))
-		}
-		started = append(started, mdl)
-		fmt.Fprintf(s.out(), "waiting for %s to become ready ...\n", mdl.Ref)
-		if err := waitHealthy(ctx, proc, s.startTimeout()); err != nil {
-			_ = proc.Stop(context.Background())
-			return fail(fmt.Errorf("model %s did not become healthy: %w", mdl.Ref, err))
-		}
-		s.setProc(mdl.Ref, proc)
-		mdl.Endpoint = proc.Endpoint()
-		// A Manager-backed launcher picks its own port (it may honor the model
-		// page's serve settings), so trust the endpoint over the requested port.
-		if p := endpointPort(mdl.Endpoint); p > 0 {
-			mdl.Port = p
-		} else {
-			mdl.Port = port
-		}
-		mdl.PID = proc.PID()
-		mdl.Prepared = true
-		s.save(st)
-		fmt.Fprintf(s.out(), "  started %s at %s (pid %d)\n", mdl.ID, mdl.Endpoint, mdl.PID)
-	}
-	return nil
-}
-
-// endpointHealthy bounds the reuse probe so a stale endpoint cannot stall an
-// install for the full health timeout.
-func endpointHealthy(ctx context.Context, endpoint string) bool {
-	probe, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	return modelrun.HealthyEndpoint(probe, endpoint) == nil
-}
-
-// endpointPort returns the port of an http endpoint, or 0 when unavailable.
-func endpointPort(endpoint string) int {
-	u, err := url.Parse(endpoint)
-	if err != nil {
-		return 0
-	}
-	port, err := strconv.Atoi(u.Port())
-	if err != nil {
-		return 0
-	}
-	return port
-}
-
-func waitHealthy(ctx context.Context, proc modelrun.ServeProcess, timeout time.Duration) error {
-	return modelrun.WaitHealthy(ctx, proc, timeout, nil)
-}
-
-func (s *Service) stopModel(ctx context.Context, m *ModelState) {
-	fmt.Fprintf(s.out(), "stopping %s ...\n", m.Ref)
-	if proc := s.takeProc(m.Ref); proc != nil {
-		_ = proc.Stop(ctx)
-		m.PID, m.Endpoint = 0, ""
-		return
-	}
-	if s.Stopper != nil {
-		if handled, err := s.Stopper(ctx, m.Ref); handled {
-			_ = err
-			m.PID, m.Endpoint = 0, ""
-			return
-		}
-	}
-	if m.PID <= 0 {
-		m.PID, m.Endpoint = 0, ""
-		return
-	}
-	// Cross-process stop: the model was started by another flashcli process.
-	if p, err := os.FindProcess(m.PID); err == nil {
-		_ = p.Signal(os.Interrupt)
-		time.Sleep(300 * time.Millisecond)
-		_ = p.Kill()
-	}
-	m.PID, m.Endpoint = 0, ""
 }
 
 func (s *Service) runCommand(ctx context.Context, command string) error {

@@ -7,7 +7,7 @@ FlashHub application and which model bundles it needs. It is declarative data
 only: FlashHub owns the manifest, `flashcli` executes it under the rules below.
 
 This document is authoritative for `app_format_version: 1`, matching what
-FlashHub serves today. It is referenced by [application_install_plan.md](application_install_plan.md).
+FlashHub serves today. It is referenced by [plans/application_install_plan.md](plans/application_install_plan.md).
 
 ## Flow
 

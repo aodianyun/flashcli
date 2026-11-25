@@ -2586,7 +2586,6 @@ impl App {
         let shared_weights = shared_weights_set(&self.models);
         let mut toggle_all: Option<bool> = None;
         let mut detail_request = None;
-        let mut load_request = None;
         let mut pull_request = None;
         let mut resync_request = None;
         let mut unload_request = None;
@@ -2794,9 +2793,6 @@ impl App {
                 ),
                 action: Pending::Clean(refs),
             });
-        }
-        if let Some(name) = load_request {
-            self.open_model_options(ui.ctx(), name, true);
         }
         if let Some(name) = pull_request {
             self.spawn_job_ui(ui.ctx(), name, true, "加载");
@@ -3072,7 +3068,6 @@ impl App {
         };
         let dark = ctx.style().visuals.dark_mode;
         let mut close = false;
-        let mut load = false;
         let mut pull = false;
         let mut options = false;
         modal_backdrop(ctx, dark, &mut close);
@@ -3237,10 +3232,6 @@ impl App {
             });
         if close {
             self.model_detail = None;
-        }
-        if load {
-            self.model_detail = None;
-            self.open_model_options(ctx, model.name.clone(), true);
         }
         if options {
             self.model_detail = None;

@@ -6,7 +6,7 @@
 bundle。它只是声明式数据：FlashHub 拥有 manifest，`flashcli` 按下面的规则执行。
 
 本文档是 `app_format_version: 1` 的权威定义，与 FlashHub 当前实际下发的内容一致；由
-[application_install_plan.zh-CN.md](application_install_plan.zh-CN.md) 引用。
+[plans/application_install_plan.zh-CN.md](plans/application_install_plan.zh-CN.md) 引用。
 
 ## 流程
 

@@ -3,7 +3,7 @@
 <p align="right"><a href="application_install_plan.md">English</a> · <strong>简体中文</strong></p>
 
 > **状态：已实现（v1）。** manifest 规范见
-> [app_manifest_standard.zh-CN.md](app_manifest_standard.zh-CN.md)（v1，与 FlashHub 实际一致）。
+> [app_manifest_standard.zh-CN.md](../app_manifest_standard.zh-CN.md)（v1，与 FlashHub 实际一致）。
 
 ## 目标
 
@@ -48,7 +48,7 @@ CLI 的应用操作**不需要**（也不使用）对守护进程的 HTTP 调用
 
 `GET /api/v1/apps/{namespace}/{name}[:version]` 返回 manifest。host 校验
 `format`、`app_format_version`、`protocol_version`、必填字段，以及 `name`/`version`
-与 key 一致。详见 [app_manifest_standard.zh-CN.md](app_manifest_standard.zh-CN.md)。
+与 key 一致。详见 [app_manifest_standard.zh-CN.md](../app_manifest_standard.zh-CN.md)。
 
 ## 安装流程
 
@@ -263,7 +263,7 @@ rename）：
 ## 配置
 
 v1 的 manifest 发布 `config: []`，host 不解释它。客户端配置由 `setup.scripts` 完成
-（见 [app_manifest_standard.zh-CN.md](app_manifest_standard.zh-CN.md)）：模型就绪后，
+（见 [app_manifest_standard.zh-CN.md](../app_manifest_standard.zh-CN.md)）：模型就绪后，
 用户确认的脚本使用连接信息写入应用自身配置；host 不再写 `connection.json`。
 
 ## 安全

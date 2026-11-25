@@ -34,7 +34,6 @@ func newAppService(cmd *cobra.Command) *apps.Service {
 	svc := apps.New(paths.Home())
 	svc.Out = cmd.OutOrStdout()
 	svc.Stdin = os.Stdin
-	svc.Bin = strings.TrimSpace(os.Getenv("FLASHCLI_BIN"))
 	svc.GatewayBaseURL = strings.TrimSpace(os.Getenv("FLASHCLI_API_BASE"))
 	svc.ConfirmSetup = func(script apps.SetupScript) bool {
 		fmt.Fprintf(cmd.OutOrStdout(), "Setup script %s: %s\n", script.Key, script.URL)

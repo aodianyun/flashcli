@@ -102,7 +102,6 @@ func newAppTestServerManifest(t *testing.T, manifest string) (*Server, *httptest
 
 	launcher := &appFakeLauncher{}
 	svc := apps.New(home)
-	svc.Launcher = launcher
 	svc.Prepare = func(context.Context, string) error { return nil }
 	svc.Fetch = func(ctx context.Context, ref flashhub.AppRef) ([]byte, error) {
 		return []byte(manifest), nil
