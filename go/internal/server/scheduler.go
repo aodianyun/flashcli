@@ -258,42 +258,57 @@ func (s *Scheduler) Acquire(ctx context.Context, refStr string) (*Lease, error) 
 		}
 		s.mu.Unlock()
 
-		_, startErr := s.manager.LoadScheduled(context.Background(), refStr, plan.Env)
+		// Start in the background so the caller's deadline returns
+		// model_starting while the resident continues to load.
+		go s.startResident(refStr, plan, call)
+		select {
+		case <-call.done:
+			if call.err != nil {
+				return nil, call.err
+			}
+			continue
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+}
 
-		s.mu.Lock()
-		delete(s.starting, refStr)
-		call.err = startErr
-		if startErr != nil {
-			delete(s.residents, refStr)
-			s.broadcastLocked()
-			s.mu.Unlock()
-			close(call.done)
-			s.emit("resident_start_failed", map[string]any{"ref": refStr, "error": startErr.Error()})
-			return nil, startErr
-		}
-		if s.stopping[refStr] != nil {
-			// A force stop/eviction raced the start. Do not resurrect it.
-			s.mu.Unlock()
-			_ = s.manager.Unload(context.Background(), refStr)
-			call.err = errors.New("model was stopped during start")
-			close(call.done)
-			return nil, call.err
-		}
-		r := s.residents[refStr]
-		if r == nil {
-			r = &resident{ref: refStr}
-			s.residents[refStr] = r
-		}
-		r.state = residentBusy
-		r.devices = plan.Devices
-		r.lastUsed = time.Now().UTC()
-		r.leases = 1
+// startResident performs the actual serve start and publishes the result. It
+// runs with a background context so a client deadline does not cancel it.
+func (s *Scheduler) startResident(refStr string, plan placementPlan, call *startCall) {
+	_, startErr := s.manager.LoadScheduled(context.Background(), refStr, plan.Env)
+
+	s.mu.Lock()
+	delete(s.starting, refStr)
+	call.err = startErr
+	if startErr != nil {
+		delete(s.residents, refStr)
 		s.broadcastLocked()
 		s.mu.Unlock()
 		close(call.done)
-		s.emit("resident_started", map[string]any{"ref": refStr, "devices": plan.Devices})
-		return &Lease{Ref: refStr, sched: s}, nil
+		s.emit("resident_start_failed", map[string]any{"ref": refStr, "error": startErr.Error()})
+		return
 	}
+	if s.stopping[refStr] != nil {
+		// A force stop/eviction raced the start. Do not resurrect it.
+		s.mu.Unlock()
+		_ = s.manager.Unload(context.Background(), refStr)
+		call.err = errors.New("model was stopped during start")
+		close(call.done)
+		return
+	}
+	r := s.residents[refStr]
+	if r == nil {
+		r = &resident{ref: refStr}
+		s.residents[refStr] = r
+	}
+	r.state = residentReady
+	r.devices = plan.Devices
+	r.lastUsed = time.Now().UTC()
+	s.broadcastLocked()
+	s.mu.Unlock()
+	close(call.done)
+	s.emit("resident_started", map[string]any{"ref": refStr, "devices": plan.Devices})
 }
 
 // planLocked answers whether ref can start now. The caller holds s.mu.

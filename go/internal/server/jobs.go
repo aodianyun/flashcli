@@ -17,12 +17,13 @@ type Event struct {
 
 // Job is a local pull or load job.
 type Job struct {
-	ID     string  `json:"id"`
-	Type   string  `json:"type"`
-	Ref    string  `json:"ref"`
-	State  string  `json:"state"`
-	Error  string  `json:"error,omitempty"`
-	Events []Event `json:"events"`
+	ID        string    `json:"id"`
+	Type      string    `json:"type"`
+	Ref       string    `json:"ref"`
+	State     string    `json:"state"`
+	Error     string    `json:"error,omitempty"`
+	StartedAt time.Time `json:"started_at,omitempty"`
+	Events    []Event   `json:"events"`
 
 	mu      sync.Mutex
 	done    chan struct{}
@@ -147,12 +148,13 @@ func (m *JobManager) Start(ctx context.Context, typ, ref string, run func(contex
 	m.mu.Lock()
 	m.seq++
 	j := &Job{
-		ID:    fmt.Sprintf("%s-%d", typ, m.seq),
-		Type:  typ,
-		Ref:   ref,
-		State: "running",
-		done:  make(chan struct{}),
-		subs:  map[chan Event]struct{}{},
+		ID:        fmt.Sprintf("%s-%d", typ, m.seq),
+		Type:      typ,
+		Ref:       ref,
+		State:     "running",
+		StartedAt: time.Now().UTC(),
+		done:      make(chan struct{}),
+		subs:      map[chan Event]struct{}{},
 	}
 	j.onEvent = func(state string, ev Event) {
 		m.publish(JobUpdate{ID: j.ID, Type: j.Type, Ref: j.Ref, State: state, Event: ev})

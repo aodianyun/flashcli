@@ -306,6 +306,61 @@ type preloadRequest struct {
 	Ref string `json:"ref"`
 }
 
+// ensurePreload makes ref ready for inference. It returns ready=true when the
+// assets are complete, or a background job id while preparing. The check is
+// local-first; the job owns any network work.
+func (s *Server) ensurePreload(ctx context.Context, refStr string) (ready bool, jobID string, err error) {
+	store := s.preloads()
+	if s.assetsReady(ctx, refStr) {
+		store.setState(refStr, preloadReady, "")
+		return true, "", nil
+	}
+	if s.Puller == nil || s.Jobs == nil {
+		return false, "", errors.New("preload is not configured")
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.ensureLoaded()
+	if e := store.models[refStr]; e != nil {
+		switch e.State {
+		case preloadLoading:
+			return false, e.JobID, nil
+		case preloadReady:
+			return true, "", nil
+		}
+	}
+	// Reserve the ref before starting the goroutine so concurrent requests share
+	// one job. Jobs.Start only spawns a goroutine, which blocks on this mutex
+	// when it tries to record completion.
+	store.models[refStr] = &preloadEntry{State: preloadLoading, UpdatedAt: time.Now().UTC()}
+	store.saveLocked()
+	job := s.Jobs.Start(context.Background(), "preload", refStr, func(ctx context.Context, emit func(string, string)) error {
+		_, pullErr := s.Puller.Pull(ctx, refStr, host.PullOptions{
+			VerifyWeights: true,
+			Progress: func(ev host.PullEvent) {
+				emit(ev.Phase, ev.Message)
+			},
+		})
+		store.mu.Lock()
+		defer store.mu.Unlock()
+		store.ensureLoaded()
+		if pullErr != nil {
+			delete(store.models, refStr)
+			store.saveLocked()
+			return pullErr
+		}
+		store.models[refStr] = &preloadEntry{State: preloadReady, UpdatedAt: time.Now().UTC()}
+		store.saveLocked()
+		return nil
+	})
+	if e := store.models[refStr]; e != nil {
+		e.JobID = job.ID
+		store.saveLocked()
+	}
+	fmt.Fprintf(LogSink(), "preload %s: job %s\n", refStr, job.ID)
+	return false, job.ID, nil
+}
+
 // preloadModel serves POST /api/v1/models/preload: an asynchronous disk
 // prepare (bundle, runtime/venv, weights). It never starts a serve process or
 // reserves VRAM.
@@ -316,69 +371,18 @@ func (s *Server) preloadModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	refStr := strings.TrimSpace(req.Ref)
-	if s.Puller == nil || s.Jobs == nil {
-		writeError(w, http.StatusNotImplemented, errors.New("preload is not configured"))
+	ready, jobID, err := s.ensurePreload(r.Context(), refStr)
+	if err != nil {
+		writeError(w, http.StatusNotImplemented, err)
 		return
 	}
-	store := s.preloads()
-
-	// Already complete on disk: preload is idempotent and needs no job.
-	if s.assetsReady(r.Context(), refStr) {
-		store.setState(refStr, preloadReady, "")
+	if ready {
 		fmt.Fprintf(LogSink(), "preload %s: already ready\n", refStr)
 		writeJSON(w, http.StatusOK, map[string]any{"ref": refStr, "preload": preloadReady})
 		return
 	}
-
-	store.mu.Lock()
-	store.ensureLoaded()
-	if e := store.models[refStr]; e != nil {
-		switch e.State {
-		case preloadLoading:
-			jobID := e.JobID
-			store.mu.Unlock()
-			writeJSON(w, http.StatusAccepted, map[string]any{
-				"ref": refStr, "preload": preloadLoading, "job_id": jobID, "state": "running",
-			})
-			return
-		case preloadReady:
-			store.mu.Unlock()
-			writeJSON(w, http.StatusOK, map[string]any{"ref": refStr, "preload": preloadReady})
-			return
-		}
-	}
-	// Reserve the ref before starting the goroutine so concurrent requests share
-	// one job. Jobs.Start only spawns a goroutine, which blocks on this mutex
-	// when it tries to record completion.
-	store.models[refStr] = &preloadEntry{State: preloadLoading, UpdatedAt: time.Now().UTC()}
-	store.saveLocked()
-	job := s.Jobs.Start(context.Background(), "preload", refStr, func(ctx context.Context, emit func(string, string)) error {
-		_, err := s.Puller.Pull(ctx, refStr, host.PullOptions{
-			VerifyWeights: true,
-			Progress: func(ev host.PullEvent) {
-				emit(ev.Phase, ev.Message)
-			},
-		})
-		store.mu.Lock()
-		defer store.mu.Unlock()
-		store.ensureLoaded()
-		if err != nil {
-			delete(store.models, refStr)
-			store.saveLocked()
-			return err
-		}
-		store.models[refStr] = &preloadEntry{State: preloadReady, UpdatedAt: time.Now().UTC()}
-		store.saveLocked()
-		return nil
-	})
-	if e := store.models[refStr]; e != nil {
-		e.JobID = job.ID
-		store.saveLocked()
-	}
-	store.mu.Unlock()
-	fmt.Fprintf(LogSink(), "preload %s: job %s\n", refStr, job.ID)
 	writeJSON(w, http.StatusAccepted, map[string]any{
-		"ref": refStr, "preload": preloadLoading, "job_id": job.ID, "state": job.State,
+		"ref": refStr, "preload": preloadLoading, "job_id": jobID, "state": "running",
 	})
 }
 

@@ -71,6 +71,90 @@ paths:
                         capabilities:
                           type: array
                           items: { type: string }
+  /v1/chat/completions:
+    post:
+      summary: Chat completions (gateway)
+      description: Requires capability `openai.chat`. `model` is a full bundle ref.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GatewayRequest' }
+      responses:
+        '200':
+          description: OpenAI chat completion (JSON or SSE)
+          headers:
+            Retry-After:
+              schema: { type: integer }
+          content:
+            application/json:
+              schema: { type: object }
+            text/event-stream:
+              schema: { type: string }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/completions:
+    post:
+      summary: Legacy completions (gateway)
+      description: Requires capability `openai.completions`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GatewayRequest' }
+      responses:
+        '200': { description: OpenAI completion }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/responses:
+    post:
+      summary: Responses API (gateway)
+      description: Requires capability `openai.responses`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GatewayRequest' }
+      responses:
+        '200': { description: OpenAI response (JSON or SSE) }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/embeddings:
+    post:
+      summary: Embeddings (gateway)
+      description: Requires capability `openai.embeddings`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GatewayRequest' }
+      responses:
+        '200': { description: OpenAI embeddings }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/moderations:
+    post:
+      summary: Moderations (gateway)
+      description: Requires capability `openai.moderations`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GatewayRequest' }
+      responses:
+        '200': { description: OpenAI moderation result }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
   /api/v1/version:
     get:
       summary: Daemon version
@@ -1224,6 +1308,15 @@ components:
           items: { $ref: '#/components/schemas/LoadedModel' }
         loaded_count: { type: integer }
         max_loaded: { type: integer }
+    GatewayRequest:
+      type: object
+      required: [model]
+      properties:
+        model:
+          type: string
+          description: Full bundle ref (namespace/name:version or flashcli-bundle/name:version)
+        stream: { type: boolean }
+      additionalProperties: true
     Device:
       type: object
       required: [kind, id]

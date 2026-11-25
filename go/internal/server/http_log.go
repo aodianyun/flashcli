@@ -58,6 +58,15 @@ func (r *statusRecorder) Flush() {
 
 func (r *statusRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
 
+// CloseNotify preserves client-disconnect detection through the logging
+// wrapper so the gateway can cancel an in-flight upstream request.
+func (r *statusRecorder) CloseNotify() <-chan bool {
+	if cn, ok := r.ResponseWriter.(http.CloseNotifier); ok {
+		return cn.CloseNotify()
+	}
+	return make(chan bool)
+}
+
 // logRequests writes every API call (except the high-frequency health check,
 // WebSocket stream and static UI assets) into the service log, together with
 // the status, duration and a redacted request body. Error responses include a

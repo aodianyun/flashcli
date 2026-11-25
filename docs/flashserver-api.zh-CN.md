@@ -30,7 +30,11 @@
 - `model` 必须是**完整 bundle ref**（`flashcli-bundle/<name>:<version>`），
   不支持短名、alias 或 latest 解析。
 - 调度器自动准备缺失资产、在内部启停 resident。模型准备/启动过程中网关返回
-  `503` + `Retry-After`，不会无限阻塞首个请求。
+  `503` + `Retry-After`，不会无限阻塞首个请求。缺失模型会启动后台 preload 并返回
+  `503 model_preparing` + `X-Flashcli-Preload-Job`；正在启动的 resident 返回
+  `503 model_starting` 与 `Retry-After: 2`。
+- `503 no_placement` 和 `429 queue_full` 表示调度失败；响应中的 `model` 会重写为
+  请求的完整 ref，child serve endpoint 绝不暴露。
 - 模型未声明对应能力时返回明确错误，不会静默转发。
 
 ## 管理（`/api/v1`）

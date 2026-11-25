@@ -114,15 +114,26 @@ type fakeServe struct {
 	ref      string
 	endpoint string
 	stopped  bool
+	// healthy blocks Healthy until closed when non-nil (startup in progress).
+	healthy chan struct{}
 }
 
-func (f *fakeServe) Ref() string                   { return f.ref }
-func (f *fakeServe) Endpoint() string              { return f.endpoint }
-func (f *fakeServe) PID() int                      { return 1234 }
-func (f *fakeServe) Healthy(context.Context) error { return nil }
-func (f *fakeServe) Running() bool                 { return !f.stopped }
-func (f *fakeServe) LastLog() string               { return "" }
-func (f *fakeServe) Stop(context.Context) error    { f.stopped = true; return nil }
+func (f *fakeServe) Ref() string      { return f.ref }
+func (f *fakeServe) Endpoint() string { return f.endpoint }
+func (f *fakeServe) PID() int         { return 1234 }
+func (f *fakeServe) Healthy(ctx context.Context) error {
+	if f.healthy != nil {
+		select {
+		case <-f.healthy:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
+}
+func (f *fakeServe) Running() bool              { return !f.stopped }
+func (f *fakeServe) LastLog() string            { return "" }
+func (f *fakeServe) Stop(context.Context) error { f.stopped = true; return nil }
 
 type fakeLauncher struct {
 	procs []*fakeServe

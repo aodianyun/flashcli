@@ -34,7 +34,13 @@ Authentication is off by default. With a token, every path except `/health`, `/`
   Short names, aliases, and latest-version lookup are not supported.
 - The scheduler preloads missing assets and starts/stops residents internally.
   While a model is preparing or starting, the gateway returns `503` with
-  `Retry-After` instead of blocking the first request.
+  `Retry-After` instead of blocking the first request. An absent model starts a
+  background preload and returns `503 model_preparing` plus
+  `X-Flashcli-Preload-Job`; a starting resident returns `503 model_starting`
+  with `Retry-After: 2`.
+- `503 no_placement` and `429 queue_full` report scheduling failures; the
+  response `model` field is rewritten to the requested full ref, and child
+  serve endpoints are never exposed.
 - Unsupported routes for a model's capabilities return an explicit error; they
   are never forwarded blindly.
 

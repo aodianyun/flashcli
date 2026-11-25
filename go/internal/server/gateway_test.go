@@ -2,70 +2,383 @@ package server
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/aodianyun/flashcli/go/internal/host"
+	"github.com/aodianyun/flashcli/go/internal/manifest"
+	"github.com/aodianyun/flashcli/go/internal/modelrun"
 )
 
-func TestGatewayModelList(t *testing.T) {
-	s := newFlowServer(t, &staticLauncher{endpoint: "http://127.0.0.1:1"})
-	h := s.Handler()
+type gatewayLauncher struct {
+	mu           sync.Mutex
+	endpoint     string
+	blockHealthy chan struct{}
+	calls        int
+}
 
-	rec, body := call(t, h, http.MethodGet, "/v1/models", "")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /v1/models = %d: %s", rec.Code, rec.Body.String())
-	}
-	if body["object"] != "list" {
-		t.Fatalf("object = %v", body["object"])
-	}
-	data, ok := body["data"].([]any)
-	if !ok || len(data) != 0 {
-		t.Fatalf("data = %v", body["data"])
-	}
+func (l *gatewayLauncher) Start(ctx context.Context, refStr string, port int) (ServeProcess, error) {
+	return l.StartWithOptions(ctx, refStr, modelrun.LoadOptions{Port: port})
+}
 
-	if _, err := s.Manager.LoadFor(context.Background(), "demo:1", "gateway-test"); err != nil {
-		t.Fatalf("load: %v", err)
-	}
+func (l *gatewayLauncher) StartWithOptions(_ context.Context, refStr string, _ modelrun.LoadOptions) (ServeProcess, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.calls++
+	return &fakeServe{ref: refStr, endpoint: l.endpoint, healthy: l.blockHealthy}, nil
+}
 
-	rec, body = call(t, h, http.MethodGet, "/v1/models", "")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /v1/models after load = %d: %s", rec.Code, rec.Body.String())
-	}
-	data, ok = body["data"].([]any)
-	if !ok || len(data) != 1 {
-		t.Fatalf("data = %v", body["data"])
-	}
-	model, ok := data[0].(map[string]any)
-	if !ok {
-		t.Fatalf("entry = %v", data[0])
-	}
-	if model["id"] != "demo:1" {
-		t.Fatalf("id = %v", model["id"])
-	}
-	if model["object"] != "model" {
-		t.Fatalf("entry object = %v", model["object"])
-	}
-	if model["owned_by"] != "flashcli" {
-		t.Fatalf("owned_by = %v", model["owned_by"])
+func (l *gatewayLauncher) callCount() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.calls
+}
+
+type flipSource struct {
+	ref   string
+	ready atomic.Bool
+	caps  []string
+}
+
+func (s *flipSource) Models(context.Context) ([]host.Model, error) {
+	return []host.Model{{
+		Ref: s.ref, CacheKey: "demo/1", BundleCached: true,
+		WeightsCached: s.ready.Load(), Serve: true, Capabilities: s.caps,
+	}}, nil
+}
+func (s *flipSource) Storage(context.Context) ([]host.Area, error) { return nil, nil }
+
+func gatewayInspect(caps []string, m *manifest.Manifest) func(string) (BundleInfo, error) {
+	return func(string) (BundleInfo, error) {
+		return BundleInfo{Name: "demo", Manifest: m, Capabilities: caps}, nil
 	}
 }
 
-func TestManagementRoutesAreNotOnV1(t *testing.T) {
-	s := newFlowServer(t, &staticLauncher{endpoint: "http://127.0.0.1:1"})
-	h := s.Handler()
+func gatewayTestServer(t *testing.T, source Source, launcher Launcher, inspect func(string) (BundleInfo, error)) *Server {
+	t.Helper()
+	t.Setenv("FLASHCLI_HOME", t.TempDir())
+	manager := NewManagerWithOptions(launcher, ManagerOptions{Inspect: inspect})
+	scheduler := NewScheduler(manager, SchedulerOptions{
+		Inspect: inspect,
+		Inventory: func(context.Context) DeviceInventory {
+			return twoGPUInventory(28 << 30)
+		},
+		IdleStopSeconds: 3600,
+	})
+	return &Server{
+		Source:                   source,
+		Manager:                  manager,
+		Scheduler:                scheduler,
+		Jobs:                     NewJobManager(),
+		Puller:                   fakePuller{},
+		Preload:                  newPreloadStore(t.TempDir() + "/preload.json"),
+		Started:                  time.Now(),
+		ResidentStartWaitSeconds: 5,
+		QueueTimeoutSeconds:      0,
+		AutoPull:                 true,
+	}
+}
 
-	for _, tc := range []struct {
-		method string
-		path   string
-	}{
-		{http.MethodGet, "/v1/system"},
-		{http.MethodGet, "/v1/storage"},
-		{http.MethodPost, "/v1/models/load"},
-		{http.MethodPost, "/v1/pull"},
-		{http.MethodGet, "/v1/apps"},
-	} {
-		rec, _ := call(t, h, tc.method, tc.path, `{}`)
-		if rec.Code >= 200 && rec.Code < 300 {
-			t.Fatalf("%s %s unexpectedly succeeded with %d", tc.method, tc.path, rec.Code)
+func TestGatewayChatProxyRewritesModelAndHidesEndpoint(t *testing.T) {
+	var upstream map[string]any
+	child := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		blob, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(blob, &upstream)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"id":"chatcmpl-1","object":"chat.completion","model":"child-model","choices":[]}`)
+	}))
+	defer child.Close()
+
+	launcher := &gatewayLauncher{endpoint: child.URL}
+	refStr := "flashcli-bundle/demo:1.0.0"
+	source := &flipSource{ref: refStr, caps: []string{"openai.chat"}}
+	source.ready.Store(true)
+	s := gatewayTestServer(t, source, launcher, gatewayInspect(source.caps, gpuManifest(t)))
+
+	rec, body := call(t, s.Handler(), http.MethodPost, "/v1/chat/completions",
+		`{"model":"`+refStr+`","messages":[{"role":"user","content":"hi"}]}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("chat = %d: %s", rec.Code, rec.Body.String())
+	}
+	if body["model"] != refStr {
+		t.Fatalf("response model = %v", body["model"])
+	}
+	if upstream["model"] != refStr {
+		t.Fatalf("upstream model = %v", upstream["model"])
+	}
+	if strings.Contains(rec.Body.String(), strings.TrimPrefix(child.URL, "http://")) {
+		t.Fatalf("child endpoint leaked: %s", rec.Body.String())
+	}
+	if got := s.Scheduler.ActiveRequests(refStr); got != 0 {
+		t.Fatalf("lease leaked: %d", got)
+	}
+	if launcher.callCount() != 1 {
+		t.Fatalf("launcher calls = %d", launcher.callCount())
+	}
+}
+
+func TestGatewaySSERewritesEveryEvent(t *testing.T) {
+	child := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, _ := w.(http.Flusher)
+		for _, payload := range []string{
+			`{"id":"1","object":"chat.completion.chunk","model":"child","choices":[]}`,
+			`{"id":"2","object":"chat.completion.chunk","model":"child","choices":[]}`,
+		} {
+			_, _ = io.WriteString(w, "data: "+payload+"\n\n")
+			if flusher != nil {
+				flusher.Flush()
+			}
 		}
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	defer child.Close()
+
+	refStr := "flashcli-bundle/demo:1.0.0"
+	launcher := &gatewayLauncher{endpoint: child.URL}
+	source := &flipSource{ref: refStr, caps: []string{"openai.chat"}}
+	source.ready.Store(true)
+	s := gatewayTestServer(t, source, launcher, gatewayInspect(source.caps, gpuManifest(t)))
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/v1/chat/completions", "application/json",
+		strings.NewReader(`{"model":"`+refStr+`","stream":true,"messages":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	blob, _ := io.ReadAll(resp.Body)
+	text := string(blob)
+	if strings.Count(text, `"model":"`+refStr+`"`) != 2 {
+		t.Fatalf("SSE model rewrite failed: %s", text)
+	}
+	if !strings.Contains(text, "data: [DONE]") {
+		t.Fatalf("SSE done marker lost: %s", text)
+	}
+	if strings.Contains(text, `"model":"child"`) {
+		t.Fatalf("SSE model not rewritten: %s", text)
+	}
+}
+
+func TestGatewayClientCancelReleasesLease(t *testing.T) {
+	canceled := make(chan struct{})
+	var once sync.Once
+	child := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, _ := w.(http.Flusher)
+		for {
+			select {
+			case <-r.Context().Done():
+				once.Do(func() { close(canceled) })
+				return
+			case <-time.After(50 * time.Millisecond):
+				if _, err := io.WriteString(w, "data: {\"model\":\"child\",\"choices\":[]}\n\n"); err != nil {
+					return
+				}
+				if flusher != nil {
+					flusher.Flush()
+				}
+			}
+		}
+	}))
+	defer child.Close()
+
+	refStr := "flashcli-bundle/demo:1.0.0"
+	launcher := &gatewayLauncher{endpoint: child.URL}
+	source := &flipSource{ref: refStr, caps: []string{"openai.chat"}}
+	source.ready.Store(true)
+	s := gatewayTestServer(t, source, launcher, gatewayInspect(source.caps, gpuManifest(t)))
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	// Raw TCP request: read one streamed chunk, then close the socket. The
+	// gateway's next write detects the disconnect, cancels upstream and
+	// releases the lease.
+	conn, err := net.Dial("tcp", strings.TrimPrefix(srv.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := `{"model":"` + refStr + `","stream":true,"messages":[]}`
+	_, _ = fmt.Fprintf(conn, "POST /v1/chat/completions HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	buf := make([]byte, 4096)
+	got := ""
+	for !strings.Contains(got, "data:") {
+		n, readErr := conn.Read(buf)
+		if n > 0 {
+			got += string(buf[:n])
+		}
+		if readErr != nil {
+			_ = conn.Close()
+			t.Fatalf("stream did not start: %v (%q)", readErr, got)
+		}
+	}
+	_ = conn.Close()
+	select {
+	case <-canceled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("child request was not cancelled")
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for s.Scheduler.ActiveRequests(refStr) != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("lease was not released: %d", s.Scheduler.ActiveRequests(refStr))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+type flipPuller struct {
+	source  *flipSource
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+	calls   atomic.Int32
+}
+
+func (p *flipPuller) Pull(ctx context.Context, _ string, _ host.PullOptions) (host.PullResult, error) {
+	p.calls.Add(1)
+	if p.started != nil {
+		p.once.Do(func() { close(p.started) })
+	}
+	select {
+	case <-p.release:
+	case <-ctx.Done():
+		return host.PullResult{}, ctx.Err()
+	}
+	p.source.ready.Store(true)
+	return host.PullResult{}, nil
+}
+
+func TestGatewayAutoPullThenRetry(t *testing.T) {
+	child := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"id":"chatcmpl-1","object":"chat.completion","model":"child","choices":[]}`)
+	}))
+	defer child.Close()
+
+	refStr := "flashcli-bundle/demo:1.0.0"
+	source := &flipSource{ref: refStr, caps: []string{"openai.chat"}}
+	launcher := &gatewayLauncher{endpoint: child.URL}
+	s := gatewayTestServer(t, source, launcher, gatewayInspect(source.caps, gpuManifest(t)))
+	puller := &flipPuller{source: source, started: make(chan struct{}), release: make(chan struct{})}
+	s.Puller = puller
+
+	rec, body := call(t, s.Handler(), http.MethodPost, "/v1/chat/completions",
+		`{"model":"`+refStr+`","messages":[]}`)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("first request = %d: %s", rec.Code, rec.Body.String())
+	}
+	errBody, _ := body["error"].(map[string]any)
+	if errBody["code"] != "model_preparing" {
+		t.Fatalf("error = %v", body)
+	}
+	jobID, _ := errBody["job_id"].(string)
+	if jobID == "" || rec.Header().Get("X-Flashcli-Preload-Job") != jobID {
+		t.Fatalf("job header = %q body = %v", rec.Header().Get("X-Flashcli-Preload-Job"), body)
+	}
+	if rec.Header().Get("Retry-After") != "5" {
+		t.Fatalf("Retry-After = %q", rec.Header().Get("Retry-After"))
+	}
+	<-puller.started
+	close(puller.release)
+	if state := waitJobState(t, s.Jobs, jobID); state != "done" {
+		t.Fatalf("preload job = %s", state)
+	}
+
+	rec, body = call(t, s.Handler(), http.MethodPost, "/v1/chat/completions",
+		`{"model":"`+refStr+`","messages":[]}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("retry = %d: %s", rec.Code, rec.Body.String())
+	}
+	if puller.calls.Load() != 1 {
+		t.Fatalf("puller calls = %d", puller.calls.Load())
+	}
+}
+
+func TestGatewayValidationAndCapabilityErrors(t *testing.T) {
+	refStr := "flashcli-bundle/demo:1.0.0"
+	source := &flipSource{ref: refStr, caps: []string{"openai.embeddings"}}
+	source.ready.Store(true)
+	launcher := &gatewayLauncher{endpoint: "http://127.0.0.1:1"}
+	s := gatewayTestServer(t, source, launcher, gatewayInspect(source.caps, gpuManifest(t)))
+
+	rec, body := call(t, s.Handler(), http.MethodPost, "/v1/chat/completions", `{"model":"demo:1","messages":[]}`)
+	if rec.Code != http.StatusBadRequest || body["error"].(map[string]any)["code"] != "invalid_model" {
+		t.Fatalf("short model = %d: %v", rec.Code, body)
+	}
+
+	rec, body = call(t, s.Handler(), http.MethodPost, "/v1/chat/completions",
+		`{"model":"`+refStr+`","messages":[]}`)
+	if rec.Code != http.StatusBadRequest || body["error"].(map[string]any)["code"] != "unsupported_capability" {
+		t.Fatalf("capability = %d: %v", rec.Code, body)
+	}
+
+	rec, body = call(t, s.Handler(), http.MethodPost, "/v1/chat/completions",
+		`{"model":"flashcli-bundle/missing:1.0.0","messages":[]}`)
+	if rec.Code != http.StatusServiceUnavailable || body["error"].(map[string]any)["code"] != "model_preparing" {
+		t.Fatalf("unknown ref = %d: %v", rec.Code, body)
+	}
+
+	s.AutoPull = false
+	s.Puller = nil
+	rec, body = call(t, s.Handler(), http.MethodPost, "/v1/chat/completions",
+		`{"model":"flashcli-bundle/missing2:1.0.0","messages":[]}`)
+	if rec.Code != http.StatusNotFound || body["error"].(map[string]any)["code"] != "model_not_found" {
+		t.Fatalf("auto_pull off = %d: %v", rec.Code, body)
+	}
+}
+
+func TestGatewayModelStartingReturnsRetryAfter(t *testing.T) {
+	child := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"id":"chatcmpl-1","object":"chat.completion","model":"child","choices":[]}`)
+	}))
+	defer child.Close()
+
+	refStr := "flashcli-bundle/demo:1.0.0"
+	source := &flipSource{ref: refStr, caps: []string{"openai.chat"}}
+	source.ready.Store(true)
+	health := make(chan struct{})
+	launcher := &gatewayLauncher{endpoint: child.URL, blockHealthy: health}
+	s := gatewayTestServer(t, source, launcher, gatewayInspect(source.caps, gpuManifest(t)))
+	s.ResidentStartWaitSeconds = 1
+
+	rec, body := call(t, s.Handler(), http.MethodPost, "/v1/chat/completions",
+		`{"model":"`+refStr+`","messages":[]}`)
+	if rec.Code != http.StatusServiceUnavailable || body["error"].(map[string]any)["code"] != "model_starting" {
+		t.Fatalf("starting = %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get("Retry-After") != "2" {
+		t.Fatalf("Retry-After = %q", rec.Header().Get("Retry-After"))
+	}
+
+	close(health)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		states := s.Scheduler.States()
+		if info, ok := states[refStr]; ok && info.State == residentReady {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("resident did not become ready: %+v", states)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	rec, _ = call(t, s.Handler(), http.MethodPost, "/v1/chat/completions",
+		`{"model":"`+refStr+`","messages":[]}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("retry after start = %d: %s", rec.Code, rec.Body.String())
 	}
 }
