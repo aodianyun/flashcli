@@ -76,12 +76,17 @@ sudo flashserver-setup
 - `max_loaded=0` 表示不限制槽位。显存准入按每个 bundle 的
   `resources.min_vram_mib`（每张 GPU）加 `vram_headroom_mib`（默认 512）：某张兼容
   GPU 的空闲显存足够时准入。未声明 `min_vram_mib` 的 bundle 目前只产生校验警告，
-  按未声明显存要求准入；槽位上限仍把正在启动的模型计入。应用启动的模型与模型页
-  使用同一准入。
-- WSL 默认：`addr=0.0.0.0:8790`、`public_host=localhost`、`serve_host=0.0.0.0`
-  （Windows 通过 localhost 转发访问服务）。
+  按未声明显存要求准入；槽位上限仍把正在启动的模型计入。应用调用网关，与模型页
+  共享同一调度器。
+- `idle_stop_seconds`（默认 600）停止无 lease 的 resident；
+  `queue_timeout_seconds`/`queue_max` 限制排队；`auto_pull`（默认 true）在后台准备
+  缺失模型；`cpu_fallback` 为 `no-gpu-runtime`（默认）或 `disabled`。
+- WSL 默认：`addr=0.0.0.0:8790`、`public_host=localhost`。`serve_host` 为遗留字段，
+  已忽略：child serve 始终绑定 loopback，只由网关访问。Windows 通过 localhost 转发
+  访问服务。
 - `token` 可选。设置后除 `/health`、`/`、`/docs`、`/ui/*`、`/openapi.yaml` 外的所有
-  路径都需要 `Authorization: Bearer <token>` 或 `X-Flashcli-Token`。
+  路径都需要 `Authorization: Bearer <token>` 或 `X-Flashcli-Token`。网关转发前会移除
+  客户端 token。
 - 镜像：`POST /api/v1/mirror {"enabled":true}`（或桌面开关）会写
   `~/.flashcli/mirror.env`（阿里云 pip、hf-mirror、gh-proxy、Gitee、SJTU torch），
   对新下载立即生效，不需要重启服务。

@@ -77,6 +77,8 @@ type schedulerResponse struct {
 	Resident        []InstanceInfo        `json:"resident"`
 	Queue           []string              `json:"queue"`
 	Reservations    []ResidentInfo        `json:"reservations"`
+	ActiveLeases    int                   `json:"active_leases"`
+	Waiters         int                   `json:"waiters"`
 	VRAMHeadroomMiB int64                 `json:"vram_headroom_mib"`
 	Requirements    []ResourceRequirement `json:"requirements"`
 }
@@ -306,6 +308,8 @@ func (s *Server) scheduler(w http.ResponseWriter, r *http.Request) {
 		Resident:        s.loaded(),
 		Queue:           snap.Queue,
 		Reservations:    snap.Reservations,
+		ActiveLeases:    snap.ActiveLeases,
+		Waiters:         snap.Waiters,
 		VRAMHeadroomMiB: s.vramHeadroomMiB(),
 		Requirements:    s.placementRequirements(r.Context(), inv),
 	})

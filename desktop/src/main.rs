@@ -851,7 +851,7 @@ impl App {
                     }
                     if let Some(reference) = start_ref {
                         self.model_detail = None;
-                        self.spawn_job_ui(ctx, reference, false, "启动");
+                        self.spawn_job_ui(ctx, reference, false, "预加载");
                     }
                 }
                 Event::WslApplied(result) => {
@@ -2685,16 +2685,12 @@ impl App {
                                 }
                             } else if m.ready() {
                                 if m.serve {
-                                    let active = self.loading
-                                        && self.job_ref == m.name
-                                        && self.job_verb == "启动";
-                                    let label = if active { "启动中…" } else { "启动" };
                                     let clicked = ui
-                                        .add_enabled_ui(!self.loading, |ui| table_button(ui, label))
+                                        .add_enabled_ui(!self.loading, |ui| table_button(ui, "使用"))
                                         .inner
                                         .clicked();
                                     if clicked {
-                                        load_request = Some(m.name.clone());
+                                        use_request = Some(m.clone());
                                     }
                                 } else {
                                     ui.label(egui::RichText::new("—").weak())
@@ -2731,7 +2727,7 @@ impl App {
                                     smoke_request = Some(m.clone());
                                     ui.close_menu();
                                 }
-                                if m.loaded && ui.button("停止").clicked() {
+                                if m.loaded && ui.button("卸载").clicked() {
                                     unload_request = Some(m.name.clone());
                                     ui.close_menu();
                                 }
@@ -2810,9 +2806,9 @@ impl App {
         }
         if let Some(name) = unload_request {
             self.dialog = Some(DialogState {
-                title: "停止模型".into(),
+                title: "卸载模型".into(),
                 message: format!(
-                    "停止后该模型的推理服务将结束，权重和缓存保留。\n确定停止 {name}？"
+                    "卸载会删除该模型的 bundle、权重和运行时；正在使用时会返回 model_busy。\n确定卸载 {name}？"
                 ),
                 action: Pending::Unload(name),
             });
@@ -3211,31 +3207,13 @@ impl App {
                     ui.separator();
                     ui.add_space(10.0);
                     ui.horizontal(|ui| {
-                        if model.ready() && model.serve {
-                            let active = self.loading
-                                && self.job_ref == model.name
-                                && self.job_verb == "启动";
-                            let label = if active { "启动中…" } else { "启动" };
-                            let clicked = ui
-                                .add_enabled_ui(!self.loading, |ui| primary_button(ui, label))
-                                .inner
-                                .clicked();
-                            if clicked {
-                                load = true;
-                            }
-                            if ui
-                                .add_enabled(!self.loading, egui::Button::new("参数"))
-                                .clicked()
-                            {
-                                options = true;
-                            }
-                        } else if model.ready() {
-                            ui.label(
-                                egui::RichText::new("该 bundle 仅支持 flashcli run")
-                                    .weak()
-                                    .small(),
-                            );
-                        } else {
+                        if ui
+                            .add_enabled(!self.loading, egui::Button::new("参数"))
+                            .clicked()
+                        {
+                            options = true;
+                        }
+                        if !model.ready() {
                             let active = self.loading
                                 && self.job_ref == model.name
                                 && self.job_verb == "加载";
@@ -3247,6 +3225,12 @@ impl App {
                             if clicked {
                                 pull = true;
                             }
+                        } else if !model.serve {
+                            ui.label(
+                                egui::RichText::new("该 bundle 仅支持 flashcli run")
+                                    .weak()
+                                    .small(),
+                            );
                         }
                     });
                 }
@@ -5975,9 +5959,9 @@ fn spawn_job(
     verb: &'static str,
 ) {
     std::thread::spawn(move || {
-        let endpoint = if pull { "/api/v1/pull" } else { "/api/v1/models/load" };
+        let endpoint = if pull { "/api/v1/pull" } else { "/api/v1/models/preload" };
         let event_ref = ref_str.clone();
-        let kind = if pull { "pull" } else { "load" };
+        let kind = if pull { "pull" } else { "preload" };
         let _ = tx.send(Event::Job(JobEvent {
             phase: "prepare".into(),
             message: format!("提交{verb}任务"),

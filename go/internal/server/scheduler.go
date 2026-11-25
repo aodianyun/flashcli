@@ -62,6 +62,8 @@ type ResidentInfo struct {
 type SchedulerSnapshot struct {
 	Reservations []ResidentInfo `json:"reservations"`
 	Queue        []string       `json:"queue"`
+	ActiveLeases int            `json:"active_leases"`
+	Waiters      int            `json:"waiters"`
 }
 
 type resident struct {
@@ -525,7 +527,9 @@ func (s *Scheduler) Snapshot() SchedulerSnapshot {
 			Ref: ref, State: r.state, Devices: append([]string(nil), r.devices...),
 			ActiveRequests: r.leases, StartedAt: r.startedAt, LastUsed: r.lastUsed,
 		})
+		out.ActiveLeases += r.leases
 	}
+	out.Waiters = s.waiters
 	sort.Slice(out.Reservations, func(i, j int) bool { return out.Reservations[i].Ref < out.Reservations[j].Ref })
 	for ref, n := range s.waiting {
 		if n > 0 {

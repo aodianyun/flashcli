@@ -83,7 +83,9 @@ func NewFromConfig(cfg Config) *Server {
 	s.VRAMHeadroomMiB = cfg.VRAMHeadroomMiB
 	if s.Manager != nil {
 		s.Manager = NewManagerWithOptions(modelrun.FlashcliLauncher{
-			Bin: cfg.FlashcliBin, Host: cfg.ServeHost, PublicHost: cfg.PublicHost, LogDir: s.LogDir,
+			// Child serve endpoints are internal to the gateway: always bind
+			// loopback, never the configured LAN host.
+			Bin: cfg.FlashcliBin, Host: "127.0.0.1", PublicHost: cfg.PublicHost, LogDir: s.LogDir,
 		}, ManagerOptions{
 			MaxLoaded:     cfg.MaxLoaded,
 			GPU:           s.GPU,

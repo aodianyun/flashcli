@@ -108,8 +108,8 @@ func TestLoadPassesSavedServeOptions(t *testing.T) {
 	if _, err := m.Load(context.Background(), dir); err != nil {
 		t.Fatal(err)
 	}
-	if l.opts.Host != "0.0.0.0" {
-		t.Fatalf("host = %q", l.opts.Host)
+	if l.opts.Host != "127.0.0.1" {
+		t.Fatalf("host = %q (child must bind loopback)", l.opts.Host)
 	}
 	if l.opts.Port <= 0 {
 		t.Fatalf("port = %d", l.opts.Port)

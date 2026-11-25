@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -148,6 +149,7 @@ func (s *Server) residentEvent(event string, data map[string]any) {
 	if event == "" {
 		return
 	}
+	fmt.Fprintf(LogSink(), "resident %s %v\n", event, data)
 	s.broadcastWS(map[string]any{"type": "resident", "event": event, "data": data})
 }
 

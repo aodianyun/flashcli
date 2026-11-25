@@ -83,13 +83,17 @@ checks `/health`.
   start is admitted when a compatible GPU has that much free VRAM. Bundles
   without `min_vram_mib` currently validate with a warning and are admitted
   without a declared VRAM requirement; the slot limit still counts starting
-  models. Models started by installed applications use the same admission as
-  the 模型 page.
-- WSL defaults: `addr=0.0.0.0:8790`, `public_host=localhost`,
-  `serve_host=0.0.0.0` (Windows reaches the service through localhost forwarding).
+  models. Applications call the gateway and share the same scheduler.
+- `idle_stop_seconds` (default 600) stops residents with no leases;
+  `queue_timeout_seconds`/`queue_max` bound waiting; `auto_pull` (default true)
+  preloads an absent model in the background; `cpu_fallback` is
+  `no-gpu-runtime` (default) or `disabled`.
+- WSL defaults: `addr=0.0.0.0:8790`, `public_host=localhost`. `serve_host` is
+  legacy and ignored: child serve processes always bind loopback and are reached
+  only by the gateway. Windows reaches the service through localhost forwarding.
 - `token` is optional. When set, every path except `/health`, `/`, `/docs`,
   `/ui/*`, and `/openapi.yaml` requires `Authorization: Bearer <token>` or
-  `X-Flashcli-Token`.
+  `X-Flashcli-Token`. The gateway strips the client token before forwarding.
 - Mirrors: `POST /api/v1/mirror {"enabled":true}` (or the desktop toggle) writes
   `~/.flashcli/mirror.env` (Aliyun pip, hf-mirror, gh-proxy, Gitee, SJTU torch)
   and applies to new downloads without restarting the service.

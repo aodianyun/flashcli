@@ -536,3 +536,40 @@ func TestGatewayRealtimeProxy(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+func TestGatewayTokenAndHeaderStripping(t *testing.T) {
+	var upstreamAuth string
+	child := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"model":"child","choices":[]}`)
+	}))
+	defer child.Close()
+
+	refStr := "flashcli-bundle/demo:1.0.0"
+	source := &flipSource{ref: refStr, caps: []string{"openai.chat"}}
+	source.ready.Store(true)
+	s := gatewayTestServer(t, source, &gatewayLauncher{endpoint: child.URL}, gatewayInspect(source.caps, gpuManifest(t)))
+	s.Token = "secret"
+	body := `{"model":"` + refStr + `","messages":[]}`
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated = %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer secret")
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("authenticated = %d: %s", rec.Code, rec.Body.String())
+	}
+	if upstreamAuth != "" {
+		t.Fatalf("client token leaked to the child: %q", upstreamAuth)
+	}
+}

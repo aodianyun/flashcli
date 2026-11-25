@@ -43,8 +43,8 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 | 能力 | 共享 API | CLI | flashserver |
 |------|----------|-----|-------------|
 | Pull / 运行时 + venv 准备 / 权重 | `host.Pull`、`host.EnsureRuntime`、`host.ResolveWeights` | `flashcli pull`、`run`/`serve` | `/api/v1/pull`、应用准备、Manager |
-| Serve 日志名 / tail / 就绪 | `modelrun.LogName`、`modelrun.TailLines`、`modelrun.WaitHealthy` | serve 子进程、`app logs` | `/api/v1/logs`、Manager/应用启动 |
-| 应用安装/启动/停止/状态/恢复 | `apps.Service`、`apps.WasRunning` | `flashcli app ...` | `/api/v1/apps`、启动恢复 |
+| Serve 日志名 / tail / 就绪 | `modelrun.LogName`、`modelrun.TailLines`、`modelrun.WaitHealthy` | serve 子进程、`app logs` | `/api/v1/logs`、Manager/调度器 |
+| 应用安装/启用/状态 | `apps.Service` | `flashcli app ...` | `/api/v1/apps`、网关 setup |
 | 缓存区域 + 唯一分配字节 | `host.Storage()` | `flashcli du` | `GET /api/v1/storage` |
 | 缓存模型、大小、就绪、运行时字节 | `host.ListModels()` | `flashcli models list` | `GET /api/v1/models` |
 | Bundle 可用性 / serve 能力 | `host.BundleRootUsable`、`host.ListModels` | `models list/show` | `/api/v1/models` |

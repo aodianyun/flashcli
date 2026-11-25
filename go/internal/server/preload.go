@@ -318,6 +318,7 @@ func (s *Server) ensurePreload(ctx context.Context, refStr string) (ready bool, 
 	if s.Puller == nil || s.Jobs == nil {
 		return false, "", errors.New("preload is not configured")
 	}
+	puller := s.Puller
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	store.ensureLoaded()
@@ -335,7 +336,7 @@ func (s *Server) ensurePreload(ctx context.Context, refStr string) (ready bool, 
 	store.models[refStr] = &preloadEntry{State: preloadLoading, UpdatedAt: time.Now().UTC()}
 	store.saveLocked()
 	job := s.Jobs.Start(context.Background(), "preload", refStr, func(ctx context.Context, emit func(string, string)) error {
-		_, pullErr := s.Puller.Pull(ctx, refStr, host.PullOptions{
+		_, pullErr := puller.Pull(ctx, refStr, host.PullOptions{
 			VerifyWeights: true,
 			Progress: func(ev host.PullEvent) {
 				emit(ev.Phase, ev.Message)

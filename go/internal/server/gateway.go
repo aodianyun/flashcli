@@ -232,6 +232,7 @@ func (s *Server) prepareGateway(ctx context.Context, refStr, capability string) 
 		return &gatewayFailure{Status: http.StatusServiceUnavailable, Code: "no_placement", Type: "server_error",
 			Message: "scheduler is not configured", Ref: refStr}
 	}
+	fmt.Fprintf(LogSink(), "gateway ready model=%s capability=%s\n", refStr, capability)
 	return nil
 }
 
@@ -437,6 +438,7 @@ func writeGatewayError(w http.ResponseWriter, status int, code, typ, message, mo
 	if jobID != "" {
 		w.Header().Set("X-Flashcli-Preload-Job", jobID)
 	}
+	fmt.Fprintf(LogSink(), "gateway error %d %s model=%s %s\n", status, code, model, message)
 	errObj := map[string]any{"message": message, "type": typ, "code": code}
 	if model != "" {
 		errObj["model"] = model

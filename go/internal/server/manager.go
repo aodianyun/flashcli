@@ -238,6 +238,13 @@ func (m *Manager) load(ctx context.Context, refStr string, progress func(phase, 
 		settings = m.opts.ServeSettings.Get(refStr)
 	}
 	host := strings.TrimSpace(settings.Host)
+	// Child serve endpoints are internal; always bind loopback even if a saved
+	// option asks for a LAN address.
+	switch host {
+	case "", "127.0.0.1", "localhost", "::1":
+	default:
+		host = "127.0.0.1"
+	}
 	port := settings.Port
 	if port > 0 {
 		if !modelrun.PortAvailable(port) {

@@ -454,6 +454,8 @@ paths:
                         active_requests: { type: integer }
                         started_at: { type: string, format: date-time }
                         last_used: { type: string, format: date-time }
+                  active_leases: { type: integer }
+                  waiters: { type: integer }
                   vram_headroom_mib: { type: integer }
                   requirements:
                     type: array
