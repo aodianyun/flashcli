@@ -81,9 +81,10 @@ func doctorCmd() *cobra.Command {
 }
 
 type validateResult struct {
-	OK     bool     `json:"ok"`
-	Bundle string   `json:"bundle"`
-	Errors []string `json:"errors"`
+	OK       bool     `json:"ok"`
+	Bundle   string   `json:"bundle"`
+	Errors   []string `json:"errors"`
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 func bundleCmd() *cobra.Command {
@@ -110,13 +111,16 @@ func bundleValidateCmd() *cobra.Command {
 				path = args[0]
 			}
 			var errs []string
+			var warnings []string
 			m, err := manifest.Load(path)
 			if err != nil {
 				errs = []string{err.Error()}
 			} else if executionOnly {
 				errs = manifest.ValidateExecution(m)
+				warnings = manifest.ValidateWarnings(m)
 			} else {
 				errs = manifest.Validate(m)
+				warnings = manifest.ValidateWarnings(m)
 				if !skipStaticServe {
 					errs = append(errs, manifest.ValidateServeMethods(m)...)
 				}
@@ -137,13 +141,19 @@ func bundleValidateCmd() *cobra.Command {
 			}
 			ok := len(errs) == 0
 			if asJSON {
-				blob, _ := json.MarshalIndent(validateResult{OK: ok, Bundle: path, Errors: errs}, "", "  ")
+				blob, _ := json.MarshalIndent(validateResult{OK: ok, Bundle: path, Errors: errs, Warnings: warnings}, "", "  ")
 				fmt.Fprintln(cmd.OutOrStdout(), string(blob))
 			} else if ok {
 				fmt.Fprintf(cmd.OutOrStdout(), "[ok] bundle: %s\n", path)
+				for _, w := range warnings {
+					fmt.Fprintf(cmd.OutOrStderr(), "[!] %s\n", w)
+				}
 			} else {
 				for _, e := range errs {
 					fmt.Fprintf(cmd.OutOrStderr(), "[!] %s\n", e)
+				}
+				for _, w := range warnings {
+					fmt.Fprintf(cmd.OutOrStderr(), "[!] %s\n", w)
 				}
 			}
 			if !ok {

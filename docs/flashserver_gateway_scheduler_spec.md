@@ -310,6 +310,9 @@ Optional:
 - The runtime matrix declares device/OS/arch/runtime compatibility. A CPU
   runtime cell must exist for CPU placement; a missing cell means no CPU
   fallback.
+- Rollout: existing bundles without `min_vram_mib` validate with a warning and
+  are admitted without a declared VRAM requirement until every published GPU
+  bundle declares it. New bundles must declare it.
 
 ### 8.2 Scheduler placement (host-only)
 

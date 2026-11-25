@@ -50,6 +50,9 @@ func main() {
 	if cfg.Addr == "" {
 		cfg.Addr = "127.0.0.1:8790"
 	}
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("invalid config: %v", err)
+	}
 	// Apply ~/.flashcli/mirror.env (or install.sh --mirror defaults) before any
 	// bundle/weight download uses PIP_INDEX_URL / HF_ENDPOINT.
 	mirror.Apply()

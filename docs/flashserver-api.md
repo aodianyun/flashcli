@@ -46,7 +46,7 @@ Authentication is off by default. With a token, every path except `/health`, `/`
 | Models | `GET /api/v1/models`, `GET /api/v1/models/loaded`, `POST /api/v1/models/preload`, `POST /api/v1/models/load`, `POST /api/v1/models/unload`, `POST /api/v1/models/smoke`, `POST /api/v1/models/clean` | Schema in [openapi.yaml](openapi.yaml) |
 | Model options | `GET/PUT/DELETE /api/v1/models/options` | `serve_options` + saved host/port, see [flashserver-desktop.md](flashserver-desktop.md#startup-parameters-and-lan-access) |
 | Jobs | `POST /api/v1/pull`, `GET /api/v1/jobs/{id}`, `GET /api/v1/jobs/{id}/events`, `POST /api/v1/jobs/{id}/cancel` | Async work; progress also streams over `/api/v1/ws` |
-| System | `GET /api/v1/system`, `GET /api/v1/gpu`, `GET /api/v1/gpu/history`, `GET /api/v1/resources`, `GET /api/v1/storage` | Telemetry and capacity |
+| System | `GET /api/v1/system`, `GET /api/v1/gpu`, `GET /api/v1/gpu/history`, `GET /api/v1/resources`, `GET /api/v1/devices`, `GET /api/v1/scheduler`, `GET /api/v1/storage` | Telemetry, device inventory, and placement answers |
 | Logs | `GET /api/v1/logs`, `GET /api/v1/logs/download` | `?kind=server\|model&ref=…&lines=N` |
 | Catalog | `GET /api/v1/catalog`, `GET /api/v1/catalog/tags`, `GET /api/v1/catalog/{id}` | FlashHub proxy |
 | Mirror | `GET /api/v1/mirror`, `POST /api/v1/mirror` | Domestic mirrors for new downloads |
@@ -56,6 +56,21 @@ Authentication is off by default. With a token, every path except `/health`, `/`
 Model objects in `GET /api/v1/models` and `GET /api/v1/models/loaded` include a
 `capabilities` array. `null` means the host does not own routes for that serve
 entry (script/native or unknown); `[]` means host inference routes are disabled.
+
+## Devices and placement
+
+- `GET /api/v1/devices` returns the WSL-visible inventory: NVIDIA dGPUs
+  (`nvidia-smi`), the CPU, RAM, and cgroup limits. iGPU/AMD/Windows-native
+  devices are out of scope.
+- `GET /api/v1/scheduler` returns resident models, slot counts,
+  queue/reservations, and one `ResourceRequirement` per cached serve bundle:
+  which GPU runtime cells match, which devices satisfy `gpu_count` and
+  `min_vram_mib + vram_headroom_mib`, whether a CPU runtime exists, and the
+  no-placement reason (`no_compatible_runtime` / `resource_exhausted`).
+- Placement is host-only. Bundles declare `min_vram_mib`, optional `gpu_count`,
+  and optional `min_ram_mib`; they never select devices.
+- CPU is a candidate only when no compatible GPU runtime exists, never because
+  VRAM is temporarily short.
 
 ## Cached model lifecycle
 

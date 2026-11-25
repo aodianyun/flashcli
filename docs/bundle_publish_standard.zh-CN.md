@@ -193,7 +193,7 @@ flashcli run flashcli-bundle/qwen3_8b_nvfp4:1.0.0
 | `defaults` | 是 | 所有环境共享的模型配置 |
 | `environments` | 是 | 非空 env key → 平台覆盖；native entry 必须有 `runtime`，纯 Python/CPU 环境可省略 |
 | `build` | 生成 | FlashRT/构建溯源；由 pack 写入 `dist/` |
-| `resources` | 可选 | flashserver 调度使用的实测显存占用（见 §3.4.2） |
+| `resources` | GPU runtime 必填 | 与模型无关的准入资源需求（见 §3.4.2） |
 | `runtime_abi_version` | 条件 | `native-abi` 必填，固定 **1** |
 | `exec_protocol_version` | 条件 | `native-exec` 必填，固定 **1** |
 | `variants` / `backends` / `entries` | 禁止 | v4 一个模型一个实现；拆分 bundle |
@@ -290,25 +290,30 @@ environment 定义 `python_dependencies` 时整体替换 defaults。
 - `run` / `serve` 在 bundle 上下文检查；缺失时给出系统包映射，或在 root 且
   `FLASHCLI_AUTO_INSTALL_SYSTEM` 允许时自动安装。
 
-### 3.4.2 `defaults.resources`（可选，flashserver）
+### 3.4.2 `defaults.resources`（flashserver 准入）
 
-声明 `flashserver` 调度模型时使用的实测运行时资源占用。
+声明与模型无关的资源需求，供 `flashserver` placement 使用。bundle 不选择设备、
+GPU id、`CUDA_VISIBLE_DEVICES` 或 placement 策略，这些由 host 决定。
 
 ```json
 "resources": {
-  "min_vram_mib": 12288
+  "min_vram_mib": 12288,
+  "gpu_count": 1,
+  "min_ram_mib": 16384
 }
 ```
 
-- `min_vram_mib`：bundle 在最大一张卡上需要的空闲显存（MiB）。按实测峰值加少量
-  余量填写，例如峰值 11.4 GiB 的 bundle 填 `12288`（12 GiB）。
-- v4 environment overlay 可以覆盖该值。
-- 模型页启动的模型和应用启动的模型使用同一规则：仅当
-  `空闲显存 >= min_vram_mib` 时 `flashserver` 才准入，否则返回
-  `409 RESOURCE_EXHAUSTED`（`need N MiB free VRAM, have M MiB`）。
-- 该值就是全部要求，不再叠加全局安全余量。
-- 未声明该字段的 bundle 不做显存准入（`max_loaded` 槽位限制仍然生效）。
-- 数值应来自该 bundle 声明 runtime 的实测峰值。
+- `min_vram_mib` — **每张 GPU** 需要的空闲显存（MiB）。按实测峰值填写；host 会额外
+  预留 `vram_headroom_mib`。GPU runtime 必须声明；在全部已发布 bundle 补齐之前，
+  缺失该值只产生校验警告，并按未声明显存要求准入。
+- `gpu_count` — 可选，默认 `1`。一个模型跨多少张 GPU；调度器按全有或全无预留。
+- `min_ram_mib` — 可选，仅 CPU runtime。CPU placement 需要的空闲内存。只有不存在
+  兼容 GPU runtime 时才使用 CPU。
+- 只允许这三个字段。设备 id、placement 提示、策略或任何其他字段都会使
+  `bundle validate` 失败。
+- v4 environment overlay 可以覆盖该块。
+- `resource_exhausted` 与 `no_compatible_runtime` 的准入语义见
+  [flashserver_gateway_scheduler_spec.zh-CN.md](flashserver_gateway_scheduler_spec.zh-CN.md)。
 
 ### 3.5 `defaults.env`
 

@@ -194,7 +194,7 @@ Script contracts:
 | `environments` | yes | Non-empty env-key → platform overrides; `runtime` is required for native entries and optional for pure-Python/CPU environments |
 | `build` | generated | FlashRT/build provenance; written into `dist/` by pack |
 | `system` | optional | System capabilities required at runtime (see §3.4.1) |
-| `resources` | optional | Measured VRAM footprint for flashserver admission (see §3.4.2) |
+| `resources` | required for GPU runtimes | Model-agnostic admission requirements (see §3.4.2) |
 | `runtime_abi_version` | conditional | Required for `native-abi`; must be **1** |
 | `exec_protocol_version` | conditional | Required for `native-exec`; must be **1** |
 | `variants` / `backends` / `entries` | forbidden | v4 has one model and one implementation; split bundles instead |
@@ -298,28 +298,35 @@ Rules:
   fail with the distro package mapping, or are installed automatically when the host is
   root and `FLASHCLI_AUTO_INSTALL_SYSTEM` permits it.
 
-### 3.4.2 `defaults.resources` (optional, flashserver)
+### 3.4.2 `defaults.resources` (flashserver admission)
 
-Declares the measured runtime footprint used by `flashserver` model admission.
+Declares model-agnostic resource requirements used by `flashserver` placement.
+Bundles never select a device, GPU id, `CUDA_VISIBLE_DEVICES`, or placement
+policy; the host decides those.
 
 ```json
 "resources": {
-  "min_vram_mib": 12288
+  "min_vram_mib": 12288,
+  "gpu_count": 1,
+  "min_ram_mib": 16384
 }
 ```
 
-- `min_vram_mib`: free GPU memory (MiB) the bundle needs on the largest card.
-  Set it from the measured peak usage plus a small headroom, e.g. a bundle that
-  peaks at 11.4 GiB uses `12288` (12 GiB).
-- A v4 environment overlay may override the value.
-- The same rule applies to models started from the 模型 page and models started
-  by an installed application: `flashserver` admits the start only when
-  `free VRAM >= min_vram_mib`, otherwise it returns
-  `409 RESOURCE_EXHAUSTED` with `need N MiB free VRAM, have M MiB`.
-- The value is the whole requirement; there is no extra global margin.
-- Bundles without this field are always admitted by VRAM (the `max_loaded`
-  slot limit still applies).
-- Values must reflect measured peak usage for the bundle's declared runtime.
+- `min_vram_mib` — free GPU memory (MiB) required **per GPU**. Set it from the
+  measured peak usage; the host additionally reserves `vram_headroom_mib`.
+  A GPU runtime must declare it; until every published bundle does, a missing
+  value validates as a warning and is admitted without a declared VRAM
+  requirement.
+- `gpu_count` — optional, default `1`. Number of GPUs one model spans. The
+  scheduler reserves that many GPUs all-or-nothing.
+- `min_ram_mib` — optional, CPU runtime only. Free RAM required for CPU
+  placement. CPU is used only when no compatible GPU runtime exists.
+- Only these three keys are allowed. Device ids, placement hints, policies, or
+  any other key fail `bundle validate`.
+- A v4 environment overlay may override the block.
+- Admission returns `503`/`409` semantics for `resource_exhausted` and
+  `no_compatible_runtime`; see
+  [flashserver_gateway_scheduler_spec.md](flashserver_gateway_scheduler_spec.md).
 
 ### 3.5 `defaults.env`
 

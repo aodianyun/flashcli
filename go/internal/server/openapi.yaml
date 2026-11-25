@@ -157,6 +157,63 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Resources' }
+  /api/v1/devices:
+    get:
+      summary: Device inventory (WSL-visible NVIDIA GPUs, CPU, RAM, cgroup limits)
+      responses:
+        '200':
+          description: Raw inventory plus the configured VRAM headroom
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  devices:
+                    type: array
+                    items: { $ref: '#/components/schemas/Device' }
+                  gpu_error: { type: string }
+                  cuda_tag: { type: string }
+                  cpu_model: { type: string }
+                  memory_total_bytes: { type: integer, format: int64 }
+                  memory_free_bytes: { type: integer, format: int64 }
+                  memory_used_bytes: { type: integer, format: int64 }
+                  cgroup_memory_limit_bytes: { type: integer, format: int64 }
+                  cgroup_memory_used_bytes: { type: integer, format: int64 }
+                  cgroup_cpu_cores: { type: number }
+                  vram_headroom_mib: { type: integer }
+  /api/v1/scheduler:
+    get:
+      summary: Scheduler state and per-ref placement answers
+      description: |
+        Reports resident models, slots, queue/reservations, and whether each
+        cached serve bundle can run here (and on which devices) without starting
+        a process. Placement is host-only; bundles declare requirements only.
+      responses:
+        '200':
+          description: Scheduler snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  slots:
+                    type: object
+                    properties:
+                      used: { type: integer }
+                      max: { type: integer }
+                  resident:
+                    type: array
+                    items: { $ref: '#/components/schemas/LoadedModel' }
+                  queue:
+                    type: array
+                    items: {}
+                  reservations:
+                    type: array
+                    items: {}
+                  vram_headroom_mib: { type: integer }
+                  requirements:
+                    type: array
+                    items: { $ref: '#/components/schemas/ResourceRequirement' }
   /api/v1/models:
     get:
       summary: Cached models and loaded instances
@@ -1155,6 +1212,38 @@ components:
           items: { $ref: '#/components/schemas/LoadedModel' }
         loaded_count: { type: integer }
         max_loaded: { type: integer }
+    Device:
+      type: object
+      required: [kind, id]
+      properties:
+        kind: { type: string, enum: [cuda, cpu] }
+        id: { type: string }
+        name: { type: string }
+        memory_total_bytes: { type: integer, format: int64 }
+        memory_used_bytes: { type: integer, format: int64 }
+        memory_free_bytes: { type: integer, format: int64 }
+        compute_cap: { type: string, description: NVIDIA compute capability, e.g. "8.9" }
+        driver_version: { type: string }
+        cores: { type: integer }
+        threads: { type: integer }
+    ResourceRequirement:
+      type: object
+      properties:
+        ref: { type: string }
+        gpu_count: { type: integer, minimum: 1 }
+        min_vram_mib: { type: integer }
+        min_ram_mib: { type: integer }
+        gpu_compatible: { type: boolean, description: A runtime cell matches at least one GPU }
+        gpu_cells:
+          type: array
+          items: { type: string }
+        gpus:
+          type: array
+          description: Devices that satisfy gpu_count and min_vram_mib + headroom; empty is all-or-nothing failure
+          items: { type: string }
+        cpu_compatible: { type: boolean, description: The bundle declares a CPU runtime cell }
+        cpu_admitted: { type: boolean, description: CPU is admitted; only when no GPU runtime exists }
+        reason: { type: string, enum: [no_compatible_runtime, resource_exhausted] }
     Model:
       type: object
       properties:

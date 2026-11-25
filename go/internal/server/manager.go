@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -537,6 +536,8 @@ type BundleInfo struct {
 	Name         string
 	RunOnly      bool
 	MinVRAMMiB   int64
+	MinRAMMiB    int64
+	GPUCount     int
 	ServeOptions []serveopts.Spec
 	Capabilities []string
 }
@@ -565,37 +566,14 @@ func inspectBundle(refStr string) (BundleInfo, error) {
 	if err != nil {
 		return BundleInfo{}, err
 	}
+	resourceNeeds := m.Resources()
 	return BundleInfo{
 		Name:         m.Name,
 		RunOnly:      m.EntryFor("serve", variant) == nil,
-		MinVRAMMiB:   minVRAMMiB(m),
+		MinVRAMMiB:   resourceNeeds.MinVRAMMiB,
+		MinRAMMiB:    resourceNeeds.MinRAMMiB,
+		GPUCount:     resourceNeeds.GPUCount,
 		ServeOptions: serveopts.FromManifest(m, variant),
 		Capabilities: m.ServeCapabilities(),
 	}, nil
-}
-
-func minVRAMMiB(m *manifest.Manifest) int64 {
-	block, _ := m.Raw["resources"].(map[string]any)
-	for _, key := range []string{"min_vram_mib", "vram_mib", "min_memory_mib"} {
-		if v, ok := numberFromAny(block[key]); ok {
-			return v
-		}
-	}
-	return 0
-}
-
-func numberFromAny(v any) (int64, bool) {
-	switch n := v.(type) {
-	case float64:
-		return int64(n), true
-	case int64:
-		return n, true
-	case int:
-		return int64(n), true
-	case string:
-		i, err := strconv.ParseInt(strings.TrimSpace(n), 10, 64)
-		return i, err == nil
-	default:
-		return 0, false
-	}
 }

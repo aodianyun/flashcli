@@ -105,6 +105,24 @@ def test_server_rejects_run_only_bundle(flashserver_bin, flashcli_bin, cli_env, 
         _stop(server)
 
 
+def test_server_devices_and_scheduler(flashserver_bin, flashcli_bin, cli_env, home):
+    port = free_port()
+    server = _start_server(flashserver_bin, flashcli_bin, cli_env, home, port)
+    base = f"http://127.0.0.1:{port}"
+    try:
+        status, devices = http_json(f"{base}/api/v1/devices")
+        assert status == 200, devices
+        kinds = {item["kind"] for item in devices["devices"]}
+        assert "cpu" in kinds
+        assert "vram_headroom_mib" in devices
+
+        status, scheduler = http_json(f"{base}/api/v1/scheduler")
+        assert status == 200, scheduler
+        assert "slots" in scheduler and "requirements" in scheduler
+    finally:
+        _stop(server)
+
+
 def _wait_disk_state(base, ref, want, timeout=60):
     deadline = time.time() + timeout
     while time.time() < deadline:

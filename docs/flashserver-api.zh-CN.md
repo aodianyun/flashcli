@@ -41,7 +41,7 @@
 | 模型 | `GET /api/v1/models`、`GET /api/v1/models/loaded`、`POST /api/v1/models/preload`、`POST /api/v1/models/load`、`POST /api/v1/models/unload`、`POST /api/v1/models/smoke`、`POST /api/v1/models/clean` | schema 见 [openapi.yaml](openapi.yaml) |
 | 模型参数 | `GET/PUT/DELETE /api/v1/models/options` | `serve_options` + 已保存的 host/port，见 [flashserver-desktop.zh-CN.md](flashserver-desktop.zh-CN.md#启动参数与局域网访问) |
 | 任务 | `POST /api/v1/pull`、`GET /api/v1/jobs/{id}`、`GET /api/v1/jobs/{id}/events`、`POST /api/v1/jobs/{id}/cancel` | 异步任务，进度也通过 `/api/v1/ws` 推送 |
-| 系统 | `GET /api/v1/system`、`GET /api/v1/gpu`、`GET /api/v1/gpu/history`、`GET /api/v1/resources`、`GET /api/v1/storage` | 遥测与容量 |
+| 系统 | `GET /api/v1/system`、`GET /api/v1/gpu`、`GET /api/v1/gpu/history`、`GET /api/v1/resources`、`GET /api/v1/devices`、`GET /api/v1/scheduler`、`GET /api/v1/storage` | 遥测、设备盘点与 placement 结果 |
 | 日志 | `GET /api/v1/logs`、`GET /api/v1/logs/download` | `?kind=server\|model&ref=…&lines=N` |
 | 目录 | `GET /api/v1/catalog`、`GET /api/v1/catalog/tags`、`GET /api/v1/catalog/{id}` | FlashHub 代理 |
 | 镜像 | `GET /api/v1/mirror`、`POST /api/v1/mirror` | 对新下载启用/关闭国内镜像 |
@@ -51,6 +51,18 @@
 `GET /api/v1/models` 与 `GET /api/v1/models/loaded` 的模型对象包含 `capabilities` 数组。
 `null` 表示 host 不拥有该 serve 条目的路由（script/native 或未知）；`[]` 表示显式关闭
 host 推理路由。
+
+## 设备与 placement
+
+- `GET /api/v1/devices` 返回 WSL 可见设备：NVIDIA dGPU（`nvidia-smi`）、CPU、内存和
+  cgroup 限制。iGPU/AMD/Windows native 不在范围内。
+- `GET /api/v1/scheduler` 返回 resident 模型、槽位、队列/预留，以及每个已缓存 serve
+  bundle 的 `ResourceRequirement`：匹配的 GPU runtime cell、满足 `gpu_count` 与
+  `min_vram_mib + vram_headroom_mib` 的设备、是否存在 CPU runtime，以及无 placement
+  的原因（`no_compatible_runtime` / `resource_exhausted`）。
+- placement 只由 host 决定。bundle 只声明 `min_vram_mib`、可选 `gpu_count` 和可选
+  `min_ram_mib`，绝不选择设备。
+- 只有在不存在兼容 GPU runtime 时 CPU 才是候选；显存暂时不足不会触发 CPU 回退。
 
 ## 缓存模型生命周期
 

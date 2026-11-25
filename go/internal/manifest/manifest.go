@@ -476,6 +476,7 @@ func Validate(m *Manifest) []string {
 	errors = append(errors, validateEntryFiles(m)...)
 	errors = append(errors, validateAllServeCapabilities(m)...)
 	errors = append(errors, validateAllServeConcurrency(m)...)
+	errors = append(errors, validateResources(m)...)
 	errors = append(errors, validatePythonDependencies(m)...)
 	errors = append(errors, validateRuntimeSuffix(m)...)
 	errors = append(errors, validateSystemRequirements(m)...)

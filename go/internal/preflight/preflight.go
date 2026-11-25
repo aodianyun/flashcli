@@ -181,6 +181,24 @@ func HostEnvKey(gpu *GpuInfo, pythonABI string) string {
 	}.Name()
 }
 
+// HostEnvKeyFor builds a host env key for one explicit GPU compute capability
+// (for example "89"), so flashserver can ask which runtime cell fits a
+// particular device. An empty sm returns the CPU key.
+func HostEnvKeyFor(sm, cudaTag, pythonABI string) string {
+	sm = strings.TrimSpace(sm)
+	if sm == "" {
+		return HostEnvKey(nil, pythonABI)
+	}
+	return EnvKey{
+		PlatformTail: "sm" + sm + "-cu" + strings.TrimSpace(cudaTag),
+		OSName:       strings.ToLower(runtime.GOOS),
+		Arch:         normalizeArch(runtime.GOARCH),
+		PythonMinor:  pythonABI,
+		SM:           sm,
+		CudaTag:      strings.TrimSpace(cudaTag),
+	}.Name()
+}
+
 // ResolveEnvironment resolves a v4 environment by exact key, then by explicit
 // fallback match entries. Fallback entries with the same specificity that can
 // match the same host are rejected during manifest validation.

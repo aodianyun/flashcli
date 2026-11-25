@@ -54,6 +54,10 @@ type Server struct {
 	// AppService returns the shared application service (nil = default).
 	AppService func() *apps.Service
 
+	// VRAMHeadroomMiB is reserved on top of a bundle's min_vram_mib when
+	// choosing a device. Zero uses the 512 MiB default.
+	VRAMHeadroomMiB int
+
 	// Preload persists explicit disk-preload intent across restarts.
 	Preload *preloadStore
 
@@ -83,17 +87,18 @@ func New(addr string) *Server {
 	store := newServeSettingsStore("")
 	logDir := filepath.Join(paths.Home(), "logs", "serve")
 	return &Server{
-		Addr:          addr,
-		Source:        defaultSource{},
-		Puller:        hostPuller{},
-		Catalog:       flashhub.NewClient(),
-		Jobs:          NewJobManager(),
-		Manager:       NewManagerWithOptions(modelrun.FlashcliLauncher{LogDir: logDir}, ManagerOptions{GPU: gpuProbe, ServeSettings: store}),
-		GPU:           gpuProbe,
-		Started:       time.Now(),
-		LogDir:        logDir,
-		ServeSettings: store,
-		Preload:       newPreloadStore(filepath.Join(paths.Home(), "flashserver", "preload.json")),
+		Addr:            addr,
+		Source:          defaultSource{},
+		Puller:          hostPuller{},
+		Catalog:         flashhub.NewClient(),
+		Jobs:            NewJobManager(),
+		Manager:         NewManagerWithOptions(modelrun.FlashcliLauncher{LogDir: logDir}, ManagerOptions{GPU: gpuProbe, ServeSettings: store}),
+		GPU:             gpuProbe,
+		Started:         time.Now(),
+		LogDir:          logDir,
+		ServeSettings:   store,
+		Preload:         newPreloadStore(filepath.Join(paths.Home(), "flashserver", "preload.json")),
+		VRAMHeadroomMiB: 512,
 	}
 }
 
@@ -123,6 +128,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/mirror", s.mirrorStatus)
 	mux.HandleFunc("POST /api/v1/mirror", s.setMirror)
 	mux.HandleFunc("GET /api/v1/resources", s.resources)
+	mux.HandleFunc("GET /api/v1/devices", s.devices)
+	mux.HandleFunc("GET /api/v1/scheduler", s.scheduler)
 	mux.HandleFunc("GET /api/v1/gpu", s.gpuStatus)
 	mux.HandleFunc("GET /api/v1/gpu/history", s.gpuHistory)
 	mux.HandleFunc("GET /api/v1/system/history", s.gpuHistory)
