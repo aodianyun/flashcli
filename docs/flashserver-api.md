@@ -41,6 +41,13 @@ Authentication is off by default. With a token, every path except `/health`, `/`
 - `503 no_placement` and `429 queue_full` report scheduling failures; the
   response `model` field is rewritten to the requested full ref, and child
   serve endpoints are never exposed.
+- Multipart routes (`audio/transcriptions`, `audio/translations`,
+  `images/edits`, `images/variations`, JSON-or-multipart `videos`) read `model`
+  from the form and buffer the upload up to `max_upload_bytes` (default
+  256 MiB).
+- `WS /v1/realtime` takes `model` as a query parameter and upgrades only after
+  validation, preload, and admission. Anthropic `messages`/`count_tokens`
+  follow the same ref and capability rules.
 - Unsupported routes for a model's capabilities return an explicit error; they
   are never forwarded blindly.
 

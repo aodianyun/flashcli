@@ -9,11 +9,15 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/coder/websocket"
 
 	"github.com/aodianyun/flashcli/go/internal/ref"
 )
@@ -27,27 +31,58 @@ type OpenAIModel struct {
 	Capabilities []string `json:"capabilities,omitempty"`
 }
 
-// gatewayMaxBody bounds JSON request bodies. Multipart/WebSocket limits arrive
-// with their routes in the next milestone.
-const gatewayMaxBody = 32 << 20
+const (
+	// gatewayMaxBody bounds JSON request/response bodies.
+	gatewayMaxBody = 32 << 20
+	// defaultGatewayMaxUpload bounds multipart audio/image/video uploads.
+	defaultGatewayMaxUpload = 256 << 20
+)
 
-// gatewayRoutes maps public gateway paths to the child serve route and the
-// bundle capability that must be declared.
-var gatewayRoutes = map[string]struct {
+// gatewayRoute describes one public gateway route.
+type gatewayRoute struct {
 	Capability string
 	Upstream   string
-}{
-	"/v1/chat/completions": {"openai.chat", "/v1/chat/completions"},
-	"/v1/completions":      {"openai.completions", "/v1/completions"},
-	"/v1/responses":        {"openai.responses", "/v1/responses"},
-	"/v1/embeddings":       {"openai.embeddings", "/v1/embeddings"},
-	"/v1/moderations":      {"openai.moderations", "/v1/moderations"},
 }
 
-// gatewayHandler builds the handler for one gateway route.
-func (s *Server) gatewayHandler(capability, upstream string) http.HandlerFunc {
+// gatewayJSONRoutes accept JSON bodies (some return binary media).
+var gatewayJSONRoutes = map[string]gatewayRoute{
+	"/v1/chat/completions":      {"openai.chat", "/v1/chat/completions"},
+	"/v1/completions":           {"openai.completions", "/v1/completions"},
+	"/v1/responses":             {"openai.responses", "/v1/responses"},
+	"/v1/embeddings":            {"openai.embeddings", "/v1/embeddings"},
+	"/v1/moderations":           {"openai.moderations", "/v1/moderations"},
+	"/v1/audio/speech":          {"openai.audio.speech", "/v1/audio/speech"},
+	"/v1/images/generations":    {"openai.images.generations", "/v1/images/generations"},
+	"/v1/messages":              {"anthropic.messages", "/v1/messages"},
+	"/v1/messages/count_tokens": {"anthropic.count_tokens", "/v1/messages/count_tokens"},
+}
+
+// gatewayMultipartRoutes accept multipart/form-data (model + media parts).
+var gatewayMultipartRoutes = map[string]gatewayRoute{
+	"/v1/audio/transcriptions": {"openai.audio.transcriptions", "/v1/audio/transcriptions"},
+	"/v1/audio/translations":   {"openai.audio.translations", "/v1/audio/translations"},
+	"/v1/images/edits":         {"openai.images.edits", "/v1/images/edits"},
+	"/v1/images/variations":    {"openai.images.variations", "/v1/images/variations"},
+	"/v1/videos":               {"openai.videos", "/v1/videos"},
+}
+
+// gatewayJSONHandler builds the handler for one JSON gateway route.
+func (s *Server) gatewayJSONHandler(capability, upstream string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		s.serveGateway(w, r, capability, upstream)
+	}
+}
+
+// gatewayMultipartHandler builds the handler for one multipart gateway route.
+// /v1/videos also accepts JSON and delegates to the JSON path.
+func (s *Server) gatewayMultipartHandler(capability, upstream string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if mediaType == "application/json" {
+			s.serveGateway(w, r, capability, upstream)
+			return
+		}
+		s.serveMultipart(w, r, capability, upstream)
 	}
 }
 
@@ -143,45 +178,8 @@ func (s *Server) serveGateway(w http.ResponseWriter, r *http.Request, capability
 		return
 	}
 
-	// Auto-pull gate: do not start a job (or require a Puller) when the
-	// operator disabled auto-pull and the model is absent.
-	if !s.assetsReady(r.Context(), refStr) && s.preloads().state(refStr) != preloadReady && !s.AutoPull {
-		writeGatewayError(w, http.StatusNotFound, "model_not_found", "invalid_request_error",
-			"model is not preloaded and auto_pull is disabled", refStr, "", 0)
-		return
-	}
-
-	ready, jobID, err := s.ensurePreload(r.Context(), refStr)
-	if err != nil {
-		writeGatewayError(w, http.StatusServiceUnavailable, "model_preparing", "server_busy", err.Error(), refStr, "", 5)
-		return
-	}
-	if !ready {
-		retry := s.preloadRetryAfter(jobID)
-		writeGatewayError(w, http.StatusServiceUnavailable, "model_preparing", "server_busy",
-			"model is being preloaded", refStr, jobID, retry)
-		return
-	}
-
-	info, err := s.inspectRef(refStr)
-	if err != nil {
-		writeGatewayError(w, http.StatusNotFound, "model_not_found", "invalid_request_error",
-			"model is not available: "+err.Error(), refStr, "", 0)
-		return
-	}
-	if info.RunOnly {
-		writeGatewayError(w, http.StatusBadRequest, "model_not_servable", "invalid_request_error",
-			"bundle has no serve entry", refStr, "", 0)
-		return
-	}
-	if !hasCapability(info.Capabilities, capability) {
-		writeGatewayError(w, http.StatusBadRequest, "unsupported_capability", "invalid_request_error",
-			fmt.Sprintf("model does not declare %s", capability), refStr, "", 0)
-		return
-	}
-	if s.Scheduler == nil {
-		writeGatewayError(w, http.StatusServiceUnavailable, "no_placement", "server_error",
-			"scheduler is not configured", refStr, "", 0)
+	if fail := s.prepareGateway(r.Context(), refStr, capability); fail != nil {
+		fail.write(w)
 		return
 	}
 
@@ -201,6 +199,42 @@ func (s *Server) serveGateway(w http.ResponseWriter, r *http.Request, capability
 	s.proxyGateway(w, r, endpoint, upstreamPath, refStr, body, parsed.Stream)
 }
 
+// prepareGateway applies the auto-pull, serve and capability gates shared by
+// JSON, multipart, and WebSocket routes.
+func (s *Server) prepareGateway(ctx context.Context, refStr, capability string) *gatewayFailure {
+	if !s.assetsReady(ctx, refStr) && s.preloads().state(refStr) != preloadReady && !s.AutoPull {
+		return &gatewayFailure{Status: http.StatusNotFound, Code: "model_not_found", Type: "invalid_request_error",
+			Message: "model is not preloaded and auto_pull is disabled", Ref: refStr}
+	}
+	ready, jobID, err := s.ensurePreload(ctx, refStr)
+	if err != nil {
+		return &gatewayFailure{Status: http.StatusServiceUnavailable, Code: "model_preparing", Type: "server_busy",
+			Message: err.Error(), Ref: refStr, Retry: 5}
+	}
+	if !ready {
+		return &gatewayFailure{Status: http.StatusServiceUnavailable, Code: "model_preparing", Type: "server_busy",
+			Message: "model is being preloaded", Ref: refStr, JobID: jobID, Retry: s.preloadRetryAfter(jobID)}
+	}
+	info, err := s.inspectRef(refStr)
+	if err != nil {
+		return &gatewayFailure{Status: http.StatusNotFound, Code: "model_not_found", Type: "invalid_request_error",
+			Message: "model is not available: " + err.Error(), Ref: refStr}
+	}
+	if info.RunOnly {
+		return &gatewayFailure{Status: http.StatusBadRequest, Code: "model_not_servable", Type: "invalid_request_error",
+			Message: "bundle has no serve entry", Ref: refStr}
+	}
+	if !hasCapability(info.Capabilities, capability) {
+		return &gatewayFailure{Status: http.StatusBadRequest, Code: "unsupported_capability", Type: "invalid_request_error",
+			Message: fmt.Sprintf("model does not declare %s", capability), Ref: refStr}
+	}
+	if s.Scheduler == nil {
+		return &gatewayFailure{Status: http.StatusServiceUnavailable, Code: "no_placement", Type: "server_error",
+			Message: "scheduler is not configured", Ref: refStr}
+	}
+	return nil
+}
+
 // gatewayFailure is a mapped gateway error.
 type gatewayFailure struct {
 	Status  int
@@ -208,11 +242,12 @@ type gatewayFailure struct {
 	Type    string
 	Message string
 	Ref     string
+	JobID   string
 	Retry   int
 }
 
 func (e *gatewayFailure) write(w http.ResponseWriter) {
-	writeGatewayError(w, e.Status, e.Code, e.Type, e.Message, e.Ref, "", e.Retry)
+	writeGatewayError(w, e.Status, e.Code, e.Type, e.Message, e.Ref, e.JobID, e.Retry)
 }
 
 // acquireForRequest waits for a resident according to resident_start_wait and
@@ -470,6 +505,147 @@ func rewriteSSEModel(src io.Reader, w io.Writer, refStr string, flusher http.Flu
 		}
 		if line == "" && flusher != nil {
 			flusher.Flush()
+		}
+	}
+}
+
+// serveMultipart buffers a bounded multipart body, extracts `model`, and
+// forwards the exact body to the child.
+func (s *Server) serveMultipart(w http.ResponseWriter, r *http.Request, capability, upstreamPath string) {
+	mediaType, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "multipart/form-data" || params["boundary"] == "" {
+		writeGatewayError(w, http.StatusBadRequest, "invalid_multipart", "invalid_request_error",
+			"expected multipart/form-data with a boundary", "", "", 0)
+		return
+	}
+	limit := s.maxUploadBytes()
+	var buf bytes.Buffer
+	reader := multipart.NewReader(io.TeeReader(http.MaxBytesReader(w, r.Body, limit), &buf), params["boundary"])
+	refStr := ""
+	for {
+		part, perr := reader.NextPart()
+		if perr == io.EOF {
+			break
+		}
+		if perr != nil {
+			var maxErr *http.MaxBytesError
+			if errors.As(perr, &maxErr) {
+				writeGatewayError(w, http.StatusRequestEntityTooLarge, "request_too_large", "invalid_request_error",
+					"multipart body is too large", "", "", 0)
+				return
+			}
+			writeGatewayError(w, http.StatusBadRequest, "invalid_multipart", "invalid_request_error",
+				"cannot parse multipart body: "+perr.Error(), "", "", 0)
+			return
+		}
+		if part.FormName() == "model" {
+			value, _ := io.ReadAll(io.LimitReader(part, 512))
+			refStr = strings.TrimSpace(string(value))
+		} else {
+			_, _ = io.Copy(io.Discard, part)
+		}
+		_ = part.Close()
+	}
+	if refStr == "" {
+		writeGatewayError(w, http.StatusBadRequest, "model_required", "invalid_request_error", "model is required", "", "", 0)
+		return
+	}
+	if !ref.IsFlashHub(refStr) {
+		writeGatewayError(w, http.StatusBadRequest, "invalid_model", "invalid_request_error",
+			"model must be a full bundle ref (namespace/name:version)", refStr, "", 0)
+		return
+	}
+	if fail := s.prepareGateway(r.Context(), refStr, capability); fail != nil {
+		fail.write(w)
+		return
+	}
+	lease, gerr := s.acquireForRequest(r.Context(), refStr)
+	if gerr != nil {
+		gerr.write(w)
+		return
+	}
+	defer lease.Release()
+	endpoint, ok := s.Manager.Endpoint(refStr)
+	if !ok {
+		writeGatewayError(w, http.StatusServiceUnavailable, "model_starting", "server_busy",
+			"model endpoint is not ready", refStr, "", 2)
+		return
+	}
+	s.proxyGateway(w, r, endpoint, upstreamPath, refStr, buf.Bytes(), false)
+}
+
+func (s *Server) maxUploadBytes() int64 {
+	if s.MaxUploadBytes > 0 {
+		return s.MaxUploadBytes
+	}
+	return defaultGatewayMaxUpload
+}
+
+// serveRealtime proxies WS /v1/realtime. The model is a full bundle ref in the
+// query string; it is validated, preloaded and leased before the upgrade.
+func (s *Server) serveRealtime(w http.ResponseWriter, r *http.Request) {
+	refStr := strings.TrimSpace(r.URL.Query().Get("model"))
+	if refStr == "" {
+		writeGatewayError(w, http.StatusBadRequest, "model_required", "invalid_request_error", "model is required", "", "", 0)
+		return
+	}
+	if !ref.IsFlashHub(refStr) {
+		writeGatewayError(w, http.StatusBadRequest, "invalid_model", "invalid_request_error",
+			"model must be a full bundle ref (namespace/name:version)", refStr, "", 0)
+		return
+	}
+	if fail := s.prepareGateway(r.Context(), refStr, "openai.realtime"); fail != nil {
+		fail.write(w)
+		return
+	}
+	lease, gerr := s.acquireForRequest(r.Context(), refStr)
+	if gerr != nil {
+		gerr.write(w)
+		return
+	}
+	defer lease.Release()
+	endpoint, ok := s.Manager.Endpoint(refStr)
+	if !ok {
+		writeGatewayError(w, http.StatusServiceUnavailable, "model_starting", "server_busy",
+			"model endpoint is not ready", refStr, "", 2)
+		return
+	}
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	wsURL := strings.Replace(strings.TrimRight(endpoint, "/"), "http", "ws", 1) + "/v1/realtime"
+	if r.URL.RawQuery != "" {
+		wsURL += "?" + r.URL.RawQuery
+	}
+	target, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		writeGatewayError(w, http.StatusBadGateway, "proxy_error", "server_error",
+			"cannot reach the model realtime endpoint", refStr, "", 0)
+		return
+	}
+	defer target.Close(websocket.StatusNormalClosure, "")
+	client, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+	if err != nil {
+		return
+	}
+	defer client.Close(websocket.StatusNormalClosure, "")
+
+	errc := make(chan error, 2)
+	go pipeWebSocket(ctx, client, target, errc)
+	go pipeWebSocket(ctx, target, client, errc)
+	<-errc
+	cancel()
+}
+
+func pipeWebSocket(ctx context.Context, src, dst *websocket.Conn, errc chan<- error) {
+	for {
+		typ, data, err := src.Read(ctx)
+		if err != nil {
+			errc <- err
+			return
+		}
+		if err := dst.Write(ctx, typ, data); err != nil {
+			errc <- err
+			return
 		}
 	}
 }

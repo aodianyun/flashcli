@@ -155,6 +155,154 @@ paths:
         '404': { $ref: '#/components/responses/Error' }
         '429': { $ref: '#/components/responses/Error' }
         '503': { $ref: '#/components/responses/Error' }
+  /v1/messages:
+    post:
+      summary: Anthropic messages (gateway)
+      description: Requires capability `anthropic.messages`; forwards `anthropic-version`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GatewayRequest' }
+      responses:
+        '200': { description: Anthropic message response }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/messages/count_tokens:
+    post:
+      summary: Anthropic count tokens (gateway)
+      description: Requires capability `anthropic.count_tokens`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GatewayRequest' }
+      responses:
+        '200': { description: Token count }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/audio/transcriptions:
+    post:
+      summary: Audio transcription (gateway, multipart)
+      description: Requires capability `openai.audio.transcriptions`; `model` is a multipart field.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/GatewayMultipart' }
+      responses:
+        '200': { description: Transcription }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/audio/translations:
+    post:
+      summary: Audio translation (gateway, multipart)
+      description: Requires capability `openai.audio.translations`; `model` is a multipart field.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/GatewayMultipart' }
+      responses:
+        '200': { description: Translation }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/audio/speech:
+    post:
+      summary: Audio speech (gateway)
+      description: Requires capability `openai.audio.speech`; may return binary audio.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GatewayRequest' }
+      responses:
+        '200': { description: Audio bytes or JSON }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/images/generations:
+    post:
+      summary: Image generation (gateway)
+      description: Requires capability `openai.images.generations`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GatewayRequest' }
+      responses:
+        '200': { description: Image result }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/images/edits:
+    post:
+      summary: Image edit (gateway, multipart)
+      description: Requires capability `openai.images.edits`; `model` is a multipart field.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/GatewayMultipart' }
+      responses:
+        '200': { description: Image result }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/images/variations:
+    post:
+      summary: Image variation (gateway, multipart)
+      description: Requires capability `openai.images.variations`; `model` is a multipart field.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/GatewayMultipart' }
+      responses:
+        '200': { description: Image result }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/videos:
+    post:
+      summary: Video generation (gateway)
+      description: Requires capability `openai.videos`; accepts JSON or multipart with a `model` field.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GatewayRequest' }
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/GatewayMultipart' }
+      responses:
+        '200': { description: Video job }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/realtime:
+    get:
+      summary: Realtime WebSocket (gateway)
+      description: Requires capability `openai.realtime`; `model` is a full bundle ref in the query string.
+      parameters:
+        - name: model
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '101': { description: WebSocket upgrade }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
   /api/v1/version:
     get:
       summary: Daemon version
@@ -1316,6 +1464,17 @@ components:
           type: string
           description: Full bundle ref (namespace/name:version or flashcli-bundle/name:version)
         stream: { type: boolean }
+      additionalProperties: true
+    GatewayMultipart:
+      type: object
+      required: [model]
+      properties:
+        model:
+          type: string
+          description: Full bundle ref (multipart form field)
+        file:
+          type: string
+          format: binary
       additionalProperties: true
     Device:
       type: object

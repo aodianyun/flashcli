@@ -35,6 +35,11 @@
   `503 model_starting` 与 `Retry-After: 2`。
 - `503 no_placement` 和 `429 queue_full` 表示调度失败；响应中的 `model` 会重写为
   请求的完整 ref，child serve endpoint 绝不暴露。
+- multipart 路由（`audio/transcriptions`、`audio/translations`、`images/edits`、
+  `images/variations`、JSON 或 multipart 的 `videos`）从表单读取 `model`，上传体按
+  `max_upload_bytes`（默认 256 MiB）限制并缓冲。
+- `WS /v1/realtime` 通过 query 参数传 `model`，只有校验、preload、准入都成功后才升级。
+  Anthropic `messages`/`count_tokens` 使用相同的 ref 与 capability 规则。
 - 模型未声明对应能力时返回明确错误，不会静默转发。
 
 ## 管理（`/api/v1`）

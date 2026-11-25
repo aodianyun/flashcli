@@ -1,10 +1,12 @@
 package server
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -65,6 +67,14 @@ func (r *statusRecorder) CloseNotify() <-chan bool {
 		return cn.CloseNotify()
 	}
 	return make(chan bool)
+}
+
+// Hijack preserves WebSocket upgrades through the logging wrapper.
+func (r *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := r.ResponseWriter.(http.Hijacker); ok {
+		return h.Hijack()
+	}
+	return nil, nil, http.ErrNotSupported
 }
 
 // logRequests writes every API call (except the high-frequency health check,

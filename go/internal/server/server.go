@@ -65,6 +65,8 @@ type Server struct {
 	QueueMax                 int
 	AutoPull                 bool
 	CPUFallback              string
+	// MaxUploadBytes bounds multipart inference uploads. Zero uses 256 MiB.
+	MaxUploadBytes int64
 
 	// Scheduler owns demand-driven resident lifecycle and leases.
 	Scheduler *Scheduler
@@ -159,9 +161,13 @@ func (s *Server) Handler() http.Handler {
 	// Data plane: OpenAI-compatible gateway. Applications and the desktop use
 	// only these routes for inference; they never see child serve endpoints.
 	mux.HandleFunc("GET /v1/models", s.gatewayModels)
-	for path, route := range gatewayRoutes {
-		mux.HandleFunc("POST "+path, s.gatewayHandler(route.Capability, route.Upstream))
+	for path, route := range gatewayJSONRoutes {
+		mux.HandleFunc("POST "+path, s.gatewayJSONHandler(route.Capability, route.Upstream))
 	}
+	for path, route := range gatewayMultipartRoutes {
+		mux.HandleFunc("POST "+path, s.gatewayMultipartHandler(route.Capability, route.Upstream))
+	}
+	mux.HandleFunc("GET /v1/realtime", s.serveRealtime)
 
 	// Control plane: management API. Resident start/stop stays internal; these
 	// routes configure disk state, applications, telemetry, and jobs.

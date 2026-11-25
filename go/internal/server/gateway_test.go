@@ -1,18 +1,23 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/coder/websocket"
 
 	"github.com/aodianyun/flashcli/go/internal/host"
 	"github.com/aodianyun/flashcli/go/internal/manifest"
@@ -324,6 +329,12 @@ func TestGatewayValidationAndCapabilityErrors(t *testing.T) {
 		t.Fatalf("capability = %d: %v", rec.Code, body)
 	}
 
+	rec, body = call(t, s.Handler(), http.MethodPost, "/v1/messages",
+		`{"model":"`+refStr+`","messages":[]}`)
+	if rec.Code != http.StatusBadRequest || body["error"].(map[string]any)["code"] != "unsupported_capability" {
+		t.Fatalf("anthropic capability = %d: %v", rec.Code, body)
+	}
+
 	rec, body = call(t, s.Handler(), http.MethodPost, "/v1/chat/completions",
 		`{"model":"flashcli-bundle/missing:1.0.0","messages":[]}`)
 	if rec.Code != http.StatusServiceUnavailable || body["error"].(map[string]any)["code"] != "model_preparing" {
@@ -380,5 +391,148 @@ func TestGatewayModelStartingReturnsRetryAfter(t *testing.T) {
 		`{"model":"`+refStr+`","messages":[]}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("retry after start = %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func multipartBody(t *testing.T, model, file string) ([]byte, string) {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	if model != "" {
+		if err := mw.WriteField("model", model); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fw, err := mw.CreateFormFile("file", "a.wav")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw.Write([]byte(file)); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes(), mw.FormDataContentType()
+}
+
+func TestGatewayMultipartExtractsModelAndForwardsBody(t *testing.T) {
+	var gotModel, gotFile string
+	child := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Errorf("child parse: %v", err)
+			return
+		}
+		gotModel = r.FormValue("model")
+		if f, _, err := r.FormFile("file"); err == nil {
+			blob, _ := io.ReadAll(f)
+			gotFile = string(blob)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"model":"child","text":"ok"}`)
+	}))
+	defer child.Close()
+
+	refStr := "flashcli-bundle/demo:1.0.0"
+	caps := []string{"openai.audio.transcriptions"}
+	source := &flipSource{ref: refStr, caps: caps}
+	source.ready.Store(true)
+	s := gatewayTestServer(t, source, &gatewayLauncher{endpoint: child.URL}, gatewayInspect(caps, gpuManifest(t)))
+
+	body, contentType := multipartBody(t, refStr, "audio-bytes")
+	req := httptest.NewRequest(http.MethodPost, "/v1/audio/transcriptions", bytes.NewReader(body))
+	req.Header.Set("Content-Type", contentType)
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("multipart = %d: %s", rec.Code, rec.Body.String())
+	}
+	if gotModel != refStr || gotFile != "audio-bytes" {
+		t.Fatalf("child got model=%q file=%q", gotModel, gotFile)
+	}
+	if !strings.Contains(rec.Body.String(), `"model":"`+refStr+`"`) {
+		t.Fatalf("model not rewritten: %s", rec.Body.String())
+	}
+}
+
+func TestGatewayMultipartRequiresModelAndLimit(t *testing.T) {
+	refStr := "flashcli-bundle/demo:1.0.0"
+	caps := []string{"openai.audio.transcriptions"}
+	source := &flipSource{ref: refStr, caps: caps}
+	source.ready.Store(true)
+	s := gatewayTestServer(t, source, &gatewayLauncher{endpoint: "http://127.0.0.1:1"}, gatewayInspect(caps, gpuManifest(t)))
+
+	body, contentType := multipartBody(t, "", "audio")
+	req := httptest.NewRequest(http.MethodPost, "/v1/audio/transcriptions", bytes.NewReader(body))
+	req.Header.Set("Content-Type", contentType)
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "model_required") {
+		t.Fatalf("missing model = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	s.MaxUploadBytes = 32
+	body, contentType = multipartBody(t, refStr, strings.Repeat("x", 128))
+	req = httptest.NewRequest(http.MethodPost, "/v1/audio/transcriptions", bytes.NewReader(body))
+	req.Header.Set("Content-Type", contentType)
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("large upload = %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestGatewayRealtimeProxy(t *testing.T) {
+	child := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "")
+		for {
+			typ, data, err := conn.Read(r.Context())
+			if err != nil {
+				return
+			}
+			if err := conn.Write(r.Context(), typ, append([]byte("echo:"), data...)); err != nil {
+				return
+			}
+		}
+	}))
+	defer child.Close()
+
+	refStr := "flashcli-bundle/demo:1.0.0"
+	caps := []string{"openai.realtime"}
+	source := &flipSource{ref: refStr, caps: caps}
+	source.ready.Store(true)
+	s := gatewayTestServer(t, source, &gatewayLauncher{endpoint: child.URL}, gatewayInspect(caps, gpuManifest(t)))
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/v1/realtime?model=" + url.QueryEscape(refStr)
+	conn, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.Write(ctx, websocket.MessageText, []byte("hi")); err != nil {
+		t.Fatal(err)
+	}
+	_, data, err := conn.Read(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "echo:hi" {
+		t.Fatalf("echo = %q", data)
+	}
+	_ = conn.Close(websocket.StatusNormalClosure, "")
+
+	deadline := time.Now().Add(5 * time.Second)
+	for s.Scheduler.ActiveRequests(refStr) != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("realtime lease was not released: %d", s.Scheduler.ActiveRequests(refStr))
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
