@@ -18,6 +18,8 @@ pip install -e "./flashcli-bundle[test]"     # optional, pytest/httpx/numpy for 
 ```
 Go host needs Go >= 1.24. In CN networks set `GOPROXY=https://goproxy.cn,direct` (and `GOSUMDB=sum.golang.google.cn`). Module path: `go/`.
 
+**Local test binaries:** `bash scripts/build_dev_bins.sh` builds only `flashcli-linux-amd64` and `flashserver-linux-amd64`. `scripts/build_go.sh` is release-only (Linux amd64/arm64 + Windows setup) — never use it just to run tests. Acceptance refuses `dist/go` binaries older than `go/` sources; `scripts/verify_e2e.sh` rebuilds them by default.
+
 Distribution:
 ```bash
 bash install.sh [--mirror]          # one-click host install (build-from-source, else release assets)
@@ -35,6 +37,8 @@ bash scripts/verify_release.sh [--version X]  # isolated install + smoke (never 
 pytest tests/            # protocol/infer + conformance; tests/bench excluded via pyproject addopts
 pytest tests/bench/      # bench helper tests (scripts/bench_*.py)
 cd go && go build ./... && go test ./...   # gofmt is the formatter; run `gofmt -w .`
+bash scripts/build_dev_bins.sh         # only the two test binaries
+bash scripts/verify_e2e.sh             # acceptance (rebuilds dev binaries by default)
 bash scripts/verify_cache.sh   # cache-key parity / cache-hit smoke (remote+local, GPU-free)
 ```
 Cache-key derivation is covered by `go/internal/weights/bundle_test.go` (remote repo-name / local id / source+revision) and `go/internal/runtime/runtime_test.go` (symlink canonicalization) — keep these in sync with the `flashcli-bundle` protocol. `verify_cache.sh` is the integration counterpart (needs pulled bundles; missing prereqs SKIP).

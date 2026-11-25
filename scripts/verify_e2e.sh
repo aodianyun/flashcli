@@ -4,7 +4,11 @@
 #   bash scripts/verify_e2e.sh                 # offline tier (local fixtures)
 #   bash scripts/verify_e2e.sh --heavy         # + python bundles (creates venvs)
 #   bash scripts/verify_e2e.sh --heavy --network  # full release gate
-#   bash scripts/verify_e2e.sh --no-build      # reuse dist/go binaries
+#   bash scripts/verify_e2e.sh --no-build      # reuse fresh dist/go binaries
+#
+# The default build uses scripts/build_dev_bins.sh and produces only the two
+# Linux/amd64 binaries pytest needs. Release assets come from build_go.sh.
+# --no-build refuses binaries older than go/ sources.
 #
 # Publishing requires the full gate (--heavy --network): on success this writes
 # dist/e2e-pass.json for the current commit, which scripts/release_go.sh
@@ -33,7 +37,7 @@ case "$(uname -s)" in
 esac
 
 if [ "$BUILD" = 1 ]; then
-  bash "$ROOT/scripts/build_go.sh" "$ROOT/dist/go"
+  bash "$ROOT/scripts/build_dev_bins.sh" "$ROOT/dist/go"
 fi
 
 export FLASHCLI_GO_BIN="${FLASHCLI_GO_BIN:-$ROOT/dist/go/flashcli-linux-amd64}"
@@ -49,6 +53,18 @@ fi
 
 [ -x "$FLASHCLI_GO_BIN" ] || { echo "missing $FLASHCLI_GO_BIN" >&2; exit 2; }
 [ -x "$FLASHSERVER_BIN" ] || { echo "missing $FLASHSERVER_BIN" >&2; exit 2; }
+
+# A stale binary silently tests old code. `--no-build` is the only way to hit
+# this, because the default build just refreshed both binaries.
+stale() {
+  find "$ROOT/go" -type f \( -name '*.go' -o -name 'go.mod' -o -name 'go.sum' \) \
+    -newer "$1" -print -quit | grep -q .
+}
+if [ "$BUILD" = 0 ] && { stale "$FLASHCLI_GO_BIN" || stale "$FLASHSERVER_BIN"; }; then
+  echo "error: dist/go binaries are older than go/ sources." >&2
+  echo "       run scripts/build_dev_bins.sh, or drop --no-build to rebuild." >&2
+  exit 2
+fi
 
 PY="${PYTHON_BIN:-python3}"
 echo "[e2e] flashcli=$FLASHCLI_GO_BIN"

@@ -25,11 +25,26 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip)
 
 
+def _newest_go_source() -> float:
+    newest = 0.0
+    for path in (ROOT / "go").rglob("*"):
+        if not path.is_file():
+            continue
+        if path.suffix == ".go" or path.name in {"go.mod", "go.sum"}:
+            newest = max(newest, path.stat().st_mtime)
+    return newest
+
+
 def _binary(env_name: str, name: str) -> Path:
     raw = os.environ.get(env_name)
     path = Path(raw) if raw else ROOT / "dist" / "go" / name
     if not path.is_file():
-        pytest.skip(f"{env_name} not found: {path} (run scripts/build_go.sh)")
+        pytest.skip(f"{env_name} not found: {path} (run scripts/build_dev_bins.sh)")
+    if not raw and path.stat().st_mtime < _newest_go_source():
+        pytest.fail(
+            f"{path} is older than go/ sources; run "
+            f"`bash scripts/build_dev_bins.sh` (not build_go.sh) or set {env_name}"
+        )
     return path
 
 

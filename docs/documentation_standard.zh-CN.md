@@ -67,12 +67,22 @@
 - 计划必须包含：目标、工作流/里程碑、交付物、测试、退出条件、强制规则。
 - 不要在计划里复制 spec；用链接引用。
 
-## 7. 文档变更检查清单
+## 7. 契约文档同步
+
+- `docs/openapi.yaml` 是 HTTP 契约的唯一来源。修改时必须在同一次变更中复制到
+  `go/internal/server/openapi.yaml`；两者不一致会导致 `TestOpenAPISpecInSync` 失败。
+- 端点或 schema 变更还要更新 `docs/flashserver-api.md` + `.zh-CN.md`，以及内嵌控制台
+  参考页 `go/internal/server/web/docs.html`。它们不会从 OpenAPI 自动生成。
+- 删除或重命名端点时，全仓搜索旧路径，增加验收测试确认已不可用，并确认返回 404。
+- 用户可见变更要写入权威 spec，不能只改 API 参考。
+
+## 8. 文档变更检查清单
 
 - [ ] 目录和文件名符合 §1–§2。
 - [ ] 英文与中文镜像同时更新。
 - [ ] `docs/README.md` 与 `docs/README.zh-CN.md` 已更新。
 - [ ] 相对链接从文件所在目录可解析。
 - [ ] spec/plan 的权威性清晰（§3）。
+- [ ] 契约文档已按 §7 同步（OpenAPI 副本、API 索引、控制台参考）。
 - [ ] 过时内容已删除或修正。
 - [ ] 链接检查通过，无断链。

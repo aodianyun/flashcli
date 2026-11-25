@@ -33,7 +33,8 @@ flashcli **distributes and loads** Model Bundles; inference lives in bundle `ent
 
 ```bash
 cd flashcli
-./install.sh --from-source          # build+install the Go host (or: bash scripts/build_go.sh)
+./install.sh --from-source          # build+install the Go host
+bash scripts/build_dev_bins.sh      # local test binaries (see "Test binaries")
 pip install -e "./flashcli-bundle"   # protocol (for pytest)
 # To run infer module and HTTP protocol tests locally (pytest/httpx/numpy):
 pip install -e "./flashcli-bundle[infer,test]"
@@ -55,6 +56,23 @@ HTTP index (both CDN layouts), and a real `flashserver` daemon exercising
 `load → endpoint → logs → unload` over HTTP. Tier 3 adds the live FlashHub
 manifest check (`FLASHCLI_ACCEPTANCE_NETWORK=1`).
 
+#### Test binaries (development vs release)
+
+- `bash scripts/build_dev_bins.sh` builds **only** the two Linux/amd64
+  binaries pytest uses: `dist/go/flashcli-linux-amd64` and
+  `dist/go/flashserver-linux-amd64`. `scripts/verify_e2e.sh` calls it by default.
+- `bash scripts/build_go.sh` builds **release assets** for Linux amd64/arm64
+  plus the Windows setup binary. Do **not** run it just to test: those other
+  targets are never used by pytest and only add build time.
+- Acceptance refuses `dist/go` binaries older than `go/` sources. With
+  `--no-build`, `verify_e2e.sh` fails fast with the rebuild command instead of
+  silently testing stale code.
+- If you point `FLASHCLI_GO_BIN` / `FLASHSERVER_BIN` at custom binaries, that
+  path is trusted and the freshness check is skipped.
+- `GO=/path/to/go` selects the Go toolchain for `build_dev_bins.sh`;
+  `PYTHON_BIN=/path/to/python` selects the interpreter for `verify_e2e.sh`
+  (useful when pytest lives in a venv).
+
 **Publishing is gated on the full run.** `scripts/release_go.sh --upload`
 refuses to publish unless `dist/e2e-pass.json` records a `--heavy --network`
 pass for the exact commit being released (`FLASHCLI_SKIP_E2E_GATE=1` exists only
@@ -62,17 +80,19 @@ for pipeline tests). Do not tag or replace release assets before that run is
 green.
 
 ```bash
-pytest tests/              # tier 1 (excludes tests/bench)
-pytest tests/bench/        # bench script helpers (scripts/bench_*.py)
-bash scripts/verify_e2e.sh # tier 2 (Linux/WSL; builds dist/go)
+pytest tests/                 # tier 1 (excludes tests/bench)
+pytest tests/bench/           # bench script helpers (scripts/bench_*.py)
+bash scripts/build_dev_bins.sh  # only the two test binaries
+bash scripts/verify_e2e.sh      # tier 2 (Linux/WSL; builds dev binaries)
 ```
 
 ### Binaries and the desktop client
 
-`bash scripts/build_go.sh` builds three commands into `dist/go/` (version from
-`pyproject.toml`). `scripts/release_go.sh` publishes them under **stable,
-unversioned names** so `releases/latest/download/<name>` always resolves to the
-current release:
+`bash scripts/build_go.sh` builds the **release** assets into `dist/go/`
+(Linux amd64/arm64 plus the Windows setup binary; version from
+`pyproject.toml`). For local tests use `scripts/build_dev_bins.sh` instead.
+`scripts/release_go.sh` publishes them under **stable, unversioned names** so
+`releases/latest/download/<name>` always resolves to the current release:
 
 | Binary | What it is |
 |--------|------------|
@@ -197,6 +217,22 @@ refactor(weights): share cache-key resolution between pull and run
   - Do not force-push `dev` once it is shared; replace a commit you just pushed by mistake only with `--force-with-lease`.
 - `dev` → `main`: **squash-and-record** (see above) — `main` gets one linear squash commit per sync, and `dev` records it with `git merge -s ours main`. Do not `--no-ff` merge or rely on fast-forward, and do not push directly to `main` for routine work.
 - Squash commit summary: `chore(sync): squash merge dev into main` (or a concise `type(scope): …` describing the release).
+
+### Change impact checklist
+
+Use this table before committing; it is the contract side of "one logical change".
+
+| Change | Must update / run |
+|---|---|
+| HTTP API (`/v1/*`, `/api/v1/*`) | `docs/openapi.yaml` is authoritative; copy it to `go/internal/server/openapi.yaml` (`TestOpenAPISpecInSync` enforces this). Update `docs/flashserver-api.md` + `.zh-CN.md`, `go/internal/server/web/docs.html`, the desktop caller, and an acceptance/unit test. Grep the repo for the old path and confirm it now returns 404. Run `go test ./internal/server/...`. |
+| CLI command/flag | Command help and CLI tests; `tests/conformance/test_command_parity.py` if the command surface changed. |
+| Desktop behavior | `desktop/README.md`, `docs/flashserver-desktop.md` + `.zh-CN.md`, `cargo test` (and a build for UI changes). |
+| Bundle manifest / execution ABI | Authoritative spec + `.zh-CN.md`, bundle `README`/`BUILD`, `flashcli bundle validate`, conformance fixtures. |
+| Docs only | The [documentation standard](docs/documentation_standard.md) checklist; no code changes. |
+
+Do not land an API change with only the Go handler and test updated: the
+OpenAPI copy, API index, console docs, and zh-CN mirror are part of the same
+change.
 
 ### Releases
 

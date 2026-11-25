@@ -75,12 +75,26 @@ Rules:
   criteria, and compliance rules.
 - Do not duplicate a spec inside a plan; link to it.
 
-## 7. Checklist for a documentation change
+## 7. Contract documentation sync
+
+- `docs/openapi.yaml` is the source of truth for the HTTP contract. Copy it to
+  `go/internal/server/openapi.yaml` in the same change; `TestOpenAPISpecInSync`
+  fails if they drift.
+- An endpoint or schema change also updates `docs/flashserver-api.md` +
+  `.zh-CN.md` and the embedded console reference
+  `go/internal/server/web/docs.html`. These are not generated from OpenAPI.
+- When removing or renaming an endpoint, search the repository for the old path,
+  add an acceptance check that it is gone, and confirm it returns 404.
+- Mention the user-visible change in the authoritative spec, not only in the
+  API reference.
+
+## 8. Checklist for a documentation change
 
 - [ ] Correct directory and file name per §1–§2.
 - [ ] English + zh-CN mirror updated together.
 - [ ] `docs/README.md` and `docs/README.zh-CN.md` updated.
 - [ ] Relative links resolve from the file's directory.
 - [ ] Spec/plan authority is clear (§3).
+- [ ] Contract docs synced per §7 (OpenAPI copy, API index, console reference).
 - [ ] Outdated content removed or corrected.
 - [ ] Links checked; no broken paths.

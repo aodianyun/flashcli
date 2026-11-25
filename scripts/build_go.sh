@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Build flashcli-go release binaries + sha256sums.
+# Build flashcli-go RELEASE binaries + sha256sums.
+#
+# Release/packaging only. For local tests use scripts/build_dev_bins.sh: it
+# builds just the two Linux/amd64 binaries that pytest actually needs.
 #
 # Usage: bash scripts/build_go.sh [OUT_DIR]
 #
