@@ -90,60 +90,48 @@ func TestResourcesRejectInvalidFields(t *testing.T) {
 	}
 }
 
-func TestResourcesV5RequiresMinVRAM(t *testing.T) {
-	missing, err := LoadData(resourceFixtureVersion([]string{"sm89-cu124-linux-x86_64-py312"}, nil, FormatVersionV5), t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	errs := Validate(missing)
-	if !hasErrorContaining(errs, "format_version 5 requires") {
-		t.Fatalf("v5 without min_vram_mib errors = %v", errs)
+func TestResourcesBlockRequiresMinVRAM(t *testing.T) {
+	for _, resources := range []map[string]any{
+		{},
+		{"gpu_count": 1},
+		{"min_ram_mib": 16384},
+	} {
+		m := loadResourceFixture(t, []string{"sm89-cu124-linux-x86_64-py312"}, resources)
+		errs := Validate(m)
+		if !hasErrorContaining(errs, "GPU runtime without resources.min_vram_mib") {
+			t.Fatalf("resources=%v errors = %v", resources, errs)
+		}
 	}
 
-	declared, err := LoadData(resourceFixtureVersion(
-		[]string{"sm89-cu124-linux-x86_64-py312"},
-		map[string]any{"min_vram_mib": 8192},
-		FormatVersionV5,
-	), t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	declared := loadResourceFixture(t, []string{"sm89-cu124-linux-x86_64-py312"}, map[string]any{"min_vram_mib": 8192})
 	for _, e := range Validate(declared) {
 		if strings.Contains(e, "min_vram_mib") {
-			t.Fatalf("v5 with min_vram_mib rejected: %v", e)
+			t.Fatalf("declared resources rejected: %v", e)
 		}
 	}
 	if warnings := ValidateWarnings(declared); len(warnings) != 0 {
-		t.Fatalf("v5 warnings = %v", warnings)
+		t.Fatalf("declared resources warnings = %v", warnings)
 	}
 
-	cpuOnly, err := LoadData(resourceFixtureVersion([]string{"cpu-linux-x86_64-py312"}, nil, FormatVersionV5), t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	cpuOnly := loadResourceFixture(t, []string{"cpu-linux-x86_64-py312"}, map[string]any{"min_ram_mib": 16384})
 	for _, e := range Validate(cpuOnly) {
 		if strings.Contains(e, "min_vram_mib") {
-			t.Fatalf("v5 CPU bundle rejected for min_vram_mib: %v", e)
+			t.Fatalf("CPU resources rejected for min_vram_mib: %v", e)
 		}
 	}
 }
 
-func TestResourcesMissingVRAMIsWarning(t *testing.T) {
+func TestResourcesLegacyWithoutBlockIsWarning(t *testing.T) {
 	gpu := loadResourceFixture(t, []string{"sm89-cu124-linux-x86_64-py312"}, nil)
 	if errs := Validate(gpu); hasErrorContaining(errs, "min_vram_mib") {
-		t.Fatalf("missing min_vram_mib must not fail validation yet: %v", errs)
+		t.Fatalf("legacy bundle must not fail validation: %v", errs)
 	}
-	if warnings := ValidateWarnings(gpu); !hasErrorContaining(warnings, "min_vram_mib") {
+	if warnings := ValidateWarnings(gpu); !hasErrorContaining(warnings, "no resources block") {
 		t.Fatalf("warnings = %v", warnings)
 	}
 
 	cpu := loadResourceFixture(t, []string{"cpu-linux-x86_64-py312"}, nil)
 	if warnings := ValidateWarnings(cpu); len(warnings) != 0 {
 		t.Fatalf("CPU bundle warnings = %v", warnings)
-	}
-
-	declared := loadResourceFixture(t, []string{"sm89-cu124-linux-x86_64-py312"}, map[string]any{"min_vram_mib": 8192})
-	if warnings := ValidateWarnings(declared); len(warnings) != 0 {
-		t.Fatalf("declared warnings = %v", warnings)
 	}
 }

@@ -7,12 +7,7 @@ import (
 	"strings"
 )
 
-const (
-	FormatVersionV4 = 4
-	// FormatVersionV5 keeps the v4 layout but makes the flashserver resource
-	// contract strict: a GPU runtime must declare resources.min_vram_mib.
-	FormatVersionV5 = 5
-)
+const FormatVersionV4 = 4
 
 // Environments returns the v4 environment overlay keys.
 func (m *Manifest) EnvironmentKeys() []string {
@@ -36,7 +31,7 @@ func (m *Manifest) ApplyEnv(envKey string) (*Manifest, error) {
 	}
 	raw := cloneMap(m.Raw)
 	merged, _ := mergeV4(raw, overlay).(map[string]any)
-	return buildV4Manifest(merged, m.Root, m.Name, m.Description, m.Environments, m.FormatVersion)
+	return buildV4Manifest(merged, m.Root, m.Name, m.Description, m.Environments)
 }
 
 func loadV4(data map[string]any, root string) (*Manifest, error) {
@@ -44,19 +39,19 @@ func loadV4(data map[string]any, root string) (*Manifest, error) {
 		return nil, fmt.Errorf("Unsupported bundle format: %q (expected %q)", data["format"], Format)
 	}
 	version, err := intFromAny(data["format_version"])
-	if err != nil || (version != FormatVersionV4 && version != FormatVersionV5) {
-		return nil, fmt.Errorf("Unsupported format_version %v (expected %d or %d)", data["format_version"], FormatVersionV4, FormatVersionV5)
+	if err != nil || version != FormatVersionV4 {
+		return nil, fmt.Errorf("Unsupported format_version %v (expected %d)", data["format_version"], FormatVersionV4)
 	}
 	if _, ok := data["variants"]; ok {
-		return nil, fmt.Errorf("Bundle %q uses variants, which are not supported by format_version 4/5", str(data["name"]))
+		return nil, fmt.Errorf("Bundle %q uses variants, which are not supported by format_version 4", str(data["name"]))
 	}
 	defaults, ok := data["defaults"].(map[string]any)
 	if !ok || len(defaults) == 0 {
-		return nil, fmt.Errorf("Bundle %q format_version 4/5 requires a non-empty defaults object", str(data["name"]))
+		return nil, fmt.Errorf("Bundle %q format_version 4 requires a non-empty defaults object", str(data["name"]))
 	}
 	envRaw, ok := data["environments"].(map[string]any)
 	if !ok || len(envRaw) == 0 {
-		return nil, fmt.Errorf("Bundle %q format_version 4/5 requires a non-empty environments object", str(data["name"]))
+		return nil, fmt.Errorf("Bundle %q format_version 4 requires a non-empty environments object", str(data["name"]))
 	}
 
 	raw := cloneMap(defaults)
@@ -83,10 +78,10 @@ func loadV4(data map[string]any, root string) (*Manifest, error) {
 		return nil, err
 	}
 	raw["runtime"] = runtimeMap
-	return buildV4Manifest(raw, root, str(data["name"]), str(data["description"]), envs, version)
+	return buildV4Manifest(raw, root, str(data["name"]), str(data["description"]), envs)
 }
 
-func buildV4Manifest(raw map[string]any, root, name, description string, envs map[string]map[string]any, formatVersion int) (*Manifest, error) {
+func buildV4Manifest(raw map[string]any, root, name, description string, envs map[string]map[string]any) (*Manifest, error) {
 	if name = strings.TrimSpace(name); name == "" {
 		name = strings.TrimSpace(str(raw["name"]))
 	}
@@ -109,7 +104,7 @@ func buildV4Manifest(raw map[string]any, root, name, description string, envs ma
 	entryServe := entrySpecFromMap(asMap(entryMap, "serve"), entryKind, entryNative)
 	m := &Manifest{
 		Root: root, Name: name, Description: description,
-		FormatVersion: formatVersion, Environments: envs,
+		FormatVersion: FormatVersionV4, Environments: envs,
 		EntryRun: entryRun, EntryServe: entryServe, Raw: raw,
 	}
 	if entryRun != nil {
@@ -128,8 +123,8 @@ func requireV4(m *Manifest) error {
 	if str(m.Raw["format"]) != Format {
 		return fmt.Errorf("Unsupported bundle format: %q (expected %q)", m.Raw["format"], Format)
 	}
-	if v, err := intField(m, "format_version"); err != nil || (v != FormatVersionV4 && v != FormatVersionV5) {
-		return fmt.Errorf("Unsupported format_version %v (expected %d or %d)", m.Raw["format_version"], FormatVersionV4, FormatVersionV5)
+	if v, err := intField(m, "format_version"); err != nil || v != FormatVersionV4 {
+		return fmt.Errorf("Unsupported format_version %v (expected %d)", m.Raw["format_version"], FormatVersionV4)
 	}
 	if _, ok := m.Raw["protocol_version"]; !ok {
 		return fmt.Errorf("Bundle %q missing required field protocol_version (current flashcli-bundle protocol is %d)", m.Name, ProtocolVersion)

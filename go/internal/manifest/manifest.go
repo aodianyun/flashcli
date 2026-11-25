@@ -167,7 +167,7 @@ func Load(root string) (*Manifest, error) {
 // LoadData parses already-decoded manifest data. root is used for messages and
 // relative-path resolution only.
 func LoadData(data map[string]any, root string) (*Manifest, error) {
-	if v, err := intFromAny(data["format_version"]); err == nil && (v == FormatVersionV4 || v == FormatVersionV5) {
+	if v, err := intFromAny(data["format_version"]); err == nil && v == FormatVersionV4 {
 		return loadV4(data, root)
 	}
 	entryKind := "python"

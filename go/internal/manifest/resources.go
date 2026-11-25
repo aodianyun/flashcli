@@ -69,18 +69,13 @@ func intValue(v any) (int64, bool) {
 }
 
 // validateResources rejects malformed fields and any attempt to encode device
-// selection or placement. format_version 5 additionally requires
-// min_vram_mib for a GPU runtime; format_version 4 is the legacy contract and
-// only warns (so already-published bundles keep running).
+// selection or placement. The presence of a `resources` block opts into the
+// strict contract: a GPU runtime must then declare min_vram_mib. A manifest
+// without the block is a legacy bundle and is only warned about (see
+// ValidateWarnings), so already-published bundles keep running.
 func validateResources(m *Manifest) []string {
-	strict := m.FormatVersion >= FormatVersionV5
 	raw, exists := m.Raw["resources"]
 	if !exists {
-		if strict && hasGPURuntime(m) {
-			return []string{fmt.Sprintf(
-				"Bundle %q has a GPU runtime but no resources.min_vram_mib; format_version 5 requires it",
-				m.Name)}
-		}
 		return nil
 	}
 	block, ok := raw.(map[string]any)
@@ -107,29 +102,26 @@ func validateResources(m *Manifest) []string {
 			errors = append(errors, fmt.Sprintf("Bundle %q resources.%s must be >= 0", m.Name, key))
 		}
 	}
-	if strict && hasGPURuntime(m) && m.Resources().MinVRAMMiB == 0 {
+	if hasGPURuntime(m) && m.Resources().MinVRAMMiB == 0 {
 		errors = append(errors, fmt.Sprintf(
-			"Bundle %q has a GPU runtime but no resources.min_vram_mib; format_version 5 requires it",
+			"Bundle %q declares resources but has a GPU runtime without resources.min_vram_mib",
 			m.Name))
 	}
 	return errors
 }
 
-// ValidateWarnings reports advisories that do not fail validation. Legacy
-// format_version 4 GPU bundles without min_vram_mib are admitted best-effort.
+// ValidateWarnings reports advisories that do not fail validation. A legacy
+// bundle with no `resources` block is admitted best-effort; adding the block
+// opts into strict validation.
 func ValidateWarnings(m *Manifest) []string {
-	if m == nil || m.FormatVersion >= FormatVersionV5 {
-		return nil
-	}
-	r := m.Resources()
-	if r.Present && r.MinVRAMMiB > 0 {
+	if m == nil || m.Resources().Present {
 		return nil
 	}
 	if !hasGPURuntime(m) {
 		return nil
 	}
 	return []string{fmt.Sprintf(
-		"Bundle %q is legacy format_version 4 and has no resources.min_vram_mib; flashserver will admit it without a declared VRAM requirement. New bundles should use format_version 5 and declare it",
+		"Bundle %q has a GPU runtime but no resources block; legacy bundles are admitted without a declared VRAM requirement. New bundles should add resources.min_vram_mib",
 		m.Name)}
 }
 
