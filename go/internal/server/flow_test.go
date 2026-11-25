@@ -82,7 +82,7 @@ func TestModelLifecycleOverHTTP(t *testing.T) {
 	s := newFlowServer(t, &staticLauncher{endpoint: model.URL})
 	h := s.Handler()
 
-	rec, body := call(t, h, http.MethodPost, "/v1/models/load", `{"ref":"demo:1"}`)
+	rec, body := call(t, h, http.MethodPost, "/api/v1/models/load", `{"ref":"demo:1"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("load = %d: %s", rec.Code, rec.Body.String())
 	}
@@ -90,45 +90,45 @@ func TestModelLifecycleOverHTTP(t *testing.T) {
 		t.Fatalf("endpoint = %v", body["endpoint"])
 	}
 
-	rec, body = call(t, h, http.MethodGet, "/v1/models", "")
+	rec, body = call(t, h, http.MethodGet, "/api/v1/models", "")
 	if rec.Code != http.StatusOK || len(body["loaded"].([]any)) != 1 {
 		t.Fatalf("models = %d: %s", rec.Code, rec.Body.String())
 	}
 
-	rec, body = call(t, h, http.MethodGet, "/v1/models/loaded", "")
+	rec, body = call(t, h, http.MethodGet, "/api/v1/models/loaded", "")
 	if rec.Code != http.StatusOK || len(body["models"].([]any)) != 1 {
 		t.Fatalf("loaded = %d: %s", rec.Code, rec.Body.String())
 	}
 
-	rec, body = call(t, h, http.MethodGet, "/v1/resources", "")
+	rec, body = call(t, h, http.MethodGet, "/api/v1/resources", "")
 	if rec.Code != http.StatusOK || body["loaded_count"].(float64) != 1 {
 		t.Fatalf("resources = %d: %s", rec.Code, rec.Body.String())
 	}
 
-	rec, body = call(t, h, http.MethodPost, "/v1/ui/chat",
+	rec, body = call(t, h, http.MethodPost, "/api/v1/ui/chat",
 		`{"ref":"demo:1","body":{"model":"demo","messages":[]}}`)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"id":"chat"`) {
 		t.Fatalf("ui chat = %d: %s", rec.Code, rec.Body.String())
 	}
 
-	rec, _ = call(t, h, http.MethodPost, "/v1/ui/chat", `{"ref":"other:1","body":{}}`)
+	rec, _ = call(t, h, http.MethodPost, "/api/v1/ui/chat", `{"ref":"other:1","body":{}}`)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("ui chat unknown ref = %d", rec.Code)
 	}
-	rec, _ = call(t, h, http.MethodPost, "/v1/ui/chat", `{"body":{}}`)
+	rec, _ = call(t, h, http.MethodPost, "/api/v1/ui/chat", `{"body":{}}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("ui chat missing ref = %d", rec.Code)
 	}
 
-	rec, _ = call(t, h, http.MethodPost, "/v1/models/load", `{}`)
+	rec, _ = call(t, h, http.MethodPost, "/api/v1/models/load", `{}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("load without ref = %d", rec.Code)
 	}
-	rec, _ = call(t, h, http.MethodPost, "/v1/models/unload", `{"ref":"demo:1"}`)
+	rec, _ = call(t, h, http.MethodPost, "/api/v1/models/unload", `{"ref":"demo:1"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("unload = %d: %s", rec.Code, rec.Body.String())
 	}
-	rec, body = call(t, h, http.MethodGet, "/v1/models/loaded", "")
+	rec, body = call(t, h, http.MethodGet, "/api/v1/models/loaded", "")
 	if rec.Code != http.StatusOK || len(body["models"].([]any)) != 0 {
 		t.Fatalf("loaded after unload = %s", rec.Body.String())
 	}
@@ -143,7 +143,7 @@ func TestSystemLogsAndAssetsOverHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rec, body := call(t, h, http.MethodGet, "/v1/system", "")
+	rec, body := call(t, h, http.MethodGet, "/api/v1/system", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("system = %d: %s", rec.Code, rec.Body.String())
 	}
@@ -151,29 +151,29 @@ func TestSystemLogsAndAssetsOverHTTP(t *testing.T) {
 		t.Fatalf("system body = %s", rec.Body.String())
 	}
 
-	if rec, _ := call(t, h, http.MethodGet, "/v1/version", ""); rec.Code != http.StatusOK {
+	if rec, _ := call(t, h, http.MethodGet, "/api/v1/version", ""); rec.Code != http.StatusOK {
 		t.Fatalf("version = %d", rec.Code)
 	}
 
-	rec, body = call(t, h, http.MethodGet, "/v1/logs?kind=model&ref=demo:1&lines=2", "")
+	rec, body = call(t, h, http.MethodGet, "/api/v1/logs?kind=model&ref=demo:1&lines=2", "")
 	if rec.Code != http.StatusOK || body["kind"] != "model" {
 		t.Fatalf("model logs = %d: %s", rec.Code, rec.Body.String())
 	}
 	if lines := body["lines"].([]any); len(lines) != 2 || lines[1] != "line3" {
 		t.Fatalf("model log lines = %v", lines)
 	}
-	if rec, _ := call(t, h, http.MethodGet, "/v1/logs?kind=model", ""); rec.Code != http.StatusBadRequest {
+	if rec, _ := call(t, h, http.MethodGet, "/api/v1/logs?kind=model", ""); rec.Code != http.StatusBadRequest {
 		t.Fatalf("model logs without ref = %d", rec.Code)
 	}
-	if rec, _ := call(t, h, http.MethodGet, "/v1/logs?kind=server&lines=1", ""); rec.Code != http.StatusOK {
+	if rec, _ := call(t, h, http.MethodGet, "/api/v1/logs?kind=server&lines=1", ""); rec.Code != http.StatusOK {
 		t.Fatalf("server logs = %d", rec.Code)
 	}
 
-	rec, _ = call(t, h, http.MethodGet, "/v1/logs/download?kind=model&ref=demo:1", "")
+	rec, _ = call(t, h, http.MethodGet, "/api/v1/logs/download?kind=model&ref=demo:1", "")
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "line3") {
 		t.Fatalf("download model log = %d: %s", rec.Code, rec.Body.String())
 	}
-	rec, _ = call(t, h, http.MethodGet, "/v1/logs/download", "")
+	rec, _ = call(t, h, http.MethodGet, "/api/v1/logs/download", "")
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Header().Get("Content-Disposition"), "flashserver.log") {
 		t.Fatalf("download server log = %d", rec.Code)
 	}
@@ -188,7 +188,7 @@ func TestSystemLogsAndAssetsOverHTTP(t *testing.T) {
 		t.Fatalf("missing asset = %d", rec.Code)
 	}
 
-	for _, path := range []string{"/v1/gpu", "/v1/gpu/history?seconds=1", "/v1/system/history"} {
+	for _, path := range []string{"/api/v1/gpu", "/api/v1/gpu/history?seconds=1", "/api/v1/system/history"} {
 		if rec, _ := call(t, h, http.MethodGet, path, ""); rec.Code != http.StatusOK {
 			t.Fatalf("%s = %d", path, rec.Code)
 		}
@@ -199,7 +199,7 @@ func TestJobsOverHTTP(t *testing.T) {
 	s := newFlowServer(t, &staticLauncher{endpoint: "http://127.0.0.1:1"})
 	h := s.Handler()
 
-	rec, body := call(t, h, http.MethodPost, "/v1/pull", `{"ref":"demo:1"}`)
+	rec, body := call(t, h, http.MethodPost, "/api/v1/pull", `{"ref":"demo:1"}`)
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("pull = %d: %s", rec.Code, rec.Body.String())
 	}
@@ -209,7 +209,7 @@ func TestJobsOverHTTP(t *testing.T) {
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		rec, body = call(t, h, http.MethodGet, "/v1/jobs/"+id, "")
+		rec, body = call(t, h, http.MethodGet, "/api/v1/jobs/"+id, "")
 		if rec.Code != http.StatusOK {
 			t.Fatalf("job = %d: %s", rec.Code, rec.Body.String())
 		}
@@ -226,18 +226,18 @@ func TestJobsOverHTTP(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	rec, _ = call(t, h, http.MethodGet, "/v1/jobs/"+id+"/events", "")
+	rec, _ = call(t, h, http.MethodGet, "/api/v1/jobs/"+id+"/events", "")
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "event: done") {
 		t.Fatalf("events = %d: %s", rec.Code, rec.Body.String())
 	}
 
-	if rec, _ := call(t, h, http.MethodGet, "/v1/jobs/unknown", ""); rec.Code != http.StatusNotFound {
+	if rec, _ := call(t, h, http.MethodGet, "/api/v1/jobs/unknown", ""); rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown job = %d", rec.Code)
 	}
-	if rec, _ := call(t, h, http.MethodGet, "/v1/jobs/unknown/events", ""); rec.Code != http.StatusNotFound {
+	if rec, _ := call(t, h, http.MethodGet, "/api/v1/jobs/unknown/events", ""); rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown job events = %d", rec.Code)
 	}
-	if rec, _ := call(t, h, http.MethodPost, "/v1/jobs/unknown/cancel", ""); rec.Code != http.StatusNotFound {
+	if rec, _ := call(t, h, http.MethodPost, "/api/v1/jobs/unknown/cancel", ""); rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown job cancel = %d", rec.Code)
 	}
 }
@@ -277,7 +277,7 @@ func TestRunServesUntilContextCancel(t *testing.T) {
 	}
 
 	// The real listener answers the version endpoint too.
-	resp, err := http.Get("http://" + s.Addr + "/v1/version")
+	resp, err := http.Get("http://" + s.Addr + "/api/v1/version")
 	if err != nil {
 		cancel()
 		t.Fatal(err)

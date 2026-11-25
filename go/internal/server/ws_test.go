@@ -26,7 +26,7 @@ func TestWebSocketStreamsSystem(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/v1/ws"
+	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/v1/ws"
 	conn, _, err := websocket.Dial(ctx, url, nil)
 	if err != nil {
 		t.Fatal(err)

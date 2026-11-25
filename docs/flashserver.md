@@ -8,7 +8,7 @@ local console and HTTP API. Inference runs in `flashcli serve` child processes.
 
 ```mermaid
 flowchart LR
-  UI["Desktop client / browser"] -- "HTTP + /v1/ws" --> SRV["flashserver :8790"]
+  UI["Desktop client / browser"] -- "HTTP + /api/v1/ws" --> SRV["flashserver :8790"]
   SRV -- "prepare + spawn" --> CLI["flashcli serve"]
   CLI --> MODEL[(loaded model)]
   SETUP["flashserver-setup"] -- "systemd unit / WSL2 distro" --> SRV
@@ -21,7 +21,7 @@ flowchart LR
 - **One service, many models** — loads and unloads cached bundles on demand;
   admission is bounded by free VRAM and an optional slot limit.
 - **Local console + HTTP API** — embedded UI at `http://localhost:8790/`, API
-  reference at `/docs`, contract at `/openapi.yaml`, live state over `/v1/ws`.
+  reference at `/docs`, contract at `/openapi.yaml`, live state over `/api/v1/ws`.
 - **Desktop client** — Windows package with overview, model management, logs, and
   settings.
 - **Linux and Windows** — a systemd unit on Linux; a dedicated
@@ -51,7 +51,7 @@ Load a model (desktop: Models → Load → Start):
 ```bash
 curl -H 'Content-Type: application/json' \
   -d '{"ref":"flashcli-bundle/<name>:<version>"}' \
-  http://127.0.0.1:8790/v1/models/load
+  http://127.0.0.1:8790/api/v1/models/load
 ```
 
 ## Documentation

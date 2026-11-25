@@ -90,7 +90,7 @@ Command tree, FlashHub sync, weight download, preflight, venv, and backend dispa
 | `venv`, `pythonprovision` | Bundle venv creation + base Python provisioning |
 | `inferexec`, `nativeexec`, `nativeabi` | Execution backends (`entry.kind`) |
 | `manifest` | Manifest parse + validation |
-| `server` | `flashserver` HTTP API (`docs/openapi.yaml`) + `/v1/ws` state stream, model lifecycle/jobs, embedded console (`go/internal/server/web`) |
+| `server` | `flashserver` HTTP API (`docs/openapi.yaml`) + `/api/v1/ws` state stream, model lifecycle/jobs, embedded console (`go/internal/server/web`) |
 | `setup` | `flashserver-setup`: Linux systemd unit, Windows `flashserver_ubuntu` WSL2 distro + logon task + firewall rule, uninstall/purge |
 | `serveopts`, `gpu`, `system`, `progress`, `mirror` | Saved per-model serve options, nvidia-smi telemetry, host capability probes, job progress, mirror env |
 | `paths`, `runtime`, `selfupdate`, `postpull`, `version`, `errs` | Support |

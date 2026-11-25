@@ -40,7 +40,7 @@ func TestCleanModels(t *testing.T) {
 
 	s := &Server{}
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/models/clean",
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/models/clean",
 		strings.NewReader(`{"refs":["demo:1","missing"]}`))
 	s.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -70,7 +70,7 @@ func TestCleanModels(t *testing.T) {
 func TestCleanModelsValidation(t *testing.T) {
 	s := &Server{}
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/models/clean", strings.NewReader(`{}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/models/clean", strings.NewReader(`{}`))
 	s.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status=%d", rec.Code)
@@ -89,7 +89,7 @@ func TestCleanStorage(t *testing.T) {
 	}
 	s := &Server{}
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/storage/clean",
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/storage/clean",
 		strings.NewReader(`{"targets":["cache"]}`))
 	s.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -144,7 +144,7 @@ func TestCleanModelsKeepsSharedRuntimeAndWeights(t *testing.T) {
 
 	s := &Server{}
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/models/clean",
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/models/clean",
 		strings.NewReader(`{"refs":["a:1.0.0"]}`))
 	s.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -177,7 +177,7 @@ func TestCleanStorageRejectsModelTargets(t *testing.T) {
 	s := &Server{}
 	for _, target := range []string{"runtimes", "all"} {
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/v1/storage/clean",
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/storage/clean",
 			strings.NewReader(`{"targets":["`+target+`"]}`))
 		s.Handler().ServeHTTP(rec, req)
 		if rec.Code != http.StatusBadRequest {

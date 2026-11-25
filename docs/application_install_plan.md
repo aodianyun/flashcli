@@ -225,8 +225,8 @@ only the way the install-script decision is obtained differs:
 | Entry point | Install-script decision |
 |---|---|
 | `flashcli app install` | asks `[y/N]` on a terminal; `--yes` runs it; no terminal without `--yes` skips and records `skipped` |
-| `flashserver` `POST /v1/apps/{org}/{name}/install` | body must carry `install_command: "run" \| "skip" \| "client"` (400 otherwise); runs as job `app-install`, prepares models, never starts them |
-| `flashserver` `POST /v1/apps/{org}/{name}/start` | starts models; body may carry `setup_scripts` + `client_home` for the setup confirmation |
+| `flashserver` `POST /api/v1/apps/{org}/{name}/install` | body must carry `install_command: "run" \| "skip" \| "client"` (400 otherwise); runs as job `app-install`, prepares models, never starts them |
+| `flashserver` `POST /api/v1/apps/{org}/{name}/start` | starts models; body may carry `setup_scripts` + `client_home` for the setup confirmation |
 | `flashcli-desktop` 应用页 | 安装 dialog shows the command; 运行脚本并安装 runs it **on the client OS** and then sends `client`, 跳过脚本安装 sends `skip`, 取消 does nothing; 启动 asks which setup scripts to run; job progress is polled into the detail pane |
 
 ### Platform ownership
@@ -244,7 +244,7 @@ run in WSL/the daemon host. Therefore:
 - Preparing bundles stays with the daemon and is unaffected by the client
   platform. Starting models is a separate action, also on the daemon.
 
-Uninstall is exposed on both fronts (`DELETE /v1/apps/{org}/{name}`,
+Uninstall is exposed on both fronts (`DELETE /api/v1/apps/{org}/{name}`,
 desktop 卸载 with an optional `purge_models`); it never removes the app's own
 installed files.
 
@@ -324,7 +324,7 @@ connection. There is no `connection.json` writer.
 - The desktop never guesses about an install script or installer. 安装 opens a
   dialog that shows the command or URL; a script runs and an installer downloads
   only after 运行脚本并安装 / 下载并安装 (跳过 prepares the models without it). The
-  daemon enforces this: `POST /v1/apps/{org}/{name}/install` requires
+  daemon enforces this: `POST /api/v1/apps/{org}/{name}/install` requires
   `install_command: "run" | "skip" | "client"` and rejects a missing value, since
   a daemon has no terminal to ask.
 
@@ -339,5 +339,5 @@ connection. There is no `connection.json` writer.
 ## Milestones
 
 The app pipeline is complete: `internal/modelrun`, `internal/apps`, the
-`flashcli app` commands, the `/v1/apps*` handlers and the desktop 应用 page are
+`flashcli app` commands, the `/api/v1/apps*` handlers and the desktop 应用 page are
 implemented and covered by T1/T2 plus the release gate.

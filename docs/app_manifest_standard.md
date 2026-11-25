@@ -122,7 +122,7 @@ is the documented/immutable path.
 For an in-place cache refresh of the **same** version (for example a mutable
 `main` revision or a repaired cache), the model page exposes **更多 → 重新同步**
 only while the model is not running. It calls
-`POST /v1/pull {"ref": "...", "force": true}` (CLI:
+`POST /api/v1/pull {"ref": "...", "force": true}` (CLI:
 `flashcli pull <ref> --force`), re-downloading the bundle tree/manifest and
 re-verifying weights. Treat this as a repair path; normal content updates should
 publish a new bundle version.

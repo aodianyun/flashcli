@@ -107,7 +107,7 @@ bundle 版本是**不可变**的：cache key、marker 和权重 store 都由版�
 
 如果确实需要在**同一版本**下刷新缓存（例如可变的 `main` revision 或缓存修复），模型页
 提供 **更多 → 重新同步**，仅在模型未运行时可用。它调用
-`POST /v1/pull {"ref": "...", "force": true}`（CLI：`flashcli pull <ref> --force`），
+`POST /api/v1/pull {"ref": "...", "force": true}`（CLI：`flashcli pull <ref> --force`），
 重新下载 bundle 树/manifest 并重新校验权重。这是修复路径；正常内容更新应发布新的 bundle
 版本。
 

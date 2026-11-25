@@ -41,7 +41,7 @@ func TestModelOptionsAPI(t *testing.T) {
 	s := &Server{ServeSettings: newServeSettingsStore("")}
 	ref := url.QueryEscape(dir)
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/models/options?ref="+ref, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/models/options?ref="+ref, nil)
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -60,7 +60,7 @@ func TestModelOptionsAPI(t *testing.T) {
 	}
 
 	put := `{"ref":` + quoteJSON(dir) + `,"host":"0.0.0.0","port":0,"options":{"max_seq":"8192","device":"cuda:1"}}`
-	req = httptest.NewRequest(http.MethodPut, "/v1/models/options", stringsReader(put))
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/models/options", stringsReader(put))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
@@ -74,7 +74,7 @@ func TestModelOptionsAPI(t *testing.T) {
 
 	// Invalid values are rejected.
 	bad := `{"ref":` + quoteJSON(dir) + `,"options":{"max_seq":"nope"}}`
-	req = httptest.NewRequest(http.MethodPut, "/v1/models/options", stringsReader(bad))
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/models/options", stringsReader(bad))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
@@ -82,7 +82,7 @@ func TestModelOptionsAPI(t *testing.T) {
 		t.Fatalf("invalid PUT status = %d: %s", rec.Code, rec.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodDelete, "/v1/models/options?ref="+ref, nil)
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/models/options?ref="+ref, nil)
 	rec = httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {

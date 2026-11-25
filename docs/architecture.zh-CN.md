@@ -42,24 +42,24 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 
 | 能力 | 共享 API | CLI | flashserver |
 |------|----------|-----|-------------|
-| Pull / 运行时 + venv 准备 / 权重 | `host.Pull`、`host.EnsureRuntime`、`host.ResolveWeights` | `flashcli pull`、`run`/`serve` | `/v1/pull`、应用准备、Manager |
-| Serve 日志名 / tail / 就绪 | `modelrun.LogName`、`modelrun.TailLines`、`modelrun.WaitHealthy` | serve 子进程、`app logs` | `/v1/logs`、Manager/应用启动 |
-| 应用安装/启动/停止/状态/恢复 | `apps.Service`、`apps.WasRunning` | `flashcli app ...` | `/v1/apps`、启动恢复 |
-| 缓存区域 + 唯一分配字节 | `host.Storage()` | `flashcli du` | `GET /v1/storage` |
-| 缓存模型、大小、就绪、运行时字节 | `host.ListModels()` | `flashcli models list` | `GET /v1/models` |
-| Bundle 可用性 / serve 能力 | `host.BundleRootUsable`、`host.ListModels` | `models list/show` | `/v1/models` |
-| 权重 key + 就绪 | `host.MarkerWeightsKey`、`host.WeightsInfo`、`host.WeightsCachedForMarker` | `models list/show` | `/v1/models` |
+| Pull / 运行时 + venv 准备 / 权重 | `host.Pull`、`host.EnsureRuntime`、`host.ResolveWeights` | `flashcli pull`、`run`/`serve` | `/api/v1/pull`、应用准备、Manager |
+| Serve 日志名 / tail / 就绪 | `modelrun.LogName`、`modelrun.TailLines`、`modelrun.WaitHealthy` | serve 子进程、`app logs` | `/api/v1/logs`、Manager/应用启动 |
+| 应用安装/启动/停止/状态/恢复 | `apps.Service`、`apps.WasRunning` | `flashcli app ...` | `/api/v1/apps`、启动恢复 |
+| 缓存区域 + 唯一分配字节 | `host.Storage()` | `flashcli du` | `GET /api/v1/storage` |
+| 缓存模型、大小、就绪、运行时字节 | `host.ListModels()` | `flashcli models list` | `GET /api/v1/models` |
+| Bundle 可用性 / serve 能力 | `host.BundleRootUsable`、`host.ListModels` | `models list/show` | `/api/v1/models` |
+| 权重 key + 就绪 | `host.MarkerWeightsKey`、`host.WeightsInfo`、`host.WeightsCachedForMarker` | `models list/show` | `/api/v1/models` |
 | 规范 ref/cache key | `host.RefCacheKey` | ref 解析 | 清理/API ref |
-| 清理路径选择 + 删除 | `host.RefPaths`、`host.RuntimePaths`、`host.OrphanPaths`、`host.AllDataPaths`、`host.SharedCachePaths`、`host.RemovePaths` | `flashcli bundle clean`、`flashcli cache clean` | `/v1/models/clean`、`/v1/storage/clean` |
-| 删除模型缓存 | `host.RemoveCachedRef` | `bundle clean` 语义 | `/v1/models/clean` |
-| GPU / 系统探测 | `gpu.*`、`preflight.*`、`host.EnsureSystemRequirements` | run/serve、models | Manager 准入、`/v1/system` |
+| 清理路径选择 + 删除 | `host.RefPaths`、`host.RuntimePaths`、`host.OrphanPaths`、`host.AllDataPaths`、`host.SharedCachePaths`、`host.RemovePaths` | `flashcli bundle clean`、`flashcli cache clean` | `/api/v1/models/clean`、`/api/v1/storage/clean` |
+| 删除模型缓存 | `host.RemoveCachedRef` | `bundle clean` 语义 | `/api/v1/models/clean` |
+| GPU / 系统探测 | `gpu.*`、`preflight.*`、`host.EnsureSystemRequirements` | run/serve、models | Manager 准入、`/api/v1/system` |
 
 规则：
 
 - **禁止**在 `go/internal/cli` 或 `go/internal/server` 再写 marker 遍历、权重就绪判断、目录大小遍历、清理路径解析、pull 编排、日志名/tail、健康等待循环、应用状态判定。
 - 新行为只在共享包实现一次，再由两个前端暴露；表格、颜色、提示等纯展示逻辑留在前端。
-- **Pull/准备只有一条流水线**：`flashcli pull`、`/v1/pull`、应用准备都走 `host.Pull`；`host.EnsureRuntime` 负责运行时/venv 准备，必须与 `flashcli serve` 保持一致（system 能力、协议缓存 schema、CUDA）。
-- **Serve 子进程**的日志命名/尾部读取统一用 `modelrun.LogName`/`modelrun.TailLines`，就绪等待统一用 `modelrun.WaitHealthy`。日志目录固定为 `~/.flashcli/logs/serve`（配置 `log_dir` 可覆盖），`flashcli app logs` 与 `/v1/logs` 读同一路径。
+- **Pull/准备只有一条流水线**：`flashcli pull`、`/api/v1/pull`、应用准备都走 `host.Pull`；`host.EnsureRuntime` 负责运行时/venv 准备，必须与 `flashcli serve` 保持一致（system 能力、协议缓存 schema、CUDA）。
+- **Serve 子进程**的日志命名/尾部读取统一用 `modelrun.LogName`/`modelrun.TailLines`，就绪等待统一用 `modelrun.WaitHealthy`。日志目录固定为 `~/.flashcli/logs/serve`（配置 `log_dir` 可覆盖），`flashcli app logs` 与 `/api/v1/logs` 读同一路径。
 - **应用状态判定**（是否在运行/是否恢复）只在 `apps`（`apps.WasRunning`）实现，daemon 恢复和桌面端不得各自推导。
 - **隔离**：daemon 可以用 Launcher/Stopper 包装共享服务（例如带 owner 的 Manager 准入），但生命周期逻辑仍在 `apps`；CLI 不得另写一份。
 - **范围——只共享真正公共的行为。** 不要把前端特有的行为硬塞进共享包，也不要让一个前端去模拟另一个：
@@ -68,7 +68,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
   - desktop：全部 UI、弹窗、本地应用/安装器执行。
   - Launcher/Stopper/Log 等适配器允许两端不同。
 - **判断标准：** 只有“两个前端必须对同一份磁盘状态/模型就绪做出相同判断”时才共享（cache key、权重就绪、pull/准备步骤、serve 日志名/就绪、应用状态）。编排、调度策略、UX、展示逻辑留在前端。
-- `flashcli cache clean` 只清理共享缓存（`cache` + 基础 Python + uv），对应 `/v1/storage/clean {"targets":["cache"]}`。模型数据/运行时使用 `flashcli bundle clean` / `/v1/models/clean`；共享权重/运行时按引用保留。磁盘统计和 ref 路径选择在 `host` 共享。
+- `flashcli cache clean` 只清理共享缓存（`cache` + 基础 Python + uv），对应 `/api/v1/storage/clean {"targets":["cache"]}`。模型数据/运行时使用 `flashcli bundle clean` / `/api/v1/models/clean`；共享权重/运行时按引用保留。磁盘统计和 ref 路径选择在 `host` 共享。
 - **防跑偏测试**：`go test ./internal/architecture/...` 会拦截机械性重复（直接 `nvidia-smi`、日志名 `NewReplacer`、`filepath.Walk*`、`.flashcli_download.incomplete`）。发现新的重复类型时，把模式补进该测试。
 - 测试：`go test ./...`；host 测试覆盖统计/清理，CLI 测试通过 host 函数覆盖 `du`、`models list`、`bundle clean`。详见 [module_layers.zh-CN.md](module_layers.zh-CN.md)。
 
@@ -80,9 +80,9 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 
 | 组件 | 源码 | 职责 |
 |------|------|------|
-| `flashserver` | `go/cmd/flashserver`、`go/internal/server` | 常驻调度器 + 本地控制台：模型加载/启动/停止、按 GPU 准入、任务队列、每模型 serve 日志、`GET /health`、`/docs`、`/openapi.yaml`；内嵌控制台页面（`go/internal/server/web`，可用 `FLASHCLI_WEB_DIR` 覆盖） |
+| `flashserver` | `go/cmd/flashserver`、`go/internal/server` | 常驻调度器 + 本地控制台：OpenAI 网关（`/v1`）、管理 API（`/api/v1`）、磁盘 preload/unload、resident 启停、按 GPU 准入、任务队列、每模型 serve 日志、`GET /health`、`/docs`、`/openapi.yaml`；内嵌控制台页面（`go/internal/server/web`，可用 `FLASHCLI_WEB_DIR` 覆盖） |
 | `flashserver-setup` | `go/cmd/flashserver-setup`、`go/internal/setup` | 安装后端：Linux 写 `/etc/flashserver/config.json` + `flashserver.service`；Windows 导入 `flashserver_ubuntu` WSL2 发行版、启用 systemd 与国内镜像、创建登录任务与模型防火墙规则。另有 `--start-service` / `--stop-service`、`--enable-autostart` / `--disable-autostart`、`--uninstall`（`--purge-*`）、`--dry-run`、供 UI 读取的 `--progress-file` |
-| 桌面客户端 | `desktop/`（Rust，egui/eframe） | Windows GUI：只调用守护进程的 HTTP API 与 `/v1/ws`，通过 `wsl.exe` / `systemctl` 启停服务，不直接读缓存内部 |
+| 桌面客户端 | `desktop/`（Rust，egui/eframe） | Windows GUI：只调用守护进程的 HTTP API 与 `/api/v1/ws`，通过 `wsl.exe` / `systemctl` 启停服务，不直接读缓存内部 |
 
 ```mermaid
 flowchart LR
@@ -90,7 +90,7 @@ flowchart LR
     ISS["flashcli-desktop-setup-windows-amd64.exe<br/>Inno Setup"] --> CLIENT[flashcli-desktop.exe]
     ISS --> SETUP[flashserver-setup.exe]
   end
-  CLIENT -- "HTTP + /v1/ws" --> SRV["flashserver :8790"]
+  CLIENT -- "HTTP + /api/v1/ws" --> SRV["flashserver :8790"]
   CLIENT -- UAC --> SETUP
   SETUP -- "systemd 单元 / WSL 发行版 + 登录任务" --> SRV
   SRV -- "re-exec / serve" --> CLI[flashcli]
@@ -99,6 +99,32 @@ flowchart LR
 ```
 
 `flashserver` 不导入任何 Python infer 代码：它通过运行 `flashcli` 来准备并服务模型，因此两个前端共用同一套缓存实现。其状态位于 `$FLASHCLI_HOME/flashserver/`（`serve-options.json`、每模型 serve 日志）。HTTP 契约见 [openapi.yaml](openapi.yaml)，面向用户的行为见 [flashserver.zh-CN.md](flashserver.zh-CN.md)。
+
+### 数据面与控制面
+
+`flashserver` 在同一端口分离推理流量与管理流量：
+
+- **数据面 `/v1/*`** — OpenAI 兼容网关。应用和桌面在 `model` 中传完整 bundle ref；
+  调度器自动准备缺失资产、内部启停 resident、每个 active 请求持有 lease，并把
+  JSON/SSE/multipart/WebSocket 代理到 loopback child。child endpoint 绝不返回给客户端。
+- **控制面 `/api/v1/*`** — 管理面：缓存/模型列表、磁盘 preload/unload、任务、应用、
+  设备/调度遥测、日志和管理 WebSocket。
+
+磁盘状态（`absent → preloading → preloaded → unloading`）与 resident 状态
+（`stopped → starting → ready ⇄ busy → stopping`）相互独立。preload/unload 是磁盘操作；
+resident 启停由调度器负责。自动淘汰只停止 resident，绝不删除资产。权威契约见
+[flashserver_gateway_scheduler_spec.zh-CN.md](flashserver_gateway_scheduler_spec.zh-CN.md)。
+
+```mermaid
+flowchart LR
+  A["应用 / OpenAI SDK"] -- "/v1/*" --> G["OpenAI 网关"]
+  D["桌面"] -- "/api/v1/*" --> C["管理 API"]
+  G --> S["调度器（lease、placement）"]
+  C --> S
+  S --> M["Resident 管理"]
+  M -- "仅 loopback" --> P["flashcli serve child"]
+  C -- "preload / unload（磁盘）" --> H[(bundle、权重、运行时)]
+```
 
 **Re-exec 命令**（在 bundle venv 内）：
 

@@ -19,7 +19,7 @@
       "chat.placeholder": "输入消息，Enter 发送，Shift+Enter 换行",
       "chat.none": "请先加载一个支持 serve 的模型",
       "log.title": "日志", "log.server": "服务", "log.model": "模型", "log.auto": "自动刷新",
-      "ab.title": "系统信息", "ab.api": "API 文档：/v1/* 接口为本地 HTTP API，健康检查 /health。",
+      "ab.title": "系统信息", "ab.api": "API 文档：/api/v1/* 接口为本地 HTTP API，健康检查 /health。",
       "ab.autostart": "开机启动",
       "common.loading": "加载中", "common.ready": "就绪", "common.missing": "缺失",
       "common.refresh": "刷新", "common.yes": "是", "common.no": "否",
@@ -49,7 +49,7 @@
       "chat.placeholder": "Type a message. Enter to send, Shift+Enter for newline.",
       "chat.none": "Load a serve-capable model first",
       "log.title": "Logs", "log.server": "Server", "log.model": "Model", "log.auto": "Auto refresh",
-      "ab.title": "System", "ab.api": "API: local HTTP endpoints under /v1/*; health check at /health.",
+      "ab.title": "System", "ab.api": "API: local HTTP endpoints under /api/v1/*; health check at /health.",
       "ab.autostart": "Auto-start",
       "common.loading": "loading", "common.ready": "ready", "common.missing": "missing",
       "common.refresh": "Refresh", "common.yes": "yes", "common.no": "no",
@@ -121,12 +121,12 @@
   async function refresh() {
     try {
       const [sys, models, loaded, storage, gpu, hist] = await Promise.all([
-        api("/v1/system").then((r) => r.json()),
-        api("/v1/models").then((r) => r.json()),
-        api("/v1/models/loaded").then((r) => r.json()),
-        api("/v1/storage").then((r) => r.json()),
-        api("/v1/gpu").then((r) => r.json()).catch(() => ({ devices: [], processes: [] })),
-        api("/v1/system/history?seconds=300").then((r) => r.json()).catch(() => ({ samples: [] })),
+        api("/api/v1/system").then((r) => r.json()),
+        api("/api/v1/models").then((r) => r.json()),
+        api("/api/v1/models/loaded").then((r) => r.json()),
+        api("/api/v1/storage").then((r) => r.json()),
+        api("/api/v1/gpu").then((r) => r.json()).catch(() => ({ devices: [], processes: [] })),
+        api("/api/v1/system/history?seconds=300").then((r) => r.json()).catch(() => ({ samples: [] })),
       ]);
       state.sys = sys;
       state.models = models.models || [];
@@ -401,7 +401,7 @@
     jobBox.innerHTML = `<span class="spinner"></span>${t("toast.loading")} <span class="ref">${esc(refStr)}</span>`;
     $("#btn-load").disabled = true;
     try {
-      const res = await api("/v1/models/load", { method: "POST", body: JSON.stringify({ ref: refStr, async: true }) });
+      const res = await api("/api/v1/models/load", { method: "POST", body: JSON.stringify({ ref: refStr, async: true }) });
       if (!res.ok) throw new Error(await readError(res));
       const job = await res.json();
       await pollJob(job.job_id, refStr);
@@ -417,7 +417,7 @@
   async function pollJob(id, refStr) {
     const jobBox = $("#load-job");
     for (let i = 0; i < 3600; i++) {
-      const res = await api("/v1/jobs/" + encodeURIComponent(id));
+      const res = await api("/api/v1/jobs/" + encodeURIComponent(id));
       if (!res.ok) throw new Error(await readError(res));
       const job = await res.json();
       const last = (job.events || []).slice(-1)[0];
@@ -437,7 +437,7 @@
 
   async function unloadModel(refStr) {
     try {
-      const res = await api("/v1/models/unload", { method: "POST", body: JSON.stringify({ ref: refStr }) });
+      const res = await api("/api/v1/models/unload", { method: "POST", body: JSON.stringify({ ref: refStr }) });
       if (!res.ok) throw new Error(await readError(res));
       toast(t("toast.unloaded") + ": " + refStr, "ok");
       await refresh();
@@ -483,7 +483,7 @@
           stream: true,
         },
       };
-      const res = await api("/v1/ui/chat", { method: "POST", body: JSON.stringify(body) });
+      const res = await api("/api/v1/ui/chat", { method: "POST", body: JSON.stringify(body) });
       if (!res.ok) throw new Error(await readError(res));
       const reader = res.body.getReader();
       const dec = new TextDecoder();
@@ -526,7 +526,7 @@
     const q = new URLSearchParams({ kind, lines: "300" });
     if (kind === "model" && ref) q.set("ref", ref);
     try {
-      const res = await api("/v1/logs?" + q.toString());
+      const res = await api("/api/v1/logs?" + q.toString());
       if (!res.ok) throw new Error(await readError(res));
       const j = await res.json();
       const view = $("#log-view");

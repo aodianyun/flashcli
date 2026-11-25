@@ -58,10 +58,10 @@ def test_server_load_native_bundle_over_http(flashserver_bin, flashcli_bin, cli_
         status, health = http_json(f"{base}/health")
         assert status == 200 and health["status"] == "ok"
 
-        status, version = http_json(f"{base}/v1/version")
+        status, version = http_json(f"{base}/api/v1/version")
         assert status == 200 and version["version"]
 
-        status, loaded = http_json(f"{base}/v1/models/load", {"ref": ref})
+        status, loaded = http_json(f"{base}/api/v1/models/load", {"ref": ref})
         assert status == 200, loaded
         assert loaded["state"] == "ready"
         endpoint = loaded["endpoint"]
@@ -71,21 +71,21 @@ def test_server_load_native_bundle_over_http(flashserver_bin, flashcli_bin, cli_
         with urllib.request.urlopen(endpoint + "/healthz", timeout=10) as resp:
             assert resp.status == 200
 
-        status, current = http_json(f"{base}/v1/models/loaded")
+        status, current = http_json(f"{base}/api/v1/models/loaded")
         assert status == 200
         assert any(item["ref"] == ref for item in current["models"])
 
-        status, logs = http_json(f"{base}/v1/logs?kind=model&ref={urllib.parse.quote(ref)}&lines=20")
+        status, logs = http_json(f"{base}/api/v1/logs?kind=model&ref={urllib.parse.quote(ref)}&lines=20")
         assert status == 200 and logs["kind"] == "model"
         assert logs["lines"], "per-model serve log was not captured"
 
-        status, storage = http_json(f"{base}/v1/storage")
+        status, storage = http_json(f"{base}/api/v1/storage")
         assert status == 200 and storage["areas"]
 
-        status, unloaded = http_json(f"{base}/v1/models/unload", {"ref": ref})
+        status, unloaded = http_json(f"{base}/api/v1/models/unload", {"ref": ref})
         assert status == 200 and unloaded["state"] == "unloaded"
 
-        status, current = http_json(f"{base}/v1/models/loaded")
+        status, current = http_json(f"{base}/api/v1/models/loaded")
         assert status == 200 and current["models"] == []
     finally:
         _stop(server)
@@ -97,7 +97,7 @@ def test_server_rejects_run_only_bundle(flashserver_bin, flashcli_bin, cli_env, 
     base = f"http://127.0.0.1:{port}"
     bundle = prepare_bundle("python_echo", home)
     try:
-        status, body = http_json(f"{base}/v1/models/load", {"ref": str(bundle)})
+        status, body = http_json(f"{base}/api/v1/models/load", {"ref": str(bundle)})
         assert status >= 400
         assert "run-only" in json.dumps(body)
     finally:

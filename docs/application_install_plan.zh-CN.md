@@ -204,8 +204,8 @@ CLI、守护进程、桌面端都调用同一个 `internal/apps`，区别只在�
 | 入口 | 安装脚本决策 |
 |---|---|
 | `flashcli app install` | 终端上询问 `[y/N]`；`--yes` 直接执行；没有终端且无 `--yes` 时跳过并记录 `skipped` |
-| `flashserver` `POST /v1/apps/{org}/{name}/install` | 必须带 `install_command: "run" \| "skip" \| "client"`（否则 400）；作为 `app-install` 作业准备模型，不启动模型 |
-| `flashserver` `POST /v1/apps/{org}/{name}/start` | 启动模型；body 可带 `setup_scripts` + `client_home` 作为 setup 确认 |
+| `flashserver` `POST /api/v1/apps/{org}/{name}/install` | 必须带 `install_command: "run" \| "skip" \| "client"`（否则 400）；作为 `app-install` 作业准备模型，不启动模型 |
+| `flashserver` `POST /api/v1/apps/{org}/{name}/start` | 启动模型；body 可带 `setup_scripts` + `client_home` 作为 setup 确认 |
 | `flashcli-desktop` 应用页 | 「安装」弹窗展示命令：「运行脚本并安装」在**客户端 OS 本地**执行后发 `client`；「跳过脚本安装」发 `skip`；取消则什么也不做。启动时询问要执行哪些 setup 脚本；作业进度显示在详情区 |
 
 ### 平台归属
@@ -220,7 +220,7 @@ exe），模型跑在 WSL/守护进程所在主机。因此：
   WSL 里跑客户端 exe。
 - 准备 bundle 由守护进程负责，与客户端平台无关；启动模型也是独立的守护进程操作。
 
-卸载在三端都可用（`DELETE /v1/apps/{org}/{name}`；桌面「卸载」可选 `purge_models`），
+卸载在三端都可用（`DELETE /api/v1/apps/{org}/{name}`；桌面「卸载」可选 `purge_models`），
 但都不会卸载应用自身安装的文件。
 
 ## 本地状态
@@ -287,7 +287,7 @@ v1 的 manifest 发布 `config: []`，host 不解释它。客户端配置由 `se
 - 本地 API 保持单用户（不做 remote 模式）
 - 桌面端从不自行决定是否执行安装脚本/安装包：点「安装」先展示命令，只有选
   「运行脚本并安装」/「下载并安装」才执行（选「跳过」则只准备模型）。守护进程强制这一点：
-  `POST /v1/apps/{org}/{name}/install` 必须带 `install_command: "run" | "skip"`，
+  `POST /api/v1/apps/{org}/{name}/install` 必须带 `install_command: "run" | "skip"`，
   缺失即拒绝——daemon 没有终端可以询问用户
 
 ## 测试
@@ -301,4 +301,4 @@ v1 的 manifest 发布 `config: []`，host 不解释它。客户端配置由 `se
 ## 里程碑
 
 应用链路已完成：`internal/modelrun`、`internal/apps`、`flashcli app` 命令、
-`/v1/apps*` 接口与桌面「应用」页均已实现，并由 T1/T2 和 release gate 覆盖。
+`/api/v1/apps*` 接口与桌面「应用」页均已实现，并由 T1/T2 和 release gate 覆盖。

@@ -7,7 +7,7 @@
 
 ```mermaid
 flowchart LR
-  UI["桌面客户端 / 浏览器"] -- "HTTP + /v1/ws" --> SRV["flashserver :8790"]
+  UI["桌面客户端 / 浏览器"] -- "HTTP + /api/v1/ws" --> SRV["flashserver :8790"]
   SRV -- "准备 + 启动" --> CLI["flashcli serve"]
   CLI --> MODEL[(已加载模型)]
   SETUP["flashserver-setup"] -- "systemd 单元 / WSL2 发行版" --> SRV
@@ -20,7 +20,7 @@ flowchart LR
 - **一个服务，多个模型** —— 按需加载/卸载本地缓存的 bundle；准入受空闲显存和可选
   槽位上限约束。
 - **本地控制台 + HTTP API** —— 内置页面 `http://localhost:8790/`，API 参考 `/docs`，
-  契约 `/openapi.yaml`，实时状态走 `/v1/ws`。
+  契约 `/openapi.yaml`，实时状态走 `/api/v1/ws`。
 - **桌面客户端** —— Windows 安装包提供概览、模型管理、日志和设置。
 - **Linux 与 Windows** —— Linux 用 systemd 单元；Windows 用专用
   `flashserver_ubuntu` WSL2 发行版 + 登录任务。
@@ -48,7 +48,7 @@ curl -s http://127.0.0.1:8790/health
 ```bash
 curl -H 'Content-Type: application/json' \
   -d '{"ref":"flashcli-bundle/<name>:<version>"}' \
-  http://127.0.0.1:8790/v1/models/load
+  http://127.0.0.1:8790/api/v1/models/load
 ```
 
 ## 文档导航

@@ -102,7 +102,7 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 
 func skipRequestLog(path string) bool {
 	switch path {
-	case "/health", "/v1/ws", "/", "/docs", "/openapi.yaml":
+	case "/health", "/api/v1/ws", "/", "/docs", "/openapi.yaml":
 		return true
 	}
 	return strings.HasPrefix(path, "/ui/")

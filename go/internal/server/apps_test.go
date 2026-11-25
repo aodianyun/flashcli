@@ -174,7 +174,7 @@ func appState(t *testing.T, svc *apps.Service, key string) apps.AppState {
 // app must install from Windows even though the daemon runs in WSL.
 func TestAppInstallUsesClientPlatform(t *testing.T) {
 	s, ts, _ := newAppTestServerManifest(t, appManifestWindowsFixture)
-	status, body := appRequest(t, http.MethodPost, ts.URL+"/v1/apps/xym/demo/install",
+	status, body := appRequest(t, http.MethodPost, ts.URL+"/api/v1/apps/xym/demo/install",
 		`{"version":"1.0.0","install_command":"client","client_os":"windows","client_arch":"x86_64","start":false}`)
 	if status != http.StatusAccepted {
 		t.Fatalf("install = %d %v", status, body)
@@ -201,7 +201,7 @@ func TestAppInstallUsesClientPlatform(t *testing.T) {
 // Windows-only app instead of silently installing something unusable.
 func TestAppInstallDaemonPlatformRejectsWindowsOnly(t *testing.T) {
 	s, ts, _ := newAppTestServerManifest(t, appManifestWindowsFixture)
-	status, body := appRequest(t, http.MethodPost, ts.URL+"/v1/apps/xym/demo/install",
+	status, body := appRequest(t, http.MethodPost, ts.URL+"/api/v1/apps/xym/demo/install",
 		`{"version":"1.0.0","install_command":"skip"}`)
 	if status != http.StatusAccepted {
 		t.Fatalf("install = %d %v", status, body)
@@ -214,7 +214,7 @@ func TestAppInstallDaemonPlatformRejectsWindowsOnly(t *testing.T) {
 
 func TestAppInstallRequiresScriptDecision(t *testing.T) {
 	s, ts, _ := newAppTestServer(t)
-	status, body := appRequest(t, http.MethodPost, ts.URL+"/v1/apps/xym/demo/install", `{"version":"1.0.0"}`)
+	status, body := appRequest(t, http.MethodPost, ts.URL+"/api/v1/apps/xym/demo/install", `{"version":"1.0.0"}`)
 	if status != http.StatusBadRequest {
 		t.Fatalf("install without decision = %d %v", status, body)
 	}
@@ -228,7 +228,7 @@ func TestAppInstallRequiresScriptDecision(t *testing.T) {
 
 func TestAppInstallSkipDoesNotRunScript(t *testing.T) {
 	s, ts, _ := newAppTestServer(t)
-	status, body := appRequest(t, http.MethodPost, ts.URL+"/v1/apps/xym/demo/install",
+	status, body := appRequest(t, http.MethodPost, ts.URL+"/api/v1/apps/xym/demo/install",
 		`{"version":"1.0.0","install_command":"skip","start":false}`)
 	if status != http.StatusAccepted {
 		t.Fatalf("install = %d %v", status, body)
@@ -257,7 +257,7 @@ func TestAppInstallSkipDoesNotRunScript(t *testing.T) {
 
 func TestAppInstallRunsConfirmedScript(t *testing.T) {
 	s, ts, launcher := newAppTestServer(t)
-	status, body := appRequest(t, http.MethodPost, ts.URL+"/v1/apps/xym/demo/install",
+	status, body := appRequest(t, http.MethodPost, ts.URL+"/api/v1/apps/xym/demo/install",
 		`{"version":"1.0.0","install_command":"run"}`)
 	if status != http.StatusAccepted {
 		t.Fatalf("install = %d %v", status, body)
@@ -288,17 +288,17 @@ func TestAppEndpointsLifecycle(t *testing.T) {
 	s, ts, launcher := newAppTestServer(t)
 	base := ts.URL
 
-	status, body := appRequest(t, http.MethodGet, base+"/v1/apps?page=1", "")
+	status, body := appRequest(t, http.MethodGet, base+"/api/v1/apps?page=1", "")
 	if status != 200 || len(body["apps"].([]any)) != 1 {
 		t.Fatalf("list = %d %v", status, body)
 	}
 
-	status, body = appRequest(t, http.MethodGet, base+"/v1/apps/xym/demo", "")
+	status, body = appRequest(t, http.MethodGet, base+"/api/v1/apps/xym/demo", "")
 	if status != 200 || body["manifest"] == nil {
 		t.Fatalf("manifest = %d %v", status, body)
 	}
 
-	status, body = appRequest(t, http.MethodPost, base+"/v1/apps/xym/demo/prepare", `{"version":"1.0.0"}`)
+	status, body = appRequest(t, http.MethodPost, base+"/api/v1/apps/xym/demo/prepare", `{"version":"1.0.0"}`)
 	if status != 202 {
 		t.Fatalf("prepare = %d %v", status, body)
 	}
@@ -322,12 +322,12 @@ func TestAppEndpointsLifecycle(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	status, body = appRequest(t, http.MethodGet, base+"/v1/apps/installed", "")
+	status, body = appRequest(t, http.MethodGet, base+"/api/v1/apps/installed", "")
 	if status != 200 || body["apps"].(map[string]any)["xym/demo:1.0.0"] == nil {
 		t.Fatalf("installed = %d %v", status, body)
 	}
 
-	status, body = appRequest(t, http.MethodPost, base+"/v1/apps/xym/demo/start?version=1.0.0", "")
+	status, body = appRequest(t, http.MethodPost, base+"/api/v1/apps/xym/demo/start?version=1.0.0", "")
 	if status != 200 || body["state"] != "ready" {
 		t.Fatalf("start = %d %v", status, body)
 	}
@@ -335,12 +335,12 @@ func TestAppEndpointsLifecycle(t *testing.T) {
 		t.Fatalf("launcher started %d", len(launcher.procs))
 	}
 
-	status, body = appRequest(t, http.MethodGet, base+"/v1/apps/xym/demo/status?version=1.0.0", "")
+	status, body = appRequest(t, http.MethodGet, base+"/api/v1/apps/xym/demo/status?version=1.0.0", "")
 	if status != 200 || len(body["models"].([]any)) != 1 {
 		t.Fatalf("status = %d %v", status, body)
 	}
 
-	status, body = appRequest(t, http.MethodPost, base+"/v1/apps/xym/demo/stop?version=1.0.0", "")
+	status, body = appRequest(t, http.MethodPost, base+"/api/v1/apps/xym/demo/stop?version=1.0.0", "")
 	if status != 200 || body["state"] != "stopped" {
 		t.Fatalf("stop = %d %v", status, body)
 	}
@@ -348,11 +348,11 @@ func TestAppEndpointsLifecycle(t *testing.T) {
 		t.Fatal("model was not stopped")
 	}
 
-	status, _ = appRequest(t, http.MethodDelete, base+"/v1/apps/xym/demo?version=1.0.0", "")
+	status, _ = appRequest(t, http.MethodDelete, base+"/api/v1/apps/xym/demo?version=1.0.0", "")
 	if status != 200 {
 		t.Fatalf("uninstall = %d", status)
 	}
-	status, _ = appRequest(t, http.MethodGet, base+"/v1/apps/xym/demo/status?version=1.0.0", "")
+	status, _ = appRequest(t, http.MethodGet, base+"/api/v1/apps/xym/demo/status?version=1.0.0", "")
 	if status != 404 {
 		t.Fatalf("status after uninstall = %d", status)
 	}

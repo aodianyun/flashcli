@@ -5070,7 +5070,7 @@ impl eframe::App for App {
             if let Some(smoke) = &self.smoke {
                 if smoke.running && !smoke.job_id.is_empty() {
                     let _ = post_json_timeout(
-                        &format!("/v1/jobs/{}/cancel", smoke.job_id),
+                        &format!("/api/v1/jobs/{}/cancel", smoke.job_id),
                         &serde_json::json!({}),
                         2,
                     );
@@ -5749,11 +5749,11 @@ fn start_ws(tx: Sender<Event>, ctx: egui::Context) {
         let mut reconnect_fails = 0;
         loop {
             let ws_url = if let Some(rest) = api_base().strip_prefix("http://") {
-                format!("ws://{rest}/v1/ws")
+                format!("ws://{rest}/api/v1/ws")
             } else if let Some(rest) = api_base().strip_prefix("https://") {
-                format!("wss://{rest}/v1/ws")
+                format!("wss://{rest}/api/v1/ws")
             } else {
-                format!("{}/v1/ws", api_base())
+                format!("{}/api/v1/ws", api_base())
             };
             match ewebsock::connect(ws_url, ewebsock::Options::default()) {
                 Ok((_sender, receiver)) => {
@@ -5892,7 +5892,7 @@ fn spawn_action(tx: Sender<Event>, ctx: egui::Context, action: Action) {
                 Ok(message) => {
                     let mut ready = false;
                     for _ in 0..16 {
-                        if let Some(v) = get_json("/v1/system") {
+                        if let Some(v) = get_json("/api/v1/system") {
                             let _ = tx.send(Event::System(v));
                             ready = true;
                             break;
@@ -5939,7 +5939,7 @@ fn spawn_action(tx: Sender<Event>, ctx: egui::Context, action: Action) {
                 action,
                 Action::EnableAutostart | Action::DisableAutostart { .. }
             ) {
-                if let Some(v) = get_json("/v1/system") {
+                if let Some(v) = get_json("/api/v1/system") {
                     let _ = tx.send(Event::System(v));
                 }
             }
@@ -5948,10 +5948,10 @@ fn spawn_action(tx: Sender<Event>, ctx: egui::Context, action: Action) {
         let _ = tx.send(Event::OpDone(result));
         ctx.request_repaint();
         if ok && !matches!(action, Action::Stop { .. }) {
-            if let Some(v) = get_json("/v1/models") {
+            if let Some(v) = get_json("/api/v1/models") {
                 let _ = tx.send(Event::Models(v));
             }
-            if let Some(v) = get_json("/v1/storage") {
+            if let Some(v) = get_json("/api/v1/storage") {
                 let _ = tx.send(Event::Storage(v));
             }
             ctx.request_repaint();
@@ -5967,7 +5967,7 @@ fn spawn_job(
     verb: &'static str,
 ) {
     std::thread::spawn(move || {
-        let endpoint = if pull { "/v1/pull" } else { "/v1/models/load" };
+        let endpoint = if pull { "/api/v1/pull" } else { "/api/v1/models/load" };
         let event_ref = ref_str.clone();
         let kind = if pull { "pull" } else { "load" };
         let _ = tx.send(Event::Job(JobEvent {
@@ -6654,7 +6654,7 @@ fn spawn_apps(
         if !domain.trim().is_empty() {
             params.push(("domain", domain.trim().to_string()));
         }
-        match get_json_query("/v1/apps", &params) {
+        match get_json_query("/api/v1/apps", &params) {
             Some(v) => {
                 let list = v["apps"].as_array().cloned().unwrap_or_default();
                 let _ = tx.send(Event::Apps(list, req));
@@ -6670,7 +6670,7 @@ fn spawn_apps(
     });
 }
 
-/// Fetch `/v1/apps/{org}/{name}/status` (local only) and update the detail.
+/// Fetch `/api/v1/apps/{org}/{name}/status` (local only) and update the detail.
 fn spawn_app_state(
     tx: Sender<Event>,
     ctx: egui::Context,
@@ -6680,7 +6680,7 @@ fn spawn_app_state(
 ) {
     std::thread::spawn(move || {
         let key = app_reference(&org, &name, &version);
-        let mut path = format!("/v1/apps/{org}/{name}/status");
+        let mut path = format!("/api/v1/apps/{org}/{name}/status");
         if !version.is_empty() {
             path.push_str(&format!("?version={version}"));
         }
@@ -6721,7 +6721,7 @@ fn spawn_app_model_log(
             ("ref", reference),
             ("lines", "6".to_string()),
         ];
-        let lines = get_json_query("/v1/logs", &params)
+        let lines = get_json_query("/api/v1/logs", &params)
             .map(|v| {
                 v["lines"]
                     .as_array()
@@ -6746,9 +6746,9 @@ fn spawn_app_detail(
 ) {
     std::thread::spawn(move || {
         let path = if version.is_empty() {
-            format!("/v1/apps/{org}/{name}")
+            format!("/api/v1/apps/{org}/{name}")
         } else {
-            format!("/v1/apps/{org}/{name}?version={version}")
+            format!("/api/v1/apps/{org}/{name}?version={version}")
         };
         match get_json(&path) {
             Some(v) => {
@@ -6788,9 +6788,9 @@ fn spawn_app_action(
         // start/stop can take a minute (model loading); run them as daemon jobs
         // so their progress lines stream into the status block.
         let path = if lifecycle {
-            format!("/v1/apps/{org}/{name}/{action}?async=1")
+            format!("/api/v1/apps/{org}/{name}/{action}?async=1")
         } else {
-            format!("/v1/apps/{org}/{name}/{action}")
+            format!("/api/v1/apps/{org}/{name}/{action}")
         };
         let mut body = if action == "prepare" {
             serde_json::json!({ "version": version })
@@ -6887,7 +6887,7 @@ fn spawn_app_install(
                 true
             }
         };
-        let path = format!("/v1/apps/{org}/{name}/install");
+        let path = format!("/api/v1/apps/{org}/{name}/install");
         let body = app_install_body(&version, handled, force);
         match post_json_timeout(&path, &body, 120) {
             Ok(v) => match v["job_id"].as_str().filter(|id| !id.is_empty()) {
@@ -7177,7 +7177,7 @@ fn spawn_app_uninstall(
     purge_models: bool,
 ) {
     std::thread::spawn(move || {
-        let mut path = format!("/v1/apps/{org}/{name}");
+        let mut path = format!("/api/v1/apps/{org}/{name}");
         let mut params: Vec<String> = Vec::new();
         if !version.is_empty() {
             params.push(format!("version={version}"));
@@ -7212,7 +7212,7 @@ fn follow_app_job(
     std::thread::spawn(move || {
         let mut seen = 0usize;
         loop {
-            let Some(job) = get_json_timeout(&format!("/v1/jobs/{job_id}"), 20) else {
+            let Some(job) = get_json_timeout(&format!("/api/v1/jobs/{job_id}"), 20) else {
                 let _ = tx.send(Event::AppAction(
                     verb,
                     Err("任务状态读取失败（flashserver 可能已停止）".to_string()),
@@ -7291,7 +7291,7 @@ fn spawn_catalog(tx: Sender<Event>, ctx: egui::Context, query: String, tag: Opti
         if let Some(tag) = tag {
             params.push(("tag", tag.to_string()));
         }
-        match get_json_query("/v1/catalog", &params) {
+        match get_json_query("/api/v1/catalog", &params) {
             Some(v) if v["repos"].is_array() || v["repos"].is_null() => {
                 let (repos, total) = parse_catalog(&v);
                 let _ = tx.send(Event::Catalog { repos, total });
@@ -7316,7 +7316,7 @@ fn spawn_catalog(tx: Sender<Event>, ctx: egui::Context, query: String, tag: Opti
 
 fn spawn_catalog_tags(tx: Sender<Event>, ctx: egui::Context) {
     std::thread::spawn(move || {
-        let tags = get_json_timeout("/v1/catalog/tags", 20)
+        let tags = get_json_timeout("/api/v1/catalog/tags", 20)
             .map(|v| {
                 v["tags"]
                     .as_array()
@@ -7338,7 +7338,7 @@ fn spawn_catalog_tags(tx: Sender<Event>, ctx: egui::Context) {
 
 fn spawn_hub_detail(tx: Sender<Event>, ctx: egui::Context, id: i64) {
     std::thread::spawn(move || {
-        match get_json_timeout(&format!("/v1/catalog/{id}"), 20) {
+        match get_json_timeout(&format!("/api/v1/catalog/{id}"), 20) {
             Some(v) if v["repo"].is_object() => {
                 let _ = tx.send(Event::HubDetail(parse_hub_detail(&v)));
             }
@@ -7358,7 +7358,7 @@ fn spawn_hub_detail(tx: Sender<Event>, ctx: egui::Context, id: i64) {
 fn spawn_clean(tx: Sender<Event>, ctx: egui::Context, refs: Vec<String>) {
     std::thread::spawn(move || {
         let body = serde_json::json!({ "refs": refs });
-        let note = match post_json("/v1/models/clean", &body) {
+        let note = match post_json("/api/v1/models/clean", &body) {
             Ok(v) => {
                 let freed = v["freed_bytes"].as_f64().unwrap_or(0.0);
                 let results = v["results"].as_array();
@@ -7387,7 +7387,7 @@ fn spawn_clean(tx: Sender<Event>, ctx: egui::Context, refs: Vec<String>) {
             Err(e) => format!("清理失败：{e}"),
         };
         let _ = tx.send(Event::CleanNote(note));
-        if let Some(v) = get_json("/v1/models") {
+        if let Some(v) = get_json("/api/v1/models") {
             let _ = tx.send(Event::Models(v));
         }
         ctx.request_repaint();
@@ -7397,7 +7397,7 @@ fn spawn_clean(tx: Sender<Event>, ctx: egui::Context, refs: Vec<String>) {
 fn spawn_storage_clean(tx: Sender<Event>, ctx: egui::Context, targets: Vec<String>) {
     std::thread::spawn(move || {
         let body = serde_json::json!({ "targets": targets });
-        let note = match post_json("/v1/storage/clean", &body) {
+        let note = match post_json("/api/v1/storage/clean", &body) {
             Ok(v) => {
                 let freed = v["freed_bytes"].as_f64().unwrap_or(0.0);
                 format!("共享缓存已清理，释放 {}", fmt_bytes(freed))
@@ -7405,7 +7405,7 @@ fn spawn_storage_clean(tx: Sender<Event>, ctx: egui::Context, targets: Vec<Strin
             Err(e) => format!("清理缓存失败：{e}"),
         };
         let _ = tx.send(Event::StorageNote(note));
-        if let Some(v) = get_json("/v1/storage") {
+        if let Some(v) = get_json("/api/v1/storage") {
             let _ = tx.send(Event::Storage(v));
         }
         ctx.request_repaint();
@@ -7417,7 +7417,7 @@ fn spawn_set_mirror(tx: Sender<Event>, ctx: egui::Context, enabled: bool) {
         let body = serde_json::json!({ "enabled": enabled });
         let mut last_error = String::new();
         for attempt in 0..6 {
-            match post_json_timeout("/v1/mirror", &body, 15) {
+            match post_json_timeout("/api/v1/mirror", &body, 15) {
                 Ok(v) => {
                     let _ = tx.send(Event::Mirror(v));
                     let _ = tx.send(Event::OpDone(Ok(if enabled {
@@ -7453,10 +7453,10 @@ fn spawn_health(tx: Sender<Event>, ctx: egui::Context) {
 
 fn spawn_system_refresh(tx: Sender<Event>, ctx: egui::Context) {
     std::thread::spawn(move || {
-        if let Some(sys) = get_json("/v1/system") {
+        if let Some(sys) = get_json("/api/v1/system") {
             let _ = tx.send(Event::System(sys));
         }
-        if let Some(models) = get_json("/v1/models") {
+        if let Some(models) = get_json("/api/v1/models") {
             let _ = tx.send(Event::Models(models));
         }
         ctx.request_repaint();
@@ -7466,7 +7466,7 @@ fn spawn_system_refresh(tx: Sender<Event>, ctx: egui::Context) {
 fn spawn_unload(tx: Sender<Event>, ctx: egui::Context, ref_str: String) {
     std::thread::spawn(move || {
         let body = serde_json::json!({ "ref": ref_str });
-        let status = match post_json("/v1/models/unload", &body) {
+        let status = match post_json("/api/v1/models/unload", &body) {
             Ok(_) => "已停止".to_string(),
             Err(e) => format!("停止失败：{e}"),
         };
@@ -7492,7 +7492,7 @@ fn spawn_logs(
                 params.push(("since", since.to_string()));
             }
         }
-        let text = get_json_query("/v1/logs", &params).map(|v| {
+        let text = get_json_query("/api/v1/logs", &params).map(|v| {
             v["lines"]
                 .as_array()
                 .map(|lines| {
@@ -7520,7 +7520,7 @@ fn spawn_export_logs(
             let agent = ureq::AgentBuilder::new()
                 .timeout(Duration::from_secs(120))
                 .build();
-            let mut request = agent.get(&format!("{}/v1/logs/download", api_base()));
+            let mut request = agent.get(&format!("{}/api/v1/logs/download", api_base()));
             request = match &model_ref {
                 Some(model) => request.query("kind", "model").query("ref", model),
                 None => request.query("kind", "server"),
@@ -7645,7 +7645,7 @@ fn delete_json(path: &str) -> Result<Value, String> {
 }
 
 fn spawn_model_options(tx: Sender<Event>, ctx: egui::Context, reference: String) {    std::thread::spawn(move || {
-        let result = get_json_query("/v1/models/options", &[("ref", reference.clone())])
+        let result = get_json_query("/api/v1/models/options", &[("ref", reference.clone())])
             .ok_or_else(|| "读取启动参数失败：服务不可用".to_string());
         let _ = tx.send(Event::ModelOptions { reference, result });
         ctx.request_repaint();
@@ -7668,7 +7668,7 @@ fn spawn_save_model_options(
             "port": port,
             "options": options,
         });
-        let result = put_json_timeout("/v1/models/options", &body, 20);
+        let result = put_json_timeout("/api/v1/models/options", &body, 20);
         let _ = tx.send(Event::ModelOptionsSaved { reference, result, start });
         ctx.request_repaint();
     });
@@ -7677,7 +7677,7 @@ fn spawn_save_model_options(
 fn spawn_cancel_job(ctx: egui::Context, job_id: String) {
     std::thread::spawn(move || {
         let _ = post_json_timeout(
-            &format!("/v1/jobs/{job_id}/cancel"),
+            &format!("/api/v1/jobs/{job_id}/cancel"),
             &serde_json::json!({}),
             10,
         );
@@ -7688,7 +7688,7 @@ fn spawn_cancel_job(ctx: egui::Context, job_id: String) {
 fn spawn_smoke(tx: Sender<Event>, ctx: egui::Context, ref_str: String) {
     std::thread::spawn(move || {
         let body = serde_json::json!({ "ref": ref_str });
-        match post_json_timeout("/v1/models/smoke", &body, 20) {
+        match post_json_timeout("/api/v1/models/smoke", &body, 20) {
             Ok(v) if v["job_id"].is_string() => {
                 let _ = tx.send(Event::SmokeJob(
                     v["job_id"].as_str().unwrap_or("").to_string(),

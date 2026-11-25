@@ -43,24 +43,24 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 
 | Capability | Shared API | CLI use | flashserver use |
 |------------|------------|---------|-----------------|
-| Pull / runtime + venv preparation / weights | `host.Pull`, `host.EnsureRuntime`, `host.ResolveWeights` | `flashcli pull`, `run`/`serve` | `/v1/pull`, app prepare, Manager |
-| Serve log name / tail / readiness | `modelrun.LogName`, `modelrun.TailLines`, `modelrun.WaitHealthy` | serve child, `app logs` | `/v1/logs`, Manager/app start |
-| App install/start/stop/state/restore | `apps.Service`, `apps.WasRunning` | `flashcli app ...` | `/v1/apps`, restore-on-start |
-| Cache areas + unique allocated bytes | `host.Storage()` | `flashcli du` | `GET /v1/storage` |
-| Cached models, sizes, readiness, runtime bytes | `host.ListModels()` | `flashcli models list` | `GET /v1/models` |
-| Bundle usability / serve capability | `host.BundleRootUsable`, `host.ListModels` | `models list/show` | `/v1/models` |
-| Weights key + readiness | `host.MarkerWeightsKey`, `host.WeightsInfo`, `host.WeightsCachedForMarker` | `models list/show` | `/v1/models` |
+| Pull / runtime + venv preparation / weights | `host.Pull`, `host.EnsureRuntime`, `host.ResolveWeights` | `flashcli pull`, `run`/`serve` | `/api/v1/pull`, app prepare, Manager |
+| Serve log name / tail / readiness | `modelrun.LogName`, `modelrun.TailLines`, `modelrun.WaitHealthy` | serve child, `app logs` | `/api/v1/logs`, Manager/app start |
+| App install/start/stop/state/restore | `apps.Service`, `apps.WasRunning` | `flashcli app ...` | `/api/v1/apps`, restore-on-start |
+| Cache areas + unique allocated bytes | `host.Storage()` | `flashcli du` | `GET /api/v1/storage` |
+| Cached models, sizes, readiness, runtime bytes | `host.ListModels()` | `flashcli models list` | `GET /api/v1/models` |
+| Bundle usability / serve capability | `host.BundleRootUsable`, `host.ListModels` | `models list/show` | `/api/v1/models` |
+| Weights key + readiness | `host.MarkerWeightsKey`, `host.WeightsInfo`, `host.WeightsCachedForMarker` | `models list/show` | `/api/v1/models` |
 | Canonical ref/cache key | `host.RefCacheKey` | ref resolution | cleanup/API refs |
-| Cleanup path selection + removal | `host.RefPaths`, `host.RuntimePaths`, `host.OrphanPaths`, `host.AllDataPaths`, `host.SharedCachePaths`, `host.RemovePaths` | `flashcli bundle clean`, `flashcli cache clean` | `/v1/models/clean`, `/v1/storage/clean` |
-| Remove model cache | `host.RemoveCachedRef` | `bundle clean` semantics | `/v1/models/clean` |
-| GPU / system probes | `gpu.*`, `preflight.*`, `host.EnsureSystemRequirements` | run/serve, models | Manager admission, `/v1/system` |
+| Cleanup path selection + removal | `host.RefPaths`, `host.RuntimePaths`, `host.OrphanPaths`, `host.AllDataPaths`, `host.SharedCachePaths`, `host.RemovePaths` | `flashcli bundle clean`, `flashcli cache clean` | `/api/v1/models/clean`, `/api/v1/storage/clean` |
+| Remove model cache | `host.RemoveCachedRef` | `bundle clean` semantics | `/api/v1/models/clean` |
+| GPU / system probes | `gpu.*`, `preflight.*`, `host.EnsureSystemRequirements` | run/serve, models | Manager admission, `/api/v1/system` |
 
 Rules:
 
 - **Do not** add another marker walker, weights-readiness check, directory-size walker, cleanup path resolver, pull orchestration, log-name sanitizer/tailer, readiness loop, or app-state predicate under `go/internal/cli` or `go/internal/server`.
 - Add the behavior once in the shared package, then expose it through both frontends. Presentation-only helpers (tables, colors, prompts) stay in the frontend.
-- **Pull/prepare is one pipeline:** `host.Pull` is used by `flashcli pull`, `/v1/pull` and app preparation; `host.EnsureRuntime` is the runtime/venv preparation used by pull, and must stay aligned with `flashcli serve` (system requirements, protocol cache schema, CUDA).
-- **Serve children** use `modelrun.LogName`/`modelrun.TailLines` for log file naming/tailing and `modelrun.WaitHealthy` for readiness. Serve logs live under the canonical `~/.flashcli/logs/serve` (config `log_dir` overrides); both `flashcli app logs` and `/v1/logs` read the same name.
+- **Pull/prepare is one pipeline:** `host.Pull` is used by `flashcli pull`, `/api/v1/pull` and app preparation; `host.EnsureRuntime` is the runtime/venv preparation used by pull, and must stay aligned with `flashcli serve` (system requirements, protocol cache schema, CUDA).
+- **Serve children** use `modelrun.LogName`/`modelrun.TailLines` for log file naming/tailing and `modelrun.WaitHealthy` for readiness. Serve logs live under the canonical `~/.flashcli/logs/serve` (config `log_dir` overrides); both `flashcli app logs` and `/api/v1/logs` read the same name.
 - **App state predicates** (running/restore) live in `apps` (`apps.WasRunning`); the daemon restore and the desktop must not re-derive them.
 - **Isolation:** the daemon may wrap a shared service with a Launcher/Stopper (for example owner-aware Manager admission), but the lifecycle logic itself stays in `apps`; the CLI must not grow a parallel copy.
 - **Scope — only genuinely common behavior is shared.** Do **not** force frontend-specific behavior into a shared package or make one frontend emulate the other. Keep the following in the respective frontend:
@@ -69,7 +69,7 @@ Rules:
   - desktop: all UI, dialogs and local app/installer execution.
   - Adapters (Launcher/Stopper/Log hooks) may differ between frontends.
 - **Decision test:** share it only if both frontends must make the **same decision about the same on-disk state or model readiness** (cache key, weights readiness, pull/prepare steps, serve log name/readiness, app state). If it is orchestration, scheduling policy, UX, or presentation, keep it in the frontend.
-- `flashcli cache clean` removes the shared cache group (`cache` + base Python + uv), matching `/v1/storage/clean {"targets":["cache"]}`. Model data/runtimes use `flashcli bundle clean` / `/v1/models/clean`; shared weights/runtime are reference-counted and kept. Disk accounting and ref-path selection are shared in `host`.
+- `flashcli cache clean` removes the shared cache group (`cache` + base Python + uv), matching `/api/v1/storage/clean {"targets":["cache"]}`. Model data/runtimes use `flashcli bundle clean` / `/api/v1/models/clean`; shared weights/runtime are reference-counted and kept. Disk accounting and ref-path selection are shared in `host`.
 - **Guard:** `go test ./internal/architecture/...` fails on the mechanical re-introductions (direct `nvidia-smi`, log-name `NewReplacer`, `filepath.Walk*`, `.flashcli_download.incomplete`). Add a pattern there when a new class of duplication is found.
 - Tests: `go test ./...`; host tests cover accounting/cleanup, CLI tests exercise `du`, `models list`, and `bundle clean` through the host functions. See [module_layers.md](module_layers.md).
 
@@ -82,9 +82,9 @@ Three components ship together. None of them duplicates cache logic: they call
 
 | Component | Source | Role |
 |-----------|--------|------|
-| `flashserver` | `go/cmd/flashserver`, `go/internal/server` | Resident scheduler and local console: model load / start / stop, GPU-aware admission, job queue, per-model serve logs, `GET /health`, `/docs`, `/openapi.yaml`; embeds the console UI (`go/internal/server/web`; `FLASHCLI_WEB_DIR` overrides it) |
+| `flashserver` | `go/cmd/flashserver`, `go/internal/server` | Resident scheduler and local console: OpenAI gateway (`/v1`), management API (`/api/v1`), disk preload/unload, resident start/stop, GPU-aware admission, job queue, per-model serve logs, `GET /health`, `/docs`, `/openapi.yaml`; embeds the console UI (`go/internal/server/web`; `FLASHCLI_WEB_DIR` overrides it) |
 | `flashserver-setup` | `go/cmd/flashserver-setup`, `go/internal/setup` | Installer backend: Linux writes `/etc/flashserver/config.json` + `flashserver.service`; Windows imports the `flashserver_ubuntu` WSL2 distro, enables systemd and mirrors, and creates the logon task + model firewall rule. Also `--start-service` / `--stop-service`, `--enable-autostart` / `--disable-autostart`, `--uninstall` (`--purge-*`), `--dry-run`, `--progress-file` for the UI |
-| Desktop client | `desktop/` (Rust, egui/eframe) | Windows GUI: talks only to the daemon's HTTP API and `/v1/ws`, and starts/stops the service through `wsl.exe` / `systemctl`; it never reads cache internals |
+| Desktop client | `desktop/` (Rust, egui/eframe) | Windows GUI: talks only to the daemon's HTTP API and `/api/v1/ws`, and starts/stops the service through `wsl.exe` / `systemctl`; it never reads cache internals |
 
 ```mermaid
 flowchart LR
@@ -92,7 +92,7 @@ flowchart LR
     ISS["flashcli-desktop-setup-windows-amd64.exe<br/>Inno Setup"] --> CLIENT[flashcli-desktop.exe]
     ISS --> SETUP[flashserver-setup.exe]
   end
-  CLIENT -- "HTTP + /v1/ws" --> SRV["flashserver :8790"]
+  CLIENT -- "HTTP + /api/v1/ws" --> SRV["flashserver :8790"]
   CLIENT -- UAC --> SETUP
   SETUP -- "systemd unit / WSL distro + logon task" --> SRV
   SRV -- "re-exec / serve" --> CLI[flashcli]
@@ -105,6 +105,38 @@ running `flashcli`, so both frontends share one cache implementation. Its state
 lives under `$FLASHCLI_HOME/flashserver/` (`serve-options.json`, per-model serve
 logs). The HTTP contract is [openapi.yaml](openapi.yaml); user-facing behavior is
 [flashserver.md](flashserver.md).
+
+### Data plane vs control plane
+
+`flashserver` separates inference traffic from management traffic on one port:
+
+- **Data plane `/v1/*`** — OpenAI-compatible gateway. Applications and the
+  desktop send inference requests with a full bundle ref in `model`. The
+  scheduler preloads missing assets, starts/stops residents internally, holds a
+  lease per active request, and proxies JSON/SSE/multipart/WebSocket traffic to a
+  loopback child. Child endpoints are never returned to clients.
+- **Control plane `/api/v1/*`** — management. Cache/model listings, disk
+  preload/unload, jobs, applications, devices/scheduler telemetry, logs, and the
+  management WebSocket.
+
+Disk state (`absent → preloading → preloaded → unloading`) and resident state
+(`stopped → starting → ready ⇄ busy → stopping`) are independent. Preload/unload
+are disk operations; resident start/stop is scheduler-owned. Automatic eviction
+only stops residents and never deletes assets. The authoritative contract is
+[flashserver_gateway_scheduler_spec.md](flashserver_gateway_scheduler_spec.md)
+(zh-CN mirror alongside).
+
+```mermaid
+flowchart LR
+  A["Apps / OpenAI SDK"] -- "/v1/*" --> G["OpenAI gateway"]
+  D["Desktop"] -- "/api/v1/*" --> C["Management API"]
+  G --> S["Scheduler (leases, placement)"]
+  C --> S
+  S --> M["Resident manager"]
+  M -- "loopback only" --> P["flashcli serve children"]
+  C -- "preload / unload (disk)" --> H[(bundle, weights, runtime)]
+```
+
 
 **Re-exec command** (inside bundle venv):
 

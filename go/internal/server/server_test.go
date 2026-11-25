@@ -36,8 +36,8 @@ func TestHealthAndModels(t *testing.T) {
 		key  string
 	}{
 		{"/health", "status"},
-		{"/v1/models", "models"},
-		{"/v1/storage", "areas"},
+		{"/api/v1/models", "models"},
+		{"/api/v1/storage", "areas"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 		rec := httptest.NewRecorder()
@@ -57,7 +57,7 @@ func TestHealthAndModels(t *testing.T) {
 
 func TestNotImplemented(t *testing.T) {
 	s := &Server{Source: fakeSource{}}
-	req := httptest.NewRequest(http.MethodPost, "/v1/pull", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/pull", nil)
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotImplemented {
@@ -77,7 +77,7 @@ func (fakePuller) Pull(ctx context.Context, ref string, opts host.PullOptions) (
 
 func TestPullJob(t *testing.T) {
 	s := &Server{Source: fakeSource{}, Puller: fakePuller{}, Jobs: NewJobManager()}
-	req := httptest.NewRequest(http.MethodPost, "/v1/pull", strings.NewReader(`{"ref":"demo:1"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/pull", strings.NewReader(`{"ref":"demo:1"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
@@ -214,7 +214,7 @@ func TestGPUStatus(t *testing.T) {
 	s := &Server{Source: fakeSource{}, GPU: func(context.Context) ([]gpu.Device, error) {
 		return []gpu.Device{{Index: 0, Name: "GPU", MemoryTotal: 1024}}, nil
 	}}
-	req := httptest.NewRequest(http.MethodGet, "/v1/gpu", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/gpu", nil)
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "GPU") {
@@ -226,7 +226,7 @@ func TestResourcesAndLoaded(t *testing.T) {
 	s := &Server{Source: fakeSource{}, GPU: func(context.Context) ([]gpu.Device, error) {
 		return []gpu.Device{{Index: 0, Name: "GPU", MemoryFree: 1024}}, nil
 	}, Manager: NewManager(&fakeLauncher{})}
-	for _, path := range []string{"/v1/resources", "/v1/models/loaded", "/v1/version"} {
+	for _, path := range []string{"/api/v1/resources", "/api/v1/models/loaded", "/api/v1/version"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
 		s.Handler().ServeHTTP(rec, req)
@@ -248,13 +248,13 @@ func TestInferEndpointRemoved(t *testing.T) {
 
 func TestAuth(t *testing.T) {
 	s := &Server{Source: fakeSource{}, Token: "secret"}
-	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/models", nil)
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	req = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/models", nil)
 	req.Header.Set("X-Flashcli-Token", "secret")
 	rec = httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
@@ -606,7 +606,7 @@ func TestRestoreAppsOnlyWhenModelsWereRunning(t *testing.T) {
 func TestPullForceAndBusy(t *testing.T) {
 	p := &capturePuller{}
 	s := &Server{Puller: p, Jobs: NewJobManager()}
-	req := httptest.NewRequest(http.MethodPost, "/v1/pull", strings.NewReader(`{"ref":"demo:1","force":true}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/pull", strings.NewReader(`{"ref":"demo:1","force":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
@@ -626,7 +626,7 @@ func TestPullForceAndBusy(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Manager = m
-	req = httptest.NewRequest(http.MethodPost, "/v1/pull", strings.NewReader(`{"ref":"demo:1"}`))
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/pull", strings.NewReader(`{"ref":"demo:1"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
@@ -690,7 +690,7 @@ func TestPullRejectsConcurrent(t *testing.T) {
 	p := &gatePuller{started: make(chan struct{}), release: make(chan struct{})}
 	s := &Server{Source: fakeSource{}, Puller: p, Jobs: NewJobManager()}
 	post := func() int {
-		req := httptest.NewRequest(http.MethodPost, "/v1/pull", strings.NewReader(`{"ref":"demo:1"}`))
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/pull", strings.NewReader(`{"ref":"demo:1"}`))
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 		s.Handler().ServeHTTP(rec, req)
@@ -715,7 +715,7 @@ func TestMirrorAPI(t *testing.T) {
 	t.Setenv("FLASHCLI_HOME", t.TempDir())
 	s := &Server{}
 	call := func(method, body string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(method, "/v1/mirror", strings.NewReader(body))
+		req := httptest.NewRequest(method, "/api/v1/mirror", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 		s.Handler().ServeHTTP(rec, req)

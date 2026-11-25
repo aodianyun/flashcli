@@ -74,7 +74,7 @@ sudo flashserver-setup
   （Windows 通过 localhost 转发访问服务）。
 - `token` 可选。设置后除 `/health`、`/`、`/docs`、`/ui/*`、`/openapi.yaml` 外的所有
   路径都需要 `Authorization: Bearer <token>` 或 `X-Flashcli-Token`。
-- 镜像：`POST /v1/mirror {"enabled":true}`（或桌面开关）会写
+- 镜像：`POST /api/v1/mirror {"enabled":true}`（或桌面开关）会写
   `~/.flashcli/mirror.env`（阿里云 pip、hf-mirror、gh-proxy、Gitee、SJTU torch），
   对新下载立即生效，不需要重启服务。
 
@@ -96,7 +96,7 @@ flashserver-setup.exe --start-service       # 开启开机启动并启动服务
 ```
 
 服务状态与开机启动相互独立：停止不会关闭开机启动，开自启也不会启停服务。
-`/v1/system` 报告当前自启状态（`enabled`、`disabled`、`unknown`）。
+`/api/v1/system` 报告当前自启状态（`enabled`、`disabled`、`unknown`）。
 
 ### 重启后的恢复
 

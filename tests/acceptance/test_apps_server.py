@@ -1,4 +1,4 @@
-"""Real flashserver /v1/apps endpoints against a local fake FlashHub.
+"""Real flashserver /api/v1/apps endpoints against a local fake FlashHub.
 
 Also covers the prepare and install jobs: the bundle tree is synced from a fake
 repo so the daemon exercises the real pull path without network, and the install
@@ -160,14 +160,14 @@ def test_server_apps_list_and_manifest(flashserver_bin, flashcli_bin, cli_env, t
     proc, base = _start_daemon(flashserver_bin, flashcli_bin, cli_env, tmp_path, hub)
     try:
         wait_json(base + "/health", timeout=30)
-        status, body = http_json(base + "/v1/apps?page=1")
+        status, body = http_json(base + "/api/v1/apps?page=1")
         assert status == 200, body
         assert body["apps"][0]["display_name"] == "Demo"
-        status, body = http_json(base + "/v1/apps/xym/demo")
+        status, body = http_json(base + "/api/v1/apps/xym/demo")
         assert status == 200, body
         assert body["manifest"]["name"] == "demo"
         assert body["org"] == "xym"
-        status, _ = http_json(base + "/v1/apps/xym/demo/status")
+        status, _ = http_json(base + "/api/v1/apps/xym/demo/status")
         assert status == 404
     finally:
         proc.terminate()
@@ -182,7 +182,7 @@ def _wait_job(base: str, job_id: str, timeout: float = 600.0) -> tuple[str, dict
     deadline = time.time() + timeout
     state, job = "", {}
     while time.time() < deadline:
-        _, job = http_json(f"{base}/v1/jobs/{job_id}")
+        _, job = http_json(f"{base}/api/v1/jobs/{job_id}")
         state = job.get("state", "")
         if state in ("done", "failed"):
             break
@@ -220,7 +220,7 @@ def test_server_app_prepare_pulls_bundle(flashserver_bin, flashcli_bin, cli_env,
     proc, base = _start_daemon(flashserver_bin, flashcli_bin, cli_env, tmp_path, hub)
     try:
         wait_json(base + "/health", timeout=30)
-        status, body = http_json(base + "/v1/apps/xym/demo/prepare", {"version": "1.0.0"})
+        status, body = http_json(base + "/api/v1/apps/xym/demo/prepare", {"version": "1.0.0"})
         assert status == 202, body
         job_id = body["job_id"]
         # A cold uv/venv cache can make the first prepare slower than a warm
@@ -228,14 +228,14 @@ def test_server_app_prepare_pulls_bundle(flashserver_bin, flashcli_bin, cli_env,
         deadline = time.time() + 120
         state = ""
         while time.time() < deadline:
-            _, job = http_json(f"{base}/v1/jobs/{job_id}")
+            _, job = http_json(f"{base}/api/v1/jobs/{job_id}")
             state = job.get("state", "")
             if state in ("done", "failed"):
                 break
             time.sleep(0.2)
         assert state == "done", job.get("error") or job
 
-        status, st = http_json(base + "/v1/apps/xym/demo/status?version=1.0.0")
+        status, st = http_json(base + "/api/v1/apps/xym/demo/status?version=1.0.0")
         assert status == 200, st
         assert st["models"][0]["prepared"] is True
     finally:
@@ -252,7 +252,7 @@ def test_server_app_install_requires_script_decision(flashserver_bin, flashcli_b
     with _fake_hub() as hub, _daemon(
         flashserver_bin, flashcli_bin, cli_env, tmp_path, hub
     ) as base:
-        status, body = http_json(base + "/v1/apps/xym/demo/install", {"version": "1.0.0"})
+        status, body = http_json(base + "/api/v1/apps/xym/demo/install", {"version": "1.0.0"})
         assert status == 400, body
         assert "install_command" in body["error"]
 
@@ -264,7 +264,7 @@ def test_server_app_install_skip_does_not_run_script(flashserver_bin, flashcli_b
         flashserver_bin, flashcli_bin, cli_env, tmp_path, hub
     ) as base:
         status, body = http_json(
-            base + "/v1/apps/xym/demo/install",
+            base + "/api/v1/apps/xym/demo/install",
             {"version": "1.0.0", "install_command": "skip"},
         )
         assert status == 202, body
@@ -272,7 +272,7 @@ def test_server_app_install_skip_does_not_run_script(flashserver_bin, flashcli_b
         assert state == "done", job.get("error") or job
         assert not marker.exists()
 
-        status, st = http_json(base + "/v1/apps/xym/demo/status?version=1.0.0")
+        status, st = http_json(base + "/api/v1/apps/xym/demo/status?version=1.0.0")
         assert status == 200, st
         assert st["install"]["skipped"] is True
         assert not st["install"].get("executed")
@@ -286,7 +286,7 @@ def test_server_app_install_run_executes_script(flashserver_bin, flashcli_bin, c
         flashserver_bin, flashcli_bin, cli_env, tmp_path, hub
     ) as base:
         status, body = http_json(
-            base + "/v1/apps/xym/demo/install",
+            base + "/api/v1/apps/xym/demo/install",
             {"version": "1.0.0", "install_command": "run"},
         )
         assert status == 202, body
@@ -294,7 +294,7 @@ def test_server_app_install_run_executes_script(flashserver_bin, flashcli_bin, c
         assert state == "done", job.get("error") or job
         assert marker.read_text(encoding="utf-8") == "ran"
 
-        status, st = http_json(base + "/v1/apps/xym/demo/status?version=1.0.0")
+        status, st = http_json(base + "/api/v1/apps/xym/demo/status?version=1.0.0")
         assert status == 200, st
         assert st["install"]["executed"] is True
         assert not st["install"].get("skipped")
@@ -309,25 +309,25 @@ def test_server_app_install_uninstall_reinstall(
     ) as base:
         for attempt in (1, 2):
             status, body = http_json(
-                base + "/v1/apps/xym/demo/install",
+                base + "/api/v1/apps/xym/demo/install",
                 {"version": "1.0.0", "install_command": "skip"},
             )
             assert status == 202, (attempt, body)
             state, job = _wait_job(base, body["job_id"])
             assert state == "done", (attempt, job.get("error") or job)
 
-            status, st = http_json(base + "/v1/apps/xym/demo/status?version=1.0.0")
+            status, st = http_json(base + "/api/v1/apps/xym/demo/status?version=1.0.0")
             assert status == 200, st
             assert st["state"] == "prepared"
             assert st["models"][0]["prepared"] is True
 
             if attempt == 1:
                 status, _ = http_json(
-                    base + "/v1/apps/xym/demo?version=1.0.0&purge_models=1",
+                    base + "/api/v1/apps/xym/demo?version=1.0.0&purge_models=1",
                     method="DELETE",
                 )
                 assert status == 200
-                status, _ = http_json(base + "/v1/apps/xym/demo/status?version=1.0.0")
+                status, _ = http_json(base + "/api/v1/apps/xym/demo/status?version=1.0.0")
                 assert status == 404
 
 
@@ -341,7 +341,7 @@ def test_server_app_install_uses_the_client_platform(
         flashserver_bin, flashcli_bin, cli_env, tmp_path, hub
     ) as base:
         status, body = http_json(
-            base + "/v1/apps/xym/demo/install",
+            base + "/api/v1/apps/xym/demo/install",
             {
                 "version": "1.0.0",
                 "install_command": "client",
@@ -356,7 +356,7 @@ def test_server_app_install_uses_the_client_platform(
         # The daemon must not run a command the client already handled.
         assert not marker.exists()
 
-        status, st = http_json(base + "/v1/apps/xym/demo/status?version=1.0.0")
+        status, st = http_json(base + "/api/v1/apps/xym/demo/status?version=1.0.0")
         assert status == 200, st
         assert st["install"]["executed"] is True
         assert st["install"]["command"] == command

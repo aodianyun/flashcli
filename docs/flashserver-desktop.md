@@ -3,7 +3,7 @@
 <p align="right"><strong>English</strong> · <a href="flashserver-desktop.zh-CN.md">简体中文</a></p>
 
 The Windows package ships `flashcli-desktop.exe`, a Rust + egui/eframe client (no
-WebView, no console window). It streams live state over `/v1/ws` and uses HTTP
+WebView, no console window). It streams live state over `/api/v1/ws` and uses HTTP
 for commands. Install/build details are in [../desktop/README.md](../desktop/README.md).
 
 ## Features
@@ -16,7 +16,7 @@ Sidebar order: **应用 → 模型 → 状态 → 日志 → 设置**.
   weights sizes; load, start, stop; run/serve smoke tests with a live log;
   multi-select cache cleanup. A cached model that is not running also offers
   **更多 → 重新同步**, which force-re-downloads its bundle tree/weights
-  (`/v1/pull {"force":true}`); use it only as a repair for a mutable revision,
+  (`/api/v1/pull {"force":true}`); use it only as a repair for a mutable revision,
   not instead of a new bundle version.
 - **应用** — a sidebar page for FlashHub apps: a cover-card grid
   (name, version · domain, description; search and domain filters; category chips
@@ -25,7 +25,7 @@ Sidebar order: **应用 → 模型 → 状态 → 日志 → 设置**.
   organization/downloads/status, description, supported OS/arch, every platform
   install command, dependency bundles and serve options, local state/models,
   connection URL — and install/start/stop/uninstall through
-  `/v1/apps`. 安装 first shows the manifest install step: a script runs, or an
+  `/api/v1/apps`. 安装 first shows the manifest install step: a script runs, or an
   installer URL is downloaded and run, on the client OS (a Windows app installs
   on Windows, not in WSL) — only after 运行脚本并安装 / 下载并安装; 跳过 installs the
   models without it, and a plain page URL opens in the browser. Install only
@@ -46,7 +46,7 @@ Sidebar order: **应用 → 模型 → 状态 → 日志 → 设置**.
   One application installs at a time: while a job runs, its card shows
   `安装中 · 阶段 xx%` with a bar, a banner appears above the grid, and the other
   apps' actions are disabled.
-  Everything is served by `flashserver` (`/v1/apps`). The application list and
+  Everything is served by `flashserver` (`/api/v1/apps`). The application list and
   manifests are fetched from FlashHub on every request (no local manifest
   cache); the desktop keeps the current list/detail in memory, so use 刷新 or
   reselect after a manifest change. App versions are immutable: publish a new
@@ -61,7 +61,7 @@ Sidebar order: **应用 → 模型 → 状态 → 日志 → 设置**.
   (app install/start/stop, model load/pull/smoke), setup-script output and
   clean/uninstall, and is persisted to `~/.flashcli/logs/flashserver.log`
   (4 MiB rotation with a `.1` backup), so it survives a daemon restart. The
-  page loads once and then appends new lines over `/v1/ws`; successful status
+  page loads once and then appends new lines over `/api/v1/ws`; successful status
   and log polling requests are not written to the log. The app detail also
   keeps the last start log with its own 查看完整日志 entry.
 - **Settings** — service start/stop, auto-start, domestic mirrors, shared-cache
@@ -76,7 +76,7 @@ confirmation; long operations show a progress overlay and a result toast.
 serve process and is enabled only when the model is ready; **Stop** ends it.
 
 - Downloads are serialized: while a job runs, load/download/start actions are
-  disabled and a concurrent `POST /v1/pull` returns HTTP 409.
+  disabled and a concurrent `POST /api/v1/pull` returns HTTP 409.
 - Progress (bundle sync, runtime, weights, serve/health) shows the bundle ref,
   phase, byte counts, and percentage; failed checksum downloads retry.
 - Model size = Bundle + that model's runtime + weights. Weights are shared by

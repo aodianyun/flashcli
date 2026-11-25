@@ -82,7 +82,7 @@ checks `/health`.
 - `token` is optional. When set, every path except `/health`, `/`, `/docs`,
   `/ui/*`, and `/openapi.yaml` requires `Authorization: Bearer <token>` or
   `X-Flashcli-Token`.
-- Mirrors: `POST /v1/mirror {"enabled":true}` (or the desktop toggle) writes
+- Mirrors: `POST /api/v1/mirror {"enabled":true}` (or the desktop toggle) writes
   `~/.flashcli/mirror.env` (Aliyun pip, hf-mirror, gh-proxy, Gitee, SJTU torch)
   and applies to new downloads without restarting the service.
 
@@ -104,7 +104,7 @@ flashserver-setup.exe --start-service       # enable auto-start and start
 ```
 
 Service state and auto-start are independent: stopping never disables auto-start,
-and toggling auto-start never starts or stops the service. `/v1/system` reports
+and toggling auto-start never starts or stops the service. `/api/v1/system` reports
 the current auto-start state (`enabled`, `disabled`, `unknown`).
 
 ### Restart behavior

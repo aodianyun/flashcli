@@ -14,13 +14,13 @@ func TestServerLogPersistsAcrossRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "flashserver.log")
 	InitLogFile(path)
 	defer InitLogFile("")
-	fmt.Fprintln(LogSink(), "api POST /v1/apps/xym/demo/start -> 202 (1ms, 10B)")
+	fmt.Fprintln(LogSink(), "api POST /api/v1/apps/xym/demo/start -> 202 (1ms, 10B)")
 	fmt.Fprintln(LogSink(), "setup workbuddy: done")
 
 	// Simulate the next daemon process: re-init from the same file.
 	InitLogFile(path)
 	text := strings.Join(serverLogLines(20), "\n")
-	if !strings.Contains(text, "POST /v1/apps/xym/demo/start") {
+	if !strings.Contains(text, "POST /api/v1/apps/xym/demo/start") {
 		t.Fatalf("api line lost: %q", text)
 	}
 	if !strings.Contains(text, "setup workbuddy: done") {
@@ -32,14 +32,14 @@ func TestRequestLogRedactsSecrets(t *testing.T) {
 	InitLogFile("")
 	defer InitLogFile("")
 	s := &Server{Source: fakeSource{}}
-	req := httptest.NewRequest(http.MethodPost, "/v1/models/load",
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/models/load",
 		strings.NewReader(`{"ref":"demo:1","api_key":"super-secret"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
 
 	text := strings.Join(serverLogLines(20), "\n")
-	if !strings.Contains(text, "api POST /v1/models/load") {
+	if !strings.Contains(text, "api POST /api/v1/models/load") {
 		t.Fatalf("request not logged: %q", text)
 	}
 	if strings.Contains(text, "super-secret") {
@@ -50,11 +50,11 @@ func TestRequestLogRedactsSecrets(t *testing.T) {
 	}
 
 	// Status/log polling must not fill the service log.
-	req = httptest.NewRequest(http.MethodGet, "/v1/version", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/version", nil)
 	rec = httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
 	text = strings.Join(serverLogLines(20), "\n")
-	if strings.Contains(text, "GET /v1/version") {
+	if strings.Contains(text, "GET /api/v1/version") {
 		t.Fatalf("successful poll was logged: %q", text)
 	}
 }

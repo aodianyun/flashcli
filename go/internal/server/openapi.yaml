@@ -3,10 +3,12 @@ info:
   title: FlashServer local API
   version: 1.0.11.20261124
   description: |
-    Local, single-user model scheduler API served by `flashserver` on
-    `http://localhost:8790`. The daemon manages model lifecycle and GPU-aware
-    admission; inference runs in `flashcli serve` child processes and is served
-    from each model's own `endpoint`.
+    Local, single-user model scheduler served by `flashserver` on
+    `http://localhost:8790`. Two namespaces share the port: `/v1/*` is the
+    OpenAI-compatible inference gateway and `/api/v1/*` is the management API.
+    Applications and the desktop use `/v1/*` for inference only; they never
+    start, stop, load, unload, or receive child serve endpoints. Preload and
+    unload are disk operations; resident start/stop is scheduler-owned.
 
     Authentication is disabled by default. When the configuration contains a
     `token`, every endpoint except `/health`, `/`, `/ui/*`, `/openapi.yaml`
@@ -32,7 +34,44 @@ paths:
                 properties:
                   status: { type: string, const: ok }
                   version: { type: string }
-  /v1/version:
+  /v1/models:
+    get:
+      summary: OpenAI model list (gateway)
+      description: |
+        Lists the bundle refs whose assets are locally available. Applications
+        send inference requests to `/v1/*` with a full bundle ref
+        (`flashcli-bundle/<name>:<version>`) in `model`; the scheduler prepares
+        and starts residents internally. Cache browsing stays on
+        `/api/v1/models`.
+      security:
+        - token: []
+        - {}
+      responses:
+        '200':
+          description: OpenAI list of locally available models
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [object, data]
+                properties:
+                  object: { type: string, const: list }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, object, created, owned_by]
+                      properties:
+                        id:
+                          type: string
+                          description: Full bundle ref.
+                        object: { type: string, const: model }
+                        created: { type: integer, format: int64 }
+                        owned_by: { type: string }
+                        capabilities:
+                          type: array
+                          items: { type: string }
+  /api/v1/version:
     get:
       summary: Daemon version
       responses:
@@ -44,7 +83,7 @@ paths:
                 type: object
                 properties:
                   version: { type: string }
-  /v1/system:
+  /api/v1/system:
     get:
       summary: System and GPU inventory
       responses:
@@ -53,7 +92,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SystemInfo' }
-  /v1/gpu:
+  /api/v1/gpu:
     get:
       summary: GPU devices and CUDA processes
       responses:
@@ -73,7 +112,7 @@ paths:
                     items: { $ref: '#/components/schemas/GpuProcess' }
         '503':
           $ref: '#/components/responses/Error'
-  /v1/gpu/history:
+  /api/v1/gpu/history:
     get:
       summary: Recent GPU telemetry samples
       parameters:
@@ -91,7 +130,7 @@ paths:
                   samples:
                     type: array
                     items: { $ref: '#/components/schemas/GpuSample' }
-  /v1/system/history:
+  /api/v1/system/history:
     get:
       summary: Recent GPU + CPU telemetry samples (alias of /v1/gpu/history)
       parameters:
@@ -109,7 +148,7 @@ paths:
                   samples:
                     type: array
                     items: { $ref: '#/components/schemas/GpuSample' }
-  /v1/resources:
+  /api/v1/resources:
     get:
       summary: Admission view used by the scheduler
       responses:
@@ -118,7 +157,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Resources' }
-  /v1/models:
+  /api/v1/models:
     get:
       summary: Cached models and loaded instances
       responses:
@@ -135,7 +174,7 @@ paths:
                   loaded:
                     type: array
                     items: { $ref: '#/components/schemas/LoadedModel' }
-  /v1/models/loaded:
+  /api/v1/models/loaded:
     get:
       summary: Loaded model instances
       responses:
@@ -149,7 +188,7 @@ paths:
                   models:
                     type: array
                     items: { $ref: '#/components/schemas/LoadedModel' }
-  /v1/catalog:
+  /api/v1/catalog:
     get:
       summary: Search the public FlashHub catalog
       parameters:
@@ -186,7 +225,7 @@ paths:
                   page_size: { type: integer }
         '502':
           $ref: '#/components/responses/Error'
-  /v1/catalog/tags:
+  /api/v1/catalog/tags:
     get:
       summary: FlashHub repository categories
       responses:
@@ -205,7 +244,7 @@ paths:
                         id: { type: integer }
                         name: { type: string }
                         name_cn: { type: string }
-  /v1/catalog/{id}:
+  /api/v1/catalog/{id}:
     get:
       summary: One FlashHub repository with its versions
       parameters:
@@ -230,7 +269,7 @@ paths:
           $ref: '#/components/responses/Error'
         '502':
           $ref: '#/components/responses/Error'
-  /v1/apps:
+  /api/v1/apps:
     get:
       summary: List FlashHub applications with local state
       description: Proxies FlashHub `/api/v1/apps` (5 min cache) and overlays installed state from the shared app registry.
@@ -253,7 +292,7 @@ paths:
                   total: { type: integer }
         '502':
           $ref: '#/components/responses/Error'
-  /v1/apps/installed:
+  /api/v1/apps/installed:
     get:
       summary: Installed applications (shared registry)
       responses:
@@ -264,7 +303,7 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
-  /v1/apps/{org}/{name}:
+  /api/v1/apps/{org}/{name}:
     parameters:
       - { name: org, in: path, required: true, schema: { type: string } }
       - { name: name, in: path, required: true, schema: { type: string } }
@@ -294,7 +333,7 @@ paths:
           description: Uninstalled
         '404':
           $ref: '#/components/responses/Error'
-  /v1/apps/{org}/{name}/status:
+  /api/v1/apps/{org}/{name}/status:
     parameters:
       - { name: org, in: path, required: true, schema: { type: string } }
       - { name: name, in: path, required: true, schema: { type: string } }
@@ -309,7 +348,7 @@ paths:
               schema: { $ref: '#/components/schemas/AppState' }
         '404':
           $ref: '#/components/responses/Error'
-  /v1/apps/{org}/{name}/install:
+  /api/v1/apps/{org}/{name}/install:
     parameters:
       - { name: org, in: path, required: true, schema: { type: string } }
       - { name: name, in: path, required: true, schema: { type: string } }
@@ -352,7 +391,7 @@ paths:
               schema: { $ref: '#/components/schemas/JobAccepted' }
         '400':
           $ref: '#/components/responses/Error'
-  /v1/apps/{org}/{name}/prepare:
+  /api/v1/apps/{org}/{name}/prepare:
     parameters:
       - { name: org, in: path, required: true, schema: { type: string } }
       - { name: name, in: path, required: true, schema: { type: string } }
@@ -375,7 +414,7 @@ paths:
               schema: { $ref: '#/components/schemas/JobAccepted' }
         '400':
           $ref: '#/components/responses/Error'
-  /v1/apps/{org}/{name}/start:
+  /api/v1/apps/{org}/{name}/start:
     parameters:
       - { name: org, in: path, required: true, schema: { type: string } }
       - { name: name, in: path, required: true, schema: { type: string } }
@@ -413,7 +452,7 @@ paths:
           $ref: '#/components/responses/Error'
         '409':
           $ref: '#/components/responses/Error'
-  /v1/apps/{org}/{name}/stop:
+  /api/v1/apps/{org}/{name}/stop:
     parameters:
       - { name: org, in: path, required: true, schema: { type: string } }
       - { name: name, in: path, required: true, schema: { type: string } }
@@ -437,7 +476,7 @@ paths:
               schema: { $ref: '#/components/schemas/JobAccepted' }
         '404':
           $ref: '#/components/responses/Error'
-  /v1/storage:
+  /api/v1/storage:
     get:
       summary: Disk usage (unique allocated bytes)
       description: "Areas: `bundles`, `models`, `runtimes`, and `cache` (download cache + base Python + uv tools grouped together)."
@@ -452,7 +491,7 @@ paths:
                   areas:
                     type: array
                     items: { $ref: '#/components/schemas/StorageArea' }
-  /v1/mirror:
+  /api/v1/mirror:
     get:
       summary: Domestic mirror settings
       responses:
@@ -481,7 +520,7 @@ paths:
               schema: { $ref: '#/components/schemas/MirrorState' }
         '500':
           $ref: '#/components/responses/Error'
-  /v1/storage/clean:
+  /api/v1/storage/clean:
     post:
       summary: Remove the shared cache
       description: "`cache` removes the download cache, base Python, and uv tools. Model bundles/weights/runtimes are removed per ref via /v1/models/clean. Legacy `python`/`tools` targets are accepted for older clients."
@@ -520,7 +559,7 @@ paths:
                 type: object
                 properties:
                   error: { type: string }
-  /v1/pull:
+  /api/v1/pull:
     post:
       summary: Download a bundle/weights asynchronously
       requestBody:
@@ -547,7 +586,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-  /v1/jobs/{id}:
+  /api/v1/jobs/{id}:
     get:
       summary: Job state and events
       parameters:
@@ -563,7 +602,7 @@ paths:
               schema: { $ref: '#/components/schemas/Job' }
         '404':
           $ref: '#/components/responses/Error'
-  /v1/jobs/{id}/events:
+  /api/v1/jobs/{id}/events:
     get:
       summary: Job progress as Server-Sent Events
       parameters:
@@ -579,7 +618,7 @@ paths:
               schema: { type: string }
         '404':
           $ref: '#/components/responses/Error'
-  /v1/jobs/{id}/cancel:
+  /api/v1/jobs/{id}/cancel:
     post:
       summary: Cancel a running job
       parameters:
@@ -601,7 +640,7 @@ paths:
           $ref: '#/components/responses/Error'
         '409':
           $ref: '#/components/responses/Error'
-  /v1/models/load:
+  /api/v1/models/load:
     post:
       summary: Load a model
       description: |
@@ -636,7 +675,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-  /v1/models/options:
+  /api/v1/models/options:
     get:
       summary: Read manifest serve options and saved values
       description: |
@@ -690,7 +729,7 @@ paths:
                   ref: { type: string }
                   state: { type: string, const: defaults }
         '400': { $ref: '#/components/responses/Error' }
-  /v1/models/unload:
+  /api/v1/models/unload:
     post:
       summary: Unload a model
       requestBody:
@@ -714,7 +753,7 @@ paths:
                   state: { type: string, const: unloaded }
         '400':
           $ref: '#/components/responses/Error'
-  /v1/models/clean:
+  /api/v1/models/clean:
     post:
       summary: Remove local bundle/weights/runtime cache for models
       description: "Loaded or in-flight models are skipped. Shared weights/runtime stay while another cached ref still references them (remaining bundle markers are the reference count)."
@@ -742,7 +781,7 @@ paths:
                   results:
                     type: array
                     items: { $ref: '#/components/schemas/CleanResult' }
-  /v1/models/smoke:
+  /api/v1/models/smoke:
     post:
       summary: Start a smoke test job for a ready model
       description: "Run-only bundles execute `flashcli run <ref>`; started serve bundles receive one capability-appropriate ping request (chat, completions, responses, Anthropic messages, embeddings, or moderations) and modality-only models without one of those capabilities report an explicit error. Progress/output is streamed as a `smoke` job over /v1/ws and appended to <ref>.smoke.log."
@@ -774,7 +813,7 @@ paths:
           $ref: '#/components/responses/Error'
         '409':
           $ref: '#/components/responses/Error'
-  /v1/logs:
+  /api/v1/logs:
     get:
       summary: Tail daemon or per-model logs
       parameters:
@@ -809,7 +848,7 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
-  /v1/logs/download:
+  /api/v1/logs/download:
     get:
       summary: Download the full daemon or per-model log
       parameters:
@@ -830,7 +869,7 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
-  /v1/ui/chat:
+  /api/v1/ui/chat:
     post:
       summary: Console helper that forwards one chat completion
       description: |
@@ -852,7 +891,7 @@ paths:
           description: Streaming or non-streaming completion passthrough
         '404':
           $ref: '#/components/responses/Error'
-  /v1/ws:
+  /api/v1/ws:
     get:
       summary: Live WebSocket stream (system snapshots + job progress)
       description: |

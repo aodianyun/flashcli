@@ -93,48 +93,59 @@ func New(addr string) *Server {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	// Unauthenticated service endpoints.
 	mux.HandleFunc("GET /health", s.health)
-	mux.HandleFunc("GET /v1/system", s.system)
-	mux.HandleFunc("GET /v1/logs", s.logs)
-	mux.HandleFunc("GET /v1/logs/download", s.downloadLogs)
-	mux.HandleFunc("GET /openapi.yaml", s.openapi)
 	mux.HandleFunc("GET /docs", s.apiDocs)
-	mux.HandleFunc("GET /v1/version", s.version)
-	mux.HandleFunc("GET /v1/models", s.models)
-	mux.HandleFunc("GET /v1/models/loaded", s.loadedModels)
-	mux.HandleFunc("GET /v1/catalog", s.catalogRepos)
-	mux.HandleFunc("GET /v1/catalog/tags", s.catalogTags)
-	mux.HandleFunc("GET /v1/catalog/{id}", s.catalogRepo)
-	mux.HandleFunc("GET /v1/storage", s.storage)
-	mux.HandleFunc("GET /v1/mirror", s.mirrorStatus)
-	mux.HandleFunc("POST /v1/mirror", s.setMirror)
-	mux.HandleFunc("GET /v1/resources", s.resources)
-	mux.HandleFunc("GET /v1/gpu", s.gpuStatus)
-	mux.HandleFunc("GET /v1/gpu/history", s.gpuHistory)
-	mux.HandleFunc("GET /v1/system/history", s.gpuHistory)
-	mux.HandleFunc("GET /v1/ws", s.ws)
-	mux.HandleFunc("POST /v1/pull", s.pull)
-	mux.HandleFunc("GET /v1/jobs/{id}", s.job)
-	mux.HandleFunc("GET /v1/jobs/{id}/events", s.jobEvents)
-	mux.HandleFunc("POST /v1/jobs/{id}/cancel", s.cancelJob)
-	mux.HandleFunc("POST /v1/models/load", s.loadModel)
-	mux.HandleFunc("POST /v1/models/unload", s.unloadModel)
-	mux.HandleFunc("GET /v1/models/options", s.getModelOptions)
-	mux.HandleFunc("PUT /v1/models/options", s.putModelOptions)
-	mux.HandleFunc("DELETE /v1/models/options", s.deleteModelOptions)
-	mux.HandleFunc("POST /v1/models/smoke", s.smokeModel)
-	mux.HandleFunc("POST /v1/models/clean", s.cleanModels)
-	mux.HandleFunc("POST /v1/storage/clean", s.cleanStorage)
-	mux.HandleFunc("GET /v1/apps", s.appList)
-	mux.HandleFunc("GET /v1/apps/installed", s.appInstalled)
-	mux.HandleFunc("GET /v1/apps/{org}/{name}", s.appManifest)
-	mux.HandleFunc("GET /v1/apps/{org}/{name}/status", s.appStatus)
-	mux.HandleFunc("POST /v1/apps/{org}/{name}/install", s.appInstall)
-	mux.HandleFunc("POST /v1/apps/{org}/{name}/prepare", s.appPrepare)
-	mux.HandleFunc("POST /v1/apps/{org}/{name}/start", s.appStart)
-	mux.HandleFunc("POST /v1/apps/{org}/{name}/stop", s.appStop)
-	mux.HandleFunc("DELETE /v1/apps/{org}/{name}", s.appUninstall)
-	mux.HandleFunc("POST /v1/ui/chat", s.uiChat)
+	mux.HandleFunc("GET /openapi.yaml", s.openapi)
+
+	// Data plane: OpenAI-compatible gateway. Applications and the desktop use
+	// only these routes for inference; they never see child serve endpoints.
+	mux.HandleFunc("GET /v1/models", s.gatewayModels)
+
+	// Control plane: management API. Resident start/stop stays internal; these
+	// routes configure disk state, applications, telemetry, and jobs.
+	mux.HandleFunc("GET /api/v1/version", s.version)
+	mux.HandleFunc("GET /api/v1/system", s.system)
+	mux.HandleFunc("GET /api/v1/logs", s.logs)
+	mux.HandleFunc("GET /api/v1/logs/download", s.downloadLogs)
+	mux.HandleFunc("GET /api/v1/models", s.models)
+	mux.HandleFunc("GET /api/v1/models/loaded", s.loadedModels)
+	mux.HandleFunc("GET /api/v1/catalog", s.catalogRepos)
+	mux.HandleFunc("GET /api/v1/catalog/tags", s.catalogTags)
+	mux.HandleFunc("GET /api/v1/catalog/{id}", s.catalogRepo)
+	mux.HandleFunc("GET /api/v1/storage", s.storage)
+	mux.HandleFunc("GET /api/v1/mirror", s.mirrorStatus)
+	mux.HandleFunc("POST /api/v1/mirror", s.setMirror)
+	mux.HandleFunc("GET /api/v1/resources", s.resources)
+	mux.HandleFunc("GET /api/v1/gpu", s.gpuStatus)
+	mux.HandleFunc("GET /api/v1/gpu/history", s.gpuHistory)
+	mux.HandleFunc("GET /api/v1/system/history", s.gpuHistory)
+	mux.HandleFunc("GET /api/v1/ws", s.ws)
+	mux.HandleFunc("POST /api/v1/pull", s.pull)
+	mux.HandleFunc("GET /api/v1/jobs/{id}", s.job)
+	mux.HandleFunc("GET /api/v1/jobs/{id}/events", s.jobEvents)
+	mux.HandleFunc("POST /api/v1/jobs/{id}/cancel", s.cancelJob)
+	mux.HandleFunc("POST /api/v1/models/load", s.loadModel)
+	mux.HandleFunc("POST /api/v1/models/unload", s.unloadModel)
+	mux.HandleFunc("GET /api/v1/models/options", s.getModelOptions)
+	mux.HandleFunc("PUT /api/v1/models/options", s.putModelOptions)
+	mux.HandleFunc("DELETE /api/v1/models/options", s.deleteModelOptions)
+	mux.HandleFunc("POST /api/v1/models/smoke", s.smokeModel)
+	mux.HandleFunc("POST /api/v1/models/clean", s.cleanModels)
+	mux.HandleFunc("POST /api/v1/storage/clean", s.cleanStorage)
+	mux.HandleFunc("GET /api/v1/apps", s.appList)
+	mux.HandleFunc("GET /api/v1/apps/installed", s.appInstalled)
+	mux.HandleFunc("GET /api/v1/apps/{org}/{name}", s.appManifest)
+	mux.HandleFunc("GET /api/v1/apps/{org}/{name}/status", s.appStatus)
+	mux.HandleFunc("POST /api/v1/apps/{org}/{name}/install", s.appInstall)
+	mux.HandleFunc("POST /api/v1/apps/{org}/{name}/prepare", s.appPrepare)
+	mux.HandleFunc("POST /api/v1/apps/{org}/{name}/start", s.appStart)
+	mux.HandleFunc("POST /api/v1/apps/{org}/{name}/stop", s.appStop)
+	mux.HandleFunc("DELETE /api/v1/apps/{org}/{name}", s.appUninstall)
+	mux.HandleFunc("POST /api/v1/ui/chat", s.uiChat)
+
+	// Local console assets.
+	mux.HandleFunc("GET /ui/", s.ui)
 	mux.HandleFunc("GET /", s.ui)
 	return s.logRequests(s.authorize(mux))
 }
@@ -154,7 +165,7 @@ func (s *Server) authorize(next http.Handler) http.Handler {
 			return
 		}
 		// Browser WebSocket clients cannot set headers; allow a query token.
-		if r.URL.Path == "/v1/ws" && r.URL.Query().Get("token") == s.Token {
+		if r.URL.Path == "/api/v1/ws" && r.URL.Query().Get("token") == s.Token {
 			next.ServeHTTP(w, r)
 			return
 		}

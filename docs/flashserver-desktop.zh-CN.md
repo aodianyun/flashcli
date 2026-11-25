@@ -3,7 +3,7 @@
 <p align="right"><a href="flashserver-desktop.md">English</a> · <strong>简体中文</strong></p>
 
 Windows 安装包内置 `flashcli-desktop.exe`（Rust + egui/eframe，不用 WebView，无控制台窗口）。
-实时状态走 `/v1/ws`，命令走 HTTP。安装与自行构建见
+实时状态走 `/api/v1/ws`，命令走 HTTP。安装与自行构建见
 [../desktop/README.md](../desktop/README.md)。
 
 ## 功能
@@ -14,14 +14,14 @@ Windows 安装包内置 `flashcli-desktop.exe`（Rust + egui/eframe，不用 Web
 - **模型** —— 本地缓存 + FlashHub 搜索；分开展示 Bundle / 运行时 / 权重大小；
   加载、启动、停止；run/serve 冒烟测试带实时日志；多选清理。已缓存且未运行的模型
   还提供 **更多 → 重新同步**，强制重新下载 bundle 树/权重
-  （`/v1/pull {"force":true}`）；仅作为可变 revision 的修复手段，正常更新应发布新的
+  （`/api/v1/pull {"force":true}`）；仅作为可变 revision 的修复手段，正常更新应发布新的
   bundle 版本。
 - **应用** —— 左侧独立菜单页：封面卡片网格（上方封面按原图比例完整显示，下方名称、
   版本 · domain、简介；搜索与 domain 过滤各占一行；分类顺序固定为
   全部、通用Agent、专用Agent、音视频制作，其余 domain 按字母序追加）+ 详情区展示能拿到的信息
   （组织/下载量/状态、简介、supported OS/arch、各平台安装命令、依赖模型与
   serve options、本地状态与模型、接入地址），并支持安装/启动/停止/卸载；数据全部来自
-  `flashserver` 的 `/v1/apps`。应用列表和 manifest 每次请求都从 FlashHub 实时获取
+  `flashserver` 的 `/api/v1/apps`。应用列表和 manifest 每次请求都从 FlashHub 实时获取
   （本地不缓存 manifest）；桌面端在内存中保留当前列表/详情，修改 manifest 后请点
   「刷新」或重新选择应用。应用版本不可变，应发布新版本而不是原地修改。点「安装」会先展示
   manifest 的安装步骤：脚本在
@@ -48,7 +48,7 @@ Windows 安装包内置 `flashcli-desktop.exe`（Rust + egui/eframe，不用 Web
   （模型页 → 更多 → 查看日志）。服务日志包含 API 调用（方法/路径/状态/耗时，敏感字段
   脱敏）、后台任务步骤（应用安装/启动/停止、模型加载/pull/冒烟）、setup 脚本输出、
   清理/卸载，并持久化到 `~/.flashcli/logs/flashserver.log`（4 MiB 轮转，保留 `.1`），
-  重启后仍可查看。页面首次加载后通过 `/v1/ws` 实时追加新日志；成功的状态/日志轮询请求
+  重启后仍可查看。页面首次加载后通过 `/api/v1/ws` 实时追加新日志；成功的状态/日志轮询请求
   不会写入日志。应用详情另有最近启动日志与「查看完整日志」。
 - **设置** —— 服务启停、开机启动、国内镜像、共享缓存清理、WSL 资源与防火墙端口、
   主题（`Ctrl+T`）、API 文档。
@@ -61,7 +61,7 @@ Windows 安装包内置 `flashcli-desktop.exe`（Rust + egui/eframe，不用 Web
 **加载**准备 Bundle、Python 运行时/venv 和权重；**启动**运行 serve 进程（只有就绪后
 可用）；**停止**结束该进程。
 
-- 下载串行执行：有任务进行中时禁用加载/下载/启动，重复 `POST /v1/pull` 返回 HTTP 409。
+- 下载串行执行：有任务进行中时禁用加载/下载/启动，重复 `POST /api/v1/pull` 返回 HTTP 409。
 - 进度（Bundle 同步、运行时、权重、serve/健康检查）显示 bundle ref、阶段、字节数和
   百分比；校验失败的下载会自动重试。
 - 模型大小 = Bundle + 该模型运行时 + 权重。权重按 `source/repo@revision` 跨版本共享

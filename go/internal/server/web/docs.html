@@ -65,6 +65,7 @@
     <table class="params">
       <tr><th>项目</th><th>值</th><th>说明</th></tr>
       <tr><td>Base URL</td><td><code>http://localhost:8790</code></td><td>默认仅监听本机回环地址。</td></tr>
+      <tr><td>命名空间</td><td><code>/v1/*</code> · <code>/api/v1/*</code></td><td><code>/v1</code> 是 OpenAI 推理网关；<code>/api/v1</code> 是管理面。应用不能启停/加载/卸载模型。</td></tr>
       <tr><td>Content-Type</td><td><code>application/json</code></td><td>所有 POST 请求体为 JSON。</td></tr>
       <tr><td>鉴权</td><td>默认关闭</td><td>开启后需要 <code>X-Flashcli-Token: &lt;token&gt;</code> 或 <code>Authorization: Bearer &lt;token&gt;</code>；<code>/health</code>、<code>/docs</code>、<code>/openapi.yaml</code>、<code>/</code> 不需要。</td></tr>
       <tr><td>错误格式</td><td><code>{"error":"..."}</code></td><td>HTTP 4xx/5xx 时返回。</td></tr>
@@ -86,7 +87,7 @@ Content-Type: application/json
     </div>
 
     <div class="api">
-      <h2><span class="method get">GET</span><span class="path">/v1/system</span></h2>
+      <h2><span class="method get">GET</span><span class="path">/api/v1/system</span></h2>
       <p class="desc">服务、GPU/CPU、CUDA/SM/torch、已加载模型等实时快照。</p>
       <h3>响应示例</h3>
       <pre>{
@@ -116,7 +117,7 @@ Content-Type: application/json
     </div>
 
     <div class="api">
-      <h2><span class="method get">GET</span><span class="path">/v1/models</span></h2>
+      <h2><span class="method get">GET</span><span class="path">/api/v1/models</span></h2>
       <p class="desc">本地缓存的模型与 bundle/权重就绪状态。<code>serve</code> 表示 bundle 是否声明了 serve 入口。</p>
       <h3>响应示例</h3>
       <pre>{
@@ -137,7 +138,7 @@ Content-Type: application/json
     </div>
 
     <div class="api">
-      <h2><span class="method get">GET</span><span class="path">/v1/storage</span></h2>
+      <h2><span class="method get">GET</span><span class="path">/api/v1/storage</span></h2>
       <p class="desc">各缓存目录占用（唯一分配字节，硬链接只计一次）。</p>
       <pre>{
   "areas": [
@@ -150,7 +151,7 @@ Content-Type: application/json
     </div>
 
     <div class="api">
-      <h2><span class="method post">POST</span><span class="path">/v1/storage/clean</span></h2>
+      <h2><span class="method post">POST</span><span class="path">/api/v1/storage/clean</span></h2>
       <p class="desc">删除共享缓存：下载缓存、Python 运行时、工具、模型运行时。模型 Bundle/权重不受影响。</p>
       <h3>请求参数</h3>
       <table class="params">
@@ -169,7 +170,7 @@ Content-Type: application/json
     <h2>加载与任务</h2>
 
     <div class="api">
-      <h2><span class="method post">POST</span><span class="path">/v1/models/load</span></h2>
+      <h2><span class="method post">POST</span><span class="path">/api/v1/models/load</span></h2>
       <p class="desc">加载模型并启动推理服务。FlashHub 引用在首次加载时自动拉取 bundle/权重。</p>
       <h3>请求参数</h3>
       <table class="params">
@@ -178,7 +179,7 @@ Content-Type: application/json
         <tr><td><code>async</code></td><td>bool</td><td>默认 <code>true</code>，返回 <code>job_id</code>。</td></tr>
       </table>
       <h3>请求示例</h3>
-      <pre>curl -X POST http://localhost:8790/v1/models/load \
+      <pre>curl -X POST http://localhost:8790/api/v1/models/load \
   -H 'Content-Type: application/json' \
   -d '{"ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.6","async":true}'</pre>
       <h3>响应示例（202）</h3>
@@ -186,7 +187,7 @@ Content-Type: application/json
     </div>
 
     <div class="api">
-      <h2><span class="method get">GET</span><span class="path">/v1/jobs/{id}</span></h2>
+      <h2><span class="method get">GET</span><span class="path">/api/v1/jobs/{id}</span></h2>
       <p class="desc">查询任务状态和事件历史。<code>events[].phase</code> 常见值：<code>resolve</code>、<code>runtime</code>、<code>weights</code>、<code>progress</code>、<code>done</code>、<code>failed</code>。</p>
       <pre>{
   "id": "load-1", "type": "load",
@@ -201,7 +202,7 @@ Content-Type: application/json
     </div>
 
     <div class="api">
-      <h2><span class="method get">GET</span><span class="path">/v1/jobs/{id}/events</span></h2>
+      <h2><span class="method get">GET</span><span class="path">/api/v1/jobs/{id}/events</span></h2>
       <p class="desc">任务进度 SSE 流；事件结束时连接关闭。</p>
       <pre>event: progress
 data: {"time":"2026-11-10T02:31:10Z","phase":"weights","message":"downloading 42%"}
@@ -214,14 +215,14 @@ data: {"time":"2026-11-10T02:31:26Z","phase":"done"}</pre>
     </div>
 
     <div class="api">
-      <h2><span class="method post">POST</span><span class="path">/v1/models/unload</span></h2>
+      <h2><span class="method post">POST</span><span class="path">/api/v1/models/unload</span></h2>
       <p class="desc">停止推理服务并释放进程；权重缓存保留。</p>
       <pre>{"ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.6"}</pre>
       <pre>{"ok":true}</pre>
     </div>
 
     <div class="api">
-      <h2><span class="method post">POST</span><span class="path">/v1/models/clean</span></h2>
+      <h2><span class="method post">POST</span><span class="path">/api/v1/models/clean</span></h2>
       <p class="desc">删除本地 Bundle、权重和缓存记录。已加载或正在加载的模型会跳过；与其他模型共享的权重会保留。</p>
       <h3>请求示例</h3>
       <pre>{"refs":["flashcli-bundle/qwen3_8b_nvfp4:1.0.6","flashserver-smoke"]}</pre>
@@ -236,7 +237,7 @@ data: {"time":"2026-11-10T02:31:26Z","phase":"done"}</pre>
     </div>
 
     <div class="api">
-      <h2><span class="method post">POST</span><span class="path">/v1/pull</span></h2>
+      <h2><span class="method post">POST</span><span class="path">/api/v1/pull</span></h2>
       <p class="desc">异步下载 bundle、运行时和权重，不启动推理服务。</p>
       <pre>{"ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.6"}</pre>
       <pre>{"job_id":"pull-1","state":"running"}</pre>
@@ -247,13 +248,13 @@ data: {"time":"2026-11-10T02:31:26Z","phase":"done"}</pre>
     <h2>FlashHub 目录</h2>
 
     <div class="api">
-      <h2><span class="method get">GET</span><span class="path">/v1/catalog</span></h2>
+      <h2><span class="method get">GET</span><span class="path">/api/v1/catalog</span></h2>
       <p class="desc">代理公共 FlashHub 仓库搜索。</p>
       <h3>查询参数</h3>
       <table class="params">
         <tr><th>参数</th><th>类型</th><th>说明</th></tr>
         <tr><td><code>q</code></td><td>string</td><td>按仓库名搜索，如 <code>pi05</code>。</td></tr>
-        <tr><td><code>tag</code></td><td>int</td><td>分类 id，来自 <code>/v1/catalog/tags</code>。</td></tr>
+        <tr><td><code>tag</code></td><td>int</td><td>分类 id，来自 <code>/api/v1/catalog/tags</code>。</td></tr>
         <tr><td><code>sort</code></td><td>string</td><td><code>updated</code>（默认）或 <code>downloads</code>。</td></tr>
         <tr><td><code>page</code></td><td>int</td><td>从 1 开始。</td></tr>
         <tr><td><code>page_size</code></td><td>int</td><td>默认 20，最大 100。</td></tr>
@@ -274,13 +275,13 @@ data: {"time":"2026-11-10T02:31:26Z","phase":"done"}</pre>
     </div>
 
     <div class="api">
-      <h2><span class="method get">GET</span><span class="path">/v1/catalog/tags</span></h2>
+      <h2><span class="method get">GET</span><span class="path">/api/v1/catalog/tags</span></h2>
       <p class="desc">仓库分类，用于筛选。</p>
       <pre>{"tags":[{"id":1,"name":"VLA","name_cn":"VLA"},{"id":2,"name":"LLM","name_cn":"LLM"}]}</pre>
     </div>
 
     <div class="api">
-      <h2><span class="method get">GET</span><span class="path">/v1/catalog/{id}</span></h2>
+      <h2><span class="method get">GET</span><span class="path">/api/v1/catalog/{id}</span></h2>
       <p class="desc">仓库详情和全部公开版本。加载某个版本用 <code>{namespace}/{name}:{version}</code>。</p>
       <pre>{
   "repo": {
@@ -302,7 +303,7 @@ data: {"time":"2026-11-10T02:31:26Z","phase":"done"}</pre>
     <h2>日志</h2>
 
     <div class="api">
-      <h2><span class="method get">GET</span><span class="path">/v1/logs</span></h2>
+      <h2><span class="method get">GET</span><span class="path">/api/v1/logs</span></h2>
       <p class="desc">读取服务或模型日志（服务日志来自 <code>journalctl -u flashserver</code>）。</p>
       <h3>查询参数</h3>
       <table class="params">
@@ -322,16 +323,16 @@ data: {"time":"2026-11-10T02:31:26Z","phase":"done"}</pre>
     </div>
 
     <div class="api">
-      <h2><span class="method get">GET</span><span class="path">/v1/logs/download</span></h2>
+      <h2><span class="method get">GET</span><span class="path">/api/v1/logs/download</span></h2>
       <p class="desc">完整日志附件（<code>text/plain</code>，<code>Content-Disposition: attachment</code>）。参数同上；<code>kind=model</code> 时需要 <code>ref</code>。</p>
-      <pre>curl -o flashserver.log 'http://localhost:8790/v1/logs/download?kind=server'</pre>
+      <pre>curl -o flashserver.log 'http://localhost:8790/api/v1/logs/download?kind=server'</pre>
     </div>
   </section>
 
   <section class="card" id="ws">
     <h2>WebSocket</h2>
     <div class="api">
-      <h2><span class="method ws">WS</span><span class="path">/v1/ws</span></h2>
+      <h2><span class="method ws">WS</span><span class="path">/api/v1/ws</span></h2>
       <p class="desc">1 Hz 系统快照 + 任务进度。客户端重连后会自动收到新的快照。</p>
       <h3>系统快照</h3>
       <pre>{"type":"system","data":{
@@ -350,18 +351,26 @@ data: {"time":"2026-11-10T02:31:26Z","phase":"done"}</pre>
   </section>
 
   <section class="card" id="infer">
-    <h2>推理</h2>
+    <h2>OpenAI 网关（推理）</h2>
     <div class="api">
-      <h2><span class="method post">POST</span><span class="path">{endpoint}/v1/chat/completions</span></h2>
-      <p class="desc">模型进程提供 OpenAI 兼容接口。endpoint 来自加载响应或 <code>/v1/models/loaded</code>，不要写死端口。</p>
-      <pre>curl http://127.0.0.1:49152/v1/chat/completions \
+      <h2><span class="method get">GET</span><span class="path">/v1/models</span></h2>
+      <p class="desc">OpenAI 模型列表，只返回本地已准备（preload 或 resident）的 bundle ref。完整缓存目录见 <code>/api/v1/models</code>。</p>
+      <pre>{"object":"list","data":[{
+  "id":"flashcli-bundle/qwen3_8b_nvfp4:1.0.6",
+  "object":"model","created":1763000000,"owned_by":"flashcli"
+}]}</pre>
+    </div>
+    <div class="api">
+      <h2><span class="method post">POST</span><span class="path">/v1/chat/completions</span></h2>
+      <p class="desc">应用只通过 <code>/v1</code> 推理。<code>model</code> 必须是完整 bundle ref；flashserver 自动准备磁盘资产、调度 resident 启停并代理请求。</p>
+      <pre>curl http://localhost:8790/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "qwen3",
+    "model": "flashcli-bundle/qwen3_8b_nvfp4:1.0.6",
     "messages": [{"role":"user","content":"Hello"}],
     "stream": true
   }'</pre>
-      <div class="note">推理 API 由 bundle 自己实现；能力（流式、工具调用、视觉输入等）取决于模型与 bundle。</div>
+      <div class="note">网关路由按 bundle 声明的能力开放；首个请求触发自动准备，未就绪时返回 <code>503</code> + <code>Retry-After</code>。应用不能启动/停止/加载/卸载模型，也看不到 child endpoint。</div>
     </div>
   </section>
 
@@ -370,23 +379,24 @@ data: {"time":"2026-11-10T02:31:26Z","phase":"done"}</pre>
     <table>
       <tr><th>方法</th><th>路径</th><th>说明</th></tr>
       <tr><td><span class="tag">GET</span></td><td><code>/health</code></td><td>存活检查</td></tr>
-      <tr><td><span class="tag">GET</span></td><td><code>/v1/system</code></td><td>系统、GPU/CPU/内存、CUDA/SM/torch、开机启动</td></tr>
-      <tr><td><span class="tag">GET</span></td><td><code>/v1/models</code></td><td>缓存模型、bundle/权重状态、serve 能力、已加载实例</td></tr>
-      <tr><td><span class="tag">GET</span></td><td><code>/v1/models/loaded</code></td><td>已加载实例</td></tr>
-      <tr><td><span class="tag">GET</span></td><td><code>/v1/storage</code></td><td>缓存目录占用</td></tr>
-      <tr><td><span class="tag">POST</span></td><td><code>/v1/storage/clean</code></td><td>清理共享缓存（运行时/Python/工具/下载）</td></tr>
-      <tr><td><span class="tag">POST</span></td><td><code>/v1/models/load</code></td><td>加载模型（异步任务）</td></tr>
-      <tr><td><span class="tag">POST</span></td><td><code>/v1/models/unload</code></td><td>卸载模型</td></tr>
-      <tr><td><span class="tag">POST</span></td><td><code>/v1/models/clean</code></td><td>清理本地模型缓存（多选）</td></tr>
-      <tr><td><span class="tag">POST</span></td><td><code>/v1/pull</code></td><td>下载 bundle/权重（异步任务）</td></tr>
-      <tr><td><span class="tag">GET</span></td><td><code>/v1/jobs/{id}</code></td><td>任务状态与事件</td></tr>
-      <tr><td><span class="tag">GET</span></td><td><code>/v1/jobs/{id}/events</code></td><td>任务进度 SSE</td></tr>
-      <tr><td><span class="tag">GET</span></td><td><code>/v1/catalog</code></td><td>FlashHub 仓库搜索</td></tr>
-      <tr><td><span class="tag">GET</span></td><td><code>/v1/catalog/tags</code></td><td>FlashHub 分类</td></tr>
-      <tr><td><span class="tag">GET</span></td><td><code>/v1/catalog/{id}</code></td><td>仓库详情 + 版本列表</td></tr>
-      <tr><td><span class="tag">GET</span></td><td><code>/v1/logs</code></td><td>服务/模型日志</td></tr>
-      <tr><td><span class="tag">GET</span></td><td><code>/v1/logs/download</code></td><td>完整日志附件</td></tr>
-      <tr><td><span class="tag">GET</span></td><td><code>/v1/ws</code></td><td>WebSocket：系统快照 + 任务进度</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/models</code></td><td>OpenAI 网关：已准备/已加载模型列表</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/api/v1/system</code></td><td>系统、GPU/CPU/内存、CUDA/SM/torch、开机启动</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/api/v1/models</code></td><td>管理面：缓存模型、bundle/权重状态、serve 能力、已加载实例</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/api/v1/models/loaded</code></td><td>已加载实例</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/api/v1/storage</code></td><td>缓存目录占用</td></tr>
+      <tr><td><span class="tag">POST</span></td><td><code>/api/v1/storage/clean</code></td><td>清理共享缓存（运行时/Python/工具/下载）</td></tr>
+      <tr><td><span class="tag">POST</span></td><td><code>/api/v1/models/load</code></td><td>加载模型（异步任务）</td></tr>
+      <tr><td><span class="tag">POST</span></td><td><code>/api/v1/models/unload</code></td><td>卸载模型</td></tr>
+      <tr><td><span class="tag">POST</span></td><td><code>/api/v1/models/clean</code></td><td>清理本地模型缓存（多选）</td></tr>
+      <tr><td><span class="tag">POST</span></td><td><code>/api/v1/pull</code></td><td>下载 bundle/权重（异步任务）</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/api/v1/jobs/{id}</code></td><td>任务状态与事件</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/api/v1/jobs/{id}/events</code></td><td>任务进度 SSE</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/api/v1/catalog</code></td><td>FlashHub 仓库搜索</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/api/v1/catalog/tags</code></td><td>FlashHub 分类</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/api/v1/catalog/{id}</code></td><td>仓库详情 + 版本列表</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/api/v1/logs</code></td><td>服务/模型日志</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/api/v1/logs/download</code></td><td>完整日志附件</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/api/v1/ws</code></td><td>WebSocket：系统快照 + 任务进度</td></tr>
       <tr><td><span class="tag">GET</span></td><td><code>/openapi.yaml</code></td><td>OpenAPI 3.1 契约</td></tr>
     </table>
   </section>

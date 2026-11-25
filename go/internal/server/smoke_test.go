@@ -26,7 +26,7 @@ func TestSmokeModelValidation(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, "/v1/models/smoke", strings.NewReader(tc.body))
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/models/smoke", strings.NewReader(tc.body))
 			s.Handler().ServeHTTP(rec, req)
 			if rec.Code != tc.code {
 				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())

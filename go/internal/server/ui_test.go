@@ -70,7 +70,7 @@ func TestGpuHistorySamples(t *testing.T) {
 	}}
 	s.sampleGPUHistory(context.Background())
 	s.sampleGPUHistory(context.Background())
-	req := httptest.NewRequest(http.MethodGet, "/v1/gpu/history?seconds=60", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/gpu/history?seconds=60", nil)
 	rec := httptest.NewRecorder()
 	s.gpuHistory(rec, req)
 	if rec.Code != http.StatusOK {

@@ -54,7 +54,7 @@ func TestCatalogEmptyResultIsAnArray(t *testing.T) {
 	s := &Server{Catalog: emptyCatalog{}}
 	h := s.Handler()
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/catalog?q=spark_x26_1p7b&tag=1", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/catalog?q=spark_x26_1p7b&tag=1", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
@@ -73,7 +73,7 @@ func TestCatalogEmptyResultIsAnArray(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/catalog/tags", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/catalog/tags", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("tags status = %d", rec.Code)
 	}
@@ -85,7 +85,7 @@ func TestCatalogEmptyResultIsAnArray(t *testing.T) {
 func TestCatalogEndpoints(t *testing.T) {
 	s := &Server{Catalog: fakeCatalog{}}
 	h := s.Handler()
-	for _, path := range []string{"/v1/catalog?q=pi05", "/v1/catalog/tags", "/v1/catalog/5"} {
+	for _, path := range []string{"/api/v1/catalog?q=pi05", "/api/v1/catalog/tags", "/api/v1/catalog/5"} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 		if rec.Code != http.StatusOK {
