@@ -29,6 +29,16 @@ flashcli **distributes and loads** Model Bundles; inference lives in bundle `ent
 
 **Maintainers:** build/release workflow → [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md) · [docs/runtime-matrix.md](docs/runtime-matrix.md). Full index: [docs/README.md](docs/README.md).
 
+## Workflow at a glance
+
+| Phase | Steps |
+|---|---|
+| **Develop** | Branch off `dev` → code → tier 1 (`go test ./...`, `pytest tests/`, `gofmt -l .`) → apply the change-impact checklist → PR into `dev`. |
+| **Integrate** | Review → tier 2 (`verify_e2e.sh`) → rebase/squash into `dev`; run tier 2h (`--heavy`) before `main` or a release candidate. |
+| **Release** | Bump versions on `dev` → sync `dev` → `main` (maintainer approval) → live index check → tier 3 gate (`--heavy --network`) → Windows installer → release notes → `release_go.sh --upload` → `verify_release.sh`. |
+
+Details: [Development setup](#development-setup) · [Git workflow](#git-workflow) · [Releases](#releases).
+
 ## Development setup
 
 ```bash
@@ -46,15 +56,16 @@ Run tests in tiers — do not run the heavy tier for every edit:
 | Tier | Command | When |
 |------|---------|------|
 | **1 — code** (default) | `cd go && go test ./...` · `pytest tests/` · `gofmt -l .` | Every change / PR |
-| **2 — acceptance** (local, offline) | `bash scripts/verify_e2e.sh --heavy` | Before merging to `main`, before a release candidate |
-| **3 — full release gate** (network) | `bash scripts/verify_e2e.sh --heavy --network` | Required before publishing; writes `dist/e2e-pass.json` |
+| **2 — acceptance** (offline) | `bash scripts/verify_e2e.sh` | Any change to the CLI, daemon API, scheduling, or cache behavior |
+| **2h — heavy acceptance** | `bash scripts/verify_e2e.sh --heavy` | Before merging to `main`, before a release candidate |
+| **3 — release gate** (network) | `bash scripts/verify_e2e.sh --heavy --network` | Required before publishing; writes `dist/e2e-pass.json` |
 
 Tier 1 is unit/integration with fixtures. Tier 2 runs the **real binaries**:
-`flashcli version/doctor/bundle validate/models show`, real `run` on v3 and v4
-Python bundles plus a native bundle, an offline FlashHub sync through a local
-HTTP index (both CDN layouts), and a real `flashserver` daemon exercising
-`load → endpoint → logs → unload` over HTTP. Tier 3 adds the live FlashHub
-manifest check (`FLASHCLI_ACCEPTANCE_NETWORK=1`).
+`flashcli version/doctor/bundle validate/models show`, an offline FlashHub sync
+through a local HTTP index (both CDN layouts), and a real `flashserver` daemon
+exercising `preload → request → logs → unload` over HTTP. `--heavy` adds real
+`run` on v3 and v4 Python bundles plus a native bundle (creates venvs). Tier 3
+adds the live FlashHub manifest check (`FLASHCLI_ACCEPTANCE_NETWORK=1`).
 
 #### Test binaries (development vs release)
 
@@ -84,6 +95,7 @@ pytest tests/                 # tier 1 (excludes tests/bench)
 pytest tests/bench/           # bench script helpers (scripts/bench_*.py)
 bash scripts/build_dev_bins.sh  # only the two test binaries
 bash scripts/verify_e2e.sh      # tier 2 (Linux/WSL; builds dev binaries)
+bash scripts/verify_e2e.sh --heavy  # tier 2h
 ```
 
 ### Binaries and the desktop client
@@ -237,31 +249,56 @@ change.
 ### Releases
 
 Releases are cut from **`main`** (stable) only. **Never publish an intermediate release
-from `dev`.** Validate host changes by building from `dev` locally — `bash install.sh
---from-source --branch dev`, or `bash scripts/build_go.sh` + install the binary. Note
-`install.sh --branch dev` **without** `--from-source` still installs the latest
-*published* release, so it does **not** exercise dev host code.
+from `dev`.** Validate host changes on `dev` with the test tiers above, or install the
+dev build with `bash install.sh --from-source --branch dev`. Note `install.sh
+--branch dev` **without** `--from-source` still installs the latest *published*
+release, so it does **not** exercise dev host code.
 
 Host releases are **incremental**: keep every published release and tag; remove only
 unpublished test/draft releases.
 
 **Host (Go) release checklist:**
 
-1. Bump **both** `[project].version` in `pyproject.toml` and `version` in `desktop/Cargo.toml` on `dev` (desktop uses the three-part prefix, e.g. `1.0.9`); commit (`chore(release): bump version to X`). Packaging fails if they diverge. The host version is `X.Y.Z.YYYYMMDD` (no dots in the date); the release tag is `v<version>` (e.g. `v1.0.9.20261120`).
-2. Sync `dev` → `main` (squash-and-record, above) so `main` carries the validated commit. Before tagging, also check the live FlashHub index layout (index JSON only, a few KiB): `FLASHCLI_FLASHHUB_LIVE=1 pytest tests/test_flashhub_index_contract.py`.
-3. On Windows from `main`, build the installer:
+1. **Bump versions on `dev`.** Update **both** `[project].version` in
+   `pyproject.toml` and `version` in `desktop/Cargo.toml` (desktop uses the
+   three-part prefix, e.g. `1.0.9`); commit as `chore(release): bump version to X`.
+   Packaging fails if they diverge. The host version is `X.Y.Z.YYYYMMDD` (no
+   dots in the date); the release tag is `v<version>` (e.g. `v1.0.9.20261120`).
+2. **Sync `dev` → `main`** (squash-and-record, above) so `main` carries the
+   validated commit. `main` must be clean and equal to `origin/main` before
+   publishing.
+3. **Check the live FlashHub index contract** (index JSON only, a few KiB):
+   `FLASHCLI_FLASHHUB_LIVE=1 pytest tests/test_flashhub_index_contract.py`.
+4. **Run the full gate on `main`:**
+   `bash scripts/verify_e2e.sh --heavy --network`. It must be all green and
+   writes `dist/e2e-pass.json` for the exact HEAD commit. Do not tag or publish
+   before this passes; `release_go.sh --upload` refuses without it.
+5. **Build the Windows installer from `main`:**
    `powershell -ExecutionPolicy Bypass -File scripts/build_windows_package.ps1`
-   (client + Go assets + `flashcli-desktop-setup-windows-amd64-v<version>.exe`; use `-GoBin` if `go` is not on PATH).
-   To embed exactly the published binaries (or when Go is not installed on Windows), build them first with
-   `bash scripts/build_go.sh` and pass `-SkipGo`; Go builds are reproducible (`-buildvcs=false`).
-4. On Linux/macOS (or Windows Git Bash) from `main`, publish both hosts in one command:
+   (client + Go assets + `flashcli-desktop-setup-windows-amd64-v<version>.exe`;
+   use `-GoBin` if `go` is not on PATH). To embed exactly the published binaries
+   (or when Go is not installed on Windows), build them first with
+   `bash scripts/build_go.sh` and pass `-SkipGo`; Go builds are reproducible
+   (`-buildvcs=false`). The Inno Setup installer is **not** byte-reproducible,
+   so build it once and do not rebuild it after uploading.
+6. **Prepare release notes** per the standard below (Features/Fixes against the
+   previous published release, same text for GitHub and Gitee). Pass them as
+   `--notes-file <notes.md>` in the next step.
+7. **Publish from `main`:**
    `bash scripts/release_go.sh --upload --notes-file <notes.md> --windows-installer dist/windows/flashcli-desktop-setup-windows-amd64-v<version>.exe`
-   The script requires a clean `main` equal to `origin/main`, creates/pushes tag `vX` at HEAD, builds the Linux/Windows Go assets, uploads them plus the Windows installer, and fails if either GitHub or Gitee upload fails. Use `FLASHCLI_RELEASE_TARGET` only for a different release branch; `--allow-non-target` is for tests only.
-   The Linux assets are reproducible; the Inno Setup installer is **not** byte-reproducible, so build it once and do not rebuild it after uploading — GitHub/Gitee display the uploaded asset SHA256.
-5. Write release notes per the standard below on **both** platforms. `--notes-file` uses the same body for GitHub and Gitee; if omitted, the script uses a minimal generated note.
-6. **Gate:** before step 4 (publishing), run the full acceptance gate on `main`: `bash scripts/verify_e2e.sh --heavy --network`. It must be all green; `release_go.sh --upload` refuses without the matching `dist/e2e-pass.json`. Then verify the published assets in a clean environment: `bash scripts/verify_release.sh --version X` (isolated prefix; add `--mirror` for Gitee).
-7. Sanity-check the published Windows installer name/SHA256 and that `flashcli-linux-{amd64,arm64}` + `flashserver-*` assets are present on both hosts.
-8. Published asset names are **stable and unversioned** (the release tag carries the version). Share stable links: `https://github.com/aodianyun/flashcli/releases/latest/download/<name>` and `https://gitee.com/aodiansoft/flashcli/releases/download/latest/<name>`. Do not add `-v<version>` to published asset names.
+   The script requires a clean `main` equal to `origin/main`, creates/pushes tag
+   `vX` at HEAD, builds/uploads the Go assets plus the Windows installer, and
+   fails if either GitHub or Gitee upload fails. Use `FLASHCLI_RELEASE_TARGET`
+   only for a different release branch; `--allow-non-target` is for tests only.
+8. **Verify the published assets in a clean environment:**
+   `bash scripts/verify_release.sh --version X` (isolated prefix; add
+   `--mirror` for Gitee).
+9. **Sanity-check** the published Windows installer name/SHA256 and that
+   `flashcli-linux-{amd64,arm64}` + `flashserver-*` assets are present on both
+   hosts. Published asset names are **stable and unversioned** (the release tag
+   carries the version); do not add `-v<version>`. Share
+   `https://github.com/aodianyun/flashcli/releases/latest/download/<name>` and
+   `https://gitee.com/aodiansoft/flashcli/releases/download/latest/<name>`.
 
 - **Bundles**: follow the maintainer checklist below and [docs/bundle_builder_guide.md](docs/bundle_builder_guide.md).
 
