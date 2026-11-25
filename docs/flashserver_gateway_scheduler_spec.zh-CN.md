@@ -163,13 +163,15 @@ WS   /v1/realtime
 
 ```text
 GET  /api/v1/models
-POST /api/v1/models/preload         {"ref":"..."} -> 202 job
+POST /api/v1/models/preload         {"ref":"...","force":false} -> 202 job
 POST /api/v1/models/unload          {"ref":"...","wait_seconds":0,"force":false}
 GET  /api/v1/devices
 GET  /api/v1/scheduler
 GET  /api/v1/jobs/{id}
 GET  /api/v1/ws
-GET  /api/v1/apps/*
+GET  /api/v1/settings               类型化全局设置
+PATCH /api/v1/settings              {"mirror":{"enabled":true}}
+GET  /api/v1/apps/*                 应用 install/prepare/setup/status
 GET  /api/v1/logs
 ```
 
@@ -189,6 +191,8 @@ POST /api/v1/models/preload
 - 启动异步 job，内部调用 `host.Pull`。
 - 幂等：preloading/preloaded 返回已有状态/job。
 - 同一 ref 的并发 preload 共享一个 job。
+- `force=true` 重新列取/下载已缓存的 bundle 树和权重（缓存修复）；模型 resident 时
+  返回 `409`。
 - 失败保留 job 错误和可续传的下载状态。
 - 不启动 serve，不预留显存。
 

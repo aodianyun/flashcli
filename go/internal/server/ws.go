@@ -115,7 +115,7 @@ func (s *Server) sendWSSnapshots(ctx context.Context, client *wsClient) {
 			})
 		}
 	}
-	client.send(map[string]any{"type": "mirror", "data": mirrorPayload()})
+	client.send(map[string]any{"type": "mirror", "data": mirrorState()})
 }
 
 func (s *Server) addWSClient(c *wsClient) {

@@ -96,7 +96,7 @@ checks `/health`.
 - `token` is optional. When set, every path except `/health`, `/`, `/docs`,
   `/ui/*`, and `/openapi.yaml` requires `Authorization: Bearer <token>` or
   `X-Flashcli-Token`. The gateway strips the client token before forwarding.
-- Mirrors: `POST /api/v1/mirror {"enabled":true}` (or the desktop toggle) writes
+- Mirrors: `PATCH /api/v1/settings {"mirror":{"enabled":true}}` (or the desktop toggle) writes
   `~/.flashcli/mirror.env` (Aliyun pip, hf-mirror, gh-proxy, Gitee, SJTU torch)
   and applies to new downloads without restarting the service.
 
@@ -128,8 +128,9 @@ On service start, `flashserver` resumes the previous session:
 - models loaded from the 模型 page are reloaded (the set is recorded in
   `~/.flashcli/flashserver/models.json`; a model that fails now stays in the
   file and is retried on the next start);
-- applications whose stored state is `ready` with recorded models are started
-  again, through the same slot/VRAM admission and owner tracking.
+- applications keep their stored setup state; they never start models on
+  restart. The scheduler starts residents on demand when a `/v1` request uses
+  their bundle ref.
 
 Restores run in the background and sequentially, so a slow model does not block
 the HTTP API; an app restore failure is logged and marks the app `failed`.

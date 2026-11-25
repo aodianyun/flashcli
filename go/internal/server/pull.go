@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 
 	"github.com/aodianyun/flashcli/go/internal/host"
@@ -19,45 +18,6 @@ type hostPuller struct{}
 
 func (hostPuller) Pull(ctx context.Context, ref string, opts host.PullOptions) (host.PullResult, error) {
 	return host.Pull(ctx, ref, opts)
-}
-
-type pullRequest struct {
-	Ref   string `json:"ref"`
-	Force bool   `json:"force"`
-}
-
-func (s *Server) pull(w http.ResponseWriter, r *http.Request) {
-	if s.Puller == nil {
-		writeError(w, http.StatusNotImplemented, context.Canceled)
-		return
-	}
-	if !s.pullBusy.CompareAndSwap(false, true) {
-		writeError(w, http.StatusConflict, errors.New("another model download is already running; wait for it to finish"))
-		return
-	}
-	var req pullRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Ref == "" {
-		s.pullBusy.Store(false)
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "ref is required"})
-		return
-	}
-	if s.Manager != nil && s.Manager.Busy(req.Ref) {
-		s.pullBusy.Store(false)
-		writeError(w, http.StatusConflict, errors.New("unload the model before re-syncing its cache"))
-		return
-	}
-	job := s.Jobs.Start(context.Background(), "pull", req.Ref, func(ctx context.Context, emit func(string, string)) error {
-		defer s.pullBusy.Store(false)
-		_, err := s.Puller.Pull(ctx, req.Ref, host.PullOptions{
-			VerifyWeights: true,
-			Force:         req.Force,
-			Progress: func(ev host.PullEvent) {
-				emit(ev.Phase, ev.Message)
-			},
-		})
-		return err
-	})
-	writeJSON(w, http.StatusAccepted, map[string]any{"job_id": job.ID, "state": job.State})
 }
 
 func (s *Server) job(w http.ResponseWriter, r *http.Request) {

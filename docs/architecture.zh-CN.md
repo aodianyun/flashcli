@@ -42,7 +42,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 
 | 能力 | 共享 API | CLI | flashserver |
 |------|----------|-----|-------------|
-| Pull / 运行时 + venv 准备 / 权重 | `host.Pull`、`host.EnsureRuntime`、`host.ResolveWeights` | `flashcli pull`、`run`/`serve` | `/api/v1/pull`、应用准备、Manager |
+| Pull / 运行时 + venv 准备 / 权重 | `host.Pull`、`host.EnsureRuntime`、`host.ResolveWeights` | `flashcli pull`、`run`/`serve` | `/api/v1/models/preload`、应用准备、Manager |
 | Serve 日志名 / tail / 就绪 | `modelrun.LogName`、`modelrun.TailLines`、`modelrun.WaitHealthy` | serve 子进程、`app logs` | `/api/v1/logs`、Manager/调度器 |
 | 应用安装/配置/状态 | `apps.Service` | `flashcli app ...` | `/api/v1/apps`、网关 setup |
 | 缓存区域 + 唯一分配字节 | `host.Storage()` | `flashcli du` | `GET /api/v1/storage` |
@@ -58,7 +58,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 
 - **禁止**在 `go/internal/cli` 或 `go/internal/server` 再写 marker 遍历、权重就绪判断、目录大小遍历、清理路径解析、pull 编排、日志名/tail、健康等待循环、应用状态判定。
 - 新行为只在共享包实现一次，再由两个前端暴露；表格、颜色、提示等纯展示逻辑留在前端。
-- **Pull/准备只有一条流水线**：`flashcli pull`、`/api/v1/pull`、应用准备都走 `host.Pull`；`host.EnsureRuntime` 负责运行时/venv 准备，必须与 `flashcli serve` 保持一致（system 能力、协议缓存 schema、CUDA）。
+- **Pull/准备只有一条流水线**：`flashcli pull`、`/api/v1/models/preload`、应用准备都走 `host.Pull`；`host.EnsureRuntime` 负责运行时/venv 准备，必须与 `flashcli serve` 保持一致（系统能力、协议缓存 schema、CUDA）。
 - **Serve 子进程**的日志命名/尾部读取统一用 `modelrun.LogName`/`modelrun.TailLines`，就绪等待统一用 `modelrun.WaitHealthy`。日志目录固定为 `~/.flashcli/logs/serve`（配置 `log_dir` 可覆盖），`flashcli app logs` 与 `/api/v1/logs` 读同一路径。
 - **应用状态判定**（是否在运行/是否恢复）只在 `apps`（`apps.WasRunning`）实现，daemon 恢复和桌面端不得各自推导。
 - **隔离**：daemon 可以用 Launcher/Stopper 包装共享服务（例如带 owner 的 Manager 准入），但生命周期逻辑仍在 `apps`；CLI 不得另写一份。

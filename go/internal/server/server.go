@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/aodianyun/flashcli/go/internal/apps"
@@ -76,8 +75,6 @@ type Server struct {
 
 	// Preload persists explicit disk-preload intent across restarts.
 	Preload *preloadStore
-
-	pullBusy atomic.Bool
 
 	preloadMu sync.Mutex
 
@@ -184,8 +181,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/catalog/tags", s.catalogTags)
 	mux.HandleFunc("GET /api/v1/catalog/{id}", s.catalogRepo)
 	mux.HandleFunc("GET /api/v1/storage", s.storage)
-	mux.HandleFunc("GET /api/v1/mirror", s.mirrorStatus)
-	mux.HandleFunc("POST /api/v1/mirror", s.setMirror)
+	mux.HandleFunc("GET /api/v1/settings", s.getSettings)
+	mux.HandleFunc("PATCH /api/v1/settings", s.patchSettings)
 	mux.HandleFunc("GET /api/v1/resources", s.resources)
 	mux.HandleFunc("GET /api/v1/devices", s.devices)
 	mux.HandleFunc("GET /api/v1/scheduler", s.scheduler)
@@ -193,7 +190,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/gpu/history", s.gpuHistory)
 	mux.HandleFunc("GET /api/v1/system/history", s.gpuHistory)
 	mux.HandleFunc("GET /api/v1/ws", s.ws)
-	mux.HandleFunc("POST /api/v1/pull", s.pull)
 	mux.HandleFunc("GET /api/v1/jobs/{id}", s.job)
 	mux.HandleFunc("GET /api/v1/jobs/{id}/events", s.jobEvents)
 	mux.HandleFunc("POST /api/v1/jobs/{id}/cancel", s.cancelJob)
@@ -215,7 +211,9 @@ func (s *Server) Handler() http.Handler {
 
 	// Local console assets.
 	mux.HandleFunc("GET /ui/", s.ui)
-	mux.HandleFunc("GET /", s.ui)
+	// Exact root only: a bare "GET /" is a subtree pattern and would swallow
+	// unknown paths (turning POST typos into 405 instead of 404).
+	mux.HandleFunc("GET /{$}", s.ui)
 	return s.logRequests(s.authorize(mux))
 }
 

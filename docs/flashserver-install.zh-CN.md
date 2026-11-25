@@ -88,7 +88,7 @@ sudo flashserver-setup
 - `token` 可选。设置后除 `/health`、`/`、`/docs`、`/ui/*`、`/openapi.yaml` 外的所有
   路径都需要 `Authorization: Bearer <token>` 或 `X-Flashcli-Token`。网关转发前会移除
   客户端 token。
-- 镜像：`POST /api/v1/mirror {"enabled":true}`（或桌面开关）会写
+- 镜像：`PATCH /api/v1/settings {"mirror":{"enabled":true}}`（或桌面开关）会写
   `~/.flashcli/mirror.env`（阿里云 pip、hf-mirror、gh-proxy、Gitee、SJTU torch），
   对新下载立即生效，不需要重启服务。
 
@@ -119,11 +119,10 @@ flashserver-setup.exe --start-service       # 开启开机启动并启动服务
 - 模型页加载过的模型会重新加载（集合记录在
   `~/.flashcli/flashserver/models.json`；本次加载失败的模型会保留在文件中，下次启动
   继续重试）；
-- 状态为 `ready` 且记录了模型的已安装应用会重新启动，仍走同一套槽位/显存准入与
-  owner 机制。
+- 应用保留已记录的配置状态，重启时**不会**代其启动模型；调度器在 `/v1` 请求使用
+  对应 bundle ref 时按需启动 resident。
 
-恢复在后台按顺序执行，不会阻塞 HTTP API；应用恢复失败会写入日志并把状态置为
-`failed`。开机启动只决定服务本身是否随系统启动——客户端应用本体（WorkBuddy、
+模型恢复在后台按顺序执行，不会阻塞 HTTP API。开机启动只决定服务本身是否随系统启动——客户端应用本体（WorkBuddy、
 Grok CLI 等）仍由它自己的开机启动设置决定。
 
 ## 卸载

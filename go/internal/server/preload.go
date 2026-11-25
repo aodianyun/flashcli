@@ -304,14 +304,18 @@ func (s *Server) modelViews(ctx context.Context, models []host.Model) []modelSta
 
 type preloadRequest struct {
 	Ref string `json:"ref"`
+	// Force re-downloads the bundle tree/manifest even when the cache marker is
+	// present (the desktop "重新同步" repair action). It is rejected while the
+	// model is resident so assets are never replaced under a running process.
+	Force bool `json:"force"`
 }
 
 // ensurePreload makes ref ready for inference. It returns ready=true when the
 // assets are complete, or a background job id while preparing. The check is
 // local-first; the job owns any network work.
-func (s *Server) ensurePreload(ctx context.Context, refStr string) (ready bool, jobID string, err error) {
+func (s *Server) ensurePreload(ctx context.Context, refStr string, force bool) (ready bool, jobID string, err error) {
 	store := s.preloads()
-	if s.assetsReady(ctx, refStr) {
+	if !force && s.assetsReady(ctx, refStr) {
 		store.setState(refStr, preloadReady, "")
 		return true, "", nil
 	}
@@ -327,7 +331,9 @@ func (s *Server) ensurePreload(ctx context.Context, refStr string) (ready bool, 
 		case preloadLoading:
 			return false, e.JobID, nil
 		case preloadReady:
-			return true, "", nil
+			if !force {
+				return true, "", nil
+			}
 		}
 	}
 	// Reserve the ref before starting the goroutine so concurrent requests share
@@ -338,6 +344,7 @@ func (s *Server) ensurePreload(ctx context.Context, refStr string) (ready bool, 
 	job := s.Jobs.Start(context.Background(), "preload", refStr, func(ctx context.Context, emit func(string, string)) error {
 		_, pullErr := puller.Pull(ctx, refStr, host.PullOptions{
 			VerifyWeights: true,
+			Force:         force,
 			Progress: func(ev host.PullEvent) {
 				emit(ev.Phase, ev.Message)
 			},
@@ -409,7 +416,11 @@ func (s *Server) preloadModel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, err)
 		return
 	}
-	ready, jobID, err := s.ensurePreload(r.Context(), refStr)
+	if req.Force && s.modelBusy(refStr) {
+		writeError(w, http.StatusConflict, errors.New("unload the model before re-syncing its cache"))
+		return
+	}
+	ready, jobID, err := s.ensurePreload(r.Context(), refStr, req.Force)
 	if err != nil {
 		writeError(w, http.StatusNotImplemented, err)
 		return

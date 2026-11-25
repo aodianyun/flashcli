@@ -58,11 +58,11 @@ Authentication is off by default. With a token, every path except `/health`, `/`
 | Health / version | `GET /health`, `GET /api/v1/version` | `health` is unauthenticated |
 | Models | `GET /api/v1/models`, `POST /api/v1/models/preload`, `POST /api/v1/models/unload`, `POST /api/v1/models/clean` | Schema in [openapi.yaml](openapi.yaml) |
 | Model options | `GET/PUT/DELETE /api/v1/models/options` | `serve_options` + saved host/port, see [flashserver-desktop.md](flashserver-desktop.md#startup-parameters-and-lan-access) |
-| Jobs | `POST /api/v1/pull`, `GET /api/v1/jobs/{id}`, `GET /api/v1/jobs/{id}/events`, `POST /api/v1/jobs/{id}/cancel` | Async work; progress also streams over `/api/v1/ws` |
+| Jobs | `GET /api/v1/jobs/{id}`, `GET /api/v1/jobs/{id}/events`, `POST /api/v1/jobs/{id}/cancel` | Async job handles for preload, install/prepare/setup; progress also streams over `/api/v1/ws` |
 | System | `GET /api/v1/system`, `GET /api/v1/gpu`, `GET /api/v1/gpu/history`, `GET /api/v1/resources`, `GET /api/v1/devices`, `GET /api/v1/scheduler`, `GET /api/v1/storage` | Telemetry, device inventory, and placement answers |
 | Logs | `GET /api/v1/logs`, `GET /api/v1/logs/download` | `?kind=server\|model&ref=…&lines=N` |
 | Catalog | `GET /api/v1/catalog`, `GET /api/v1/catalog/tags`, `GET /api/v1/catalog/{id}` | FlashHub proxy |
-| Mirror | `GET /api/v1/mirror`, `POST /api/v1/mirror` | Domestic mirrors for new downloads |
+| Settings | `GET /api/v1/settings`, `PATCH /api/v1/settings` | Typed global settings; `writable` lists mutable fields (`mirror.enabled`) |
 | Apps | `GET/POST/DELETE /api/v1/apps/*`, `POST /api/v1/apps/{org}/{name}/setup` | Install/prepare and configure apps; inference always goes through `/v1` |
 | Live / UI | `GET /api/v1/ws`, `GET /`, `GET /docs`, `GET /openapi.yaml` | WebSocket state; embedded console |
 
@@ -70,6 +70,12 @@ Model objects in `GET /api/v1/models` include a `capabilities` array. `null`
 means the host does not own routes for that serve entry (script/native or
 unknown); `[]` means host inference routes are disabled. The same payload also
 contains `loaded` (resident instances).
+
+`GET /api/v1/settings` is the single typed settings document. `mirror`,
+`scheduler`, `server`, and `paths` are effective values; only fields listed in
+`writable` may be changed with `PATCH` (currently `mirror.enabled`). Scheduler
+and server fields are read-only and require editing the daemon config plus a
+restart. Per-model host/port/serve options stay under `/models/options`.
 
 ## Devices and placement
 
@@ -90,9 +96,9 @@ contains `loaded` (resident instances).
 
 - `POST /api/v1/models/preload` downloads the bundle and weights and prepares
   the runtime/venv without starting a serve process. It is idempotent and
-  returns a job while running.
-- `POST /api/v1/pull` is the legacy low-level download job; `preload` is the
-  gateway-facing disk operation.
+  returns a job while running. `force=true` re-downloads cached bundle/weights
+  (the desktop **重新同步** repair action) and is rejected with 409 while the
+  model is resident.
 - `POST /api/v1/models/unload` stops the resident process and deletes bundle,
   weights, runtime, and cache records. It returns `409 model_busy` while the
   model is resident or has active requests; `wait_seconds` waits and `force`
@@ -112,6 +118,12 @@ disk primitives; see
 curl -H 'Content-Type: application/json' \
   -d '{"ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.0"}' \
   http://127.0.0.1:8790/api/v1/models/preload
+
+# read settings / toggle domestic mirrors (the only writable field today)
+curl http://127.0.0.1:8790/api/v1/settings
+curl -X PATCH -H 'Content-Type: application/json' \
+  -d '{"mirror":{"enabled":true}}' \
+  http://127.0.0.1:8790/api/v1/settings
 
 # inference through the gateway (the scheduler starts the resident)
 curl -H 'Content-Type: application/json' \

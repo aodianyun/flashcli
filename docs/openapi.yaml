@@ -757,33 +757,34 @@ paths:
                   areas:
                     type: array
                     items: { $ref: '#/components/schemas/StorageArea' }
-  /api/v1/mirror:
+  /api/v1/settings:
     get:
-      summary: Domestic mirror settings
+      summary: Effective daemon settings
+      description: |
+        One typed settings document. Only fields listed in `writable` may be
+        changed; scheduler/server/paths values are read-only effective state.
       responses:
         '200':
-          description: Current mirror state and endpoints
+          description: Settings
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/MirrorState' }
-    post:
-      summary: Enable or disable domestic mirrors
-      description: Writes or removes ~/.flashcli/mirror.env and applies it to new downloads.
+              schema: { $ref: '#/components/schemas/Settings' }
+    patch:
+      summary: Update writable settings
+      description: "Partial update. Currently only `mirror.enabled` is writable; unknown or read-only sections return 400."
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [enabled]
-              properties:
-                enabled: { type: boolean }
+            schema: { $ref: '#/components/schemas/SettingsPatch' }
       responses:
         '200':
-          description: Updated mirror state
+          description: Updated settings
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/MirrorState' }
+              schema: { $ref: '#/components/schemas/Settings' }
+        '400':
+          $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
   /api/v1/storage/clean:
@@ -825,33 +826,6 @@ paths:
                 type: object
                 properties:
                   error: { type: string }
-  /api/v1/pull:
-    post:
-      summary: Download a bundle/weights asynchronously
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [ref]
-              properties:
-                ref: { type: string }
-                force:
-                  type: boolean
-                  default: false
-                  description: "Re-download the bundle tree/manifest even when the cache marker is present (model page 重新同步). The model must not be running."
-      responses:
-        '202':
-          description: Pull job accepted
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/JobRef' }
-        '409':
-          description: Another download is running, or the model is loaded (unload it first)
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
   /api/v1/jobs/{id}:
     get:
       summary: Job state and events
@@ -967,7 +941,9 @@ paths:
         Asynchronously downloads the bundle and weights and prepares the
         runtime/venv. Never starts a serve process or reserves VRAM. Idempotent:
         a running preload returns its job, and a completed preload returns
-        `preloaded` without a new job.
+        `preloaded` without a new job. With `force=true` the bundle tree and
+        weights are re-listed/re-downloaded even when cached (the desktop
+        "重新同步" repair action); the model must not be resident.
       requestBody:
         required: true
         content:
@@ -977,6 +953,10 @@ paths:
               required: [ref]
               properties:
                 ref: { type: string }
+                force:
+                  type: boolean
+                  default: false
+                  description: Re-download cached bundle/weights; rejected with 409 while resident.
       responses:
         '200':
           description: Already preloaded
@@ -999,6 +979,7 @@ paths:
                   job_id: { type: string }
                   state: { type: string }
         '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
         '501': { $ref: '#/components/responses/Error' }
   /api/v1/models/unload:
     post:
@@ -1126,8 +1107,8 @@ paths:
       summary: Live WebSocket stream (system snapshots + job progress)
       description: |
         Upgrades to WebSocket. The server sends `hello`, then a `system`
-        snapshot once per second and `job` progress messages for pull/load
-        jobs. When a token is configured, pass `?token=...` because browsers
+        snapshot once per second and `job` progress messages for preload,
+        install, prepare, and setup jobs. When a token is configured, pass `?token=...` because browsers
         cannot set headers on WebSocket handshakes.
       parameters:
         - name: token
@@ -1193,6 +1174,43 @@ components:
         hf_endpoint: { type: string }
         git_proxy: { type: string }
         install_repo: { type: string }
+    Settings:
+      type: object
+      properties:
+        mirror: { $ref: '#/components/schemas/MirrorState' }
+        scheduler:
+          type: object
+          properties:
+            vram_headroom_mib: { type: integer, format: int64 }
+            max_loaded: { type: integer }
+            idle_stop_seconds: { type: integer }
+            resident_start_wait_seconds: { type: integer }
+            queue_timeout_seconds: { type: integer }
+            queue_max: { type: integer }
+            auto_pull: { type: boolean }
+            cpu_fallback: { type: string, enum: [no-gpu-runtime, disabled] }
+        server:
+          type: object
+          properties:
+            addr: { type: string }
+            auth_enabled: { type: boolean }
+            version: { type: string }
+        paths:
+          type: object
+          properties:
+            home: { type: string }
+            bundles: { type: string }
+            models: { type: string }
+        writable:
+          type: array
+          items: { type: string }
+    SettingsPatch:
+      type: object
+      properties:
+        mirror:
+          type: object
+          properties:
+            enabled: { type: boolean }
     CleanResult:
       type: object
       properties:
@@ -1529,16 +1547,11 @@ components:
         name: { type: string }
         path: { type: string }
         bytes: { type: integer, format: int64 }
-    JobRef:
-      type: object
-      properties:
-        job_id: { type: string }
-        state: { type: string }
     Job:
       type: object
       properties:
         id: { type: string }
-        type: { type: string, enum: [pull, load] }
+        type: { type: string, enum: [preload, app-install, app-prepare, app-setup] }
         ref: { type: string }
         state: { type: string, enum: [running, done, failed] }
         error: { type: string }

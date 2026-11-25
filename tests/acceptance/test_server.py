@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import subprocess
 import time
+import urllib.error
+import urllib.request
 
 from helpers import free_port, http_json, prepare_bundle, wait_json
 
@@ -61,6 +63,45 @@ def test_server_devices_and_scheduler(flashserver_bin, flashcli_bin, cli_env, ho
         status, scheduler = http_json(f"{base}/api/v1/scheduler")
         assert status == 200, scheduler
         assert "slots" in scheduler and "requirements" in scheduler
+    finally:
+        _stop(server)
+
+
+def test_server_settings(flashserver_bin, flashcli_bin, cli_env, home):
+    port = free_port()
+    server = _start_server(flashserver_bin, flashcli_bin, cli_env, home, port)
+    base = f"http://127.0.0.1:{port}"
+    try:
+        status, settings = http_json(f"{base}/api/v1/settings")
+        assert status == 200, settings
+        assert set(settings) >= {"mirror", "scheduler", "server", "paths", "writable"}
+        assert settings["writable"] == ["mirror.enabled"]
+
+        status, updated = http_json(
+            f"{base}/api/v1/settings",
+            {"mirror": {"enabled": False}},
+            method="PATCH",
+        )
+        assert status == 200 and updated["mirror"]["enabled"] is False, updated
+
+        status, _ = http_json(
+            f"{base}/api/v1/settings", {"scheduler": {"max_loaded": 1}}, method="PATCH"
+        )
+        assert status == 400, "scheduler settings must be read-only"
+
+        # The old one-off endpoints are gone, not merely undocumented.
+        for path, payload in (
+            ("/api/v1/mirror", {"enabled": True}),
+            ("/api/v1/pull", {"ref": "x"}),
+        ):
+            data = json.dumps(payload).encode()
+            req = urllib.request.Request(base + path, data=data, method="POST")
+            try:
+                urllib.request.urlopen(req, timeout=10)
+            except urllib.error.HTTPError as exc:
+                assert exc.code == 404, f"{path} -> {exc.code}"
+            else:
+                raise AssertionError(f"{path} is still served")
     finally:
         _stop(server)
 

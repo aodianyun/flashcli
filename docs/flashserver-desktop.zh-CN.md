@@ -14,7 +14,7 @@ Windows 安装包内置 `flashcli-desktop.exe`（Rust + egui/eframe，不用 Web
 - **模型** —— 本地缓存 + FlashHub 搜索；分开展示 Bundle / 运行时 / 权重大小；
   磁盘预加载/卸载、resident 状态；多选清理。已缓存模型
   还提供 **更多 → 重新同步**，强制重新下载 bundle 树/权重
-  （`/api/v1/pull {"force":true}`）；仅作为可变 revision 的修复手段，正常更新应发布新的
+  （`/api/v1/models/preload {"force":true}`）；仅作为可变 revision 的修复手段，正常更新应发布新的
   bundle 版本。推理由网关提供，resident 由调度器按需启动；桌面不提供应用级模型启停。
 - **应用** —— 左侧独立菜单页：封面卡片网格（上方封面按原图比例完整显示，下方名称、
   版本 · domain、简介；搜索与 domain 过滤各占一行；分类顺序固定为
@@ -45,7 +45,7 @@ Windows 安装包内置 `flashcli-desktop.exe`（Rust + egui/eframe，不用 Web
   模型 serve 日志（模型页 → 更多 → 查看日志，可另存为）、服务日志（左侧「日志」页）。
 - **日志** —— 服务日志（左侧「日志」页，可清空/另存为）与模型 serve 日志
   （模型页 → 更多 → 查看日志）。服务日志包含 API 调用（方法/路径/状态/耗时，敏感字段
-  脱敏）、后台任务步骤（应用安装/配置、模型预加载/pull）、setup 脚本输出、
+  脱敏）、后台任务步骤（应用安装/配置、模型预加载/重新同步）、setup 脚本输出、
   清理/卸载，并持久化到 `~/.flashcli/logs/flashserver.log`（4 MiB 轮转，保留 `.1`），
   重启后仍可查看。页面首次加载后通过 `/api/v1/ws` 实时追加新日志；成功的状态/日志轮询请求
   不会写入日志。应用详情另有最近配置日志与「查看完整日志」。
@@ -61,12 +61,14 @@ Windows 安装包内置 `flashcli-desktop.exe`（Rust + egui/eframe，不用 Web
 resident 并删除磁盘资产（busy 时返回 `409 model_busy`，可强制）。resident 启停由
 flashserver 调度器负责；桌面只展示状态，推理走网关。
 
-- 下载串行执行：有任务进行中时禁用加载/下载/启动，重复 `POST /api/v1/pull` 返回 HTTP 409。
-- 进度（Bundle 同步、运行时、权重、serve/健康检查）显示 bundle ref、阶段、字节数和
-  百分比；校验失败的下载会自动重试。
+- 下载串行执行：有任务进行中时禁用加载/下载。对 resident 模型发起强制预加载返回
+  HTTP 409，需先卸载。
+- 进度（Bundle 同步、运行时、权重）显示 bundle ref、阶段、字节数和百分比；校验失败的
+  下载会自动重试。
 - 模型大小 = Bundle + 该模型运行时 + 权重。权重按 `source/repo@revision` 跨版本共享
   （合计按权重 key 去重）；每个 bundle 版本有独立的运行时目录。
-- 设置中只清理共享缓存（下载缓存、基础 Python、uv）；Bundle/权重/运行时在模型页清理。
+- 设置中通过 `PATCH /api/v1/settings {"mirror":{"enabled":true}}` 切换国内镜像，
+  并只清理共享缓存（下载缓存、基础 Python、uv）；Bundle/权重/运行时在模型页清理。
 
 ## 启动参数与局域网访问
 

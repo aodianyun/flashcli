@@ -169,13 +169,15 @@ WS   /v1/realtime
 
 ```text
 GET  /api/v1/models                 all known refs and their states
-POST /api/v1/models/preload         {"ref":"..."} -> 202 job
+POST /api/v1/models/preload         {"ref":"...","force":false} -> 202 job
 POST /api/v1/models/unload          {"ref":"...","wait_seconds":0,"force":false}
 GET  /api/v1/devices                device inventory
 GET  /api/v1/scheduler              queue, resident models, reservations
 GET  /api/v1/jobs/{id}              job state/events
 GET  /api/v1/ws                     management events
-GET  /api/v1/apps/*                 application install/prepare/status
+GET  /api/v1/settings               typed global settings
+PATCH /api/v1/settings              {"mirror":{"enabled":true}}
+GET  /api/v1/apps/*                 application install/prepare/setup/status
 GET  /api/v1/logs                   logs
 ```
 
@@ -195,6 +197,8 @@ POST /api/v1/models/preload
 - Starts an asynchronous job that invokes `host.Pull`.
 - Idempotent: `preloading` or `preloaded` returns the existing state/job.
 - Duplicate concurrent preloads for the same ref share one job.
+- `force=true` re-lists/re-downloads the cached bundle tree and weights (cache
+  repair). It is rejected with `409` while the model is resident.
 - Failure leaves the job failed and keeps resumable download state.
 - Preload never starts a serve process and never reserves VRAM.
 

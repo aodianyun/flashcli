@@ -190,9 +190,9 @@ func TestJobsOverHTTP(t *testing.T) {
 	s := newFlowServer(t, &staticLauncher{endpoint: "http://127.0.0.1:1"})
 	h := s.Handler()
 
-	rec, body := call(t, h, http.MethodPost, "/api/v1/pull", `{"ref":"demo:1"}`)
+	rec, body := call(t, h, http.MethodPost, "/api/v1/models/preload", `{"ref":"demo:1"}`)
 	if rec.Code != http.StatusAccepted {
-		t.Fatalf("pull = %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("preload = %d: %s", rec.Code, rec.Body.String())
 	}
 	id, _ := body["job_id"].(string)
 	if id == "" {

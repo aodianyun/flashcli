@@ -985,7 +985,7 @@ impl App {
         &mut self,
         ctx: &egui::Context,
         ref_str: String,
-        pull: bool,
+        force: bool,
         verb: &'static str,
     ) {
         self.job_ref = ref_str.clone();
@@ -995,7 +995,7 @@ impl App {
         self.load_status_at = None;
         self.load_message.clear();
         self.load_pct = None;
-        spawn_job(self.tx.clone(), ctx.clone(), ref_str, pull, verb);
+        spawn_job(self.tx.clone(), ctx.clone(), ref_str, force, verb);
     }
 
     fn apply_job(&mut self, job: JobEvent) {
@@ -2436,7 +2436,7 @@ impl App {
             if load_clicked {
                 let ref_str = self.load_ref.trim().to_string();
                 if !ref_str.is_empty() {
-                    self.spawn_job_ui(ui.ctx(), ref_str, true, "加载");
+                    self.spawn_job_ui(ui.ctx(), ref_str, false, "加载");
                 }
             }
         });
@@ -2650,7 +2650,7 @@ impl App {
             });
         }
         if let Some(name) = pull_request {
-            self.spawn_job_ui(ui.ctx(), name, true, "加载");
+            self.spawn_job_ui(ui.ctx(), name, false, "加载");
         }
         if let Some(name) = resync_request {
             self.spawn_job_ui(ui.ctx(), name, true, "重新同步");
@@ -2888,7 +2888,7 @@ impl App {
             self.hub_detail = None;
         }
         if let Some(reference) = load_ref {
-            self.spawn_job_ui(ui.ctx(), reference, true, "下载");
+            self.spawn_job_ui(ui.ctx(), reference, false, "下载");
         }
     }
 
@@ -3094,7 +3094,7 @@ impl App {
         }
         if pull {
             self.model_detail = None;
-            self.spawn_job_ui(ctx, model.name.clone(), true, "加载");
+            self.spawn_job_ui(ctx, model.name.clone(), false, "加载");
         }
     }
 
@@ -5492,8 +5492,8 @@ fn start_ws(tx: Sender<Event>, ctx: egui::Context) {
                                                     continue;
                                                 }
                                                 let verb = match kind.as_str() {
-                                                    "pull" => "下载",
-                                                    _ => "启动",
+                                                    "preload" => "加载",
+                                                    _ => "准备",
                                                 };
                                                 let _ = tx.send(Event::Job(JobEvent {
                                                     phase: data["event"]["phase"]
@@ -5651,11 +5651,10 @@ fn spawn_job(
     tx: Sender<Event>,
     ctx: egui::Context,
     ref_str: String,
-    pull: bool,
+    force: bool,
     verb: &'static str,
 ) {
     std::thread::spawn(move || {
-        let endpoint = if pull { "/api/v1/pull" } else { "/api/v1/models/preload" };
         let event_ref = ref_str.clone();
         let _ = tx.send(Event::Job(JobEvent {
             phase: "prepare".into(),
@@ -5667,10 +5666,9 @@ fn spawn_job(
         }));
         let body = serde_json::json!({
             "ref": ref_str,
-            "async": true,
-            "force": pull && verb == "重新同步",
+            "force": force,
         });
-        match post_json(endpoint, &body) {
+        match post_json("/api/v1/models/preload", &body) {
             Ok(v) => {
                 let job = v["job_id"].as_str().unwrap_or("");
                 if job.is_empty() {
@@ -7102,12 +7100,12 @@ fn spawn_storage_clean(tx: Sender<Event>, ctx: egui::Context, targets: Vec<Strin
 
 fn spawn_set_mirror(tx: Sender<Event>, ctx: egui::Context, enabled: bool) {
     std::thread::spawn(move || {
-        let body = serde_json::json!({ "enabled": enabled });
+        let body = serde_json::json!({ "mirror": { "enabled": enabled } });
         let mut last_error = String::new();
         for attempt in 0..6 {
-            match post_json_timeout("/api/v1/mirror", &body, 15) {
+            match patch_json_timeout("/api/v1/settings", &body, 15) {
                 Ok(v) => {
-                    let _ = tx.send(Event::Mirror(v));
+                    let _ = tx.send(Event::Mirror(v["mirror"].clone()));
                     let _ = tx.send(Event::OpDone(Ok(if enabled {
                         "已启用国内镜像".into()
                     } else {
@@ -7284,6 +7282,20 @@ fn put_json_timeout(path: &str, body: &Value, secs: u64) -> Result<Value, String
         .build();
     match agent
         .put(&format!("{}{}", api_base(), path))
+        .send_json(body)
+    {
+        Ok(resp) => resp.into_json::<Value>().map_err(|e| e.to_string()),
+        Err(ureq::Error::Status(_, resp)) => Err(http_error_message(resp)),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+fn patch_json_timeout(path: &str, body: &Value, secs: u64) -> Result<Value, String> {
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(secs))
+        .build();
+    match agent
+        .patch(&format!("{}{}", api_base(), path))
         .send_json(body)
     {
         Ok(resp) => resp.into_json::<Value>().map_err(|e| e.to_string()),
@@ -8107,7 +8119,6 @@ fn translate_phase(phase: &str) -> &str {
     match phase {
         "prepare" => "准备 Bundle",
         "resolve" => "解析引用",
-        "pull" => "拉取 Bundle",
         "bundle" => "下载 Bundle",
         "weights" | "download" => "下载权重",
         "venv" | "deps" | "dependencies" => "安装依赖",

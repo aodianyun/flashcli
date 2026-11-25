@@ -16,7 +16,7 @@ Sidebar order: **应用 → 模型 → 状态 → 日志 → 设置**.
   weights sizes; disk **preload/unload**; resident state from the scheduler;
   multi-select cache cleanup. A cached
   model also offers **更多 → 重新同步**, which force-re-downloads its bundle
-  tree/weights (`/api/v1/pull {"force":true}`); use it only as a repair for a
+  tree/weights (`/api/v1/models/preload {"force":true}`); use it only as a repair for a
   mutable revision, not instead of a new bundle version. Inference is served by
   the gateway and the scheduler starts residents on demand; the desktop does not
   offer application-level model start/stop.
@@ -58,7 +58,7 @@ Sidebar order: **应用 → 模型 → 状态 → 日志 → 设置**.
 - **Logs** — the service log (日志 page, clear / Save-As) and a model's serve
   log (模型 → 更多 → 查看日志, with 另存为). The service log covers API calls
   (method/path/status/duration, credentials redacted), background job steps
-  (app install/setup, model preload/unload/pull), setup-script output
+  (app install/setup, model preload/unload/resync), setup-script output
   and clean/uninstall, and is persisted to `~/.flashcli/logs/flashserver.log`
   (4 MiB rotation with a `.1` backup), so it survives a daemon restart. The
   page loads once and then appends new lines over `/api/v1/ws`; successful status
@@ -79,14 +79,14 @@ is owned by the flashserver scheduler; the desktop only shows the state and call
 the gateway for inference.
 
 
-- Downloads are serialized: while a job runs, load/download/start actions are
-  disabled and a concurrent `POST /api/v1/pull` returns HTTP 409.
-- Progress (bundle sync, runtime, weights, serve/health) shows the bundle ref,
+- Downloads are serialized: while a job runs, load/download actions are
+  disabled. A forced preload of a resident model returns HTTP 409; unload it first.
+- Progress (bundle sync, runtime, weights) shows the bundle ref,
   phase, byte counts, and percentage; failed checksum downloads retry.
 - Model size = Bundle + that model's runtime + weights. Weights are shared by
   `source/repo@revision` across bundle versions (totals de-duplicate by weights
   key); each bundle version has its own runtime directory.
-- Settings cleans only the shared cache (downloads, base Python, uv). Bundle,
+- Settings toggles domestic mirrors through `PATCH /api/v1/settings {"mirror":{"enabled":true}}` and cleans only the shared cache (downloads, base Python, uv). Bundle,
   weights, and runtime cleanup lives on the Models page.
 
 ## Startup parameters and LAN access

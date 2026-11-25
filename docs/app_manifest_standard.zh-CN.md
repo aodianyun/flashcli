@@ -97,17 +97,17 @@ bundle 版本是**不可变**的：cache key、marker 和权重 store 都由版�
    同时发布新的应用版本）。
 3. 重新安装应用（桌面端「重新安装」，或 `flashcli app install <app> --force`）。
 
-重新安装会重新拉取 manifest、停止该应用正在运行的模型（释放槽位/显存，保留缓存）、
-准备新 bundle；安装**不会启动**模型，随后点「启动」才会启动并针对新的接入地址执行
-已确认的配置脚本。旧缓存不会自动删除，确认不再需要时用
+重新安装会重新拉取 manifest、保留缓存、准备新 bundle；安装**不会启动**模型。随后点
+「应用配置」（或 `flashcli app setup`）针对新的接入地址执行已确认的 setup 脚本；模型
+由调度器按需启动。旧缓存不会自动删除，确认不再需要时用
 `flashcli bundle clean --all <old-ref>` 清理。
 
-新的**应用**版本是一个新的 app key：安装新版本并停止/卸载旧版本。同一应用版本下直接
+新的**应用**版本是一个新的 app key：安装新版本并卸载旧版本。同一应用版本下直接
 更新 bundle ref 也支持重新安装，但发布新应用版本才是符合不可变约定的路径。
 
 如果确实需要在**同一版本**下刷新缓存（例如可变的 `main` revision 或缓存修复），模型页
 提供 **更多 → 重新同步**，仅在模型未运行时可用。它调用
-`POST /api/v1/pull {"ref": "...", "force": true}`（CLI：`flashcli pull <ref> --force`），
+`POST /api/v1/models/preload {"ref": "...", "force": true}`（CLI：`flashcli pull <ref> --force`），
 重新下载 bundle 树/manifest 并重新校验权重。这是修复路径；正常内容更新应发布新的 bundle
 版本。
 

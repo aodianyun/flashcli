@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -54,16 +56,6 @@ func TestHealthAndModels(t *testing.T) {
 	}
 }
 
-func TestNotImplemented(t *testing.T) {
-	s := &Server{Source: fakeSource{}}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/pull", nil)
-	rec := httptest.NewRecorder()
-	s.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusNotImplemented {
-		t.Fatalf("status = %d", rec.Code)
-	}
-}
-
 type fakePuller struct{}
 
 func (fakePuller) Pull(ctx context.Context, ref string, opts host.PullOptions) (host.PullResult, error) {
@@ -74,9 +66,9 @@ func (fakePuller) Pull(ctx context.Context, ref string, opts host.PullOptions) (
 	return host.PullResult{BundleRoot: "/tmp/bundle", Checkpoint: "/tmp/weights"}, nil
 }
 
-func TestPullJob(t *testing.T) {
-	s := &Server{Source: fakeSource{}, Puller: fakePuller{}, Jobs: NewJobManager()}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/pull", strings.NewReader(`{"ref":"demo:1"}`))
+func TestPreloadJob(t *testing.T) {
+	s := newPreloadServer(t, fakePuller{})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/models/preload", strings.NewReader(`{"ref":"demo:1"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
@@ -91,22 +83,9 @@ func TestPullJob(t *testing.T) {
 	if id == "" {
 		t.Fatal("missing job_id")
 	}
-	for i := 0; i < 50; i++ {
-		j, ok := s.Jobs.Get(id)
-		if ok {
-			j.mu.Lock()
-			state := j.State
-			j.mu.Unlock()
-			if state == "done" || state == "failed" {
-				if state != "done" {
-					t.Fatalf("job state=%s", state)
-				}
-				return
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
+	if state := waitJobState(t, s.Jobs, id); state != "done" {
+		t.Fatalf("job state=%s", state)
 	}
-	t.Fatal("job did not finish")
 }
 
 type fakeServe struct {
@@ -544,22 +523,23 @@ func TestManagerRestoreKeepsFailedModels(t *testing.T) {
 
 // Re-syncing a cached version passes Force to the puller; a loaded model must
 // be unloaded first.
-func TestPullForceAndBusy(t *testing.T) {
+func TestPreloadForceAndBusy(t *testing.T) {
 	p := &capturePuller{}
-	s := &Server{Puller: p, Jobs: NewJobManager()}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/pull", strings.NewReader(`{"ref":"demo:1","force":true}`))
+	s := newPreloadServer(t, p)
+	h := s.Handler()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/models/preload", strings.NewReader(`{"ref":"demo:1","force":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	s.Handler().ServeHTTP(rec, req)
+	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
 	}
 	deadline := time.Now().Add(2 * time.Second)
-	for !p.force && time.Now().Before(deadline) {
+	for !p.hasForce() && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if !p.force {
-		t.Fatal("pull did not receive force")
+	if !p.hasForce() {
+		t.Fatal("preload did not receive force")
 	}
 
 	m := NewManagerWithOptions(&fakeLauncher{}, ManagerOptions{Inspect: fakeInspect})
@@ -567,21 +547,30 @@ func TestPullForceAndBusy(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Manager = m
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/pull", strings.NewReader(`{"ref":"demo:1"}`))
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/models/preload", strings.NewReader(`{"ref":"demo:1","force":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
-	s.Handler().ServeHTTP(rec, req)
+	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusConflict {
-		t.Fatalf("loaded model pull status = %d, want 409", rec.Code)
+		t.Fatalf("loaded model force preload status = %d, want 409", rec.Code)
 	}
 }
 
 type capturePuller struct {
+	mu    sync.Mutex
 	force bool
 }
 
+func (p *capturePuller) hasForce() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.force
+}
+
 func (p *capturePuller) Pull(ctx context.Context, ref string, opts host.PullOptions) (host.PullResult, error) {
+	p.mu.Lock()
 	p.force = opts.Force
+	p.mu.Unlock()
 	if opts.Progress != nil {
 		opts.Progress(host.PullEvent{Phase: "done", Ref: ref})
 	}
@@ -613,65 +602,46 @@ func TestInspectBundleVRAM(t *testing.T) {
 	}
 }
 
-type gatePuller struct {
-	started chan struct{}
-	release chan struct{}
-}
-
-func (p *gatePuller) Pull(ctx context.Context, ref string, opts host.PullOptions) (host.PullResult, error) {
-	select {
-	case p.started <- struct{}{}:
-		<-p.release
-	default:
-	}
-	return host.PullResult{BundleRoot: "/tmp/bundle", Checkpoint: "/tmp/weights"}, nil
-}
-
-func TestPullRejectsConcurrent(t *testing.T) {
-	p := &gatePuller{started: make(chan struct{}), release: make(chan struct{})}
-	s := &Server{Source: fakeSource{}, Puller: p, Jobs: NewJobManager()}
-	post := func() int {
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/pull", strings.NewReader(`{"ref":"demo:1"}`))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		s.Handler().ServeHTTP(rec, req)
-		return rec.Code
-	}
-	if code := post(); code != http.StatusAccepted {
-		t.Fatalf("first pull status = %d", code)
-	}
-	<-p.started
-	if code := post(); code != http.StatusConflict {
-		t.Fatalf("concurrent pull status = %d, want 409", code)
-	}
-	close(p.release)
-	for i := 0; i < 100 && s.pullBusy.Load(); i++ {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if code := post(); code != http.StatusAccepted {
-		t.Fatalf("pull after completion status = %d", code)
-	}
-}
-func TestMirrorAPI(t *testing.T) {
+func TestSettingsAPI(t *testing.T) {
 	t.Setenv("FLASHCLI_HOME", t.TempDir())
-	s := &Server{}
+	s := &Server{Addr: "127.0.0.1:8790"}
 	call := func(method, body string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(method, "/api/v1/mirror", strings.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
+		var reader io.Reader
+		if body != "" {
+			reader = strings.NewReader(body)
+		}
+		req := httptest.NewRequest(method, "/api/v1/settings", reader)
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
 		rec := httptest.NewRecorder()
 		s.Handler().ServeHTTP(rec, req)
 		return rec
 	}
-	if rec := call(http.MethodGet, ""); rec.Code != http.StatusOK {
+	rec := call(http.MethodGet, "")
+	if rec.Code != http.StatusOK {
 		t.Fatalf("GET status = %d", rec.Code)
 	}
-	if rec := call(http.MethodPost, `{"enabled":true}`); rec.Code != http.StatusOK {
-		t.Fatalf("POST enable status = %d: %s", rec.Code, rec.Body.String())
+	for _, key := range []string{`"mirror"`, `"scheduler"`, `"server"`, `"paths"`, `"writable"`} {
+		if !strings.Contains(rec.Body.String(), key) {
+			t.Fatalf("GET settings missing %s: %s", key, rec.Body.String())
+		}
+	}
+
+	if rec := call(http.MethodPatch, `{"mirror":{"enabled":true}}`); rec.Code != http.StatusOK {
+		t.Fatalf("PATCH enable status = %d: %s", rec.Code, rec.Body.String())
 	}
 	if rec := call(http.MethodGet, ""); !strings.Contains(rec.Body.String(), `"enabled":true`) {
 		t.Fatalf("GET after enable = %s", rec.Body.String())
 	}
-	if rec := call(http.MethodPost, `{"enabled":false}`); rec.Code != http.StatusOK {
-		t.Fatalf("POST disable status = %d", rec.Code)
+	if rec := call(http.MethodPatch, `{"mirror":{"enabled":false}}`); rec.Code != http.StatusOK {
+		t.Fatalf("PATCH disable status = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	if rec := call(http.MethodPatch, `{}`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("PATCH empty status = %d, want 400", rec.Code)
+	}
+	if rec := call(http.MethodPatch, `{"scheduler":{"max_loaded":2}}`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("PATCH read-only scheduler status = %d, want 400", rec.Code)
 	}
 }

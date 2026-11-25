@@ -43,7 +43,7 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 
 | Capability | Shared API | CLI use | flashserver use |
 |------------|------------|---------|-----------------|
-| Pull / runtime + venv preparation / weights | `host.Pull`, `host.EnsureRuntime`, `host.ResolveWeights` | `flashcli pull`, `run`/`serve` | `/api/v1/pull`, app prepare, Manager |
+| Pull / runtime + venv preparation / weights | `host.Pull`, `host.EnsureRuntime`, `host.ResolveWeights` | `flashcli pull`, `run`/`serve` | `/api/v1/models/preload`, app prepare, Manager |
 | Serve log name / tail / readiness | `modelrun.LogName`, `modelrun.TailLines`, `modelrun.WaitHealthy` | serve child, `app logs` | `/api/v1/logs`, Manager/scheduler |
 | App install/setup/state | `apps.Service` | `flashcli app ...` | `/api/v1/apps`, gateway setup |
 | Cache areas + unique allocated bytes | `host.Storage()` | `flashcli du` | `GET /api/v1/storage` |
@@ -59,7 +59,7 @@ Rules:
 
 - **Do not** add another marker walker, weights-readiness check, directory-size walker, cleanup path resolver, pull orchestration, log-name sanitizer/tailer, readiness loop, or app-state predicate under `go/internal/cli` or `go/internal/server`.
 - Add the behavior once in the shared package, then expose it through both frontends. Presentation-only helpers (tables, colors, prompts) stay in the frontend.
-- **Pull/prepare is one pipeline:** `host.Pull` is used by `flashcli pull`, `/api/v1/pull` and app preparation; `host.EnsureRuntime` is the runtime/venv preparation used by pull, and must stay aligned with `flashcli serve` (system requirements, protocol cache schema, CUDA).
+- **Pull/prepare is one pipeline:** `host.Pull` is used by `flashcli pull`, `/api/v1/models/preload` and app preparation; `host.EnsureRuntime` is the runtime/venv preparation used by pull, and must stay aligned with `flashcli serve` (system requirements, protocol cache schema, CUDA).
 - **Serve children** use `modelrun.LogName`/`modelrun.TailLines` for log file naming/tailing and `modelrun.WaitHealthy` for readiness. Serve logs live under the canonical `~/.flashcli/logs/serve` (config `log_dir` overrides); both `flashcli app logs` and `/api/v1/logs` read the same name.
 - **App state predicates** (running/restore) live in `apps` (`apps.WasRunning`); the daemon restore and the desktop must not re-derive them.
 - **Isolation:** the daemon may wrap a shared service with a Launcher/Stopper (for example owner-aware Manager admission), but the lifecycle logic itself stays in `apps`; the CLI must not grow a parallel copy.

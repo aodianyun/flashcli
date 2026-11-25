@@ -49,17 +49,22 @@
 | 健康 / 版本 | `GET /health`、`GET /api/v1/version` | `/health` 不需要鉴权 |
 | 模型 | `GET /api/v1/models`、`POST /api/v1/models/preload`、`POST /api/v1/models/unload`、`POST /api/v1/models/clean` | schema 见 [openapi.yaml](openapi.yaml) |
 | 模型参数 | `GET/PUT/DELETE /api/v1/models/options` | `serve_options` + 已保存的 host/port，见 [flashserver-desktop.zh-CN.md](flashserver-desktop.zh-CN.md#启动参数与局域网访问) |
-| 任务 | `POST /api/v1/pull`、`GET /api/v1/jobs/{id}`、`GET /api/v1/jobs/{id}/events`、`POST /api/v1/jobs/{id}/cancel` | 异步任务，进度也通过 `/api/v1/ws` 推送 |
+| 任务 | `GET /api/v1/jobs/{id}`、`GET /api/v1/jobs/{id}/events`、`POST /api/v1/jobs/{id}/cancel` | preload、install/prepare/setup 的异步任务句柄，进度也通过 `/api/v1/ws` 推送 |
 | 系统 | `GET /api/v1/system`、`GET /api/v1/gpu`、`GET /api/v1/gpu/history`、`GET /api/v1/resources`、`GET /api/v1/devices`、`GET /api/v1/scheduler`、`GET /api/v1/storage` | 遥测、设备盘点与 placement 结果 |
 | 日志 | `GET /api/v1/logs`、`GET /api/v1/logs/download` | `?kind=server\|model&ref=…&lines=N` |
 | 目录 | `GET /api/v1/catalog`、`GET /api/v1/catalog/tags`、`GET /api/v1/catalog/{id}` | FlashHub 代理 |
-| 镜像 | `GET /api/v1/mirror`、`POST /api/v1/mirror` | 对新下载启用/关闭国内镜像 |
+| 设置 | `GET /api/v1/settings`、`PATCH /api/v1/settings` | 类型化全局设置；`writable` 列出可写字段（`mirror.enabled`） |
 | 应用 | `GET/POST/DELETE /api/v1/apps/*`、`POST /api/v1/apps/{org}/{name}/setup` | 安装/准备/配置应用；推理一律走 `/v1` |
 | 实时 / 界面 | `GET /api/v1/ws`、`GET /`、`GET /docs`、`GET /openapi.yaml` | WebSocket 状态与内置控制台 |
 
 `GET /api/v1/models` 的模型对象包含 `capabilities` 数组。`null` 表示 host 不拥有该
 serve 条目的路由（script/native 或未知）；`[]` 表示显式关闭 host 推理路由。响应中的
 `loaded` 字段列出 resident 实例。
+
+`GET /api/v1/settings` 是唯一的类型化全局设置文档。`mirror`、`scheduler`、`server`、
+`paths` 均为生效值；只有 `writable` 列出的字段可用 `PATCH` 修改（当前为
+`mirror.enabled`）。调度器和服务器字段为只读，需要修改 daemon 配置并重启。每模型的
+host/port/serve options 仍放在 `/models/options`。
 
 ## 设备与 placement
 
@@ -76,8 +81,8 @@ serve 条目的路由（script/native 或未知）；`[]` 表示显式关闭 hos
 ## 缓存模型生命周期
 
 - `POST /api/v1/models/preload` 下载 bundle 和权重、准备运行时/venv，不启动 serve。
-  幂等；运行中返回 job。
-- `POST /api/v1/pull` 是底层下载任务；网关面向的磁盘操作是 `preload`。
+  幂等；运行中返回 job。`force=true` 会重新下载已缓存的 bundle/权重（桌面
+  **重新同步** 修复动作），模型 resident 时返回 409。
 - `POST /api/v1/models/unload` 停止 resident 并删除 bundle、权重、运行时和缓存记录。
   resident 或有 active 请求时返回 `409 model_busy`；`wait_seconds` 等待，`force`
   先停止。仍被其他 ref 引用的共享 bundle/权重/运行时保留。
@@ -93,6 +98,12 @@ serve 条目的路由（script/native 或未知）；`[]` 表示显式关闭 hos
 curl -H 'Content-Type: application/json' \
   -d '{"ref":"flashcli-bundle/qwen3_8b_nvfp4:1.0.0"}' \
   http://127.0.0.1:8790/api/v1/models/preload
+
+# 读取设置 / 切换国内镜像（当前唯一可写字段）
+curl http://127.0.0.1:8790/api/v1/settings
+curl -X PATCH -H 'Content-Type: application/json' \
+  -d '{"mirror":{"enabled":true}}' \
+  http://127.0.0.1:8790/api/v1/settings
 
 # 通过网关推理（调度器自动启动 resident）
 curl -H 'Content-Type: application/json' \

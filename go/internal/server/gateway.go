@@ -209,7 +209,7 @@ func (s *Server) prepareGateway(ctx context.Context, refStr, capability string) 
 		return &gatewayFailure{Status: http.StatusNotFound, Code: "model_not_found", Type: "invalid_request_error",
 			Message: "model is not preloaded and auto_pull is disabled", Ref: refStr}
 	}
-	ready, jobID, err := s.ensurePreload(ctx, refStr)
+	ready, jobID, err := s.ensurePreload(ctx, refStr, false)
 	if err != nil {
 		return &gatewayFailure{Status: http.StatusServiceUnavailable, Code: "model_preparing", Type: "server_busy",
 			Message: err.Error(), Ref: refStr, Retry: 5}

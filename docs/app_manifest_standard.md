@@ -108,21 +108,22 @@ To update:
 3. Reinstall the application (`重新安装` in the desktop, or
    `flashcli app install <app> --force`).
 
-Reinstall fetches the current manifest, stops every running model of the app
-(freeing slots/VRAM), keeps the caches, and prepares the new bundles — install
-does not start them. Starting the app afterwards runs the confirmed setup
-scripts for the new connection. Old caches are not deleted automatically; use
-`flashcli bundle clean --all <old-ref>` when they are no longer needed.
+Reinstall fetches the current manifest, keeps the caches, and prepares the new
+bundles — install does not start models. Running **应用配置** (`flashcli app
+setup`) afterwards executes the confirmed setup scripts against the gateway;
+the scheduler starts models on demand. Old caches are not deleted
+automatically; use `flashcli bundle clean --all <old-ref>` when they are no
+longer needed.
 
-A new **application** version is a separate app key: install it and stop or
-uninstall the old version. Updating the bundle refs in place under the same
+A new **application** version is a separate app key: install it and uninstall
+the old version. Updating the bundle refs in place under the same
 application version is supported by reinstall, but publishing a new app version
 is the documented/immutable path.
 
 For an in-place cache refresh of the **same** version (for example a mutable
 `main` revision or a repaired cache), the model page exposes **更多 → 重新同步**
 only while the model is not running. It calls
-`POST /api/v1/pull {"ref": "...", "force": true}` (CLI:
+`POST /api/v1/models/preload {"ref": "...", "force": true}` (CLI:
 `flashcli pull <ref> --force`), re-downloading the bundle tree/manifest and
 re-verifying weights. Treat this as a repair path; normal content updates should
 publish a new bundle version.
