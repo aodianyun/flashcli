@@ -24,6 +24,8 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 
 模块地图、Bundle/FlashRT 栈和 FlashHub 流程的源文件是 [`images/`](images/) 下的 `.en.dot` / `.zh-CN.dot`；重新生成：`dot -Tsvg <name>.<lang>.dot -o <name>.<lang>.svg`（PNG 同理）。系统总览、flashcli 流程、网关/调度流程和应用生命周期是手工排版 SVG。
 
+面向非技术读者的介绍见 [flashcli_system_overview.zh-CN.docx](flashcli_system_overview.zh-CN.docx)。
+
 ## 核心原则
 
 1. **推理在 bundle 内** — bundle 拥有**全部模型专属逻辑**：前向、预处理/后处理、模态形状与 dtype、输入/输出语义、option→端口映射与默认值。flashcli 只是**通用、与模型无关的驱动器**：解析 ref、准备环境、调用 bundle 提供的接口——`kind=python` 用 `entry`，`native-exec`/`native-abi` 用声明的 model-runtime ABI + manifest `native` 块。**host（`go/`）中不得出现任何模型专属常量、形状或预处理。**

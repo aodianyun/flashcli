@@ -24,6 +24,8 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 
 The module map, bundle stack, and FlashHub flow have `.en.dot` / `.zh-CN.dot` sources in [`images/`](images/); regenerate with `dot -Tsvg <name>.<lang>.dot -o <name>.<lang>.svg` (and `-Tpng`). The system overview, flashcli flow, gateway/scheduler flow, and app lifecycle are hand-laid SVG.
 
+For a non-technical introduction, see [flashcli_system_overview.zh-CN.docx](flashcli_system_overview.zh-CN.docx).
+
 ## Core principles
 
 1. **Inference lives in the bundle** — the bundle owns **all model-specific logic**: the forward pass, preprocessing/postprocessing, modality shapes and dtypes, input/output semantics, and option→port mapping/defaults. flashcli is a **generic, model-agnostic driver**: it resolves the ref, prepares the environment, and invokes the bundle-provided interface — `entry` for `kind=python`, or the declared model-runtime ABI + manifest `native` block for `native-exec`/`native-abi`. **No model-specific constants, shapes, or preprocessing may live in the host** (`go/`).
