@@ -1,0 +1,34 @@
+digraph FlashcliFlow {
+  graph [rankdir=TB, bgcolor="#f7f9fc", pad=0.35, nodesep=0.5, ranksep=0.55,
+         fontname="Noto Sans CJK SC", fontsize=24, labelloc="t",
+         label=<<B>flashcli 运行流程</B><BR/><FONT POINT-SIZE="13" COLOR="#64748b">ref 解析 → 缓存/运行时/权重准备 → run 或 serve</FONT>>];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC",
+        fontsize=12, margin="0.18,0.10", penwidth=1.2, color="#94a3b8"];
+  edge [fontname="Noto Sans CJK SC", fontsize=10, color="#64748b", arrowsize=0.75];
+
+  input [fillcolor="#dbeafe", color="#60a5fa", label=<<B>输入</B><BR/><FONT POINT-SIZE="10">flashcli run | serve &lt;ref&gt;<BR/>flashcli-bundle/name:version[@variant]<BR/>或本地 bundles/&lt;name&gt;</FONT>>];
+  parse [fillcolor="#e0e7ff", color="#818cf8", label=<<B>解析 ref</B><BR/><FONT POINT-SIZE="10">namespace / name / version<BR/>variant · cache key</FONT>>];
+  check [shape=diamond, fillcolor="#fef9c3", color="#eab308", label=<<B>本地缓存<br/>完整?</B>>];
+  sync [fillcolor="#ffedd5", color="#f97316", label=<<B>FlashHub 同步</B><BR/><FONT POINT-SIZE="10">repo index<BR/>manifest + bundle files<BR/>runtime dir · weights metadata</FONT>>];
+  preflight [fillcolor="#ede9fe", color="#8b5cf6", label=<<B>Preflight</B><BR/><FONT POINT-SIZE="10">GPU / CUDA / Python ABI<BR/>runtime cell 匹配<BR/>system requirements</FONT>>];
+  venv [fillcolor="#fce7f3", color="#db2777", label=<<B>运行时 / venv</B><BR/><FONT POINT-SIZE="10">uv / pip<BR/>flashcli-bundle[infer]<BR/>python_dependencies</FONT>>];
+  weights [fillcolor="#dcfce7", color="#22c55e", label=<<B>权重准备</B><BR/><FONT POINT-SIZE="10">共享 models/store/<BR/>download manifest<BR/>post_pull · extra_pull</FONT>>];
+  entry [fillcolor="#fef3c7", color="#d97706", label=<<B>执行入口</B><BR/><FONT POINT-SIZE="10">bundle/entry<BR/>Python RunEngine / ServeEngine<BR/>native-exec / native-abi</FONT>>];
+  run [fillcolor="#e0f2fe", color="#0284c7", label=<<B>run</B><BR/><FONT POINT-SIZE="10">一次性推理<BR/>输出结果后退出</FONT>>];
+  serve [fillcolor="#e0f2fe", color="#0284c7", label=<<B>serve</B><BR/><FONT POINT-SIZE="10">host-owned HTTP/WS<BR/>OpenAI / Anthropic 协议</FONT>>];
+  flashrt [fillcolor="#f1f5f9", color="#64748b", label=<<B>FlashRT</B><BR/><FONT POINT-SIZE="10">flash_rt · .so<BR/>CUDA kernels</FONT>>];
+  offline [shape=note, fillcolor="#f8fafc", color="#cbd5e1", label=<<B>离线保证</B><BR/><FONT POINT-SIZE="10">缓存完整且满足 bundle readiness<BR/>时不再访问网络；<BR/>只有显式 pull / 缺失资产 /<BR/>schema 升级才联网。</FONT>>];
+
+  input -> parse -> check;
+  check -> preflight [label="完整（离线）", color="#22c55e"];
+  check -> sync [label="缺失 / 显式 pull", color="#f97316"];
+  sync -> preflight [label="bundle tree ready", color="#f97316"];
+  preflight -> venv [label="runtime 可用", color="#8b5cf6"];
+  venv -> weights [label="依赖就绪", color="#db2777"];
+  weights -> entry [label="checkpoint ready", color="#22c55e"];
+  entry -> run [label="run"];
+  entry -> serve [label="serve"];
+  entry -> flashrt [style=dashed, label="import", color="#64748b"];
+  offline -> check [style=dotted, color="#94a3b8", arrowhead=none];
+  { rank=same; run; serve; }
+}

@@ -8,6 +8,22 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 
 > **Go host.** The host CLI is a static Go binary under `go/` (module `github.com/aodianyun/flashcli/go`); the Python host was removed. `flashcli-bundle/` remains: it is the **protocol** + **infer** package installed into bundle venvs (`flashcli-bundle[infer]`). Execution backends (`entry.kind`) are specified in [bundle_execution_abi.md](bundle_execution_abi.md).
 
+## Diagrams
+
+![flashcli system architecture](images/system-architecture.svg)
+
+| Diagram | Contents |
+|---|---|
+| [System architecture](images/system-architecture.svg) · [PNG](images/system-architecture.png) | Clients, flashserver, flashcli, shared cache, FlashHub, Model Bundle, FlashRT |
+| [flashcli run/serve flow](images/flashcli-flow.svg) · [PNG](images/flashcli-flow.png) | Ref resolution, offline cache, preflight, venv, weights, entry, run/serve |
+| [flashserver gateway/scheduler flow](images/flashserver-gateway-flow.svg) · [PNG](images/flashserver-gateway-flow.png) | `/v1` request path, preload, placement, lease, proxy, release, errors |
+| [Model Bundle / FlashRT stack](images/bundle-runtime-stack.svg) · [PNG](images/bundle-runtime-stack.png) | FlashHub → bundle manifest/entry/runtime cells → venv/weights → FlashRT |
+| [Go host module map](images/go-module-map.svg) · [PNG](images/go-module-map.png) | Commands → CLI/server frontends → shared host services → execution backends |
+| [FlashHub flow](images/flashhub-flow.svg) · [PNG](images/flashhub-flow.png) | Publish → catalog/versions → CLI/flashserver/desktop sync |
+| [App lifecycle](images/app-lifecycle.svg) · [PNG](images/app-lifecycle.png) | install → prepare → setup → ready; no app-owned model start/stop |
+
+Sources are the `.dot` files in [`images/`](images/); regenerate with `dot -Tsvg <name>.dot -o <name>.svg` (and `-Tpng`).
+
 ## Core principles
 
 1. **Inference lives in the bundle** — the bundle owns **all model-specific logic**: the forward pass, preprocessing/postprocessing, modality shapes and dtypes, input/output semantics, and option→port mapping/defaults. flashcli is a **generic, model-agnostic driver**: it resolves the ref, prepares the environment, and invokes the bundle-provided interface — `entry` for `kind=python`, or the declared model-runtime ABI + manifest `native` block for `native-exec`/`native-abi`. **No model-specific constants, shapes, or preprocessing may live in the host** (`go/`).

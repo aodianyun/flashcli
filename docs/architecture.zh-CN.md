@@ -8,6 +8,22 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 
 > **Go host。** 主机 CLI 是 `go/`（module `github.com/aodianyun/flashcli/go`）下的静态 Go 二进制；Python host 已移除。`flashcli-bundle/` 保留：它是装进 bundle venv 的 **protocol** + **infer** 包（`flashcli-bundle[infer]`）。执行 backend（`entry.kind`）规范见 [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md)。
 
+## 架构图与流程图
+
+![flashcli 系统架构](images/system-architecture.svg)
+
+| 图 | 内容 |
+|---|---|
+| [系统架构](images/system-architecture.svg) · [PNG](images/system-architecture.png) | 客户端、flashserver、flashcli、共享缓存、FlashHub、Model Bundle、FlashRT |
+| [flashcli run/serve 流程](images/flashcli-flow.svg) · [PNG](images/flashcli-flow.png) | ref 解析、离线缓存、preflight、venv、权重、entry、run/serve |
+| [flashserver 网关/调度流程](images/flashserver-gateway-flow.svg) · [PNG](images/flashserver-gateway-flow.png) | `/v1` 请求、preload、placement、lease、proxy、释放、错误 |
+| [Model Bundle / FlashRT 运行时栈](images/bundle-runtime-stack.svg) · [PNG](images/bundle-runtime-stack.png) | FlashHub → manifest/entry/runtime cells → venv/权重 → FlashRT |
+| [Go host 模块地图](images/go-module-map.svg) · [PNG](images/go-module-map.png) | 命令 → CLI/server 前端 → 共享 host 服务 → 执行 backend |
+| [FlashHub 流程](images/flashhub-flow.svg) · [PNG](images/flashhub-flow.png) | 发布 → 目录/版本 → CLI/flashserver/desktop 同步 |
+| [应用生命周期](images/app-lifecycle.svg) · [PNG](images/app-lifecycle.png) | install → prepare → setup → ready；应用不拥有模型启停 |
+
+源文件是 [`images/`](images/) 下的 `.dot`；重新生成：`dot -Tsvg <name>.dot -o <name>.svg`（PNG 同理）。
+
 ## 核心原则
 
 1. **推理在 bundle 内** — bundle 拥有**全部模型专属逻辑**：前向、预处理/后处理、模态形状与 dtype、输入/输出语义、option→端口映射与默认值。flashcli 只是**通用、与模型无关的驱动器**：解析 ref、准备环境、调用 bundle 提供的接口——`kind=python` 用 `entry`，`native-exec`/`native-abi` 用声明的 model-runtime ABI + manifest `native` 块。**host（`go/`）中不得出现任何模型专属常量、形状或预处理。**
