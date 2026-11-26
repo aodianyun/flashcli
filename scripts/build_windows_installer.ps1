@@ -49,16 +49,34 @@ try {
     }
     Copy-Item $ClientExe (Join-Path $Payload "flashcli-desktop.exe")
     # Only amd64 Linux binaries are shipped: the installer is x64-only
-    # (ArchitecturesAllowed=x64) and WSL2 on x64 Windows is amd64. Setup picks
-    # flashcli-linux-<arch>/flashserver-linux-<arch> from this directory, so no
-    # arm64 pair (or network checksum file) is needed.
+    # (ArchitecturesAllowed=x64) and WSL2 on x64 Windows is amd64. Preserve the
+    # project build checksums so Setup can verify this bundled payload locally.
+    $ChecksumsPath = Join-Path $Dist "sha256sums.txt"
+    if (-not (Test-Path -LiteralPath $ChecksumsPath)) {
+        throw "missing $ChecksumsPath; build the release assets with scripts/build_go.sh first"
+    }
+    $ChecksumEntries = @{}
+    foreach ($line in Get-Content -LiteralPath $ChecksumsPath) {
+        if ($line -match '^\s*([0-9a-fA-F]{64})\s+\*?(.+?)\s*$') {
+            $ChecksumEntries[$Matches[2]] = $Matches[1].ToLowerInvariant()
+        }
+    }
+    $PayloadChecksums = @()
     foreach ($name in @(
         "flashcli-linux-amd64",
         "flashserver-linux-amd64"
     )) {
         $src = Join-Path $Dist $name
-        if (Test-Path $src) { Copy-Item $src (Join-Path $Payload $name) }
+        if (-not (Test-Path -LiteralPath $src)) { throw "missing Linux payload $src" }
+        if (-not $ChecksumEntries.ContainsKey($name)) { throw "$name is missing from $ChecksumsPath" }
+        $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $src).Hash.ToLowerInvariant()
+        if ($actual -ne $ChecksumEntries[$name]) {
+            throw "$name SHA-256 mismatch: got $actual, expected $($ChecksumEntries[$name]) from $ChecksumsPath"
+        }
+        Copy-Item -LiteralPath $src -Destination (Join-Path $Payload $name)
+        $PayloadChecksums += "$actual  $name"
     }
+    [IO.File]::WriteAllLines((Join-Path $Payload "sha256sums.txt"), $PayloadChecksums, [Text.Encoding]::ASCII)
 
     # Bundle the protocol package source so bundle venvs do not need GitHub.
     $BundleSrc = Join-Path $Root "flashcli-bundle"

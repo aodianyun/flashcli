@@ -105,6 +105,9 @@ func installWSL(ctx context.Context, env Env, opts Options, out io.Writer) error
 	if err := moveDistro(ctx, opts, &i); err != nil {
 		return err
 	}
+	if err := cancellationErr(ctx, opts); err != nil {
+		return err
+	}
 	if err := stepf(out, 3, total, "Enabling systemd", func() error { return ensureSystemd(ctx, opts, &i) }); err != nil {
 		return err
 	}
@@ -218,70 +221,6 @@ func stepf(out io.Writer, n, total int, name string, fn func() error) error {
 	return nil
 }
 
-// ensureWSL makes WSL2 available on a clean Windows install. `wsl --install`
-// both enables the optional features and installs the WSL app/kernel; when the
-// OS still needs a restart it reports ErrRebootRequired so the UI can offer one
-// and ask the user to run the installer again.
-func ensureWSL(ctx context.Context, opts Options, i *installer) error {
-	if wslStatusOK(ctx) {
-		return nil
-	}
-	i.printf("WSL2 not detected; enabling it (this can take several minutes)...\n")
-	if opts.DryRun {
-		i.printf("$ wsl.exe --install --no-distribution\n")
-		return nil
-	}
-
-	enableCtx, cancel := context.WithTimeout(ctx, 20*time.Minute)
-	wslErr := i.runDiag(enableCtx, sysExe("wsl.exe"), "--install", "--no-distribution")
-	cancel()
-	if wslErr != nil {
-		// Older Windows 10 builds do not know --no-distribution (or --install).
-		i.printf("wsl --install failed (%v); enabling the optional features with DISM\n", wslErr)
-		dismCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-		err1 := dismEnable(dismCtx, i, "Microsoft-Windows-Subsystem-Linux")
-		err2 := dismEnable(dismCtx, i, "VirtualMachinePlatform")
-		cancel()
-		if err1 != nil && err2 != nil {
-			return fmt.Errorf("enable WSL2 features: %v; %v", err1, err2)
-		}
-	}
-
-	// A newly enabled WSL app or optional feature normally needs a reboot; poll
-	// briefly so a machine that is ready without one still proceeds.
-	deadline := time.Now().Add(60 * time.Second)
-	for {
-		if wslStatusOK(ctx) {
-			return nil
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("%w: restart Windows, then run Setup again (or run `wsl --install` from an elevated terminal)", ErrRebootRequired)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(3 * time.Second):
-		}
-	}
-}
-
-func wslStatusOK(ctx context.Context) bool {
-	c, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	return exec.CommandContext(c, sysExe("wsl.exe"), "--status").Run() == nil
-}
-
-// dismEnable treats DISM's 3010 (ERROR_SUCCESS_REBOOT_REQUIRED) as success.
-func dismEnable(ctx context.Context, i *installer, feature string) error {
-	err := i.run(ctx, sysExe("dism.exe"), "/online", "/enable-feature",
-		"/featurename:"+feature, "/all", "/norestart")
-	if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() == 3010 {
-		i.printf("%s enabled; a restart is required\n", feature)
-		return nil
-	}
-	return err
-}
-
 func ensureDistro(ctx context.Context, opts Options, i *installer) error {
 	// Cold-starting the WSL service can make the first calls fail briefly.
 	for attempt := 0; attempt < 5; attempt++ {
@@ -375,16 +314,16 @@ func importDistroRootfs(ctx context.Context, opts Options, i *installer) error {
 	if err != nil {
 		return fmt.Errorf("invalid WSL directory %q: %w", target, err)
 	}
-	if wslDistroRegistered(ctx, opts.Distro) {
-		return fmt.Errorf("WSL distro %q is already registered but did not start; run `wsl -d %s -u root true`, then retry (or choose another --distro name)", opts.Distro, opts.Distro)
+	registered, err := registeredForImport(ctx, i, opts.Distro)
+	if err != nil {
+		return fmt.Errorf("check WSL registration before import: %w", err)
 	}
-	if entries, err := os.ReadDir(abs); err == nil && len(entries) > 0 {
-		return fmt.Errorf("target directory %s is not empty", abs)
+	if registered {
+		return fmt.Errorf("WSL distro %q is already registered; refusing to overwrite it", opts.Distro)
 	}
-	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-		return fmt.Errorf("create %s: %w", filepath.Dir(abs), err)
+	if err := i.prepareWSLLocation(abs); err != nil {
+		return err
 	}
-
 	rootfs := strings.TrimSpace(opts.DistroRootfs)
 	cleanup := func() {}
 	if rootfs == "" {
@@ -395,18 +334,95 @@ func importDistroRootfs(ctx context.Context, opts Options, i *installer) error {
 		rootfs, cleanup = path, done
 	}
 	defer cleanup()
-
+	if err := cancellationErr(ctx, opts); err != nil {
+		return err
+	}
 	i.printf("\nimport Ubuntu rootfs into %s\n", abs)
-	cmd := exec.CommandContext(ctx, sysExe("wsl.exe"), "--import", opts.Distro, abs, rootfs, "--version", "2")
-	out, err := cmd.CombinedOutput()
-	if len(out) > 0 {
-		_, _ = diag.Write(normalizeDiagnostic(out))
+	// Let the import finish even if the UI requests cancellation. An interrupted
+	// import can leave a partial VHDX that must never be overwritten on retry.
+	i.printf("WSL_IMPORT_BEGIN %s; cancellation will wait for this command to finish\n", abs)
+	importErr := i.runDiag(context.WithoutCancel(ctx), sysExe("wsl.exe"), "--import", opts.Distro, abs, rootfs, "--version", "2")
+	i.printf("WSL_IMPORT_END %s; result=%v\n", abs, importErr)
+	if cancelErr := cancellationErr(ctx, opts); cancelErr != nil {
+		return cancelledImportState(ctx, cancelErr, opts.Distro, abs, i)
 	}
+	if err := importErr; err != nil {
+		return fmt.Errorf("wsl --import %s: %w; existing target files were preserved for inspection", abs, err)
+	}
+	i.printf("imported WSL distro %s into %s (Ubuntu 24.04 rootfs)\n", opts.Distro, abs)
+	return nil
+}
+
+func cancelledImportState(ctx context.Context, cancelErr error, name, target string, i *installer) error {
+	checkCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
+	defer cancel()
+	registered, err := registeredForImport(checkCtx, i, name)
 	if err != nil {
-		_ = os.RemoveAll(abs)
-		return fmt.Errorf("wsl --import %s: %w", abs, err)
+		return fmt.Errorf("%w: WSL import command finished, but registration could not be checked: %v; inspect %s before retrying", cancelErr, err, target)
 	}
-	i.printf("imported WSL distro %s (Ubuntu 24.04 rootfs)\n", opts.Distro)
+	if !registered {
+		return fmt.Errorf("%w: WSL import command finished without registering %s; inspect %s before retrying", cancelErr, name, target)
+	}
+	actual, err := distroBasePath(checkCtx, i, name)
+	if err != nil {
+		return fmt.Errorf("%w: WSL import command finished, but BasePath could not be checked: %v; inspect %s before retrying", cancelErr, err, target)
+	}
+	if err := verifyWSLLocation(name, actual, target, i); err != nil {
+		return fmt.Errorf("%w: WSL import command finished, but storage verification failed: %v; manual inspection required", cancelErr, err)
+	}
+	return fmt.Errorf("%w: WSL import finished at %s; setup stopped before later steps", cancelErr, actual)
+}
+
+func registeredForImport(ctx context.Context, i *installer, name string) (bool, error) {
+	output, err := i.runDiagOutput(ctx, sysExe("wsl.exe"), "--list", "--quiet")
+	if err != nil {
+		return false, err
+	}
+	for _, line := range strings.Split(string(normalizeDiagnostic(output)), "\n") {
+		if strings.EqualFold(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "\uFEFF")), name) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (i *installer) prepareWSLLocation(path string) error {
+	if i.prepareLocation != nil {
+		return i.prepareLocation(path)
+	}
+	return prepareWSLLocation(path)
+}
+
+func prepareWSLLocation(abs string) error {
+	info, err := os.Lstat(abs)
+	if err == nil {
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("WSL target %s is not a regular directory", abs)
+		}
+		entries, readErr := os.ReadDir(abs)
+		if readErr != nil {
+			return fmt.Errorf("read WSL target %s: %w", abs, readErr)
+		}
+		if len(entries) != 0 {
+			return fmt.Errorf("WSL target %s is not empty; refusing to overwrite it", abs)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect WSL target %s: %w", abs, err)
+	}
+	if err := os.MkdirAll(abs, 0o755); err != nil {
+		return fmt.Errorf("create WSL target %s: %w", abs, err)
+	}
+	probe, err := os.CreateTemp(abs, ".flashserver-write-check-*")
+	if err != nil {
+		return fmt.Errorf("WSL target %s is not writable: %w", abs, err)
+	}
+	name := probe.Name()
+	if err := probe.Close(); err != nil {
+		return fmt.Errorf("close WSL target write probe: %w", err)
+	}
+	if err := os.Remove(name); err != nil {
+		return fmt.Errorf("remove WSL target write probe: %w", err)
+	}
 	return nil
 }
 
@@ -492,50 +508,171 @@ func fetchRootfs(ctx context.Context, client *http.Client, url, dest string, i *
 	return nil
 }
 
-// moveDistro relocates the WSL distro's virtual disk when --wsl-dir is set.
-// WSL has no install-time location flag, so install it first and move it while
-// the distro is stopped. A failure is a warning: the service still works from
-// the default location.
+// moveDistro verifies the requested location. It never unregisters a distro.
 func moveDistro(ctx context.Context, opts Options, i *installer) error {
-	target := strings.TrimSpace(opts.WSLDir)
-	if target == "" {
+	if strings.TrimSpace(opts.WSLDir) == "" {
 		return nil
 	}
-	abs, err := filepath.Abs(target)
+	target, err := filepath.Abs(strings.TrimSpace(opts.WSLDir))
 	if err != nil {
-		i.printf("warn: invalid WSL directory %q: %v\n", target, err)
-		return nil
+		return fmt.Errorf("invalid requested WSL directory: %w", err)
+	}
+	current, err := distroBasePath(ctx, i, opts.Distro)
+	if err != nil {
+		return fmt.Errorf("cannot verify current WSL storage for %s: %w", opts.Distro, err)
+	}
+	if equalWSLPath(current, target) {
+		return verifyWSLLocation(opts.Distro, current, target, i)
+	}
+	if opts.Distro != "flashserver_ubuntu" {
+		return fmt.Errorf("refusing to move legacy distribution %s automatically; current=%s requested=%s", opts.Distro, current, target)
+	}
+	if err := i.prepareWSLLocation(target); err != nil {
+		return err
+	}
+	if err := cancellationErr(ctx, opts); err != nil {
+		return err
 	}
 	if opts.DryRun {
-		i.printf("$ wsl.exe --terminate %s && wsl.exe --manage %s --move %s\n", opts.Distro, opts.Distro, abs)
+		i.printf("$ wsl.exe --terminate %s; wsl.exe --manage %s --move %s\n", opts.Distro, opts.Distro, target)
 		return nil
 	}
-	if _, err := os.Stat(filepath.Join(abs, "ext4.vhdx")); err == nil {
-		i.printf("WSL distro already at %s\n", abs)
-		return nil
+	help, err := i.runDiagOutput(ctx, sysExe("wsl.exe"), "--help")
+	if err != nil || !hasHelpOption(help, "--manage") || !hasHelpOption(help, "--move") {
+		return fmt.Errorf("WSL CLI does not confirm --manage --move support; current=%s requested=%s", current, target)
 	}
-	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-		i.printf("warn: create %s: %v\n", filepath.Dir(abs), err)
-		return nil
+	if err := i.runDiag(ctx, sysExe("wsl.exe"), "--terminate", opts.Distro); err != nil {
+		i.printf("warn: target-only terminate returned %v; trying the move without affecting other distributions\n", err)
 	}
-	// The VHDX stays locked for a while after the distro is stopped, so
-	// --move fails with ERROR_SHARING_VIOLATION. Shut WSL down and retry.
-	i.printf("stopping WSL before moving the distro\n")
-	_ = exec.CommandContext(ctx, sysExe("wsl.exe"), "--shutdown").Run()
-	var lastErr error
-	for attempt := 1; attempt <= 6; attempt++ {
-		time.Sleep(time.Duration(attempt+2) * time.Second)
-		cmd := exec.CommandContext(ctx, sysExe("wsl.exe"), "--manage", opts.Distro, "--move", abs)
-		cmd.Stdout = diag
-		cmd.Stderr = diag
-		if err := cmd.Run(); err == nil {
-			i.printf("moved WSL distro %s to %s\n", opts.Distro, abs)
-			return nil
-		} else {
-			lastErr = err
+	if err := cancellationErr(ctx, opts); err != nil {
+		return err
+	}
+	// A cancellation request must not kill wsl.exe while it is moving a VHDX.
+	// The caller stops the remaining installation after this command returns.
+	moveCtx := context.WithoutCancel(ctx)
+	i.printf("WSL_MOVE_BEGIN %s -> %s; cancellation will wait for this command to finish\n", current, target)
+	moveErr := i.runDiag(moveCtx, sysExe("wsl.exe"), "--manage", opts.Distro, "--move", target)
+	i.printf("WSL_MOVE_END %s -> %s; result=%v\n", current, target, moveErr)
+	if cancelErr := cancellationErr(ctx, opts); cancelErr != nil {
+		return cancelledMoveState(ctx, cancelErr, opts.Distro, current, target, i)
+	}
+	if moveErr != nil {
+		observed, queryErr := distroBasePath(ctx, i, opts.Distro)
+		if queryErr != nil {
+			return fmt.Errorf("target-only move failed (%v) and registration is uncertain: %w", moveErr, queryErr)
+		}
+		if equalWSLPath(observed, target) {
+			return verifyWSLLocation(opts.Distro, observed, target, i)
+		}
+		if !equalWSLPath(observed, current) {
+			return fmt.Errorf("target-only move failed and BasePath changed unexpectedly to %s; manual inspection required", observed)
+		}
+		entries, readErr := os.ReadDir(target)
+		if readErr != nil {
+			return fmt.Errorf("target-only move failed and destination cannot be inspected: %w", readErr)
+		}
+		if len(entries) > 0 {
+			return fmt.Errorf("target-only move failed and destination contains files; manual inspection required: %s", target)
+		}
+		if !opts.AllowGlobalWSLShutdown {
+			return fmt.Errorf("target-only WSL move failed (%v); current=%s requested=%s; global shutdown was not authorized", moveErr, current, target)
+		}
+		if err := cancellationErr(ctx, opts); err != nil {
+			return err
+		}
+		i.printf("global WSL shutdown was explicitly authorized; stopping all WSL distributions before one move retry\n")
+		if err := i.runDiag(moveCtx, sysExe("wsl.exe"), "--shutdown"); err != nil {
+			return fmt.Errorf("authorized global WSL shutdown failed: %w", err)
+		}
+		if err := cancellationErr(ctx, opts); err != nil {
+			return err
+		}
+		beforeRetry, err := distroBasePath(ctx, i, opts.Distro)
+		if err != nil || !equalWSLPath(beforeRetry, current) {
+			return fmt.Errorf("WSL registration changed before the authorized move retry: current=%s observed=%s query error=%v; manual inspection required", current, beforeRetry, err)
+		}
+		if err := i.prepareWSLLocation(target); err != nil {
+			return fmt.Errorf("WSL target changed before the authorized move retry: %w", err)
+		}
+		if err := cancellationErr(ctx, opts); err != nil {
+			return err
+		}
+		i.printf("WSL_MOVE_BEGIN %s -> %s; authorized retry; cancellation will wait for this command to finish\n", current, target)
+		err = i.runDiag(moveCtx, sysExe("wsl.exe"), "--manage", opts.Distro, "--move", target)
+		i.printf("WSL_MOVE_END %s -> %s; authorized retry result=%v\n", current, target, err)
+		if cancelErr := cancellationErr(ctx, opts); cancelErr != nil {
+			return cancelledMoveState(ctx, cancelErr, opts.Distro, current, target, i)
+		}
+		if err != nil {
+			return fmt.Errorf("WSL move failed after authorized shutdown: %w; verify registered path before retrying", err)
 		}
 	}
-	i.printf("warn: move WSL distro to %s failed (%v); keeping the default location\n", abs, lastErr)
+	actual, err := distroBasePath(ctx, i, opts.Distro)
+	if err != nil {
+		return fmt.Errorf("WSL move returned success but registration could not be verified: %w", err)
+	}
+	return verifyWSLLocation(opts.Distro, actual, target, i)
+}
+
+func cancelledMoveState(ctx context.Context, cancelErr error, name, source, target string, i *installer) error {
+	checkCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
+	defer cancel()
+	actual, err := distroBasePath(checkCtx, i, name)
+	if err != nil {
+		return fmt.Errorf("%w: WSL move command finished, but BasePath could not be checked: %v; manual inspection required", cancelErr, err)
+	}
+	if equalWSLPath(actual, target) {
+		if err := verifyWSLLocation(name, actual, target, i); err != nil {
+			return fmt.Errorf("%w: WSL move command finished at %s but storage verification failed: %v; manual inspection required", cancelErr, actual, err)
+		}
+		return fmt.Errorf("%w: WSL move finished at requested path %s; setup stopped before later steps", cancelErr, actual)
+	}
+	if equalWSLPath(actual, source) {
+		return fmt.Errorf("%w: WSL move command finished; registered path remains %s; inspect destination %s before retrying", cancelErr, actual, target)
+	}
+	return fmt.Errorf("%w: WSL move command finished at unexpected path %s; manual inspection required", cancelErr, actual)
+}
+
+func distroBasePath(ctx context.Context, i *installer, name string) (string, error) {
+	queryCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	script := "Get-ChildItem 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss' -ErrorAction Stop | Get-ItemProperty | Select-Object DistributionName,BasePath | ConvertTo-Json -Compress"
+	output, err := i.runDiagOutput(queryCtx, sysExe("powershell.exe"), "-NoProfile", "-NonInteractive", "-Command", script)
+	if err != nil {
+		return "", err
+	}
+	type registration struct {
+		DistributionName string
+		BasePath         string
+	}
+	var entries []registration
+	if json.Unmarshal(output, &entries) != nil {
+		var entry registration
+		if err := json.Unmarshal(output, &entry); err != nil {
+			return "", err
+		}
+		entries = []registration{entry}
+	}
+	for _, entry := range entries {
+		if strings.EqualFold(entry.DistributionName, name) && entry.BasePath != "" {
+			return entry.BasePath, nil
+		}
+	}
+	return "", fmt.Errorf("registered BasePath for %s not found", name)
+}
+
+func equalWSLPath(a, b string) bool {
+	clean := func(p string) string { return strings.TrimPrefix(filepath.Clean(p), `\\?\`) }
+	return strings.EqualFold(clean(a), clean(b))
+}
+func verifyWSLLocation(name, actual, target string, i *installer) error {
+	if !equalWSLPath(actual, target) {
+		return fmt.Errorf("WSL storage mismatch for %s: actual=%s requested=%s", name, actual, target)
+	}
+	if _, err := os.Stat(filepath.Join(actual, "ext4.vhdx")); err != nil {
+		return fmt.Errorf("WSL storage for %s reports %s but ext4.vhdx is not verified: %w", name, actual, err)
+	}
+	i.printf("verified WSL storage for %s: %s\n", name, actual)
 	return nil
 }
 

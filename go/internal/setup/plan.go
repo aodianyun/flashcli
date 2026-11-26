@@ -5,9 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"runtime"
-	"time"
 )
 
 // Env is the detected installation environment.
@@ -28,9 +26,7 @@ type Step struct {
 func Detect(ctx context.Context) Env {
 	env := Env{OS: runtime.GOOS, Arch: runtime.GOARCH}
 	if env.OS == "windows" {
-		c, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		env.WSL = exec.CommandContext(c, sysExe("wsl.exe"), "--status").Run() == nil
+		env.WSL = detectWSLAvailable(ctx)
 	}
 	return env
 }
