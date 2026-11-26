@@ -14,7 +14,7 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 
 | Diagram | Contents |
 |---|---|
-| [System overview](images/architecture-overview.en.svg) · [PNG](images/architecture-overview.en.png) | Clients, flashserver control plane, flashcli worker, compute/weights/environment, FlashHub, FlashRT |
+| [System overview](images/architecture-overview.en.svg) · [PNG](images/architecture-overview.en.png) | Clients, flashserver local service, flashcli execution, Model Bundle + FlashRT, shared cache, FlashHub and weight sources |
 | [flashcli run/serve flow](images/flashcli-flow.en.svg) · [PNG](images/flashcli-flow.en.png) | Ref resolution, offline cache, preflight, venv, weights, entry, run/serve |
 | [flashserver gateway/scheduler flow](images/flashserver-gateway-flow.en.svg) · [PNG](images/flashserver-gateway-flow.en.png) | `/v1` request path, preload, placement, lease, proxy, release, errors |
 | [Model Bundle / FlashRT stack](images/bundle-runtime-stack.en.svg) · [PNG](images/bundle-runtime-stack.en.png) | FlashHub → bundle manifest/entry/runtime cells → venv/weights → FlashRT |
