@@ -362,6 +362,7 @@ GPU runtime 必填：
 单元测试：
 
 - 完整 ref 校验、capability 路由、错误映射。
+- 客户端取消或上游流中断都会释放 lease，并保留已输出的部分内容。
 - preload/unload 幂等、active lease 等待/409/force、共享资产保留。
 - auto-pull job 去重、Retry-After 策略、完成后重试成功。
 - 调度准入、LRU 空闲 stop、max_loaded、VRAM headroom、队列。

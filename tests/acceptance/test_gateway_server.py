@@ -14,6 +14,7 @@ import os
 import subprocess
 import threading
 import time
+import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -48,7 +49,14 @@ BUNDLE_MANIFEST = {
                 "module": "serve",
                 "attr": "ServeEngine",
                 "mode": "engine",
-                "capabilities": ["openai.chat"],
+                "capabilities": [
+                    "openai.chat",
+                    "openai.embeddings",
+                    "openai.moderations",
+                    "openai.audio.transcriptions",
+                    "anthropic.messages",
+                    "anthropic.count_tokens",
+                ],
             }
         },
         "python_dependencies": {"torch": False, "pip": []},
@@ -151,6 +159,47 @@ def _start_daemon(flashserver_bin, flashcli_bin, cli_env, tmp_path, hub_port):
     return proc, f"http://127.0.0.1:{port}"
 
 
+def _http_json_headers(url: str, payload: dict, headers: dict) -> tuple[int, dict]:
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json", **headers},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            return resp.status, json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        return exc.code, json.loads(exc.read() or b"{}")
+
+
+def _http_multipart(url: str, fields: dict, file_field: str, filename: str, content: bytes) -> tuple[int, dict]:
+    boundary = "----flashcli-gateway-e2e"
+    chunks = []
+    for name, value in fields.items():
+        chunks.append(
+            f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode()
+        )
+    chunks.append(
+        f'--{boundary}\r\nContent-Disposition: form-data; name="{file_field}"; filename="{filename}"\r\n'
+        f"Content-Type: application/octet-stream\r\n\r\n".encode()
+        + content
+        + b"\r\n"
+    )
+    chunks.append(f"--{boundary}--\r\n".encode())
+    req = urllib.request.Request(
+        url,
+        data=b"".join(chunks),
+        method="POST",
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            return resp.status, json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        return exc.code, json.loads(exc.read() or b"{}")
+
+
 def _http_text(url: str, payload: dict) -> str:
     req = urllib.request.Request(
         url,
@@ -249,6 +298,45 @@ def test_gateway_real_bundle(flashserver_bin, flashcli_bin, cli_env, tmp_path):
             },
         )
         assert "data: " in stream and "Answer:" in stream and "hello" in stream and REF in stream
+
+        # Other host-owned routes go through the same bundle and gateway.
+        status, embeddings = http_json(
+            base + "/v1/embeddings", {"model": REF, "input": "hello"}
+        )
+        assert status == 200 and embeddings["data"][0]["embedding"]
+
+        status, moderation = http_json(
+            base + "/v1/moderations", {"model": REF, "input": "violence"}
+        )
+        assert status == 200 and moderation["results"][0]["flagged"] is True
+
+        anthropic = {"anthropic-version": "2023-06-01"}
+        status, message = _http_json_headers(
+            base + "/v1/messages",
+            {
+                "model": REF,
+                "max_tokens": 16,
+                "messages": [{"role": "user", "content": "hello"}],
+            },
+            anthropic,
+        )
+        assert status == 200 and message["content"]
+
+        status, count = _http_json_headers(
+            base + "/v1/messages/count_tokens",
+            {"model": REF, "messages": [{"role": "user", "content": "hello"}]},
+            anthropic,
+        )
+        assert status == 200 and count["input_tokens"] >= 1
+
+        status, audio = _http_multipart(
+            base + "/v1/audio/transcriptions",
+            {"model": REF},
+            "file",
+            "hello.wav",
+            b"RIFF....WAVE",
+        )
+        assert status == 200 and "Hello from realtime audio." in audio["text"]
 
         # A resident model is busy for disk removal; force stops it first.
         status, body = http_json(base + "/api/v1/models/unload", {"ref": REF})

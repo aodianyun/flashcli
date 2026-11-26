@@ -243,6 +243,52 @@ func TestGatewayClientCancelReleasesLease(t *testing.T) {
 	}
 }
 
+func TestGatewayUpstreamStreamCutReleasesLease(t *testing.T) {
+	child := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: {\"model\":\"child\",\"choices\":[{\"delta\":{\"content\":\"hel\"}}]}\n\n")
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		// Returning closes the upstream stream mid-response, like a child crash
+		// or a dropped network connection.
+	}))
+	defer child.Close()
+
+	refStr := "flashcli-bundle/demo:1.0.0"
+	launcher := &gatewayLauncher{endpoint: child.URL}
+	source := &flipSource{ref: refStr, caps: []string{"openai.chat"}}
+	source.ready.Store(true)
+	s := gatewayTestServer(t, source, launcher, gatewayInspect(source.caps, gpuManifest(t)))
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	resp, err := http.Post(
+		srv.URL+"/v1/chat/completions",
+		"application/json",
+		strings.NewReader(`{"model":"`+refStr+`","stream":true,"messages":[]}`),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, readErr := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	text := string(body)
+	if !strings.Contains(text, "data:") || !strings.Contains(text, "hel") {
+		t.Fatalf("partial stream lost: %s", text)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for s.Scheduler.ActiveRequests(refStr) != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("lease was not released: %d", s.Scheduler.ActiveRequests(refStr))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 type flipPuller struct {
 	source  *flipSource
 	started chan struct{}

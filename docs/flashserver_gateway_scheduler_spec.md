@@ -390,6 +390,7 @@ Telemetry is exposed at `/api/v1/devices` and `/api/v1/scheduler`.
 Unit tests:
 
 - Full-ref validation, capability routing, error mapping.
+- Client cancel and upstream stream cut both release the lease and preserve partial output.
 - Preload/unload idempotency, active lease wait/409/force, shared asset retention.
 - Auto-pull job dedupe, Retry-After policy, retry after completion.
 - Scheduler admission, LRU idle stop, max_loaded, VRAM headroom, queue.
