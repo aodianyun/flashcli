@@ -1,0 +1,47 @@
+digraph GoModuleMapEN {
+  graph [rankdir=LR, bgcolor="#f7f9fc", pad=0.35, nodesep=0.35, ranksep=0.65,
+         fontname="Noto Sans CJK SC", fontsize=24, labelloc="t", size="16,9!", ratio=fill,
+         label=<<B>Go host module map</B><BR/><FONT POINT-SIZE="13" COLOR="#64748b">commands → frontends → shared host services → execution backends / Python protocol</FONT>>];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC",
+        fontsize=11, margin="0.14,0.08", penwidth=1.1, color="#94a3b8"];
+  edge [fontname="Noto Sans CJK SC", fontsize=9, color="#64748b", arrowsize=0.7];
+
+  subgraph cluster_cmd {
+    label=<<B>Commands</B>>; fontsize=13; color="#bfdbfe"; style="rounded,filled"; fillcolor="#f8fbff";
+    cmdcli [fillcolor="#dbeafe", color="#60a5fa", label="cmd/flashcli"];
+    cmdsrv [fillcolor="#dbeafe", color="#60a5fa", label="cmd/flashserver"];
+    cmdsetup [fillcolor="#dbeafe", color="#60a5fa", label="cmd/flashserver-setup"];
+    desktop [fillcolor="#dbeafe", color="#60a5fa", label="desktop/ (Rust)"];
+  }
+
+  subgraph cluster_front {
+    label=<<B>Frontends</B>>; fontsize=13; color="#c4b5fd"; style="rounded,filled"; fillcolor="#fbfaff";
+    cli [fillcolor="#ede9fe", color="#8b5cf6", label=<<B>internal/cli</B><BR/><FONT POINT-SIZE="9">flags · output<BR/>run/serve/pull</FONT>>];
+    srv [fillcolor="#ede9fe", color="#8b5cf6", label=<<B>internal/server</B><BR/><FONT POINT-SIZE="9">HTTP · gateway<BR/>scheduler · jobs<BR/>console · ws</FONT>>];
+    setup [fillcolor="#ede9fe", color="#8b5cf6", label=<<B>internal/setup</B><BR/><FONT POINT-SIZE="9">systemd · WSL2<BR/>autostart · firewall</FONT>>];
+  }
+
+  subgraph cluster_shared {
+    label=<<B>Shared host services</B>>; fontsize=13; color="#bbf7d0"; style="rounded,filled"; fillcolor="#f7fff9";
+    host [fillcolor="#dcfce7", color="#22c55e", label=<<B>internal/host</B><BR/><FONT POINT-SIZE="9">cache · weights key<BR/>runtime paths · pull<BR/>cleanup · readiness</FONT>>];
+    apps [fillcolor="#dcfce7", color="#22c55e", label=<<B>internal/apps</B><BR/><FONT POINT-SIZE="9">install · prepare<BR/>setup · state</FONT>>];
+    modelrun [fillcolor="#dcfce7", color="#22c55e", label=<<B>internal/modelrun</B><BR/><FONT POINT-SIZE="9">serve child<BR/>logs · health</FONT>>];
+    manifest [fillcolor="#dcfce7", color="#22c55e", label=<<B>internal/manifest</B><BR/><FONT POINT-SIZE="9">manifest · env<BR/>variants · entry</FONT>>];
+    support [fillcolor="#dcfce7", color="#22c55e", label=<<B>weights · runtime · venv · uv</B><BR/><FONT POINT-SIZE="9">downloads · markers<BR/>runtime cache · deps</FONT>>];
+    infra [fillcolor="#dcfce7", color="#22c55e", label=<<B>flashhub · mirror</B><BR/><FONT POINT-SIZE="9">repo sync · CN mirrors</FONT>>];
+    probes [fillcolor="#dcfce7", color="#22c55e", label=<<B>gpu · preflight</B><BR/><FONT POINT-SIZE="9">inventory · SM/CUDA<BR/>system requirements</FONT>>];
+  }
+
+  subgraph cluster_exec {
+    label=<<B>Execution backends</B>>; fontsize=13; color="#fbcfe8"; style="rounded,filled"; fillcolor="#fff7fb";
+    infer [fillcolor="#fce7f3", color="#db2777", label=<<B>inferexec · nativeexec · nativeabi</B><BR/><FONT POINT-SIZE="9">python re-exec<BR/>native process / .so ABI</FONT>>];
+    pyproto [fillcolor="#fce7f3", color="#db2777", label=<<B>flashcli-bundle</B><BR/><FONT POINT-SIZE="9">protocol + infer<BR/>flashcli_bundle.infer</FONT>>];
+    flashrt [fillcolor="#e0f2fe", color="#0284c7", label=<<B>FlashRT</B><BR/><FONT POINT-SIZE="9">flash_rt · .so<BR/>CUDA kernels</FONT>>];
+  }
+
+  cmdcli -> cli; cmdsrv -> srv; cmdsetup -> setup; desktop -> srv [label="HTTP/ws", color="#60a5fa"];
+  cli -> host; cli -> infer; srv -> host; srv -> apps; srv -> modelrun; srv -> probes;
+  apps -> host; modelrun -> host; host -> support; host -> infra; host -> manifest;
+  infer -> pyproto; infer -> flashrt; pyproto -> flashrt [style=dashed];
+  setup -> srv [label="service", style=dashed];
+}

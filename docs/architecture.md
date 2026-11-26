@@ -10,19 +10,19 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 
 ## Diagrams
 
-![flashcli system architecture](images/system-architecture.svg)
+![flashcli system architecture](images/architecture-overview.en.svg)
 
 | Diagram | Contents |
 |---|---|
-| [System architecture](images/system-architecture.svg) · [PNG](images/system-architecture.png) | Clients, flashserver, flashcli, shared cache, FlashHub, Model Bundle, FlashRT |
-| [flashcli run/serve flow](images/flashcli-flow.svg) · [PNG](images/flashcli-flow.png) | Ref resolution, offline cache, preflight, venv, weights, entry, run/serve |
-| [flashserver gateway/scheduler flow](images/flashserver-gateway-flow.svg) · [PNG](images/flashserver-gateway-flow.png) | `/v1` request path, preload, placement, lease, proxy, release, errors |
-| [Model Bundle / FlashRT stack](images/bundle-runtime-stack.svg) · [PNG](images/bundle-runtime-stack.png) | FlashHub → bundle manifest/entry/runtime cells → venv/weights → FlashRT |
-| [Go host module map](images/go-module-map.svg) · [PNG](images/go-module-map.png) | Commands → CLI/server frontends → shared host services → execution backends |
-| [FlashHub flow](images/flashhub-flow.svg) · [PNG](images/flashhub-flow.png) | Publish → catalog/versions → CLI/flashserver/desktop sync |
-| [App lifecycle](images/app-lifecycle.svg) · [PNG](images/app-lifecycle.png) | install → prepare → setup → ready; no app-owned model start/stop |
+| [System overview](images/architecture-overview.en.svg) · [PNG](images/architecture-overview.en.png) | Clients, flashserver, flashcli, shared cache, FlashHub, Model Bundle, FlashRT |
+| [flashcli run/serve flow](images/flashcli-flow.en.svg) · [PNG](images/flashcli-flow.en.png) | Ref resolution, offline cache, preflight, venv, weights, entry, run/serve |
+| [flashserver gateway/scheduler flow](images/flashserver-gateway-flow.en.svg) · [PNG](images/flashserver-gateway-flow.en.png) | `/v1` request path, preload, placement, lease, proxy, release, errors |
+| [Model Bundle / FlashRT stack](images/bundle-runtime-stack.en.svg) · [PNG](images/bundle-runtime-stack.en.png) | FlashHub → bundle manifest/entry/runtime cells → venv/weights → FlashRT |
+| [Go host module map](images/go-module-map.en.svg) · [PNG](images/go-module-map.en.png) | Commands → CLI/server frontends → shared host services → execution backends |
+| [FlashHub flow](images/flashhub-flow.en.svg) · [PNG](images/flashhub-flow.en.png) | Publish → catalog/versions → CLI/flashserver/desktop sync |
+| [App lifecycle](images/app-lifecycle.en.svg) · [PNG](images/app-lifecycle.en.png) | install → prepare → setup → ready; no app-owned model start/stop |
 
-Sources are the `.dot` files in [`images/`](images/); regenerate with `dot -Tsvg <name>.dot -o <name>.svg` (and `-Tpng`).
+Flow and module diagrams have `.en.dot` / `.zh-CN.dot` sources in [`images/`](images/); regenerate with `dot -Tsvg <name>.<lang>.dot -o <name>.<lang>.svg` (and `-Tpng`). The system overview is a hand-laid SVG.
 
 ## Core principles
 

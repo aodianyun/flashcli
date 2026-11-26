@@ -1,0 +1,27 @@
+digraph AppLifecycleEN {
+  graph [rankdir=LR, bgcolor="#f7f9fc", pad=0.35, nodesep=0.45, ranksep=0.7,
+         fontname="Noto Sans CJK SC", fontsize=24, labelloc="t", size="16,9!", ratio=fill,
+         label=<<B>flashserver application lifecycle</B><BR/><FONT POINT-SIZE="13" COLOR="#64748b">install → prepare → setup → ready; models are always started on demand by the scheduler</FONT>>];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC",
+        fontsize=12, margin="0.18,0.10", penwidth=1.2, color="#94a3b8"];
+  edge [fontname="Noto Sans CJK SC", fontsize=10, color="#64748b", arrowsize=0.75];
+
+  planned [fillcolor="#e0e7ff", color="#818cf8", label=<<B>PLANNED</B><BR/><FONT POINT-SIZE="10">manifest valid<BR/>platform supported</FONT>>];
+  install [fillcolor="#ffedd5", color="#f97316", label=<<B>INSTALL</B><BR/><FONT POINT-SIZE="10">client script / installer<BR/>or skip (models only)</FONT>>];
+  prepared [fillcolor="#fef9c3", color="#eab308", label=<<B>PREPARED</B><BR/><FONT POINT-SIZE="10">default bundles<BR/>disk ready (preload)</FONT>>];
+  setup [fillcolor="#ede9fe", color="#8b5cf6", label=<<B>SETUP</B><BR/><FONT POINT-SIZE="10">write gateway connection<BR/>run confirmed setup scripts</FONT>>];
+  ready [fillcolor="#dcfce7", color="#22c55e", label=<<B>READY</B><BR/><FONT POINT-SIZE="10">app configured<BR/>inference goes to /v1</FONT>>];
+  failed [fillcolor="#fee2e2", color="#ef4444", label=<<B>FAILED</B><BR/><FONT POINT-SIZE="10">install/prepare failed<BR/>logs retained</FONT>>];
+  gateway [fillcolor="#e0f2fe", color="#0284c7", label=<<B>Gateway /v1</B><BR/><FONT POINT-SIZE="10">scheduler starts residents<BR/>app has no PID / endpoint</FONT>>];
+
+  planned -> install [label="install"];
+  install -> prepared [label="script/installer done"];
+  install -> failed [label="failed", color="#ef4444"];
+  planned -> prepared [label="skip / no model", style=dashed];
+  prepared -> setup [label="explicit setup"];
+  setup -> ready [label="setup ok"];
+  setup -> ready [label="script failed, still READY", style=dashed, color="#f59e0b"];
+  ready -> gateway [label="inference request", color="#0284c7"];
+  ready -> planned [label="uninstall / reinstall", style=dashed, color="#94a3b8"];
+  failed -> install [label="retry", style=dashed, color="#94a3b8"];
+}
