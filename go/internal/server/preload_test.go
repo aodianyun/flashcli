@@ -187,6 +187,48 @@ func TestPreloadFailureReturnsToAbsent(t *testing.T) {
 	}
 }
 
+func TestPreloadJobCancelClearsIntent(t *testing.T) {
+	p := &blockingPuller{started: make(chan struct{}), release: make(chan struct{})}
+	s := newPreloadServer(t, p)
+	h := s.Handler()
+	refStr := "flashcli-bundle/cancel-me:1.0.0"
+
+	rec, body := call(t, h, http.MethodPost, "/api/v1/models/preload", `{"ref":"`+refStr+`"}`)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("preload = %d: %s", rec.Code, rec.Body.String())
+	}
+	jobID, _ := body["job_id"].(string)
+	if jobID == "" {
+		t.Fatalf("preload body = %v", body)
+	}
+	<-p.started
+
+	rec, body = call(t, h, http.MethodPost, "/api/v1/jobs/"+jobID+"/cancel", "")
+	if rec.Code != http.StatusOK || body["state"] != "canceling" {
+		t.Fatalf("cancel = %d: %v", rec.Code, body)
+	}
+	if state := waitJobState(t, s.Jobs, jobID); state != "failed" {
+		t.Fatalf("cancelled preload state = %s, want failed", state)
+	}
+	if got := s.preloads().state(refStr); got != preloadAbsent {
+		t.Fatalf("preload state after cancel = %q, want %q", got, preloadAbsent)
+	}
+
+	// A cancelled preload leaves no reservation: it can be retried.
+	s.Puller = fakePuller{}
+	rec, body = call(t, h, http.MethodPost, "/api/v1/models/preload", `{"ref":"`+refStr+`"}`)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("retry preload = %d: %s", rec.Code, rec.Body.String())
+	}
+	retryID, _ := body["job_id"].(string)
+	if state := waitJobState(t, s.Jobs, retryID); state != "done" {
+		t.Fatalf("retry state = %s", state)
+	}
+	if got := s.preloads().state(refStr); got != preloadReady {
+		t.Fatalf("preload state after retry = %q, want %q", got, preloadReady)
+	}
+}
+
 func TestUnloadBusyWaitsOrForces(t *testing.T) {
 	s := newFlowServer(t, &staticLauncher{endpoint: "http://127.0.0.1:1"})
 	h := s.Handler()

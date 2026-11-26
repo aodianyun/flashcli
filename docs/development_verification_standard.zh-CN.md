@@ -88,9 +88,9 @@ bash scripts/verify_e2e.sh
 bash scripts/verify_e2e.sh --heavy
 ```
 
-增加 v3/v4 Python bundle 和 native bundle 的真实 `run`。会创建 bundle venv，并运行
-标记为 `network` 的 requirement 测试（PyPI venv 安装），因此需要网络，耗时数分钟；
-用于合并 `main` 和发布候选前，不要每次修改都跑。
+增加 v3/v4 Python bundle 和 native bundle 的真实 `run`。会创建 bundle venv，耗时
+数分钟；用于合并 `main` 和发布候选前，不要每次修改都跑。标记为 `network` 的 PyPI
+requirement 测试属于第 3 层，不在这一层。
 
 ## 4. 按变更类型检查契约
 

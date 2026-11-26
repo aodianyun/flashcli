@@ -330,14 +330,13 @@ GPU runtime 必填：
   "queue_timeout_seconds": 30,
   "queue_max": 16,
   "auto_pull": true,
-  "auto_pull_wait_seconds": 0,
   "cpu_fallback": "no-gpu-runtime"
 }
 ```
 
 - `vram_headroom_mib` 默认 6144 MiB，可用 `FLASHCLI_VRAM_HEADROOM_MIB`（或配置文件）覆盖。
 - `cpu_fallback` 默认 `no-gpu-runtime`，或 `disabled`；容量不足永不触发 CPU 回退。
-- `auto_pull_wait_seconds=0` 立即返回标准 503；正数用于小模型的有界等待。
+- auto-pull 立即返回标准 503 + `Retry-After`；网关不会阻塞等待 preload。
 - 启动时校验配置，非法值直接失败。
 
 ## 10. 应用与桌面契约

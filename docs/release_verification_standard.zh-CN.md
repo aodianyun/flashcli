@@ -32,8 +32,8 @@ bash scripts/verify_e2e.sh --heavy --network
 - 真实二进制和真实 daemon；
 - Python bundle 推理（`--heavy`）；
 - 实时 FlashHub manifest 检查（`--network`）；
-- 仅发布使用的构建/安装检查（`tests/test_build_go.py -m release`）；
 - PyPI venv requirement 检查（`tests/test_bundle_requirement_import.py -m network`）；
+- 仅发布使用的构建/安装检查（`tests/test_build_go.py -m release`）；
 - 写入 `dist/e2e-pass.json`，记录当前 commit、`heavy=true`、`network=true`。
 
 `scripts/release_go.sh --upload` 只有在标记与当前 HEAD 完全匹配且两个标志都为 true

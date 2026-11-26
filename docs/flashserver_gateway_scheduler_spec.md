@@ -351,7 +351,6 @@ Telemetry is exposed at `/api/v1/devices` and `/api/v1/scheduler`.
   "queue_timeout_seconds": 30,
   "queue_max": 16,
   "auto_pull": true,
-  "auto_pull_wait_seconds": 0,
   "cpu_fallback": "no-gpu-runtime"
 }
 ```
@@ -360,8 +359,8 @@ Telemetry is exposed at `/api/v1/devices` and `/api/v1/scheduler`.
   `FLASHCLI_VRAM_HEADROOM_MIB` (or the config file).
 - `cpu_fallback` is `no-gpu-runtime` (default) or `disabled`; capacity never
   triggers CPU fallback.
-- `auto_pull_wait_seconds=0` returns the standard 503 immediately; a positive
-  value is an optional bounded wait for small models.
+- Auto-pull returns the standard 503 immediately with `Retry-After`; the
+  gateway does not block on a preload.
 - Values are validated at startup; invalid values fail fast.
 
 ## 10. Application and desktop contract

@@ -36,8 +36,8 @@ This is Tier 3 from the development standard:
 - real binaries and real daemon;
 - Python bundle inference (`--heavy`);
 - live FlashHub manifest check (`--network`);
-- release-only build/install checks (`tests/test_build_go.py -m release`);
 - PyPI venv requirement checks (`tests/test_bundle_requirement_import.py -m network`);
+- release-only build/install checks (`tests/test_build_go.py -m release`);
 - writes `dist/e2e-pass.json` with the current commit, `heavy=true`,
   `network=true`.
 

@@ -94,9 +94,9 @@ bash scripts/verify_e2e.sh --heavy
 ```
 
 Adds real `run` on v3 and v4 Python bundles plus a native bundle. This creates
-bundle venvs and runs the network-marked requirement tests (PyPI venv installs),
-so it needs network access and can take several minutes; run it before `main`
-merges and release candidates, not on every edit.
+bundle venvs and can take several minutes; run it before `main` merges and
+release candidates, not on every edit. Network-marked PyPI requirement tests
+belong to Tier 3, not this tier.
 
 ## 4. Contract checks by change type
 
