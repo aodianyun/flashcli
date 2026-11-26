@@ -24,7 +24,7 @@ digraph FlashHubFlow {
     cli [fillcolor="#dcfce7", color="#22c55e", label=<<B>flashcli</B><BR/><FONT POINT-SIZE="10">pull · run · serve<BR/>local cache · offline</FONT>>];
     srv [fillcolor="#ede9fe", color="#8b5cf6", label=<<B>flashserver</B><BR/><FONT POINT-SIZE="10">/api/v1/catalog proxy<BR/>preload · app install</FONT>>];
     desktop [fillcolor="#dbeafe", color="#60a5fa", label=<<B>Desktop</B><BR/><FONT POINT-SIZE="10">FlashHub page<BR/>apps / models</FONT>>];
-    cache [shape=cylinder, fillcolor="#fef9c3", color="#eab308", label=<<B>Local cache</B><BR/><FONT POINT-SIZE="10">~/.flashcli/bundles<BR/>models/store/<BR/>runtimes/</FONT>>];
+    cache [shape=cylinder, fillcolor="#fef9c3", color="#eab308", label=<<B>本地缓存</B><BR/><FONT POINT-SIZE="10">bundles · weights<BR/>runtimes</FONT>>];
   }
 
   bauthor -> repo [label="publish bundle", color="#f97316"];

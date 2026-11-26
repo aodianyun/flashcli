@@ -18,7 +18,7 @@ digraph GoModuleMapEN {
     label=<<B>Frontends</B>>; fontsize=13; color="#c4b5fd"; style="rounded,filled"; fillcolor="#fbfaff";
     cli [fillcolor="#ede9fe", color="#8b5cf6", label=<<B>internal/cli</B><BR/><FONT POINT-SIZE="9">flags · output<BR/>run/serve/pull</FONT>>];
     srv [fillcolor="#ede9fe", color="#8b5cf6", label=<<B>internal/server</B><BR/><FONT POINT-SIZE="9">HTTP · gateway<BR/>scheduler · jobs<BR/>console · ws</FONT>>];
-    setup [fillcolor="#ede9fe", color="#8b5cf6", label=<<B>internal/setup</B><BR/><FONT POINT-SIZE="9">systemd · WSL2<BR/>autostart · firewall</FONT>>];
+    setup [fillcolor="#ede9fe", color="#8b5cf6", label=<<B>internal/setup</B><BR/><FONT POINT-SIZE="9">service install<BR/>autostart · firewall</FONT>>];
   }
 
   subgraph cluster_shared {
@@ -27,16 +27,16 @@ digraph GoModuleMapEN {
     apps [fillcolor="#dcfce7", color="#22c55e", label=<<B>internal/apps</B><BR/><FONT POINT-SIZE="9">install · prepare<BR/>setup · state</FONT>>];
     modelrun [fillcolor="#dcfce7", color="#22c55e", label=<<B>internal/modelrun</B><BR/><FONT POINT-SIZE="9">serve child<BR/>logs · health</FONT>>];
     manifest [fillcolor="#dcfce7", color="#22c55e", label=<<B>internal/manifest</B><BR/><FONT POINT-SIZE="9">manifest · env<BR/>variants · entry</FONT>>];
-    support [fillcolor="#dcfce7", color="#22c55e", label=<<B>weights · runtime · venv · uv</B><BR/><FONT POINT-SIZE="9">downloads · markers<BR/>runtime cache · deps</FONT>>];
+    support [fillcolor="#dcfce7", color="#22c55e", label=<<B>weights · runtime · venv</B><BR/><FONT POINT-SIZE="9">downloads · markers<BR/>runtime cache · deps</FONT>>];
     infra [fillcolor="#dcfce7", color="#22c55e", label=<<B>flashhub · mirror</B><BR/><FONT POINT-SIZE="9">repo sync · CN mirrors</FONT>>];
-    probes [fillcolor="#dcfce7", color="#22c55e", label=<<B>gpu · preflight</B><BR/><FONT POINT-SIZE="9">inventory · SM/CUDA<BR/>system requirements</FONT>>];
+    probes [fillcolor="#dcfce7", color="#22c55e", label=<<B>gpu · preflight</B><BR/><FONT POINT-SIZE="9">device inventory · runtime<BR/>system requirements</FONT>>];
   }
 
   subgraph cluster_exec {
     label=<<B>Execution backends</B>>; fontsize=13; color="#fbcfe8"; style="rounded,filled"; fillcolor="#fff7fb";
-    infer [fillcolor="#fce7f3", color="#db2777", label=<<B>inferexec · nativeexec · nativeabi</B><BR/><FONT POINT-SIZE="9">python re-exec<BR/>native process / .so ABI</FONT>>];
+    infer [fillcolor="#fce7f3", color="#db2777", label=<<B>inferexec · nativeexec · nativeabi</B><BR/><FONT POINT-SIZE="9">python re-exec<BR/>native process / ABI</FONT>>];
     pyproto [fillcolor="#fce7f3", color="#db2777", label=<<B>flashcli-bundle</B><BR/><FONT POINT-SIZE="9">protocol + infer<BR/>flashcli_bundle.infer</FONT>>];
-    flashrt [fillcolor="#e0f2fe", color="#0284c7", label=<<B>FlashRT</B><BR/><FONT POINT-SIZE="9">flash_rt · .so<BR/>CUDA kernels</FONT>>];
+    flashrt [fillcolor="#e0f2fe", color="#0284c7", label=<<B>FlashRT</B><BR/><FONT POINT-SIZE="9">inference runtime<BR/>platform kernels</FONT>>];
   }
 
   cmdcli -> cli; cmdsrv -> srv; cmdsetup -> setup; desktop -> srv [label="HTTP/ws", color="#60a5fa"];

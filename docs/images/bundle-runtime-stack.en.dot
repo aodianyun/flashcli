@@ -16,21 +16,21 @@ digraph BundleRuntimeStackEN {
     label=<<B>Model Bundle / versioned contract</B>>; fontsize=14; color="#fecaca"; style="rounded,filled"; fillcolor="#fff7f7";
     manifest [fillcolor="#fee2e2", color="#ef4444", label=<<B>flashcli-bundle.json</B><BR/><FONT POINT-SIZE="10">format_version · protocol_version<BR/>defaults + environments<BR/>resources: min_vram_mib · gpu_count · min_ram_mib<BR/>run_options · serve_options</FONT>>];
     entry [fillcolor="#fee2e2", color="#ef4444", label=<<B>entry</B><BR/><FONT POINT-SIZE="10">kind: python · native-exec · native-abi<BR/>run / serve<BR/>capabilities · concurrency</FONT>>];
-    cells [fillcolor="#fee2e2", color="#ef4444", label=<<B>Runtime cells</B><BR/><FONT POINT-SIZE="10">sm89-cu124-linux-x86_64-py312<BR/>runtime dir · python_abi<BR/>CUDA / SM compatibility</FONT>>];
+    cells [fillcolor="#fee2e2", color="#ef4444", label=<<B>Runtime cells</B><BR/><FONT POINT-SIZE="10">device / OS / arch / Python ABI<BR/>runtime dir · python_abi<BR/>device / runtime compatibility</FONT>>];
   }
 
   subgraph cluster_host {
     label=<<B>Host / flashcli prepare</B>>; fontsize=14; color="#bbf7d0"; style="rounded,filled"; fillcolor="#f7fff9";
-    venv [fillcolor="#dcfce7", color="#22c55e", label=<<B>Bundle venv</B><BR/><FONT POINT-SIZE="10">uv / pip<BR/>flashcli-bundle[infer]<BR/>manifest python_dependencies</FONT>>];
-    weights [shape=cylinder, fillcolor="#fef9c3", color="#eab308", label=<<B>Shared weights store</B><BR/><FONT POINT-SIZE="10">models/store/&lt;source&gt;/&lt;repo&gt;@&lt;rev&gt;-&lt;hash&gt;<BR/>download manifest · resume</FONT>>];
-    runtime [fillcolor="#e0f2fe", color="#0284c7", label=<<B>Runtime cache</B><BR/><FONT POINT-SIZE="10">~/.flashcli/runtimes/<BR/>per runtime cell / ABI</FONT>>];
+    venv [fillcolor="#dcfce7", color="#22c55e", label=<<B>Bundle venv</B><BR/><FONT POINT-SIZE="10">package installer<BR/>flashcli-bundle[infer]<BR/>manifest python_dependencies</FONT>>];
+    weights [shape=cylinder, fillcolor="#fef9c3", color="#eab308", label=<<B>Shared weights store</B><BR/><FONT POINT-SIZE="10">shared by source / repo / revision<BR/>download manifest · resume</FONT>>];
+    runtime [fillcolor="#e0f2fe", color="#0284c7", label=<<B>Runtime cache</B><BR/><FONT POINT-SIZE="10">runtime cache<BR/>per runtime cell / ABI</FONT>>];
   }
 
   subgraph cluster_exec {
     label=<<B>Execution / inference process</B>>; fontsize=14; color="#fbcfe8"; style="rounded,filled"; fillcolor="#fff7fb";
     py [fillcolor="#fce7f3", color="#db2777", label=<<B>Python infer</B><BR/><FONT POINT-SIZE="10">bundle_venv/bin/python<BR/>-m flashcli_bundle.infer run|serve<BR/>PYTHONPATH=bundle root</FONT>>];
-    native [fillcolor="#fce7f3", color="#db2777", label=<<B>Native backend</B><BR/><FONT POINT-SIZE="10">native-exec: process + HTTP/stdio<BR/>native-abi: .so ABI<BR/>no host model logic</FONT>>];
-    flashrt [fillcolor="#e0f2fe", color="#0284c7", label=<<B>FlashRT</B><BR/><FONT POINT-SIZE="10">flash_rt · .so · CUDA kernels<BR/>sibling clone / build input<BR/>not pip-installed by host</FONT>>];
+    native [fillcolor="#fce7f3", color="#db2777", label=<<B>Native backend</B><BR/><FONT POINT-SIZE="10">native-exec: process + HTTP/stdio<BR/>native-abi: ABI / library<BR/>no host model logic</FONT>>];
+    flashrt [fillcolor="#e0f2fe", color="#0284c7", label=<<B>FlashRT</B><BR/><FONT POINT-SIZE="10">inference runtime / kernels<BR/>platform backend<BR/>not a host dependency</FONT>>];
   }
 
   repo -> manifest [label="sync / download", color="#f97316"];
@@ -41,8 +41,8 @@ digraph BundleRuntimeStackEN {
   cells -> runtime [label="prepare runtime", color="#0284c7"];
   venv -> py [label="python -m infer", color="#db2777"];
   entry -> native [label="native entry", color="#db2777"];
-  py -> flashrt [label="import flash_rt", color="#0284c7"];
-  native -> flashrt [label=".so / ABI", color="#0284c7"];
+  py -> flashrt [label="import runtime", color="#0284c7"];
+  native -> flashrt [label="ABI / library", color="#0284c7"];
   runtime -> py [style=dashed, color="#0284c7"];
   runtime -> native [style=dashed, color="#0284c7"];
   { rank=same; py; native; }

@@ -13,201 +13,201 @@
 <text text-anchor="start" x="403.11" y="-717.85" font-family="Noto Sans CJK SC" font-size="13.00" fill="#64748b">FlashHub publish → host prepare → bundle venv / native entry → FlashRT</text>
 <g id="clust1" class="cluster">
 <title>cluster_hub</title>
-<path fill="#fffaf5" stroke="#fed7aa" d="M269.33,-617.25C269.33,-617.25 952.64,-617.25 952.64,-617.25 958.64,-617.25 964.64,-623.25 964.64,-629.25 964.64,-629.25 964.64,-690.25 964.64,-690.25 964.64,-696.25 958.64,-702.25 952.64,-702.25 952.64,-702.25 269.33,-702.25 269.33,-702.25 263.33,-702.25 257.33,-696.25 257.33,-690.25 257.33,-690.25 257.33,-629.25 257.33,-629.25 257.33,-623.25 263.33,-617.25 269.33,-617.25"/>
-<text text-anchor="start" x="547.48" y="-688.05" font-family="Noto Sans CJK SC" font-weight="bold" font-size="14.00">FlashHub / remote</text>
+<path fill="#fffaf5" stroke="#fed7aa" d="M279.04,-617.25C279.04,-617.25 1018.89,-617.25 1018.89,-617.25 1024.89,-617.25 1030.89,-623.25 1030.89,-629.25 1030.89,-629.25 1030.89,-690.25 1030.89,-690.25 1030.89,-696.25 1024.89,-702.25 1018.89,-702.25 1018.89,-702.25 279.04,-702.25 279.04,-702.25 273.04,-702.25 267.04,-696.25 267.04,-690.25 267.04,-690.25 267.04,-629.25 267.04,-629.25 267.04,-623.25 273.04,-617.25 279.04,-617.25"/>
+<text text-anchor="start" x="585.47" y="-688.05" font-family="Noto Sans CJK SC" font-weight="bold" font-size="14.00">FlashHub / remote</text>
 </g>
 <g id="clust2" class="cluster">
 <title>cluster_bundle</title>
-<path fill="#fff7f7" stroke="#fecaca" d="M23.5,-374.25C23.5,-374.25 633.49,-374.25 633.49,-374.25 639.49,-374.25 645.49,-380.25 645.49,-386.25 645.49,-386.25 645.49,-574.25 645.49,-574.25 645.49,-580.25 639.49,-586.25 633.49,-586.25 633.49,-586.25 23.5,-586.25 23.5,-586.25 17.5,-586.25 11.5,-580.25 11.5,-574.25 11.5,-574.25 11.5,-386.25 11.5,-386.25 11.5,-380.25 17.5,-374.25 23.5,-374.25"/>
-<text text-anchor="start" x="209.49" y="-572.05" font-family="Noto Sans CJK SC" font-weight="bold" font-size="14.00">Model Bundle / versioned contract</text>
+<path fill="#fff7f7" stroke="#fecaca" d="M24.42,-374.25C24.42,-374.25 674.23,-374.25 674.23,-374.25 680.23,-374.25 686.23,-380.25 686.23,-386.25 686.23,-386.25 686.23,-574.25 686.23,-574.25 686.23,-580.25 680.23,-586.25 674.23,-586.25 674.23,-586.25 24.42,-586.25 24.42,-586.25 18.42,-586.25 12.42,-580.25 12.42,-574.25 12.42,-574.25 12.42,-386.25 12.42,-386.25 12.42,-380.25 18.42,-374.25 24.42,-374.25"/>
+<text text-anchor="start" x="230.32" y="-572.05" font-family="Noto Sans CJK SC" font-weight="bold" font-size="14.00">Model Bundle / versioned contract</text>
 </g>
 <g id="clust3" class="cluster">
 <title>cluster_host</title>
-<path fill="#f7fff9" stroke="#bbf7d0" d="M369.97,-241C369.97,-241 1238.72,-241 1238.72,-241 1244.72,-241 1250.72,-247 1250.72,-253 1250.72,-253 1250.72,-331.25 1250.72,-331.25 1250.72,-337.25 1244.72,-343.25 1238.72,-343.25 1238.72,-343.25 369.97,-343.25 369.97,-343.25 363.97,-343.25 357.97,-337.25 357.97,-331.25 357.97,-331.25 357.97,-253 357.97,-253 357.97,-247 363.97,-241 369.97,-241"/>
-<text text-anchor="start" x="728.34" y="-329.05" font-family="Noto Sans CJK SC" font-weight="bold" font-size="14.00">Host / flashcli prepare</text>
+<path fill="#f7fff9" stroke="#bbf7d0" d="M390.82,-241C390.82,-241 1237.8,-241 1237.8,-241 1243.8,-241 1249.8,-247 1249.8,-253 1249.8,-253 1249.8,-331.25 1249.8,-331.25 1249.8,-337.25 1243.8,-343.25 1237.8,-343.25 1237.8,-343.25 390.82,-343.25 390.82,-343.25 384.82,-343.25 378.82,-337.25 378.82,-331.25 378.82,-331.25 378.82,-253 378.82,-253 378.82,-247 384.82,-241 390.82,-241"/>
+<text text-anchor="start" x="738.31" y="-329.05" font-family="Noto Sans CJK SC" font-weight="bold" font-size="14.00">Host / flashcli prepare</text>
 </g>
 <g id="clust4" class="cluster">
 <title>cluster_exec</title>
-<path fill="#fff7fb" stroke="#fbcfe8" d="M266.46,-8C266.46,-8 555.86,-8 555.86,-8 561.86,-8 567.86,-14 567.86,-20 567.86,-20 567.86,-91 567.86,-91 567.86,-97 561.86,-103 555.86,-103 555.86,-103 266.46,-103 266.46,-103 260.46,-103 254.46,-97 254.46,-91 254.46,-91 254.46,-20 254.46,-20 254.46,-14 260.46,-8 266.46,-8"/>
-<text text-anchor="start" x="310.16" y="-88.8" font-family="Noto Sans CJK SC" font-weight="bold" font-size="14.00">Execution / inference process</text>
+<path fill="#fff7fb" stroke="#fbcfe8" d="M275.93,-8C275.93,-8 590.39,-8 590.39,-8 596.39,-8 602.39,-14 602.39,-20 602.39,-20 602.39,-91 602.39,-91 602.39,-97 596.39,-103 590.39,-103 590.39,-103 275.93,-103 275.93,-103 269.93,-103 263.93,-97 263.93,-91 263.93,-91 263.93,-20 263.93,-20 263.93,-14 269.93,-8 275.93,-8"/>
+<text text-anchor="start" x="332.16" y="-88.8" font-family="Noto Sans CJK SC" font-weight="bold" font-size="14.00">Execution / inference process</text>
 </g>
 <!-- catalog -->
 <g id="node1" class="node">
 <title>catalog</title>
-<path fill="#ffedd5" stroke="#f97316" stroke-width="1.2" d="M892.95,-666C892.95,-666 697.95,-666 697.95,-666 691.95,-666 685.95,-660 685.95,-654 685.95,-654 685.95,-642 685.95,-642 685.95,-636 691.95,-630 697.95,-630 697.95,-630 892.95,-630 892.95,-630 898.95,-630 904.95,-636 904.95,-642 904.95,-642 904.95,-654 904.95,-654 904.95,-660 898.95,-666 892.95,-666"/>
-<text text-anchor="start" x="753.45" y="-650.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Catalog / Apps</text>
-<text text-anchor="start" x="698.95" y="-640" font-family="Noto Sans CJK SC" font-size="10.00">bundle search · versions · app manifest</text>
+<path fill="#ffedd5" stroke="#f97316" stroke-width="1.2" d="M944.78,-666C944.78,-666 749.78,-666 749.78,-666 743.78,-666 737.78,-660 737.78,-654 737.78,-654 737.78,-642 737.78,-642 737.78,-636 743.78,-630 749.78,-630 749.78,-630 944.78,-630 944.78,-630 950.78,-630 956.78,-636 956.78,-642 956.78,-642 956.78,-654 956.78,-654 956.78,-660 950.78,-666 944.78,-666"/>
+<text text-anchor="start" x="805.28" y="-650.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Catalog / Apps</text>
+<text text-anchor="start" x="750.78" y="-640" font-family="Noto Sans CJK SC" font-size="10.00">bundle search · versions · app manifest</text>
 </g>
 <!-- repo -->
 <g id="node2" class="node">
 <title>repo</title>
-<path fill="#ffedd5" stroke="#f97316" stroke-width="1.2" d="M525.45,-671C525.45,-671 329.45,-671 329.45,-671 323.45,-671 317.45,-665 317.45,-659 317.45,-659 317.45,-637 317.45,-637 317.45,-631 323.45,-625 329.45,-625 329.45,-625 525.45,-625 525.45,-625 531.45,-625 537.45,-631 537.45,-637 537.45,-637 537.45,-659 537.45,-659 537.45,-665 531.45,-671 525.45,-671"/>
-<text text-anchor="start" x="391.45" y="-655.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Bundle repo</text>
-<text text-anchor="start" x="380.95" y="-645" font-family="Noto Sans CJK SC" font-size="10.00">flashcli&#45;bundle.json</text>
-<text text-anchor="start" x="330.45" y="-635" font-family="Noto Sans CJK SC" font-size="10.00">entry · runtime dirs · weights metadata</text>
+<path fill="#ffedd5" stroke="#f97316" stroke-width="1.2" d="M548.28,-671C548.28,-671 352.28,-671 352.28,-671 346.28,-671 340.28,-665 340.28,-659 340.28,-659 340.28,-637 340.28,-637 340.28,-631 346.28,-625 352.28,-625 352.28,-625 548.28,-625 548.28,-625 554.28,-625 560.28,-631 560.28,-637 560.28,-637 560.28,-659 560.28,-659 560.28,-665 554.28,-671 548.28,-671"/>
+<text text-anchor="start" x="414.28" y="-655.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Bundle repo</text>
+<text text-anchor="start" x="403.78" y="-645" font-family="Noto Sans CJK SC" font-size="10.00">flashcli&#45;bundle.json</text>
+<text text-anchor="start" x="353.28" y="-635" font-family="Noto Sans CJK SC" font-size="10.00">entry · runtime dirs · weights metadata</text>
 </g>
 <!-- manifest -->
 <g id="node3" class="node">
 <title>manifest</title>
-<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.2" d="M559.95,-555C559.95,-555 294.95,-555 294.95,-555 288.95,-555 282.95,-549 282.95,-543 282.95,-543 282.95,-501 282.95,-501 282.95,-495 288.95,-489 294.95,-489 294.95,-489 559.95,-489 559.95,-489 565.95,-489 571.95,-495 571.95,-501 571.95,-501 571.95,-543 571.95,-543 571.95,-549 565.95,-555 559.95,-555"/>
-<text text-anchor="start" x="368.95" y="-539.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">flashcli&#45;bundle.json</text>
-<text text-anchor="start" x="345.95" y="-529" font-family="Noto Sans CJK SC" font-size="10.00">format_version · protocol_version</text>
-<text text-anchor="start" x="371.45" y="-519" font-family="Noto Sans CJK SC" font-size="10.00">defaults + environments</text>
-<text text-anchor="start" x="295.95" y="-509" font-family="Noto Sans CJK SC" font-size="10.00">resources: min_vram_mib · gpu_count · min_ram_mib</text>
-<text text-anchor="start" x="359.45" y="-499" font-family="Noto Sans CJK SC" font-size="10.00">run_options · serve_options</text>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.2" d="M582.78,-555C582.78,-555 317.78,-555 317.78,-555 311.78,-555 305.78,-549 305.78,-543 305.78,-543 305.78,-501 305.78,-501 305.78,-495 311.78,-489 317.78,-489 317.78,-489 582.78,-489 582.78,-489 588.78,-489 594.78,-495 594.78,-501 594.78,-501 594.78,-543 594.78,-543 594.78,-549 588.78,-555 582.78,-555"/>
+<text text-anchor="start" x="391.78" y="-539.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">flashcli&#45;bundle.json</text>
+<text text-anchor="start" x="368.78" y="-529" font-family="Noto Sans CJK SC" font-size="10.00">format_version · protocol_version</text>
+<text text-anchor="start" x="394.28" y="-519" font-family="Noto Sans CJK SC" font-size="10.00">defaults + environments</text>
+<text text-anchor="start" x="318.78" y="-509" font-family="Noto Sans CJK SC" font-size="10.00">resources: min_vram_mib · gpu_count · min_ram_mib</text>
+<text text-anchor="start" x="382.28" y="-499" font-family="Noto Sans CJK SC" font-size="10.00">run_options · serve_options</text>
 </g>
 <!-- repo&#45;&gt;manifest -->
 <g id="edge1" class="edge">
 <title>repo&#45;&gt;manifest</title>
-<path fill="none" stroke="#f97316" d="M427.45,-624.83C427.45,-607.66 427.45,-583.42 427.45,-562.89"/>
-<polygon fill="#f97316" stroke="#f97316" points="430.08,-562.73 427.45,-555.23 424.83,-562.73 430.08,-562.73"/>
-<text text-anchor="middle" x="465.95" y="-597.5" font-family="Noto Sans CJK SC" font-size="10.00">sync / download</text>
+<path fill="none" stroke="#f97316" d="M450.28,-624.83C450.28,-607.66 450.28,-583.42 450.28,-562.89"/>
+<polygon fill="#f97316" stroke="#f97316" points="452.9,-562.73 450.28,-555.23 447.65,-562.73 452.9,-562.73"/>
+<text text-anchor="middle" x="488.78" y="-597.5" font-family="Noto Sans CJK SC" font-size="10.00">sync / download</text>
 </g>
 <!-- entry -->
 <g id="node4" class="node">
 <title>entry</title>
-<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.2" d="M273.95,-438C273.95,-438 82.95,-438 82.95,-438 76.95,-438 70.95,-432 70.95,-426 70.95,-426 70.95,-394 70.95,-394 70.95,-388 76.95,-382 82.95,-382 82.95,-382 273.95,-382 273.95,-382 279.95,-382 285.95,-388 285.95,-394 285.95,-394 285.95,-426 285.95,-426 285.95,-432 279.95,-438 273.95,-438"/>
-<text text-anchor="start" x="162.45" y="-422.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">entry</text>
-<text text-anchor="start" x="83.95" y="-412" font-family="Noto Sans CJK SC" font-size="10.00">kind: python · native&#45;exec · native&#45;abi</text>
-<text text-anchor="start" x="153.95" y="-402" font-family="Noto Sans CJK SC" font-size="10.00">run / serve</text>
-<text text-anchor="start" x="114.95" y="-392" font-family="Noto Sans CJK SC" font-size="10.00">capabilities · concurrency</text>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.2" d="M287.78,-438C287.78,-438 96.78,-438 96.78,-438 90.78,-438 84.78,-432 84.78,-426 84.78,-426 84.78,-394 84.78,-394 84.78,-388 90.78,-382 96.78,-382 96.78,-382 287.78,-382 287.78,-382 293.78,-382 299.78,-388 299.78,-394 299.78,-394 299.78,-426 299.78,-426 299.78,-432 293.78,-438 287.78,-438"/>
+<text text-anchor="start" x="176.28" y="-422.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">entry</text>
+<text text-anchor="start" x="97.78" y="-412" font-family="Noto Sans CJK SC" font-size="10.00">kind: python · native&#45;exec · native&#45;abi</text>
+<text text-anchor="start" x="167.78" y="-402" font-family="Noto Sans CJK SC" font-size="10.00">run / serve</text>
+<text text-anchor="start" x="128.78" y="-392" font-family="Noto Sans CJK SC" font-size="10.00">capabilities · concurrency</text>
 </g>
 <!-- manifest&#45;&gt;entry -->
 <g id="edge2" class="edge">
 <title>manifest&#45;&gt;entry</title>
-<path fill="none" stroke="#64748b" d="M354.76,-488.89C320.72,-473.85 280.4,-456.03 246.9,-441.24"/>
-<polygon fill="#64748b" stroke="#64748b" points="247.79,-438.76 239.87,-438.13 245.67,-443.56 247.79,-438.76"/>
-<text text-anchor="middle" x="322.45" y="-461.5" font-family="Noto Sans CJK SC" font-size="10.00">parse</text>
+<path fill="none" stroke="#64748b" d="M374.96,-488.89C339.69,-473.85 297.9,-456.03 263.2,-441.24"/>
+<polygon fill="#64748b" stroke="#64748b" points="263.84,-438.66 255.91,-438.13 261.78,-443.49 263.84,-438.66"/>
+<text text-anchor="middle" x="341.28" y="-461.5" font-family="Noto Sans CJK SC" font-size="10.00">parse</text>
 </g>
 <!-- cells -->
 <g id="node5" class="node">
 <title>cells</title>
-<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.2" d="M582.95,-438C582.95,-438 433.95,-438 433.95,-438 427.95,-438 421.95,-432 421.95,-426 421.95,-426 421.95,-394 421.95,-394 421.95,-388 427.95,-382 433.95,-382 433.95,-382 582.95,-382 582.95,-382 588.95,-382 594.95,-388 594.95,-394 594.95,-394 594.95,-426 594.95,-426 594.95,-432 588.95,-438 582.95,-438"/>
-<text text-anchor="start" x="468.45" y="-422.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Runtime cells</text>
-<text text-anchor="start" x="434.95" y="-412" font-family="Noto Sans CJK SC" font-size="10.00">sm89&#45;cu124&#45;linux&#45;x86_64&#45;py312</text>
-<text text-anchor="start" x="448.45" y="-402" font-family="Noto Sans CJK SC" font-size="10.00">runtime dir · python_abi</text>
-<text text-anchor="start" x="451.95" y="-392" font-family="Noto Sans CJK SC" font-size="10.00">CUDA / SM compatibility</text>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.2" d="M616.28,-438C616.28,-438 474.28,-438 474.28,-438 468.28,-438 462.28,-432 462.28,-426 462.28,-426 462.28,-394 462.28,-394 462.28,-388 468.28,-382 474.28,-382 474.28,-382 616.28,-382 616.28,-382 622.28,-382 628.28,-388 628.28,-394 628.28,-394 628.28,-426 628.28,-426 628.28,-432 622.28,-438 616.28,-438"/>
+<text text-anchor="start" x="505.28" y="-422.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Runtime cells</text>
+<text text-anchor="start" x="475.28" y="-412" font-family="Noto Sans CJK SC" font-size="10.00">device / OS / arch / Python ABI</text>
+<text text-anchor="start" x="485.28" y="-402" font-family="Noto Sans CJK SC" font-size="10.00">runtime dir · python_abi</text>
+<text text-anchor="start" x="475.78" y="-392" font-family="Noto Sans CJK SC" font-size="10.00">device / runtime compatibility</text>
 </g>
 <!-- manifest&#45;&gt;cells -->
 <g id="edge3" class="edge">
 <title>manifest&#45;&gt;cells</title>
-<path fill="none" stroke="#64748b" d="M451.1,-488.89C461.39,-474.92 473.44,-458.55 483.83,-444.44"/>
-<polygon fill="#64748b" stroke="#64748b" points="486.14,-445.73 488.48,-438.13 481.91,-442.61 486.14,-445.73"/>
-<text text-anchor="middle" x="516.95" y="-461.5" font-family="Noto Sans CJK SC" font-size="10.00">select environment</text>
+<path fill="none" stroke="#64748b" d="M478.01,-488.89C490.18,-474.79 504.46,-458.26 516.72,-444.06"/>
+<polygon fill="#64748b" stroke="#64748b" points="518.93,-445.52 521.84,-438.13 514.96,-442.09 518.93,-445.52"/>
+<text text-anchor="middle" x="547.78" y="-461.5" font-family="Noto Sans CJK SC" font-size="10.00">select environment</text>
 </g>
 <!-- venv -->
 <g id="node6" class="node">
 <title>venv</title>
-<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.2" d="M794.95,-309C794.95,-309 647.95,-309 647.95,-309 641.95,-309 635.95,-303 635.95,-297 635.95,-297 635.95,-265 635.95,-265 635.95,-259 641.95,-253 647.95,-253 647.95,-253 794.95,-253 794.95,-253 800.95,-253 806.95,-259 806.95,-265 806.95,-265 806.95,-297 806.95,-297 806.95,-303 800.95,-309 794.95,-309"/>
-<text text-anchor="start" x="684.95" y="-293.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Bundle venv</text>
-<text text-anchor="start" x="703.95" y="-283" font-family="Noto Sans CJK SC" font-size="10.00">uv / pip</text>
-<text text-anchor="start" x="671.95" y="-273" font-family="Noto Sans CJK SC" font-size="10.00">flashcli&#45;bundle[infer]</text>
-<text text-anchor="start" x="648.95" y="-263" font-family="Noto Sans CJK SC" font-size="10.00">manifest python_dependencies</text>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.2" d="M844.78,-309C844.78,-309 697.78,-309 697.78,-309 691.78,-309 685.78,-303 685.78,-297 685.78,-297 685.78,-265 685.78,-265 685.78,-259 691.78,-253 697.78,-253 697.78,-253 844.78,-253 844.78,-253 850.78,-253 856.78,-259 856.78,-265 856.78,-265 856.78,-297 856.78,-297 856.78,-303 850.78,-309 844.78,-309"/>
+<text text-anchor="start" x="734.78" y="-293.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Bundle venv</text>
+<text text-anchor="start" x="731.28" y="-283" font-family="Noto Sans CJK SC" font-size="10.00">package installer</text>
+<text text-anchor="start" x="721.78" y="-273" font-family="Noto Sans CJK SC" font-size="10.00">flashcli&#45;bundle[infer]</text>
+<text text-anchor="start" x="698.78" y="-263" font-family="Noto Sans CJK SC" font-size="10.00">manifest python_dependencies</text>
 </g>
 <!-- manifest&#45;&gt;venv -->
 <g id="edge4" class="edge">
 <title>manifest&#45;&gt;venv</title>
-<path fill="none" stroke="#22c55e" d="M527.89,-488.98C542.47,-483.15 557.06,-476.63 570.45,-469.5 635.07,-435.12 681.95,-360.03 705.11,-316.02"/>
-<polygon fill="#22c55e" stroke="#22c55e" points="707.51,-317.1 708.63,-309.23 702.85,-314.69 707.51,-317.1"/>
-<text text-anchor="middle" x="718.95" y="-407.5" font-family="Noto Sans CJK SC" font-size="10.00">python_dependencies</text>
+<path fill="none" stroke="#22c55e" d="M556.63,-488.98C571.9,-483.16 587.2,-476.65 601.28,-469.5 670.04,-434.6 724.41,-359.44 751.81,-315.61"/>
+<polygon fill="#22c55e" stroke="#22c55e" points="754.11,-316.88 755.82,-309.12 749.64,-314.13 754.11,-316.88"/>
+<text text-anchor="middle" x="759.78" y="-407.5" font-family="Noto Sans CJK SC" font-size="10.00">python_dependencies</text>
 </g>
 <!-- weights -->
 <g id="node7" class="node">
 <title>weights</title>
-<path fill="#fef9c3" stroke="#eab308" stroke-width="1.2" d="M1187.45,-306.98C1187.45,-310.16 1134.12,-312.75 1068.45,-312.75 1002.79,-312.75 949.45,-310.16 949.45,-306.98 949.45,-306.98 949.45,-255.02 949.45,-255.02 949.45,-251.84 1002.79,-249.25 1068.45,-249.25 1134.12,-249.25 1187.45,-251.84 1187.45,-255.02 1187.45,-255.02 1187.45,-306.98 1187.45,-306.98"/>
-<path fill="none" stroke="#eab308" stroke-width="1.2" d="M1187.45,-306.98C1187.45,-303.79 1134.12,-301.2 1068.45,-301.2 1002.79,-301.2 949.45,-303.79 949.45,-306.98"/>
-<text text-anchor="start" x="1005.95" y="-288.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Shared weights store</text>
-<text text-anchor="start" x="962.45" y="-278" font-family="Noto Sans CJK SC" font-size="10.00">models/store/&lt;source&gt;/&lt;repo&gt;@&lt;rev&gt;&#45;&lt;hash&gt;</text>
-<text text-anchor="start" x="998.95" y="-268" font-family="Noto Sans CJK SC" font-size="10.00">download manifest · resume</text>
+<path fill="#fef9c3" stroke="#eab308" stroke-width="1.2" d="M1188.28,-306.98C1188.28,-310.16 1148.38,-312.75 1099.28,-312.75 1050.17,-312.75 1010.28,-310.16 1010.28,-306.98 1010.28,-306.98 1010.28,-255.02 1010.28,-255.02 1010.28,-251.84 1050.17,-249.25 1099.28,-249.25 1148.38,-249.25 1188.28,-251.84 1188.28,-255.02 1188.28,-255.02 1188.28,-306.98 1188.28,-306.98"/>
+<path fill="none" stroke="#eab308" stroke-width="1.2" d="M1188.28,-306.98C1188.28,-303.79 1148.38,-301.2 1099.28,-301.2 1050.17,-301.2 1010.28,-303.79 1010.28,-306.98"/>
+<text text-anchor="start" x="1036.78" y="-288.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Shared weights store</text>
+<text text-anchor="start" x="1023.28" y="-278" font-family="Noto Sans CJK SC" font-size="10.00">shared by source / repo / revision</text>
+<text text-anchor="start" x="1029.78" y="-268" font-family="Noto Sans CJK SC" font-size="10.00">download manifest · resume</text>
 </g>
 <!-- manifest&#45;&gt;weights -->
 <g id="edge5" class="edge">
 <title>manifest&#45;&gt;weights</title>
-<path fill="none" stroke="#eab308" d="M572.17,-495.84C636.78,-482.34 713.13,-463.21 779.45,-438 865.54,-405.28 958.05,-351.74 1014.6,-316.69"/>
-<polygon fill="#eab308" stroke="#eab308" points="1015.99,-318.91 1020.97,-312.72 1013.22,-314.45 1015.99,-318.91"/>
-<text text-anchor="middle" x="969.95" y="-407.5" font-family="Noto Sans CJK SC" font-size="10.00">weights / extra_weights</text>
+<path fill="none" stroke="#eab308" d="M594.99,-498.58C664.51,-485.3 748.18,-465.57 820.28,-438 903.96,-406 993.05,-352.32 1047.45,-317.03"/>
+<polygon fill="#eab308" stroke="#eab308" points="1049.06,-319.12 1053.91,-312.82 1046.19,-314.72 1049.06,-319.12"/>
+<text text-anchor="middle" x="1006.78" y="-407.5" font-family="Noto Sans CJK SC" font-size="10.00">weights / extra_weights</text>
 </g>
 <!-- native -->
 <g id="node10" class="node">
 <title>native</title>
-<path fill="#fce7f3" stroke="#db2777" stroke-width="1.2" d="M308.95,-198C308.95,-198 151.95,-198 151.95,-198 145.95,-198 139.95,-192 139.95,-186 139.95,-186 139.95,-154 139.95,-154 139.95,-148 145.95,-142 151.95,-142 151.95,-142 308.95,-142 308.95,-142 314.95,-142 320.95,-148 320.95,-154 320.95,-154 320.95,-186 320.95,-186 320.95,-192 314.95,-198 308.95,-198"/>
-<text text-anchor="start" x="184.95" y="-182.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Native backend</text>
-<text text-anchor="start" x="152.95" y="-172" font-family="Noto Sans CJK SC" font-size="10.00">native&#45;exec: process + HTTP/stdio</text>
-<text text-anchor="start" x="187.95" y="-162" font-family="Noto Sans CJK SC" font-size="10.00">native&#45;abi: .so ABI</text>
-<text text-anchor="start" x="184.45" y="-152" font-family="Noto Sans CJK SC" font-size="10.00">no host model logic</text>
+<path fill="#fce7f3" stroke="#db2777" stroke-width="1.2" d="M318.78,-198C318.78,-198 161.78,-198 161.78,-198 155.78,-198 149.78,-192 149.78,-186 149.78,-186 149.78,-154 149.78,-154 149.78,-148 155.78,-142 161.78,-142 161.78,-142 318.78,-142 318.78,-142 324.78,-142 330.78,-148 330.78,-154 330.78,-154 330.78,-186 330.78,-186 330.78,-192 324.78,-198 318.78,-198"/>
+<text text-anchor="start" x="194.78" y="-182.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Native backend</text>
+<text text-anchor="start" x="162.78" y="-172" font-family="Noto Sans CJK SC" font-size="10.00">native&#45;exec: process + HTTP/stdio</text>
+<text text-anchor="start" x="185.78" y="-162" font-family="Noto Sans CJK SC" font-size="10.00">native&#45;abi: ABI / library</text>
+<text text-anchor="start" x="194.28" y="-152" font-family="Noto Sans CJK SC" font-size="10.00">no host model logic</text>
 </g>
 <!-- entry&#45;&gt;native -->
 <g id="edge8" class="edge">
 <title>entry&#45;&gt;native</title>
-<path fill="none" stroke="#db2777" d="M184.42,-381.7C193.9,-338.33 212.38,-253.72 222.81,-205.97"/>
-<polygon fill="#db2777" stroke="#db2777" points="225.44,-206.24 224.48,-198.35 220.31,-205.12 225.44,-206.24"/>
-<text text-anchor="middle" x="242.45" y="-278.5" font-family="Noto Sans CJK SC" font-size="10.00">native entry</text>
+<path fill="none" stroke="#db2777" d="M197.78,-381.7C206.53,-338.33 223.59,-253.72 233.22,-205.97"/>
+<polygon fill="#db2777" stroke="#db2777" points="235.85,-206.22 234.76,-198.35 230.7,-205.18 235.85,-206.22"/>
+<text text-anchor="middle" x="254.28" y="-278.5" font-family="Noto Sans CJK SC" font-size="10.00">native entry</text>
 </g>
 <!-- runtime -->
 <g id="node8" class="node">
 <title>runtime</title>
-<path fill="#e0f2fe" stroke="#0284c7" stroke-width="1.2" d="M507.95,-304C507.95,-304 408.95,-304 408.95,-304 402.95,-304 396.95,-298 396.95,-292 396.95,-292 396.95,-270 396.95,-270 396.95,-264 402.95,-258 408.95,-258 408.95,-258 507.95,-258 507.95,-258 513.95,-258 519.95,-264 519.95,-270 519.95,-270 519.95,-292 519.95,-292 519.95,-298 513.95,-304 507.95,-304"/>
-<text text-anchor="start" x="414.95" y="-288.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Runtime cache</text>
-<text text-anchor="start" x="410.95" y="-278" font-family="Noto Sans CJK SC" font-size="10.00">~/.flashcli/runtimes/</text>
-<text text-anchor="start" x="409.95" y="-268" font-family="Noto Sans CJK SC" font-size="10.00">per runtime cell / ABI</text>
+<path fill="#e0f2fe" stroke="#0284c7" stroke-width="1.2" d="M536.78,-304C536.78,-304 437.78,-304 437.78,-304 431.78,-304 425.78,-298 425.78,-292 425.78,-292 425.78,-270 425.78,-270 425.78,-264 431.78,-258 437.78,-258 437.78,-258 536.78,-258 536.78,-258 542.78,-258 548.78,-264 548.78,-270 548.78,-270 548.78,-292 548.78,-292 548.78,-298 542.78,-304 536.78,-304"/>
+<text text-anchor="start" x="443.78" y="-288.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Runtime cache</text>
+<text text-anchor="start" x="453.78" y="-278" font-family="Noto Sans CJK SC" font-size="10.00">runtime cache</text>
+<text text-anchor="start" x="438.78" y="-268" font-family="Noto Sans CJK SC" font-size="10.00">per runtime cell / ABI</text>
 </g>
 <!-- cells&#45;&gt;runtime -->
 <g id="edge6" class="edge">
 <title>cells&#45;&gt;runtime</title>
-<path fill="none" stroke="#0284c7" d="M497.73,-381.76C489.56,-361.02 478.35,-332.54 469.99,-311.31"/>
-<polygon fill="#0284c7" stroke="#0284c7" points="472.36,-310.15 467.17,-304.13 467.47,-312.07 472.36,-310.15"/>
-<text text-anchor="middle" x="526.45" y="-354.5" font-family="Noto Sans CJK SC" font-size="10.00">prepare runtime</text>
+<path fill="none" stroke="#0284c7" d="M532.83,-381.76C523.32,-360.93 510.24,-332.29 500.53,-311.03"/>
+<polygon fill="#0284c7" stroke="#0284c7" points="502.89,-309.86 497.38,-304.13 498.11,-312.04 502.89,-309.86"/>
+<text text-anchor="middle" x="560.28" y="-354.5" font-family="Noto Sans CJK SC" font-size="10.00">prepare runtime</text>
 </g>
 <!-- py -->
 <g id="node9" class="node">
 <title>py</title>
-<path fill="#fce7f3" stroke="#db2777" stroke-width="1.2" d="M622.95,-198C622.95,-198 463.95,-198 463.95,-198 457.95,-198 451.95,-192 451.95,-186 451.95,-186 451.95,-154 451.95,-154 451.95,-148 457.95,-142 463.95,-142 463.95,-142 622.95,-142 622.95,-142 628.95,-142 634.95,-148 634.95,-154 634.95,-154 634.95,-186 634.95,-186 634.95,-192 628.95,-198 622.95,-198"/>
-<text text-anchor="start" x="506.45" y="-182.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Python infer</text>
-<text text-anchor="start" x="485.95" y="-172" font-family="Noto Sans CJK SC" font-size="10.00">bundle_venv/bin/python</text>
-<text text-anchor="start" x="464.95" y="-162" font-family="Noto Sans CJK SC" font-size="10.00">&#45;m flashcli_bundle.infer run|serve</text>
-<text text-anchor="start" x="481.45" y="-152" font-family="Noto Sans CJK SC" font-size="10.00">PYTHONPATH=bundle root</text>
+<path fill="#fce7f3" stroke="#db2777" stroke-width="1.2" d="M658.78,-198C658.78,-198 499.78,-198 499.78,-198 493.78,-198 487.78,-192 487.78,-186 487.78,-186 487.78,-154 487.78,-154 487.78,-148 493.78,-142 499.78,-142 499.78,-142 658.78,-142 658.78,-142 664.78,-142 670.78,-148 670.78,-154 670.78,-154 670.78,-186 670.78,-186 670.78,-192 664.78,-198 658.78,-198"/>
+<text text-anchor="start" x="542.28" y="-182.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Python infer</text>
+<text text-anchor="start" x="521.78" y="-172" font-family="Noto Sans CJK SC" font-size="10.00">bundle_venv/bin/python</text>
+<text text-anchor="start" x="500.78" y="-162" font-family="Noto Sans CJK SC" font-size="10.00">&#45;m flashcli_bundle.infer run|serve</text>
+<text text-anchor="start" x="517.28" y="-152" font-family="Noto Sans CJK SC" font-size="10.00">PYTHONPATH=bundle root</text>
 </g>
 <!-- venv&#45;&gt;py -->
 <g id="edge7" class="edge">
 <title>venv&#45;&gt;py</title>
-<path fill="none" stroke="#db2777" d="M677,-252.78C651.84,-237.37 620.29,-218.05 594.17,-202.06"/>
-<polygon fill="#db2777" stroke="#db2777" points="595.42,-199.74 587.65,-198.07 592.68,-204.22 595.42,-199.74"/>
-<text text-anchor="middle" x="673.45" y="-221.5" font-family="Noto Sans CJK SC" font-size="10.00">python &#45;m infer</text>
+<path fill="none" stroke="#db2777" d="M723.32,-252.78C696.07,-237.31 661.86,-217.89 633.62,-201.85"/>
+<polygon fill="#db2777" stroke="#db2777" points="634.77,-199.49 626.95,-198.07 632.18,-204.05 634.77,-199.49"/>
+<text text-anchor="middle" x="716.28" y="-221.5" font-family="Noto Sans CJK SC" font-size="10.00">python &#45;m infer</text>
 </g>
 <!-- runtime&#45;&gt;py -->
 <g id="edge11" class="edge">
 <title>runtime&#45;&gt;py</title>
-<path fill="none" stroke="#0284c7" stroke-dasharray="5,2" d="M475.65,-257.94C487.67,-242.54 503.91,-221.7 517.49,-204.29"/>
-<polygon fill="#0284c7" stroke="#0284c7" points="519.82,-205.57 522.36,-198.04 515.68,-202.34 519.82,-205.57"/>
+<path fill="none" stroke="#0284c7" stroke-dasharray="5,2" d="M505.89,-257.94C519.01,-242.4 536.79,-221.34 551.56,-203.83"/>
+<polygon fill="#0284c7" stroke="#0284c7" points="553.62,-205.47 556.45,-198.04 549.61,-202.08 553.62,-205.47"/>
 </g>
 <!-- runtime&#45;&gt;native -->
 <g id="edge12" class="edge">
 <title>runtime&#45;&gt;native</title>
-<path fill="none" stroke="#0284c7" stroke-dasharray="5,2" d="M412.31,-257.94C378.26,-241.66 331.5,-219.31 293.93,-201.35"/>
-<polygon fill="#0284c7" stroke="#0284c7" points="294.92,-198.91 287.02,-198.04 292.66,-203.65 294.92,-198.91"/>
+<path fill="none" stroke="#0284c7" stroke-dasharray="5,2" d="M437.29,-257.94C400.25,-241.59 349.33,-219.12 308.53,-201.12"/>
+<polygon fill="#0284c7" stroke="#0284c7" points="309.48,-198.67 301.56,-198.04 307.36,-203.47 309.48,-198.67"/>
 </g>
 <!-- flashrt -->
 <g id="node11" class="node">
 <title>flashrt</title>
-<path fill="#e0f2fe" stroke="#0284c7" stroke-width="1.2" d="M481.95,-72C481.95,-72 340.95,-72 340.95,-72 334.95,-72 328.95,-66 328.95,-60 328.95,-60 328.95,-28 328.95,-28 328.95,-22 334.95,-16 340.95,-16 340.95,-16 481.95,-16 481.95,-16 487.95,-16 493.95,-22 493.95,-28 493.95,-28 493.95,-60 493.95,-60 493.95,-66 487.95,-72 481.95,-72"/>
-<text text-anchor="start" x="387.95" y="-56.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">FlashRT</text>
-<text text-anchor="start" x="341.95" y="-46" font-family="Noto Sans CJK SC" font-size="10.00">flash_rt · .so · CUDA kernels</text>
-<text text-anchor="start" x="351.95" y="-36" font-family="Noto Sans CJK SC" font-size="10.00">sibling clone / build input</text>
-<text text-anchor="start" x="354.45" y="-26" font-family="Noto Sans CJK SC" font-size="10.00">not pip&#45;installed by host</text>
+<path fill="#e0f2fe" stroke="#0284c7" stroke-width="1.2" d="M495.78,-72C495.78,-72 370.78,-72 370.78,-72 364.78,-72 358.78,-66 358.78,-60 358.78,-60 358.78,-28 358.78,-28 358.78,-22 364.78,-16 370.78,-16 370.78,-16 495.78,-16 495.78,-16 501.78,-16 507.78,-22 507.78,-28 507.78,-28 507.78,-60 507.78,-60 507.78,-66 501.78,-72 495.78,-72"/>
+<text text-anchor="start" x="409.78" y="-56.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">FlashRT</text>
+<text text-anchor="start" x="371.78" y="-46" font-family="Noto Sans CJK SC" font-size="10.00">inference runtime / kernels</text>
+<text text-anchor="start" x="392.28" y="-36" font-family="Noto Sans CJK SC" font-size="10.00">platform backend</text>
+<text text-anchor="start" x="380.28" y="-26" font-family="Noto Sans CJK SC" font-size="10.00">not a host dependency</text>
 </g>
 <!-- py&#45;&gt;flashrt -->
 <g id="edge9" class="edge">
 <title>py&#45;&gt;flashrt</title>
-<path fill="none" stroke="#0284c7" d="M514.49,-141.79C494.28,-122.81 467.23,-97.4 445.92,-77.38"/>
-<polygon fill="#0284c7" stroke="#0284c7" points="447.62,-75.37 440.35,-72.15 444.02,-79.2 447.62,-75.37"/>
-<text text-anchor="middle" x="527.45" y="-114.5" font-family="Noto Sans CJK SC" font-size="10.00">import flash_rt</text>
+<path fill="none" stroke="#0284c7" d="M547.24,-141.79C524.79,-122.73 494.72,-97.18 471.1,-77.12"/>
+<polygon fill="#0284c7" stroke="#0284c7" points="472.66,-75 465.24,-72.15 469.26,-79 472.66,-75"/>
+<text text-anchor="middle" x="558.78" y="-114.5" font-family="Noto Sans CJK SC" font-size="10.00">import runtime</text>
 </g>
 <!-- native&#45;&gt;flashrt -->
 <g id="edge10" class="edge">
 <title>native&#45;&gt;flashrt</title>
-<path fill="none" stroke="#0284c7" d="M270.17,-141.79C298.23,-122.57 335.91,-96.75 365.31,-76.61"/>
-<polygon fill="#0284c7" stroke="#0284c7" points="367.12,-78.55 371.82,-72.15 364.15,-74.22 367.12,-78.55"/>
-<text text-anchor="middle" x="328.45" y="-114.5" font-family="Noto Sans CJK SC" font-size="10.00">.so / ABI</text>
+<path fill="none" stroke="#0284c7" d="M282.63,-141.79C312.67,-122.49 353.07,-96.53 384.46,-76.36"/>
+<polygon fill="#0284c7" stroke="#0284c7" points="386.13,-78.41 391.02,-72.15 383.29,-73.99 386.13,-78.41"/>
+<text text-anchor="middle" x="352.28" y="-114.5" font-family="Noto Sans CJK SC" font-size="10.00">ABI / library</text>
 </g>
 </g>
 </svg>

@@ -16,7 +16,7 @@
 <text x="800.0" y="350.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#1f2937">已准备?</text>
 <rect x="580" y="415" width="440" height="85" rx="12" fill="#ffedd5" stroke="#f97316" stroke-width="1.4"/>
 <text x="800.0" y="438" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#1f2937">Preload job → 503 model_preparing</text>
-<text x="800.0" y="457" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">host.Pull · bundle + runtime + 权重</text>
+<text x="800.0" y="457" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">准备磁盘资产 · bundle/runtime/权重</text>
 <text x="800.0" y="473" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">Retry-After · X-Flashcli-Preload-Job</text>
 <rect x="580" y="525" width="440" height="90" rx="12" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.4"/>
 <text x="800.0" y="548" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#1f2937">调度器</text>

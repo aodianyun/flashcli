@@ -6,7 +6,7 @@
 <rect x="36" y="120" width="360" height="720" rx="16" fill="#f8fbff" stroke="#bfdbfe" stroke-width="1.5"/>
 <text x="56" y="150" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#1e3a8a">Clients</text>
 <rect x="436" y="120" width="724" height="720" rx="16" fill="#fbfaff" stroke="#c4b5fd" stroke-width="1.5"/>
-<text x="456" y="150" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#5b21b6">Local host · ~/.flashcli</text>
+<text x="456" y="150" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#5b21b6">Local host · FLASHCLI_HOME</text>
 <rect x="1200" y="120" width="364" height="720" rx="16" fill="#fffaf5" stroke="#fed7aa" stroke-width="1.5"/>
 <text x="1220" y="150" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#9a3412">Remote / build</text>
 <rect x="60" y="180" width="312" height="92" rx="12" ry="12" fill="#dbeafe" stroke="#60a5fa" stroke-width="1.4"/>
@@ -24,7 +24,7 @@
 <text x="216.0" y="564" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#1f2937">CLI user</text>
 <text x="216.0" y="584" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">flashcli run/serve/pull</text>
 <rect x="456" y="170" width="684" height="290" rx="14" fill="#f5f3ff" stroke="#a78bfa" stroke-width="1.4"/>
-<text x="798" y="196" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#4c1d95">flashserver :8790</text>
+<text x="798" y="196" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#4c1d95">flashserver</text>
 <rect x="472" y="214" width="196" height="78" rx="12" ry="12" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.4"/>
 <text x="570.0" y="238" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="13.5" font-weight="700" fill="#1f2937">Gateway</text>
 <text x="570.0" y="258" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11" fill="#475569">/v1</text>
@@ -46,7 +46,7 @@
 <text x="622.0" y="571" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">pull · run · serve</text>
 <rect x="796" y="510" width="326" height="92" rx="12" ry="12" fill="#fef9c3" stroke="#eab308" stroke-width="1.4"/>
 <text x="959.0" y="534" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#1f2937">Shared cache</text>
-<text x="959.0" y="554" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">bundles · models · runtimes</text>
+<text x="959.0" y="554" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">bundles · weights · runtimes</text>
 <rect x="472" y="636" width="300" height="92" rx="12" ry="12" fill="#fce7f3" stroke="#ec4899" stroke-width="1.4"/>
 <text x="622.0" y="660" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#1f2937">serve child</text>
 <text x="622.0" y="680" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">loopback only</text>
@@ -63,8 +63,8 @@
 <text x="1382.0" y="484" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">flashcli-bundle[infer]</text>
 <rect x="1220" y="558" width="324" height="88" rx="12" ry="12" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.4"/>
 <text x="1382.0" y="582" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#1f2937">FlashRT</text>
-<text x="1382.0" y="602" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">flash_rt · .so</text>
-<text x="1382.0" y="619" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">CUDA kernels</text>
+<text x="1382.0" y="602" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">inference runtime</text>
+<text x="1382.0" y="619" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">platform kernels</text>
 <line x1="372" y1="226" x2="456" y2="250" stroke="#2563eb" stroke-width="1.6" marker-end="url(#arrow)"/>
 <text x="414.0" y="232.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#2563eb" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">HTTP + WS</text>
 <line x1="372" y1="346" x2="456" y2="300" stroke="#2563eb" stroke-width="1.6" marker-end="url(#arrow)"/>

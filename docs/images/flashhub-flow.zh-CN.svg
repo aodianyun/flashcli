@@ -13,169 +13,168 @@
 <text text-anchor="start" x="422.5" y="-655.6" font-family="Noto Sans CJK SC" font-size="13.00" fill="#64748b">发布 → 目录/版本 → CLI / flashserver / desktop 同步</text>
 <g id="clust1" class="cluster">
 <title>cluster_pub</title>
-<path fill="#fffaf5" stroke="#fed7aa" d="M251.41,-371.41C251.41,-371.41 411.47,-371.41 411.47,-371.41 417.47,-371.41 423.47,-377.41 423.47,-383.41 423.47,-383.41 423.47,-623.36 423.47,-623.36 423.47,-629.36 417.47,-635.36 411.47,-635.36 411.47,-635.36 251.41,-635.36 251.41,-635.36 245.41,-635.36 239.41,-629.36 239.41,-623.36 239.41,-623.36 239.41,-383.41 239.41,-383.41 239.41,-377.41 245.41,-371.41 251.41,-371.41"/>
-<text text-anchor="start" x="267.94" y="-621.16" font-family="Noto Sans CJK SC" font-weight="bold" font-size="14.00">Publishers / 发布者</text>
+<path fill="#fffaf5" stroke="#fed7aa" d="M251.41,-370.06C251.41,-370.06 411.47,-370.06 411.47,-370.06 417.47,-370.06 423.47,-376.06 423.47,-382.06 423.47,-382.06 423.47,-623.29 423.47,-623.29 423.47,-629.29 417.47,-635.29 411.47,-635.29 411.47,-635.29 251.41,-635.29 251.41,-635.29 245.41,-635.29 239.41,-629.29 239.41,-623.29 239.41,-623.29 239.41,-382.06 239.41,-382.06 239.41,-376.06 245.41,-370.06 251.41,-370.06"/>
+<text text-anchor="start" x="267.94" y="-621.09" font-family="Noto Sans CJK SC" font-weight="bold" font-size="14.00">Publishers / 发布者</text>
 </g>
 <g id="clust2" class="cluster">
 <title>cluster_hub</title>
-<path fill="#fff7f7" stroke="#fecaca" d="M650.43,-297.13C650.43,-297.13 1129.7,-297.13 1129.7,-297.13 1135.7,-297.13 1141.7,-303.13 1141.7,-309.13 1141.7,-309.13 1141.7,-549.07 1141.7,-549.07 1141.7,-555.07 1135.7,-561.07 1129.7,-561.07 1129.7,-561.07 650.43,-561.07 650.43,-561.07 644.43,-561.07 638.43,-555.07 638.43,-549.07 638.43,-549.07 638.43,-309.13 638.43,-309.13 638.43,-303.13 644.43,-297.13 650.43,-297.13"/>
-<text text-anchor="start" x="857.06" y="-546.87" font-family="Noto Sans CJK SC" font-weight="bold" font-size="14.00">FlashHub</text>
+<path fill="#fff7f7" stroke="#fecaca" d="M650.43,-295.41C650.43,-295.41 1129.7,-295.41 1129.7,-295.41 1135.7,-295.41 1141.7,-301.41 1141.7,-307.41 1141.7,-307.41 1141.7,-548.65 1141.7,-548.65 1141.7,-554.65 1135.7,-560.65 1129.7,-560.65 1129.7,-560.65 650.43,-560.65 650.43,-560.65 644.43,-560.65 638.43,-554.65 638.43,-548.65 638.43,-548.65 638.43,-307.41 638.43,-307.41 638.43,-301.41 644.43,-295.41 650.43,-295.41"/>
+<text text-anchor="start" x="857.06" y="-546.45" font-family="Noto Sans CJK SC" font-weight="bold" font-size="14.00">FlashHub</text>
 </g>
 <g id="clust3" class="cluster">
 <title>cluster_use</title>
-<path fill="#f7fff9" stroke="#bbf7d0" d="M22.3,-12.64C22.3,-12.64 836.23,-12.64 836.23,-12.64 842.23,-12.64 848.23,-18.64 848.23,-24.64 848.23,-24.64 848.23,-264.59 848.23,-264.59 848.23,-270.59 842.23,-276.59 836.23,-276.59 836.23,-276.59 22.3,-276.59 22.3,-276.59 16.3,-276.59 10.3,-270.59 10.3,-264.59 10.3,-264.59 10.3,-24.64 10.3,-24.64 10.3,-18.64 16.3,-12.64 22.3,-12.64"/>
-<text text-anchor="start" x="363.26" y="-262.39" font-family="Noto Sans CJK SC" font-weight="bold" font-size="14.00">Consumers / 消费端</text>
+<path fill="#f7fff9" stroke="#bbf7d0" d="M22.3,-12.71C22.3,-12.71 836.88,-12.71 836.88,-12.71 842.88,-12.71 848.88,-18.71 848.88,-24.71 848.88,-24.71 848.88,-265.94 848.88,-265.94 848.88,-271.94 842.88,-277.94 836.88,-277.94 836.88,-277.94 22.3,-277.94 22.3,-277.94 16.3,-277.94 10.3,-271.94 10.3,-265.94 10.3,-265.94 10.3,-24.71 10.3,-24.71 10.3,-18.71 16.3,-12.71 22.3,-12.71"/>
+<text text-anchor="start" x="363.59" y="-263.74" font-family="Noto Sans CJK SC" font-weight="bold" font-size="14.00">Consumers / 消费端</text>
 </g>
 <!-- bauthor -->
 <g id="node1" class="node">
 <title>bauthor</title>
-<path fill="#ffedd5" stroke="#f97316" stroke-width="1.2" d="M375.2,-443.77C375.2,-443.77 288.2,-443.77 288.2,-443.77 282.2,-443.77 276.2,-437.77 276.2,-431.77 276.2,-431.77 276.2,-409.77 276.2,-409.77 276.2,-403.77 282.2,-397.77 288.2,-397.77 288.2,-397.77 375.2,-397.77 375.2,-397.77 381.2,-397.77 387.2,-403.77 387.2,-409.77 387.2,-409.77 387.2,-431.77 387.2,-431.77 387.2,-437.77 381.2,-443.77 375.2,-443.77"/>
-<text text-anchor="start" x="289.2" y="-428.17" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Bundle author</text>
-<text text-anchor="start" x="293.7" y="-417.77" font-family="Noto Sans CJK SC" font-size="10.00">build · validate</text>
-<text text-anchor="start" x="289.2" y="-407.77" font-family="Noto Sans CJK SC" font-size="10.00">release_bundle.sh</text>
+<path fill="#ffedd5" stroke="#f97316" stroke-width="1.2" d="M375.2,-442C375.2,-442 288.2,-442 288.2,-442 282.2,-442 276.2,-436 276.2,-430 276.2,-430 276.2,-408 276.2,-408 276.2,-402 282.2,-396 288.2,-396 288.2,-396 375.2,-396 375.2,-396 381.2,-396 387.2,-402 387.2,-408 387.2,-408 387.2,-430 387.2,-430 387.2,-436 381.2,-442 375.2,-442"/>
+<text text-anchor="start" x="289.2" y="-426.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Bundle author</text>
+<text text-anchor="start" x="293.7" y="-416" font-family="Noto Sans CJK SC" font-size="10.00">build · validate</text>
+<text text-anchor="start" x="289.2" y="-406" font-family="Noto Sans CJK SC" font-size="10.00">release_bundle.sh</text>
 </g>
 <!-- repo -->
 <g id="node4" class="node">
 <title>repo</title>
-<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.2" d="M844.2,-368.77C844.2,-368.77 687.2,-368.77 687.2,-368.77 681.2,-368.77 675.2,-362.77 675.2,-356.77 675.2,-356.77 675.2,-334.77 675.2,-334.77 675.2,-328.77 681.2,-322.77 687.2,-322.77 687.2,-322.77 844.2,-322.77 844.2,-322.77 850.2,-322.77 856.2,-328.77 856.2,-334.77 856.2,-334.77 856.2,-356.77 856.2,-356.77 856.2,-362.77 850.2,-368.77 844.2,-368.77"/>
-<text text-anchor="start" x="729.7" y="-353.17" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Bundle repo</text>
-<text text-anchor="start" x="728.7" y="-342.77" font-family="Noto Sans CJK SC" font-size="10.00">manifest · files</text>
-<text text-anchor="start" x="688.2" y="-332.77" font-family="Noto Sans CJK SC" font-size="10.00">runtime dirs · weights metadata</text>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.2" d="M844.2,-368C844.2,-368 687.2,-368 687.2,-368 681.2,-368 675.2,-362 675.2,-356 675.2,-356 675.2,-334 675.2,-334 675.2,-328 681.2,-322 687.2,-322 687.2,-322 844.2,-322 844.2,-322 850.2,-322 856.2,-328 856.2,-334 856.2,-334 856.2,-356 856.2,-356 856.2,-362 850.2,-368 844.2,-368"/>
+<text text-anchor="start" x="729.7" y="-352.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Bundle repo</text>
+<text text-anchor="start" x="728.7" y="-342" font-family="Noto Sans CJK SC" font-size="10.00">manifest · files</text>
+<text text-anchor="start" x="688.2" y="-332" font-family="Noto Sans CJK SC" font-size="10.00">runtime dirs · weights metadata</text>
 </g>
 <!-- bauthor&#45;&gt;repo -->
 <g id="edge1" class="edge">
 <title>bauthor&#45;&gt;repo</title>
-<path fill="none" stroke="#f97316" d="M387.42,-411.27C457.79,-399.05 581.24,-377.62 667.7,-362.61"/>
-<polygon fill="#f97316" stroke="#f97316" points="668.22,-365.19 675.16,-361.32 667.32,-360.01 668.22,-365.19"/>
-<text text-anchor="middle" x="532.7" y="-398.77" font-family="Noto Sans CJK SC" font-size="10.00">publish bundle</text>
+<path fill="none" stroke="#f97316" d="M387.42,-409.63C457.79,-397.57 581.24,-376.43 667.7,-361.62"/>
+<polygon fill="#f97316" stroke="#f97316" points="668.21,-364.19 675.16,-360.34 667.33,-359.02 668.21,-364.19"/>
+<text text-anchor="middle" x="532.7" y="-398" font-family="Noto Sans CJK SC" font-size="10.00">publish bundle</text>
 </g>
 <!-- aauthor -->
 <g id="node2" class="node">
 <title>aauthor</title>
-<path fill="#ffedd5" stroke="#f97316" stroke-width="1.2" d="M381.2,-572.77C381.2,-572.77 282.2,-572.77 282.2,-572.77 276.2,-572.77 270.2,-566.77 270.2,-560.77 270.2,-560.77 270.2,-538.77 270.2,-538.77 270.2,-532.77 276.2,-526.77 282.2,-526.77 282.2,-526.77 381.2,-526.77 381.2,-526.77 387.2,-526.77 393.2,-532.77 393.2,-538.77 393.2,-538.77 393.2,-560.77 393.2,-560.77 393.2,-566.77 387.2,-572.77 381.2,-572.77"/>
-<text text-anchor="start" x="298.7" y="-557.17" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">App author</text>
-<text text-anchor="start" x="301.2" y="-546.77" font-family="Noto Sans CJK SC" font-size="10.00">app manifest</text>
-<text text-anchor="start" x="283.2" y="-536.77" font-family="Noto Sans CJK SC" font-size="10.00">install / setup scripts</text>
+<path fill="#ffedd5" stroke="#f97316" stroke-width="1.2" d="M381.2,-573C381.2,-573 282.2,-573 282.2,-573 276.2,-573 270.2,-567 270.2,-561 270.2,-561 270.2,-539 270.2,-539 270.2,-533 276.2,-527 282.2,-527 282.2,-527 381.2,-527 381.2,-527 387.2,-527 393.2,-533 393.2,-539 393.2,-539 393.2,-561 393.2,-561 393.2,-567 387.2,-573 381.2,-573"/>
+<text text-anchor="start" x="298.7" y="-557.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">App author</text>
+<text text-anchor="start" x="301.2" y="-547" font-family="Noto Sans CJK SC" font-size="10.00">app manifest</text>
+<text text-anchor="start" x="283.2" y="-537" font-family="Noto Sans CJK SC" font-size="10.00">install / setup scripts</text>
 </g>
 <!-- apps -->
 <g id="node5" class="node">
 <title>apps</title>
-<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.2" d="M825.7,-498.77C825.7,-498.77 705.7,-498.77 705.7,-498.77 699.7,-498.77 693.7,-492.77 693.7,-486.77 693.7,-486.77 693.7,-464.77 693.7,-464.77 693.7,-458.77 699.7,-452.77 705.7,-452.77 705.7,-452.77 825.7,-452.77 825.7,-452.77 831.7,-452.77 837.7,-458.77 837.7,-464.77 837.7,-464.77 837.7,-486.77 837.7,-486.77 837.7,-492.77 831.7,-498.77 825.7,-498.77"/>
-<text text-anchor="start" x="729.2" y="-483.17" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">App registry</text>
-<text text-anchor="start" x="735.2" y="-472.77" font-family="Noto Sans CJK SC" font-size="10.00">app manifest</text>
-<text text-anchor="start" x="706.7" y="-462.77" font-family="Noto Sans CJK SC" font-size="10.00">default bundles · scripts</text>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.2" d="M825.7,-498C825.7,-498 705.7,-498 705.7,-498 699.7,-498 693.7,-492 693.7,-486 693.7,-486 693.7,-464 693.7,-464 693.7,-458 699.7,-452 705.7,-452 705.7,-452 825.7,-452 825.7,-452 831.7,-452 837.7,-458 837.7,-464 837.7,-464 837.7,-486 837.7,-486 837.7,-492 831.7,-498 825.7,-498"/>
+<text text-anchor="start" x="729.2" y="-482.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">App registry</text>
+<text text-anchor="start" x="735.2" y="-472" font-family="Noto Sans CJK SC" font-size="10.00">app manifest</text>
+<text text-anchor="start" x="706.7" y="-462" font-family="Noto Sans CJK SC" font-size="10.00">default bundles · scripts</text>
 </g>
 <!-- aauthor&#45;&gt;apps -->
 <g id="edge2" class="edge">
 <title>aauthor&#45;&gt;apps</title>
-<path fill="none" stroke="#f97316" d="M393.23,-539.4C469.75,-526.29 601.67,-503.7 685.96,-489.26"/>
-<polygon fill="#f97316" stroke="#f97316" points="686.51,-491.83 693.46,-487.97 685.63,-486.65 686.51,-491.83"/>
-<text text-anchor="middle" x="532.7" y="-528.77" font-family="Noto Sans CJK SC" font-size="10.00">publish app</text>
+<path fill="none" stroke="#f97316" d="M393.23,-539.49C469.75,-526.21 601.67,-503.3 685.96,-488.67"/>
+<polygon fill="#f97316" stroke="#f97316" points="686.52,-491.24 693.46,-487.37 685.62,-486.06 686.52,-491.24"/>
+<text text-anchor="middle" x="532.7" y="-528" font-family="Noto Sans CJK SC" font-size="10.00">publish app</text>
 </g>
 <!-- api -->
 <g id="node3" class="node">
 <title>api</title>
-<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.2" d="M1102.7,-378.77C1102.7,-378.77 1012.7,-378.77 1012.7,-378.77 1006.7,-378.77 1000.7,-372.77 1000.7,-366.77 1000.7,-366.77 1000.7,-344.77 1000.7,-344.77 1000.7,-338.77 1006.7,-332.77 1012.7,-332.77 1012.7,-332.77 1102.7,-332.77 1102.7,-332.77 1108.7,-332.77 1114.7,-338.77 1114.7,-344.77 1114.7,-344.77 1114.7,-366.77 1114.7,-366.77 1114.7,-372.77 1108.7,-378.77 1102.7,-378.77"/>
-<text text-anchor="start" x="1020.2" y="-363.17" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Catalog / API</text>
-<text text-anchor="start" x="1024.7" y="-352.77" font-family="Noto Sans CJK SC" font-size="10.00">search · tags</text>
-<text text-anchor="start" x="1013.7" y="-342.77" font-family="Noto Sans CJK SC" font-size="10.00">app list · versions</text>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.2" d="M1102.7,-377C1102.7,-377 1012.7,-377 1012.7,-377 1006.7,-377 1000.7,-371 1000.7,-365 1000.7,-365 1000.7,-343 1000.7,-343 1000.7,-337 1006.7,-331 1012.7,-331 1012.7,-331 1102.7,-331 1102.7,-331 1108.7,-331 1114.7,-337 1114.7,-343 1114.7,-343 1114.7,-365 1114.7,-365 1114.7,-371 1108.7,-377 1102.7,-377"/>
+<text text-anchor="start" x="1020.2" y="-361.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Catalog / API</text>
+<text text-anchor="start" x="1024.7" y="-351" font-family="Noto Sans CJK SC" font-size="10.00">search · tags</text>
+<text text-anchor="start" x="1013.7" y="-341" font-family="Noto Sans CJK SC" font-size="10.00">app list · versions</text>
 </g>
 <!-- cli -->
 <g id="node6" class="node">
 <title>cli</title>
-<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.2" d="M381.2,-213.77C381.2,-213.77 282.2,-213.77 282.2,-213.77 276.2,-213.77 270.2,-207.77 270.2,-201.77 270.2,-201.77 270.2,-179.77 270.2,-179.77 270.2,-173.77 276.2,-167.77 282.2,-167.77 282.2,-167.77 381.2,-167.77 381.2,-167.77 387.2,-167.77 393.2,-173.77 393.2,-179.77 393.2,-179.77 393.2,-201.77 393.2,-201.77 393.2,-207.77 387.2,-213.77 381.2,-213.77"/>
-<text text-anchor="start" x="310.2" y="-198.17" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">flashcli</text>
-<text text-anchor="start" x="287.7" y="-187.77" font-family="Noto Sans CJK SC" font-size="10.00">pull · run · serve</text>
-<text text-anchor="start" x="283.2" y="-177.77" font-family="Noto Sans CJK SC" font-size="10.00">local cache · offline</text>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.2" d="M381.2,-215C381.2,-215 282.2,-215 282.2,-215 276.2,-215 270.2,-209 270.2,-203 270.2,-203 270.2,-181 270.2,-181 270.2,-175 276.2,-169 282.2,-169 282.2,-169 381.2,-169 381.2,-169 387.2,-169 393.2,-175 393.2,-181 393.2,-181 393.2,-203 393.2,-203 393.2,-209 387.2,-215 381.2,-215"/>
+<text text-anchor="start" x="310.2" y="-199.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">flashcli</text>
+<text text-anchor="start" x="287.7" y="-189" font-family="Noto Sans CJK SC" font-size="10.00">pull · run · serve</text>
+<text text-anchor="start" x="283.2" y="-179" font-family="Noto Sans CJK SC" font-size="10.00">local cache · offline</text>
 </g>
 <!-- api&#45;&gt;cli -->
 <g id="edge5" class="edge">
 <title>api&#45;&gt;cli</title>
-<path fill="none" stroke="#f97316" d="M1047.26,-332.4C1024.1,-278.61 958.78,-146.67 856.2,-93.77 800.34,-64.96 530.12,-63.9 469.2,-84.77 424.87,-99.96 383.82,-136.07 358.56,-161.92"/>
-<polygon fill="#f97316" stroke="#f97316" points="356.4,-160.37 353.1,-167.6 360.19,-164.01 356.4,-160.37"/>
-<text text-anchor="middle" x="765.7" y="-96.77" font-family="Noto Sans CJK SC" font-size="10.00">search / resolve</text>
+<path fill="none" stroke="#f97316" d="M1047.48,-330.85C1024.59,-276.93 959.43,-143.47 856.2,-90 798.69,-60.21 529.31,-59.64 469.2,-81 423.52,-97.23 382.02,-136 357.07,-163.12"/>
+<polygon fill="#f97316" stroke="#f97316" points="355.09,-161.4 352,-168.72 358.98,-164.92 355.09,-161.4"/>
+<text text-anchor="middle" x="765.7" y="-93" font-family="Noto Sans CJK SC" font-size="10.00">search / resolve</text>
 </g>
 <!-- srv -->
 <g id="node7" class="node">
 <title>srv</title>
-<path fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.2" d="M383.2,-84.77C383.2,-84.77 280.2,-84.77 280.2,-84.77 274.2,-84.77 268.2,-78.77 268.2,-72.77 268.2,-72.77 268.2,-50.77 268.2,-50.77 268.2,-44.77 274.2,-38.77 280.2,-38.77 280.2,-38.77 383.2,-38.77 383.2,-38.77 389.2,-38.77 395.2,-44.77 395.2,-50.77 395.2,-50.77 395.2,-72.77 395.2,-72.77 395.2,-78.77 389.2,-84.77 383.2,-84.77"/>
-<text text-anchor="start" x="298.7" y="-69.17" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">flashserver</text>
-<text text-anchor="start" x="281.2" y="-58.77" font-family="Noto Sans CJK SC" font-size="10.00">/api/v1/catalog proxy</text>
-<text text-anchor="start" x="281.7" y="-48.77" font-family="Noto Sans CJK SC" font-size="10.00">preload · app install</text>
+<path fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.2" d="M383.2,-85C383.2,-85 280.2,-85 280.2,-85 274.2,-85 268.2,-79 268.2,-73 268.2,-73 268.2,-51 268.2,-51 268.2,-45 274.2,-39 280.2,-39 280.2,-39 383.2,-39 383.2,-39 389.2,-39 395.2,-45 395.2,-51 395.2,-51 395.2,-73 395.2,-73 395.2,-79 389.2,-85 383.2,-85"/>
+<text text-anchor="start" x="298.7" y="-69.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">flashserver</text>
+<text text-anchor="start" x="281.2" y="-59" font-family="Noto Sans CJK SC" font-size="10.00">/api/v1/catalog proxy</text>
+<text text-anchor="start" x="281.7" y="-49" font-family="Noto Sans CJK SC" font-size="10.00">preload · app install</text>
 </g>
 <!-- api&#45;&gt;srv -->
 <g id="edge7" class="edge">
 <title>api&#45;&gt;srv</title>
-<path fill="none" stroke="#f97316" d="M1051.2,-332.54C1034.79,-269.59 979.48,-97.27 856.2,-49.77 703.31,9.14 506.21,-20.85 402.94,-43.76"/>
-<polygon fill="#f97316" stroke="#f97316" points="402.1,-41.26 395.36,-45.47 403.26,-46.38 402.1,-41.26"/>
-<text text-anchor="middle" x="765.7" y="-52.77" font-family="Noto Sans CJK SC" font-size="10.00">catalog / app proxy</text>
+<path fill="none" stroke="#f97316" d="M1051.26,-330.61C1035,-267.22 980.04,-93.72 856.2,-46 703.28,12.93 506.19,-19.05 402.93,-43.14"/>
+<polygon fill="#f97316" stroke="#f97316" points="402.05,-40.65 395.36,-44.94 403.26,-45.76 402.05,-40.65"/>
+<text text-anchor="middle" x="765.7" y="-49" font-family="Noto Sans CJK SC" font-size="10.00">catalog / app proxy</text>
 </g>
 <!-- repo&#45;&gt;api -->
 <g id="edge3" class="edge">
 <title>repo&#45;&gt;api</title>
-<path fill="none" stroke="#ef4444" stroke-dasharray="5,2" d="M856.47,-348.87C900.61,-350.39 952.77,-352.19 992.79,-353.57"/>
-<polygon fill="#ef4444" stroke="#ef4444" points="993.03,-356.2 1000.62,-353.84 993.22,-350.95 993.03,-356.2"/>
-<text text-anchor="middle" x="932.7" y="-353.77" font-family="Noto Sans CJK SC" font-size="10.00">index</text>
+<path fill="none" stroke="#ef4444" stroke-dasharray="5,2" d="M856.47,-347.79C900.61,-349.16 952.77,-350.77 992.79,-352.02"/>
+<polygon fill="#ef4444" stroke="#ef4444" points="993.04,-354.65 1000.62,-352.26 993.21,-349.4 993.04,-354.65"/>
+<text text-anchor="middle" x="932.7" y="-353" font-family="Noto Sans CJK SC" font-size="10.00">index</text>
 </g>
 <!-- apps&#45;&gt;api -->
 <g id="edge4" class="edge">
 <title>apps&#45;&gt;api</title>
-<path fill="none" stroke="#ef4444" stroke-dasharray="5,2" d="M822.62,-452.63C871.66,-432.34 942.91,-402.86 993.9,-381.76"/>
-<polygon fill="#ef4444" stroke="#ef4444" points="995.03,-384.13 1000.96,-378.84 993.03,-379.28 995.03,-384.13"/>
-<text text-anchor="middle" x="932.7" y="-414.77" font-family="Noto Sans CJK SC" font-size="10.00">index</text>
+<path fill="none" stroke="#ef4444" stroke-dasharray="5,2" d="M821.93,-451.96C871.06,-431.46 942.85,-401.5 994.1,-380.12"/>
+<polygon fill="#ef4444" stroke="#ef4444" points="995.28,-382.47 1001.19,-377.16 993.25,-377.63 995.28,-382.47"/>
+<text text-anchor="middle" x="932.7" y="-413" font-family="Noto Sans CJK SC" font-size="10.00">index</text>
 </g>
 <!-- cli&#45;&gt;repo -->
 <g id="edge6" class="edge">
 <title>cli&#45;&gt;repo</title>
-<path fill="none" stroke="#f97316" d="M357.81,-213.99C383.73,-236.64 426.33,-270.31 469.2,-288.77 532.25,-315.92 608.41,-330.21 667.63,-337.7"/>
-<polygon fill="#f97316" stroke="#f97316" points="667.36,-340.31 675.13,-338.62 668,-335.1 667.36,-340.31"/>
-<text text-anchor="middle" x="532.7" y="-328.77" font-family="Noto Sans CJK SC" font-size="10.00">sync manifest/files/runtime</text>
+<path fill="none" stroke="#f97316" d="M358.93,-215.28C385.05,-237.18 427.2,-269.2 469.2,-287 532.33,-313.76 608.32,-328.32 667.44,-336.16"/>
+<polygon fill="#f97316" stroke="#f97316" points="667.15,-338.77 674.93,-337.13 667.83,-333.57 667.15,-338.77"/>
+<text text-anchor="middle" x="532.7" y="-327" font-family="Noto Sans CJK SC" font-size="10.00">sync manifest/files/runtime</text>
 </g>
 <!-- cache -->
 <g id="node9" class="node">
 <title>cache</title>
-<path fill="#fef9c3" stroke="#eab308" stroke-width="1.2" d="M822.2,-192.27C822.2,-196.13 796.88,-199.27 765.7,-199.27 734.53,-199.27 709.2,-196.13 709.2,-192.27 709.2,-192.27 709.2,-129.27 709.2,-129.27 709.2,-125.41 734.53,-122.27 765.7,-122.27 796.88,-122.27 822.2,-125.41 822.2,-129.27 822.2,-129.27 822.2,-192.27 822.2,-192.27"/>
-<path fill="none" stroke="#eab308" stroke-width="1.2" d="M822.2,-192.27C822.2,-188.41 796.88,-185.27 765.7,-185.27 734.53,-185.27 709.2,-188.41 709.2,-192.27"/>
-<text text-anchor="start" x="732.2" y="-173.17" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Local cache</text>
-<text text-anchor="start" x="722.2" y="-162.77" font-family="Noto Sans CJK SC" font-size="10.00">~/.flashcli/bundles</text>
-<text text-anchor="start" x="733.2" y="-152.77" font-family="Noto Sans CJK SC" font-size="10.00">models/store/</text>
-<text text-anchor="start" x="742.7" y="-142.77" font-family="Noto Sans CJK SC" font-size="10.00">runtimes/</text>
+<path fill="#fef9c3" stroke="#eab308" stroke-width="1.2" d="M822.7,-176.98C822.7,-180.16 797.15,-182.75 765.7,-182.75 734.25,-182.75 708.7,-180.16 708.7,-176.98 708.7,-176.98 708.7,-125.02 708.7,-125.02 708.7,-121.84 734.25,-119.25 765.7,-119.25 797.15,-119.25 822.7,-121.84 822.7,-125.02 822.7,-125.02 822.7,-176.98 822.7,-176.98"/>
+<path fill="none" stroke="#eab308" stroke-width="1.2" d="M822.7,-176.98C822.7,-173.79 797.15,-171.2 765.7,-171.2 734.25,-171.2 708.7,-173.79 708.7,-176.98"/>
+<text text-anchor="start" x="741.2" y="-158.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">本地缓存</text>
+<text text-anchor="start" x="721.7" y="-148" font-family="Noto Sans CJK SC" font-size="10.00">bundles · weights</text>
+<text text-anchor="start" x="744.7" y="-138" font-family="Noto Sans CJK SC" font-size="10.00">runtimes</text>
 </g>
 <!-- cli&#45;&gt;cache -->
 <g id="edge10" class="edge">
 <title>cli&#45;&gt;cache</title>
-<path fill="none" stroke="#eab308" d="M393.23,-186.57C474.55,-180.92 618.42,-170.93 701.22,-165.18"/>
-<polygon fill="#eab308" stroke="#eab308" points="701.74,-167.77 709.04,-164.64 701.38,-162.54 701.74,-167.77"/>
-<text text-anchor="middle" x="532.7" y="-183.77" font-family="Noto Sans CJK SC" font-size="10.00">materialize</text>
+<path fill="none" stroke="#eab308" d="M393.23,-186.26C474.32,-178.56 617.62,-164.96 700.53,-157.09"/>
+<polygon fill="#eab308" stroke="#eab308" points="701.15,-159.67 708.36,-156.35 700.65,-154.44 701.15,-159.67"/>
+<text text-anchor="middle" x="532.7" y="-181" font-family="Noto Sans CJK SC" font-size="10.00">materialize</text>
 </g>
 <!-- srv&#45;&gt;repo -->
 <g id="edge8" class="edge">
 <title>srv&#45;&gt;repo</title>
-<path fill="none" stroke="#f97316" stroke-dasharray="5,2" d="M351.06,-84.82C375.58,-114.49 421.49,-166.32 469.2,-200.77 490.12,-215.87 628.52,-281.8 708.28,-319.34"/>
-<polygon fill="#f97316" stroke="#f97316" points="707.43,-321.85 715.34,-322.66 709.67,-317.1 707.43,-321.85"/>
-<text text-anchor="middle" x="532.7" y="-267.77" font-family="Noto Sans CJK SC" font-size="10.00">preload / app prepare</text>
+<path fill="none" stroke="#f97316" stroke-dasharray="5,2" d="M351.83,-85.23C376.64,-114.3 422.32,-164.35 469.2,-198 509.84,-227.17 632.53,-284.94 706.42,-318.72"/>
+<polygon fill="#f97316" stroke="#f97316" points="705.5,-321.19 713.42,-321.91 707.68,-316.41 705.5,-321.19"/>
+<text text-anchor="middle" x="532.7" y="-267" font-family="Noto Sans CJK SC" font-size="10.00">preload / app prepare</text>
 </g>
 <!-- srv&#45;&gt;cache -->
 <g id="edge11" class="edge">
 <title>srv&#45;&gt;cache</title>
-<path fill="none" stroke="#eab308" d="M395.52,-76.17C477.24,-94.89 619.25,-127.44 701.27,-146.23"/>
-<polygon fill="#eab308" stroke="#eab308" points="701.12,-148.89 709.02,-148.01 702.29,-143.78 701.12,-148.89"/>
-<text text-anchor="middle" x="532.7" y="-122.77" font-family="Noto Sans CJK SC" font-size="10.00">preload/unload</text>
+<path fill="none" stroke="#eab308" d="M395.52,-74.94C477.13,-91.75 618.85,-120.95 700.93,-137.86"/>
+<polygon fill="#eab308" stroke="#eab308" points="700.81,-140.52 708.68,-139.46 701.87,-135.37 700.81,-140.52"/>
+<text text-anchor="middle" x="532.7" y="-117" font-family="Noto Sans CJK SC" font-size="10.00">preload/unload</text>
 </g>
 <!-- desktop -->
 <g id="node8" class="node">
 <title>desktop</title>
-<path fill="#dbeafe" stroke="#60a5fa" stroke-width="1.2" d="M118.7,-104.77C118.7,-104.77 46.7,-104.77 46.7,-104.77 40.7,-104.77 34.7,-98.77 34.7,-92.77 34.7,-92.77 34.7,-70.77 34.7,-70.77 34.7,-64.77 40.7,-58.77 46.7,-58.77 46.7,-58.77 118.7,-58.77 118.7,-58.77 124.7,-58.77 130.7,-64.77 130.7,-70.77 130.7,-70.77 130.7,-92.77 130.7,-92.77 130.7,-98.77 124.7,-104.77 118.7,-104.77"/>
-<text text-anchor="start" x="58.7" y="-89.17" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Desktop</text>
-<text text-anchor="start" x="47.7" y="-78.77" font-family="Noto Sans CJK SC" font-size="10.00">FlashHub page</text>
-<text text-anchor="start" x="50.2" y="-68.77" font-family="Noto Sans CJK SC" font-size="10.00">apps / models</text>
+<path fill="#dbeafe" stroke="#60a5fa" stroke-width="1.2" d="M118.7,-106C118.7,-106 46.7,-106 46.7,-106 40.7,-106 34.7,-100 34.7,-94 34.7,-94 34.7,-72 34.7,-72 34.7,-66 40.7,-60 46.7,-60 46.7,-60 118.7,-60 118.7,-60 124.7,-60 130.7,-66 130.7,-72 130.7,-72 130.7,-94 130.7,-94 130.7,-100 124.7,-106 118.7,-106"/>
+<text text-anchor="start" x="58.7" y="-90.4" font-family="Noto Sans CJK SC" font-weight="bold" font-size="12.00">Desktop</text>
+<text text-anchor="start" x="47.7" y="-80" font-family="Noto Sans CJK SC" font-size="10.00">FlashHub page</text>
+<text text-anchor="start" x="50.2" y="-70" font-family="Noto Sans CJK SC" font-size="10.00">apps / models</text>
 </g>
 <!-- desktop&#45;&gt;srv -->
 <g id="edge9" class="edge">
 <title>desktop&#45;&gt;srv</title>
-<path fill="none" stroke="#60a5fa" d="M130.74,-77.96C167.37,-75 218.8,-70.83 260.33,-67.47"/>
-<polygon fill="#60a5fa" stroke="#60a5fa" points="260.7,-70.07 267.96,-66.85 260.28,-64.84 260.7,-70.07"/>
-<text text-anchor="middle" x="195.7" y="-75.77" font-family="Noto Sans CJK SC" font-size="10.00">HTTP</text>
+<path fill="none" stroke="#60a5fa" d="M130.74,-79C167.37,-75.89 218.8,-71.51 260.33,-67.98"/>
+<polygon fill="#60a5fa" stroke="#60a5fa" points="260.71,-70.59 267.96,-67.33 260.27,-65.35 260.71,-70.59"/>
+<text text-anchor="middle" x="195.7" y="-77" font-family="Noto Sans CJK SC" font-size="10.00">HTTP</text>
 </g>
 </g>
 </svg>
