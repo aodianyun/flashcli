@@ -14,7 +14,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 
 | 图 | 内容 |
 |---|---|
-| [系统总览](images/architecture-overview.zh-CN.svg) · [PNG](images/architecture-overview.zh-CN.png) | 客户端、flashserver、flashcli、共享缓存、FlashHub、Model Bundle、FlashRT |
+| [系统总览](images/architecture-overview.zh-CN.svg) · [PNG](images/architecture-overview.zh-CN.png) | 客户端、flashserver 控制面、flashcli 工作进程、算力/权重/环境、FlashHub、FlashRT |
 | [flashcli run/serve 流程](images/flashcli-flow.zh-CN.svg) · [PNG](images/flashcli-flow.zh-CN.png) | ref 解析、离线缓存、preflight、venv、权重、entry、run/serve |
 | [flashserver 网关/调度流程](images/flashserver-gateway-flow.zh-CN.svg) · [PNG](images/flashserver-gateway-flow.zh-CN.png) | `/v1` 请求、preload、placement、lease、proxy、释放、错误 |
 | [Model Bundle / FlashRT 运行时栈](images/bundle-runtime-stack.zh-CN.svg) · [PNG](images/bundle-runtime-stack.zh-CN.png) | FlashHub → manifest/entry/runtime cells → venv/权重 → FlashRT |
