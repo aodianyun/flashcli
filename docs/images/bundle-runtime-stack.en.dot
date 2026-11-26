@@ -33,7 +33,6 @@ digraph BundleRuntimeStackEN {
     flashrt [fillcolor="#e0f2fe", color="#0284c7", label=<<B>FlashRT</B><BR/><FONT POINT-SIZE="10">flash_rt · .so · CUDA kernels<BR/>sibling clone / build input<BR/>not pip-installed by host</FONT>>];
   }
 
-  catalog -> repo [label="bundle versions", color="#f97316"];
   repo -> manifest [label="sync / download", color="#f97316"];
   manifest -> entry [label="parse"];
   manifest -> cells [label="select environment"];

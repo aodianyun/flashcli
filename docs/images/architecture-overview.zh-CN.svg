@@ -66,25 +66,24 @@
 <text x="1382.0" y="602" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">flash_rt · .so</text>
 <text x="1382.0" y="619" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">CUDA kernels</text>
 <line x1="372" y1="226" x2="456" y2="250" stroke="#2563eb" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="414.0" y="232.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#2563eb">HTTP + WS</text>
+<text x="414.0" y="232.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#2563eb" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">HTTP + WS</text>
 <line x1="372" y1="346" x2="456" y2="300" stroke="#2563eb" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="414.0" y="317.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#2563eb">/v1</text>
+<text x="414.0" y="317.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#2563eb" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">/v1</text>
 <line x1="372" y1="466" x2="456" y2="350" stroke="#8b5cf6" stroke-width="1.6" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<text x="414.0" y="402.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#8b5cf6">HTTP + WS</text>
+<text x="414.0" y="402.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#8b5cf6" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">HTTP + WS</text>
 <line x1="372" y1="586" x2="472" y2="556" stroke="#22c55e" stroke-width="1.6" marker-end="url(#arrow)"/>
 <line x1="798" y1="388" x2="798" y2="510" stroke="#8b5cf6" stroke-width="1.6" marker-end="url(#arrow)"/>
 <line x1="622" y1="602" x2="622" y2="636" stroke="#0ea5e9" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="622.0" y="613.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#0ea5e9">re-exec</text>
+<text x="622.0" y="613.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#0ea5e9" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">re-exec</text>
 <line x1="772" y1="556" x2="796" y2="556" stroke="#eab308" stroke-width="1.6" marker-end="url(#arrow)"/>
 <line x1="798" y1="460" x2="796" y2="510" stroke="#eab308" stroke-width="1.6" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<text x="797.0" y="479.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#eab308">preload / unload</text>
-<line x1="772" y1="602" x2="1220" y2="228" stroke="#f97316" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="980" y="470" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#f97316">同步 / 拉取</text>
+<text x="797.0" y="479.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#eab308" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">preload / unload</text>
+<path d="M 772,602 L 780,602 L 780,760 L 1170,760 L 1170,228 L 1220,228" fill="none" stroke="#f97316" stroke-width="1.6" marker-end="url(#arrow)"/>
+<text x="1208" y="246" text-anchor="end" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#f97316" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">同步 / 拉取</text>
 <line x1="1382" y1="276" x2="1382" y2="306" stroke="#f97316" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="1382.0" y="285.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#f97316">发布</text>
+<text x="1382.0" y="285.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#f97316" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">发布</text>
 <line x1="1382" y1="410" x2="1382" y2="440" stroke="#db2777" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="1382.0" y="419.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#db2777">安装</text>
+<text x="1382.0" y="419.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#db2777" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">安装</text>
 <line x1="1382" y1="528" x2="1382" y2="558" stroke="#0284c7" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="1382.0" y="537.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#0284c7">导入</text>
-<line x1="772" y1="682" x2="1220" y2="484" stroke="#db2777" stroke-width="1.6" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<text x="1382.0" y="537.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#0284c7" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">导入</text>
 </svg>

@@ -22,7 +22,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 | [FlashHub 流程](images/flashhub-flow.zh-CN.svg) · [PNG](images/flashhub-flow.zh-CN.png) | 发布 → 目录/版本 → CLI/flashserver/desktop 同步 |
 | [应用生命周期](images/app-lifecycle.zh-CN.svg) · [PNG](images/app-lifecycle.zh-CN.png) | install → prepare → setup → ready；应用不拥有模型启停 |
 
-流程图和模块图源文件是 [`images/`](images/) 下的 `.en.dot` / `.zh-CN.dot`；重新生成：`dot -Tsvg <name>.<lang>.dot -o <name>.<lang>.svg`（PNG 同理）。系统总览是手工排版 SVG。
+模块地图、Bundle/FlashRT 栈和 FlashHub 流程的源文件是 [`images/`](images/) 下的 `.en.dot` / `.zh-CN.dot`；重新生成：`dot -Tsvg <name>.<lang>.dot -o <name>.<lang>.svg`（PNG 同理）。系统总览、flashcli 流程、网关/调度流程和应用生命周期是手工排版 SVG。
 
 ## 核心原则
 

@@ -42,6 +42,6 @@ digraph GoModuleMapEN {
   cmdcli -> cli; cmdsrv -> srv; cmdsetup -> setup; desktop -> srv [label="HTTP/ws", color="#60a5fa"];
   cli -> host; cli -> infer; srv -> host; srv -> apps; srv -> modelrun; srv -> probes;
   apps -> host; modelrun -> host; host -> support; host -> infra; host -> manifest;
-  infer -> pyproto; infer -> flashrt; pyproto -> flashrt [style=dashed];
+  infer -> pyproto;
   setup -> srv [label="service", style=dashed];
 }

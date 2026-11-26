@@ -22,7 +22,7 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 | [FlashHub flow](images/flashhub-flow.en.svg) · [PNG](images/flashhub-flow.en.png) | Publish → catalog/versions → CLI/flashserver/desktop sync |
 | [App lifecycle](images/app-lifecycle.en.svg) · [PNG](images/app-lifecycle.en.png) | install → prepare → setup → ready; no app-owned model start/stop |
 
-Flow and module diagrams have `.en.dot` / `.zh-CN.dot` sources in [`images/`](images/); regenerate with `dot -Tsvg <name>.<lang>.dot -o <name>.<lang>.svg` (and `-Tpng`). The system overview is a hand-laid SVG.
+The module map, bundle stack, and FlashHub flow have `.en.dot` / `.zh-CN.dot` sources in [`images/`](images/); regenerate with `dot -Tsvg <name>.<lang>.dot -o <name>.<lang>.svg` (and `-Tpng`). The system overview, flashcli flow, gateway/scheduler flow, and app lifecycle are hand-laid SVG.
 
 ## Core principles
 
