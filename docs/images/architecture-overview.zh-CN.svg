@@ -1,173 +1,169 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
 <defs>
-<radialGradient id="bg" cx="50%" cy="-12%" r="92%"><stop offset="0" stop-color="#111C33"/><stop offset="0.55" stop-color="#0A1020"/><stop offset="1" stop-color="#080D18"/></radialGradient>
-<marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#5B9BD5"/></marker>
-<marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4FAE8A"/></marker>
-<marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#D9A441"/></marker>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0F172A" flood-opacity="0.06"/></filter>
+<marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#2563EB"/></marker>
+<marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#0F766E"/></marker>
+<marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#B45309"/></marker>
 </defs>
-<rect width="1600" height="900" fill="url(#bg)"/>
-<path d="M 48 100 L 1552 100" stroke="#233149" stroke-width="1"/>
-<text x="48" y="64" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="34" font-weight="700" fill="#F1F5F9" opacity="1.0" >flashcli 系统架构</text>
-<text x="1552" y="64" text-anchor="end" font-family="JetBrains Mono, Consolas, monospace" font-size="12" font-weight="400" fill="#64748B" opacity="1.0" >v1</text>
+<rect width="1600" height="900" fill="#F7F9FC"/>
+<path d="M 48 100 L 1552 100" stroke="#E2E8F0" stroke-width="1"/>
+<text x="48" y="64" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="34" font-weight="700" fill="#0F172A" opacity="1.0" >flashcli 系统架构</text>
+<text x="1552" y="64" text-anchor="end" font-family="JetBrains Mono, Consolas, monospace" font-size="12" font-weight="400" fill="#94A3B8" opacity="1.0" >v1</text>
 <text x="48" y="132" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748B" opacity="1.0" letter-spacing="1.2">客户端</text>
 <text x="390" y="132" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748B" opacity="1.0" letter-spacing="1.2">本地主机</text>
 <text x="1170" y="132" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748B" opacity="1.0" letter-spacing="1.2">云端</text>
-<rect x="48" y="160" width="260" height="280" rx="16" fill="#0F172A" stroke="#233149" stroke-width="1.2"/>
-<circle cx="70" cy="188" r="4.2" fill="#5B9BD5"/>
-<text x="82" y="194" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#F1F5F9" opacity="1.0" >桌面端</text>
-<rect x="64" y="220.0" width="228" height="61.333333333333336" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="77" y="237.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >发现与安装</text>
-<text x="77" y="254.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >应用目录</text>
-<text x="77" y="268.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >版本 · 安装 · 升级</text>
-<rect x="64" y="291.33333333333337" width="228" height="61.333333333333336" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="77" y="308.33333333333337" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >配置与管理</text>
-<text x="77" y="325.33333333333337" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >本地服务</text>
-<text x="77" y="339.83333333333337" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >模型 · 设置 · 日志</text>
-<rect x="64" y="362.6666666666667" width="228" height="61.333333333333336" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="77" y="379.6666666666667" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >推理</text>
-<text x="77" y="396.6666666666667" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >统一入口</text>
-<text x="77" y="411.1666666666667" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >聊天 · 事件 · 状态</text>
-<rect x="48" y="470" width="260" height="160" rx="16" fill="#0F172A" stroke="#233149" stroke-width="1.2"/>
-<circle cx="70" cy="498" r="4.2" fill="#5B9BD5"/>
-<text x="82" y="504" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#F1F5F9" opacity="1.0" >已安装应用</text>
-<rect x="64.0" y="530" width="109.0" height="86" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="77.0" y="560.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >业务应用</text>
-<text x="77.0" y="577.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >调用 /v1</text>
-<text x="77.0" y="591.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >不管理模型进程</text>
-<rect x="183.0" y="530" width="109.0" height="86" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="196.0" y="560.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >SDK / 脚本</text>
-<text x="196.0" y="577.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >OpenAI 兼容</text>
-<text x="196.0" y="591.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >快速接入</text>
-<rect x="48" y="660" width="260" height="150" rx="16" fill="#0F172A" stroke="#233149" stroke-width="1.2"/>
-<circle cx="70" cy="688" r="4.2" fill="#5B9BD5"/>
-<text x="82" y="694" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#F1F5F9" opacity="1.0" >CLI</text>
-<rect x="64.0" y="720" width="228.0" height="76" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="77.0" y="745.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >pull · run · serve</text>
-<text x="77.0" y="762.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >本地调试</text>
-<text x="77.0" y="776.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >bundle 校验 · 缓存清理</text>
-<rect x="390" y="160" width="710" height="320" rx="16" fill="#0F172A" stroke="#233149" stroke-width="1.2"/>
-<circle cx="412" cy="188" r="4.2" fill="#5B9BD5"/>
-<text x="424" y="194" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#F1F5F9" opacity="1.0" >flashserver</text>
-<rect x="406.0" y="220.0" width="218.0" height="116.0" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="419.0" y="265.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >网关 /v1</text>
-<text x="419.0" y="282.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >统一推理入口</text>
-<text x="419.0" y="296.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >OpenAI/Anthropic · SSE/文件</text>
-<rect x="636.0" y="220.0" width="218.0" height="116.0" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="649.0" y="265.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >调度器</text>
-<text x="649.0" y="282.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >端侧算力调度</text>
-<text x="649.0" y="296.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >显存准入 · 排队 · 常驻回收</text>
-<rect x="866.0" y="220.0" width="218.0" height="116.0" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="879.0" y="265.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >管理器</text>
-<text x="879.0" y="282.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >模型生命周期</text>
-<text x="879.0" y="296.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >启动 · 健康 · 租约释放</text>
-<rect x="406.0" y="348.0" width="218.0" height="116.0" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="419.0" y="393.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >管理面 /api/v1</text>
-<text x="419.0" y="410.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >管理与可观测</text>
-<text x="419.0" y="424.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >模型/缓存 · 任务 · 日志</text>
-<rect x="636.0" y="348.0" width="218.0" height="116.0" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="649.0" y="393.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >应用服务</text>
-<text x="649.0" y="410.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >应用生命周期</text>
-<text x="649.0" y="424.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >目录 · 安装 · 配置 · 状态</text>
-<rect x="866.0" y="348.0" width="218.0" height="116.0" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="879.0" y="393.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >系统与 GPU</text>
-<text x="879.0" y="410.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >端侧资源探测</text>
-<text x="879.0" y="424.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >GPU/CPU/RAM · 显存余量</text>
-<rect x="390" y="510" width="220" height="300" rx="16" fill="#0F172A" stroke="#233149" stroke-width="1.2"/>
-<circle cx="412" cy="538" r="4.2" fill="#4FAE8A"/>
-<text x="424" y="544" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#F1F5F9" opacity="1.0" >flashcli</text>
-<rect x="406" y="570.0" width="188" height="68.0" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="419" y="587.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >解析与准备</text>
-<text x="419" y="604.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >bundle 解析</text>
-<text x="419" y="618.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >manifest · 运行环境 · venv</text>
-<rect x="406" y="648.0" width="188" height="68.0" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="419" y="665.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >权重</text>
-<text x="419" y="682.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >权重准备</text>
-<text x="419" y="696.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >HF/魔塔 · 校验 · 续传</text>
-<rect x="406" y="726.0" width="188" height="68.0" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="419" y="743.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >启动</text>
-<text x="419" y="760.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >本地执行</text>
-<text x="419" y="774.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >serve/run · 日志 · 健康</text>
-<rect x="640" y="510" width="230" height="300" rx="16" fill="#0F172A" stroke="#233149" stroke-width="1.2"/>
-<circle cx="662" cy="538" r="4.2" fill="#4FAE8A"/>
-<text x="674" y="544" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#F1F5F9" opacity="1.0" >模型运行时</text>
-<rect x="656" y="570.0" width="198" height="68.0" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="669" y="587.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >Model Bundle</text>
-<text x="669" y="604.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >模型定义</text>
-<text x="669" y="618.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >manifest · entry · 模型逻辑</text>
-<rect x="656" y="648.0" width="198" height="68.0" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="669" y="665.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >FlashRT</text>
-<text x="669" y="682.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >推理运行时</text>
-<text x="669" y="696.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >算子 · kernel · 执行后端</text>
-<rect x="656" y="726.0" width="198" height="68.0" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="669" y="743.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >模型进程</text>
-<text x="669" y="760.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >本机服务</text>
-<text x="669" y="774.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >加载模型 · 仅本机回环</text>
-<rect x="900" y="510" width="200" height="300" rx="16" fill="#0F172A" stroke="#233149" stroke-width="1.2"/>
-<circle cx="922" cy="538" r="4.2" fill="#D9A441"/>
-<text x="934" y="544" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#F1F5F9" opacity="1.0" >共享缓存</text>
-<rect x="916" y="570.0" width="168" height="68.0" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="929" y="587.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >模型包</text>
-<text x="929" y="604.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >bundle 文件</text>
-<text x="929" y="618.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >manifest · entry · 模型代码</text>
-<rect x="916" y="648.0" width="168" height="68.0" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="929" y="665.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >权重</text>
-<text x="929" y="682.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >checkpoints</text>
-<text x="929" y="696.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >完整性标记 · 断点续传</text>
-<rect x="916" y="726.0" width="168" height="68.0" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="929" y="743.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >运行时</text>
-<text x="929" y="760.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >隔离环境</text>
-<text x="929" y="774.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >venv · Python · CUDA 依赖</text>
-<rect x="1170" y="160" width="380" height="280" rx="16" fill="#0F172A" stroke="#233149" stroke-width="1.2"/>
-<circle cx="1192" cy="188" r="4.2" fill="#D9A441"/>
-<text x="1204" y="194" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#F1F5F9" opacity="1.0" >FlashHub</text>
-<rect x="1186" y="220.0" width="348" height="61.333333333333336" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="1199" y="237.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >模型目录</text>
-<text x="1199" y="254.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >模型包仓库</text>
-<text x="1199" y="268.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >版本 · 标签 · 下载</text>
-<rect x="1186" y="291.33333333333337" width="348" height="61.333333333333336" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="1199" y="308.33333333333337" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >应用目录</text>
-<text x="1199" y="325.33333333333337" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >应用包与说明</text>
-<text x="1199" y="339.83333333333337" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >版本 · 安装 · 配置</text>
-<rect x="1186" y="362.6666666666667" width="348" height="61.333333333333336" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="1199" y="379.6666666666667" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >发布分发</text>
-<text x="1199" y="396.6666666666667" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >发布与下载</text>
-<text x="1199" y="411.1666666666667" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >版本 · 制品 · 地址</text>
-<rect x="1170" y="470" width="380" height="270" rx="16" fill="#0F172A" stroke="#233149" stroke-width="1.2"/>
-<circle cx="1192" cy="498" r="4.2" fill="#D9A441"/>
-<text x="1204" y="504" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#F1F5F9" opacity="1.0" >权重源</text>
-<rect x="1186" y="530.0" width="348" height="58.0" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="1199" y="547.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >HuggingFace</text>
-<text x="1199" y="564.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >权重仓库</text>
-<text x="1199" y="578.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >可配置源</text>
-<rect x="1186" y="598.0" width="348" height="58.0" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="1199" y="615.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >ModelScope</text>
-<text x="1199" y="632.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >魔塔社区</text>
-<text x="1199" y="646.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >可配置源</text>
-<rect x="1186" y="666.0" width="348" height="58.0" rx="9" fill="#141F33" stroke="#22314A"/>
-<text x="1199" y="683.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#E2E8F0" opacity="1.0" >源策略</text>
-<text x="1199" y="700.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#A9B8CC" opacity="1.0" >按环境选择</text>
-<text x="1199" y="714.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#7F91A8" opacity="1.0" >按需下载 · 缓存</text>
-<path d="M 308,250 L 390,250" fill="none" stroke="#5B9BD5" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<text x="349" y="240" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#C7D2E3" opacity="1.0" stroke="#080D18" stroke-width="6" paint-order="stroke">本地 API</text>
-<path d="M 174,440 L 174,470" fill="none" stroke="#5B9BD5" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<text x="182" y="458" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#C7D2E3" opacity="1.0" stroke="#080D18" stroke-width="6" paint-order="stroke">安装 / 升级</text>
-<path d="M 308,550 L 350,550 L 350,320 L 390,320" fill="none" stroke="#5B9BD5" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<text x="355" y="495" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#C7D2E3" opacity="1.0" stroke="#080D18" stroke-width="6" paint-order="stroke">推理 /v1</text>
-<path d="M 308,735 L 390,735" fill="none" stroke="#5B9BD5" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 480,480 L 480,510" fill="none" stroke="#5B9BD5" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<text x="488" y="500" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#C7D2E3" opacity="1.0" stroke="#080D18" stroke-width="6" paint-order="stroke">调用 serve</text>
-<path d="M 610,650 L 640,650" fill="none" stroke="#4FAE8A" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="625" y="640" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#C7D2E3" opacity="1.0" stroke="#080D18" stroke-width="6" paint-order="stroke">启动</text>
-<path d="M 870,650 L 900,650" fill="none" stroke="#4FAE8A" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="885" y="640" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#C7D2E3" opacity="1.0" stroke="#080D18" stroke-width="6" paint-order="stroke">读取</text>
-<path d="M 1060,480 L 1060,510" fill="none" stroke="#D9A441" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
-<text x="1050" y="500" text-anchor="end" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#C7D2E3" opacity="1.0" stroke="#080D18" stroke-width="6" paint-order="stroke">预加载 / 卸载</text>
-<path d="M 500,810 L 500,850 L 1000,850 L 1000,810" fill="none" stroke="#D9A441" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
-<text x="700" y="842" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#C7D2E3" opacity="1.0" stroke="#080D18" stroke-width="6" paint-order="stroke">准备资产</text>
-<path d="M 1170,230 L 1100,230" fill="none" stroke="#D9A441" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
-<text x="1135" y="220" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#C7D2E3" opacity="1.0" stroke="#080D18" stroke-width="6" paint-order="stroke">目录查询</text>
-<path d="M 1550,300 L 1570,300 L 1570,775 L 1100,775" fill="none" stroke="#D9A441" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
-<text x="1330" y="765" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#C7D2E3" opacity="1.0" stroke="#080D18" stroke-width="6" paint-order="stroke">模型包</text>
-<path d="M 1170,560 L 1150,560 L 1150,650 L 1100,650" fill="none" stroke="#D9A441" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
-<text x="1110" y="642" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#C7D2E3" opacity="1.0" stroke="#080D18" stroke-width="6" paint-order="stroke">权重</text>
+<rect x="48" y="160" width="260" height="280" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="70" cy="188" r="4.2" fill="#2563EB"/>
+<text x="82" y="194" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A" opacity="1.0" >桌面端</text>
+<rect x="64" y="220.0" width="228" height="61.333333333333336" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="77" y="237.66666666666666" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >发现与安装</text>
+<text x="77" y="254.66666666666666" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >应用目录</text>
+<text x="77" y="269.16666666666663" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >版本 · 安装 · 升级</text>
+<rect x="64" y="291.33333333333337" width="228" height="61.333333333333336" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="77" y="309.00000000000006" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >配置与管理</text>
+<text x="77" y="326.00000000000006" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >本地服务</text>
+<text x="77" y="340.50000000000006" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >模型 · 设置 · 日志</text>
+<rect x="64" y="362.6666666666667" width="228" height="61.333333333333336" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="77" y="380.33333333333337" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >推理</text>
+<text x="77" y="397.33333333333337" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >统一入口</text>
+<text x="77" y="411.83333333333337" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >聊天 · 事件 · 状态</text>
+<rect x="48" y="490" width="260" height="150" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="70" cy="518" r="4.2" fill="#2563EB"/>
+<text x="82" y="524" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A" opacity="1.0" >已安装应用</text>
+<rect x="64.0" y="550" width="109.0" height="76" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="77.0" y="575.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >业务应用</text>
+<text x="77.0" y="592.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >调用 /v1</text>
+<text x="77.0" y="606.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >不管理模型进程</text>
+<rect x="183.0" y="550" width="109.0" height="76" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="196.0" y="575.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >SDK / 脚本</text>
+<text x="196.0" y="592.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >OpenAI 兼容</text>
+<text x="196.0" y="606.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >快速接入</text>
+<rect x="48" y="670" width="260" height="140" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="70" cy="698" r="4.2" fill="#2563EB"/>
+<text x="82" y="704" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A" opacity="1.0" >CLI</text>
+<rect x="64.0" y="730" width="228.0" height="66" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="77.0" y="750.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >pull · run · serve</text>
+<text x="77.0" y="767.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >本地调试</text>
+<text x="77.0" y="781.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >bundle 校验 · 缓存清理</text>
+<rect x="390" y="160" width="710" height="300" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="412" cy="188" r="4.2" fill="#2563EB"/>
+<text x="424" y="194" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A" opacity="1.0" >flashserver</text>
+<rect x="406.0" y="220.0" width="218.0" height="106.0" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="419.0" y="260.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >网关 /v1</text>
+<text x="419.0" y="277.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >统一推理入口</text>
+<text x="419.0" y="291.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >OpenAI/Anthropic · SSE/文件</text>
+<rect x="636.0" y="220.0" width="218.0" height="106.0" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="649.0" y="260.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >调度器</text>
+<text x="649.0" y="277.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >端侧算力调度</text>
+<text x="649.0" y="291.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >显存准入 · 排队 · 常驻回收</text>
+<rect x="866.0" y="220.0" width="218.0" height="106.0" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="879.0" y="260.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >管理器</text>
+<text x="879.0" y="277.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >模型生命周期</text>
+<text x="879.0" y="291.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >启动 · 健康 · 租约释放</text>
+<rect x="406.0" y="338.0" width="218.0" height="106.0" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="419.0" y="378.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >管理 API /api/v1</text>
+<text x="419.0" y="395.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >管理与可观测</text>
+<text x="419.0" y="409.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >模型/缓存 · 任务 · 日志</text>
+<rect x="636.0" y="338.0" width="218.0" height="106.0" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="649.0" y="378.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >应用服务</text>
+<text x="649.0" y="395.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >应用生命周期</text>
+<text x="649.0" y="409.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >目录 · 安装 · 配置 · 状态</text>
+<rect x="866.0" y="338.0" width="218.0" height="106.0" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="879.0" y="378.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >系统与 GPU</text>
+<text x="879.0" y="395.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >端侧资源探测</text>
+<text x="879.0" y="409.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >GPU/CPU/RAM · 显存余量</text>
+<rect x="390" y="520" width="210" height="290" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="412" cy="548" r="4.2" fill="#0F766E"/>
+<text x="424" y="554" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A" opacity="1.0" >flashcli</text>
+<rect x="406" y="580.0" width="178" height="64.66666666666667" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="419" y="599.3333333333334" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >解析与准备</text>
+<text x="419" y="616.3333333333334" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >bundle 解析</text>
+<text x="419" y="630.8333333333334" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >manifest · 运行环境 · venv</text>
+<rect x="406" y="654.6666666666666" width="178" height="64.66666666666667" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="419" y="674.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >权重</text>
+<text x="419" y="691.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >按 manifest 选源</text>
+<text x="419" y="705.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >按需下载 · 校验 · 续传</text>
+<rect x="406" y="729.3333333333334" width="178" height="64.66666666666667" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="419" y="748.6666666666667" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >启动</text>
+<text x="419" y="765.6666666666667" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >本地执行</text>
+<text x="419" y="780.1666666666667" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >serve/run · 日志 · 健康</text>
+<rect x="650" y="520" width="220" height="290" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="672" cy="548" r="4.2" fill="#0F766E"/>
+<text x="684" y="554" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A" opacity="1.0" >模型运行时</text>
+<rect x="666" y="580.0" width="188" height="64.66666666666667" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="679" y="599.3333333333334" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >Model Bundle</text>
+<text x="679" y="616.3333333333334" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >模型定义</text>
+<text x="679" y="630.8333333333334" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >manifest · entry · 模型逻辑</text>
+<rect x="666" y="654.6666666666666" width="188" height="64.66666666666667" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="679" y="674.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >FlashRT</text>
+<text x="679" y="691.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >推理运行时</text>
+<text x="679" y="705.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >算子 · kernel · 执行后端</text>
+<rect x="666" y="729.3333333333334" width="188" height="64.66666666666667" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="679" y="748.6666666666667" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >模型进程</text>
+<text x="679" y="765.6666666666667" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >本机服务</text>
+<text x="679" y="780.1666666666667" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >加载模型 · 仅本机回环</text>
+<rect x="920" y="520" width="180" height="290" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="942" cy="548" r="4.2" fill="#B45309"/>
+<text x="954" y="554" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A" opacity="1.0" >共享缓存</text>
+<rect x="936" y="580.0" width="148" height="64.66666666666667" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="949" y="599.3333333333334" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >模型包</text>
+<text x="949" y="616.3333333333334" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >bundle 文件</text>
+<text x="949" y="630.8333333333334" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >manifest · entry · 代码</text>
+<rect x="936" y="654.6666666666666" width="148" height="64.66666666666667" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="949" y="674.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >权重</text>
+<text x="949" y="691.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >checkpoints</text>
+<text x="949" y="705.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >完整性标记 · 断点续传</text>
+<rect x="936" y="729.3333333333334" width="148" height="64.66666666666667" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="949" y="748.6666666666667" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >运行时</text>
+<text x="949" y="765.6666666666667" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >隔离环境</text>
+<text x="949" y="780.1666666666667" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >venv · Python · CUDA 依赖</text>
+<rect x="1170" y="160" width="380" height="280" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="1192" cy="188" r="4.2" fill="#B45309"/>
+<text x="1204" y="194" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A" opacity="1.0" >FlashHub</text>
+<rect x="1186" y="220.0" width="348" height="61.333333333333336" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="1199" y="237.66666666666666" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >模型目录</text>
+<text x="1199" y="254.66666666666666" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >模型包仓库</text>
+<text x="1199" y="269.16666666666663" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >版本 · 标签 · 下载</text>
+<rect x="1186" y="291.33333333333337" width="348" height="61.333333333333336" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="1199" y="309.00000000000006" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >应用目录</text>
+<text x="1199" y="326.00000000000006" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >应用包与说明</text>
+<text x="1199" y="340.50000000000006" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >版本 · 安装 · 配置</text>
+<rect x="1186" y="362.6666666666667" width="348" height="61.333333333333336" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="1199" y="380.33333333333337" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >发布分发</text>
+<text x="1199" y="397.33333333333337" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >发布与下载</text>
+<text x="1199" y="411.83333333333337" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >版本 · 制品 · 地址</text>
+<rect x="1170" y="500" width="380" height="210" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="1192" cy="528" r="4.2" fill="#B45309"/>
+<text x="1204" y="534" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A" opacity="1.0" >权重源</text>
+<rect x="1186.0" y="560" width="169.0" height="136" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="1199.0" y="615.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >HuggingFace</text>
+<text x="1199.0" y="632.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >权重仓库</text>
+<text x="1199.0" y="646.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >checkpoints</text>
+<rect x="1365.0" y="560" width="169.0" height="136" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
+<text x="1378.0" y="615.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >ModelScope</text>
+<text x="1378.0" y="632.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >魔塔社区</text>
+<text x="1378.0" y="646.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >checkpoints</text>
+<path d="M 308,250 L 390,250" fill="none" stroke="#2563EB" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<text x="349" y="240" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#475569" opacity="1.0" stroke="#F7F9FC" stroke-width="6" paint-order="stroke">本地 API</text>
+<path d="M 174,440 L 174,490" fill="none" stroke="#2563EB" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<text x="182" y="468" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#475569" opacity="1.0" stroke="#F7F9FC" stroke-width="6" paint-order="stroke">安装 / 升级</text>
+<path d="M 308,565 L 350,565 L 350,320 L 390,320" fill="none" stroke="#2563EB" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<text x="355" y="505" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#475569" opacity="1.0" stroke="#F7F9FC" stroke-width="6" paint-order="stroke">推理 /v1</text>
+<path d="M 308,740 L 390,740" fill="none" stroke="#2563EB" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 480,460 L 480,520" fill="none" stroke="#2563EB" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<text x="488" y="495" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#475569" opacity="1.0" stroke="#F7F9FC" stroke-width="6" paint-order="stroke">调用 serve</text>
+<path d="M 600,665 L 650,665" fill="none" stroke="#0F766E" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<text x="625" y="655" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#475569" opacity="1.0" stroke="#F7F9FC" stroke-width="6" paint-order="stroke">启动</text>
+<path d="M 870,665 L 920,665" fill="none" stroke="#0F766E" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<text x="895" y="655" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#475569" opacity="1.0" stroke="#F7F9FC" stroke-width="6" paint-order="stroke">读取</text>
+<path d="M 1060,460 L 1060,520" fill="none" stroke="#B45309" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
+<text x="1050" y="510" text-anchor="end" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#475569" opacity="1.0" stroke="#F7F9FC" stroke-width="6" paint-order="stroke">预加载 / 卸载</text>
+<path d="M 495,810 L 495,850 L 1010,850 L 1010,810" fill="none" stroke="#B45309" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
+<text x="700" y="842" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#475569" opacity="1.0" stroke="#F7F9FC" stroke-width="6" paint-order="stroke">准备资产</text>
+<path d="M 1170,230 L 1100,230" fill="none" stroke="#B45309" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
+<text x="1135" y="220" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#475569" opacity="1.0" stroke="#F7F9FC" stroke-width="6" paint-order="stroke">目录查询</text>
+<path d="M 1550,300 L 1570,300 L 1570,775 L 1100,775" fill="none" stroke="#B45309" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
+<text x="1330" y="765" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#475569" opacity="1.0" stroke="#F7F9FC" stroke-width="6" paint-order="stroke">模型包</text>
+<path d="M 1170,580 L 1150,580 L 1150,650 L 1100,650" fill="none" stroke="#B45309" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
+<text x="1110" y="642" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.1" font-weight="600" fill="#475569" opacity="1.0" stroke="#F7F9FC" stroke-width="6" paint-order="stroke">权重</text>
 </svg>
