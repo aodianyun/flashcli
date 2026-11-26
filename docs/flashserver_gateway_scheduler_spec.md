@@ -399,7 +399,7 @@ Unit tests:
 Integration/acceptance:
 
 - Fake model child: JSON, SSE, multipart, WebSocket, client cancellation.
-- Real `ServeEngine` bundle pulled through a fake FlashHub: preload → JSON/SSE → unload busy/force (`tests/acceptance/test_gateway_server.py`).
+- Real `ServeEngine` bundle pulled through a fake FlashHub: preload → daemon restart keeps preloaded state → JSON/SSE → unload busy/force (`tests/acceptance/test_gateway_server.py`).
 - Request auto-pulls an absent model; retry after preload succeeds.
 - Idle resident stops without deleting assets; next request reuses assets.
 - `unload` while busy: 409/waits/force.

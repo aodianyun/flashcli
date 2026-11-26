@@ -371,7 +371,7 @@ GPU runtime 必填：
 集成/验收：
 
 - 假 child：JSON、SSE、multipart、WebSocket、客户端取消。
-- 通过 fake FlashHub 拉取真实 `ServeEngine` bundle：preload → JSON/SSE → busy/force unload（`tests/acceptance/test_gateway_server.py`）。
+- 通过 fake FlashHub 拉取真实 `ServeEngine` bundle：preload → daemon 重启后仍为 preloaded → JSON/SSE → busy/force unload（`tests/acceptance/test_gateway_server.py`）。
 - 缺失模型自动 preload，重试后推理成功。
 - 空闲 resident stop 不删资产，下次请求复用资产。
 - busy 时 unload：409/等待/force。

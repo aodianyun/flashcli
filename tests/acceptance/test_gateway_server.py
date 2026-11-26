@@ -7,6 +7,8 @@ into a bundle venv, started by the scheduler, and called through ``/v1``.
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
 import os
 import subprocess
@@ -60,6 +62,10 @@ BUNDLE_MANIFEST = {
 SERVE_PY = "from serve_fixture_engines import LLMEngine as ServeEngine\n"
 
 
+def _manifest(base: str) -> dict:
+    return copy.deepcopy(BUNDLE_MANIFEST)
+
+
 class _Hub(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         base = f"http://127.0.0.1:{self.server.server_port}"
@@ -88,7 +94,7 @@ class _Hub(BaseHTTPRequestHandler):
                 }
             ).encode()
         elif self.path == "/repo/1/versions/1/flashcli-bundle.json":
-            body = json.dumps(BUNDLE_MANIFEST).encode()
+            body = json.dumps(_manifest(base)).encode()
         elif self.path == "/repo/1/versions/1/serve.py":
             body = SERVE_PY.encode()
         elif self.path == "/repo/1/versions/1/serve_fixture_engines.py":
@@ -97,6 +103,8 @@ class _Hub(BaseHTTPRequestHandler):
         elif self.path == "/repo/1/versions/1/checkpoint/model.safetensors":
             body = b""
         elif self.path == "/repo/1/versions/1/runtime/test/.keep":
+            body = b""
+        elif self.path == "/weights/model.safetensors":
             body = b""
         else:
             self.send_error(404)
@@ -133,7 +141,6 @@ def _start_daemon(flashserver_bin, flashcli_bin, cli_env, tmp_path, hub_port):
     env["FLASHCLI_HOME"] = str(tmp_path / "home")
     env["FLASHCLI_RUNTIME_ENV_KEY"] = CELL
     env["FLASHCLI_SKIP_CUDA_USERLAND"] = "1"
-    env["FLASHCLI_SKIP_WEIGHTS"] = "1"
     proc = subprocess.Popen(
         [str(flashserver_bin), "--config", str(cfg)],
         env=env,
@@ -160,7 +167,7 @@ def _wait_job(base, job_id, timeout=900):
     while time.time() < deadline:
         _, job = http_json(f"{base}/api/v1/jobs/{job_id}")
         if job["state"] in ("done", "failed"):
-            assert job["state"] == "done", job
+            assert job["state"] == "done", job.get("error") or job
             return
         time.sleep(0.3)
     raise AssertionError(f"job {job_id} did not finish")
@@ -187,6 +194,35 @@ def test_gateway_real_bundle(flashserver_bin, flashcli_bin, cli_env, tmp_path):
             time.sleep(0.3)
         else:
             raise AssertionError(f"model did not preload: {models}")
+
+        # The fixture ships its checkpoint inline; record the shared-store marker
+        # that a real downloaded bundle would already have so restart readiness
+        # can be checked without a weights.repo.
+        digest = hashlib.sha256(b"huggingface\x00echo\x00main").hexdigest()[:8]
+        weights_key = model.get("weights_key") or f"store/huggingface/{NAME}@main-{digest}"
+        if weights_key:
+            weights_root = tmp_path / "home" / "models" / weights_key
+            checkpoint = weights_root / "checkpoint"
+            checkpoint.mkdir(parents=True, exist_ok=True)
+            (weights_root / "model.safetensors").write_bytes(b"")
+            (checkpoint / "model.safetensors").write_bytes(b"")
+            (weights_root / ".flashcli_model.json").write_text(
+                json.dumps({"preset": NAME, "checkpoint": str(checkpoint)}),
+                encoding="utf-8",
+            )
+
+        # Prepared disk state survives a daemon restart; the next request starts
+        # a fresh resident child.
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        proc, base = _start_daemon(flashserver_bin, flashcli_bin, cli_env, tmp_path, hub.server_port)
+        wait_json(base + "/health", timeout=30)
+        _, models = http_json(base + "/api/v1/models")
+        model = next((m for m in models["models"] if m["ref"] == REF), None)
+        assert model and model.get("preload") == "preloaded", models
 
         # Inference goes through the gateway; the scheduler starts the real
         # bundle child and the response model is rewritten to the full ref.
