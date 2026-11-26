@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
+	"os/signal"
 	"sync"
+	"time"
 
-	"github.com/aodianyun/flashcli/go/internal/paths"
 	"github.com/aodianyun/flashcli/go/internal/setup"
 	"github.com/aodianyun/flashcli/go/internal/version"
 )
@@ -41,15 +41,18 @@ func run() int {
 	flag.BoolVar(&opts.RemoveCLI, "remove-cli", false, "with --uninstall: also delete the flashcli binary")
 	flag.BoolVar(&opts.PurgeSettings, "purge-settings", false, "with --uninstall: also delete the desktop client settings")
 	flag.BoolVar(&opts.PurgeDistro, "purge-distro", false, "with --uninstall (WSL): unregister the Ubuntu distro and delete its virtual disk (all data inside is lost)")
-	flag.StringVar(&opts.WSLDir, "wsl-dir", "", "with --backend wsl: move the Ubuntu distro to this directory (NTFS drive)")
+	flag.StringVar(&opts.WSLDir, "wsl-dir", "", "with --backend wsl: place or move the distro at this directory")
+	flag.BoolVar(&opts.AllowGlobalWSLShutdown, "allow-global-wsl-shutdown", false, "authorize stopping all WSL distributions if a target-only move fails")
 	flag.StringVar(&opts.DistroRootfs, "distro-rootfs", "", "with --backend wsl: import this Ubuntu rootfs tarball instead of downloading the distro")
 	flag.BoolVar(&opts.StopService, "stop-service", false, "stop the service and disable auto-start")
 	flag.BoolVar(&opts.StartService, "start-service", false, "enable auto-start and start the service")
 	flag.BoolVar(&opts.EnableAutostart, "enable-autostart", false, "enable auto-start without starting the service")
 	flag.BoolVar(&opts.DisableAutostart, "disable-autostart", false, "disable auto-start without stopping the service")
 	progressPath := flag.String("progress-file", "", "write machine-readable setup progress to this file")
+	cancelPath := flag.String("cancel-file", "", "watch this file for a setup cancellation request")
 	showVersion := flag.Bool("version", false, "print version")
 	flag.Parse()
+	opts.CancelFile = *cancelPath
 	if *showVersion {
 		fmt.Println(version.Version)
 		return 0
@@ -58,36 +61,64 @@ func run() int {
 		return 0
 	}
 
-	ctx := context.Background()
-	env := setup.Detect(ctx)
-	backend := setup.EffectiveBackend(env, opts.Backend)
-	logFile := openSetupLog()
-	if logFile != nil {
-		defer logFile.Close()
-		setup.SetLog(logFile)
+	progressWriter := &appendFile{path: *progressPath}
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+	if *cancelPath != "" {
+		stopWatching := watchCancelFile(*cancelPath, cancel)
+		defer func() { stopWatching(); _ = os.Remove(*cancelPath) }()
 	}
-	out := io.Writer(os.Stdout)
-	if logFile != nil {
-		out = io.MultiWriter(os.Stdout, logFile)
+	logSession, logErr := openSetupLog()
+	if errors.Is(logErr, ErrSetupAlreadyRunning) {
+		fmt.Fprintln(os.Stderr, logErr)
+		writeProgressResult(*progressPath, 2, logErr.Error())
+		return 2
+	}
+	if logErr != nil && logSession == nil {
+		fmt.Fprintf(os.Stderr, "cannot safely start setup: %v\n", logErr)
+		writeProgressResult(*progressPath, 2, logErr.Error())
+		return 2
+	}
+	if logSession != nil {
+		defer logSession.Close()
+		setup.SetLog(logSession)
+		logSession.warningSink = os.Stderr
+		if *progressPath != "" {
+			logSession.warningSink = io.MultiWriter(os.Stderr, progressWriter)
+		}
+	}
+	var out io.Writer = os.Stdout
+	if logSession != nil {
+		out = bestEffortOutput{out, logSession}
 	}
 	if *progressPath != "" {
-		// The installer reads this file while setup runs. Reopen/close on
-		// every write so its reader never hits a sharing lock.
+		// Inno reads this file during setup. The UI supplies a unique path so a
+		// second installer cannot overwrite the active run's progress.
 		_ = os.Remove(*progressPath)
-		out = io.MultiWriter(out, &appendFile{path: *progressPath})
+		out = bestEffortOutput{out, progressWriter}
 	}
-	// The heartbeat goroutine and the main setup goroutine both write here.
+	// The startup probe must be covered by both the unique run log and the
+	// fixed setup.log stream that the existing Inno UI tails.
+	var logWarning error
+	if logErr != nil {
+		logWarning = logErr
+	}
 	out = &syncWriter{w: out}
+	env := setup.Detect(ctx)
+	backend := setup.EffectiveBackend(env, opts.Backend)
 	fmt.Fprintf(out, "flashserver-setup %s\n", version.Version)
 	fmt.Fprintf(out, "System: %s/%s, WSL: %v, backend: %s\n", env.OS, env.Arch, env.WSL, backend)
-	if logFile != nil {
-		fmt.Fprintf(out, "Log: %s\n", logFile.Name())
+	if logSession != nil && logSession.path() != "" {
+		fmt.Fprintf(out, "Log: %s\n", logSession.path())
+	}
+	if logWarning != nil {
+		fmt.Fprintf(out, "warning: setup log is unavailable or incomplete: %v; continuing without complete file logging\n", logWarning)
 	}
 	fmt.Fprintln(out)
 	if opts.DryRun {
 		steps, err := setup.Plan(env, opts.Backend)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			fmt.Fprintf(os.Stderr, "error: %s\n", redactSetupLog([]byte(err.Error())))
 			if *progressPath != "" {
 				fmt.Fprintf(out, "DONE 2\n")
 			}
@@ -100,8 +131,8 @@ func run() int {
 	}
 	code := 0
 	if err := setup.Run(ctx, env, opts, out); err != nil {
-		fmt.Fprintf(out, "error: %v\n", err)
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		fmt.Fprintf(out, "error: %s\n", redactSetupLog([]byte(err.Error())))
+		fmt.Fprintf(os.Stderr, "error: %s\n", redactSetupLog([]byte(err.Error())))
 		if errors.Is(err, setup.ErrRebootRequired) {
 			fmt.Fprintln(out, "\nWindows must be restarted before WSL2 can be used.")
 			fmt.Fprintln(out, "Restart the computer, then run Setup again to finish the installation.")
@@ -110,10 +141,48 @@ func run() int {
 			code = 2
 		}
 	}
+	if ctx.Err() != nil && code == 0 {
+		fmt.Fprintln(out, "error: setup was cancelled; no further installation steps will run")
+		code = 2
+	}
 	if *progressPath != "" {
 		fmt.Fprintf(out, "DONE %d\n", code)
 	}
 	return code
+}
+
+func watchCancelFile(path string, cancel context.CancelFunc) func() {
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		ticker := time.NewTicker(200 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			if _, err := os.Stat(path); err == nil {
+				cancel()
+				return
+			}
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+	return func() { close(done); <-stopped }
+}
+
+func writeProgressResult(path string, code int, message string) {
+	if path == "" {
+		return
+	}
+	_ = os.Remove(path)
+	w := &appendFile{path: path}
+	if message != "" {
+		_, _ = fmt.Fprintf(w, "error: %s\n", message)
+	}
+	_, _ = fmt.Fprintf(w, "DONE %d\n", code)
 }
 
 // appendFile writes each chunk by opening, appending and closing the file so
@@ -132,38 +201,39 @@ type syncWriter struct {
 func (w *syncWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.w.Write(p)
+	_, err := w.w.Write(redactSetupLog(p))
+	return len(p), err
 }
 
 func (w *appendFile) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	written := len(p)
+	p = redactSetupLog(p)
 	f, err := os.OpenFile(w.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
-		return len(p), nil
+		fmt.Fprintln(os.Stderr, "warning: progress file unavailable; diagnostics may not be persisted")
+		return written, nil
 	}
 	n, werr := f.Write(p)
 	if cerr := f.Close(); werr == nil {
 		werr = cerr
 	}
-	return n, werr
+	if werr == nil && n != len(p) {
+		werr = io.ErrShortWrite
+	}
+	return written, werr
 }
 
-// openSetupLog writes the full setup trace (including WSL/schtasks output) so
-// the UI installer and support can diagnose failures. Windows keeps all
-// Windows-side state under %LOCALAPPDATA%\flashcli-desktop; the Linux setup and
-// flashcli continue to use $FLASHCLI_HOME/logs.
-func openSetupLog() *os.File {
-	dir := filepath.Join(paths.Home(), "logs")
-	if state := setup.WindowsStateDir(); state != "" {
-		dir = filepath.Join(state, "logs")
+// A broken console or progress pipe must not prevent writes to the log sinks.
+type bestEffortOutput []io.Writer
+
+func (writers bestEffortOutput) Write(p []byte) (int, error) {
+	for _, writer := range writers {
+		n, err := writer.Write(p)
+		if err != nil || n != len(p) {
+			fmt.Fprintln(os.Stderr, "warning: an output channel failed; diagnostics may be incomplete")
+		}
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil
-	}
-	f, err := os.OpenFile(filepath.Join(dir, "setup.log"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
-	if err != nil {
-		return nil
-	}
-	return f
+	return len(p), nil
 }

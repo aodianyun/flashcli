@@ -11,3 +11,5 @@ import (
 func installWSL(context.Context, Env, Options, io.Writer) error {
 	return fmt.Errorf("WSL installation is only supported on Windows")
 }
+
+func detectWSLAvailable(context.Context) bool { return false }

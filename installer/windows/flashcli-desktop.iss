@@ -1,4 +1,4 @@
-﻿; flashcli-desktop Windows UI installer (Inno Setup 6+).
+﻿; flashcli-desktop Windows UI installer (Inno Setup 6.6+).
 ;
 ; Build on Windows after scripts/build_go.sh has produced dist/go:
 ;   powershell -ExecutionPolicy Bypass -File scripts/build_windows_installer.ps1
@@ -44,6 +44,7 @@ Source: "{#PayloadDir}\flashcli-bundle.tar.gz"; DestDir: "{app}\payload"; Flags:
 ; x64-only installer: WSL2 is amd64 here, so the arm64 pair is not shipped.
 Source: "{#PayloadDir}\flashcli-linux-amd64"; DestDir: "{app}\payload"; Flags: ignoreversion
 Source: "{#PayloadDir}\flashserver-linux-amd64"; DestDir: "{app}\payload"; Flags: ignoreversion
+Source: "{#PayloadDir}\sha256sums.txt"; DestDir: "{app}\payload"; Flags: ignoreversion
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut to the flashcli desktop client"; GroupDescription: "Additional icons:"
@@ -59,6 +60,9 @@ Filename: "{app}\flashcli-desktop.exe"; Description: "Launch flashcli desktop"; 
 const
   CrLf = #13#10;
 
+function SetupGetCurrentProcessId: Cardinal;
+external 'GetCurrentProcessId@kernel32.dll stdcall';
+
 var
   PurgeModels: Boolean;
   RemoveCLI: Boolean;
@@ -71,7 +75,9 @@ var
   ProgressCancelButton: TNewButton;
   ProgressCancelled: Boolean;
   SetupRunning: Boolean;
+  CancelPath: String;
   WSLDirPage: TInputDirWizardPage;
+  WSLShutdownConsent: TNewCheckBox;
   UninstallForm: TSetupForm;
   CbAll, CbModels, CbCli, CbSettings, CbDistro: TCheckBox;
 
@@ -106,9 +112,35 @@ begin
     Result := Result + ' --purge-distro';
 end;
 
+procedure RequestSetupCancel;
+begin
+  if ProgressCancelled then
+    Exit;
+  if not SaveStringToFile(CancelPath, 'cancel', False) then
+  begin
+    MsgBox('Could not send the cancellation request. Setup must remain open while the WSL operation finishes.' + #13#10 +
+      'Log: ' + StateDir + '\logs\setup.log', mbError, MB_OK);
+    Exit;
+  end;
+  ProgressCancelled := True;
+  ProgressCancelButton.Enabled := False;
+  ProgressPage.Msg1Label.Caption := 'Cancellation requested.' + #13#10#13#10 +
+    'Waiting for the setup engine to finish any active WSL disk operation and stop. The log remains available.';
+end;
+
 procedure ProgressCancelClick(Sender: TObject);
 begin
-  ProgressCancelled := True;
+  RequestSetupCancel;
+end;
+
+procedure CancelButtonClick(CurPageID: Integer; var Cancel, Confirm: Boolean);
+begin
+  if SetupRunning then
+  begin
+    RequestSetupCancel;
+    Cancel := False;
+    Confirm := False;
+  end;
 end;
 
 { Keep the progress bar and Cancel button on the bottom row, right-aligned. }
@@ -158,11 +190,9 @@ var
   Title: TNewStaticText;
   Btn: TButton;
 begin
-  UninstallForm := CreateCustomForm();
+  UninstallForm := CreateCustomForm(540, 304, False, False);
   try
     UninstallForm.Caption := 'flashcli-desktop 卸载选项';
-    UninstallForm.ClientWidth := ScaleX(540);
-    UninstallForm.ClientHeight := ScaleY(304);
     UninstallForm.Position := poScreenCenter;
     UninstallForm.BorderStyle := bsDialog;
 
@@ -574,6 +604,7 @@ function RunEnvironmentSetup: Boolean;
 var
   ResultCode, Step, Total, DoneCode, Attempts: Integer;
   StepText, Detail, ProgressPath, LogPath, ProgressLog, LastLog: String;
+  ProbePath: String;
   StepDone, HasDone, Started, LastDone: Boolean;
   LastStep: Integer;
   LastText: String;
@@ -586,12 +617,27 @@ begin
   SetupRunning := False;
   ProgressCancelled := False;
   LastElapsed := -1;
-  ProgressPath := ExpandConstant('{tmp}\flashserver-progress.txt');
+  ProgressPath := ExpandConstant('{tmp}\flashserver-progress-') +
+    IntToStr(SetupGetCurrentProcessId) + '.txt';
   LogPath := StateDir + '\logs\setup.log';
+  CancelPath := StateDir + '\logs\cancel-' +
+    GetDateTimeString('yyyymmddhhnnss', #0, #0) + '-' +
+    IntToStr(SetupGetCurrentProcessId) + '.txt';
+  ProbePath := CancelPath + '.probe';
   DeleteFile(ProgressPath);
+  if FileExists(CancelPath) or FileExists(ProbePath) or
+     (not ForceDirectories(StateDir + '\logs')) or
+     (not SaveStringToFile(ProbePath, 'probe', False)) then
+  begin
+    SetupError := 'Cannot create the setup cancellation channel under ' + StateDir + '\logs.';
+    Exit;
+  end;
+  DeleteFile(ProbePath);
   WSLArgs := '';
   if Trim(WSLDirPage.Values[0]) <> '' then
     WSLArgs := ' --wsl-dir "' + WSLDirPage.Values[0] + '"';
+  if WSLShutdownConsent.Checked then
+    WSLArgs := WSLArgs + ' --allow-global-wsl-shutdown';
 
   ProgressPage.Msg1Label.Caption :=
     'Preparing the flashcli-desktop environment' + #13#10#13#10 +
@@ -601,11 +647,12 @@ begin
   ProgressPage.Show;
   LayoutProgressPage;
   ProgressCancelButton.Visible := True;
+  ProgressCancelButton.Enabled := True;
   try
     Started := Exec(
       ExpandConstant('{app}\payload\flashserver-setup.exe'),
       '--backend wsl --bin-dir "' + ExpandConstant('{app}\payload') + '"' + WSLArgs +
-        ' --progress-file "' + ProgressPath + '"',
+        ' --progress-file "' + ProgressPath + '" --cancel-file "' + CancelPath + '"',
       ExpandConstant('{app}'), SW_HIDE, ewNoWait, ResultCode);
     if not Started then
       SetupError := 'Could not start flashserver-setup.exe.'
@@ -621,17 +668,17 @@ begin
       begin
         LoadProgress(ProgressPath, Step, Total, StepText, StepDone, HasDone,
           DoneCode, ProgressLog);
-        if ProgressCancelled then
-        begin
-          SetupError := 'Setup was cancelled.';
-          Exec(ExpandConstant('{sys}\taskkill.exe'),
-            '/F /T /IM flashserver-setup.exe', '', SW_HIDE,
-            ewWaitUntilTerminated, ResultCode);
-          SetupRunning := False;
-          Break;
-        end;
         if HasDone then
           Break;
+        if ProgressCancelled then
+        begin
+          ProgressPage.Msg1Label.Caption := 'Cancellation requested.' + #13#10#13#10 +
+            'Waiting for the active WSL disk operation to finish before setup stops.' + #13#10 +
+            'Log: ' + LogPath;
+          Sleep(250);
+          Inc(Attempts);
+          Continue;
+        end;
         Elapsed := Attempts div 4;
         if (Step > 0) and (Total > 0) then
         begin
@@ -673,14 +720,17 @@ begin
         Inc(Attempts);
         if Attempts > 21600 then
         begin
-          SetupError := 'Timed out after 90 minutes while waiting for setup.';
-          Break;
+          RequestSetupCancel;
+          if ProgressCancelled then
+            SetupError := 'Timed out after 90 minutes. Waiting for the setup engine to finish its current WSL operation and stop.';
+          Attempts := 0;
+          Continue;
         end;
       end;
       if HasDone then
         SetupRunning := False;
 
-      if SetupError = '' then
+      if (SetupError = '') and (not ProgressCancelled) then
       begin
         if DoneCode = 3 then
         begin
@@ -713,10 +763,17 @@ begin
   finally
     ProgressCancelButton.Visible := False;
     ProgressPage.Hide;
+    if ProgressPath <> '' then
+      DeleteFile(ProgressPath);
   end;
 
   if ProgressCancelled then
+  begin
+    MsgBox('Cancellation requested. Any active WSL disk move will finish before the setup engine stops.' + #13#10#13#10 +
+      'Review the log before running Setup again: ' + LogPath,
+      mbInformation, MB_OK);
     Abort;
+  end;
   if SetupReboot then
     MsgBox('WSL2 has been enabled, but Windows must be restarted before Ubuntu can be installed.' + #13#10#13#10 +
       'Restart the computer, then run flashcli-desktop Setup again to finish the installation.',
@@ -748,17 +805,6 @@ begin
     SetupOK := RunEnvironmentSetup;
 end;
 
-{ Kill the setup engine if the wizard is closed or cancelled while it runs. }
-procedure DeinitializeSetup;
-var
-  ResultCode: Integer;
-begin
-  if SetupRunning then
-    Exec(ExpandConstant('{sys}\taskkill.exe'),
-      '/F /T /IM flashserver-setup.exe', '', SW_HIDE,
-      ewWaitUntilTerminated, ResultCode);
-end;
-
 procedure InitializeWizard;
 begin
   ProgressPage := CreateOutputProgressPage('Setting up flashcli-desktop',
@@ -786,6 +832,14 @@ begin
     'flashcli-desktop runs inside WSL2. The Ubuntu disk holds model weights and runtimes, so choose a drive with at least 30 GB free. The default is a sibling of the installation directory (flashcli-desktop-wsl), or %LOCALAPPDATA%\flashcli-desktop-wsl when installing under Program Files; leave it empty to keep the WSL default.',
     False, '');
   WSLDirPage.Add('WSL data directory (leave empty for the WSL default):');
+  WSLShutdownConsent := TNewCheckBox.Create(WSLDirPage);
+  WSLShutdownConsent.Parent := WSLDirPage.Surface;
+  WSLShutdownConsent.Left := ScaleX(0);
+  WSLShutdownConsent.Top := ScaleY(190);
+  WSLShutdownConsent.Width := WSLDirPage.Surface.Width;
+  WSLShutdownConsent.Height := ScaleY(55);
+  WSLShutdownConsent.Caption := 'If moving an existing FlashServer distribution requires it, I authorize stopping ALL running WSL distributions. Their running processes will end.';
+  WSLShutdownConsent.Checked := False;
 end;
 
 function DefaultWSLDir: String;

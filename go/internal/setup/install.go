@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -24,33 +25,50 @@ var ErrRebootRequired = errors.New("restart required to finish enabling WSL2")
 
 // Options controls installation.
 type Options struct {
-	Backend          string
-	DryRun           bool
-	BinDir           string
-	Prefix           string
-	Home             string
-	User             string
-	Distro           string
-	Addr             string
-	Token            string
-	ServiceName      string
-	ConfigPath       string
-	NoService        bool
-	ReleaseVersion   string
-	ReleaseBase      string
-	ReleaseAPI       string
-	Uninstall        bool
-	PurgeModels      bool
-	RemoveCLI        bool
-	PurgeSettings    bool
-	PurgeDistro      bool
-	WSLDir           string
-	DistroRootfs     string
-	StopService      bool
-	StartService     bool
-	EnableAutostart  bool
-	DisableAutostart bool
-	PathEnv          string
+	Backend                string
+	DryRun                 bool
+	BinDir                 string
+	Prefix                 string
+	Home                   string
+	User                   string
+	Distro                 string
+	Addr                   string
+	Token                  string
+	ServiceName            string
+	ConfigPath             string
+	NoService              bool
+	ReleaseVersion         string
+	ReleaseBase            string
+	ReleaseAPI             string
+	Uninstall              bool
+	PurgeModels            bool
+	RemoveCLI              bool
+	PurgeSettings          bool
+	PurgeDistro            bool
+	WSLDir                 string
+	AllowGlobalWSLShutdown bool
+	CancelFile             string
+	DistroRootfs           string
+	StopService            bool
+	StartService           bool
+	EnableAutostart        bool
+	DisableAutostart       bool
+	PathEnv                string
+}
+
+func cancellationErr(ctx context.Context, opts Options) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if opts.CancelFile == "" {
+		return nil
+	}
+	if _, err := os.Stat(opts.CancelFile); err == nil {
+		return context.Canceled
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("check setup cancellation file: %w", err)
+	}
+	return nil
 }
 
 // Run installs flashserver for the detected platform.
@@ -131,10 +149,17 @@ func normalizeOptions(env Env, opts Options) Options {
 }
 
 type installer struct {
-	env  Env
-	opts Options
-	out  io.Writer
+	env             Env
+	opts            Options
+	out             io.Writer
+	runner          commandRunner
+	prepareLocation func(string) error
+	wait            func(context.Context, time.Duration) error
 }
+
+// commandRunner captures a child process' output. Tests inject a fake runner
+// so Windows setup paths never need to invoke WSL or DISM.
+type commandRunner func(context.Context, string, ...string) ([]byte, error)
 
 // geteuid is os.Geteuid behind a variable so tests can exercise the root-only
 // install/service paths without running as root.
@@ -210,6 +235,13 @@ func (i installer) run(ctx context.Context, name string, args ...string) error {
 		i.printf("$ %s %s\n", name, strings.Join(args, " "))
 		return nil
 	}
+	if i.runner != nil {
+		output, err := i.runner(ctx, name, args...)
+		if len(output) > 0 {
+			_, _ = i.out.Write(redactDiagnostic(normalizeDiagnostic(output)))
+		}
+		return err
+	}
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdout = i.out
 	cmd.Stderr = i.out
@@ -220,16 +252,28 @@ func (i installer) run(ctx context.Context, name string, args ...string) error {
 // the progress stream. Windows tools (notably wsl.exe) emit UTF-16LE; decode
 // it before writing so Inno can read setup.log as UTF-8 without mojibake.
 func (i installer) runDiag(ctx context.Context, name string, args ...string) error {
+	_, err := i.runDiagOutput(ctx, name, args...)
+	return err
+}
+
+func (i installer) runDiagOutput(ctx context.Context, name string, args ...string) ([]byte, error) {
 	if i.opts.DryRun {
 		i.printf("$ %s %s\n", name, strings.Join(args, " "))
-		return nil
+		return nil, nil
 	}
-	cmd := exec.CommandContext(ctx, name, args...)
-	out, err := cmd.CombinedOutput()
-	if len(out) > 0 {
-		_, _ = diag.Write(normalizeDiagnostic(out))
+	var output []byte
+	var err error
+	if i.runner != nil {
+		output, err = i.runner(ctx, name, args...)
+	} else {
+		cmd := exec.CommandContext(ctx, name, args...)
+		output, err = cmd.CombinedOutput()
 	}
-	return err
+	decoded := normalizeDiagnostic(output)
+	if len(decoded) > 0 {
+		_, _ = diag.Write(redactDiagnostic(decoded))
+	}
+	return decoded, err
 }
 
 // normalizeDiagnostic converts UTF-16LE output to UTF-8; plain ASCII/UTF-8
@@ -250,6 +294,34 @@ func normalizeDiagnostic(b []byte) []byte {
 		units = append(units, uint16(b[i])|uint16(b[i+1])<<8)
 	}
 	return []byte(strings.ToValidUTF8(string(utf16.Decode(units)), "?"))
+}
+
+var diagnosticRedactors = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)(https?://)[^/@\s]+:[^/@\s]+@`),
+	regexp.MustCompile(`(?i)(authorization\s*:\s*bearer\s+)[^\s]+`),
+	regexp.MustCompile(`(?i)((?:access[_-]?token|api[_-]?key|password|passwd|secret|token)=)[^&\s]+`),
+}
+
+func redactDiagnostic(b []byte) []byte {
+	text := string(b)
+	text = diagnosticRedactors[0].ReplaceAllString(text, `${1}[REDACTED]@`)
+	text = diagnosticRedactors[1].ReplaceAllString(text, `${1}[REDACTED]`)
+	text = diagnosticRedactors[2].ReplaceAllString(text, `${1}[REDACTED]`)
+	return []byte(text)
+}
+
+func (i installer) pause(ctx context.Context, duration time.Duration) error {
+	if i.wait != nil {
+		return i.wait(ctx, duration)
+	}
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func (i installer) writeFile(path string, data []byte, mode os.FileMode, desc string) error {
