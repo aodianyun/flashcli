@@ -249,3 +249,11 @@ func (s *Server) gatewayVideo(w http.ResponseWriter, r *http.Request) {
 func (s *Server) gatewayVideoContent(w http.ResponseWriter, r *http.Request) {
 	s.serveQueryModel(w, r, "openai.videos", r.URL.EscapedPath())
 }
+
+func (s *Server) gatewayResponse(w http.ResponseWriter, r *http.Request) {
+	s.serveQueryModel(w, r, "openai.responses", r.URL.EscapedPath())
+}
+
+func (s *Server) gatewayResponseCancel(w http.ResponseWriter, r *http.Request) {
+	s.serveQueryModel(w, r, "openai.responses", r.URL.EscapedPath())
+}

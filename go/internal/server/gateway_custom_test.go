@@ -396,6 +396,42 @@ func TestGatewayModelsDetailOpenAIAndAnthropic(t *testing.T) {
 	assertGatewayError(t, rec, http.StatusNotFound, "model_not_found")
 }
 
+func TestGatewayResponseSubroutes(t *testing.T) {
+	child, recorded := newCustomGatewayChild(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"model":"child","id":"resp_1","object":"response"}`)
+	})
+	s := customGatewayServer(t, child.URL, []string{"openai.responses"})
+	const refStr = "flashcli-bundle/demo:1.0.0"
+	modelQuery := "?model=" + url.QueryEscape(refStr)
+
+	cases := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/v1/responses/resp_1"},
+		{http.MethodDelete, "/v1/responses/resp_1"},
+		{http.MethodPost, "/v1/responses/resp_1/cancel"},
+	}
+	for _, tc := range cases {
+		req := httptest.NewRequest(tc.method, tc.path+modelQuery, nil)
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s %s = %d: %s", tc.method, tc.path, rec.Code, rec.Body.String())
+		}
+		method, path, _, _, _, _, _ := recorded.snapshot()
+		if method != tc.method || path != tc.path {
+			t.Fatalf("forwarded %s %s, want %s %s", method, path, tc.method, tc.path)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/responses/resp_1", nil)
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	assertGatewayError(t, rec, http.StatusBadRequest, "model_required")
+}
+
 func TestGatewayVideoJobRoutes(t *testing.T) {
 	child, recorded := newCustomGatewayChild(t, func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/content") {

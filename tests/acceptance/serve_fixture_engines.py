@@ -15,6 +15,8 @@ import struct
 import time
 from typing import Any
 
+from fastapi import Request
+
 from flashcli_bundle.protocol import (
     AudioTranscriptionRequest,
     AudioTranscriptionResult,
@@ -132,6 +134,23 @@ class LLMEngine:
 
     def register_routes(self, app) -> None:  # noqa: ANN001
         engine = self
+
+        @app.get("/v1/custom/echo")
+        async def custom_echo_get(request: Request) -> dict[str, Any]:
+            return {
+                "model": engine.model_id,
+                "path": request.url.path,
+                "query": dict(request.query_params),
+            }
+
+        @app.post("/v1/custom/echo")
+        async def custom_echo_post(request: Request) -> dict[str, Any]:
+            return {
+                "model": engine.model_id,
+                "path": request.url.path,
+                "query": dict(request.query_params),
+                "body": await request.json(),
+            }
 
         @app.get("/debug/last")
         async def debug_last() -> dict[str, Any]:

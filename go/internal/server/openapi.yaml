@@ -151,6 +151,59 @@ paths:
         '404': { $ref: '#/components/responses/Error' }
         '429': { $ref: '#/components/responses/Error' }
         '503': { $ref: '#/components/responses/Error' }
+  /v1/responses/{id}:
+    get:
+      summary: Stored response detail (gateway)
+      description: Requires capability `openai.responses`; `model` selects the resident model.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: model
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Stored response }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+    delete:
+      summary: Delete a stored response (gateway)
+      description: Requires capability `openai.responses`; `model` selects the resident model.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: model
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Deletion result }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/responses/{id}/cancel:
+    post:
+      summary: Cancel a background response (gateway)
+      description: Requires capability `openai.responses`; `model` selects the resident model.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: model
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Cancellation result }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
   /v1/embeddings:
     post:
       summary: Embeddings (gateway)

@@ -392,6 +392,8 @@ data: {"time":"2026-11-10T02:31:26Z","phase":"done"}</pre>
       <tr><td><span class="tag">GET</span></td><td><code>/health</code></td><td>存活检查</td></tr>
       <tr><td><span class="tag">GET</span></td><td><code>/v1/models</code></td><td>OpenAI 网关：已准备/已加载模型列表</td></tr>
       <tr><td><span class="tag">GET</span></td><td><code>/v1/models/{id}</code></td><td>网关：单个模型详情（OpenAI/Anthropic 结构）</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/responses/{id}</code></td><td>网关：Responses 后台结果查询/删除/取消（<code>?model=</code>）</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/videos/{id}</code></td><td>网关：视频任务查询/下载/删除（<code>?model=</code>）</td></tr>
       <tr><td><span class="tag">POST</span></td><td><code>/v1/&lt;custom-path&gt;</code></td><td>网关：bundle 自定义路由透传（按 model 选择模型）</td></tr>
       <tr><td><span class="tag">GET</span></td><td><code>/api/v1/system</code></td><td>系统、GPU/CPU/内存、CUDA/SM/torch、开机启动</td></tr>
       <tr><td><span class="tag">GET</span></td><td><code>/api/v1/models</code></td><td>管理面：缓存模型、bundle/权重状态、serve 能力、已加载实例</td></tr>

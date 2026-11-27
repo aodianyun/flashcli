@@ -24,6 +24,7 @@
 |---|---|
 | `GET /v1/models`、`GET /v1/models/{id}` | 本地已准备（preloaded 或 resident）的 bundle ref 列表/详情；带 `anthropic-version` 时返回 Anthropic 结构 |
 | `POST /v1/chat/completions`、`/completions`、`/responses`、`/embeddings`、`/moderations` | 模型声明对应 capability 时才开放 |
+| `GET/DELETE /v1/responses/{id}`、`POST /v1/responses/{id}/cancel` | `openai.responses` 后台响应查询/取消；用 `?model=` 选择模型 |
 | `POST /v1/audio/*`、`/images/*`、`/videos`、`/messages`、`/messages/count_tokens` | 按 capability 开放 |
 | `GET /v1/videos`、`GET/DELETE /v1/videos/{id}`、`GET /v1/videos/{id}/content` | `openai.videos` 的任务元数据/下载；用 `?model=` 选择模型 |
 | `<method> /v1/<custom-path>` | bundle `register_routes` 自定义路由透传 |

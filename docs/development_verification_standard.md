@@ -98,6 +98,26 @@ bundle venvs and can take several minutes; run it before `main` merges and
 release candidates, not on every edit. Network-marked PyPI requirement tests
 belong to Tier 3, not this tier.
 
+The heavy gateway fixture also runs a real `ServeEngine` child through
+`flashserver`: preload → start → standard JSON/SSE/multipart/Anthropic routes →
+custom `/v1/*` passthrough → `GET /v1/models/{id}` → reserved-path `405` →
+busy/force unload.
+
+### Tier 2g — real GPU scheduler (opt-in)
+
+```bash
+bash scripts/build_dev_bins.sh
+FLASHCLI_SCHEDULER_PORT=8895 python3 scripts/verify_scheduler_public.py
+```
+
+This is the reproducible real-GPU gate for scheduler/gateway changes. It pulls
+two public FlashHub models, accounts real free VRAM, and verifies two residents,
+idle stop, child crash recovery, low-VRAM admission, `max_loaded` queue/LRU,
+busy unload, daemon restart with an active stream, and resident recovery. The
+first run needs network and several GiB of disk. Set
+`FLASHCLI_SCHEDULER_PORT` when the default `8795` is reserved (for example a
+Windows Hyper-V excluded port range).
+
 ## 4. Contract checks by change type
 
 | Change | Required work |

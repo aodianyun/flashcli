@@ -145,6 +145,9 @@ GET    /v1/models/{id}
 POST   /v1/chat/completions
 POST   /v1/completions
 POST   /v1/responses
+GET    /v1/responses/{id}
+DELETE /v1/responses/{id}
+POST   /v1/responses/{id}/cancel
 POST   /v1/embeddings
 POST   /v1/moderations
 POST   /v1/audio/transcriptions
@@ -448,6 +451,9 @@ Real-GPU public acceptance (opt-in, reproducible):
 bash scripts/build_dev_bins.sh
 python3 scripts/verify_scheduler_public.py
 ```
+
+Set `FLASHCLI_SCHEDULER_PORT` when the default `8795` is reserved (for example
+a Windows Hyper-V excluded port range).
 
 The script uses `xym/hunyuan_05b_instruct_rtx:1.0.0` and
 `xym/ernie45_0p3b_rtx:1.0.0` by default (override with

@@ -40,6 +40,7 @@ GO_ONLY_COMMANDS = {
     "app list",
     "app show",
     "app install",
+    "app setup",
     "app status",
     "app start",
     "app stop",

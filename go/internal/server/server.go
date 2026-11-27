@@ -170,6 +170,10 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("POST "+path, s.gatewayMultipartHandler(route.Capability, route.Upstream))
 	}
 	mux.HandleFunc("GET /v1/realtime", s.serveRealtime)
+	// Standard response job routes, selected with ?model= like video jobs.
+	mux.HandleFunc("GET /v1/responses/{id}", s.gatewayResponse)
+	mux.HandleFunc("DELETE /v1/responses/{id}", s.gatewayResponse)
+	mux.HandleFunc("POST /v1/responses/{id}/cancel", s.gatewayResponseCancel)
 	// Standard video job routes. The model that owns the job is selected with
 	// ?model=<full-ref> because these requests have no JSON body.
 	mux.HandleFunc("GET /v1/videos", s.gatewayVideoList)

@@ -27,6 +27,7 @@ Authentication is off by default. With a token, every path except `/health`, `/`
 |---|---|
 | `GET /v1/models`, `GET /v1/models/{id}` | OpenAI list/detail of locally available (preloaded or resident) bundle refs; Anthropic shape with `anthropic-version` |
 | `POST /v1/chat/completions`, `/completions`, `/responses`, `/embeddings`, `/moderations` | Mounted when the requested bundle declares the capability |
+| `GET/DELETE /v1/responses/{id}`, `POST /v1/responses/{id}/cancel` | `openai.responses` background response lookup/cancel; select the model with `?model=` |
 | `POST /v1/audio/*`, `/images/*`, `/videos`, `/messages`, `/messages/count_tokens` | Capability-gated |
 | `GET /v1/videos`, `GET/DELETE /v1/videos/{id}`, `GET /v1/videos/{id}/content` | `openai.videos` job metadata/download; select the model with `?model=` |
 | `<method> /v1/<custom-path>` | Bundle-owned `register_routes` passthrough |

@@ -140,6 +140,9 @@ GET    /v1/models/{id}
 POST   /v1/chat/completions
 POST   /v1/completions
 POST   /v1/responses
+GET    /v1/responses/{id}
+DELETE /v1/responses/{id}
+POST   /v1/responses/{id}/cancel
 POST   /v1/embeddings
 POST   /v1/moderations
 POST   /v1/audio/transcriptions
@@ -413,6 +416,9 @@ GPU runtime 必填：
 bash scripts/build_dev_bins.sh
 python3 scripts/verify_scheduler_public.py
 ```
+
+默认 `8795` 被占用（例如 Windows Hyper-V 排除端口段）时设置
+`FLASHCLI_SCHEDULER_PORT`。
 
 脚本默认使用 `xym/hunyuan_05b_instruct_rtx:1.0.0` 和
 `xym/ernie45_0p3b_rtx:1.0.0`（可用 `FLASHCLI_SCHEDULER_MODEL_A/B` 覆盖），在单张

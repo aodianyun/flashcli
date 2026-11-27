@@ -15,6 +15,7 @@ import subprocess
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -43,6 +44,7 @@ BUNDLE_MANIFEST = {
     ],
     "defaults": {
         "python_abi": "312",
+        "resources": {"min_vram_mib": 1024},
         "entry": {
             "serve": {
                 "kind": "python",
@@ -337,6 +339,38 @@ def test_gateway_real_bundle(flashserver_bin, flashcli_bin, cli_env, tmp_path):
             b"RIFF....WAVE",
         )
         assert status == 200 and "Hello from realtime audio." in audio["text"]
+
+        # Custom /v1/* paths are bundle-owned: the gateway selects the model,
+        # strips ?model=, forwards the method/body, and rewrites the response.
+        encoded = urllib.parse.quote(REF, safe="")
+        status, custom = http_json(
+            f"{base}/v1/custom/echo?model={encoded}&tag=1",
+            {"hello": "world"},
+        )
+        assert status == 200, custom
+        assert custom["model"] == REF
+        assert custom["path"] == "/v1/custom/echo"
+        assert custom["body"] == {"hello": "world"}
+        assert custom["query"] == {"tag": "1"}
+        status, custom = http_json(f"{base}/v1/custom/echo?model={encoded}&tag=2")
+        assert status == 200, custom
+        assert custom["query"] == {"tag": "2"}
+
+        # The body model also selects the model; the query is still stripped.
+        status, custom = http_json(
+            f"{base}/v1/custom/echo?tag=3",
+            {"model": REF, "hello": "body"},
+        )
+        assert status == 200, custom
+        assert custom["query"] == {"tag": "3"}
+        assert custom["body"]["model"] == REF
+
+        # Host-owned model routes stay host-owned and reserved paths keep the
+        # 405/Allow contract instead of falling through to custom passthrough.
+        status, detail = http_json(f"{base}/v1/models/{encoded}")
+        assert status == 200 and detail["id"] == REF, detail
+        status, body = http_json(base + "/v1/models", {})
+        assert status == 405 and body["error"]["code"] == "method_not_allowed", body
 
         # A resident model is busy for disk removal; force stops it first.
         status, body = http_json(base + "/api/v1/models/unload", {"ref": REF})

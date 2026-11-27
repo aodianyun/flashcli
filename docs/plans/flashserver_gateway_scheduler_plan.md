@@ -213,6 +213,7 @@ Deliverables:
 
 - observability: request logs, preload/resident/evict events, queue/lease metrics.
 - security: token shared with gateway, child loopback only, token stripping.
+- custom `/v1/*` passthrough, reserved-path 405/Allow, model detail and video job routes.
 - config validation and defaults.
 - WSL dGPU single/multi-card and CPU runtime acceptance.
 - OpenAPI, docs, zh mirrors, release notes.
@@ -239,6 +240,8 @@ Exit criteria:
 | multi-GPU `gpu_count` | yes | fake | WSL real if available |
 | CPU fallback rules | yes | fake | WSL CPU runtime if available |
 | JSON / SSE / multipart / WS | yes | yes | yes |
+| custom `/v1/*` passthrough | yes | yes | yes (real category bundle) |
+| reserved-path 405 / model detail / video jobs | yes | yes | yes |
 | app/desktop no start/stop | static | yes | yes |
 
 ## 4. Definition of done

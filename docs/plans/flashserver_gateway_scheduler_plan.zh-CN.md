@@ -198,6 +198,7 @@
 
 - 可观测性：请求日志、preload/resident/evict 事件、队列/lease 指标。
 - 安全：token 共用、child 仅 loopback、转发前移除 token。
+- custom `/v1/*` 透传、保留路径 405/Allow、模型详情与视频任务路由。
 - 配置校验和默认值。
 - WSL dGPU 单卡/多卡和 CPU runtime 验收。
 - OpenAPI、英文/中文文档、发布说明。
@@ -223,6 +224,8 @@
 | 多 GPU `gpu_count` | 是 | 假设备 | WSL 有卡时真实验收 |
 | CPU 回退规则 | 是 | 假设备 | WSL 有 CPU runtime 时验收 |
 | JSON / SSE / multipart / WS | 是 | 是 | 是 |
+| custom `/v1/*` 透传 | 是 | 是 | 是（真实分类 bundle） |
+| 保留路径 405 / 模型详情 / 视频任务 | 是 | 是 | 是 |
 | 应用/桌面无 start/stop | 静态 | 是 | 是 |
 
 ## 4. 完成标准

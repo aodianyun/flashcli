@@ -92,6 +92,23 @@ bash scripts/verify_e2e.sh --heavy
 数分钟；用于合并 `main` 和发布候选前，不要每次修改都跑。标记为 `network` 的 PyPI
 requirement 测试属于第 3 层，不在这一层。
 
+重型网关 fixture 还会通过 `flashserver` 启动真实的 `ServeEngine` 子进程：
+preload → start → 标准 JSON/SSE/multipart/Anthropic 路由 → custom `/v1/*` 透传 →
+`GET /v1/models/{id}` → 保留路径 `405` → busy/force unload。
+
+### 第 2g 层 — 真实 GPU 调度（可选）
+
+```bash
+bash scripts/build_dev_bins.sh
+FLASHCLI_SCHEDULER_PORT=8895 python3 scripts/verify_scheduler_public.py
+```
+
+这是调度/网关改动的可复现真实 GPU 门禁。它会拉取两个公开 FlashHub 模型，按真实空闲
+显存做准入，并验证双 resident、空闲 stop、child 崩溃恢复、低显存拒绝、
+`max_loaded` 队列/LRU、busy unload、带 active stream 的 daemon 重启和 resident
+恢复。首次运行需要网络和数 GiB 磁盘。默认 `8795` 被占用（例如 Windows Hyper-V
+排除端口段）时设置 `FLASHCLI_SCHEDULER_PORT`。
+
 ## 4. 按变更类型检查契约
 
 | 变更 | 必须处理 |
