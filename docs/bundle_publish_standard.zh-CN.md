@@ -34,6 +34,8 @@
 
 ### 1.1 分类规范（强制补充）
 
+**基础契约（无单独补充）：** LLM、VLM、embedding/rerank，以及标准 image/video engine-serve bundle 由本规范加 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md) 覆盖。下表只列有额外强制规则的分类。
+
 部分模型分类有额外的服务与打包规则。属于这些分类的 bundle **必须**同时满足对应分类规范；不满足则不可发布。
 
 | 分类 | FlashHub tag | 规范 | 常见集成方式 |

@@ -1,110 +1,133 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
-<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/></marker></defs>
-<rect width="1600" height="900" fill="#f7f9fc"/>
-<text x="800.0" y="46" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="28" font-weight="700" fill="#0f172a">flashcli 运行 / 服务流程</text>
-<text x="800.0" y="74" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="14" fill="#64748b">ref 解析 → 缓存、运行时与权重 → entry → run 或 serve</text>
-<rect x="36" y="105" width="360" height="760" rx="16" fill="#dbeafe" opacity="0.35" stroke="#e2e8f0" stroke-width="1"/>
-<text x="52" y="129" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#475569">1 · 解析</text>
-<rect x="420" y="105" width="360" height="760" rx="16" fill="#dcfce7" opacity="0.35" stroke="#e2e8f0" stroke-width="1"/>
-<text x="436" y="129" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#475569">2 · 准备</text>
-<rect x="804" y="105" width="360" height="760" rx="16" fill="#fef3c7" opacity="0.35" stroke="#e2e8f0" stroke-width="1"/>
-<text x="820" y="129" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#475569">3 · 执行</text>
-<rect x="1188" y="105" width="376" height="760" rx="16" fill="#fce7f3" opacity="0.35" stroke="#e2e8f0" stroke-width="1"/>
-<text x="1204" y="129" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#475569">运行时</text>
-<rect x="50" y="150" width="330" height="95" rx="12" fill="#dbeafe" stroke="#60a5fa" stroke-width="1.4"/>
-<text x="215.0" y="174" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#1f2937">输入</text>
-<text x="215.0" y="194" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">flashcli run | serve &lt;ref&gt;</text>
-<text x="215.0" y="211" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">FlashHub ref 或本地 bundles/&lt;name&gt;</text>
-<rect x="50" y="295" width="330" height="80" rx="12" fill="#e0e7ff" stroke="#818cf8" stroke-width="1.4"/>
-<text x="215.0" y="319" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#1f2937">解析 ref</text>
-<text x="215.0" y="339" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">namespace / name / version</text>
-<text x="215.0" y="356" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">variant · cache key</text>
-<polygon points="215.0,420 320,470.0 215.0,520 110,470.0" fill="#fef9c3" stroke="#eab308" stroke-width="1.4"/>
-<text x="215.0" y="457.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#1f2937">本地缓存</text>
-<text x="215.0" y="475.0" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#1f2937">完整?</text>
-<rect x="50" y="600" width="330" height="120" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.4"/>
-<text x="215.0" y="624" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#1f2937">离线保证</text>
-<text x="215.0" y="644" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">缓存完整且满足 bundle readiness</text>
-<text x="215.0" y="661" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">时保持离线；只有显式 pull、</text>
-<text x="215.0" y="678" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">缺失资产或 schema 升级才联网。</text>
-<rect x="440" y="295" width="330" height="95" rx="12" fill="#ffedd5" stroke="#f97316" stroke-width="1.4"/>
-<text x="605.0" y="319" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#1f2937">FlashHub 同步</text>
-<text x="605.0" y="339" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">repo index · manifest</text>
-<text x="605.0" y="356" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">bundle 文件 · runtime 目录</text>
-<text x="605.0" y="373" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">权重元数据</text>
-<rect x="440" y="430" width="330" height="100" rx="12" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.4"/>
-<text x="605.0" y="454" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#1f2937">Preflight</text>
-<text x="605.0" y="474" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">device / runtime / Python ABI</text>
-<text x="605.0" y="491" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">runtime cell 匹配</text>
-<text x="605.0" y="508" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">system requirements</text>
-<rect x="440" y="580" width="330" height="90" rx="12" fill="#fce7f3" stroke="#db2777" stroke-width="1.4"/>
-<text x="605.0" y="604" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#1f2937">运行时 / venv</text>
-<text x="605.0" y="624" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">包安装器</text>
-<text x="605.0" y="641" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">flashcli-bundle[infer]</text>
-<text x="605.0" y="658" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">python_dependencies</text>
-<rect x="440" y="720" width="330" height="90" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="1.4"/>
-<text x="605.0" y="744" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#1f2937">权重准备</text>
-<text x="605.0" y="764" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">共享权重存储</text>
-<text x="605.0" y="781" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">下载清单 · 续传</text>
-<text x="605.0" y="798" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">post_pull · extra_pull</text>
-<rect x="830" y="150" width="330" height="100" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.4"/>
-<text x="995.0" y="174" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#1f2937">执行说明</text>
-<text x="995.0" y="194" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">Entry 在 bundle venv 内运行；</text>
-<text x="995.0" y="211" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">host 不导入模型代码。</text>
-<rect x="1210" y="150" width="330" height="100" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.4"/>
-<text x="1375.0" y="174" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#1f2937">FlashRT 说明</text>
-<text x="1375.0" y="194" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">由 bundle entry 导入；</text>
-<text x="1375.0" y="211" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">不是 host 的包依赖。</text>
-<rect x="830" y="300" width="330" height="100" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.4"/>
-<text x="995.0" y="324" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#1f2937">Serve 说明</text>
-<text x="995.0" y="344" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">serve 挂载 OpenAI / Anthropic 路由；</text>
-<text x="995.0" y="361" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">run 输出一次结果后退出。</text>
-<rect x="1210" y="300" width="330" height="100" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.4"/>
-<text x="1375.0" y="324" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#1f2937">缓存说明</text>
-<text x="1375.0" y="344" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">权重按 source/repo@revision 共享；</text>
-<text x="1375.0" y="361" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">runtime 按 cell 独立。</text>
-<rect x="830" y="450" width="330" height="100" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.4"/>
-<text x="995.0" y="474" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#1f2937">网关不变量</text>
-<text x="995.0" y="494" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">路由按 capability 挂载；</text>
-<text x="995.0" y="511" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">child endpoint 不对外暴露。</text>
-<rect x="1210" y="450" width="330" height="100" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.4"/>
-<text x="1375.0" y="474" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#1f2937">隔离</text>
-<text x="1375.0" y="494" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">bundle 代码只使用 flashcli-bundle 协议；</text>
-<text x="1375.0" y="511" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">不导入 host 包。</text>
-<rect x="830" y="720" width="330" height="90" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="1.4"/>
-<text x="995.0" y="744" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#1f2937">执行入口</text>
-<text x="995.0" y="764" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">bundle entry</text>
-<text x="995.0" y="781" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">RunEngine / ServeEngine</text>
-<text x="995.0" y="798" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">native-exec / native-abi</text>
-<rect x="830" y="830" width="160" height="55" rx="12" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.4"/>
-<text x="910.0" y="854" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#1f2937">run</text>
-<text x="910.0" y="874" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">一次性推理</text>
-<rect x="1010" y="830" width="150" height="55" rx="12" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.4"/>
-<text x="1085.0" y="854" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#1f2937">serve</text>
-<text x="1085.0" y="874" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">host HTTP / WS</text>
-<rect x="1210" y="720" width="330" height="90" rx="12" fill="#f1f5f9" stroke="#64748b" stroke-width="1.4"/>
-<text x="1375.0" y="744" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#1f2937">FlashRT</text>
-<text x="1375.0" y="764" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">inference runtime</text>
-<text x="1375.0" y="781" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" fill="#475569">platform kernels</text>
-<path d="M 215,245 L 215,295" fill="none" stroke="#64748b" stroke-width="1.6" marker-end="url(#arrow)"/>
-<path d="M 215,375 L 215,420" fill="none" stroke="#64748b" stroke-width="1.6" marker-end="url(#arrow)"/>
-<path d="M 320,470 L 380,470 L 380,480 L 440,480" fill="none" stroke="#22c55e" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="382" y="462" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#22c55e" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">完整 / 离线</text>
-<path d="M 320,470 L 400,470 L 400,343 L 440,343" fill="none" stroke="#f97316" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="404" y="415" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#f97316" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">缺失 / pull</text>
-<path d="M 605,390 L 605,430" fill="none" stroke="#f97316" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="612" y="414" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#f97316" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">bundle 树就绪</text>
-<path d="M 605,530 L 605,580" fill="none" stroke="#8b5cf6" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="612" y="560" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#8b5cf6" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">runtime 就绪</text>
-<path d="M 605,670 L 605,720" fill="none" stroke="#db2777" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="612" y="700" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#db2777" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">依赖就绪</text>
-<path d="M 770,765 L 830,765" fill="none" stroke="#22c55e" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="800" y="753" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#22c55e" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">checkpoint 就绪</text>
-<path d="M 1160,765 L 1210,765" fill="none" stroke="#64748b" stroke-width="1.6" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<text x="1185" y="750" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#64748b" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">import</text>
-<path d="M 910,810 L 880,830" fill="none" stroke="#0284c7" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="880" y="820" text-anchor="end" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#0284c7" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">run</text>
-<path d="M 1080,810 L 1100,830" fill="none" stroke="#0284c7" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="1100" y="820" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#0284c7" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">serve</text>
-<path d="M 215,600 L 215,520" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<defs>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0F172A" flood-opacity="0.06"/></filter>
+<marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#2563EB"/></marker>
+<marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#0F766E"/></marker>
+<marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#B45309"/></marker>
+<marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#DC2626"/></marker>
+</defs>
+<rect width="1600" height="900" fill="#F7F9FC"/>
+<path d="M 48 100 L 1552 100" stroke="#E2E8F0" stroke-width="1"/>
+<text x="48" y="64" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="34" font-weight="700" fill="#0F172A">flashcli 运行 / 服务流程</text>
+<text x="1552" y="64" text-anchor="end" font-family="JetBrains Mono, Consolas, monospace" font-size="12" font-weight="400" fill="#94A3B8">v1</text>
+<text x="48" y="132" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">输入与解析</text>
+<text x="408" y="132" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">本地准备</text>
+<text x="858" y="132" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">执行</text>
+<text x="1218" y="132" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">运行时</text>
+<rect x="48" y="160" width="330" height="340" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="70" cy="188" r="4.2" fill="#2563EB"/>
+<text x="82" y="194" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">输入</text>
+<rect x="64" y="220" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="77" y="239" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">CLI</text>
+<text x="77" y="255" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">flashcli run | serve &lt;ref&gt;</text>
+<text x="77" y="270" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">FlashHub ref 或本地 bundles/&lt;name&gt;</text>
+<rect x="64" y="296" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="77" y="315" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Ref 解析</text>
+<text x="77" y="331" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">namespace / name / version</text>
+<text x="77" y="346" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">variant -&gt; cache key</text>
+<rect x="64" y="372" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="77" y="391" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">离线保证</text>
+<text x="77" y="407" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">缓存完整 + bundle readiness</text>
+<text x="77" y="422" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">只有 pull / schema 升级联网</text>
+<rect x="48" y="530" width="330" height="290" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="70" cy="558" r="4.2" fill="#B45309"/>
+<text x="82" y="564" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">缓存</text>
+<rect x="64" y="590" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="77" y="609" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Bundle 缓存</text>
+<text x="77" y="625" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">manifest / entry / runtime</text>
+<text x="77" y="640" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">版本目录 + 标记</text>
+<rect x="64" y="666" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="77" y="685" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">权重存储</text>
+<text x="77" y="701" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">source/repo@revision</text>
+<text x="77" y="716" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">download manifest + resume</text>
+<rect x="408" y="160" width="420" height="660" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="430" cy="188" r="4.2" fill="#0F766E"/>
+<text x="442" y="194" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">准备</text>
+<rect x="424" y="220" width="388" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="437" y="239" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">缓存检查</text>
+<text x="437" y="255" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">bundle + weights + runtime</text>
+<text x="437" y="270" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">offline-first</text>
+<rect x="424" y="296" width="388" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="437" y="315" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Preflight</text>
+<text x="437" y="331" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">device / runtime / Python ABI</text>
+<text x="437" y="346" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">runtime cell 匹配</text>
+<rect x="424" y="372" width="388" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="437" y="391" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">运行时 / venv</text>
+<text x="437" y="407" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">flashcli-bundle[infer]</text>
+<text x="437" y="422" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">manifest python_dependencies</text>
+<rect x="424" y="448" width="388" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="437" y="467" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">权重准备</text>
+<text x="437" y="483" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">共享权重存储 + 断点续传</text>
+<text x="437" y="498" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">post_pull / extra_pull</text>
+<rect x="424" y="524" width="388" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="437" y="543" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Entry 选择</text>
+<text x="437" y="559" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">python / native-exec / native-abi</text>
+<text x="437" y="574" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">run / serve</text>
+<rect x="424" y="600" width="388" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="437" y="619" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">离线复用</text>
+<text x="437" y="635" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">完成准备后不再联网</text>
+<text x="437" y="650" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">首次请求只触发一次准备</text>
+<rect x="858" y="160" width="330" height="240" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="880" cy="188" r="4.2" fill="#0F766E"/>
+<text x="892" y="194" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Entry</text>
+<rect x="874" y="220" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="887" y="239" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">RunEngine / ServeEngine</text>
+<text x="887" y="255" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">bundle venv python</text>
+<text x="887" y="270" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">host 传入参数</text>
+<rect x="874" y="296" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="887" y="315" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Native backend</text>
+<text x="887" y="331" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">native-exec process</text>
+<text x="887" y="346" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">native-abi library</text>
+<rect x="858" y="430" width="330" height="230" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="880" cy="458" r="4.2" fill="#2563EB"/>
+<text x="892" y="464" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">命令</text>
+<rect x="874" y="490" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="887" y="509" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">run</text>
+<text x="887" y="525" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">一次推理 / 任务</text>
+<text x="887" y="540" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">stdout + exit code</text>
+<rect x="874" y="566" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="887" y="585" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">serve</text>
+<text x="887" y="601" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">host HTTP / WS surface</text>
+<text x="887" y="616" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">OpenAI / Anthropic</text>
+<rect x="858" y="690" width="330" height="130" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="880" cy="718" r="4.2" fill="#B45309"/>
+<text x="892" y="724" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">边界</text>
+<rect x="874" y="740" width="298" height="47" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="887" y="759" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">不含 host 模型逻辑</text>
+<text x="887" y="775" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">bundle 拥有推理与预处理</text>
+<rect x="1218" y="160" width="334" height="330" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="1240" cy="188" r="4.2" fill="#0F766E"/>
+<text x="1252" y="194" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">共享运行时</text>
+<rect x="1234" y="220" width="302" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="1247" y="239" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">FlashRT</text>
+<text x="1247" y="255" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">inference runtime / kernels</text>
+<text x="1247" y="270" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">platform backend</text>
+<rect x="1234" y="296" width="302" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="1247" y="315" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Python infer</text>
+<text x="1247" y="331" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">bundle_venv/bin/python</text>
+<text x="1247" y="346" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">-m flashcli_bundle.infer</text>
+<rect x="1234" y="372" width="302" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="1247" y="391" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">运行时缓存</text>
+<text x="1247" y="407" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">runtime cell / ABI</text>
+<text x="1247" y="422" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">被多个 ref 复用</text>
+<rect x="1218" y="520" width="334" height="300" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="1240" cy="548" r="4.2" fill="#2563EB"/>
+<text x="1252" y="554" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">调用方</text>
+<rect x="1234" y="580" width="302" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="1247" y="599" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">flashserver</text>
+<text x="1247" y="615" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">gateway / scheduler</text>
+<text x="1247" y="630" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">resident lifecycle</text>
+<rect x="1234" y="656" width="302" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="1247" y="675" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">CLI</text>
+<text x="1247" y="691" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">pull / run / serve</text>
+<text x="1247" y="706" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">本地调试</text>
+<rect x="1234" y="732" width="302" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="1247" y="751" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Apps / desktop</text>
+<text x="1247" y="767" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">只调用 /v1</text>
+<text x="1247" y="782" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">不接触 child endpoint</text>
+<path d="M 378 300 L 408 300" fill="none" stroke="#2563EB" stroke-width="1.4" marker-end="url(#arrow-blue)"/>
+<text x="393" y="288" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">ref</text>
+<path d="M 828 300 L 858 300" fill="none" stroke="#0F766E" stroke-width="1.4" marker-end="url(#arrow-green)"/>
+<path d="M 828 600 L 858 600" fill="none" stroke="#0F766E" stroke-width="1.4" marker-end="url(#arrow-green)"/>
+<path d="M 1188 300 L 1218 300" fill="none" stroke="#0F766E" stroke-width="1.4" marker-end="url(#arrow-green)"/>
 </svg>

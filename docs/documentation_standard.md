@@ -12,7 +12,7 @@ is kept in sync. Follow this standard for every new or moved document.
 | `docs/` | Authoritative specifications, standards, user guides, and architecture. One concept per file. |
 | `docs/plans/` | Delivery plans and milestone checklists. Plans are **not** behavior contracts. |
 | `docs/README.md` / `docs/README.zh-CN.md` | Documentation index; every document must be listed. |
-| `docs/images/` | Architecture/flow diagrams (`.svg`/`.png`) and their Graphviz `.dot` sources. |
+| `docs/images/` | Architecture/flow diagrams: authoritative `.svg` sources plus rendered `.png` files. Requirements: [CONTRIBUTING.md → Architecture and flow diagrams](../CONTRIBUTING.md#architecture-and-flow-diagrams). |
 | Root `README.md`, `AGENTS.md`, `CONTRIBUTING.md` | Project overview and contributor rules (not feature specs). |
 
 Do not create new subdirectories under `docs/` without updating this standard

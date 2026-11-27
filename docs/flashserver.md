@@ -20,6 +20,8 @@ flowchart LR
 
 - **One service, many models** — loads and unloads cached bundles on demand;
   admission is bounded by free VRAM and an optional slot limit.
+- **OpenAI/Anthropic gateway** — standard routes are capability-gated; bundles
+  can also expose custom `/v1/*` routes through `register_routes`.
 - **Local console + HTTP API** — embedded UI at `http://localhost:8790/`, API
   reference at `/docs`, contract at `/openapi.yaml`, live state over `/api/v1/ws`.
 - **Desktop client** — Windows package with overview, model management, logs, and

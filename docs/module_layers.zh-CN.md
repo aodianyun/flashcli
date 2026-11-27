@@ -84,6 +84,7 @@ Go 主机**不** import Python infer 包；它以子进程启动（或驱动原�
 | 包 | 职责 |
 |----|------|
 | `host` | **CLI 与 flashserver 共用的缓存/运行时服务层**：marker、bundle 可用性/serve 能力、权重 key/就绪、每 bundle 运行时路径/大小、磁盘统计、ref 路径解析、清理 |
+| `apps` | CLI 与 flashserver 共用的应用安装/准备/setup/激活与状态判断 |
 | `cli` | 面向用户的命令（`run`/`serve`/`pull`/`bundle`/`models`/`cache`/`doctor`/`du`/`upgrade`/`version`） |
 | `ref`、`flashhub` | ref 解析、FlashHub index + 树同步 |
 | `weights` | HF/ModelScope 下载、缓存、`post_pull`、`extra_pull` |

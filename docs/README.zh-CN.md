@@ -14,7 +14,7 @@
 | [documentation_standard.zh-CN.md](documentation_standard.zh-CN.md) | 贡献者 | **权威** 文档目录、命名、镜像、索引与检查清单 |
 | [development_verification_standard.zh-CN.md](development_verification_standard.zh-CN.md) | 贡献者 | **权威** 合并前验证分层、测试二进制、契约检查、PR 完成标准 |
 | [release_verification_standard.zh-CN.md](release_verification_standard.zh-CN.md) | 维护者 | **权威** 发布门禁、版本号、资产、发布、说明与发布后检查 |
-| [images/](images/) | 所有人 | 架构图与流程图（SVG/PNG）及 Graphviz 源文件 |
+| [images/](images/) | 所有人 | 架构图与流程图：权威 SVG 源文件 + 渲染后的 PNG |
 | [flashcli_system_overview.zh-CN.docx](flashcli_system_overview.zh-CN.docx) | 非技术读者 | 系统、模块与流程的中文 Word 说明 |
 | [flashserver.zh-CN.md](flashserver.zh-CN.md) | 用户 / 集成方 | `flashserver`、`flashserver-setup`、桌面客户端：安装、API、启动参数、生命周期、排障 |
 | [flashserver-api.zh-CN.md](flashserver-api.zh-CN.md) | 集成方 | API 端点索引与示例；schema 见 openapi.yaml |

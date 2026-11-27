@@ -291,6 +291,19 @@ Docs are part of the product and this is a **public repository** — treat them 
 - **Verify relative links** after moving/renaming files (plans refer to root specs as `../<spec>.md`).
 - **When behavior changes**, update together: the authoritative spec (`docs/*.md`), the affected bundle `README`/`BUILD`, and `docs/environment.md` if env vars changed.
 
+### Architecture and flow diagrams
+
+`docs/images/` is the only home for diagrams. A stale or inconsistent diagram is a documentation bug, not decoration.
+
+- **Pairing and naming.** Every diagram ships as `<name>.en.svg` + `<name>.en.png` and `<name>.zh-CN.svg` + `<name>.zh-CN.png`. Both languages must show the same boxes, arrows, and labels; only the text changes. Update [docs/architecture.md](docs/architecture.md) and its zh-CN mirror in the same change.
+- **Canvas and hierarchy.** 1600×900, light background (`#F7F9FC`), 48 px outer margins. Title 34 px/700 at the top left, `v1` at the top right, a 1 px divider at y=100, uppercase column labels at y=132. Use at most four columns.
+- **Cards, not colored blobs.** Use white group cards (16 px radius, soft shadow, `#E2E8F0` border) with a 4 px accent dot and an 18.5 px title. Items are `#F8FAFC` cards (9 px radius) with a 12.1 px semibold title and 10.3 px muted lines. Left-align card text; do not center paragraphs inside cards.
+- **Palette.** Ink `#0F172A`, body `#475569`, muted `#94A3B8`, lines `#E2E8F0`, card `#FFFFFF`, item `#F8FAFC`. Accents: blue `#2563EB` (data/request), green `#0F766E` (local execution), amber `#B45309` (external/disk), red `#DC2626` (failure). No gradients or pastel fills.
+- **Arrows.** 1.4 px straight or orthogonal lines with one semantic accent color. Labels are optional, 10.5 px muted, and must fit the gap; omit the label rather than clipping it. Do not cross cards; route around them.
+- **Content.** One concept per diagram: overview, run/serve, gateway/scheduler, bundle/runtime stack, Go module map, FlashHub flow, or app lifecycle. Match the authoritative spec; do not invent routes or states. Show the gateway split (`/v1` vs `/api/v1`), scheduler ownership, and custom-path passthrough where relevant.
+- **Source and rendering.** The SVG is authoritative; never hand-edit a PNG. Render with `rsvg-convert -w 1600 -h 900 -o docs/images/<name>.<lang>.png docs/images/<name>.<lang>.svg`. Check at 100% and 50% for clipped text, CJK glyphs, arrow labels, and both languages before committing.
+- **No second source of truth.** Hand-laid SVG replaces Graphviz `.dot`; delete stale `.dot` files instead of keeping both.
+
 ## Reporting issues
 
 Include:

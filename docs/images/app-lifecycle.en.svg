@@ -1,59 +1,76 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
-<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/></marker></defs>
-<rect width="1600" height="900" fill="#f7f9fc"/>
-<text x="800.0" y="46" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="28" font-weight="700" fill="#0f172a">flashserver application lifecycle</text>
-<text x="800.0" y="74" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="14" fill="#64748b">install → prepare → setup → ready; models are always started on demand by the scheduler</text>
-<rect x="40" y="350" width="240" height="110" rx="12" fill="#e0e7ff" stroke="#818cf8" stroke-width="1.4"/>
-<text x="160.0" y="374" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#1f2937">PLANNED</text>
-<text x="160.0" y="394" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">manifest valid</text>
-<text x="160.0" y="410" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">platform supported</text>
-<rect x="330" y="350" width="250" height="110" rx="12" fill="#ffedd5" stroke="#f97316" stroke-width="1.4"/>
-<text x="455.0" y="374" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#1f2937">INSTALL</text>
-<text x="455.0" y="394" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">client script / installer</text>
-<text x="455.0" y="410" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">or skip (models only)</text>
-<rect x="630" y="350" width="250" height="110" rx="12" fill="#fef9c3" stroke="#eab308" stroke-width="1.4"/>
-<text x="755.0" y="374" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#1f2937">PREPARED</text>
-<text x="755.0" y="394" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">default bundles</text>
-<text x="755.0" y="410" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">disk ready (preload)</text>
-<rect x="930" y="350" width="250" height="110" rx="12" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.4" stroke-dasharray="7 5"/>
-<text x="1055.0" y="374" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#1f2937">SETUP (action)</text>
-<text x="1055.0" y="394" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">not a stored state</text>
-<text x="1055.0" y="410" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">write gateway connection</text>
-<text x="1055.0" y="426" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">run confirmed setup scripts</text>
-<rect x="1230" y="350" width="240" height="110" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="1.4"/>
-<text x="1350.0" y="374" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#1f2937">READY</text>
-<text x="1350.0" y="394" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">app configured</text>
-<text x="1350.0" y="410" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">inference goes to /v1</text>
-<rect x="330" y="180" width="250" height="100" rx="12" fill="#fee2e2" stroke="#ef4444" stroke-width="1.4"/>
-<text x="455.0" y="204" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#1f2937">FAILED</text>
-<text x="455.0" y="224" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">install/prepare failed</text>
-<text x="455.0" y="240" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">logs retained</text>
-<rect x="1230" y="600" width="330" height="100" rx="12" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.4"/>
-<text x="1395.0" y="624" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#1f2937">Gateway /v1</text>
-<text x="1395.0" y="644" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">scheduler starts residents</text>
-<text x="1395.0" y="660" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">app has no PID / endpoint</text>
-<rect x="40" y="600" width="500" height="100" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.4"/>
-<text x="290.0" y="624" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#1f2937">Invariant</text>
-<text x="290.0" y="644" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">App state never stores a model pid or child endpoint.</text>
-<text x="290.0" y="660" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#475569">All inference goes through the gateway.</text>
-<path d="M 280,405 L 330,405" fill="none" stroke="#64748b" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="305" y="395" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#64748b" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">install</text>
-<path d="M 580,405 L 630,405" fill="none" stroke="#64748b" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="605" y="395" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#64748b" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">script / installer done</text>
-<path d="M 880,405 L 930,405" fill="none" stroke="#64748b" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="905" y="395" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#64748b" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">explicit setup</text>
-<path d="M 1180,405 L 1230,405" fill="none" stroke="#64748b" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="1205" y="395" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#64748b" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">setup ok</text>
-<path d="M 1180,440 L 1230,440" fill="none" stroke="#f59e0b" stroke-width="1.6" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<text x="1205" y="432" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#f59e0b" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">script failed, still READY</text>
-<path d="M 455,350 L 455,280" fill="none" stroke="#ef4444" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="420" y="310" text-anchor="end" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#ef4444" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">failed</text>
-<path d="M 520,280 L 520,350" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<text x="527" y="330" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#94a3b8" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">retry</text>
-<path d="M 160,350 L 160,300 L 755,300 L 755,350" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<text x="450" y="290" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#94a3b8" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">skip / no model</text>
-<path d="M 1350,460 L 1350,600" fill="none" stroke="#0284c7" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="1358" y="540" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#0284c7" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">inference request</text>
-<path d="M 1230,460 L 1205,460 L 1205,760 L 600,760 L 600,500 L 280,500 L 280,460" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
-<text x="750" y="750" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.5" fill="#94a3b8" stroke="#f7f9fc" stroke-width="4" paint-order="stroke">uninstall / reinstall</text>
+<defs>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0F172A" flood-opacity="0.06"/></filter>
+<marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#2563EB"/></marker>
+<marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#0F766E"/></marker>
+<marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#B45309"/></marker>
+<marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#DC2626"/></marker>
+</defs>
+<rect width="1600" height="900" fill="#F7F9FC"/>
+<path d="M 48 100 L 1552 100" stroke="#E2E8F0" stroke-width="1"/>
+<text x="48" y="64" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="34" font-weight="700" fill="#0F172A">flashserver app lifecycle</text>
+<text x="1552" y="64" text-anchor="end" font-family="JetBrains Mono, Consolas, monospace" font-size="12" font-weight="400" fill="#94A3B8">v1</text>
+<rect x="48" y="160" width="1504" height="470" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="70" cy="188" r="4.2" fill="#2563EB"/>
+<text x="82" y="194" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">App lifecycle</text>
+<rect x="64" y="250" width="240" height="132" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="84" cy="278" r="4.2" fill="#2563EB"/>
+<text x="96" y="284" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="16" font-weight="700" fill="#0F172A">PLANNED</text>
+<text x="84" y="320" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11" font-weight="400" fill="#475569">valid manifest</text>
+<text x="84" y="342" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11" font-weight="400" fill="#94A3B8">platform supported</text>
+<rect x="356" y="250" width="240" height="132" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="376" cy="278" r="4.2" fill="#B45309"/>
+<text x="388" y="284" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="16" font-weight="700" fill="#0F172A">INSTALL</text>
+<text x="376" y="320" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11" font-weight="400" fill="#475569">client script / installer</text>
+<text x="376" y="342" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11" font-weight="400" fill="#94A3B8">or skip (prepare models)</text>
+<rect x="648" y="250" width="240" height="132" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="668" cy="278" r="4.2" fill="#0F766E"/>
+<text x="680" y="284" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="16" font-weight="700" fill="#0F172A">PREPARED</text>
+<text x="668" y="320" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11" font-weight="400" fill="#475569">default bundles</text>
+<text x="668" y="342" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11" font-weight="400" fill="#94A3B8">disk ready (preload)</text>
+<rect x="940" y="250" width="240" height="132" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="960" cy="278" r="4.2" fill="#2563EB"/>
+<text x="972" y="284" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="16" font-weight="700" fill="#0F172A">SETUP</text>
+<text x="960" y="320" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11" font-weight="400" fill="#475569">not a persisted state</text>
+<text x="960" y="342" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11" font-weight="400" fill="#94A3B8">writes gateway connection</text>
+<rect x="1232" y="250" width="240" height="132" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="1252" cy="278" r="4.2" fill="#0F766E"/>
+<text x="1264" y="284" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="16" font-weight="700" fill="#0F172A">READY</text>
+<text x="1252" y="320" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11" font-weight="400" fill="#475569">app configured</text>
+<text x="1252" y="342" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11" font-weight="400" fill="#94A3B8">inference via /v1</text>
+<text x="956" y="366" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">runs confirmed setup scripts</text>
+<path d="M 304 316 L 356 316" fill="none" stroke="#2563EB" stroke-width="1.4" marker-end="url(#arrow-blue)"/>
+<path d="M 596 316 L 648 316" fill="none" stroke="#2563EB" stroke-width="1.4" marker-end="url(#arrow-blue)"/>
+<path d="M 888 316 L 940 316" fill="none" stroke="#2563EB" stroke-width="1.4" marker-end="url(#arrow-blue)"/>
+<path d="M 1180 316 L 1232 316" fill="none" stroke="#2563EB" stroke-width="1.4" marker-end="url(#arrow-blue)"/>
+<rect x="356" y="430" width="240" height="120" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="376" cy="458" r="4.2" fill="#DC2626"/>
+<text x="388" y="464" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="16" font-weight="700" fill="#0F172A">FAILED</text>
+<text x="376" y="500" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11" font-weight="400" fill="#475569">install / prepare failed</text>
+<text x="376" y="522" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11" font-weight="400" fill="#94A3B8">logs kept</text>
+<path d="M 476 382 L 476 430" fill="none" stroke="#DC2626" stroke-width="1.4" marker-end="url(#arrow-red)"/>
+<text x="476" y="414" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">failure</text>
+<text x="64" y="600" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">SETUP failure can retry or return to READY; the app never owns model processes.</text>
+<rect x="48" y="660" width="700" height="180" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="70" cy="688" r="4.2" fill="#0F766E"/>
+<text x="82" y="694" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Runtime boundary</text>
+<rect x="64" y="716" width="668" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="77" y="735" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Gateway /v1</text>
+<text x="77" y="751" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">single inference entry; scheduler starts residents</text>
+<text x="77" y="766" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">app never owns PID / endpoint</text>
+<rect x="64" y="790" width="668" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="77" y="809" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">App status</text>
+<text x="77" y="825" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">app status excludes child endpoints</text>
+<text x="77" y="840" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">inference always through /v1</text>
+<rect x="788" y="660" width="764" height="180" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="810" cy="688" r="4.2" fill="#B45309"/>
+<text x="822" y="694" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Uninstall</text>
+<rect x="804" y="716" width="732" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="817" y="735" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Remove app</text>
+<text x="817" y="751" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">remove app record + install dir</text>
+<text x="817" y="766" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">model cache stays unless explicitly cleaned</text>
+<rect x="804" y="790" width="732" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="817" y="809" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Reinstall</text>
+<text x="817" y="825" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">reinstall does not require model download</text>
+<text x="817" y="840" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">disk state is owned by preload</text>
 </svg>

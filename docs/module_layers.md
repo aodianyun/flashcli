@@ -83,6 +83,7 @@ Command tree, FlashHub sync, weight download, preflight, venv, and backend dispa
 | Package | Role |
 |---------|------|
 | `host` | **Shared cache/runtime service layer** for both the CLI and flashserver: markers, bundle usability/serve capability, weights key/readiness, per-bundle runtime paths/sizes, disk accounting, ref-path resolution, cleanup |
+| `apps` | Application install/prepare/setup/activation and state predicates shared by the CLI and flashserver |
 | `cli` | User-facing commands (`run`/`serve`/`pull`/`bundle`/`models`/`cache`/`doctor`/`du`/`upgrade`/`version`) |
 | `ref`, `flashhub` | Ref parsing, FlashHub index + tree sync |
 | `weights` | HF/ModelScope download, cache, `post_pull`, `extra_pull` |

@@ -16,13 +16,13 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 |---|---|
 | [System overview](images/architecture-overview.en.svg) · [PNG](images/architecture-overview.en.png) | Clients (Desktop, installed apps, CLI), flashserver modules (gateway, scheduler, manager, management, apps, system/GPU), flashcli execution, Model Bundle + FlashRT, shared cache, FlashHub, weight sources |
 | [flashcli run/serve flow](images/flashcli-flow.en.svg) · [PNG](images/flashcli-flow.en.png) | Ref resolution, offline cache, preflight, venv, weights, entry, run/serve |
-| [flashserver gateway/scheduler flow](images/flashserver-gateway-flow.en.svg) · [PNG](images/flashserver-gateway-flow.en.png) | `/v1` request path, preload, placement, lease, proxy, release, errors |
+| [flashserver gateway/scheduler flow](images/flashserver-gateway-flow.en.svg) · [PNG](images/flashserver-gateway-flow.en.png) | `/v1` request path, `/api/v1` management, custom-path passthrough, preload, placement, lease, proxy, release, errors |
 | [Model Bundle / FlashRT stack](images/bundle-runtime-stack.en.svg) · [PNG](images/bundle-runtime-stack.en.png) | FlashHub → bundle manifest/entry/runtime cells → venv/weights → FlashRT |
 | [Go host module map](images/go-module-map.en.svg) · [PNG](images/go-module-map.en.png) | Commands → CLI/server frontends → shared host services → execution backends |
 | [FlashHub flow](images/flashhub-flow.en.svg) · [PNG](images/flashhub-flow.en.png) | Publish → catalog/versions → CLI/flashserver/desktop sync |
 | [App lifecycle](images/app-lifecycle.en.svg) · [PNG](images/app-lifecycle.en.png) | install → prepare → setup → ready; no app-owned model start/stop |
 
-The module map, bundle stack, and FlashHub flow have `.en.dot` / `.zh-CN.dot` sources in [`images/`](images/); regenerate with `dot -Tsvg <name>.<lang>.dot -o <name>.<lang>.svg` (and `-Tpng`). The system overview, flashcli flow, gateway/scheduler flow, and app lifecycle are hand-laid SVG.
+All diagrams in [`images/`](images/) are hand-laid SVG. The SVG is authoritative; render PNGs with `rsvg-convert -w 1600 -h 900 -o <name>.<lang>.png <name>.<lang>.svg`. Style requirements: [CONTRIBUTING.md → Architecture and flow diagrams](../CONTRIBUTING.md#architecture-and-flow-diagrams).
 
 For a non-technical introduction, see [flashcli_system_overview.zh-CN.docx](flashcli_system_overview.zh-CN.docx).
 
@@ -133,6 +133,11 @@ logs). The HTTP contract is [openapi.yaml](../go/internal/server/openapi.yaml); 
   scheduler preloads missing assets, starts/stops residents internally, holds a
   lease per active request, and proxies JSON/SSE/multipart/WebSocket traffic to a
   loopback child. Child endpoints are never returned to clients.
+- Standard routes are host-owned and capability-gated. Any other `/v1/*` path is
+  a **bundle-owned custom route** (`register_routes`): the gateway selects the
+  model from the body or `?model=`, strips that selector, and forwards the
+  method, path, body, SSE, and binary response unchanged. Custom paths are not
+  capability-gated; the bundle decides whether the route exists.
 - **Control plane `/api/v1/*`** — management. Cache/model listings, disk
   preload/unload, jobs, applications, devices/scheduler telemetry, logs, and the
   management WebSocket.
@@ -146,7 +151,7 @@ only stops residents and never deletes assets. The authoritative contract is
 
 ```mermaid
 flowchart LR
-  A["Apps / OpenAI SDK"] -- "/v1/*" --> G["OpenAI gateway"]
+  A["Apps / OpenAI SDK"] -- "/v1 standard + custom" --> G["OpenAI gateway"]
   D["Desktop"] -- "/api/v1/*" --> C["Management API"]
   G --> S["Scheduler (leases, placement)"]
   C --> S

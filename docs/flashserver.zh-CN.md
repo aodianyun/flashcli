@@ -19,6 +19,8 @@ flowchart LR
 
 - **一个服务，多个模型** —— 按需加载/卸载本地缓存的 bundle；准入受空闲显存和可选
   槽位上限约束。
+- **OpenAI/Anthropic 网关** —— 标准路由按 capability 开放；bundle 也可以通过
+  `register_routes` 暴露 custom `/v1/*` 路由。
 - **本地控制台 + HTTP API** —— 内置页面 `http://localhost:8790/`，API 参考 `/docs`，
   契约 `/openapi.yaml`，实时状态走 `/api/v1/ws`。
 - **桌面客户端** —— Windows 安装包提供概览、模型管理、日志和设置。

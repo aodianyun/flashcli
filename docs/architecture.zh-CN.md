@@ -16,13 +16,13 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 |---|---|
 | [系统总览](images/architecture-overview.zh-CN.svg) · [PNG](images/architecture-overview.zh-CN.png) | 客户端（桌面端、已安装应用、CLI）、flashserver 模块（网关、调度、管理、应用、系统/GPU）、flashcli 执行、Model Bundle + FlashRT、共享缓存、FlashHub、权重源 |
 | [flashcli run/serve 流程](images/flashcli-flow.zh-CN.svg) · [PNG](images/flashcli-flow.zh-CN.png) | ref 解析、离线缓存、preflight、venv、权重、entry、run/serve |
-| [flashserver 网关/调度流程](images/flashserver-gateway-flow.zh-CN.svg) · [PNG](images/flashserver-gateway-flow.zh-CN.png) | `/v1` 请求、preload、placement、lease、proxy、释放、错误 |
+| [flashserver 网关/调度流程](images/flashserver-gateway-flow.zh-CN.svg) · [PNG](images/flashserver-gateway-flow.zh-CN.png) | `/v1` 请求、`/api/v1` 管理、custom path 透传、preload、placement、lease、proxy、释放、错误 |
 | [Model Bundle / FlashRT 运行时栈](images/bundle-runtime-stack.zh-CN.svg) · [PNG](images/bundle-runtime-stack.zh-CN.png) | FlashHub → manifest/entry/runtime cells → venv/权重 → FlashRT |
 | [Go host 模块地图](images/go-module-map.zh-CN.svg) · [PNG](images/go-module-map.zh-CN.png) | 命令 → CLI/server 前端 → 共享 host 服务 → 执行 backend |
 | [FlashHub 流程](images/flashhub-flow.zh-CN.svg) · [PNG](images/flashhub-flow.zh-CN.png) | 发布 → 目录/版本 → CLI/flashserver/desktop 同步 |
 | [应用生命周期](images/app-lifecycle.zh-CN.svg) · [PNG](images/app-lifecycle.zh-CN.png) | install → prepare → setup → ready；应用不拥有模型启停 |
 
-模块地图、Bundle/FlashRT 栈和 FlashHub 流程的源文件是 [`images/`](images/) 下的 `.en.dot` / `.zh-CN.dot`；重新生成：`dot -Tsvg <name>.<lang>.dot -o <name>.<lang>.svg`（PNG 同理）。系统总览、flashcli 流程、网关/调度流程和应用生命周期是手工排版 SVG。
+[`images/`](images/) 下的所有图都是手工排版 SVG，SVG 是权威源文件；PNG 用 `rsvg-convert -w 1600 -h 900 -o <name>.<lang>.png <name>.<lang>.svg` 渲染。样式要求见 [CONTRIBUTING.md → Architecture and flow diagrams](../CONTRIBUTING.md#architecture-and-flow-diagrams)。
 
 面向非技术读者的介绍见 [flashcli_system_overview.zh-CN.docx](flashcli_system_overview.zh-CN.docx)。
 
@@ -125,6 +125,10 @@ flowchart LR
 - **数据面 `/v1/*`** — OpenAI 兼容网关。应用和桌面在 `model` 中传完整 bundle ref；
   调度器自动准备缺失资产、内部启停 resident、每个 active 请求持有 lease，并把
   JSON/SSE/multipart/WebSocket 代理到 loopback child。child endpoint 绝不返回给客户端。
+- 标准路由由 host 拥有并按 capability 门控。其他 `/v1/*` 路径都是 **bundle 拥有的
+  custom path**（`register_routes`）：网关从 body 或 `?model=` 选择模型、剥离选择器，
+  原样转发 method、path、body、SSE 和二进制响应。custom path 不做 capability 门控，
+  由 bundle 决定路由是否存在。
 - **控制面 `/api/v1/*`** — 管理面：缓存/模型列表、磁盘 preload/unload、任务、应用、
   设备/调度遥测、日志和管理 WebSocket。
 
@@ -135,7 +139,7 @@ resident 启停由调度器负责。自动淘汰只停止 resident，绝不删�
 
 ```mermaid
 flowchart LR
-  A["应用 / OpenAI SDK"] -- "/v1/*" --> G["OpenAI 网关"]
+  A["应用 / OpenAI SDK"] -- "/v1 标准 + custom" --> G["OpenAI 网关"]
   D["桌面"] -- "/api/v1/*" --> C["管理 API"]
   G --> S["调度器（lease、placement）"]
   C --> S

@@ -51,7 +51,7 @@
 <rect x="406.0" y="220.0" width="218.0" height="106.0" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
 <text x="419.0" y="260.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >网关 /v1</text>
 <text x="419.0" y="277.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >统一推理入口</text>
-<text x="419.0" y="291.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >OpenAI/Anthropic · SSE/文件</text>
+<text x="419.0" y="291.5" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8" opacity="1.0" >OpenAI/Anthropic · custom /v1/*</text>
 <rect x="636.0" y="220.0" width="218.0" height="106.0" rx="9" fill="#F8FAFC" stroke="#E8EEF5"/>
 <text x="649.0" y="260.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A" opacity="1.0" >调度器</text>
 <text x="649.0" y="277.0" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10.3" font-weight="400" fill="#475569" opacity="1.0" >端侧算力调度</text>

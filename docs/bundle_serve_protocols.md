@@ -59,14 +59,14 @@ These categories may expose native routes through `register_routes` (for example
 
 ### 1.2 Custom paths and model selection
 
-The gateway owns `/v1/models` and the standard OpenAI/Anthropic routes. Any other `/v1/*` path is a **custom path** and is forwarded to the selected model's serve endpoint.
+The gateway owns `/v1/models`, `/v1/models/{id}`, and the standard OpenAI/Anthropic routes, including the `/v1/responses/{id}` and `/v1/videos*` subroutes. Any other `/v1/*` path is a **custom path** and is forwarded to the selected model's serve endpoint.
 
 The gateway is multi-model, so a custom request must select the resident model:
 
 - if the JSON/multipart body has a `model` field, that full bundle ref selects the model;
 - otherwise pass the selector as a query parameter: `?model=<namespace/name:version>` (used by GET/DELETE and by bodies that intentionally omit `model`, such as audio separation).
 
-The gateway resolves the resident model, strips the `model` query before forwarding, and leaves the path/body unchanged. Direct `flashcli serve` ignores the query. `/v1/models` is **not** a custom path: it remains the host-owned gateway model list and is never passed through.
+The gateway resolves the resident model, strips the `model` query before forwarding, and leaves the path/body unchanged. Direct `flashcli serve` ignores the query. `/v1/models*`, `/v1/responses/*`, and `/v1/videos/*` are host-owned and are never passed through as custom paths.
 
 ### 1.3 Engine-mode defaults (host-owned)
 

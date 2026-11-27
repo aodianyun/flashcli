@@ -34,6 +34,8 @@ Everything else is a convention or recommendation: the `runtime/` directory name
 
 ### 1.1 Category standards (mandatory supplements)
 
+**Base contract (no separate supplement):** LLM, VLM, embedding/rerank, and standard image/video engine-serve bundles are covered by this standard plus [bundle_serve_protocols.md](bundle_serve_protocols.md). The table below lists only categories that have additional mandatory rules.
+
 Some model categories have additional serving and packaging rules. A bundle in one of these categories **MUST** also satisfy its category standard; a bundle that does not is not publishable.
 
 | Category | FlashHub tag | Standard | Typical integration |
