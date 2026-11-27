@@ -311,7 +311,7 @@ GPU runtime 必填：
 3. 有兼容 GPU runtime 时优先 GPU。
 4. `gpu_count > 1` 时预留同样数量的 GPU，每张都要满足 VRAM 需求：已声明的 bundle 为
    `min_vram_mib + vram_headroom_mib`，未声明 `min_vram_mib` 的 legacy bundle 使用保守的
-   6144 MiB 下限（显式 headroom `0` 可关闭预留）；全部成功或全部失败。
+   6144 MiB 下限（`FLASHCLI_VRAM_HEADROOM_MIB=0` 可关闭预留）；全部成功或全部失败。
 5. 没有兼容 GPU runtime 且 bundle 有 CPU runtime cell 时，CPU 才是候选。
    CPU 用 `min_ram_mib`（如果声明），否则使用可配置 RAM headroom，best-effort 准入。
 6. **有 GPU runtime 但显存暂时不足时，不降级 CPU**；先淘汰空闲 resident、排队或 503。

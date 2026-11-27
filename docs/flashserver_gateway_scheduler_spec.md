@@ -328,8 +328,9 @@ Optional:
 3. Prefer a GPU placement when a compatible GPU runtime exists.
 4. For `gpu_count > 1`, reserve that many GPUs each satisfying
    `vramNeedMiB`: `min_vram_mib + vram_headroom_mib` for declared bundles, or a
-   conservative 6144 MiB floor when `min_vram_mib` is absent (an explicit
-   headroom of `0` disables the reservation). Reservation is all-or-nothing.
+   conservative 6144 MiB floor when `min_vram_mib` is absent
+   (`FLASHCLI_VRAM_HEADROOM_MIB=0` disables the reservation). Reservation is
+   all-or-nothing.
 5. If no compatible GPU runtime exists and the bundle has a CPU runtime cell,
    CPU is a candidate. CPU uses `min_ram_mib` when declared, otherwise a
    configurable RAM headroom and best-effort admission.
