@@ -328,6 +328,299 @@ func TestDownloadFileRetriesConnectionClosedBeforeResponseHeaders(t *testing.T) 
 	}
 }
 
+func TestSweepDownloadTempsRemovesOnlyOldOwnedFilesRecursively(t *testing.T) {
+	root := t.TempDir()
+	nested := filepath.Join(root, "weights", "part")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(root, ".flashhub-download-abandoned")
+	nestedStale := filepath.Join(nested, ".flashhub-download-abandoned")
+	fresh := filepath.Join(root, ".flashhub-download-recent")
+	formal := filepath.Join(nested, "model.bin")
+	unrelated := filepath.Join(root, "notes.tmp")
+	legacyIncomplete := filepath.Join(nested, "model.bin.incomplete")
+	for _, path := range []string{stale, nestedStale, fresh, formal, unrelated, legacyIncomplete} {
+		if err := os.WriteFile(path, []byte("keep or remove"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	now := time.Now()
+	old := now.Add(-staleDownloadTempAge - time.Minute)
+	for _, path := range []string{stale, nestedStale} {
+		if err := os.Chtimes(path, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := sweepDownloadTemps(root, now, nil); err != nil {
+		t.Fatalf("first sweep: %v", err)
+	}
+	if err := sweepDownloadTemps(root, now, nil); err != nil {
+		t.Fatalf("repeated sweep: %v", err)
+	}
+	for _, path := range []string{stale, nestedStale} {
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("stale temporary file %q remains: %v", path, err)
+		}
+	}
+	for _, path := range []string{fresh, formal, unrelated, legacyIncomplete} {
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("protected file %q was removed: %v", path, err)
+		}
+	}
+}
+
+func TestSweepDownloadTempsReportsRemovalFailure(t *testing.T) {
+	root := t.TempDir()
+	temp := filepath.Join(root, ".flashhub-download-stale")
+	if err := os.WriteFile(temp, []byte("partial"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-staleDownloadTempAge - time.Minute)
+	if err := os.Chtimes(temp, old, old); err != nil {
+		t.Fatal(err)
+	}
+	wantErr := errors.New("injected remove failure")
+	err := sweepDownloadTemps(root, time.Now(), func(string) error { return wantErr })
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("sweep error = %v, want injected remove error", err)
+	}
+	if _, statErr := os.Stat(temp); statErr != nil {
+		t.Fatalf("failed removal changed file: %v", statErr)
+	}
+}
+
+func TestSweepDownloadTempsCannotFollowParentSymlinkSwapOutsideRoot(t *testing.T) {
+	root := t.TempDir()
+	nested := filepath.Join(root, "nested")
+	outside := t.TempDir()
+	if err := os.Mkdir(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	insideTemp := filepath.Join(nested, ".flashhub-download-stale")
+	outsideTemp := filepath.Join(outside, ".flashhub-download-stale")
+	for _, path := range []string{insideTemp, outsideTemp} {
+		if err := os.WriteFile(path, []byte("partial"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		old := time.Now().Add(-staleDownloadTempAge - time.Minute)
+		if err := os.Chtimes(path, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rootFS, err := os.OpenRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rootFS.Close()
+	swapped := false
+	err = sweepDownloadTemps(root, time.Now(), func(path string) error {
+		if !swapped {
+			moved := filepath.Join(root, "nested-moved")
+			if err := os.Rename(nested, moved); err != nil {
+				return err
+			}
+			if err := os.Symlink(outside, nested); err != nil {
+				t.Skipf("symlink creation is unavailable: %v", err)
+			}
+			swapped = true
+		}
+		return rootFS.Remove(filepath.FromSlash(path))
+	})
+	if err == nil {
+		t.Fatal("sweep unexpectedly removed through the swapped parent symlink")
+	}
+	if _, err := os.Stat(outsideTemp); err != nil {
+		t.Fatalf("outside temporary file was removed: %v", err)
+	}
+}
+
+func TestSweepDownloadTempsSkipsSymlinkBundleRoot(t *testing.T) {
+	parent := t.TempDir()
+	outside := t.TempDir()
+	temp := filepath.Join(outside, ".flashhub-download-stale")
+	if err := os.WriteFile(temp, []byte("partial"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-staleDownloadTempAge - time.Minute)
+	if err := os.Chtimes(temp, old, old); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(parent, "bundle-link")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlink creation is unavailable: %v", err)
+	}
+	if err := sweepDownloadTemps(link, time.Now(), nil); err != nil {
+		t.Fatalf("sweep symlink root: %v", err)
+	}
+	if _, err := os.Stat(temp); err != nil {
+		t.Fatalf("file outside the selected Bundle root was removed: %v", err)
+	}
+}
+
+func TestRemoveDownloadTempUnregistersAfterRemovalFailure(t *testing.T) {
+	root := t.TempDir()
+	temp := filepath.Join(root, ".flashhub-download-stale")
+	if err := os.Mkdir(temp, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(temp, "child"), []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	markDownloadTempActive(temp)
+	if err := removeDownloadTemp(temp); err == nil {
+		t.Fatal("removeDownloadTemp unexpectedly removed a non-empty directory")
+	}
+	if downloadTempIsActive(temp) {
+		t.Fatal("failed removal left the completed path registered as active")
+	}
+}
+
+func TestSyncBundleSweepsStaleTempsBeforeFetchingIndex(t *testing.T) {
+	root := t.TempDir()
+	stale := filepath.Join(root, ".flashhub-download-abandoned")
+	if err := os.WriteFile(stale, []byte("partial"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-staleDownloadTempAge - time.Minute)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	var indexRequested atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		indexRequested.Store(true)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	client := NewClient()
+	client.HTTP = srv.Client()
+	client.CacheDir = filepath.Join(t.TempDir(), "index-cache")
+
+	if _, err := client.SyncBundle(context.Background(), srv.URL+"/index", root, "", nil, true); err == nil {
+		t.Fatal("SyncBundle unexpectedly succeeded with a failing index endpoint")
+	}
+	if !indexRequested.Load() {
+		t.Fatal("SyncBundle did not proceed to fetch the index")
+	}
+	if _, err := os.Stat(stale); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stale temporary file remains after SyncBundle start: %v", err)
+	}
+}
+
+func TestSyncBundleContinuesAfterSweepError(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(root, []byte("file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var indexRequested atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		indexRequested.Store(true)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	client := NewClient()
+	client.HTTP = srv.Client()
+	client.CacheDir = filepath.Join(t.TempDir(), "index-cache")
+
+	if _, err := client.SyncBundle(context.Background(), srv.URL+"/index", root, "", nil, true); err == nil || !strings.Contains(err.Error(), "HTTP 500") {
+		t.Fatalf("SyncBundle error = %v, want the index request error after a cleanup warning", err)
+	}
+	if !indexRequested.Load() {
+		t.Fatal("SyncBundle did not continue to fetch the index after cleanup failed")
+	}
+}
+
+func TestSyncBundleSweepPreservesConcurrentDownloadTemp(t *testing.T) {
+	manifest := []byte(`{"name":"test"}`)
+	activePayload := []byte("active payload")
+	activeStarted := make(chan struct{}, 1)
+	releaseActive := make(chan struct{})
+	defer func() {
+		select {
+		case <-releaseActive:
+		default:
+			close(releaseActive)
+		}
+	}()
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/active":
+			w.Header().Set("Content-Length", fmt.Sprint(len(activePayload)))
+			_, _ = w.Write(activePayload[:1])
+			w.(http.Flusher).Flush()
+			activeStarted <- struct{}{}
+			<-releaseActive
+			_, _ = w.Write(activePayload[1:])
+		case "/index":
+			index, err := json.Marshal(map[string]any{"code": 0, "data": map[string]any{"files": []any{
+				map[string]any{"download_url": srv.URL + "/flashcli-bundle.json", "file_name": ManifestPath, "file_size": len(manifest), "md5_hash": payloadMD5(manifest)},
+			}}})
+			if err != nil {
+				t.Errorf("marshal index: %v", err)
+				return
+			}
+			_, _ = w.Write(index)
+		case "/flashcli-bundle.json":
+			_, _ = w.Write(manifest)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	bundleDir := t.TempDir()
+	client := testDownloadClient(srv.Client())
+	activeDest := filepath.Join(bundleDir, "weights", "model.bin")
+	activeResult := make(chan error, 1)
+	go func() {
+		activeResult <- client.DownloadFile(context.Background(), File{Path: "weights/model.bin", URL: srv.URL + "/active", Size: int64(len(activePayload))}, activeDest, true, true, nil)
+	}()
+	select {
+	case <-activeStarted:
+	case <-time.After(time.Second):
+		t.Fatal("concurrent download did not start")
+	}
+	tempPattern := filepath.Join(filepath.Dir(activeDest), ".flashhub-download-*")
+	var matches []string
+	var err error
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		matches, err = filepath.Glob(tempPattern)
+		if err != nil || len(matches) > 0 {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("active temporary files = %v, err = %v", matches, err)
+	}
+	old := time.Now().Add(-staleDownloadTempAge - time.Minute)
+	if err := os.Chtimes(matches[0], old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	syncClient := NewClient()
+	syncClient.HTTP = srv.Client()
+	syncClient.CacheDir = filepath.Join(t.TempDir(), "index-cache")
+	if _, err := syncClient.SyncBundle(context.Background(), srv.URL+"/index", bundleDir, "", nil, true); err != nil {
+		t.Fatalf("SyncBundle: %v", err)
+	}
+	if _, err := os.Stat(matches[0]); err != nil {
+		t.Fatalf("SyncBundle removed active temporary file: %v", err)
+	}
+	close(releaseActive)
+	if err := <-activeResult; err != nil {
+		t.Fatalf("concurrent DownloadFile: %v", err)
+	}
+	got, err := os.ReadFile(activeDest)
+	if err != nil || string(got) != string(activePayload) {
+		t.Fatalf("active destination = %q, err = %v", got, err)
+	}
+	assertNoDownloadTemps(t, activeDest)
+}
+
 func TestSyncBundleProgressIsLiveAndBoundedAcrossRetry(t *testing.T) {
 	previousQuiet := progress.IsQuiet()
 	progress.SetQuiet(true)

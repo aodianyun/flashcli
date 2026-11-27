@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"io/fs"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -113,8 +115,16 @@ var downloadPathLocks = struct {
 	entries map[string]*downloadPathLock
 }{entries: make(map[string]*downloadPathLock)}
 
-// acquireDownloadPath serializes final validation and rename for one path.
-func acquireDownloadPath(ctx context.Context, path string) (func(), error) {
+// activeDownloadTemps prevents this process's startup sweep from removing a live attempt.
+var activeDownloadTemps = struct {
+	sync.Mutex
+	paths map[string]struct{}
+}{paths: make(map[string]struct{})}
+
+// staleDownloadTempAge is a conservative age filter for files owned by other processes.
+const staleDownloadTempAge = 24 * time.Hour
+
+func downloadPathKey(path string) string {
 	key, err := filepath.Abs(path)
 	if err != nil {
 		key = filepath.Clean(path)
@@ -124,6 +134,31 @@ func acquireDownloadPath(ctx context.Context, path string) (func(), error) {
 	if runtime.GOOS == "windows" {
 		key = strings.ToLower(key)
 	}
+	return key
+}
+
+func markDownloadTempActive(path string) {
+	activeDownloadTemps.Lock()
+	activeDownloadTemps.paths[downloadPathKey(path)] = struct{}{}
+	activeDownloadTemps.Unlock()
+}
+
+func markDownloadTempInactive(path string) {
+	activeDownloadTemps.Lock()
+	delete(activeDownloadTemps.paths, downloadPathKey(path))
+	activeDownloadTemps.Unlock()
+}
+
+func downloadTempIsActive(path string) bool {
+	activeDownloadTemps.Lock()
+	_, active := activeDownloadTemps.paths[downloadPathKey(path)]
+	activeDownloadTemps.Unlock()
+	return active
+}
+
+// acquireDownloadPath serializes final validation and rename for one path.
+func acquireDownloadPath(ctx context.Context, path string) (func(), error) {
+	key := downloadPathKey(path)
 
 	downloadPathLocks.Lock()
 	lock := downloadPathLocks.entries[key]
@@ -376,6 +411,7 @@ func (c *Client) downloadFile(ctx context.Context, f File, dest string, force, q
 				}
 				return fmt.Errorf("download %s failed after %d attempt(s): replace destination: %w", f.Path, attempt, err)
 			}
+			markDownloadTempInactive(tmpPath)
 			notifyDownloadedBytes(onBytes, size)
 			return nil
 		}
@@ -585,6 +621,7 @@ func (c *Client) downloadAttempt(parent context.Context, client *http.Client, po
 		return "", 0, false, 0, &downloadFailure{reason: "create temporary file failed", cause: err}
 	}
 	tmpPath := out.Name()
+	markDownloadTempActive(tmpPath)
 	closed := false
 	closeOut := func() error {
 		if closed {
@@ -710,10 +747,91 @@ func matchesFileMetadata(f File, path string) (bool, error) {
 }
 
 func removeDownloadTemp(path string) error {
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+	err := os.Remove(path)
+	markDownloadTempInactive(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return nil
+}
+
+func sweepDownloadTemps(root string, now time.Time, remove func(string) error) error {
+	rootInfo, err := os.Lstat(root)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("inspect bundle directory: %w", err)
+	}
+	if rootInfo.Mode()&os.ModeSymlink != 0 {
+		// Do not follow a linked Bundle root into an unrelated directory tree.
+		return nil
+	}
+	if !rootInfo.IsDir() {
+		return fmt.Errorf("bundle path %s is not a directory", root)
+	}
+	rootFS, err := os.OpenRoot(root)
+	if err != nil {
+		return fmt.Errorf("open bundle directory: %w", err)
+	}
+	defer rootFS.Close()
+	openedRootInfo, err := rootFS.Stat(".")
+	if err != nil {
+		return fmt.Errorf("inspect opened bundle directory: %w", err)
+	}
+	if !os.SameFile(rootInfo, openedRootInfo) {
+		// The root path changed between Lstat and OpenRoot.
+		return fmt.Errorf("bundle directory changed while opening: %s", root)
+	}
+	if remove == nil {
+		remove = func(path string) error {
+			return rootFS.Remove(filepath.FromSlash(path))
+		}
+	}
+	cutoff := now.Add(-staleDownloadTempAge)
+	var failures []error
+	err = fs.WalkDir(rootFS.FS(), ".", func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			if errors.Is(walkErr, os.ErrNotExist) {
+				return nil
+			}
+			return walkErr
+		}
+		if path == "." || entry.IsDir() || !strings.HasPrefix(entry.Name(), ".flashhub-download-") {
+			return nil
+		}
+		info, err := rootFS.Lstat(filepath.FromSlash(path))
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			failures = append(failures, fmt.Errorf("inspect %s: %w", path, err))
+			return nil
+		}
+		fullPath := filepath.Join(root, filepath.FromSlash(path))
+		if !info.Mode().IsRegular() || !info.ModTime().Before(cutoff) || downloadTempIsActive(fullPath) {
+			return nil
+		}
+		current, err := rootFS.Lstat(filepath.FromSlash(path))
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			failures = append(failures, fmt.Errorf("recheck %s: %w", path, err))
+			return nil
+		}
+		if !os.SameFile(info, current) || !current.Mode().IsRegular() || !current.ModTime().Before(cutoff) || downloadTempIsActive(fullPath) {
+			return nil
+		}
+		if err := remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			failures = append(failures, fmt.Errorf("remove %s: %w", path, err))
+		}
+		return nil
+	})
+	if err != nil {
+		failures = append(failures, fmt.Errorf("scan bundle directory %s: %w", root, err))
+	}
+	return errors.Join(failures...)
 }
 
 func notifyDownloadedBytes(onBytes func(int), total int64) {
@@ -857,6 +975,9 @@ var ErrNotFound = errors.New("flashhub: not found")
 // declared by the manifest so unselected cells are skipped even when they do
 // not live under the legacy top-level runtime/ directory.
 func (c *Client) SyncBundle(ctx context.Context, repoURL, bundleDir, runtimeRel string, allRuntimeRels []string, quiet bool) (map[string]any, error) {
+	if err := sweepDownloadTemps(bundleDir, time.Now(), nil); err != nil {
+		log.Printf("flashhub: could not fully clean stale download files under %q; continuing: %v", bundleDir, err)
+	}
 	// Always fetch a fresh index: a cached one may list artifacts from an
 	// earlier upload (stale download URLs → 404).
 	ix, err := c.FetchIndex(ctx, repoURL, false)
