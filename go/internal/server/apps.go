@@ -126,7 +126,7 @@ func (s *Server) appPrepare(w http.ResponseWriter, r *http.Request) {
 		})
 		return err
 	})
-	writeJSON(w, http.StatusAccepted, map[string]any{"job_id": job.ID, "state": job.State})
+	writeJSON(w, http.StatusAccepted, map[string]any{"job_id": job.ID, "state": job.state()})
 }
 
 // appInstall serves POST /v1/apps/{org}/{name}/install as an async job that
@@ -177,7 +177,7 @@ func (s *Server) appInstall(w http.ResponseWriter, r *http.Request) {
 		_, err := svc.Install(ctx, ref.String(), opts)
 		return err
 	})
-	writeJSON(w, http.StatusAccepted, map[string]any{"job_id": job.ID, "state": job.State})
+	writeJSON(w, http.StatusAccepted, map[string]any{"job_id": job.ID, "state": job.state()})
 }
 
 // appSetup serves POST /api/v1/apps/{org}/{name}/setup. It records the gateway
@@ -213,7 +213,7 @@ func (s *Server) appLifecycle(w http.ResponseWriter, r *http.Request, action str
 			svc.Out = emitWriter{emit: emit}
 			return runAppLifecycle(ctx, svc, action, key, setup)
 		})
-		writeJSON(w, http.StatusAccepted, map[string]any{"job_id": job.ID, "state": job.State})
+		writeJSON(w, http.StatusAccepted, map[string]any{"job_id": job.ID, "state": job.state()})
 		return
 	}
 	svc.Out = LogSink()

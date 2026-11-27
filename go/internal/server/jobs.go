@@ -33,6 +33,15 @@ type Job struct {
 	onEvent func(state string, ev Event)
 }
 
+// state returns the current job state under the job lock. Handlers must use
+// this instead of reading State directly: the job goroutine can finish while
+// the install request is still writing its 202 response.
+func (j *Job) state() string {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.State
+}
+
 func (j *Job) emit(phase, message string) {
 	j.mu.Lock()
 	ev := Event{Time: time.Now().UTC().Format(time.RFC3339Nano), Phase: phase, Message: message}
