@@ -279,6 +279,9 @@ func TestSchedulerQueueTimeoutReturnsResourceError(t *testing.T) {
 	if launcher.callCount() != 1 {
 		t.Fatalf("launcher calls = %d, want 1", launcher.callCount())
 	}
+	if snap := s.Snapshot(); snap.Waiters != 0 || len(snap.Queue) != 0 {
+		t.Fatalf("queue after timeout = %+v, want empty", snap)
+	}
 }
 
 func TestSchedulerQueueFullWhileResidentIsBusy(t *testing.T) {
@@ -368,6 +371,45 @@ func TestSchedulerQueuedAcquireCanceled(t *testing.T) {
 	})
 	if launcher.callCount() != 1 {
 		t.Fatalf("launcher calls = %d, want 1", launcher.callCount())
+	}
+}
+
+func TestSchedulerEvictsLeastRecentlyUsedIdleResident(t *testing.T) {
+	launcher := &lifecycleLauncher{}
+	a, b, c := "a:1", "b:1", "c:1"
+	manifests := map[string]*manifest.Manifest{
+		a: vramManifest(t, 1024), b: vramManifest(t, 1024), c: vramManifest(t, 1024),
+	}
+	inv := (&mutableInventory{inv: singleGPUInventory(12 << 30)}).Get
+	s := newSchedulerWith(t, launcher, manifests, inv, SchedulerOptions{
+		MaxLoaded: 2, VRAMHeadroomMiB: 512,
+	})
+
+	leaseA, err := s.Acquire(context.Background(), a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaseA.Release()
+	time.Sleep(20 * time.Millisecond)
+	leaseB, err := s.Acquire(context.Background(), b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaseB.Release()
+
+	leaseC, err := s.Acquire(context.Background(), c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer leaseC.Release()
+	if s.Resident(a) {
+		t.Fatal("LRU resident a should have been evicted")
+	}
+	if !s.Resident(b) || !s.Resident(c) {
+		t.Fatalf("residents = %+v, want b and c", s.States())
+	}
+	if launcher.callCount() != 3 {
+		t.Fatalf("launcher calls = %d, want 3", launcher.callCount())
 	}
 }
 
