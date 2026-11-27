@@ -12,6 +12,8 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 
 ![flashcli 系统架构](images/architecture-overview.zh-CN.svg)
 
+系统总览刻意保持概览；其他图都是**步骤级**：输入、决策、分支、状态转换、错误/重试路径，以及每一步触及的组件。样式要求见 [CONTRIBUTING.md → Architecture and flow diagrams](../CONTRIBUTING.md#architecture-and-flow-diagrams)。
+
 | 图 | 内容 |
 |---|---|
 | [系统总览](images/architecture-overview.zh-CN.svg) · [PNG](images/architecture-overview.zh-CN.png) | 客户端（桌面端、已安装应用、CLI）、flashserver 模块（网关、调度、管理、应用、系统/GPU）、flashcli 执行、Model Bundle + FlashRT、共享缓存、FlashHub、权重源 |

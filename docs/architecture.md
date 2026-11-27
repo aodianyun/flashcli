@@ -12,6 +12,8 @@ It does **not** implement model forward passes or CUDA kernels; those live in bu
 
 ![flashcli system architecture](images/architecture-overview.en.svg)
 
+The system overview is intentionally coarse. The other diagrams are **step-level**: inputs, decisions, branches, state transitions, error/retry paths, and the component each step touches. Style rules: [CONTRIBUTING.md → Architecture and flow diagrams](../CONTRIBUTING.md#architecture-and-flow-diagrams).
+
 | Diagram | Contents |
 |---|---|
 | [System overview](images/architecture-overview.en.svg) · [PNG](images/architecture-overview.en.png) | Clients (Desktop, installed apps, CLI), flashserver modules (gateway, scheduler, manager, management, apps, system/GPU), flashcli execution, Model Bundle + FlashRT, shared cache, FlashHub, weight sources |
