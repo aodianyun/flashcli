@@ -32,6 +32,20 @@
 
 其余都是约定或建议：目录是否叫 `runtime/`、`flash_rt/` 是共享还是 per-environment、以及各 runtime 是否共享代码。按 environment 隔离的布局见 §2.3。
 
+### 1.1 分类规范（强制补充）
+
+部分模型分类有额外的服务与打包规则。属于这些分类的 bundle **必须**同时满足对应分类规范；不满足则不可发布。
+
+| 分类 | FlashHub tag | 规范 | 常见集成方式 |
+|---|---|---|---|
+| ASR | `ASR` | [bundle_asr_standard.zh-CN.md](bundle_asr_standard.zh-CN.md) | engine（`ServeEngine.transcribe`）或 script |
+| TTS | `TTS` | [bundle_tts_standard.zh-CN.md](bundle_tts_standard.zh-CN.md) | engine（`ServeEngine.speech`） |
+| OCR | `VLM`（OCR） | [bundle_ocr_standard.zh-CN.md](bundle_ocr_standard.zh-CN.md) | engine + `register_routes` |
+| 音频分离 | `audio-model` | [bundle_audio_separation_standard.zh-CN.md](bundle_audio_separation_standard.zh-CN.md) | engine + `register_routes` |
+| 视频擦除 | `video-model` | [bundle_video_erase_standard.zh-CN.md](bundle_video_erase_standard.zh-CN.md) | engine + `register_routes` |
+
+这些文档只补充本规范，不覆盖本规范。flashserver `/v1` 网关会把分类自定义路径（`/v1/ocr*`、`/v1/audio/spec`、`/v1/audio/separations`、`/v1/video/erase*`）透传到模型 serve 端点，因此它们与标准路由使用同一个 base URL。
+
 ---
 
 ## 2. FlashHub 发布目录结构

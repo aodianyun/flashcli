@@ -26,6 +26,11 @@
 | [plans/application_install_plan.zh-CN.md](plans/application_install_plan.zh-CN.md) | 维护者 | `flashcli app` 安装流程、状态机、回滚、命令、里程碑 |
 | [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) | bundle 作者 | `entry.kind` 后端、原生进程/`.so` 契约、conformance |
 | [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md) | bundle 作者 | **权威** OpenAI/Anthropic serve 对接：能力、`ServeEngine`、端点输入输出 |
+| [bundle_asr_standard.zh-CN.md](bundle_asr_standard.zh-CN.md) | bundle 作者 | ASR 分类补充：OpenAI 形状转写、能力声明、说话人分离、限制 |
+| [bundle_tts_standard.zh-CN.md](bundle_tts_standard.zh-CN.md) | bundle 作者 | TTS 分类补充：`ServeEngine.speech`、参考音频扩展、音频编码 |
+| [bundle_ocr_standard.zh-CN.md](bundle_ocr_standard.zh-CN.md) | bundle 作者 | OCR 分类补充：`ocr_serve`、多图/批量、`/v1/ocr*` 路由 |
+| [bundle_audio_separation_standard.zh-CN.md](bundle_audio_separation_standard.zh-CN.md) | bundle 作者 | 音频分离补充：`voice`/`ambience` 音轨、文件/URL/路径输入、本地输出 |
+| [bundle_video_erase_standard.zh-CN.md](bundle_video_erase_standard.zh-CN.md) | bundle 作者 | 视频擦除分类补充：`/v1/video/erase*`、任务、掩码引导修复 |
 | [flashserver_gateway_scheduler_spec.zh-CN.md](flashserver_gateway_scheduler_spec.zh-CN.md) | 贡献者 / 集成方 | **权威** flashserver `/v1` OpenAI 网关、`/api/v1` 管理面、preload/unload、调度与 placement |
 | [plans/flashserver_gateway_scheduler_plan.zh-CN.md](plans/flashserver_gateway_scheduler_plan.zh-CN.md) | 维护者 | 网关/调度交付计划与强制遵守规则 |
 | [architecture.zh-CN.md](architecture.zh-CN.md) | 贡献者 | 运行时流程、本地服务栈、host 与 bundle、缓存、目录布局 |
@@ -49,6 +54,10 @@
 - **bundle 作者** —— [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) →
   [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md) →
   [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)（LLM/音频/图像/视频 serve）→
+  适用时阅读对应分类规范（[ASR](bundle_asr_standard.zh-CN.md)、
+  [TTS](bundle_tts_standard.zh-CN.md)、[OCR](bundle_ocr_standard.zh-CN.md)、
+  [音频分离](bundle_audio_separation_standard.zh-CN.md)、
+  [视频擦除](bundle_video_erase_standard.zh-CN.md)）→
   [bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md)。
 - **维护者 / 贡献者** —— [architecture.zh-CN.md](architecture.zh-CN.md) →
   [module_layers.zh-CN.md](module_layers.zh-CN.md) → [../CONTRIBUTING.md](../CONTRIBUTING.md)。
