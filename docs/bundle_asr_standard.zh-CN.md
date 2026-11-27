@@ -486,7 +486,7 @@
 3. **能力/枚举**：以下情况按该参数的 `on_unsupported` 处理：
    - `support: "unsupported"`；
    - `values` 为枚举数组，而请求值不在其中。
-   
+
    结果为 `reject` → 422 `unsupported_parameter`；`degrade` → 继续处理并记入 `x_gateway.degraded`。
 4. **`strict=true`**：把本应 `degrade` 的项升级为 422 `unsupported_parameter`；`reject` 与硬限制不受影响。
 
