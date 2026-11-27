@@ -119,6 +119,27 @@ def start_daemon(name: str, cfg: dict, env: dict[str, str]) -> subprocess.Popen:
     raise RuntimeError("daemon health timeout")
 
 
+def cleanup_children() -> None:
+    """Kill serve children left behind by a previous interrupted run.
+
+    The check is scoped to this acceptance HOME so a real installed service is
+    never touched.
+    """
+    marker = f"FLASHCLI_HOME={HOME}".encode()
+    for proc_dir in glob.glob("/proc/[0-9]*"):
+        try:
+            env = Path(proc_dir, "environ").read_bytes().split(b"\0")
+            if marker not in env:
+                continue
+            cmd = Path(proc_dir, "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="ignore")
+            if "flashcli_bundle.infer serve" not in cmd and "flashcli-linux-amd64 serve" not in cmd:
+                continue
+            os.kill(int(Path(proc_dir).name), signal.SIGKILL)
+            log("cleanup: killed leftover child", Path(proc_dir).name)
+        except (FileNotFoundError, ProcessLookupError, PermissionError):
+            continue
+
+
 def stop_daemon(proc: subprocess.Popen | None) -> None:
     if proc and proc.poll() is None:
         proc.send_signal(signal.SIGTERM)
@@ -127,6 +148,7 @@ def stop_daemon(proc: subprocess.Popen | None) -> None:
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.wait(timeout=5)
+    cleanup_children()
 
 
 def req(method: str, path: str, payload: dict | None = None, timeout: int = 600):
@@ -223,14 +245,14 @@ def wait_chat(ref: str, timeout: int = 20) -> str:
     raise AssertionError(last)
 
 
-def stream_in_thread(ref: str, max_tokens: int = 1024) -> dict:
+def stream_in_thread(ref: str, max_tokens: int = 1024, delay: float = 0.005) -> dict:
     box = {"started": threading.Event(), "done": threading.Event(), "error": None, "bytes": 0}
 
     def run():
         try:
             payload = {
                 "model": ref,
-                "messages": [{"role": "user", "content": "Write a long paragraph."}],
+                "messages": [{"role": "user", "content": "Count from 1 to 1000, separated by commas."}],
                 "max_tokens": max_tokens,
                 "temperature": 0,
                 "stream": True,
@@ -250,7 +272,7 @@ def stream_in_thread(ref: str, max_tokens: int = 1024) -> dict:
                     box["started"].set()
                     # Slow consumer keeps the gateway lease open long enough to
                     # exercise queueing and busy unload deterministically.
-                    time.sleep(0.005)
+                    time.sleep(delay)
         except Exception as exc:  # a forced unload cuts the stream
             box["error"] = repr(exc)
         finally:
@@ -268,6 +290,31 @@ def wait_active(ref: str, minimum: int = 1, timeout: int = 60) -> dict:
             return item
         time.sleep(0.2)
     raise RuntimeError(f"{ref} never reached {minimum} active requests: {reservations()}")
+
+
+def wait_state(ref: str, state: str, timeout: int = 60) -> dict:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        item = reservations().get(ref)
+        if item and item.get("state") == state:
+            return item
+        time.sleep(0.2)
+    raise RuntimeError(f"{ref} never reached {state}: {reservations()}")
+
+
+def chat_in_thread(ref: str, max_tokens: int = 32) -> dict:
+    box = {"done": threading.Event(), "status": None, "reply": None, "error": None}
+
+    def run():
+        try:
+            box["status"], box["reply"] = chat(ref, max_tokens=max_tokens, timeout=600)
+        except Exception as exc:
+            box["error"] = repr(exc)
+        finally:
+            box["done"].set()
+
+    threading.Thread(target=run, daemon=True).start()
+    return box
 
 
 def wait_no_resident(timeout: int = 30) -> None:
@@ -308,6 +355,7 @@ def main() -> int:
     if os.environ.get("FLASHCLI_SCHEDULER_FRESH") == "1":
         shutil.rmtree(HOME, ignore_errors=True)
     HOME.mkdir(parents=True, exist_ok=True)
+    cleanup_children()
 
     log("== preload public models ==")
     proc = start_daemon("preload", {**common_config(), "idle_stop_seconds": 600}, daemon_env())
@@ -321,43 +369,14 @@ def main() -> int:
     assert ld, "no CUDA userland libs in bundle venvs"
     log("LD_LIBRARY_PATH entries:", ld)
 
-    log("== A: max_loaded=0, two residents, idle stop, crash, low VRAM ==")
-    proc = start_daemon("max0", {**common_config(), "idle_stop_seconds": 6}, daemon_env(ld))
+    log("== A: max_loaded=0, low VRAM, two residents, child crash ==")
+    proc = start_daemon("max0", {**common_config(), "idle_stop_seconds": 600}, daemon_env(ld))
     try:
         _, sched = req("GET", "/api/v1/scheduler")
         assert sched["slots"]["max"] == 0, sched["slots"]
         assert sched["vram_headroom_mib"] == 512, sched["vram_headroom_mib"]
         log("defaults", sched["slots"], sched["vram_headroom_mib"])
 
-        log("chat A:", assert_chat(MODEL_A)[:60])
-        log("chat B:", assert_chat(MODEL_B)[:60])
-        current = reservations()
-        assert set(current) == {MODEL_A, MODEL_B}, current
-        assert all(item["state"] in ("ready", "busy") for item in current.values()), current
-        log("both resident", {key: value["state"] for key, value in current.items()})
-
-        wait_no_resident(timeout=30)
-        _, models = req("GET", "/api/v1/models")
-        for ref in (MODEL_A, MODEL_B):
-            model = next(m for m in models["models"] if m["ref"] == ref)
-            assert model["preload"] == "preloaded" and model["resident"] == "stopped", model
-        log("idle stop kept preload")
-
-        log("restart after idle stop:", assert_chat(MODEL_B)[:60])
-
-        _, resources = req("GET", "/api/v1/resources")
-        loaded = next(item for item in resources["loaded"] if item["ref"] == MODEL_B)
-        old_pid = loaded["pid"]
-        os.kill(old_pid, signal.SIGKILL)
-        time.sleep(0.5)
-        log("killed child", old_pid, "restart chat:", assert_chat(MODEL_B)[:60])
-        _, resources = req("GET", "/api/v1/resources")
-        new_pid = next(item for item in resources["loaded"] if item["ref"] == MODEL_B)["pid"]
-        assert new_pid != old_pid, (old_pid, new_pid)
-        assert len(resources["loaded"]) == 1, resources["loaded"]
-        log("crash restart pid", old_pid, "->", new_pid)
-
-        wait_no_resident(timeout=30)
         venv_python = glob.glob(str(HOME / "runtimes" / "*" / "venv" / "bin" / "python"))
         if venv_python:
             log("low-VRAM admission with a", HOG_MIB, "MiB hog")
@@ -395,16 +414,48 @@ def main() -> int:
             log("VRAM released, chat:", wait_chat(MODEL_A)[:60])
         else:
             log("SKIP low-VRAM hog: no bundle venv python")
+
+        log("chat B:", assert_chat(MODEL_B)[:60])
+        current = reservations()
+        assert set(current) == {MODEL_A, MODEL_B}, current
+        assert all(item["state"] in ("ready", "busy") for item in current.values()), current
+        log("both resident", {key: value["state"] for key, value in current.items()})
+
+        _, resources = req("GET", "/api/v1/resources")
+        loaded = next(item for item in resources["loaded"] if item["ref"] == MODEL_B)
+        old_pid = loaded["pid"]
+        os.kill(old_pid, signal.SIGKILL)
+        time.sleep(0.5)
+        log("killed child", old_pid, "restart chat:", assert_chat(MODEL_B)[:60])
+        _, resources = req("GET", "/api/v1/resources")
+        new_pid = next(item for item in resources["loaded"] if item["ref"] == MODEL_B)["pid"]
+        assert new_pid != old_pid, (old_pid, new_pid)
+        assert len(resources["loaded"]) == 2, resources["loaded"]
+        log("crash restart pid", old_pid, "->", new_pid)
+    finally:
+        stop_daemon(proc)
+
+    log("== A2: idle stop keeps preload and restarts on demand ==")
+    proc = start_daemon("idle", {**common_config(), "idle_stop_seconds": 6}, daemon_env(ld))
+    try:
+        log("chat A:", assert_chat(MODEL_A)[:60])
+        wait_no_resident(timeout=30)
+        _, models = req("GET", "/api/v1/models")
+        model = next(m for m in models["models"] if m["ref"] == MODEL_A)
+        assert model["preload"] == "preloaded" and model["resident"] == "stopped", model
+        log("idle stop kept preload")
+        log("restart after idle stop:", assert_chat(MODEL_A)[:60])
     finally:
         stop_daemon(proc)
 
     log("== B: max_loaded=1, queue timeout, LRU eviction, restart with active stream ==")
-    max1_cfg = {**common_config(), "max_loaded": 1, "idle_stop_seconds": 30, "queue_timeout_seconds": 3}
+    max1_cfg = {**common_config(), "max_loaded": 1, "idle_stop_seconds": 30, "queue_timeout_seconds": 5}
     proc = start_daemon("max1", max1_cfg, daemon_env(ld))
     try:
-        box = stream_in_thread(MODEL_A)
-        assert box["started"].wait(120), "model A stream did not start"
-        wait_active(MODEL_A)
+        # Start A and issue B while A is still starting: max_loaded=1 must queue
+        # B and time out, without relying on how long a generated stream runs.
+        box = chat_in_thread(MODEL_A, max_tokens=64)
+        wait_state(MODEL_A, "starting")
         started = time.time()
         status, body = req(
             "POST",
@@ -415,9 +466,10 @@ def main() -> int:
         elapsed = time.time() - started
         assert status == 503, (status, body)
         assert body.get("error", {}).get("code") in ("no_placement", "queue_full"), body
-        assert elapsed >= 2.0, elapsed
+        assert elapsed >= 4.0, elapsed
         log("queued B rejected after", round(elapsed, 2), "s", body["error"]["code"])
-        assert box["done"].wait(120), "model A stream did not finish"
+        assert box["done"].wait(120), "model A request did not finish"
+        assert box["status"] == 200, box
         time.sleep(1)
 
         log("after release, B should evict idle A")
