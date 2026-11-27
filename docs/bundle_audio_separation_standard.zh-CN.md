@@ -4,7 +4,7 @@
 
 > **分类补充规范。** 通用 manifest、目录布局、entry、运行时、权重与发布规则仍以 [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)（英文版：[bundle_publish_standard.md](bundle_publish_standard.md)）为准。本页只补充音频分离服务特有的要求，不重复这些规则。
 >
-> **由宿主负责的服务行为。** engine 模式下 `/health`、`/v1/models`、鉴权、推理槽位并发、请求日志、SSE 传输与协议错误转换均由宿主负责，定义见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)（英文版：[bundle_serve_protocols.md](bundle_serve_protocols.md)）。本页不重新定义这些行为。
+> **由宿主负责的服务行为。** engine 模式下标准路由、鉴权、推理槽位并发、请求日志、SSE 传输与协议错误转换均由宿主负责，定义见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)（英文版：[bundle_serve_protocols.md](bundle_serve_protocols.md)）。本页不重新定义这些行为。
 >
 > **网关模型选择。** 直连 `flashcli serve` 时一个部署就是一个模型，因此请求不带 `model` 字段。多模型 flashserver `/v1` 网关对自定义路径使用查询选择器：`POST /v1/audio/separations?model=<namespace/name:version>`。网关解析常驻模型后**在转发前移除该查询参数**，路径与请求体原样转发。请求体契约不会新增 `model` 字段，响应中也不包含该字段。
 
@@ -37,7 +37,7 @@ flashcli serve <org>/<name>:<version> --host 0.0.0.0 --port 8080
 - API 仅在**风格上**与 OpenAI 对齐（资源命名、JSON 参数、error 对象），OpenAI 并没有原生音频分离端点；该路径及其字段属于本地扩展，不代表 OpenAI 官方支持。
 - 模型 MUST 提供 §3 定义的语义。仅把通用“人声/伴奏”分离器的输出改名**不构成**符合规范；能力不足时服务必须报告（§7）。
 - 执行是同步的。v1 不定义流式响应，也不定义异步任务或状态轮询。响应中的 `id` 仅标识本次请求，不是任务 ID。
-- 音频分离 bundle 统一以 **engine 模式**打包，并把该路由作为自定义路由提供。宿主通过 `register_routes(app)` 挂载自定义路由，且其优先级高于宿主路由；`/health` 与 `/v1/models` 仍由宿主提供。该路由不是宿主能力，因此不在宿主的推理闸门内：bundle MUST 自行校验请求、串行化 GPU 调用并实施自身限制，同时遵循 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md) 描述的宿主鉴权与日志行为。
+- 音频分离 bundle 统一以 **engine 模式**打包，并把该路由作为自定义路由提供。宿主通过 `register_routes(app)` 挂载自定义路由，且其优先级高于宿主路由；标准路由仍由宿主提供。该路由不是宿主能力，因此不在宿主的推理闸门内：bundle MUST 自行校验请求、串行化 GPU 调用并实施自身限制，同时遵循 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md) 描述的宿主鉴权与日志行为。
 
 ---
 

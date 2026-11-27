@@ -68,6 +68,21 @@ The gateway is multi-model, so a custom request must select the resident model:
 
 The gateway resolves the resident model, strips the `model` query before forwarding, and leaves the path/body unchanged. Direct `flashcli serve` ignores the query. `/v1/models` is **not** a custom path: it remains the host-owned gateway model list and is never passed through.
 
+### 1.3 Engine-mode defaults (host-owned)
+
+In engine mode the host always provides the following; bundles do not implement them and category standards must link here instead of repeating them.
+
+| Area | Provided by the host |
+|---|---|
+| Base routes | `GET /health`, `GET /v1/models`, `GET /v1/models/{id}` |
+| Capability routes | OpenAI/Anthropic routes enabled by `serve.capabilities` (chat, completions, responses, embeddings, moderations, audio, images, videos, realtime) |
+| Request handling | JSON/multipart parsing and validation, SSE and WebSocket transport, OpenAI/Anthropic error envelopes, request logging |
+| Access control | Token/auth (when configured), capability gating, model selection |
+| Concurrency | `serve.concurrency` inference slots (default `1`); sync gated methods are rejected when `N > 1` |
+| Engine surface | `model_id`, `load(checkpoint, preset, **options)`, `warmup(spec)`, the capability methods in §4, and optional `register_routes(app)` |
+
+`serve.capabilities` absent keeps the legacy `["openai.chat"]`; `[]` exposes no inference routes. `register_routes(app)` custom routes are mounted before host routes and keep priority; they do not replace the host-owned health/model/base routes. The exact request fields for each capability are in §5.
+
 ## 2. Ownership (engine mode)
 
 | Layer | Owns |

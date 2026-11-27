@@ -6,7 +6,7 @@
 >
 > **Gateway passthrough.** OCR bundles use `format_version: 4`, engine mode, a `ServeEngine`, and `register_routes(app)` for the native `/v1/ocr`, `/v1/ocr/batch` and `/v1/ocr/info` routes. The flashserver `/v1` gateway forwards these custom paths to the model's serve endpoint, so the same base URL exposes both the standard OpenAI routes and the native OCR routes.
 >
-> **Generic rules are not repeated.** Manifest/layout/entry/runtime/weights/publishing are defined in [bundle_publish_standard.md](bundle_publish_standard.md); engine-mode host behavior (`/health`, `/v1/models`, auth, concurrency, request logging, SSE transport, error translation) is defined in [bundle_serve_protocols.md](bundle_serve_protocols.md). This page adds only OCR-specific routes, schemas, limits, and acceptance.
+> **Generic rules are not repeated.** Manifest/layout/entry/runtime/weights/publishing are defined in [bundle_publish_standard.md](bundle_publish_standard.md); engine-mode host behavior (standard routes, auth, concurrency, request logging, SSE transport, error translation) is defined in [bundle_serve_protocols.md](bundle_serve_protocols.md). This page adds only OCR-specific routes, schemas, limits, and acceptance.
 
 > Applies to: OCR (text detection + text recognition) models adapted by FlashRT,
 > published to FlashHub as a flashcli bundle (`format_version: 4`) and served over
@@ -61,8 +61,8 @@ Appendix B. Error codes
 
 1. Use an **engine-mode** `ServeEngine`; the listen address/port are provided by the host's
    `--host` (default `0.0.0.0`) / `--port` (default `8000`);
-2. Provide both the **OpenAI-compatible** (`/v1/chat/completions`, `/v1/responses`,
-   `/v1/models`) and the **native OCR** (`/v1/ocr`) endpoints;
+2. Provide both the **OpenAI-compatible** (`/v1/chat/completions`, `/v1/responses`)
+   and the **native OCR** (`/v1/ocr`) endpoints; the host owns the standard routes;
 3. Support **multi-image input**: one request may carry several images, and per-image
    results are returned in input order;
 4. Support **batch JSON multi-output** `/v1/ocr/batch`: one call names several inputs
@@ -98,7 +98,7 @@ flashcli serve <org>/<name>:<version> --host 0.0.0.0 --port 8080 --api-key <key>
                                                 ▼
 ┌─ ocr_serve/  protocol layer (shared verbatim by all OCR bundles, never modified per model) ──┐
 │  server.py      /v1/ocr  /v1/ocr/batch  /v1/ocr/info  OCR FIFO queue, SSE                   │
-│                 (host owns /v1/models, /health, auth and the concurrency gate)               │
+│                 (host owns standard routes, auth and the concurrency gate)                  │
 │  openai_api.py  parse both OpenAI dialects, shape OCR results, SSE events                    │
 │  media.py       data URL / base64 / http(s) / local path parsing, size + SSRF checks         │
 │  datatypes.py   framework-independent request/result/error types                             │
@@ -118,8 +118,8 @@ Rules:
   `datatypes.py` / `__init__.py`) depend only on `fastapi` / `uvicorn` /
   `pydantic` and the standard library — not on torch. They own OCR-specific request
   parsing, result shaping, SSE, batch handling, image validation, and the OCR FIFO
-  queue. The host owns `/health`, `/v1/models`, authentication, the concurrency gate,
-  request logging and the error envelope.
+  queue. The host owns standard routes, authentication, the concurrency gate, request
+  logging and the error envelope.
 - `ocr_serve/backend.py` is the model glue and may depend on runtime libraries such as
   torch/OpenCV; porting to another OCR model means replacing its implementation while
   keeping the interface unchanged.
@@ -166,7 +166,7 @@ The generic manifest schema, entry rules, dependencies and weights are defined i
 ```json
 [
   {"name": "model_name", "type": "string", "default": "<ocr-model>", "phase": "load",
-   "help": "Model id reported by /v1/models and in responses (requests may name any model)."},
+   "help": "Model id reported in responses (requests may name any model)."},
   {"name": "api_key", "type": "string", "default": "", "phase": "load",
    "help": "Require this key on /v1/* as 'Authorization: Bearer <key>' or 'x-api-key: <key>'."},
   {"name": "device", "type": "string", "default": "cuda", "phase": "load",
@@ -248,7 +248,7 @@ class Backend:
   nothing.
 - `run_image`: decode one image and run the full OCR pipeline, returning
   `ImageResult(width, height, rec_texts, rec_scores, rec_polys, det_scores, e2e_ms, image_bytes)`.
-- `info`: runtime status for `/health` and `/v1/ocr/info` (device, GPU, capture state, etc.).
+- `info`: runtime status for `/v1/ocr/info` (device, GPU, capture state, etc.).
 - The backend must serialize GPU calls itself (the protocol layer already guarantees a
   single slot, but the synchronous `chat()` path may also be called by the host).
 - **Do not** load calibration data or run a calibration forward pass in `load`/`warmup`.
@@ -450,7 +450,7 @@ Rules:
 
 ## 13. Server behavior rules (must be identical everywhere)
 
-> Engine-mode host behavior (authentication, `/health`, `/v1/models`, the concurrency gate, request logging and the error envelope) is defined in [bundle_serve_protocols.md](bundle_serve_protocols.md) and is not repeated here. The rules below are OCR-specific media/queue behavior.
+> Engine-mode host behavior (standard routes, authentication, the concurrency gate, request logging and the error envelope) is defined in [bundle_serve_protocols.md](bundle_serve_protocols.md) and is not repeated here. The rules below are OCR-specific media/queue behavior.
 
 | Rule | Reason / rationale |
 | --- | --- |
@@ -476,8 +476,6 @@ Rules:
 | POST | `/v1/ocr` | Native | Single/multi-image structured results |
 | POST | `/v1/ocr/batch` | Native | JSON batch multi-output |
 | GET | `/v1/ocr/info` | Native | Capabilities, limits, runtime status |
-| GET | `/v1/models` | OpenAI | Model list |
-| GET | `/health` | — | Liveness, queue, GPU, graph-capture status |
 
 ```bash
 # Chat Completions (local path)
@@ -517,18 +515,17 @@ All of the following must be completed before publishing:
 | --- | --- | --- |
 | 1 | `flashcli bundle validate <dist>` | `[ok]` |
 | 2 | `flashcli run <dist>` | Text/scores/polygons match the optimization receipt |
-| 3 | `flashcli serve <dist>` (target GPU matrix) | Starts successfully, `/health` returns 200 |
+| 3 | `flashcli serve <dist>` (target GPU matrix) | Starts successfully and `/v1/ocr/info` responds |
 | 4 | Chat Completions non-streaming/streaming | content is byte-identical; `ocr` is complete |
 | 5 | Responses non-streaming/streaming | `response.completed` + `ocr`; parseable by the official SDK |
 | 6 | `/v1/ocr` single/multi image | `image_count`, order and per-image text are correct |
 | 7 | `/v1/ocr/batch` | Order/id/format correct; per-item failure isolation; `skipped` semantics |
-| 8 | Auth | No key 401; correct key 200; `/health` needs no auth |
-| 9 | Local paths | Absolute/relative/`file://` succeed; 400 outside the root and when disabled |
-| 10 | Errors and limits | No image, oversized image, private URL, tools, n>1, bad JSON |
-| 11 | Concurrency/queueing | Single slot serializes; 503 beyond the queue |
-| 12 | Accuracy | Line-by-line identical to `flashcli run` / the optimization receipt |
-| 13 | Package contents | No weights, no calibration data, no test images/caches; `.so` is the required minimal set |
-| 14 | Cleanup | Runtime caches, logs and `__pycache__` do not enter the package |
+| 8 | Local paths | Absolute/relative/`file://` succeed; 400 outside the root and when disabled |
+| 9 | Errors and limits | No image, oversized image, private URL, tools, n>1, bad JSON |
+| 10 | Concurrency/queueing | Single slot serializes; 503 beyond the queue |
+| 11 | Accuracy | Line-by-line identical to `flashcli run` / the optimization receipt |
+| 12 | Package contents | No weights, no calibration data, no test images/caches; `.so` is the required minimal set |
+| 13 | Cleanup | Runtime caches, logs and `__pycache__` do not enter the package |
 
 Tests must run the `dist/` publish tree through `flashcli serve`, not the development
 directory. Remote debugging processes must hold the shared debug lock (for example

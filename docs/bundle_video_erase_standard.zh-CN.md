@@ -12,7 +12,7 @@
 >
 > **通用规则不重复。** manifest/目录/entry/运行时/权重/发布规则见
 > [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)；engine 模式的 host 行为
-> （`/health`、`/v1/models`、鉴权、并发、请求日志、SSE 传输、错误转换）见
+> （标准路由、鉴权、并发、请求日志、SSE 传输、错误转换）见
 > [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)。本文只补充视频擦除路由、schema、限制和验收。
 
 本文是 **MiniMax-Remover FlashRT bundle 的服务端规范**，同时定义：
@@ -47,7 +47,7 @@ MiniMax-Remover 是 **mask 引导**的视频修复模型：输入一段视频（
 
 ## 2. 架构与 host 边界
 
-engine 模式下 host 构建 FastAPI，并负责 `/health`、`/v1/models`、鉴权、推理槽并发门、请求日志、SSE 传输和协议错误转换；host 调用 `ServeEngine.register_routes(app)` 挂载下面的视频擦除路由。host 契约见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)；本文只补充视频擦除路由、媒体契约、任务和限制。
+engine 模式下 host 构建 FastAPI，并负责标准路由、鉴权、推理槽并发门、请求日志、SSE 传输和协议错误转换；host 调用 `ServeEngine.register_routes(app)` 挂载下面的视频擦除路由。host 契约见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)；本文只补充视频擦除路由、媒体契约、任务和限制。
 
 ## 3. 启动与生命周期
 
@@ -402,7 +402,7 @@ print(resp.model_extra["erase"]["output"]["zip_url"])
 
 | 选项 | 默认 | 说明 |
 |---|---|---|
-| `--model-name` | `minimax_remover` | `/v1/models` 与响应中的 id |
+| `--model-name` | `minimax_remover` | 响应中的模型 id |
 | `--api-key` | 空 | `/v1/*` 鉴权 |
 | `--device` | `cuda:0` | CUDA 设备 |
 | `--attention` | `auto` | 内置 SageAttention-2；显式 `FLASHRT_ATTN_MODE` |

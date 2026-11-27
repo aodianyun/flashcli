@@ -6,7 +6,7 @@
 >
 > **网关透传。** OCR bundle 使用 `format_version: 4`、engine 模式、`ServeEngine`，并通过 `register_routes(app)` 提供原生 `/v1/ocr`、`/v1/ocr/batch`、`/v1/ocr/info` 路由。flashserver `/v1` 网关会把这些自定义路径透传到模型 serve 端点，因此同一个 base URL 同时暴露标准 OpenAI 路由和原生 OCR 路由。
 >
-> **通用规则不重复。** manifest/目录/entry/运行时/权重/发布规则见 [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)；engine 模式的 host 行为（`/health`、`/v1/models`、鉴权、并发、请求日志、SSE 传输、错误转换）见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)。本文只补充 OCR 专有路由、schema、限制和验收。
+> **通用规则不重复。** manifest/目录/entry/运行时/权重/发布规则见 [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)；engine 模式的 host 行为（标准路由、鉴权、并发、请求日志、SSE 传输、错误转换）见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)。本文只补充 OCR 专有路由、schema、限制和验收。
 
 > 适用：FlashRT 适配的 OCR（文本检测 + 文本识别）模型，以 flashcli bundle
 > （`format_version: 4`）发布到 FlashHub，并通过 `flashcli serve` 提供
@@ -60,8 +60,8 @@
 
 1. 使用 **engine 模式** 的 `ServeEngine`，监听地址/端口由 host 的
    `--host`（默认 `0.0.0.0`）/ `--port`（默认 `8000`）提供；
-2. 同时提供 **OpenAI 兼容**（`/v1/chat/completions`、`/v1/responses`、
-   `/v1/models`）与 **原生 OCR**（`/v1/ocr`）接口；
+2. 同时提供 **OpenAI 兼容**（`/v1/chat/completions`、`/v1/responses`）与
+   **原生 OCR**（`/v1/ocr`）接口；标准模型/健康路由由 host 持有；
 3. 支持 **多图输入**：一次请求可带多张图片，按输入顺序返回逐图结果；
 4. 支持 **批量 JSON 多输出** `/v1/ocr/batch`：一次调用指定多个输入
    （每项可多图）与每项输出格式，按顺序返回 `results[]`；
@@ -94,7 +94,7 @@ flashcli serve <org>/<name>:<version> --host 0.0.0.0 --port 8080 --api-key <key>
                                    ▼
  ┌──────────── ocr_serve/（协议层文件：所有 OCR bundle 共用，原样复制，禁止按模型修改）────────────┐
  │ server.py      /v1/ocr  /v1/ocr/batch  /v1/ocr/info  OCR FIFO 队列、SSE                     │
- │                （host 持有 /v1/models、/health、鉴权和并发门）                                │
+ │                （host 持有标准路由、鉴权和并发门）                                           │
  │ openai_api.py  OpenAI 两种方言的解析、OCR 结果塑形、SSE 事件                                 │
  │ media.py       data URL / base64 / http(s) / 本地路径解析、大小与 SSRF 校验                  │
  │ datatypes.py   与框架无关的请求/结果/错误类型                                                 │
@@ -112,8 +112,8 @@ flashcli serve <org>/<name>:<version> --host 0.0.0.0 --port 8080 --api-key <key>
 - `ocr_serve/` 的协议文件（`server.py` / `openai_api.py` / `media.py` /
   `datatypes.py` / `__init__.py`）只依赖 `fastapi` / `uvicorn` /
   `pydantic` 与标准库，不依赖 torch；它们负责 OCR 专有的请求解析、结果塑形、
-  SSE、批量处理、图片校验和 OCR FIFO 队列。`/health`、`/v1/models`、鉴权、
-  并发门、请求日志和错误信封由 host 持有。
+  SSE、批量处理、图片校验和 OCR FIFO 队列。标准路由、鉴权、并发门、请求日志
+  和错误信封由 host 持有。
 - `ocr_serve/backend.py` 是模型胶水，可以依赖 torch/OpenCV 等运行时库；
   移植到其他 OCR 模型时替换它的实现，保持接口不变。
 - 胶水不处理 HTTP/JSON/SSE/排队；协议层不认识任何具体 OCR 模型。
@@ -152,7 +152,7 @@ flashcli serve <org>/<name>:<version> --host 0.0.0.0 --port 8080 --api-key <key>
 ```json
 [
   {"name": "model_name", "type": "string", "default": "<ocr-model>", "phase": "load",
-   "help": "Model id reported by /v1/models and in responses (requests may name any model)."},
+   "help": "Model id reported in responses (requests may name any model)."},
   {"name": "api_key", "type": "string", "default": "", "phase": "load",
    "help": "Require this key on /v1/* as 'Authorization: Bearer <key>' or 'x-api-key: <key>'."},
   {"name": "device", "type": "string", "default": "cuda", "phase": "load",
@@ -232,7 +232,7 @@ class Backend:
 - `warmup`：按逗号分隔的图片路径预捕获/预热；空值不做事。
 - `run_image`：解码一张图片并执行完整 OCR，返回
   `ImageResult(width, height, rec_texts, rec_scores, rec_polys, det_scores, e2e_ms, image_bytes)`。
-- `info`：`/health` 与 `/v1/ocr/info` 的运行状态（device、GPU、捕获状态等）。
+- `info`：`/v1/ocr/info` 的运行状态（device、GPU、捕获状态等）。
 - 后端必须自行串行化 GPU 调用（协议层已保证单槽位，但 `chat()` 同步
   路径也可能被 host 调用）。
 - **不得**在 `load`/`warmup` 中加载校准数据或执行校准前向。
@@ -429,7 +429,7 @@ host 按 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md) 加�
 
 ## 13. 服务端行为规则（必须一致）
 
-> engine 模式的 host 行为（鉴权、`/health`、`/v1/models`、并发门、请求日志和错误信封）见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)，本文不重复。下表只列 OCR 专有的媒体/队列行为。
+> engine 模式的 host 行为（标准路由、鉴权、并发门、请求日志和错误信封）见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)，本文不重复。下表只列 OCR 专有的媒体/队列行为。
 
 | 规则 | 原因 / 依据 |
 | --- | --- |
@@ -455,8 +455,6 @@ host 按 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md) 加�
 | POST | `/v1/ocr` | 原生 | 单图/多图结构化结果 |
 | POST | `/v1/ocr/batch` | 原生 | JSON 批量多输出 |
 | GET | `/v1/ocr/info` | 原生 | 能力、限制、运行状态 |
-| GET | `/v1/models` | OpenAI | 模型列表 |
-| GET | `/health` | — | 存活、队列、GPU、图捕获状态 |
 
 ```bash
 # Chat Completions（本地路径）
@@ -496,18 +494,17 @@ print(r.model_extra["ocr"]["images"][0]["lines"])
 | --- | --- | --- |
 | 1 | `flashcli bundle validate <dist>` | `[ok]` |
 | 2 | `flashcli run <dist>` | 文本/分数/多边形与优化回执一致 |
-| 3 | `flashcli serve <dist>`（目标 GPU 矩阵） | 启动成功，`/health` 200 |
+| 3 | `flashcli serve <dist>`（目标 GPU 矩阵） | 启动成功，`/v1/ocr/info` 可响应 |
 | 4 | Chat Completions 非流式/流式 | content 逐字节一致；`ocr` 完整 |
 | 5 | Responses 非流式/流式 | `response.completed` + `ocr`；官方 SDK 可解析 |
 | 6 | `/v1/ocr` 单图/多图 | `image_count`、顺序、逐图文本正确 |
 | 7 | `/v1/ocr/batch` | 顺序/id/格式正确；单项失败隔离；`skipped` 语义 |
-| 8 | 鉴权 | 无 key 401；正确 key 200；`/health` 免鉴权 |
-| 9 | 本地路径 | 绝对/相对/`file://` 成功；root 外与关闭时 400 |
-| 10 | 错误与限制 | 无图、超大图、私网 URL、tools、n>1、坏 JSON |
-| 11 | 并发/排队 | 单槽位串行；超过队列 503 |
-| 12 | 精度 | 与 `flashcli run` / 优化回执逐行一致 |
-| 13 | 包内容 | 无权重、无校准数据、无测试图片/缓存；`.so` 为必需最小集 |
-| 14 | 清理 | 运行缓存、日志、`__pycache__` 不进包 |
+| 8 | 本地路径 | 绝对/相对/`file://` 成功；root 外与关闭时 400 |
+| 9 | 错误与限制 | 无图、超大图、私网 URL、tools、n>1、坏 JSON |
+| 10 | 并发/排队 | 单槽位串行；超过队列 503 |
+| 11 | 精度 | 与 `flashcli run` / 优化回执逐行一致 |
+| 12 | 包内容 | 无权重、无校准数据、无测试图片/缓存；`.so` 为必需最小集 |
+| 13 | 清理 | 运行缓存、日志、`__pycache__` 不进包 |
 
 测试必须用 `dist/` 发布树经 `flashcli serve` 运行，而不是开发目录。
 远端调试进程必须持有共享调试锁（如 `/debuglock/rsi.lock`），避免与其他

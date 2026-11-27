@@ -9,16 +9,16 @@ This specification applies to any local ASR model. `qwen3-asr-1.7b` and `moss-tr
 ---
 
 
-> **Category supplement.** The generic manifest, layout, weights, runtime and publishing rules remain authoritative in [bundle_publish_standard.md](bundle_publish_standard.md) (zh: [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)). Engine-mode host behavior (`/health`, `/v1/models`, auth, concurrency, request logging, SSE transport, error translation) is defined in [bundle_serve_protocols.md](bundle_serve_protocols.md); this page adds only ASR-specific routes, schemas, limits, and acceptance.
+> **Category supplement.** The generic manifest, layout, weights, runtime and publishing rules remain authoritative in [bundle_publish_standard.md](bundle_publish_standard.md) (zh: [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)). Engine-mode host behavior (standard routes, auth, concurrency, request logging, SSE transport, error translation) is defined in [bundle_serve_protocols.md](bundle_serve_protocols.md); this page adds only ASR-specific routes, schemas, limits, and acceptance.
 >
 > **FlashCLI integration.** A new ASR bundle uses `format_version: 4`. It may use either form:
 >
-> - **engine mode**: implement `ServeEngine.transcribe` for `/v1/audio/transcriptions` / `translations`, and use `register_routes(app)` for `/v1/audio/spec`; the host owns `/health`;
+> - **engine mode**: implement `ServeEngine.transcribe` for `/v1/audio/transcriptions` / `translations`, and use `register_routes(app)` for `/v1/audio/spec`;
 > - **script mode**: the bundle owns the HTTP server and implements the complete contract below.
 >
 > Declare `openai.audio.transcriptions` (and `openai.audio.translations` when supported) in `entry.serve.capabilities`.
 >
-> **Gateway passthrough.** The flashserver `/v1` gateway proxies `/v1/audio/transcriptions` / `translations` and forwards custom paths such as `/v1/audio/spec` to the model's serve endpoint. Extra multipart fields are forwarded, but the model must tolerate them. The richer model declaration lives at `/v1/audio/spec.models`; `/v1/models` remains the standard gateway model list.
+> **Gateway passthrough.** The flashserver `/v1` gateway proxies `/v1/audio/transcriptions` / `translations` and forwards custom paths such as `/v1/audio/spec` to the model's serve endpoint. Extra multipart fields are forwarded, but the model must tolerate them. The richer model declaration lives at `/v1/audio/spec.models`.
 
 ## 0. Specification Positioning
 
@@ -55,9 +55,7 @@ This specification is a **contract**, not an implementation guide.
 | Method | Path | Description |
 |---|---|---|
 | POST | `/v1/audio/transcriptions` | Transcription, `multipart/form-data` |
-| GET | `/v1/models` | Standard OpenAI model list (host-owned; not a bundle registry) |
 | GET | `/v1/audio/spec` | Specification version and model declaration registry (`models[]`) |
-| GET | `/health` | Liveness probe (host-owned in engine mode; script mode may expose `/healthz`) |
 
 `GET /v1/audio/spec` returns the specification version and the model declaration registry:
 
@@ -599,8 +597,7 @@ This specification also applies to deployments where "one local model comes with
 ### 11.1 Must Keep
 
 - Endpoints, multipart fields, `response_format`, and error shapes are exactly the same as §2–§7.
-- `GET /v1/audio/spec` returns `models[]` with exactly one entry containing that model's `description`, `parameters`, and `limits`.
-- `GET /v1/audio/spec` returns `spec_version` as usual.
+- `GET /v1/audio/spec` returns `models[]` with exactly one entry containing that model's `description`, `parameters`, and `limits`, plus `spec_version`.
 - `parameters` / `limits` are still static declarations, but MUST be honest; `degraded` and `strict` MUST still take effect; parameters MUST NOT be silently dropped just because "there is only one model".
 - Separate internal results from protocol rendering: native output → internal result → three OpenAI response/text views, so protocol correctness is independent of the inference implementation.
 

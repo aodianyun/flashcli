@@ -4,7 +4,7 @@
 
 > **Category supplement.** The generic manifest, layout, entry, runtime, weights, and publishing rules remain authoritative in [bundle_publish_standard.md](bundle_publish_standard.md) (zh: [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)). This page adds only TTS-specific requirements.
 >
-> **Host-owned serving behavior.** In engine mode the host owns `/health`, `/v1/models`, `/v1/models/{id}`, authentication, the concurrency gate, request parsing, the error envelope, and the HTTP/SSE transport. These are defined in [bundle_serve_protocols.md](bundle_serve_protocols.md) (zh: [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)). A bundle must not reimplement host-owned routes; this page only defines what the TTS engine files and `ServeEngine.speech()` must do.
+> **Host-owned serving behavior.** In engine mode the host owns Host base routes (health, models), authentication, the concurrency gate, request parsing, the error envelope, and the HTTP/SSE transport. These are defined in [bundle_serve_protocols.md](bundle_serve_protocols.md) (zh: [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)). A bundle must not reimplement host-owned routes; this page only defines what the TTS engine files and `ServeEngine.speech()` must do.
 >
 > **You will generate code.** Any script-mode bundle or self-hosted HTTP layer you were given is a reference for model maths only. Discard it and generate only the engine-mode files described here.
 
@@ -19,7 +19,7 @@ The FlashCLI host terminates HTTP and calls the bundle's engine. A TTS bundle su
 | Host-owned (see [bundle_serve_protocols.md](bundle_serve_protocols.md)) | Bundle-owned |
 |---|---|
 | HTTP server, routes, authentication, request parsing | Model loading and inference |
-| `/health`, `/v1/models`, `/v1/models/{id}` | `ServeEngine.model_id` |
+| Host base routes (health, models) | `ServeEngine.model_id` |
 | `POST /v1/audio/speech` JSON parsing | `ServeEngine.speech()` |
 | Concurrency gate, error envelope, response headers, transport | `serve.py`, `engine.py`, `audio_encode.py` |
 | Weight download according to the manifest | Reading the `checkpoint` path passed to `load()` |
@@ -120,7 +120,7 @@ Keep these checks in `speech()` even when a downstream model validates again, so
 | Model or GPU failure | any other exception | `500 {"detail": "speech failed: …"}` |
 | Malformed JSON body or non-object body | (not reached) | `422 {"detail": [{…}]}` — host validation |
 
-The JSON error envelope is **host-defined**; do not promise `{"error": {...}}` in bundle docs. `/v1/models/{unknown}` returns the host's 404 object — nothing for the bundle to implement.
+The JSON error envelope is **host-defined**; do not promise `{"error": {...}}` in bundle docs. Unknown-model 404s are host behavior; nothing for the bundle to implement.
 
 ---
 
@@ -235,7 +235,8 @@ flashcli bundle validate <bundle-root-or-dist>
 
 # 3) Host smoke (the host runs HTTP; the bundle only supplies the engine)
 flashcli serve <bundle-root> &        # or: flashcli serve flashcli-bundle/<name>:<version>
-until curl -sf localhost:8000/v1/models >/dev/null; do sleep 1; done
+# wait for host readiness (host-owned route; see bundle_serve_protocols.md)
+until curl -sf localhost:8000/health >/dev/null; do sleep 1; done
 curl -s -X POST localhost:8000/v1/audio/speech -H 'Content-Type: application/json' -d '{
   "input":"hello",
   "reference_audio":"/abs/ref.wav",
@@ -489,7 +490,7 @@ def synthesize(text: str, *, ref_audio: str, ref_text: Optional[str],
 - [ ] `speech()` applies `speed` and returns `SpeechResult(audio, media_type)`
 - [ ] no `uvicorn` / `FastAPI(` / `@app.` / `@router.` / `ctypes` in the bundle
 - [ ] `flashcli bundle validate <tree>` passes
-- [ ] smoke: `/v1/models` 200 → speech 200 → `wav` is 24 kHz mono
+- [ ] smoke: host readiness 200 → speech 200 → `wav` is 24 kHz mono
 - [ ] error smoke: missing/relative/missing-file reference → 400; >10 MiB → 413
 - [ ] `dist/flashcli-bundle.json` contains `build.sources[]`, identical for all environments
 

@@ -9,16 +9,16 @@
 ---
 
 
-> **分类补充规范。** 通用 manifest、目录、权重、运行时和发布规则仍以 [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) 为准；engine 模式的 host 行为（`/health`、`/v1/models`、鉴权、并发、请求日志、SSE 传输、错误转换）见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)；本文只补充 ASR 专有路由、schema、限制和验收。
+> **分类补充规范。** 通用 manifest、目录、权重、运行时和发布规则仍以 [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) 为准；engine 模式的 host 行为（标准路由、鉴权、并发、请求日志、SSE 传输、错误转换）见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)；本文只补充 ASR 专有路由、schema、限制和验收。
 >
 > **FlashCLI 集成方式。** 新 ASR bundle 使用 `format_version: 4`，可采用以下任一形式：
 >
-> - **engine 模式**：实现 `ServeEngine.transcribe` 处理 `/v1/audio/transcriptions` / `translations`，并用 `register_routes(app)` 注册 `/v1/audio/spec`；`/health` 由 host 持有；
+> - **engine 模式**：实现 `ServeEngine.transcribe` 处理 `/v1/audio/transcriptions` / `translations`，并用 `register_routes(app)` 注册 `/v1/audio/spec`；
 > - **script 模式**：由 bundle 自己启动 HTTP 服务，完整实现下面的契约。
 >
 > 在 `entry.serve.capabilities` 中声明 `openai.audio.transcriptions`（支持翻译时再加 `openai.audio.translations`）。
 >
-> **网关透传。** flashserver `/v1` 网关会代理 `/v1/audio/transcriptions` / `translations`，并把 `/v1/audio/spec` 等自定义路径透传到模型 serve 端点。额外的 multipart 字段会被转发，但模型必须能容忍。按模型声明的 `parameters` / `limits` 位于 `/v1/audio/spec.models[]`；`/v1/models` 仍是网关的标准模型列表。
+> **网关透传。** flashserver `/v1` 网关会代理 `/v1/audio/transcriptions` / `translations`，并把 `/v1/audio/spec` 等自定义路径透传到模型 serve 端点。额外的 multipart 字段会被转发，但模型必须能容忍。按模型声明的 `parameters` / `limits` 位于 `/v1/audio/spec.models[]`。
 
 ## 0. 规范定位
 
@@ -55,9 +55,7 @@
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | POST | `/v1/audio/transcriptions` | 转写，`multipart/form-data` |
-| GET | `/v1/models` | 标准 OpenAI 模型列表（host 持有，不是 bundle 注册表） |
 | GET | `/v1/audio/spec` | 规范版本与模型声明注册表（`models[]`） |
-| GET | `/health` | 存活探针（engine 模式由 host 持有；script 模式可用 `/healthz`） |
 
 `GET /v1/audio/spec` 返回规范版本和模型声明注册表：
 
@@ -599,8 +597,7 @@
 ### 11.1 必须保留
 
 - 端点、multipart 字段、`response_format`、错误形状与 §2–§7 完全一致。
-- `GET /v1/audio/spec` 返回 `models[]`，恰好一条，内含该模型的 `description`、`parameters`、`limits`。
-- `GET /v1/audio/spec` 照常返回 `spec_version`。
+- `GET /v1/audio/spec` 返回 `models[]`（恰好一条，内含该模型的 `description`、`parameters`、`limits`）和 `spec_version`。
 - `parameters` / `limits` 仍是静态声明，但 MUST 诚实；`degraded` 与 `strict` 仍 MUST 生效，**不得**因为“只有一个模型”就静默丢弃参数。
 - 内部结果与协议渲染分离：原生输出 → 内部结果 → 三类 OpenAI 响应/文本视图，让协议正确性独立于推理实现。
 

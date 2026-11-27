@@ -62,6 +62,21 @@ ASR、TTS、OCR、音频分离、视频擦除 bundle 还有额外的服务要求
 
 网关解析 resident 模型后，在转发前去掉 `model` query，路径和 body 保持不变。直连 `flashcli serve` 会忽略该 query。`/v1/models` **不是**自定义路径：它始终是网关持有的模型列表，不会透传。
 
+### 1.3 engine 模式默认能力（host 持有）
+
+engine 模式下 host 始终提供以下能力；bundle 不实现，分类规范应链接到这里而不是重复。
+
+| 范围 | host 提供 |
+|---|---|
+| 基础路由 | `GET /health`、`GET /v1/models`、`GET /v1/models/{id}` |
+| 能力路由 | 由 `serve.capabilities` 开启的 OpenAI/Anthropic 路由（chat、completions、responses、embeddings、moderations、audio、images、videos、realtime） |
+| 请求处理 | JSON/multipart 解析与校验、SSE/WebSocket 传输、OpenAI/Anthropic 错误信封、请求日志 |
+| 访问控制 | 配置后的 token/鉴权、能力门、模型选择 |
+| 并发 | `serve.concurrency` 推理槽（默认 `1`）；`N > 1` 时同步 gated 方法被拒绝 |
+| Engine 接口 | `model_id`、`load(checkpoint, preset, **options)`、`warmup(spec)`、§4 的能力方法，以及可选的 `register_routes(app)` |
+
+`serve.capabilities` 缺省保持 legacy `["openai.chat"]`；`[]` 不暴露推理路由。`register_routes(app)` 自定义路由挂载在 host 路由之前并保持优先级；它们不替代 host 持有的 health/model/基础路由。各能力的精确请求字段见 §5。
+
 ## 2. 职责归属（engine 模式）
 
 | 层 | 负责 |

@@ -4,7 +4,7 @@
 
 > **Category supplement.** The generic manifest, layout, entry, runtime, weights and publishing rules remain authoritative in [bundle_publish_standard.md](bundle_publish_standard.md) (zh: [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)). This page adds only audio-separation-specific serving requirements and does not repeat those rules.
 >
-> **Host-owned serving behavior.** In engine mode the host owns `/health`, `/v1/models`, authentication, inference-slot concurrency, request logging, SSE transport and protocol-error translation, all defined in [bundle_serve_protocols.md](bundle_serve_protocols.md) (zh: [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)). This page does not redefine them.
+> **Host-owned serving behavior.** In engine mode the host owns the standard routes, authentication, inference-slot concurrency, request logging, SSE transport and protocol-error translation, all defined in [bundle_serve_protocols.md](bundle_serve_protocols.md) (zh: [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)). This page does not redefine them.
 >
 > **Gateway model selection.** A direct `flashcli serve` deployment serves exactly one model, so requests carry no `model` field. The multi-model flashserver `/v1` gateway routes custom paths with a query selector: `POST /v1/audio/separations?model=<namespace/name:version>`. The gateway resolves the resident model, **strips the query before forwarding**, and leaves the path and body unchanged. The body contract never gains a `model` field, and responses never contain one.
 
@@ -37,7 +37,7 @@ flashcli serve <org>/<name>:<version> --host 0.0.0.0 --port 8080
 - The API is OpenAI-*shaped* (resource naming, JSON parameters, error object), but OpenAI has no native audio-separation endpoint; this path and its fields are local extensions, and the design does not imply official OpenAI support.
 - The model MUST provide the semantics defined in §3. Renaming the outputs of a generic vocal/accompaniment separator is **not** conformance; if the capability is missing, the service reports it (§7).
 - Execution is synchronous. v1 defines no streaming response and no asynchronous job or status-polling API. The response `id` identifies the request only; it is not a job id.
-- Audio separation bundles are packaged in **engine mode** and expose this route as a custom route. The host mounts custom routes from `register_routes(app)` ahead of its own routes and keeps `/health` and `/v1/models` host-owned. Because the route is not a host capability, it is outside the host inference gate: the bundle MUST validate requests, serialize GPU work, and enforce its own limits, while still following the host's auth and logging behavior described in [bundle_serve_protocols.md](bundle_serve_protocols.md).
+- Audio separation bundles are packaged in **engine mode** and expose this route as a custom route. The host mounts custom routes from `register_routes(app)` ahead of its own routes and keeps the standard routes host-owned. Because the route is not a host capability, it is outside the host inference gate: the bundle MUST validate requests, serialize GPU work, and enforce its own limits, while still following the host's auth and logging behavior described in [bundle_serve_protocols.md](bundle_serve_protocols.md).
 
 ---
 

@@ -4,7 +4,7 @@
 
 > **分类补充规范。** 通用 manifest、目录、entry、运行时、权重与发布规则仍以 [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md) 为准（英文：[bundle_publish_standard.md](bundle_publish_standard.md)）。本文只补充 TTS 特有要求。
 >
-> **宿主负责的服务行为。** engine 模式下，`/health`、`/v1/models`、`/v1/models/{id}`、鉴权、并发门控、请求解析、错误封装以及 HTTP/SSE 传输均由宿主负责，定义见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)（英文：[bundle_serve_protocols.md](bundle_serve_protocols.md)）。bundle 不得重新实现宿主路由；本文只规定 TTS 引擎文件与 `ServeEngine.speech()` 必须完成的工作。
+> **宿主负责的服务行为。** engine 模式下，host 基础路由（health、models）、鉴权、并发门控、请求解析、错误封装以及 HTTP/SSE 传输均由宿主负责，定义见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)（英文：[bundle_serve_protocols.md](bundle_serve_protocols.md)）。bundle 不得重新实现宿主路由；本文只规定 TTS 引擎文件与 `ServeEngine.speech()` 必须完成的工作。
 >
 > **你需要生成代码。** 已拿到的 script 模式 bundle 或自带 HTTP 层只能作为模型数学的参考；请丢弃它们，只生成本文描述的 engine 模式文件。
 
@@ -19,7 +19,7 @@ FlashCLI 宿主负责终止 HTTP 并调用 bundle 引擎。TTS bundle 只提供�
 | 宿主负责（见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)） | Bundle 负责 |
 |---|---|
 | HTTP 服务、路由、鉴权、请求解析 | 模型加载与推理 |
-| `/health`、`/v1/models`、`/v1/models/{id}` | `ServeEngine.model_id` |
+| host 基础路由（health、models） | `ServeEngine.model_id` |
 | `POST /v1/audio/speech` 的 JSON 解析 | `ServeEngine.speech()` |
 | 并发门控、错误封装、响应头、传输 | `serve.py`、`engine.py`、`audio_encode.py` |
 | 按 manifest 下载权重 | 使用传给 `load()` 的 `checkpoint` 路径 |
@@ -120,7 +120,7 @@ from flashcli_bundle.protocol import SpeechRequest, SpeechResult
 | 模型 / GPU 失败 | 其他任意异常 | `500 {"detail": "speech failed: …"}` |
 | JSON 请求体格式错误或不是对象 | （不会到达此处） | `422 {"detail": [{…}]}` — 宿主校验 |
 
-JSON 错误封装由**宿主定义**；不要在 bundle 文档中承诺 `{"error": {...}}`。`/v1/models/{unknown}` 返回宿主的 404 对象，bundle 无需实现。
+JSON 错误封装由**宿主定义**；不要在 bundle 文档中承诺 `{"error": {...}}`。未知模型的 404 属于宿主行为，bundle 无需实现。
 
 ---
 
@@ -235,7 +235,8 @@ flashcli bundle validate <bundle-root-or-dist>
 
 # 3) Host smoke (the host runs HTTP; the bundle only supplies the engine)
 flashcli serve <bundle-root> &        # or: flashcli serve flashcli-bundle/<name>:<version>
-until curl -sf localhost:8000/v1/models >/dev/null; do sleep 1; done
+# 等待 host 就绪（host 持有该路由，见 bundle_serve_protocols.zh-CN.md）
+until curl -sf localhost:8000/health >/dev/null; do sleep 1; done
 curl -s -X POST localhost:8000/v1/audio/speech -H 'Content-Type: application/json' -d '{
   "input":"hello",
   "reference_audio":"/abs/ref.wav",
@@ -489,7 +490,7 @@ def synthesize(text: str, *, ref_audio: str, ref_text: Optional[str],
 - [ ] `speech()` 应用 `speed` 并返回 `SpeechResult(audio, media_type)`
 - [ ] bundle 中无 `uvicorn` / `FastAPI(` / `@app.` / `@router.` / `ctypes`
 - [ ] `flashcli bundle validate <tree>` 通过
-- [ ] 冒烟：`/v1/models` 200 → speech 200 → `wav` 为 24 kHz 单声道
+- [ ] 冒烟：host 就绪 200 → speech 200 → `wav` 为 24 kHz 单声道
 - [ ] 错误冒烟：reference 缺失/相对路径/文件不存在 → 400；>10 MiB → 413
 - [ ] `dist/flashcli-bundle.json` 包含 `build.sources[]`，且所有环境一致
 
