@@ -45,6 +45,29 @@ proxy, so the bundle owns the entire protocol. `native-exec` over stdio and
 
 The remainder of this document describes **only Python engine mode**.
 
+### 1.1 Category supplements
+
+ASR, TTS, OCR, audio-separation, and video-erase bundles have additional serving requirements. Follow the matching supplement in addition to this document:
+
+- [bundle_asr_standard.md](bundle_asr_standard.md)
+- [bundle_tts_standard.md](bundle_tts_standard.md)
+- [bundle_ocr_standard.md](bundle_ocr_standard.md)
+- [bundle_audio_separation_standard.md](bundle_audio_separation_standard.md)
+- [bundle_video_erase_standard.md](bundle_video_erase_standard.md)
+
+These categories may expose native routes through `register_routes` (for example `/v1/ocr*`, `/v1/audio/spec`, `/v1/audio/separations`, `/v1/video/erase*`). The flashserver `/v1` gateway forwards these custom paths and methods to the model's serve endpoint; no per-route gateway allowlist is required.
+
+### 1.2 Custom paths and model selection
+
+The gateway owns `/v1/models` and the standard OpenAI/Anthropic routes. Any other `/v1/*` path is a **custom path** and is forwarded to the selected model's serve endpoint.
+
+The gateway is multi-model, so a custom request must select the resident model:
+
+- if the JSON/multipart body has a `model` field, that full bundle ref selects the model;
+- otherwise pass the selector as a query parameter: `?model=<namespace/name:version>` (used by GET/DELETE and by bodies that intentionally omit `model`, such as audio separation).
+
+The gateway resolves the resident model, strips the `model` query before forwarding, and leaves the path/body unchanged. Direct `flashcli serve` ignores the query. `/v1/models` is **not** a custom path: it remains the host-owned gateway model list and is never passed through.
+
 ## 2. Ownership (engine mode)
 
 | Layer | Owns |

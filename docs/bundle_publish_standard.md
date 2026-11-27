@@ -32,6 +32,20 @@ End users resolve bundles via inline refs (`flashcli-bundle/<name>:<version>`). 
 
 Everything else is a convention or recommendation: the `runtime/` directory name, whether `flash_rt/` is shared or per-environment, and whether runtime cells share code. See §2.3 for an isolated per-environment layout.
 
+### 1.1 Category standards (mandatory supplements)
+
+Some model categories have additional serving and packaging rules. A bundle in one of these categories **MUST** also satisfy its category standard; a bundle that does not is not publishable.
+
+| Category | FlashHub tag | Standard | Typical integration |
+|---|---|---|---|
+| ASR | `ASR` | [bundle_asr_standard.md](bundle_asr_standard.md) | engine (`ServeEngine.transcribe`) or script |
+| TTS | `TTS` | [bundle_tts_standard.md](bundle_tts_standard.md) | engine (`ServeEngine.speech`) |
+| OCR | `VLM` (OCR) | [bundle_ocr_standard.md](bundle_ocr_standard.md) | engine + `register_routes` |
+| Audio separation | `audio-model` | [bundle_audio_separation_standard.md](bundle_audio_separation_standard.md) | engine + `register_routes` |
+| Video erase | `video-model` | [bundle_video_erase_standard.md](bundle_video_erase_standard.md) | engine + `register_routes` |
+
+These documents add to this standard and never override it. The flashserver `/v1` gateway forwards custom category paths (`/v1/ocr*`, `/v1/audio/spec`, `/v1/audio/separations`, `/v1/video/erase*`) to the model's serve endpoint, so they are available through the same base URL as the standard routes.
+
 ---
 
 ## 2. FlashHub publish layout

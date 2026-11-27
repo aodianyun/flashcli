@@ -39,6 +39,29 @@ host 打印 bundle 端点且不做反向代理，协议完全由 bundle 拥有�
 
 本文以下内容**仅描述 Python engine 模式**。
 
+### 1.1 分类补充规范
+
+ASR、TTS、OCR、音频分离、视频擦除 bundle 还有额外的服务要求，需同时遵循对应分类规范：
+
+- [bundle_asr_standard.zh-CN.md](bundle_asr_standard.zh-CN.md)
+- [bundle_tts_standard.zh-CN.md](bundle_tts_standard.zh-CN.md)
+- [bundle_ocr_standard.zh-CN.md](bundle_ocr_standard.zh-CN.md)
+- [bundle_audio_separation_standard.zh-CN.md](bundle_audio_separation_standard.zh-CN.md)
+- [bundle_video_erase_standard.zh-CN.md](bundle_video_erase_standard.zh-CN.md)
+
+这些分类可通过 `register_routes` 暴露原生路由（如 `/v1/ocr*`、`/v1/audio/spec`、`/v1/audio/separations`、`/v1/video/erase*`）。flashserver `/v1` 网关会把这些自定义路径和方法透传到模型 serve 端点，不需要网关侧逐路由白名单。
+
+### 1.2 自定义路径与模型选择
+
+`/v1/models` 和标准 OpenAI/Anthropic 路由由网关持有；其他 `/v1/*` 路径都是**自定义路径**，会透传到所选模型的 serve 端点。
+
+网关是多模型服务，自定义请求必须选择 resident 模型：
+
+- JSON/multipart body 中有 `model` 字段时，用完整 bundle ref 选择模型；
+- 否则通过 query 选择：`?model=<namespace/name:version>`（GET/DELETE，以及像音频分离这种 body 故意不带 `model` 的 POST）。
+
+网关解析 resident 模型后，在转发前去掉 `model` query，路径和 body 保持不变。直连 `flashcli serve` 会忽略该 query。`/v1/models` **不是**自定义路径：它始终是网关持有的模型列表，不会透传。
+
 ## 2. 职责归属（engine 模式）
 
 | 层 | 负责 |
