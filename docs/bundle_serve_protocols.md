@@ -83,6 +83,10 @@ In engine mode the host always provides the following; bundles do not implement 
 
 `serve.capabilities` absent keeps the legacy `["openai.chat"]`; `[]` exposes no inference routes. `register_routes(app)` custom routes are mounted before host routes and keep priority; they do not replace the host-owned health/model/base routes. The exact request fields for each capability are in §5.
 
+A bundle may register a standard path through `register_routes` to **override** the host default (for example OCR chat/responses with an `ocr` extension, ASR transcription with richer response shapes, or video chat/responses with an `erase` extension). The override owns that path's request parsing, SSE and error shape; host auth/logging middleware still applies. The host base routes remain host-owned.
+
+Error envelopes are protocol-specific: chat/completions/responses and Anthropic routes use their protocol error shapes; audio speech/transcription surface FastAPI's `{"detail": ...}` for `HTTPException`; a custom `register_routes` route owns its own error shape.
+
 ## 2. Ownership (engine mode)
 
 | Layer | Owns |

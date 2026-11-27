@@ -4,7 +4,7 @@
 
 > **Category supplement.** The generic manifest, layout, weights, runtime and publishing rules remain authoritative in [bundle_publish_standard.md](bundle_publish_standard.md) (zh: [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)). This page adds only OCR-specific requirements.
 >
-> **Gateway passthrough.** OCR bundles use `format_version: 4`, engine mode, a `ServeEngine`, and `register_routes(app)` for the native `/v1/ocr`, `/v1/ocr/batch` and `/v1/ocr/info` routes. The flashserver `/v1` gateway forwards these custom paths to the model's serve endpoint, so the same base URL exposes both the standard OpenAI routes and the native OCR routes.
+> **Gateway passthrough.** OCR bundles use `format_version: 4`, engine mode, a `ServeEngine`, and `register_routes(app)` for the native `/v1/ocr`, `/v1/ocr/batch` and `/v1/ocr/info` routes. To add the `ocr` extension and OCR-specific streaming semantics, the bundle also registers `/v1/chat/completions` and `/v1/responses`; these overrides take priority over the host defaults and own their parsing/SSE/error shape. Host base routes remain host-owned. The flashserver `/v1` gateway forwards these paths to the model's serve endpoint, so the same base URL exposes both the standard OpenAI routes and the native OCR routes. Custom paths that do not carry `model` in the body use `?model=<full-ref>`; see [bundle_serve_protocols.md](bundle_serve_protocols.md) §1.2.
 >
 > **Generic rules are not repeated.** Manifest/layout/entry/runtime/weights/publishing are defined in [bundle_publish_standard.md](bundle_publish_standard.md); engine-mode host behavior (standard routes, auth, concurrency, request logging, SSE transport, error translation) is defined in [bundle_serve_protocols.md](bundle_serve_protocols.md). This page adds only OCR-specific routes, schemas, limits, and acceptance.
 
@@ -62,7 +62,7 @@ Appendix B. Error codes
 1. Use an **engine-mode** `ServeEngine`; the listen address/port are provided by the host's
    `--host` (default `0.0.0.0`) / `--port` (default `8000`);
 2. Provide both the **OpenAI-compatible** (`/v1/chat/completions`, `/v1/responses`)
-   and the **native OCR** (`/v1/ocr`) endpoints; the host owns the standard routes;
+   and the **native OCR** (`/v1/ocr`) endpoints; the OCR bundle overrides chat/responses for the `ocr` extension and native routes, while host base routes remain host-owned;
 3. Support **multi-image input**: one request may carry several images, and per-image
    results are returned in input order;
 4. Support **batch JSON multi-output** `/v1/ocr/batch`: one call names several inputs
@@ -98,7 +98,7 @@ flashcli serve <org>/<name>:<version> --host 0.0.0.0 --port 8080 --api-key <key>
                                                 ▼
 ┌─ ocr_serve/  protocol layer (shared verbatim by all OCR bundles, never modified per model) ──┐
 │  server.py      /v1/ocr  /v1/ocr/batch  /v1/ocr/info  OCR FIFO queue, SSE                   │
-│                 (host owns standard routes, auth and the concurrency gate)                  │
+│                 (host owns base routes/auth; OCR overrides chat/responses, own queue/SSE)   │
 │  openai_api.py  parse both OpenAI dialects, shape OCR results, SSE events                    │
 │  media.py       data URL / base64 / http(s) / local path parsing, size + SSRF checks         │
 │  datatypes.py   framework-independent request/result/error types                             │
@@ -118,8 +118,8 @@ Rules:
   `datatypes.py` / `__init__.py`) depend only on `fastapi` / `uvicorn` /
   `pydantic` and the standard library — not on torch. They own OCR-specific request
   parsing, result shaping, SSE, batch handling, image validation, and the OCR FIFO
-  queue. The host owns standard routes, authentication, the concurrency gate, request
-  logging and the error envelope.
+  queue. The bundle overrides chat/responses for the `ocr` extension; the host owns base
+  routes, authentication, the concurrency gate, request logging and the error envelope.
 - `ocr_serve/backend.py` is the model glue and may depend on runtime libraries such as
   torch/OpenCV; porting to another OCR model means replacing its implementation while
   keeping the interface unchanged.
@@ -160,6 +160,8 @@ The host-side `ServeEngine` protocol and engine-mode routing are specified in
 ## 4. OCR-specific manifest settings
 
 The generic manifest schema, entry rules, dependencies and weights are defined in [bundle_publish_standard.md](bundle_publish_standard.md). Only the OCR-specific serve options and resource requirements are listed here.
+
+- `entry.serve.capabilities` MUST include `openai.chat` and `openai.responses` so the gateway routes the overridden chat/responses paths. No separate OCR capability is required; `/v1/ocr*` are custom paths.
 
 ### 4.3 Shared serve_options (required in every OCR bundle, identical names and semantics)
 
@@ -450,7 +452,7 @@ Rules:
 
 ## 13. Server behavior rules (must be identical everywhere)
 
-> Engine-mode host behavior (standard routes, authentication, the concurrency gate, request logging and the error envelope) is defined in [bundle_serve_protocols.md](bundle_serve_protocols.md) and is not repeated here. The rules below are OCR-specific media/queue behavior.
+> Host base behavior (base routes, authentication, the concurrency gate, request logging and the error envelope) is defined in [bundle_serve_protocols.md](bundle_serve_protocols.md) and is not repeated here. The OCR bundle overrides chat/responses for the `ocr` extension; the rules below are OCR-specific media/queue behavior.
 
 | Rule | Reason / rationale |
 | --- | --- |

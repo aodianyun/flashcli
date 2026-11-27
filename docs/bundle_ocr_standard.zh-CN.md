@@ -4,7 +4,7 @@
 
 > **类别补充。** 通用 manifest、目录结构、权重、运行时与发布规则仍以 [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)（英文：[bundle_publish_standard.md](bundle_publish_standard.md)）为准；本页只补充 OCR 专有要求。
 >
-> **网关透传。** OCR bundle 使用 `format_version: 4`、engine 模式、`ServeEngine`，并通过 `register_routes(app)` 提供原生 `/v1/ocr`、`/v1/ocr/batch`、`/v1/ocr/info` 路由。flashserver `/v1` 网关会把这些自定义路径透传到模型 serve 端点，因此同一个 base URL 同时暴露标准 OpenAI 路由和原生 OCR 路由。
+> **网关透传。** OCR bundle 使用 `format_version: 4`、engine 模式、`ServeEngine`，并通过 `register_routes(app)` 提供原生 `/v1/ocr`、`/v1/ocr/batch`、`/v1/ocr/info` 路由。为加入 `ocr` 扩展和 OCR 专有流式语义，bundle 还会覆盖注册 `/v1/chat/completions` 和 `/v1/responses`；这些覆盖路由优先于 host 默认路由，并自行负责解析/SSE/错误形状。host 基础路由仍由 host 持有。flashserver `/v1` 网关会把这些路径透传到模型 serve 端点，因此同一个 base URL 同时暴露标准 OpenAI 路由和原生 OCR 路由。body 不带 `model` 的自定义路径用 `?model=<full-ref>` 选择模型，见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md) §1.2。
 >
 > **通用规则不重复。** manifest/目录/entry/运行时/权重/发布规则见 [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)；engine 模式的 host 行为（标准路由、鉴权、并发、请求日志、SSE 传输、错误转换）见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)。本文只补充 OCR 专有路由、schema、限制和验收。
 
@@ -61,7 +61,7 @@
 1. 使用 **engine 模式** 的 `ServeEngine`，监听地址/端口由 host 的
    `--host`（默认 `0.0.0.0`）/ `--port`（默认 `8000`）提供；
 2. 同时提供 **OpenAI 兼容**（`/v1/chat/completions`、`/v1/responses`）与
-   **原生 OCR**（`/v1/ocr`）接口；标准模型/健康路由由 host 持有；
+   **原生 OCR**（`/v1/ocr`）接口；OCR bundle 覆盖 chat/responses 以提供 `ocr` 扩展和原生路由，host 基础路由仍由 host 持有；
 3. 支持 **多图输入**：一次请求可带多张图片，按输入顺序返回逐图结果；
 4. 支持 **批量 JSON 多输出** `/v1/ocr/batch`：一次调用指定多个输入
    （每项可多图）与每项输出格式，按顺序返回 `results[]`；
@@ -94,7 +94,7 @@ flashcli serve <org>/<name>:<version> --host 0.0.0.0 --port 8080 --api-key <key>
                                    ▼
  ┌──────────── ocr_serve/（协议层文件：所有 OCR bundle 共用，原样复制，禁止按模型修改）────────────┐
  │ server.py      /v1/ocr  /v1/ocr/batch  /v1/ocr/info  OCR FIFO 队列、SSE                     │
- │                （host 持有标准路由、鉴权和并发门）                                           │
+ │                （host 持有基础路由/鉴权；OCR 覆盖 chat/responses，自管队列/SSE）              │
  │ openai_api.py  OpenAI 两种方言的解析、OCR 结果塑形、SSE 事件                                 │
  │ media.py       data URL / base64 / http(s) / 本地路径解析、大小与 SSRF 校验                  │
  │ datatypes.py   与框架无关的请求/结果/错误类型                                                 │
@@ -112,8 +112,8 @@ flashcli serve <org>/<name>:<version> --host 0.0.0.0 --port 8080 --api-key <key>
 - `ocr_serve/` 的协议文件（`server.py` / `openai_api.py` / `media.py` /
   `datatypes.py` / `__init__.py`）只依赖 `fastapi` / `uvicorn` /
   `pydantic` 与标准库，不依赖 torch；它们负责 OCR 专有的请求解析、结果塑形、
-  SSE、批量处理、图片校验和 OCR FIFO 队列。标准路由、鉴权、并发门、请求日志
-  和错误信封由 host 持有。
+  SSE、批量处理、图片校验和 OCR FIFO 队列。OCR 覆盖 chat/responses 以提供 `ocr`
+  扩展；host 持有基础路由、鉴权、并发门、请求日志和错误信封。
 - `ocr_serve/backend.py` 是模型胶水，可以依赖 torch/OpenCV 等运行时库；
   移植到其他 OCR 模型时替换它的实现，保持接口不变。
 - 胶水不处理 HTTP/JSON/SSE/排队；协议层不认识任何具体 OCR 模型。
@@ -146,6 +146,8 @@ flashcli serve <org>/<name>:<version> --host 0.0.0.0 --port 8080 --api-key <key>
 ## 4. OCR 专有 manifest 设置
 
 通用 manifest schema、entry、依赖和权重见 [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)。这里只列 OCR 专有的 serve_options 和资源要求。
+
+- `entry.serve.capabilities` MUST 包含 `openai.chat` 和 `openai.responses`，网关才会路由被覆盖的 chat/responses 路径。不需要单独的 OCR capability；`/v1/ocr*` 是自定义路径。
 
 ### 4.3 统一的 serve_options（所有 OCR bundle 必须提供，名字与语义一致）
 
@@ -429,7 +431,7 @@ host 按 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md) 加�
 
 ## 13. 服务端行为规则（必须一致）
 
-> engine 模式的 host 行为（标准路由、鉴权、并发门、请求日志和错误信封）见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)，本文不重复。下表只列 OCR 专有的媒体/队列行为。
+> host 基础行为（基础路由、鉴权、并发门、请求日志和错误信封）见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)，本文不重复。OCR 覆盖 chat/responses 以提供 `ocr` 扩展；下表只列 OCR 专有的媒体/队列行为。
 
 | 规则 | 原因 / 依据 |
 | --- | --- |

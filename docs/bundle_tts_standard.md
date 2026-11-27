@@ -4,7 +4,7 @@
 
 > **Category supplement.** The generic manifest, layout, entry, runtime, weights, and publishing rules remain authoritative in [bundle_publish_standard.md](bundle_publish_standard.md) (zh: [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)). This page adds only TTS-specific requirements.
 >
-> **Host-owned serving behavior.** In engine mode the host owns Host base routes (health, models), authentication, the concurrency gate, request parsing, the error envelope, and the HTTP/SSE transport. These are defined in [bundle_serve_protocols.md](bundle_serve_protocols.md) (zh: [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)). A bundle must not reimplement host-owned routes; this page only defines what the TTS engine files and `ServeEngine.speech()` must do.
+> **Host-owned serving behavior.** In engine mode the host owns the base routes (health, models), authentication, the concurrency gate, request parsing, the error envelope, and the HTTP/SSE transport. These are defined in [bundle_serve_protocols.md](bundle_serve_protocols.md) (zh: [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)). A bundle must not reimplement host-owned routes; this page only defines what the TTS engine files and `ServeEngine.speech()` must do.
 >
 > **You will generate code.** Any script-mode bundle or self-hosted HTTP layer you were given is a reference for model maths only. Discard it and generate only the engine-mode files described here.
 

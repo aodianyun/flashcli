@@ -13,12 +13,12 @@
 >
 > **FlashCLI 集成方式。** 新 ASR bundle 使用 `format_version: 4`，可采用以下任一形式：
 >
-> - **engine 模式**：实现 `ServeEngine.transcribe` 处理 `/v1/audio/transcriptions` / `translations`，并用 `register_routes(app)` 注册 `/v1/audio/spec`；
+> - **engine 模式（完整契约）**：用 `register_routes(app)` 注册 `/v1/audio/transcriptions` / `translations` 和 `/v1/audio/spec`；自定义路由优先于 host 默认路由。host 默认的 `ServeEngine.transcribe` 路由只提供标准 OpenAI 转写子集，不提供下面的完整契约；
 > - **script 模式**：由 bundle 自己启动 HTTP 服务，完整实现下面的契约。
 >
 > 在 `entry.serve.capabilities` 中声明 `openai.audio.transcriptions`（支持翻译时再加 `openai.audio.translations`）。
 >
-> **网关透传。** flashserver `/v1` 网关会代理 `/v1/audio/transcriptions` / `translations`，并把 `/v1/audio/spec` 等自定义路径透传到模型 serve 端点。额外的 multipart 字段会被转发，但模型必须能容忍。按模型声明的 `parameters` / `limits` 位于 `/v1/audio/spec.models[]`。
+> **网关透传。** flashserver `/v1` 网关会代理 `/v1/audio/transcriptions` / `translations`，并把 `/v1/audio/spec` 等自定义路径透传到模型 serve 端点。额外的 multipart 字段会被转发，但模型必须能容忍。按模型声明的 `parameters` / `limits` 位于 `/v1/audio/spec.models[]`。body 不带 `model` 的自定义路径用 `?model=<full-ref>` 选择模型，见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md) §1.2。
 
 ## 0. 规范定位
 

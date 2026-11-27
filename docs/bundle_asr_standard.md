@@ -13,12 +13,12 @@ This specification applies to any local ASR model. `qwen3-asr-1.7b` and `moss-tr
 >
 > **FlashCLI integration.** A new ASR bundle uses `format_version: 4`. It may use either form:
 >
-> - **engine mode**: implement `ServeEngine.transcribe` for `/v1/audio/transcriptions` / `translations`, and use `register_routes(app)` for `/v1/audio/spec`;
+> - **engine mode (full contract)**: use `register_routes(app)` for `/v1/audio/transcriptions` / `translations` and `/v1/audio/spec`; custom routes take priority over the host defaults. The host's default `ServeEngine.transcribe` route only exposes the standard OpenAI transcription subset, not the richer contract below;
 > - **script mode**: the bundle owns the HTTP server and implements the complete contract below.
 >
 > Declare `openai.audio.transcriptions` (and `openai.audio.translations` when supported) in `entry.serve.capabilities`.
 >
-> **Gateway passthrough.** The flashserver `/v1` gateway proxies `/v1/audio/transcriptions` / `translations` and forwards custom paths such as `/v1/audio/spec` to the model's serve endpoint. Extra multipart fields are forwarded, but the model must tolerate them. The richer model declaration lives at `/v1/audio/spec.models`.
+> **Gateway passthrough.** The flashserver `/v1` gateway proxies `/v1/audio/transcriptions` / `translations` and forwards custom paths such as `/v1/audio/spec` to the model's serve endpoint. Extra multipart fields are forwarded, but the model must tolerate them. The richer model declaration lives at `/v1/audio/spec.models[]`. Custom paths that do not carry `model` in the body use `?model=<full-ref>`; see [bundle_serve_protocols.md](bundle_serve_protocols.md) §1.2.
 
 ## 0. Specification Positioning
 

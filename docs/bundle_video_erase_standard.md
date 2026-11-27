@@ -8,8 +8,11 @@
 > requirements.
 >
 > **Gateway passthrough.** Video-erase bundles use `format_version: 4`, engine mode, a `ServeEngine`, and
-> `register_routes(app)` for the native `/v1/video/erase` family. The flashserver `/v1` gateway forwards these custom
-> paths, including job and file URLs, to the model's serve endpoint.
+> `register_routes(app)` for the native `/v1/video/erase` family. They also register `/v1/chat/completions` and
+> `/v1/responses` to add the `erase` extension and progress SSE; these overrides take priority over the host defaults
+> and own their parsing/SSE/error shape. Host base routes remain host-owned. The flashserver `/v1` gateway forwards
+> these paths, including job and file URLs, to the model's serve endpoint. Custom paths that do not carry
+> `model` in the body use `?model=<full-ref>`; see [bundle_serve_protocols.md](bundle_serve_protocols.md) §1.2.
 >
 > **Generic rules are not repeated.** Manifest/layout/entry/runtime/weights/publishing are defined in
 > [bundle_publish_standard.md](bundle_publish_standard.md); engine-mode host behavior (standard routes, auth,
@@ -48,7 +51,7 @@ How the serving mode differs from OCR / LLM bundles:
 
 ## 2. Architecture and host boundaries
 
-Engine mode: the host builds FastAPI and owns the standard routes, authentication, the inference-slot concurrency gate, request logging, SSE transport, and protocol-error translation. It calls `ServeEngine.register_routes(app)`; the video-erase routes below are mounted there. The host contract is defined in [bundle_serve_protocols.md](bundle_serve_protocols.md); this page adds only the video-erase routes, media contract, jobs, and limits.
+Engine mode: the host builds FastAPI and owns the base routes, authentication, request logging and the process lifecycle. It calls `ServeEngine.register_routes(app)`; the video-erase bundle registers the native `/v1/video/erase*` routes **and overrides** `/v1/chat/completions` / `/v1/responses` to add the `erase` extension and progress SSE. These overrides take priority and own their parsing/SSE/error shape. Declare `openai.chat` and `openai.responses` so the gateway routes those overridden paths; declare `openai.videos` only if the standard video routes are also implemented. The host contract is defined in [bundle_serve_protocols.md](bundle_serve_protocols.md); this page adds only the video-erase routes, media contract, jobs, and limits.
 
 ## 3. Startup and lifecycle
 

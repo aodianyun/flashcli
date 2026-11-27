@@ -7,8 +7,11 @@
 > [bundle_publish_standard.md](bundle_publish_standard.md)）为准。本页只补充视频擦除 API 的要求。
 >
 > **网关透传。** 视频擦除 bundle 使用 `format_version: 4`、engine 模式、`ServeEngine`，并通过
-> `register_routes(app)` 提供原生 `/v1/video/erase` 系列路由。flashserver `/v1` 网关会把这些自定义路径
-> （包括任务/文件 URL）透传到模型 serve 端点。
+> `register_routes(app)` 提供原生 `/v1/video/erase` 系列路由。它还会覆盖注册 `/v1/chat/completions` 和
+> `/v1/responses`，以加入 `erase` 扩展和进度 SSE；这些覆盖路由优先于 host 默认路由，并自行负责解析/SSE/错误
+> 形状。host 基础路由仍由 host 持有。flashserver `/v1` 网关会把这些路径（包括任务/文件 URL）透传到模型
+> serve 端点。body 不带 `model` 的自定义路径用 `?model=<full-ref>` 选择模型，见
+> [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md) §1.2。
 >
 > **通用规则不重复。** manifest/目录/entry/运行时/权重/发布规则见
 > [bundle_publish_standard.zh-CN.md](bundle_publish_standard.zh-CN.md)；engine 模式的 host 行为
@@ -47,7 +50,7 @@ MiniMax-Remover 是 **mask 引导**的视频修复模型：输入一段视频（
 
 ## 2. 架构与 host 边界
 
-engine 模式下 host 构建 FastAPI，并负责标准路由、鉴权、推理槽并发门、请求日志、SSE 传输和协议错误转换；host 调用 `ServeEngine.register_routes(app)` 挂载下面的视频擦除路由。host 契约见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)；本文只补充视频擦除路由、媒体契约、任务和限制。
+engine 模式下 host 构建 FastAPI，并负责基础路由、鉴权、请求日志和进程生命周期；host 调用 `ServeEngine.register_routes(app)`，视频擦除 bundle 注册原生 `/v1/video/erase*` 路由，并**覆盖** `/v1/chat/completions` / `/v1/responses` 以加入 `erase` 扩展和进度 SSE；这些覆盖路由优先，并自行负责解析/SSE/错误形状。声明 `openai.chat` 和 `openai.responses` 让网关路由这些覆盖路径；只有同时实现标准视频路由时才声明 `openai.videos`。host 契约见 [bundle_serve_protocols.zh-CN.md](bundle_serve_protocols.zh-CN.md)；本文只补充视频擦除路由、媒体契约、任务和限制。
 
 ## 3. 启动与生命周期
 

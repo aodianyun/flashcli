@@ -77,6 +77,10 @@ engine 模式下 host 始终提供以下能力；bundle 不实现，分类规范
 
 `serve.capabilities` 缺省保持 legacy `["openai.chat"]`；`[]` 不暴露推理路由。`register_routes(app)` 自定义路由挂载在 host 路由之前并保持优先级；它们不替代 host 持有的 health/model/基础路由。各能力的精确请求字段见 §5。
 
+bundle 可通过 `register_routes` 注册标准路径来**覆盖** host 默认路由（例如 OCR 的 chat/responses 加 `ocr` 扩展、ASR 的转写返回更丰富形状、视频 chat/responses 加 `erase` 扩展）。覆盖路由自行负责该路径的请求解析、SSE 和错误形状；host 的鉴权/日志中间件仍然生效。host 基础路由仍由 host 持有。
+
+错误信封按协议区分：chat/completions/responses 和 Anthropic 路由使用各自协议的错误形状；audio speech/transcription 的 `HTTPException` 返回 FastAPI 的 `{"detail": ...}`；`register_routes` 自定义路由自行决定错误形状。
+
 ## 2. 职责归属（engine 模式）
 
 | 层 | 负责 |
