@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
 <defs>
-<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0F172A" flood-opacity="0.06"/></filter>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1.5" stdDeviation="3" flood-color="#0F172A" flood-opacity="0.05"/></filter>
 <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#2563EB"/></marker>
 <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#0F766E"/></marker>
 <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#B45309"/></marker>
@@ -8,177 +8,149 @@
 </defs>
 <rect width="1600" height="900" fill="#F7F9FC"/>
 <path d="M 48 100 L 1552 100" stroke="#E2E8F0" stroke-width="1"/>
-<text x="48" y="64" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="34" font-weight="700" fill="#0F172A">flashserver gateway / scheduler flow (detail)</text>
+<text x="48" y="64" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="34" font-weight="700" fill="#0F172A">flashserver gateway / scheduler flow</text>
 <text x="1552" y="64" text-anchor="end" font-family="JetBrains Mono, Consolas, monospace" font-size="12" font-weight="400" fill="#94A3B8">v1</text>
-<text x="48" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">CLIENTS</text>
-<text x="408" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">GATEWAY</text>
-<text x="818" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">SCHEDULER / MANAGER</text>
-<text x="1178" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">CHILD / STATE</text>
-<rect x="48" y="160" width="310" height="350" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
-<circle cx="70" cy="188" r="4.2" fill="#2563EB"/>
-<text x="82" y="194" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Inference clients</text>
-<rect x="64" y="218" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="77" y="237" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">OpenAI SDK</text>
-<text x="77" y="253" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">body model = full ref</text>
-<text x="77" y="268" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">chat / responses / embeddings</text>
-<rect x="64" y="290" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="77" y="309" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Anthropic SDK</text>
-<text x="77" y="325" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">body model = full ref</text>
-<text x="77" y="340" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">messages / count_tokens</text>
-<rect x="64" y="362" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="77" y="381" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Custom HTTP</text>
-<text x="77" y="397" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">custom path: body or ?model=</text>
-<text x="77" y="412" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">full ref</text>
-<rect x="64" y="434" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="77" y="453" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Realtime WS</text>
-<text x="77" y="469" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">/v1/realtime?model=&lt;full-ref&gt;</text>
-<text x="77" y="484" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">validate/admit before upgrade</text>
-<rect x="48" y="530" width="310" height="330" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
-<circle cx="70" cy="558" r="4.2" fill="#B45309"/>
-<text x="82" y="564" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Control clients</text>
-<rect x="64" y="588" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="77" y="607" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Desktop</text>
-<text x="77" y="623" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">/api/v1 management</text>
-<text x="77" y="638" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">no model start/stop</text>
-<rect x="64" y="660" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="77" y="679" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">CLI</text>
-<text x="77" y="695" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">pull / run / serve</text>
-<text x="77" y="710" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">diagnostics + local debug</text>
-<rect x="64" y="732" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="77" y="751" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Apps</text>
-<text x="77" y="767" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">install / prepare / setup</text>
-<text x="77" y="782" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">inference via /v1 only</text>
-<rect x="64" y="804" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="77" y="823" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Child endpoint</text>
-<text x="77" y="839" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">loopback only</text>
-<text x="77" y="854" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">never returned to clients</text>
-<rect x="408" y="160" width="360" height="350" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
-<circle cx="430" cy="188" r="4.2" fill="#2563EB"/>
-<text x="442" y="194" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Auth &amp; route</text>
-<rect x="424" y="218" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="437" y="237" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Auth</text>
-<text x="437" y="253" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">token checked first</text>
-<text x="437" y="268" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">401; health/docs exempt</text>
-<rect x="424" y="290" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="437" y="309" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Standard route</text>
-<text x="437" y="325" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">capability gate</text>
-<text x="437" y="340" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">chat/audio/images/videos/...</text>
-<rect x="424" y="362" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="437" y="381" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Custom path</text>
-<text x="437" y="397" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">no capability gate</text>
-<text x="437" y="412" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">register_routes owns</text>
-<rect x="424" y="434" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="437" y="453" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Reserved path</text>
-<text x="437" y="469" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">models/responses/videos</text>
-<text x="437" y="484" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">405/404, never forward</text>
-<rect x="408" y="530" width="360" height="330" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
-<circle cx="430" cy="558" r="4.2" fill="#0F766E"/>
-<text x="442" y="564" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Model &amp; readiness</text>
-<rect x="424" y="588" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="437" y="607" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Select model</text>
-<text x="437" y="623" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">body / form / query</text>
-<text x="437" y="638" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">full ref only</text>
-<rect x="424" y="660" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="437" y="679" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Conflict/missing</text>
-<text x="437" y="695" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">body != query -&gt; 400 conflict</text>
-<text x="437" y="710" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">missing/short -&gt; 400</text>
-<rect x="424" y="732" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="437" y="751" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Disk readiness</text>
-<text x="437" y="767" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">manifest / incomplete / auto-pull</text>
-<text x="437" y="782" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">not ready -&gt; 503 + Retry-After</text>
-<rect x="424" y="804" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="437" y="823" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Capability (standard)</text>
-<text x="437" y="839" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">undeclared -&gt; 400 unsupported</text>
-<text x="437" y="854" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">custom path skips</text>
-<rect x="818" y="160" width="310" height="350" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
-<circle cx="840" cy="188" r="4.2" fill="#2563EB"/>
-<text x="852" y="194" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Scheduler</text>
-<rect x="834" y="218" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="847" y="237" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Acquire</text>
-<text x="847" y="253" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">max_loaded / queue</text>
-<text x="847" y="268" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">queue full -&gt; 429</text>
-<rect x="834" y="290" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="847" y="309" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Placement</text>
-<text x="847" y="325" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">free VRAM + headroom</text>
-<text x="847" y="340" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">gpu_count / CPU fallback</text>
-<rect x="834" y="362" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="847" y="381" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Eviction</text>
-<text x="847" y="397" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">LRU idle residents only</text>
-<text x="847" y="412" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">disk assets kept</text>
-<rect x="834" y="434" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="847" y="453" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Start</text>
-<text x="847" y="469" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">spawn child + health</text>
-<text x="847" y="484" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">not ready -&gt; 503 starting</text>
-<rect x="818" y="530" width="310" height="330" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
-<circle cx="840" cy="558" r="4.2" fill="#0F766E"/>
-<text x="852" y="564" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Lease / manager</text>
-<rect x="834" y="588" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="847" y="607" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Lease</text>
-<text x="847" y="623" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">active_requests++</text>
-<text x="847" y="638" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">blocks evict / unload</text>
-<rect x="834" y="660" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="847" y="679" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Child</text>
-<text x="847" y="695" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">endpoint + PID + health</text>
-<text x="847" y="710" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">restart on next request</text>
-<rect x="834" y="732" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="847" y="751" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Idle</text>
-<text x="847" y="767" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">last_used / idle_stop_seconds</text>
-<text x="847" y="782" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">stops resident only</text>
-<rect x="834" y="804" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="847" y="823" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Unload</text>
-<text x="847" y="839" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">busy -&gt; 409 / force</text>
-<text x="847" y="854" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">delete disk assets</text>
-<rect x="1178" y="160" width="354" height="350" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
-<circle cx="1200" cy="188" r="4.2" fill="#0F766E"/>
-<text x="1212" y="194" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Proxy</text>
-<rect x="1194" y="218" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1207" y="237" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">JSON / SSE</text>
-<text x="1207" y="253" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">stream through</text>
-<text x="1207" y="268" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">rewrite model</text>
-<rect x="1194" y="290" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1207" y="309" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Multipart</text>
-<text x="1207" y="325" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">&lt;= max_upload_bytes</text>
-<text x="1207" y="340" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">over limit -&gt; 413</text>
-<rect x="1194" y="362" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1207" y="381" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">WebSocket</text>
-<text x="1207" y="397" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">/v1/realtime</text>
-<text x="1207" y="412" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">bidirectional</text>
-<rect x="1194" y="434" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1207" y="453" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Cancel</text>
-<text x="1207" y="469" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">client close -&gt; cancel upstream</text>
-<text x="1207" y="484" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">release lease</text>
-<rect x="1178" y="530" width="354" height="330" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
-<circle cx="1200" cy="558" r="4.2" fill="#DC2626"/>
-<text x="1212" y="564" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Errors / state</text>
-<rect x="1194" y="588" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1207" y="607" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Error map</text>
-<text x="1207" y="623" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">400/401/404/405/409/413</text>
-<text x="1207" y="638" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">429/499/501/502/503</text>
-<rect x="1194" y="660" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1207" y="679" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Retry hints</text>
-<text x="1207" y="695" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">Retry-After</text>
-<text x="1207" y="710" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">X-Flashcli-Preload-Job</text>
-<rect x="1194" y="732" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1207" y="751" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Disk state</text>
-<text x="1207" y="767" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">absent -&gt; preloading</text>
-<text x="1207" y="782" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">preloaded -&gt; unloading</text>
-<rect x="1194" y="804" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1207" y="823" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Resident state</text>
-<text x="1207" y="839" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">stopped -&gt; starting -&gt; ready</text>
-<text x="1207" y="854" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">ready &lt;-&gt; busy -&gt; stopping</text>
-<path d="M 378 300 L 408 300" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<text x="393" y="288" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">request</text>
-<path d="M 378 660 L 408 660" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
-<text x="393" y="648" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">manage</text>
-<path d="M 788 300 L 818 300" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="803" y="288" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">ready</text>
-<path d="M 788 660 L 818 660" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<text x="803" y="648" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">preload</text>
-<path d="M 1148 300 L 1178 300" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="1163" y="288" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">spawn</text>
-<path d="M 1148 660 L 1178 660" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<text x="1163" y="648" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">lease</text>
-<path d="M 598 510 L 598 530" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 983 510 L 983 530" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<path d="M 1361 510 L 1361 530" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<text x="48" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">CLIENT</text>
+<rect x="48" y="150" width="330" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
+<rect x="48" y="150" width="330" height="3" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
+<text x="418" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">GATEWAY</text>
+<rect x="418" y="150" width="330" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
+<rect x="418" y="150" width="330" height="3" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
+<text x="788" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">SCHEDULER / MANAGER</text>
+<rect x="788" y="150" width="330" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
+<rect x="788" y="150" width="330" height="3" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
+<text x="1158" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">PROXY / STATE</text>
+<rect x="1158" y="150" width="330" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
+<rect x="1158" y="150" width="330" height="3" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
+<rect x="68" y="180" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="68" y="190" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
+<text x="82" y="199" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Inference request</text>
+<text x="82" y="214" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">OpenAI / Anthropic / custom</text>
+<text x="82" y="228" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">model in body / form / query</text>
+<rect x="68" y="260" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="68" y="270" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
+<text x="82" y="279" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Health / docs</text>
+<text x="82" y="294" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">/health / docs / openapi</text>
+<text x="82" y="308" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">auth exempt</text>
+<rect x="68" y="340" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="68" y="350" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="82" y="359" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Management request</text>
+<text x="82" y="374" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">/api/v1 preload / unload</text>
+<text x="82" y="388" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">jobs / settings / devices / ws</text>
+<polygon points="583,180 678.7,217 583,254 487.3,217" fill="#FFF9F0" stroke="#2563EB" stroke-width="1.3"/>
+<text x="583" y="215" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Auth</text>
+<text x="583" y="231" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">token checked first</text>
+<text x="583" y="243" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">fail -&gt; 401</text>
+<polygon points="583,272 678.7,309 583,346 487.3,309" fill="#FFF9F0" stroke="#2563EB" stroke-width="1.3"/>
+<text x="583" y="307" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Route class</text>
+<text x="583" y="323" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">standard / custom / reserved</text>
+<text x="583" y="335" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">reserved -&gt; 405/404</text>
+<rect x="438" y="364" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="438" y="374" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
+<text x="452" y="383" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Select model</text>
+<text x="452" y="398" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">body / form / query</text>
+<text x="452" y="412" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">full ref / conflict -&gt; 400</text>
+<polygon points="583,444 678.7,481 583,518 487.3,481" fill="#FFF9F0" stroke="#B45309" stroke-width="1.3"/>
+<text x="583" y="479" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Disk ready?</text>
+<text x="583" y="495" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">manifest / incomplete</text>
+<text x="583" y="507" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">auto-pull / 503 preparing</text>
+<polygon points="583,536 678.7,573 583,610 487.3,573" fill="#FFF9F0" stroke="#2563EB" stroke-width="1.3"/>
+<text x="583" y="571" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Capability?</text>
+<text x="583" y="587" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">standard routes only</text>
+<text x="583" y="599" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">undeclared -&gt; 400</text>
+<rect x="808" y="180" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="808" y="190" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="822" y="199" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Preload</text>
+<text x="822" y="214" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">start / reuse job</text>
+<text x="822" y="228" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">Retry-After + job id</text>
+<rect x="808" y="260" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="808" y="270" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
+<text x="822" y="279" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Acquire</text>
+<text x="822" y="294" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">max_loaded / queue</text>
+<text x="822" y="308" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">queue full -&gt; 429</text>
+<polygon points="953,340 1048.7,377 953,414 857.3,377" fill="#FFF9F0" stroke="#0F766E" stroke-width="1.3"/>
+<text x="953" y="375" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Placement?</text>
+<text x="953" y="391" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">free VRAM + headroom</text>
+<text x="953" y="403" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">gpu_count / CPU fallback</text>
+<rect x="808" y="432" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="808" y="442" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="822" y="451" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">LRU evict</text>
+<text x="822" y="466" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">idle residents only</text>
+<text x="822" y="480" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">disk assets kept</text>
+<rect x="808" y="512" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="808" y="522" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
+<text x="822" y="531" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Start child</text>
+<text x="822" y="546" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">spawn + health</text>
+<text x="822" y="560" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">not ready -&gt; 503 starting</text>
+<rect x="808" y="592" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="808" y="602" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
+<text x="822" y="611" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Lease</text>
+<text x="822" y="626" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">active_requests++</text>
+<text x="822" y="640" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">blocks evict / unload</text>
+<rect x="1178" y="180" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="1178" y="190" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
+<text x="1192" y="199" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Proxy</text>
+<text x="1192" y="214" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">JSON / SSE / multipart / WS</text>
+<text x="1192" y="228" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">rewrite model / strip token</text>
+<rect x="1178" y="260" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="1178" y="270" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
+<text x="1192" y="279" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Client cancel</text>
+<text x="1192" y="294" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">cancel upstream</text>
+<text x="1192" y="308" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">release lease</text>
+<rect x="1178" y="340" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="1178" y="350" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
+<text x="1192" y="359" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Release</text>
+<text x="1192" y="374" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">lease-- / last_used</text>
+<text x="1192" y="388" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">idle stop later</text>
+<rect x="1178" y="420" width="290" height="62" rx="8" fill="#F8FAFC" stroke="#B8C4D4" stroke-width="1.15" stroke-dasharray="6 4"/>
+<rect x="1178" y="430" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="1192" y="439" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">State</text>
+<text x="1192" y="454" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">disk / resident</text>
+<text x="1192" y="468" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">unload / evict / restart</text>
+<rect x="1178" y="500" width="290" height="62" rx="8" fill="#F8FAFC" stroke="#B8C4D4" stroke-width="1.15" stroke-dasharray="6 4"/>
+<rect x="1178" y="510" width="3" height="42" rx="1.5" fill="#DC2626" stroke="#DC2626" stroke-width="0"/>
+<text x="1192" y="519" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Error map</text>
+<text x="1192" y="534" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">400/401/404/405/409/413</text>
+<text x="1192" y="548" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">429/499/501/502/503</text>
+<path d="M 358 211 L 398 211 L 398 217 L 487.3 217" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<text x="398" y="209" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">request</text>
+<path d="M 358 291 L 398 291 L 398 217 L 487.3 217" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<text x="398" y="249" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">ok</text>
+<path d="M 583 254 L 583 272" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<text x="591" y="266" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">ok</text>
+<path d="M 583 346 L 583 364" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<text x="591" y="358" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">std/custom</text>
+<path d="M 583 426 L 583 444" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 678.7 481 L 768 481 L 768 211 L 808 211" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
+<text x="768" y="341" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">no</text>
+<path d="M 583 518 L 583 536" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<text x="591" y="530" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">yes</text>
+<path d="M 678.7 573 L 768 573 L 768 291 L 808 291" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<text x="768" y="427" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">ready</text>
+<path d="M 953 322 L 953 340" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 953 414 L 953 432" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
+<text x="961" y="426" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">no</text>
+<path d="M 953 494 L 953 340" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" stroke-dasharray="6 5" marker-end="url(#arrow-amber)"/>
+<text x="961" y="420" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">retry</text>
+<path d="M 953 414 L 953 512" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<text x="961" y="466" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">yes</text>
+<path d="M 953 574 L 953 592" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 1098 623 L 1138 623 L 1138 211 L 1178 211" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<text x="1138" y="412" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">lease</text>
+<path d="M 1323 242 L 1323 260" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<text x="1331" y="254" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">close</text>
+<path d="M 1323 242 L 1323 340" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<text x="1331" y="294" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">done</text>
+<path d="M 1323 402 L 1323 420" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 1323 322 L 1323 500" fill="none" stroke="#DC2626" stroke-width="1.4" stroke-linejoin="round" stroke-dasharray="6 5" marker-end="url(#arrow-red)"/>
+<text x="1331" y="414" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">499</text>
+<rect x="48" y="838" width="10" height="2" rx="1" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
+<text x="63" y="842" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">request / data</text>
+<rect x="158.8" y="838" width="10" height="2" rx="1" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
+<text x="173.8" y="842" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">local execution</text>
+<rect x="274.8" y="838" width="10" height="2" rx="1" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="289.8" y="842" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">external / disk</text>
+<rect x="390.8" y="838" width="10" height="2" rx="1" fill="#DC2626" stroke="#DC2626" stroke-width="0"/>
+<text x="405.8" y="842" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">failure / retry</text>
+<text x="48" y="862" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">dashed: optional / retry path</text>
 </svg>

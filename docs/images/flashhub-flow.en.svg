@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
 <defs>
-<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0F172A" flood-opacity="0.06"/></filter>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1.5" stdDeviation="3" flood-color="#0F172A" flood-opacity="0.05"/></filter>
 <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#2563EB"/></marker>
 <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#0F766E"/></marker>
 <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#B45309"/></marker>
@@ -8,175 +8,192 @@
 </defs>
 <rect width="1600" height="900" fill="#F7F9FC"/>
 <path d="M 48 100 L 1552 100" stroke="#E2E8F0" stroke-width="1"/>
-<text x="48" y="64" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="34" font-weight="700" fill="#0F172A">FlashHub publish / consume flow (detail)</text>
+<text x="48" y="64" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="34" font-weight="700" fill="#0F172A">FlashHub publish / consume flow</text>
 <text x="1552" y="64" text-anchor="end" font-family="JetBrains Mono, Consolas, monospace" font-size="12" font-weight="400" fill="#94A3B8">v1</text>
 <text x="48" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">PUBLISHERS</text>
-<text x="408" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">FLASHHUB</text>
-<text x="818" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">CONSUMERS</text>
-<text x="1178" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">LOCAL / WEIGHT SOURCES</text>
-<rect x="48" y="160" width="310" height="350" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
-<circle cx="70" cy="188" r="4.2" fill="#B45309"/>
-<text x="82" y="194" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Bundle author</text>
-<rect x="64" y="218" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="77" y="237" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">build</text>
-<text x="77" y="253" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">compile FlashRT kernels</text>
-<text x="77" y="268" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">assemble runtime cells</text>
-<rect x="64" y="290" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="77" y="309" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">validate</text>
-<text x="77" y="325" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">manifest / entry / options</text>
-<text x="77" y="340" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">format / protocol</text>
-<rect x="64" y="362" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="77" y="381" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">pack</text>
-<text x="77" y="397" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">publish root tree</text>
-<text x="77" y="412" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">weights metadata only</text>
-<rect x="64" y="434" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="77" y="453" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">release</text>
-<text x="77" y="469" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">release_bundle.sh</text>
-<text x="77" y="484" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">upload to FlashHub</text>
-<rect x="48" y="530" width="310" height="330" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
-<circle cx="70" cy="558" r="4.2" fill="#B45309"/>
-<text x="82" y="564" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">App author</text>
-<rect x="64" y="588" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="77" y="607" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">app manifest</text>
-<text x="77" y="623" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">id / version / platform</text>
-<text x="77" y="638" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">default bundles</text>
-<rect x="64" y="660" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="77" y="679" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Install scripts</text>
-<text x="77" y="695" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">client / daemon / installer</text>
-<text x="77" y="710" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">setup scripts</text>
-<rect x="64" y="732" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="77" y="751" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">validate</text>
-<text x="77" y="767" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">schema / commands</text>
-<text x="77" y="782" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">platform support</text>
-<rect x="64" y="804" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="77" y="823" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">publish</text>
-<text x="77" y="839" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">app registry</text>
-<text x="77" y="854" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">versions</text>
-<rect x="408" y="160" width="360" height="350" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
-<circle cx="430" cy="188" r="4.2" fill="#2563EB"/>
-<text x="442" y="194" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Publish API</text>
-<rect x="424" y="218" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="437" y="237" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Auth / org</text>
-<text x="437" y="253" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">user / organization</text>
-<text x="437" y="268" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">permissions</text>
-<rect x="424" y="290" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="437" y="309" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Create version</text>
-<text x="437" y="325" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">version metadata</text>
-<text x="437" y="340" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">release status</text>
-<rect x="424" y="362" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="437" y="381" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Upload files</text>
-<text x="437" y="397" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">multipart upload</text>
-<text x="437" y="412" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">md5 / size</text>
-<rect x="424" y="434" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="437" y="453" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Review / status</text>
-<text x="437" y="469" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">pre-release / public</text>
-<text x="437" y="484" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">index refresh</text>
-<rect x="408" y="530" width="360" height="330" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
-<circle cx="430" cy="558" r="4.2" fill="#B45309"/>
-<text x="442" y="564" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Artifacts</text>
-<rect x="424" y="588" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="437" y="607" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Bundle repo</text>
-<text x="437" y="623" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">versions + files</text>
-<text x="437" y="638" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">manifest + runtime</text>
-<rect x="424" y="660" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="437" y="679" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">App registry</text>
-<text x="437" y="695" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">app manifest</text>
-<text x="437" y="710" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">versions</text>
-<rect x="424" y="732" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="437" y="751" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">CDN</text>
-<text x="437" y="767" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">download_url</text>
-<text x="437" y="782" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">md5 / size</text>
-<rect x="424" y="804" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="437" y="823" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Index / tags</text>
-<text x="437" y="839" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">search / sort</text>
-<text x="437" y="854" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">tags / model names</text>
-<rect x="818" y="160" width="310" height="350" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
-<circle cx="840" cy="188" r="4.2" fill="#0F766E"/>
-<text x="852" y="194" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">flashcli</text>
-<rect x="834" y="218" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="847" y="237" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Search / resolve</text>
-<text x="847" y="253" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">search / tags</text>
-<text x="847" y="268" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">ref -&gt; repo/version</text>
-<rect x="834" y="290" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="847" y="309" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">pull</text>
-<text x="847" y="325" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">manifest</text>
-<text x="847" y="340" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">files + runtime</text>
-<rect x="834" y="362" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="847" y="381" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">download</text>
-<text x="847" y="397" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">bundle tree</text>
-<text x="847" y="412" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">weights / extra</text>
-<rect x="834" y="434" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="847" y="453" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Cache / offline</text>
-<text x="847" y="469" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">FLASHCLI_HOME</text>
-<text x="847" y="484" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">markers / readiness</text>
-<rect x="818" y="530" width="310" height="330" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
-<circle cx="840" cy="558" r="4.2" fill="#2563EB"/>
-<text x="852" y="564" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">flashserver / desktop</text>
-<rect x="834" y="588" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="847" y="607" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">catalog proxy</text>
-<text x="847" y="623" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">/api/v1/catalog</text>
-<text x="847" y="638" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">search / tags / detail</text>
-<rect x="834" y="660" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="847" y="679" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">preload / app</text>
-<text x="847" y="695" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">preload job</text>
-<text x="847" y="710" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">app install / prepare</text>
-<rect x="834" y="732" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="847" y="751" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Jobs / events</text>
-<text x="847" y="767" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">job progress</text>
-<text x="847" y="782" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">/api/v1/ws</text>
-<rect x="834" y="804" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="847" y="823" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Desktop UI</text>
-<text x="847" y="839" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">models / apps</text>
-<text x="847" y="854" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">install / upgrade</text>
-<rect x="1178" y="160" width="354" height="350" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
-<circle cx="1200" cy="188" r="4.2" fill="#0F766E"/>
-<text x="1212" y="194" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Local cache</text>
-<rect x="1194" y="218" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1207" y="237" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Bundles</text>
-<text x="1207" y="253" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">per name/version</text>
-<text x="1207" y="268" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">manifest + entry + runtime</text>
-<rect x="1194" y="290" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1207" y="309" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Weights</text>
-<text x="1207" y="325" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">store/&lt;source&gt;/&lt;repo&gt;@rev</text>
-<text x="1207" y="340" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">extra weights</text>
-<rect x="1194" y="362" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1207" y="381" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Runtimes</text>
-<text x="1207" y="397" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">per env key / ABI</text>
-<text x="1207" y="412" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">venv + CUDA</text>
-<rect x="1194" y="434" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1207" y="453" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Markers</text>
-<text x="1207" y="469" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">download manifest</text>
-<text x="1207" y="484" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">readiness / incomplete</text>
-<rect x="1178" y="530" width="354" height="330" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
-<circle cx="1200" cy="558" r="4.2" fill="#B45309"/>
-<text x="1212" y="564" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Weight sources</text>
-<rect x="1194" y="588" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1207" y="607" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">ModelScope</text>
-<text x="1207" y="623" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">repo + revision</text>
-<text x="1207" y="638" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">allow patterns</text>
-<rect x="1194" y="660" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1207" y="679" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">HuggingFace</text>
-<text x="1207" y="695" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">repo + revision</text>
-<text x="1207" y="710" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">allow patterns</text>
-<rect x="1194" y="732" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1207" y="751" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Transfer</text>
-<text x="1207" y="767" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">path + size</text>
-<text x="1207" y="782" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">resume</text>
-<rect x="1194" y="804" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1207" y="823" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Offline reuse</text>
-<text x="1207" y="839" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">no network once complete</text>
-<text x="1207" y="854" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">network only pull/schema</text>
-<path d="M 378 300 L 408 300" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
-<text x="393" y="288" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">publish</text>
-<path d="M 378 660 L 408 660" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
-<text x="393" y="648" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">publish</text>
-<path d="M 788 300 L 818 300" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<text x="803" y="288" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">resolve</text>
-<path d="M 788 660 L 818 660" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<text x="803" y="648" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">apps</text>
-<path d="M 1148 300 L 1178 300" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="1163" y="288" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">cache</text>
-<path d="M 1148 660 L 1178 660" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
-<text x="1163" y="648" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">preload</text>
-<path d="M 598 510 L 598 530" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
+<rect x="48" y="150" width="260" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
+<rect x="48" y="150" width="260" height="3" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="343" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">PUBLISH API</text>
+<rect x="343" y="150" width="260" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
+<rect x="343" y="150" width="260" height="3" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
+<text x="638" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">ARTIFACTS / CDN</text>
+<rect x="638" y="150" width="260" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
+<rect x="638" y="150" width="260" height="3" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="933" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">CONSUMERS</text>
+<rect x="933" y="150" width="260" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
+<rect x="933" y="150" width="260" height="3" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
+<text x="1228" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">LOCAL / WEIGHTS</text>
+<rect x="1228" y="150" width="260" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
+<rect x="1228" y="150" width="260" height="3" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<rect x="68" y="180" width="220" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="68" y="190" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="82" y="199" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">build</text>
+<text x="82" y="214" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">compile FlashRT kernels</text>
+<text x="82" y="228" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">assemble runtime cells</text>
+<rect x="68" y="260" width="220" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="68" y="270" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="82" y="279" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">validate</text>
+<text x="82" y="294" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">manifest / entry / options</text>
+<text x="82" y="308" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">format / protocol</text>
+<rect x="68" y="340" width="220" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="68" y="350" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="82" y="359" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">pack</text>
+<text x="82" y="374" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">publish root tree</text>
+<text x="82" y="388" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">weights metadata only</text>
+<rect x="68" y="420" width="220" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="68" y="430" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="82" y="439" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">release</text>
+<text x="82" y="454" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">release_bundle.sh</text>
+<text x="82" y="468" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">upload</text>
+<rect x="68" y="500" width="220" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="68" y="510" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="82" y="519" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">App author</text>
+<text x="82" y="534" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">app manifest</text>
+<text x="82" y="548" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">install / setup scripts</text>
+<rect x="363" y="180" width="220" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="363" y="190" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
+<text x="377" y="199" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Auth / org</text>
+<text x="377" y="214" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">user / organization</text>
+<text x="377" y="228" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">permissions</text>
+<rect x="363" y="260" width="220" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="363" y="270" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
+<text x="377" y="279" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Create version</text>
+<text x="377" y="294" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">version metadata</text>
+<text x="377" y="308" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">release status</text>
+<rect x="363" y="340" width="220" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="363" y="350" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
+<text x="377" y="359" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Upload files</text>
+<text x="377" y="374" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">multipart upload</text>
+<text x="377" y="388" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">md5 / size</text>
+<rect x="363" y="420" width="220" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="363" y="430" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
+<text x="377" y="439" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Review / status</text>
+<text x="377" y="454" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">pre-release / public</text>
+<text x="377" y="468" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">index refresh</text>
+<rect x="363" y="500" width="220" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="363" y="510" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
+<text x="377" y="519" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Publish app</text>
+<text x="377" y="534" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">app registry</text>
+<text x="377" y="548" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">versions</text>
+<rect x="658" y="180" width="220" height="62" rx="8" fill="#F8FAFC" stroke="#B8C4D4" stroke-width="1.15" stroke-dasharray="6 4"/>
+<rect x="658" y="190" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="672" y="199" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Bundle repo</text>
+<text x="672" y="214" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">versions + files</text>
+<text x="672" y="228" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">manifest + runtime</text>
+<rect x="658" y="260" width="220" height="62" rx="8" fill="#F8FAFC" stroke="#B8C4D4" stroke-width="1.15" stroke-dasharray="6 4"/>
+<rect x="658" y="270" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="672" y="279" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">CDN</text>
+<text x="672" y="294" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">download_url</text>
+<text x="672" y="308" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">md5 / size</text>
+<rect x="658" y="340" width="220" height="62" rx="8" fill="#F8FAFC" stroke="#B8C4D4" stroke-width="1.15" stroke-dasharray="6 4"/>
+<rect x="658" y="350" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="672" y="359" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Index / tags</text>
+<text x="672" y="374" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">search / sort</text>
+<text x="672" y="388" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">tags / model names</text>
+<rect x="658" y="420" width="220" height="62" rx="8" fill="#F8FAFC" stroke="#B8C4D4" stroke-width="1.15" stroke-dasharray="6 4"/>
+<rect x="658" y="430" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="672" y="439" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">App registry</text>
+<text x="672" y="454" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">app manifest</text>
+<text x="672" y="468" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">versions</text>
+<rect x="953" y="180" width="220" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="953" y="190" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
+<text x="967" y="199" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Search / resolve</text>
+<text x="967" y="214" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">search / tags</text>
+<text x="967" y="228" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">ref -&gt; repo/version</text>
+<rect x="953" y="260" width="220" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="953" y="270" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
+<text x="967" y="279" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">pull</text>
+<text x="967" y="294" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">manifest</text>
+<text x="967" y="308" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">files + runtime</text>
+<rect x="953" y="340" width="220" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="953" y="350" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
+<text x="967" y="359" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">download</text>
+<text x="967" y="374" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">bundle tree</text>
+<text x="967" y="388" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">weights / extra</text>
+<rect x="953" y="420" width="220" height="62" rx="8" fill="#F8FAFC" stroke="#B8C4D4" stroke-width="1.15" stroke-dasharray="6 4"/>
+<rect x="953" y="430" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
+<text x="967" y="439" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Cache / offline</text>
+<text x="967" y="454" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">FLASHCLI_HOME</text>
+<text x="967" y="468" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">markers / readiness</text>
+<rect x="953" y="500" width="220" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="953" y="510" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
+<text x="967" y="519" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">flashserver</text>
+<text x="967" y="534" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">catalog proxy</text>
+<text x="967" y="548" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">preload / app install</text>
+<rect x="953" y="580" width="220" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="953" y="590" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
+<text x="967" y="599" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Desktop</text>
+<text x="967" y="614" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">models / apps</text>
+<text x="967" y="628" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">install / upgrade</text>
+<rect x="1248" y="180" width="220" height="62" rx="8" fill="#F8FAFC" stroke="#B8C4D4" stroke-width="1.15" stroke-dasharray="6 4"/>
+<rect x="1248" y="190" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
+<text x="1262" y="199" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Bundles</text>
+<text x="1262" y="214" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">per name/version</text>
+<text x="1262" y="228" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">manifest + entry + runtime</text>
+<rect x="1248" y="260" width="220" height="62" rx="8" fill="#F8FAFC" stroke="#B8C4D4" stroke-width="1.15" stroke-dasharray="6 4"/>
+<rect x="1248" y="270" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
+<text x="1262" y="279" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Runtimes</text>
+<text x="1262" y="294" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">per env key / ABI</text>
+<text x="1262" y="308" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">venv + CUDA</text>
+<rect x="1248" y="340" width="220" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
+<rect x="1248" y="350" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="1262" y="359" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Weight sources</text>
+<text x="1262" y="374" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">ModelScope / HuggingFace</text>
+<text x="1262" y="388" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">repo + revision</text>
+<rect x="1248" y="420" width="220" height="62" rx="8" fill="#F8FAFC" stroke="#B8C4D4" stroke-width="1.15" stroke-dasharray="6 4"/>
+<rect x="1248" y="430" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="1262" y="439" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Weights</text>
+<text x="1262" y="454" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">store/&lt;source&gt;/&lt;repo&gt;@rev</text>
+<text x="1262" y="468" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">extra weights</text>
+<rect x="1248" y="500" width="220" height="62" rx="8" fill="#F8FAFC" stroke="#B8C4D4" stroke-width="1.15" stroke-dasharray="6 4"/>
+<rect x="1248" y="510" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="1262" y="519" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Markers</text>
+<text x="1262" y="534" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">download manifest</text>
+<text x="1262" y="548" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">readiness / incomplete</text>
+<path d="M 178 242 L 178 260" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 178 322 L 178 340" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 178 402 L 178 420" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 288 451 L 325.5 451 L 325.5 211 L 363 211" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
+<text x="325.5" y="326" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">publish</text>
+<path d="M 288 531 L 325.5 531 L 325.5 531 L 363 531" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
+<text x="325.5" y="526" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">publish</text>
+<path d="M 473 242 L 473 260" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 473 322 L 473 340" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 473 402 L 473 420" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 583 451 L 620.5 451 L 620.5 211 L 658 211" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
+<text x="620.5" y="326" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">store</text>
+<path d="M 583 531 L 620.5 531 L 620.5 451 L 658 451" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
+<text x="620.5" y="486" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">store</text>
+<path d="M 583 451 L 620.5 451 L 620.5 371 L 658 371" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<text x="620.5" y="406" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">index</text>
+<path d="M 768 242 L 768 260" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
+<text x="776" y="254" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">files</text>
+<path d="M 878 371 L 915.5 371 L 915.5 211 L 953 211" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<text x="915.5" y="286" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">resolve</text>
+<path d="M 1063 242 L 1063 260" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 1063 322 L 1063 340" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 878 291 L 915.5 291 L 915.5 371 L 953 371" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
+<text x="915.5" y="326" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">files</text>
+<path d="M 1063 402 L 1063 420" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 1173 451 L 1210.5 451 L 1210.5 211 L 1248 211" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<text x="1210.5" y="326" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">materialize</text>
+<path d="M 1358 242 L 1358 260" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<text x="1366" y="254" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">prepare</text>
+<path d="M 1358 402 L 1358 420" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
+<text x="1366" y="414" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">pull</text>
+<path d="M 1358 482 L 1358 500" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
+<text x="1366" y="494" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">mark</text>
+<path d="M 878 371 L 915.5 371 L 915.5 531 L 953 531" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<text x="915.5" y="446" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">catalog</text>
+<path d="M 1063 562 L 1063 580" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<text x="1071" y="574" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">UI</text>
+<rect x="48" y="838" width="10" height="2" rx="1" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
+<text x="63" y="842" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">request / data</text>
+<rect x="158.8" y="838" width="10" height="2" rx="1" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
+<text x="173.8" y="842" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">local execution</text>
+<rect x="274.8" y="838" width="10" height="2" rx="1" fill="#B45309" stroke="#B45309" stroke-width="0"/>
+<text x="289.8" y="842" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">external / disk</text>
+<rect x="390.8" y="838" width="10" height="2" rx="1" fill="#DC2626" stroke="#DC2626" stroke-width="0"/>
+<text x="405.8" y="842" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">failure / retry</text>
+<text x="48" y="862" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">dashed: optional / retry path</text>
 </svg>
