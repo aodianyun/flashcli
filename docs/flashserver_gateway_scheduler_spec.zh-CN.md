@@ -257,6 +257,32 @@ client -> /v1/<route> {model: full-ref}
 - JSON 和 SSE 响应中的 `model` 为字符串时重写为请求的完整 ref。超过网关 body
   上限的 JSON 响应会直接流式透传，不再缓冲或截断。
 
+### 6.1 按请求形态选择模型
+
+网关不会根据路由或“唯一 resident”猜测模型，始终需要显式的完整 bundle ref。该
+ref 同时是缓存 key 和调度 key，不是展示名。
+
+| 请求 | 网关读取 `model` 的位置 |
+|---|---|
+| `POST /v1/chat/completions`、`/completions`、`/responses`、`/embeddings`、`/moderations`、`/audio/speech`、`/images/generations`、`/messages`、`/messages/count_tokens` | JSON body `model` |
+| `POST /v1/audio/transcriptions`、`/audio/translations`、`/images/edits`、`/images/variations`、`/v1/videos` | multipart form 字段 `model`；`/v1/videos` 也接受 JSON body `model` |
+| `WS /v1/realtime` | `?model=<full-ref>` |
+| `GET /v1/videos`、`GET/DELETE /v1/videos/{id}`、`GET /v1/videos/{id}/content` | `?model=<full-ref>` |
+| `GET/DELETE /v1/responses/{id}`、`POST /v1/responses/{id}/cancel` | `?model=<full-ref>` |
+| custom `/v1/*` JSON/multipart | body/form `model`；body 故意不带时用 `?model=` |
+| custom `/v1/*` GET/DELETE/HEAD/其他 body | `?model=<full-ref>` |
+| `GET /v1/models`、`GET /v1/models/{id}` | 不选模型；只做列表/详情 |
+
+规则：
+
+- 必须是完整 FlashHub ref（`flashcli-bundle/<name>:<version>`）；短名/alias 返回
+  `400 invalid_model`。
+- body/form 和 query 同时出现时必须一致；不一致返回 `400 model_conflict`。
+- 转发前剥离 `model` query；path 和 body 保持不变。
+- custom JSON body 可以是数组或标量；只有对象中的字符串 `model` 才作为选择器。
+  没有时必须有 query 选择器。
+- child 自己的 `model_id` 不参与路由；网关会把字符串响应 `model` 重写回请求的完整 ref。
+
 ## 7. auto-pull 与 Retry-After
 
 auto-pull 不应无限阻塞首个推理请求：

@@ -8,93 +8,172 @@
 </defs>
 <rect width="1600" height="900" fill="#F7F9FC"/>
 <path d="M 48 100 L 1552 100" stroke="#E2E8F0" stroke-width="1"/>
-<text x="48" y="64" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="34" font-weight="700" fill="#0F172A">Go host module map</text>
+<text x="48" y="64" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="34" font-weight="700" fill="#0F172A">Go host module map (detail)</text>
 <text x="1552" y="64" text-anchor="end" font-family="JetBrains Mono, Consolas, monospace" font-size="12" font-weight="400" fill="#94A3B8">v1</text>
 <text x="48" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">COMMANDS</text>
 <text x="408" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">FRONTENDS</text>
-<text x="858" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">SHARED HOST SERVICES</text>
-<text x="1218" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">EXECUTION BACKENDS</text>
-<rect x="48" y="160" width="330" height="680" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<text x="818" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">SHARED HOST SERVICES</text>
+<text x="1178" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">EXECUTION / BOUNDARY</text>
+<rect x="48" y="160" width="310" height="350" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
 <circle cx="70" cy="188" r="4.2" fill="#2563EB"/>
-<text x="82" y="194" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Commands</text>
-<rect x="64" y="220" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="77" y="239" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">cmd/flashcli</text>
-<text x="77" y="255" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">pull / run / serve</text>
-<text x="77" y="270" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">bundle / app / config</text>
-<rect x="64" y="296" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="77" y="315" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">cmd/flashserver</text>
-<text x="77" y="331" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">gateway + scheduler</text>
-<text x="77" y="346" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">management API + console</text>
-<rect x="64" y="372" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="77" y="391" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">cmd/flashserver-setup</text>
-<text x="77" y="407" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">Linux / WSL install</text>
-<text x="77" y="422" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">service registration</text>
-<rect x="408" y="160" width="420" height="680" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<text x="82" y="194" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Binaries</text>
+<rect x="64" y="218" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="77" y="237" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">cmd/flashcli</text>
+<text x="77" y="253" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">pull / run / serve</text>
+<text x="77" y="268" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">bundle / models / cache</text>
+<rect x="64" y="290" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="77" y="309" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">cmd/flashserver</text>
+<text x="77" y="325" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">gateway + scheduler</text>
+<text x="77" y="340" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">management API + console</text>
+<rect x="64" y="362" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="77" y="381" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">cmd/flashserver-setup</text>
+<text x="77" y="397" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">Linux / WSL install</text>
+<text x="77" y="412" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">service registration</text>
+<rect x="64" y="434" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="77" y="453" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Cobra</text>
+<text x="77" y="469" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">flag parsing</text>
+<text x="77" y="484" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">command wiring</text>
+<rect x="48" y="530" width="310" height="330" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="70" cy="558" r="4.2" fill="#B45309"/>
+<text x="82" y="564" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">CLI commands</text>
+<rect x="64" y="588" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="77" y="607" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Model / cache</text>
+<text x="77" y="623" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">pull / models / cache / du</text>
+<text x="77" y="638" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">bundle validate / clean</text>
+<rect x="64" y="660" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="77" y="679" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Apps</text>
+<text x="77" y="695" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">app install / prepare / setup</text>
+<text x="77" y="710" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">app status / logs / uninstall</text>
+<rect x="64" y="732" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="77" y="751" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Diagnostics</text>
+<text x="77" y="767" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">doctor / version / upgrade</text>
+<text x="77" y="782" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">weights</text>
+<rect x="64" y="804" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="77" y="823" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Run</text>
+<text x="77" y="839" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">run / serve</text>
+<text x="77" y="854" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">single-process launch</text>
+<rect x="408" y="160" width="360" height="350" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
 <circle cx="430" cy="188" r="4.2" fill="#0F766E"/>
 <text x="442" y="194" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Frontends</text>
-<rect x="424" y="220" width="388" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="437" y="239" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/cli</text>
-<text x="437" y="255" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">flags / prompts / output</text>
-<text x="437" y="270" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">CLI-only orchestration</text>
-<rect x="424" y="296" width="388" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="437" y="315" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/server</text>
-<text x="437" y="331" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">HTTP / auth / jobs / ws</text>
-<text x="437" y="346" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">gateway / scheduler / manager</text>
-<rect x="858" y="160" width="330" height="680" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
-<circle cx="880" cy="188" r="4.2" fill="#B45309"/>
-<text x="892" y="194" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Shared host</text>
-<rect x="874" y="220" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="887" y="239" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/host</text>
-<text x="887" y="255" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">pull / prepare / cache</text>
-<text x="887" y="270" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">readiness + cleanup</text>
-<rect x="874" y="296" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="887" y="315" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/weights</text>
-<text x="887" y="331" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">cache keys / manifests</text>
-<text x="887" y="346" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">download + resume</text>
-<rect x="874" y="372" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="887" y="391" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/runtime</text>
-<text x="887" y="407" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">runtime cells / venv</text>
-<text x="887" y="422" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">paths + IDs</text>
-<rect x="874" y="448" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="887" y="467" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/ref + manifest</text>
-<text x="887" y="483" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">ref parsing / validation</text>
-<text x="887" y="498" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">capabilities + resources</text>
-<rect x="874" y="524" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="887" y="543" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/modelrun</text>
-<text x="887" y="559" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">serve logs / health</text>
-<text x="887" y="574" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">process lifecycle</text>
-<rect x="874" y="600" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="887" y="619" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/apps</text>
-<text x="887" y="635" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">install / prepare / setup</text>
-<text x="887" y="650" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">app state predicate</text>
-<rect x="874" y="676" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="887" y="695" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/gpu + preflight</text>
-<text x="887" y="711" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">device inventory</text>
-<text x="887" y="726" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">VRAM admission</text>
-<rect x="874" y="752" width="298" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="887" y="771" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/architecture</text>
-<text x="887" y="787" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">shared-code guards</text>
-<text x="887" y="802" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">no duplicate walkers</text>
-<rect x="1218" y="160" width="334" height="680" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
-<circle cx="1240" cy="188" r="4.2" fill="#0F766E"/>
-<text x="1252" y="194" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Execution</text>
-<rect x="1234" y="220" width="302" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1247" y="239" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/inferexec</text>
-<text x="1247" y="255" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">python -m infer</text>
-<text x="1247" y="270" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">run / serve</text>
-<rect x="1234" y="296" width="302" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1247" y="315" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/nativeexec</text>
-<text x="1247" y="331" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">native-exec process</text>
-<text x="1247" y="346" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">HTTP / stdio</text>
-<rect x="1234" y="372" width="302" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1247" y="391" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/nativeabi</text>
-<text x="1247" y="407" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">ABI / .so</text>
-<text x="1247" y="422" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">hostabi bridge</text>
-<rect x="1234" y="448" width="302" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
-<text x="1247" y="467" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/hostabi</text>
-<text x="1247" y="483" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">native ABI bridge</text>
-<text x="1247" y="498" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">no model logic</text>
-<path d="M 378 300 L 408 300" fill="none" stroke="#2563EB" stroke-width="1.4" marker-end="url(#arrow-blue)"/>
-<path d="M 828 300 L 858 300" fill="none" stroke="#0F766E" stroke-width="1.4" marker-end="url(#arrow-green)"/>
-<path d="M 1188 300 L 1218 300" fill="none" stroke="#0F766E" stroke-width="1.4" marker-end="url(#arrow-green)"/>
+<rect x="424" y="218" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="437" y="237" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/cli</text>
+<text x="437" y="253" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">flags / prompts / output</text>
+<text x="437" y="268" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">CLI-only orchestration</text>
+<rect x="424" y="290" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="437" y="309" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/server</text>
+<text x="437" y="325" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">HTTP / auth / jobs / ws</text>
+<text x="437" y="340" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">gateway / scheduler / manager</text>
+<rect x="424" y="362" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="437" y="381" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Server features</text>
+<text x="437" y="397" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">preload / unload / console</text>
+<text x="437" y="412" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">catalog / jobs / logs</text>
+<rect x="408" y="530" width="360" height="330" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="430" cy="558" r="4.2" fill="#2563EB"/>
+<text x="442" y="564" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Server support</text>
+<rect x="424" y="588" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="437" y="607" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/setup</text>
+<text x="437" y="623" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">systemd / WSL install</text>
+<text x="437" y="638" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">uninstall / purge</text>
+<rect x="424" y="660" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="437" y="679" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/server/web</text>
+<text x="437" y="695" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">embedded console</text>
+<text x="437" y="710" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">openapi.yaml + docs</text>
+<rect x="424" y="732" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="437" y="751" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/modelrun</text>
+<text x="437" y="767" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">serve logs / health</text>
+<text x="437" y="782" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">process lifecycle</text>
+<rect x="424" y="804" width="328" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="437" y="823" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Scheduler/manager</text>
+<text x="437" y="839" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">resident lifecycle</text>
+<text x="437" y="854" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">leases / eviction / telemetry</text>
+<rect x="818" y="160" width="310" height="350" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="840" cy="188" r="4.2" fill="#B45309"/>
+<text x="852" y="194" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Shared host</text>
+<rect x="834" y="218" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="847" y="237" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">host / weights</text>
+<text x="847" y="253" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">cache / readiness / cleanup</text>
+<text x="847" y="268" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">download / resume / post_pull</text>
+<rect x="834" y="290" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="847" y="309" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">runtime / venv</text>
+<text x="847" y="325" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">runtime cells / IDs</text>
+<text x="847" y="340" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">uv / pip / python deps</text>
+<rect x="834" y="362" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="847" y="381" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">manifest / ref</text>
+<text x="847" y="397" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">parse / validate</text>
+<text x="847" y="412" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">capabilities + resources</text>
+<rect x="834" y="434" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="847" y="453" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">apps / serveopts</text>
+<text x="847" y="469" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">install / prepare / setup</text>
+<text x="847" y="484" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">saved serve options</text>
+<rect x="818" y="530" width="310" height="330" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="840" cy="558" r="4.2" fill="#0F766E"/>
+<text x="852" y="564" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Probes / support</text>
+<rect x="834" y="588" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="847" y="607" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">gpu / preflight</text>
+<text x="847" y="623" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">device inventory</text>
+<text x="847" y="638" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">VRAM / runtime admission</text>
+<rect x="834" y="660" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="847" y="679" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">flashhub</text>
+<text x="847" y="695" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">index / manifest sync</text>
+<text x="847" y="710" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">catalog / apps</text>
+<rect x="834" y="732" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="847" y="751" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">paths / mirror / progress</text>
+<text x="847" y="767" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">FLASHCLI_HOME layout</text>
+<text x="847" y="782" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">mirror + job progress</text>
+<rect x="834" y="804" width="278" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="847" y="823" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">postpull / selfupdate</text>
+<text x="847" y="839" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">post-pull hooks</text>
+<text x="847" y="854" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">upgrade / version</text>
+<rect x="1178" y="160" width="354" height="350" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="1200" cy="188" r="4.2" fill="#0F766E"/>
+<text x="1212" y="194" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Execution backends</text>
+<rect x="1194" y="218" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="1207" y="237" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">inferexec</text>
+<text x="1207" y="253" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">python -m infer</text>
+<text x="1207" y="268" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">run / serve</text>
+<rect x="1194" y="290" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="1207" y="309" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">nativeexec</text>
+<text x="1207" y="325" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">native-exec process</text>
+<text x="1207" y="340" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">HTTP / stdio</text>
+<rect x="1194" y="362" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="1207" y="381" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">nativeabi / hostabi</text>
+<text x="1207" y="397" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">ABI / .so</text>
+<text x="1207" y="412" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">bridge</text>
+<rect x="1194" y="434" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="1207" y="453" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">internal/architecture</text>
+<text x="1207" y="469" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">mechanical guards</text>
+<text x="1207" y="484" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">shared-code tests</text>
+<rect x="1178" y="530" width="354" height="330" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.1" filter="url(#shadow)"/>
+<circle cx="1200" cy="558" r="4.2" fill="#DC2626"/>
+<text x="1212" y="564" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="18.5" font-weight="700" fill="#0F172A">Boundary</text>
+<rect x="1194" y="588" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="1207" y="607" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Protocol</text>
+<text x="1207" y="623" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">flashcli-bundle</text>
+<text x="1207" y="638" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">dependencies = []</text>
+<rect x="1194" y="660" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="1207" y="679" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Host</text>
+<text x="1207" y="695" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">never imports Python infer</text>
+<text x="1207" y="710" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">re-exec / exec only</text>
+<rect x="1194" y="732" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="1207" y="751" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Model-agnostic</text>
+<text x="1207" y="767" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">no model constants/shapes</text>
+<text x="1207" y="782" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">bundle / manifest owns</text>
+<rect x="1194" y="804" width="322" height="62" rx="9" fill="#F8FAFC" stroke="#E8EEF5" stroke-width="1"/>
+<text x="1207" y="823" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Mechanical gates</text>
+<text x="1207" y="839" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">no direct nvidia-smi</text>
+<text x="1207" y="854" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10.3" font-weight="400" fill="#94A3B8">no duplicate walkers</text>
+<path d="M 378 300 L 408 300" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<text x="393" y="288" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">wire</text>
+<path d="M 378 660 L 408 660" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
+<text x="393" y="648" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">cmd</text>
+<path d="M 788 300 L 818 300" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<text x="803" y="288" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">call</text>
+<path d="M 788 660 L 818 660" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<text x="803" y="648" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">svc</text>
+<path d="M 1148 300 L 1178 300" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<text x="1163" y="288" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">exec</text>
+<path d="M 1148 660 L 1178 660" fill="none" stroke="#DC2626" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-red)"/>
+<text x="1163" y="648" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="10.5" font-weight="400" fill="#94A3B8">rule</text>
+<path d="M 598 510 L 598 530" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<path d="M 983 510 L 983 530" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
 </svg>

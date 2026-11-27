@@ -53,14 +53,18 @@ ASR、TTS、OCR、音频分离、视频擦除 bundle 还有额外的服务要求
 
 ### 1.2 自定义路径与模型选择
 
-`/v1/models`、`/v1/models/{id}` 和标准 OpenAI/Anthropic 路由（含 `/v1/responses/{id}` 与 `/v1/videos*` 子路由）由网关持有；其他 `/v1/*` 路径都是**自定义路径**，会透传到所选模型的 serve 端点。
+host 拥有 `GET /health`、`GET /v1/models`、`GET /v1/models/{id}`，以及 `serve.capabilities` 启用的全部标准 OpenAI/Anthropic 路由：chat、completions、responses（含 job 子路由）、embeddings、moderations、audio、images、videos（含 job 子路由）、messages、`count_tokens`、realtime。这些路由按 capability 门控。
+
+`/v1/models*`、`/v1/responses/*`、`/v1/videos/*` 这三个前缀还额外是**保留命名空间**：其中的未知路径由 host 返回 `404`/`405`，永远不会当作 custom path。
+
+其他 `/v1/*` 路径才是 **custom path**，会透传到所选模型的 serve 端点。custom path 不做 capability 门控，由 bundle 的 `register_routes` 决定是否存在。
 
 网关是多模型服务，自定义请求必须选择 resident 模型：
 
 - JSON/multipart body 中有 `model` 字段时，用完整 bundle ref 选择模型；
 - 否则通过 query 选择：`?model=<namespace/name:version>`（GET/DELETE，以及像音频分离这种 body 故意不带 `model` 的 POST）。
 
-网关解析 resident 模型后，在转发前去掉 `model` query，路径和 body 保持不变。直连 `flashcli serve` 会忽略该 query。`/v1/models*`、`/v1/responses/*`、`/v1/videos/*` 由 host 持有，永远不会作为自定义路径透传。
+网关解析 resident 模型后，在转发前去掉 `model` query，路径和 body 保持不变。直连 `flashcli serve` 会忽略该 query。
 
 ### 1.3 engine 模式默认能力（host 持有）
 

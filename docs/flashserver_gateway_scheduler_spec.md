@@ -271,6 +271,36 @@ client -> /v1/<route> {model: full-ref}
   SSE payloads when it is a string. JSON responses above the gateway body limit
   are streamed unchanged instead of being buffered or truncated.
 
+### 6.1 Model selection by request shape
+
+The gateway never infers a model from the route or from a single resident; it
+always needs an explicit full bundle ref. The ref is the cache key and the
+scheduler key, not a display name.
+
+| Request | Where the gateway reads `model` |
+|---|---|
+| `POST /v1/chat/completions`, `/completions`, `/responses`, `/embeddings`, `/moderations`, `/audio/speech`, `/images/generations`, `/messages`, `/messages/count_tokens` | JSON body `model` |
+| `POST /v1/audio/transcriptions`, `/audio/translations`, `/images/edits`, `/images/variations`, `/v1/videos` | multipart form field `model`; `/v1/videos` also accepts JSON body `model` |
+| `WS /v1/realtime` | `?model=<full-ref>` |
+| `GET /v1/videos`, `GET/DELETE /v1/videos/{id}`, `GET /v1/videos/{id}/content` | `?model=<full-ref>` |
+| `GET/DELETE /v1/responses/{id}`, `POST /v1/responses/{id}/cancel` | `?model=<full-ref>` |
+| custom `/v1/*` JSON/multipart | body/form `model`, or `?model=` when the body intentionally omits it |
+| custom `/v1/*` GET/DELETE/HEAD/other body | `?model=<full-ref>` |
+| `GET /v1/models`, `GET /v1/models/{id}` | no model selection; list/detail only |
+
+Rules:
+
+- The value must be a full FlashHub ref (`flashcli-bundle/<name>:<version>`);
+  short names and aliases return `400 invalid_model`.
+- Body/form and query selectors may both be present only if they are identical;
+  a mismatch returns `400 model_conflict`.
+- The `model` query is stripped before forwarding; the path and body are
+  unchanged.
+- A custom JSON body may be an array or scalar; only an object string `model`
+  acts as a selector. If it is absent, the query selector is required.
+- The child's own `model_id` is not used for routing; the gateway rewrites a
+  string response `model` back to the requested full ref.
+
 ## 7. Auto-pull and Retry-After
 
 Auto-pull never blocks the first inference request indefinitely:
