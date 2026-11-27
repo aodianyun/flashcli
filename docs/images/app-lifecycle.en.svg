@@ -1,115 +1,317 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
-<defs>
-<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1.5" stdDeviation="3" flood-color="#0F172A" flood-opacity="0.05"/></filter>
-<marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#2563EB"/></marker>
-<marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#0F766E"/></marker>
-<marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#B45309"/></marker>
-<marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#DC2626"/></marker>
-</defs>
-<rect width="1600" height="900" fill="#F7F9FC"/>
-<path d="M 48 100 L 1552 100" stroke="#E2E8F0" stroke-width="1"/>
-<text x="48" y="64" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="34" font-weight="700" fill="#0F172A">flashserver app lifecycle</text>
-<text x="1552" y="64" text-anchor="end" font-family="JetBrains Mono, Consolas, monospace" font-size="12" font-weight="400" fill="#94A3B8">v1</text>
-<text x="48" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">PLAN / INSTALL</text>
-<text x="408" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">PREPARE</text>
-<text x="818" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">SETUP</text>
-<text x="1178" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">READY / OPS</text>
-<rect x="80" y="230" width="210" height="100" rx="10" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.2" filter="url(#shadow)"/>
-<rect x="80" y="240" width="3" height="80" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="96" y="258" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="15" font-weight="700" fill="#0F172A">PLANNED</text>
-<text x="96" y="280" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">manifest 合法</text>
-<text x="96" y="296" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">平台支持</text>
-<rect x="350" y="230" width="210" height="100" rx="10" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.2" filter="url(#shadow)"/>
-<rect x="350" y="240" width="3" height="80" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="366" y="258" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="15" font-weight="700" fill="#0F172A">INSTALL</text>
-<text x="366" y="280" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">client / daemon</text>
-<text x="366" y="296" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">installer / skip</text>
-<rect x="620" y="230" width="210" height="100" rx="10" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.2" filter="url(#shadow)"/>
-<rect x="620" y="240" width="3" height="80" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="636" y="258" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="15" font-weight="700" fill="#0F172A">PREPARED</text>
-<text x="636" y="280" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">default bundles</text>
-<text x="636" y="296" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">preload 完成</text>
-<rect x="890" y="230" width="210" height="100" rx="10" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.2" filter="url(#shadow)"/>
-<rect x="890" y="240" width="3" height="80" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="906" y="258" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="15" font-weight="700" fill="#0F172A">SETUP</text>
-<text x="906" y="280" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">执行 setup scripts</text>
-<text x="906" y="296" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">写入网关连接</text>
-<rect x="1160" y="230" width="210" height="100" rx="10" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.2" filter="url(#shadow)"/>
-<rect x="1160" y="240" width="3" height="80" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="1176" y="258" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="15" font-weight="700" fill="#0F172A">READY</text>
-<text x="1176" y="280" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">应用已配置</text>
-<text x="1176" y="296" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">推理走 /v1</text>
-<path d="M 290 280 L 350 280" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 560 280 L 620 280" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 830 280 L 890 280" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 1100 280 L 1160 280" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<rect x="350" y="410" width="210" height="100" rx="10" fill="#FFF5F5" stroke="#F3C4C4" stroke-width="1.2"/>
-<text x="366" y="438" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="15" font-weight="700" fill="#0F172A">FAILED</text>
-<text x="366" y="462" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#475569">install/prepare failed</text>
-<text x="366" y="480" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">logs kept, retryable</text>
-<path d="M 455 330 L 455 410" fill="none" stroke="#DC2626" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-red)"/>
-<text x="468" y="374" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">fail</text>
-<rect x="1160" y="410" width="210" height="100" rx="10" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.2"/>
-<text x="1176" y="438" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="15" font-weight="700" fill="#0F172A">UNINSTALL</text>
-<text x="1176" y="462" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#475569">remove app record</text>
-<text x="1176" y="480" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">keep model cache</text>
-<path d="M 1265 330 L 1265 410" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
-<text x="1278" y="374" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">remove</text>
-<text x="48" y="570" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">INSTALL COMMANDS</text>
-<text x="408" y="570" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">PREPARE DETAILS</text>
-<text x="818" y="570" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">SETUP DETAILS</text>
-<text x="1178" y="570" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">BOUNDARY / PERSISTENCE</text>
-<rect x="48" y="590" width="330" height="250" rx="10" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="408" y="590" width="360" height="250" rx="10" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="818" y="590" width="330" height="250" rx="10" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="1178" y="590" width="374" height="250" rx="10" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="64" y="610" width="298" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="64" y="618" width="3" height="34" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="78" y="627" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">client / daemon / installer</text>
-<text x="78" y="643" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">or skip (prepare models)</text>
-<rect x="64" y="674" width="298" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="64" y="682" width="3" height="34" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="78" y="691" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">idempotent</text>
-<text x="78" y="707" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">re-run reuses state</text>
-<rect x="64" y="738" width="298" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="64" y="746" width="3" height="34" rx="1.5" fill="#DC2626" stroke="#DC2626" stroke-width="0"/>
-<text x="78" y="755" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Logs / retry</text>
-<text x="78" y="771" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">retry after failure</text>
-<rect x="424" y="610" width="328" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="424" y="618" width="3" height="34" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="438" y="627" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">default bundles</text>
-<text x="438" y="643" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">preload jobs</text>
-<rect x="424" y="674" width="328" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="424" y="682" width="3" height="34" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="438" y="691" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Readiness</text>
-<text x="438" y="707" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">manifest / weights / offline</text>
-<rect x="424" y="738" width="328" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="424" y="746" width="3" height="34" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="438" y="755" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Resume</text>
-<text x="438" y="771" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">preload resumes</text>
-<rect x="834" y="610" width="298" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="834" y="618" width="3" height="34" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="848" y="627" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Scripts</text>
-<text x="848" y="643" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">install / setup / errors</text>
-<rect x="834" y="674" width="298" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="834" y="682" width="3" height="34" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="848" y="691" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Gateway connection</text>
-<text x="848" y="707" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">base URL / token</text>
-<rect x="834" y="738" width="298" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="834" y="746" width="3" height="34" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="848" y="755" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Retryable</text>
-<text x="848" y="771" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">failure keeps READY</text>
-<rect x="1194" y="610" width="342" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="1194" y="618" width="3" height="34" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="1208" y="627" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Scheduler</text>
-<text x="1208" y="643" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">owns resident lifecycle</text>
-<rect x="1194" y="674" width="342" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="1194" y="682" width="3" height="34" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="1208" y="691" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">App</text>
-<text x="1208" y="707" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">calls /v1 only, no PID/endpoint</text>
-<rect x="1194" y="738" width="342" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="1194" y="746" width="3" height="34" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="1208" y="755" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Uninstall retention</text>
-<text x="1208" y="771" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">keep model cache until explicit clean</text>
-<text x="48" y="862" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">blue: state progression  amber: external action  red: failure  dashed: optional / retry</text>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.43.0 (0)
+ -->
+<!-- Title: app_lifecycle Pages: 1 -->
+<svg width="2823pt" height="840pt"
+ viewBox="0.00 0.00 2822.60 839.60" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(28.8 810.8)">
+<title>app_lifecycle</title>
+<polygon fill="#f7f9fc" stroke="transparent" points="-28.8,28.8 -28.8,-810.8 2793.8,-810.8 2793.8,28.8 -28.8,28.8"/>
+<text text-anchor="start" x="1147" y="-755" font-family="Noto Sans CJK SC" font-weight="bold" font-size="30.00">flashserver application lifecycle</text>
+<text text-anchor="start" x="1076.5" y="-737.8" font-family="Noto Sans CJK SC" font-size="14.00" fill="#64748b">planned → preparing → prepared → ready; applications call /v1 and never start or stop models</text>
+<g id="clust1" class="cluster">
+<title>cluster_1</title>
+<path fill="#ffffff" stroke="#f97316" stroke-width="1.3" d="M20,-8C20,-8 848,-8 848,-8 854,-8 860,-14 860,-20 860,-20 860,-703 860,-703 860,-709 854,-715 848,-715 848,-715 20,-715 20,-715 14,-715 8,-709 8,-703 8,-703 8,-20 8,-20 8,-14 14,-8 20,-8"/>
+<text text-anchor="start" x="363.5" y="-700" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">Install and prepare</text>
+</g>
+<g id="clust2" class="cluster">
+<title>cluster_2</title>
+<path fill="#ffffff" stroke="#8b5cf6" stroke-width="1.3" d="M1724,-272.5C1724,-272.5 2155,-272.5 2155,-272.5 2161,-272.5 2167,-278.5 2167,-284.5 2167,-284.5 2167,-710 2167,-710 2167,-716 2161,-722 2155,-722 2155,-722 1724,-722 1724,-722 1718,-722 1712,-716 1712,-710 1712,-710 1712,-284.5 1712,-284.5 1712,-278.5 1718,-272.5 1724,-272.5"/>
+<text text-anchor="start" x="1855" y="-707" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">Configure and activate</text>
+</g>
+<g id="clust3" class="cluster">
+<title>cluster_3</title>
+<path fill="#ffffff" stroke="#14b8a6" stroke-width="1.3" d="M880,-8C880,-8 2745,-8 2745,-8 2751,-8 2757,-14 2757,-20 2757,-20 2757,-230 2757,-230 2757,-236 2751,-242 2745,-242 2745,-242 880,-242 880,-242 874,-242 868,-236 868,-230 868,-230 868,-20 868,-20 868,-14 874,-8 880,-8"/>
+<text text-anchor="start" x="1730" y="-227" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">Runtime and uninstall</text>
+</g>
+<!-- resolve -->
+<g id="node1" class="node">
+<title>resolve</title>
+<path fill="#ffedd5" stroke="#f97316" stroke-width="1.3" d="M538,-672C538,-672 164,-672 164,-672 158,-672 152,-666 152,-660 152,-660 152,-642 152,-642 152,-636 158,-630 164,-630 164,-630 538,-630 538,-630 544,-630 550,-636 550,-642 550,-642 550,-660 550,-660 550,-666 544,-672 538,-672"/>
+<text text-anchor="middle" x="351" y="-654.6" font-family="Noto Sans CJK SC" font-size="13.00">FetchAppManifest + Validate + Platform</text>
+<text text-anchor="middle" x="351" y="-640.6" font-family="Noto Sans CJK SC" font-size="13.00">platform command / default bundles / pinned version</text>
+</g>
+<!-- already -->
+<g id="node2" class="node">
+<title>already</title>
+<polygon fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.45" points="477,-589 176,-562 477,-535 778,-562 477,-589"/>
+<text text-anchor="middle" x="477" y="-558.9" font-family="Noto Sans CJK SC" font-size="12.00">Already prepared / ready and force=false?</text>
+</g>
+<!-- resolve&#45;&gt;already -->
+<g id="edge1" class="edge">
+<title>resolve&#45;&gt;already</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M380.22,-629.82C397.21,-618.1 418.84,-603.16 437.34,-590.39"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="439.11,-592.14 443.48,-586.14 436.33,-588.1 439.11,-592.14"/>
+</g>
+<!-- noop -->
+<g id="node3" class="node">
+<title>noop</title>
+<path fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.8" d="M779,-466C779,-466 595,-466 595,-466 589,-466 583,-460 583,-454 583,-454 583,-442 583,-442 583,-436 589,-430 595,-430 595,-430 779,-430 779,-430 785,-430 791,-436 791,-442 791,-442 791,-454 791,-454 791,-460 785,-466 779,-466"/>
+<text text-anchor="middle" x="687" y="-444.3" font-family="Noto Sans CJK SC" font-size="14.00">AlreadyReady (no&#45;op)</text>
+</g>
+<!-- already&#45;&gt;noop -->
+<g id="edge2" class="edge">
+<title>already&#45;&gt;noop</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M518.74,-538.74C556.62,-518.54 612.01,-488.99 648.76,-469.39"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="649.92,-471.55 654.94,-466.1 647.61,-467.23 649.92,-471.55"/>
+<text text-anchor="middle" x="585" y="-509.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">yes</text>
+</g>
+<!-- planned -->
+<g id="node4" class="node">
+<title>planned</title>
+<path fill="#e0e7ff" stroke="#6366f1" stroke-width="1.8" d="M541.5,-477.5C541.5,-477.5 188.5,-477.5 188.5,-477.5 182.5,-477.5 176.5,-471.5 176.5,-465.5 176.5,-465.5 176.5,-430.5 176.5,-430.5 176.5,-424.5 182.5,-418.5 188.5,-418.5 188.5,-418.5 541.5,-418.5 541.5,-418.5 547.5,-418.5 553.5,-424.5 553.5,-430.5 553.5,-430.5 553.5,-465.5 553.5,-465.5 553.5,-471.5 547.5,-477.5 541.5,-477.5"/>
+<text text-anchor="middle" x="365" y="-459.3" font-family="Noto Sans CJK SC" font-size="14.00">planned</text>
+<text text-anchor="middle" x="365" y="-444.3" font-family="Noto Sans CJK SC" font-size="14.00">written to apps.json before the install command</text>
+<text text-anchor="middle" x="365" y="-429.3" font-family="Noto Sans CJK SC" font-size="14.00">persisted under a cross&#45;process lock</text>
+</g>
+<!-- already&#45;&gt;planned -->
+<g id="edge3" class="edge">
+<title>already&#45;&gt;planned</title>
+<path fill="none" stroke="#4f46e5" stroke-width="1.15" d="M452.97,-536.97C437.25,-521.25 416.46,-500.46 399.04,-483.04"/>
+<polygon fill="#4f46e5" stroke="#4f46e5" stroke-width="1.15" points="400.43,-480.97 393.75,-477.75 396.97,-484.43 400.43,-480.97"/>
+<text text-anchor="middle" x="439" y="-509.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">no</text>
+</g>
+<!-- install_cmd -->
+<g id="node5" class="node">
+<title>install_cmd</title>
+<path fill="#ffedd5" stroke="#f97316" stroke-width="1.3" d="M558.5,-362C558.5,-362 243.5,-362 243.5,-362 237.5,-362 231.5,-356 231.5,-350 231.5,-350 231.5,-290 231.5,-290 231.5,-284 237.5,-278 243.5,-278 243.5,-278 558.5,-278 558.5,-278 564.5,-278 570.5,-284 570.5,-290 570.5,-290 570.5,-350 570.5,-350 570.5,-356 564.5,-362 558.5,-362"/>
+<text text-anchor="middle" x="401" y="-344.6" font-family="Noto Sans CJK SC" font-size="13.00">install.command</text>
+<text text-anchor="middle" x="401" y="-330.6" font-family="Noto Sans CJK SC" font-size="13.00">run: daemon executes the shell command</text>
+<text text-anchor="middle" x="401" y="-316.6" font-family="Noto Sans CJK SC" font-size="13.00">client: desktop runs it; daemon only records</text>
+<text text-anchor="middle" x="401" y="-302.6" font-family="Noto Sans CJK SC" font-size="13.00">URL: show the download page, never fetch</text>
+<text text-anchor="middle" x="401" y="-288.6" font-family="Noto Sans CJK SC" font-size="13.00">skip: do not execute</text>
+</g>
+<!-- planned&#45;&gt;install_cmd -->
+<g id="edge4" class="edge">
+<title>planned&#45;&gt;install_cmd</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M373.17,-418.41C377.31,-403.92 382.45,-385.94 387.18,-369.38"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="389.61,-369.79 389.18,-362.38 384.9,-368.44 389.61,-369.79"/>
+</g>
+<!-- preparing -->
+<g id="node6" class="node">
+<title>preparing</title>
+<path fill="#fef3c7" stroke="#f59e0b" stroke-width="1.3" d="M532.5,-192C532.5,-192 269.5,-192 269.5,-192 263.5,-192 257.5,-186 257.5,-180 257.5,-180 257.5,-148 257.5,-148 257.5,-142 263.5,-136 269.5,-136 269.5,-136 532.5,-136 532.5,-136 538.5,-136 544.5,-142 544.5,-148 544.5,-148 544.5,-180 544.5,-180 544.5,-186 538.5,-192 532.5,-192"/>
+<text text-anchor="middle" x="401" y="-174.6" font-family="Noto Sans CJK SC" font-size="13.00">preparing</text>
+<text text-anchor="middle" x="401" y="-160.6" font-family="Noto Sans CJK SC" font-size="13.00">serially Prepare the default bundles</text>
+<text text-anchor="middle" x="401" y="-146.6" font-family="Noto Sans CJK SC" font-size="13.00">Prepare = host.Pull</text>
+</g>
+<!-- install_cmd&#45;&gt;preparing -->
+<g id="edge6" class="edge">
+<title>install_cmd&#45;&gt;preparing</title>
+<path fill="none" stroke="#d97706" stroke-width="1.15" d="M401,-277.73C401,-253.29 401,-222.68 401,-199.53"/>
+<polygon fill="#d97706" stroke="#d97706" stroke-width="1.15" points="403.45,-199.29 401,-192.29 398.55,-199.29 403.45,-199.29"/>
+<text text-anchor="middle" x="432" y="-253.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">ok + models</text>
+</g>
+<!-- prepared -->
+<g id="node7" class="node">
+<title>prepared</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.3" d="M830.5,-83.5C830.5,-83.5 417.5,-83.5 417.5,-83.5 411.5,-83.5 405.5,-77.5 405.5,-71.5 405.5,-71.5 405.5,-39.5 405.5,-39.5 405.5,-33.5 411.5,-27.5 417.5,-27.5 417.5,-27.5 830.5,-27.5 830.5,-27.5 836.5,-27.5 842.5,-33.5 842.5,-39.5 842.5,-39.5 842.5,-71.5 842.5,-71.5 842.5,-77.5 836.5,-83.5 830.5,-83.5"/>
+<text text-anchor="middle" x="624" y="-66.1" font-family="Noto Sans CJK SC" font-size="13.00">prepared</text>
+<text text-anchor="middle" x="624" y="-52.1" font-family="Noto Sans CJK SC" font-size="13.00">all selected bundles have Prepared=true</text>
+<text text-anchor="middle" x="624" y="-38.1" font-family="Noto Sans CJK SC" font-size="13.00">Connection = {base_url, api_key=local, models, model_refs}</text>
+</g>
+<!-- install_cmd&#45;&gt;prepared -->
+<g id="edge7" class="edge">
+<title>install_cmd&#45;&gt;prepared</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" stroke-dasharray="5,2" d="M513.62,-277.95C530.42,-268.13 546.32,-256.25 559,-242 597.52,-198.71 613.54,-131.24 619.96,-90.71"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="622.39,-90.99 621.01,-83.71 617.55,-90.26 622.39,-90.99"/>
+<text text-anchor="middle" x="652" y="-161.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">ok + no models</text>
+</g>
+<!-- failed -->
+<g id="node8" class="node">
+<title>failed</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M364,-85C364,-85 38,-85 38,-85 32,-85 26,-79 26,-73 26,-73 26,-38 26,-38 26,-32 32,-26 38,-26 38,-26 364,-26 364,-26 370,-26 376,-32 376,-38 376,-38 376,-73 376,-73 376,-79 370,-85 364,-85"/>
+<text text-anchor="middle" x="201" y="-66.8" font-family="Noto Sans CJK SC" font-size="14.00">failed</text>
+<text text-anchor="middle" x="201" y="-51.8" font-family="Noto Sans CJK SC" font-size="14.00">install command or Prepare failed; logs kept</text>
+<text text-anchor="middle" x="201" y="-36.8" font-family="Noto Sans CJK SC" font-size="14.00">retryable; cached bundles are kept</text>
+</g>
+<!-- install_cmd&#45;&gt;failed -->
+<g id="edge5" class="edge">
+<title>install_cmd&#45;&gt;failed</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M267.89,-277.95C252.22,-268.32 237.95,-256.5 227,-242 194.19,-198.54 193.18,-132.57 196.4,-92.13"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="198.85,-92.32 197.02,-85.14 193.96,-91.89 198.85,-92.32"/>
+<text text-anchor="middle" x="235" y="-161.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">fail</text>
+</g>
+<!-- desktop_note -->
+<g id="node18" class="node">
+<title>desktop_note</title>
+<polygon fill="#dbeafe" stroke="#3b82f6" stroke-width="1.3" points="1175.5,-197 886.5,-197 886.5,-131 1181.5,-131 1181.5,-191 1175.5,-197"/>
+<polyline fill="none" stroke="#3b82f6" stroke-width="1.3" points="1175.5,-197 1175.5,-191 "/>
+<polyline fill="none" stroke="#3b82f6" stroke-width="1.3" points="1181.5,-191 1175.5,-191 "/>
+<text text-anchor="middle" x="1034" y="-180.8" font-family="Noto Sans CJK SC" font-size="11.50">Desktop role</text>
+<text text-anchor="middle" x="1034" y="-167.8" font-family="Noto Sans CJK SC" font-size="11.50">runs client commands / installers locally</text>
+<text text-anchor="middle" x="1034" y="-154.8" font-family="Noto Sans CJK SC" font-size="11.50">then POST install; configuration uses /setup</text>
+<text text-anchor="middle" x="1034" y="-141.8" font-family="Noto Sans CJK SC" font-size="11.50">never starts/stops models; inference via /v1</text>
+</g>
+<!-- install_cmd&#45;&gt;desktop_note -->
+<g id="edge21" class="edge">
+<title>install_cmd&#45;&gt;desktop_note</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" stroke-dasharray="1,5" d="M570.67,-302.07C660.14,-290.38 770.97,-271.48 867,-242 901.62,-231.37 938.35,-215.04 968.52,-200.15"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="969.68,-202.31 974.85,-197 967.49,-197.93 969.68,-202.31"/>
+</g>
+<!-- preparing&#45;&gt;prepared -->
+<g id="edge8" class="edge">
+<title>preparing&#45;&gt;prepared</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M457.56,-135.99C489.01,-120.97 528.24,-102.23 560.71,-86.72"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="561.85,-88.9 567.11,-83.67 559.74,-84.47 561.85,-88.9"/>
+<text text-anchor="middle" x="549.5" y="-104.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">all pulled</text>
+</g>
+<!-- preparing&#45;&gt;failed -->
+<g id="edge9" class="edge">
+<title>preparing&#45;&gt;failed</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M350.27,-135.99C323.16,-121.55 289.61,-103.68 261.18,-88.55"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="262.15,-86.29 254.82,-85.16 259.85,-90.61 262.15,-86.29"/>
+<text text-anchor="middle" x="315" y="-104.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">fail</text>
+</g>
+<!-- setup -->
+<g id="node9" class="node">
+<title>setup</title>
+<path fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.3" d="M2054.5,-679C2054.5,-679 1773.5,-679 1773.5,-679 1767.5,-679 1761.5,-673 1761.5,-667 1761.5,-667 1761.5,-635 1761.5,-635 1761.5,-629 1767.5,-623 1773.5,-623 1773.5,-623 2054.5,-623 2054.5,-623 2060.5,-623 2066.5,-629 2066.5,-635 2066.5,-635 2066.5,-667 2066.5,-667 2066.5,-673 2060.5,-679 2054.5,-679"/>
+<text text-anchor="middle" x="1914" y="-661.6" font-family="Noto Sans CJK SC" font-size="13.00">POST /api/v1/apps/{org}/{name}/setup</text>
+<text text-anchor="middle" x="1914" y="-647.6" font-family="Noto Sans CJK SC" font-size="13.00">returns AppState or an ?async=1 job</text>
+<text text-anchor="middle" x="1914" y="-633.6" font-family="Noto Sans CJK SC" font-size="13.00">body: setup_scripts[] + client_home</text>
+</g>
+<!-- prepared&#45;&gt;setup -->
+<g id="edge10" class="edge">
+<title>prepared&#45;&gt;setup</title>
+<path fill="none" stroke="#7c3aed" stroke-width="1.15" d="M769.11,-83.51C805.79,-99.17 835,-123.92 835,-163 835,-563 835,-563 835,-563 835,-608.55 1454.08,-635.01 1754.37,-645.17"/>
+<polygon fill="#7c3aed" stroke="#7c3aed" stroke-width="1.15" points="1754.33,-647.62 1761.41,-645.41 1754.5,-642.72 1754.33,-647.62"/>
+<text text-anchor="middle" x="855" y="-381.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">activate</text>
+</g>
+<!-- failed&#45;&gt;resolve -->
+<g id="edge20" class="edge">
+<title>failed&#45;&gt;resolve</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M176.72,-85.22C161.98,-105.58 146,-134.28 146,-163 146,-563 146,-563 146,-563 146,-593.87 165.94,-613.95 193.39,-626.96"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="192.74,-629.35 200.13,-629.96 194.73,-624.88 192.74,-629.35"/>
+<text text-anchor="middle" x="159" y="-381.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">retry</text>
+</g>
+<!-- set_ready -->
+<g id="node10" class="node">
+<title>set_ready</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.3" d="M2086,-590C2086,-590 1742,-590 1742,-590 1736,-590 1730,-584 1730,-578 1730,-578 1730,-546 1730,-546 1730,-540 1736,-534 1742,-534 1742,-534 2086,-534 2086,-534 2092,-534 2098,-540 2098,-546 2098,-546 2098,-578 2098,-578 2098,-584 2092,-590 2086,-590"/>
+<text text-anchor="middle" x="1914" y="-572.6" font-family="Noto Sans CJK SC" font-size="13.00">set state=ready and clear error first</text>
+<text text-anchor="middle" x="1914" y="-558.6" font-family="Noto Sans CJK SC" font-size="13.00">only then run the setup scripts</text>
+<text text-anchor="middle" x="1914" y="-544.6" font-family="Noto Sans CJK SC" font-size="13.00">script failure writes setup_error; state stays ready</text>
+</g>
+<!-- setup&#45;&gt;set_ready -->
+<g id="edge11" class="edge">
+<title>setup&#45;&gt;set_ready</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M1914,-622.95C1914,-614.77 1914,-605.67 1914,-597.09"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="1916.45,-597.03 1914,-590.03 1911.55,-597.03 1916.45,-597.03"/>
+</g>
+<!-- scripts -->
+<g id="node11" class="node">
+<title>scripts</title>
+<path fill="#fef3c7" stroke="#f59e0b" stroke-width="1.3" d="M2106,-490C2106,-490 1742,-490 1742,-490 1736,-490 1730,-484 1730,-478 1730,-478 1730,-418 1730,-418 1730,-412 1736,-406 1742,-406 1742,-406 2106,-406 2106,-406 2112,-406 2118,-412 2118,-418 2118,-418 2118,-478 2118,-478 2118,-484 2112,-490 2106,-490"/>
+<text text-anchor="middle" x="1924" y="-472.6" font-family="Noto Sans CJK SC" font-size="13.00">applySetupScripts</text>
+<text text-anchor="middle" x="1924" y="-458.6" font-family="Noto Sans CJK SC" font-size="13.00">saved plan and no explicit selection → replay offline</text>
+<text text-anchor="middle" x="1924" y="-444.6" font-family="Noto Sans CJK SC" font-size="13.00">otherwise pin manifest order + SHA&#45;256</text>
+<text text-anchor="middle" x="1924" y="-430.6" font-family="Noto Sans CJK SC" font-size="13.00">script cache setup&#45;cache/&lt;sha256&gt;.py</text>
+<text text-anchor="middle" x="1924" y="-416.6" font-family="Noto Sans CJK SC" font-size="13.00">the first failure stops the rest</text>
+</g>
+<!-- set_ready&#45;&gt;scripts -->
+<g id="edge12" class="edge">
+<title>set_ready&#45;&gt;scripts</title>
+<path fill="none" stroke="#d97706" stroke-width="1.15" d="M1916.42,-533.89C1917.4,-522.96 1918.55,-510 1919.67,-497.55"/>
+<polygon fill="#d97706" stroke="#d97706" stroke-width="1.15" points="1922.13,-497.48 1920.31,-490.29 1917.25,-497.05 1922.13,-497.48"/>
+</g>
+<!-- ready -->
+<g id="node12" class="node">
+<title>ready</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.8" d="M2137.5,-349.5C2137.5,-349.5 1760.5,-349.5 1760.5,-349.5 1754.5,-349.5 1748.5,-343.5 1748.5,-337.5 1748.5,-337.5 1748.5,-302.5 1748.5,-302.5 1748.5,-296.5 1754.5,-290.5 1760.5,-290.5 1760.5,-290.5 2137.5,-290.5 2137.5,-290.5 2143.5,-290.5 2149.5,-296.5 2149.5,-302.5 2149.5,-302.5 2149.5,-337.5 2149.5,-337.5 2149.5,-343.5 2143.5,-349.5 2137.5,-349.5"/>
+<text text-anchor="middle" x="1949" y="-331.3" font-family="Noto Sans CJK SC" font-size="14.00">ready</text>
+<text text-anchor="middle" x="1949" y="-316.3" font-family="Noto Sans CJK SC" font-size="14.00">app configured and ready for requests</text>
+<text text-anchor="middle" x="1949" y="-301.3" font-family="Noto Sans CJK SC" font-size="14.00">Connection only in apps.json; APIKey is always local</text>
+</g>
+<!-- scripts&#45;&gt;ready -->
+<g id="edge13" class="edge">
+<title>scripts&#45;&gt;ready</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M1932.19,-405.74C1935.32,-389.95 1938.86,-372.09 1941.89,-356.84"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="1944.37,-356.93 1943.33,-349.59 1939.56,-355.98 1944.37,-356.93"/>
+<text text-anchor="middle" x="2000.5" y="-381.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">done / failure both ready</text>
+</g>
+<!-- ready&#45;&gt;setup -->
+<g id="edge15" class="edge">
+<title>ready&#45;&gt;setup</title>
+<path fill="none" stroke="#7c3aed" stroke-width="1.15" stroke-dasharray="5,2" d="M2062.13,-349.5C2089.97,-362.13 2116.51,-380.21 2133,-406 2153.12,-437.45 2136.68,-452.85 2133,-490 2128.53,-535.1 2143.48,-556.46 2113,-590 2101.74,-602.38 2088.04,-612.25 2073.13,-620.1"/>
+<polygon fill="#7c3aed" stroke="#7c3aed" stroke-width="1.15" points="2071.83,-618.02 2066.68,-623.35 2074.03,-622.39 2071.83,-618.02"/>
+<text text-anchor="middle" x="2162" y="-509.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">reconfigure</text>
+</g>
+<!-- infer -->
+<g id="node13" class="node">
+<title>infer</title>
+<path fill="#dbeafe" stroke="#3b82f6" stroke-width="1.3" d="M1898,-199C1898,-199 1616,-199 1616,-199 1610,-199 1604,-193 1604,-187 1604,-187 1604,-141 1604,-141 1604,-135 1610,-129 1616,-129 1616,-129 1898,-129 1898,-129 1904,-129 1910,-135 1910,-141 1910,-141 1910,-187 1910,-187 1910,-193 1904,-199 1898,-199"/>
+<text text-anchor="middle" x="1757" y="-181.6" font-family="Noto Sans CJK SC" font-size="13.00">Inference through /v1 only</text>
+<text text-anchor="middle" x="1757" y="-167.6" font-family="Noto Sans CJK SC" font-size="13.00">gateway → scheduler → resident</text>
+<text text-anchor="middle" x="1757" y="-153.6" font-family="Noto Sans CJK SC" font-size="13.00">apps have no PID / child endpoint</text>
+<text text-anchor="middle" x="1757" y="-139.6" font-family="Noto Sans CJK SC" font-size="13.00">apps cannot start / stop / load / unload</text>
+</g>
+<!-- ready&#45;&gt;infer -->
+<g id="edge14" class="edge">
+<title>ready&#45;&gt;infer</title>
+<path fill="none" stroke="#2563eb" stroke-width="1.15" d="M1913.34,-290.39C1882.89,-265.97 1838.82,-230.63 1805.23,-203.69"/>
+<polygon fill="#2563eb" stroke="#2563eb" stroke-width="1.15" points="1806.5,-201.57 1799.51,-199.1 1803.44,-205.39 1806.5,-201.57"/>
+<text text-anchor="middle" x="1895" y="-253.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">request</text>
+</g>
+<!-- status -->
+<g id="node14" class="node">
+<title>status</title>
+<path fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.3" d="M2328.5,-185C2328.5,-185 1951.5,-185 1951.5,-185 1945.5,-185 1939.5,-179 1939.5,-173 1939.5,-173 1939.5,-155 1939.5,-155 1939.5,-149 1945.5,-143 1951.5,-143 1951.5,-143 2328.5,-143 2328.5,-143 2334.5,-143 2340.5,-149 2340.5,-155 2340.5,-155 2340.5,-173 2340.5,-173 2340.5,-179 2334.5,-185 2328.5,-185"/>
+<text text-anchor="middle" x="2140" y="-167.6" font-family="Noto Sans CJK SC" font-size="13.00">GET .../status</text>
+<text text-anchor="middle" x="2140" y="-153.6" font-family="Noto Sans CJK SC" font-size="13.00">reads apps.json; transitional older than ~10m → failed</text>
+</g>
+<!-- ready&#45;&gt;status -->
+<g id="edge16" class="edge">
+<title>ready&#45;&gt;status</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" stroke-dasharray="1,5" d="M1984.48,-290.39C2020.38,-261.45 2075.3,-217.17 2109.36,-189.7"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="2111.14,-191.41 2115.05,-185.11 2108.07,-187.6 2111.14,-191.41"/>
+</g>
+<!-- uninstall -->
+<g id="node15" class="node">
+<title>uninstall</title>
+<path fill="#ffedd5" stroke="#f97316" stroke-width="1.3" d="M2726.5,-199C2726.5,-199 2381.5,-199 2381.5,-199 2375.5,-199 2369.5,-193 2369.5,-187 2369.5,-187 2369.5,-141 2369.5,-141 2369.5,-135 2375.5,-129 2381.5,-129 2381.5,-129 2726.5,-129 2726.5,-129 2732.5,-129 2738.5,-135 2738.5,-141 2738.5,-141 2738.5,-187 2738.5,-187 2738.5,-193 2732.5,-199 2726.5,-199"/>
+<text text-anchor="middle" x="2554" y="-181.6" font-family="Noto Sans CJK SC" font-size="13.00">DELETE /api/v1/apps/{org}/{name}</text>
+<text text-anchor="middle" x="2554" y="-167.6" font-family="Noto Sans CJK SC" font-size="13.00">by default removes the registry entry only</text>
+<text text-anchor="middle" x="2554" y="-153.6" font-family="Noto Sans CJK SC" font-size="13.00">?purge_models=1 also calls RemoveCachedRef</text>
+<text text-anchor="middle" x="2554" y="-139.6" font-family="Noto Sans CJK SC" font-size="13.00">shared assets kept; an uncached ref aborts purge</text>
+</g>
+<!-- ready&#45;&gt;uninstall -->
+<g id="edge17" class="edge">
+<title>ready&#45;&gt;uninstall</title>
+<path fill="none" stroke="#ea580c" stroke-width="1.15" d="M2138.14,-290.48C2207.05,-278.17 2285.16,-261.96 2355,-242 2393.07,-231.12 2434.03,-215.91 2468.84,-201.87"/>
+<polygon fill="#ea580c" stroke="#ea580c" stroke-width="1.15" points="2470.16,-203.98 2475.72,-199.08 2468.31,-199.44 2470.16,-203.98"/>
+<text text-anchor="middle" x="2344.5" y="-253.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">uninstall</text>
+</g>
+<!-- uninstalled -->
+<g id="node16" class="node">
+<title>uninstalled</title>
+<path fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.8" d="M2727,-85C2727,-85 2373,-85 2373,-85 2367,-85 2361,-79 2361,-73 2361,-73 2361,-38 2361,-38 2361,-32 2367,-26 2373,-26 2373,-26 2727,-26 2727,-26 2733,-26 2739,-32 2739,-38 2739,-38 2739,-73 2739,-73 2739,-79 2733,-85 2727,-85"/>
+<text text-anchor="middle" x="2550" y="-66.8" font-family="Noto Sans CJK SC" font-size="14.00">uninstalled</text>
+<text text-anchor="middle" x="2550" y="-51.8" font-family="Noto Sans CJK SC" font-size="14.00">model cache / logs / setup&#45;cache kept by default</text>
+<text text-anchor="middle" x="2550" y="-36.8" font-family="Noto Sans CJK SC" font-size="14.00">never stops a resident</text>
+</g>
+<!-- uninstall&#45;&gt;uninstalled -->
+<g id="edge18" class="edge">
+<title>uninstall&#45;&gt;uninstalled</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M2552.71,-128.72C2552.27,-117.03 2551.78,-103.95 2551.34,-92.16"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="2553.78,-91.92 2551.07,-85.01 2548.89,-92.1 2553.78,-91.92"/>
+</g>
+<!-- prepare_only -->
+<g id="node17" class="node">
+<title>prepare_only</title>
+<path fill="#fef3c7" stroke="#f59e0b" stroke-width="1.3" d="M1563,-192C1563,-192 1223,-192 1223,-192 1217,-192 1211,-186 1211,-180 1211,-180 1211,-148 1211,-148 1211,-142 1217,-136 1223,-136 1223,-136 1563,-136 1563,-136 1569,-136 1575,-142 1575,-148 1575,-148 1575,-180 1575,-180 1575,-186 1569,-192 1563,-192"/>
+<text text-anchor="middle" x="1393" y="-174.6" font-family="Noto Sans CJK SC" font-size="13.00">POST .../prepare</text>
+<text text-anchor="middle" x="1393" y="-160.6" font-family="Noto Sans CJK SC" font-size="13.00">NoInstall + PrepareOnly + Force</text>
+<text text-anchor="middle" x="1393" y="-146.6" font-family="Noto Sans CJK SC" font-size="13.00">may create prepared state for an uninstalled app</text>
+</g>
+<!-- prepare_only&#45;&gt;prepared -->
+<g id="edge19" class="edge">
+<title>prepare_only&#45;&gt;prepared</title>
+<path fill="none" stroke="#d97706" stroke-width="1.15" stroke-dasharray="5,2" d="M1240.39,-135.97C1225.41,-133.52 1210.42,-131.16 1196,-129 1130.47,-119.2 979.76,-100.15 849.48,-84.03"/>
+<polygon fill="#d97706" stroke="#d97706" stroke-width="1.15" points="849.76,-81.6 842.51,-83.17 849.16,-86.46 849.76,-81.6"/>
+<text text-anchor="middle" x="1107" y="-104.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">prepare only</text>
+</g>
+</g>
 </svg>

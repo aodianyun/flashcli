@@ -1,0 +1,56 @@
+digraph app_lifecycle {
+  graph [rankdir=TB, bgcolor="#F7F9FC", pad=0.4, nodesep=0.4, ranksep=0.45, fontname="Noto Sans CJK SC", fontsize=30, labelloc=t, label=<<B>flashserver application lifecycle</B><BR/><FONT POINT-SIZE="14" COLOR="#64748B">planned → preparing → prepared → ready; applications call /v1 and never start or stop models</FONT>>];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC", fontsize=13, margin="0.46,0.10", penwidth=1.3, color="#94A3B8"];
+  edge [fontname="Noto Sans CJK SC", fontsize=11, color="#64748B", fontcolor="#475569", arrowsize=0.7, penwidth=1.15];
+  subgraph cluster_1 {
+    label=<<B>Install and prepare</B>>;
+    style="rounded,filled"; color="#F97316"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  resolve [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=13, width=4.40, label="FetchAppManifest + Validate + Platform\nplatform command / default bundles / pinned version"];
+  already [shape=diamond, style="filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.45, fontsize=12, width=3.60, label="Already prepared / ready and force=false?"];
+  noop [shape=box, style="rounded,filled", fillcolor="#F1F5F9", color="#CBD5E1", penwidth=1.8, fontsize=14, width=1.92, label="AlreadyReady (no-op)"];
+  planned [shape=box, style="rounded,filled", fillcolor="#E0E7FF", color="#6366F1", penwidth=1.8, fontsize=14, width=4.08, label="planned\nwritten to apps.json before the install command\npersisted under a cross-process lock"];
+  install_cmd [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=13, width=3.84, label="install.command\nrun: daemon executes the shell command\nclient: desktop runs it; daemon only records\nURL: show the download page, never fetch\nskip: do not execute"];
+  preparing [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=3.20, label="preparing\nserially Prepare the default bundles\nPrepare = host.Pull"];
+  prepared [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=4.96, label="prepared\nall selected bundles have Prepared=true\nConnection = {base_url, api_key=local, models, model_refs}"];
+  failed [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=3.84, label="failed\ninstall command or Prepare failed; logs kept\nretryable; cached bundles are kept"];
+  }
+  subgraph cluster_2 {
+    label=<<B>Configure and activate</B>>;
+    style="rounded,filled"; color="#8B5CF6"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  setup [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=3.20, label="POST /api/v1/apps/{org}/{name}/setup\nreturns AppState or an ?async=1 job\nbody: setup_scripts[] + client_home"];
+  set_ready [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=4.48, label="set state=ready and clear error first\nonly then run the setup scripts\nscript failure writes setup_error; state stays ready"];
+  scripts [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=4.64, label="applySetupScripts\nsaved plan and no explicit selection → replay offline\notherwise pin manifest order + SHA-256\nscript cache setup-cache/<sha256>.py\nthe first failure stops the rest"];
+  ready [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.8, fontsize=14, width=4.48, label="ready\napp configured and ready for requests\nConnection only in apps.json; APIKey is always local"];
+  }
+  subgraph cluster_3 {
+    label=<<B>Runtime and uninstall</B>>;
+    style="rounded,filled"; color="#14B8A6"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  infer [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.3, fontsize=13, width=3.52, label="Inference through /v1 only\ngateway → scheduler → resident\napps have no PID / child endpoint\napps cannot start / stop / load / unload"];
+  status [shape=box, style="rounded,filled", fillcolor="#F1F5F9", color="#CBD5E1", penwidth=1.3, fontsize=13, width=4.72, label="GET .../status\nreads apps.json; transitional older than ~10m → failed"];
+  uninstall [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=13, width=4.16, label="DELETE /api/v1/apps/{org}/{name}\nby default removes the registry entry only\n?purge_models=1 also calls RemoveCachedRef\nshared assets kept; an uncached ref aborts purge"];
+  uninstalled [shape=box, style="rounded,filled", fillcolor="#F1F5F9", color="#CBD5E1", penwidth=1.8, fontsize=14, width=4.16, label="uninstalled\nmodel cache / logs / setup-cache kept by default\nnever stops a resident"];
+  prepare_only [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=4.16, label="POST .../prepare\nNoInstall + PrepareOnly + Force\nmay create prepared state for an uninstalled app"];
+  desktop_note [shape=note, style="filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.3, fontsize=11.5, width=3.84, label="Desktop role\nruns client commands / installers locally\nthen POST install; configuration uses /setup\nnever starts/stops models; inference via /v1"];
+  }
+  resolve -> already [color="#64748B", style="solid"];
+  already -> noop [color="#64748B", style="solid", label="yes"];
+  already -> planned [color="#4F46E5", style="solid", label="no"];
+  planned -> install_cmd [color="#64748B", style="solid"];
+  install_cmd -> failed [color="#DC2626", style="dashed", label="fail"];
+  install_cmd -> preparing [color="#D97706", style="solid", label="ok + models"];
+  install_cmd -> prepared [color="#16A34A", style="dashed", label="ok + no models"];
+  preparing -> prepared [color="#16A34A", style="solid", label="all pulled"];
+  preparing -> failed [color="#DC2626", style="dashed", label="fail"];
+  prepared -> setup [color="#7C3AED", style="solid", label="activate"];
+  setup -> set_ready [color="#16A34A", style="solid"];
+  set_ready -> scripts [color="#D97706", style="solid"];
+  scripts -> ready [color="#16A34A", style="solid", label="done / failure both ready"];
+  ready -> infer [color="#2563EB", style="solid", label="request"];
+  ready -> setup [color="#7C3AED", style="dashed", label="reconfigure"];
+  ready -> status [color="#64748B", style="dotted"];
+  ready -> uninstall [color="#EA580C", style="solid", label="uninstall"];
+  uninstall -> uninstalled [color="#64748B", style="solid"];
+  prepare_only -> prepared [color="#D97706", style="dashed", label="prepare only"];
+  failed -> resolve [color="#DC2626", style="dashed", label="retry"];
+  install_cmd -> desktop_note [color="#64748B", style="dotted"];
+}

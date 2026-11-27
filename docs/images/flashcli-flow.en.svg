@@ -1,153 +1,676 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
-<defs>
-<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1.5" stdDeviation="3" flood-color="#0F172A" flood-opacity="0.05"/></filter>
-<marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#2563EB"/></marker>
-<marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#0F766E"/></marker>
-<marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#B45309"/></marker>
-<marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#DC2626"/></marker>
-</defs>
-<rect width="1600" height="900" fill="#F7F9FC"/>
-<path d="M 48 100 L 1552 100" stroke="#E2E8F0" stroke-width="1"/>
-<text x="48" y="64" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="34" font-weight="700" fill="#0F172A">flashcli run / serve flow</text>
-<text x="1552" y="64" text-anchor="end" font-family="JetBrains Mono, Consolas, monospace" font-size="12" font-weight="400" fill="#94A3B8">v1</text>
-<text x="48" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">CLI / INPUT</text>
-<rect x="48" y="150" width="330" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="48" y="150" width="330" height="3" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="418" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">RESOLVE / CACHE</text>
-<rect x="418" y="150" width="330" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="418" y="150" width="330" height="3" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="788" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">PREPARE / WEIGHTS / VENV</text>
-<rect x="788" y="150" width="330" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="788" y="150" width="330" height="3" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="1158" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">ENTRY / EXECUTION</text>
-<rect x="1158" y="150" width="330" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="1158" y="150" width="330" height="3" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<rect x="68" y="180" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="68" y="190" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="82" y="199" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">flashcli run|serve &lt;ref&gt;</text>
-<text x="82" y="214" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">local dir or FlashHub ref</text>
-<text x="82" y="228" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">pull / models show / bundle validate</text>
-<rect x="68" y="260" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="68" y="270" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="82" y="279" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Environment</text>
-<text x="82" y="294" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">FLASHCLI_HOME / RUNTIME_ENV_KEY</text>
-<text x="82" y="308" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">mirror / CUDA userland</text>
-<rect x="68" y="340" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="68" y="350" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="82" y="359" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Parse ref / variant</text>
-<text x="82" y="374" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">namespace/name:version[:variant]</text>
-<text x="82" y="388" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">cache key = source/repo@revision</text>
-<polygon points="213,420 308.7,457 213,494 117.3,457" fill="#FFF9F0" stroke="#DC2626" stroke-width="1.3"/>
-<text x="213" y="455" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Valid input?</text>
-<text x="213" y="471" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">full ref / manifest</text>
-<text x="213" y="483" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">no -&gt; clear error</text>
-<rect x="438" y="180" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="438" y="190" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="452" y="199" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Bundle tree</text>
-<text x="452" y="214" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">manifest + entry + runtime</text>
-<text x="452" y="228" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">FLASHCLI_HOME/bundles/&lt;name&gt;/&lt;ver&gt;</text>
-<rect x="438" y="260" width="290" height="62" rx="8" fill="#F8FAFC" stroke="#B8C4D4" stroke-width="1.15" stroke-dasharray="6 4"/>
-<rect x="438" y="270" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="452" y="279" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Download manifest</text>
-<text x="452" y="294" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">.flashcli_download.json</text>
-<text x="452" y="308" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">expected path + size</text>
-<polygon points="583,340 678.7,377 583,414 487.3,377" fill="#FFF9F0" stroke="#B45309" stroke-width="1.3"/>
-<text x="583" y="375" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Cache complete?</text>
-<text x="583" y="391" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">manifest + markers</text>
-<text x="583" y="403" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">no -&gt; resume / pull</text>
-<polygon points="583,432 678.7,469 583,506 487.3,469" fill="#FFF9F0" stroke="#0F766E" stroke-width="1.3"/>
-<text x="583" y="467" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Bundle ready?</text>
-<text x="583" y="483" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">allow / require + norm stats</text>
-<text x="583" y="495" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">legacy cache accepted</text>
-<rect x="438" y="524" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="438" y="534" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="452" y="543" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Pull job</text>
-<text x="452" y="558" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">index -&gt; manifest -&gt; files</text>
-<text x="452" y="572" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">verify size / md5</text>
-<rect x="808" y="180" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="808" y="190" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="822" y="199" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Preflight</text>
-<text x="822" y="214" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">env key: SM/CUDA/Python ABI</text>
-<text x="822" y="228" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">device / driver / CPU fallback</text>
-<rect x="808" y="260" width="290" height="62" rx="8" fill="#F8FAFC" stroke="#B8C4D4" stroke-width="1.15" stroke-dasharray="6 4"/>
-<rect x="808" y="270" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="822" y="279" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Weights</text>
-<text x="822" y="294" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">source/repo@revision</text>
-<text x="822" y="308" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">allow / require + extra</text>
-<rect x="808" y="340" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="808" y="350" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="822" y="359" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Transfer / resume</text>
-<text x="822" y="374" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">download manifest + resume</text>
-<text x="822" y="388" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">post_pull / norm stats</text>
-<rect x="808" y="420" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="808" y="430" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="822" y="439" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Create / reuse venv</text>
-<text x="822" y="454" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">uv / pip fallback</text>
-<text x="822" y="468" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">flashcli-bundle[infer]</text>
-<rect x="808" y="500" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="808" y="510" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="822" y="519" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Python deps</text>
-<text x="822" y="534" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">manifest python_dependencies</text>
-<text x="822" y="548" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">UV cache / hardlinks</text>
-<polygon points="1323,180 1418.7,217 1323,254 1227.3,217" fill="#FFF9F0" stroke="#0F766E" stroke-width="1.3"/>
-<text x="1323" y="215" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Entry kind</text>
-<text x="1323" y="231" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">python engine / script</text>
-<text x="1323" y="243" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">native-exec / native-abi</text>
-<rect x="1178" y="272" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="1178" y="282" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="1192" y="291" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Load</text>
-<text x="1192" y="306" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">ServeEngine / RunEngine</text>
-<text x="1192" y="320" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">load(checkpoint, preset)</text>
-<rect x="1178" y="352" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="1178" y="362" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="1192" y="371" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Warmup</text>
-<text x="1192" y="386" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">warmup(spec)</text>
-<text x="1192" y="400" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">CUDA graph / engine init</text>
-<rect x="1178" y="432" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="1178" y="442" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="1192" y="451" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">run / serve</text>
-<text x="1192" y="466" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">run: predict -&gt; stdout / exit</text>
-<text x="1192" y="480" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">serve: build_app + routes</text>
-<rect x="1178" y="512" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="1178" y="522" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="1192" y="531" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Protocol</text>
-<text x="1192" y="546" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">JSON / SSE / multipart / WS</text>
-<text x="1192" y="560" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">health + /v1/models</text>
-<path d="M 213 242 L 213 260" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 213 322 L 213 340" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 213 402 L 213 420" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 308.7 457 L 398 457 L 398 211 L 438 211" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<text x="398" y="329" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">ok</text>
-<path d="M 583 242 L 583 260" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 583 322 L 583 340" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 583 414 L 583 432" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="591" y="426" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">yes</text>
-<path d="M 583 414 L 583 524" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
-<text x="591" y="472" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">no</text>
-<path d="M 678.7 469 L 768 469 L 768 211 L 808 211" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="768" y="335" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">ready</text>
-<path d="M 728 555 L 768 555 L 768 371 L 808 371" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
-<text x="768" y="458" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">fetch</text>
-<path d="M 953 242 L 953 260" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 953 322 L 953 340" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 953 402 L 953 420" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="961" y="414" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">ready</text>
-<path d="M 953 482 L 953 500" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 1098 531 L 1138 531 L 1138 217 L 1227.3 217" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="1138" y="369" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">launch</text>
-<path d="M 1323 254 L 1323 272" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="1331" y="266" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">engine</text>
-<path d="M 1323 334 L 1323 352" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 1323 414 L 1323 432" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="1331" y="426" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">run/serve</text>
-<path d="M 1323 494 L 1323 512" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<rect x="48" y="838" width="10" height="2" rx="1" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="63" y="842" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">request / data</text>
-<rect x="158.8" y="838" width="10" height="2" rx="1" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="173.8" y="842" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">local execution</text>
-<rect x="274.8" y="838" width="10" height="2" rx="1" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="289.8" y="842" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">external / disk</text>
-<rect x="390.8" y="838" width="10" height="2" rx="1" fill="#DC2626" stroke="#DC2626" stroke-width="0"/>
-<text x="405.8" y="842" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">failure / retry</text>
-<text x="48" y="862" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">dashed: optional / retry path</text>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.43.0 (0)
+ -->
+<!-- Title: flashcli_flow Pages: 1 -->
+<svg width="2267pt" height="2825pt"
+ viewBox="0.00 0.00 2266.60 2824.60" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(28.8 2795.8)">
+<title>flashcli_flow</title>
+<polygon fill="#f7f9fc" stroke="transparent" points="-28.8,28.8 -28.8,-2795.8 2237.8,-2795.8 2237.8,28.8 -28.8,28.8"/>
+<text text-anchor="start" x="857.5" y="-2740" font-family="Noto Sans CJK SC" font-weight="bold" font-size="30.00">flashcli run / serve execution flow</text>
+<text text-anchor="start" x="817.5" y="-2722.8" font-family="Noto Sans CJK SC" font-size="14.00" fill="#64748b">resolve ref → local cache / FlashHub sync → weights / venv → inference inside the bundle</text>
+<g id="clust1" class="cluster">
+<title>cluster_1</title>
+<path fill="#ffffff" stroke="#3b82f6" stroke-width="1.3" d="M20,-2212C20,-2212 426,-2212 426,-2212 432,-2212 438,-2218 438,-2224 438,-2224 438,-2695 438,-2695 438,-2701 432,-2707 426,-2707 426,-2707 20,-2707 20,-2707 14,-2707 8,-2701 8,-2695 8,-2695 8,-2224 8,-2224 8,-2218 14,-2212 20,-2212"/>
+<text text-anchor="start" x="162.5" y="-2692" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">Command entry</text>
+</g>
+<g id="clust2" class="cluster">
+<title>cluster_2</title>
+<path fill="#ffffff" stroke="#f97316" stroke-width="1.3" d="M458,-1964C458,-1964 1357,-1964 1357,-1964 1363,-1964 1369,-1970 1369,-1976 1369,-1976 1369,-2381 1369,-2381 1369,-2387 1363,-2393 1357,-2393 1357,-2393 458,-2393 458,-2393 452,-2393 446,-2387 446,-2381 446,-2381 446,-1976 446,-1976 446,-1970 452,-1964 458,-1964"/>
+<text text-anchor="start" x="823.5" y="-2378" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">Bundle tree resolution</text>
+</g>
+<g id="clust3" class="cluster">
+<title>cluster_3</title>
+<path fill="#ffffff" stroke="#8b5cf6" stroke-width="1.3" d="M802,-1243C802,-1243 1513,-1243 1513,-1243 1519,-1243 1525,-1249 1525,-1255 1525,-1255 1525,-1935 1525,-1935 1525,-1941 1519,-1947 1513,-1947 1513,-1947 802,-1947 802,-1947 796,-1947 790,-1941 790,-1935 790,-1935 790,-1255 790,-1255 790,-1249 796,-1243 802,-1243"/>
+<text text-anchor="start" x="1059.5" y="-1932" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">Manifest and environment</text>
+</g>
+<g id="clust4" class="cluster">
+<title>cluster_4</title>
+<path fill="#ffffff" stroke="#f472b6" stroke-width="1.3" d="M194,-454C194,-454 764,-454 764,-454 770,-454 776,-460 776,-466 776,-466 776,-1203 776,-1203 776,-1209 770,-1215 764,-1215 764,-1215 194,-1215 194,-1215 188,-1215 182,-1209 182,-1203 182,-1203 182,-466 182,-466 182,-460 188,-454 194,-454"/>
+<text text-anchor="start" x="374.5" y="-1200" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">Python runtime preparation</text>
+</g>
+<g id="clust5" class="cluster">
+<title>cluster_5</title>
+<path fill="#ffffff" stroke="#8b5cf6" stroke-width="1.3" d="M78,-8C78,-8 781,-8 781,-8 787,-8 793,-14 793,-20 793,-20 793,-425 793,-425 793,-431 787,-437 781,-437 781,-437 78,-437 78,-437 72,-437 66,-431 66,-425 66,-425 66,-20 66,-20 66,-14 72,-8 78,-8"/>
+<text text-anchor="start" x="307.5" y="-422" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">Inside the bundle (engine mode)</text>
+</g>
+<g id="clust6" class="cluster">
+<title>cluster_6</title>
+<path fill="#ffffff" stroke="#38bdf8" stroke-width="1.3" d="M796,-866C796,-866 2189,-866 2189,-866 2195,-866 2201,-872 2201,-878 2201,-878 2201,-1182 2201,-1182 2201,-1188 2195,-1194 2189,-1194 2189,-1194 796,-1194 796,-1194 790,-1194 784,-1188 784,-1182 784,-1182 784,-878 784,-878 784,-872 790,-866 796,-866"/>
+<text text-anchor="start" x="1402" y="-1179" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">Native execution entries</text>
+</g>
+<!-- start -->
+<g id="node1" class="node">
+<title>start</title>
+<path fill="#dbeafe" stroke="#3b82f6" stroke-width="1.8" d="M358.5,-2664C358.5,-2664 149.5,-2664 149.5,-2664 143.5,-2664 137.5,-2658 137.5,-2652 137.5,-2652 137.5,-2617 137.5,-2617 137.5,-2611 143.5,-2605 149.5,-2605 149.5,-2605 358.5,-2605 358.5,-2605 364.5,-2605 370.5,-2611 370.5,-2617 370.5,-2617 370.5,-2652 370.5,-2652 370.5,-2658 364.5,-2664 358.5,-2664"/>
+<text text-anchor="middle" x="254" y="-2645.8" font-family="Noto Sans CJK SC" font-size="14.00">flashcli run | serve</text>
+<text text-anchor="middle" x="254" y="-2630.8" font-family="Noto Sans CJK SC" font-size="14.00">&lt;ref&gt; [OPTIONS], raw argv</text>
+<text text-anchor="middle" x="254" y="-2615.8" font-family="Noto Sans CJK SC" font-size="14.00">cobra DisableFlagParsing</text>
+</g>
+<!-- peel -->
+<g id="node2" class="node">
+<title>peel</title>
+<path fill="#e0e7ff" stroke="#6366f1" stroke-width="1.3" d="M397,-2572C397,-2572 111,-2572 111,-2572 105,-2572 99,-2566 99,-2560 99,-2560 99,-2528 99,-2528 99,-2522 105,-2516 111,-2516 111,-2516 397,-2516 397,-2516 403,-2516 409,-2522 409,-2528 409,-2528 409,-2560 409,-2560 409,-2566 403,-2572 397,-2572"/>
+<text text-anchor="middle" x="254" y="-2554.6" font-family="Noto Sans CJK SC" font-size="13.00">peelHostFlags</text>
+<text text-anchor="middle" x="254" y="-2540.6" font-family="Noto Sans CJK SC" font-size="13.00">ref · &#45;&#45;checkpoint · &#45;&#45;mtp&#45;checkpoint</text>
+<text text-anchor="middle" x="254" y="-2526.6" font-family="Noto Sans CJK SC" font-size="13.00">&#45;&#45;quiet · &#45;&#45;no&#45;auto&#45;install · &#45;h</text>
+</g>
+<!-- start&#45;&gt;peel -->
+<g id="edge1" class="edge">
+<title>start&#45;&gt;peel</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M254,-2604.52C254,-2596.49 254,-2587.69 254,-2579.38"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="256.45,-2579.24 254,-2572.24 251.55,-2579.24 256.45,-2579.24"/>
+</g>
+<!-- help -->
+<g id="node3" class="node">
+<title>help</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="254,-2483 128,-2456 254,-2429 380,-2456 254,-2483"/>
+<text text-anchor="middle" x="254" y="-2452.9" font-family="Noto Sans CJK SC" font-size="12.00">help only?</text>
+</g>
+<!-- peel&#45;&gt;help -->
+<g id="edge2" class="edge">
+<title>peel&#45;&gt;help</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M254,-2515.79C254,-2507.72 254,-2498.79 254,-2490.38"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="256.45,-2490.15 254,-2483.15 251.55,-2490.15 256.45,-2490.15"/>
+</g>
+<!-- manifest -->
+<g id="node4" class="node">
+<title>manifest</title>
+<path fill="#fef3c7" stroke="#f59e0b" stroke-width="1.3" d="M408,-2350C408,-2350 38,-2350 38,-2350 32,-2350 26,-2344 26,-2338 26,-2338 26,-2320 26,-2320 26,-2314 32,-2308 38,-2308 38,-2308 408,-2308 408,-2308 414,-2308 420,-2314 420,-2320 420,-2320 420,-2338 420,-2338 420,-2344 414,-2350 408,-2350"/>
+<text text-anchor="middle" x="223" y="-2332.6" font-family="Noto Sans CJK SC" font-size="13.00">resolveManifestOnly</text>
+<text text-anchor="middle" x="223" y="-2318.6" font-family="Noto Sans CJK SC" font-size="13.00">local manifest, or download only flashcli&#45;bundle.json</text>
+</g>
+<!-- help&#45;&gt;manifest -->
+<g id="edge3" class="edge">
+<title>help&#45;&gt;manifest</title>
+<path fill="none" stroke="#d97706" stroke-width="1.15" d="M247.88,-2430.3C242.64,-2409.21 235.13,-2378.91 229.73,-2357.14"/>
+<polygon fill="#d97706" stroke="#d97706" stroke-width="1.15" points="232.05,-2356.32 227.99,-2350.11 227.29,-2357.5 232.05,-2356.32"/>
+<text text-anchor="middle" x="253" y="-2404.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">yes</text>
+</g>
+<!-- ensure -->
+<g id="node6" class="node">
+<title>ensure</title>
+<path fill="#dbeafe" stroke="#3b82f6" stroke-width="1.3" d="M892.5,-2350C892.5,-2350 541.5,-2350 541.5,-2350 535.5,-2350 529.5,-2344 529.5,-2338 529.5,-2338 529.5,-2320 529.5,-2320 529.5,-2314 535.5,-2308 541.5,-2308 541.5,-2308 892.5,-2308 892.5,-2308 898.5,-2308 904.5,-2314 904.5,-2320 904.5,-2320 904.5,-2338 904.5,-2338 904.5,-2344 898.5,-2350 892.5,-2350"/>
+<text text-anchor="middle" x="717" y="-2332.6" font-family="Noto Sans CJK SC" font-size="13.00">host.EnsureBundle(ref, quiet, force=false)</text>
+<text text-anchor="middle" x="717" y="-2318.6" font-family="Noto Sans CJK SC" font-size="13.00">force is always false; run/serve never call host.Pull</text>
+</g>
+<!-- help&#45;&gt;ensure -->
+<g id="edge5" class="edge">
+<title>help&#45;&gt;ensure</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M308.02,-2440.42C388.77,-2418.61 541.53,-2377.37 635.78,-2351.93"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="636.62,-2354.24 642.74,-2350.05 635.34,-2349.51 636.62,-2354.24"/>
+<text text-anchor="middle" x="451" y="-2404.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">no</text>
+</g>
+<!-- end_help -->
+<g id="node5" class="node">
+<title>end_help</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.8" d="M320,-2266C320,-2266 126,-2266 126,-2266 120,-2266 114,-2260 114,-2254 114,-2254 114,-2242 114,-2242 114,-2236 120,-2230 126,-2230 126,-2230 320,-2230 320,-2230 326,-2230 332,-2236 332,-2242 332,-2242 332,-2254 332,-2254 332,-2260 326,-2266 320,-2266"/>
+<text text-anchor="middle" x="223" y="-2244.3" font-family="Noto Sans CJK SC" font-size="14.00">print bundle help, exit 0</text>
+</g>
+<!-- manifest&#45;&gt;end_help -->
+<g id="edge4" class="edge">
+<title>manifest&#45;&gt;end_help</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M223,-2307.66C223,-2297.18 223,-2284.33 223,-2273.34"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="225.45,-2273.07 223,-2266.07 220.55,-2273.07 225.45,-2273.07"/>
+</g>
+<!-- local -->
+<g id="node7" class="node">
+<title>local</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="783,-2275 653,-2248 783,-2221 913,-2248 783,-2275"/>
+<text text-anchor="middle" x="783" y="-2244.9" font-family="Noto Sans CJK SC" font-size="12.00">local path?</text>
+</g>
+<!-- ensure&#45;&gt;local -->
+<g id="edge6" class="edge">
+<title>ensure&#45;&gt;local</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M734,-2307.66C741.86,-2298.24 751.32,-2286.92 759.83,-2276.74"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="761.83,-2278.16 764.44,-2271.22 758.07,-2275.02 761.83,-2278.16"/>
+</g>
+<!-- local_ret -->
+<g id="node8" class="node">
+<title>local_ret</title>
+<path fill="#dbeafe" stroke="#3b82f6" stroke-width="1.3" d="M1339,-2157C1339,-2157 1143,-2157 1143,-2157 1137,-2157 1131,-2151 1131,-2145 1131,-2145 1131,-2127 1131,-2127 1131,-2121 1137,-2115 1143,-2115 1143,-2115 1339,-2115 1339,-2115 1345,-2115 1351,-2121 1351,-2127 1351,-2127 1351,-2145 1351,-2145 1351,-2151 1345,-2157 1339,-2157"/>
+<text text-anchor="middle" x="1241" y="-2139.6" font-family="Noto Sans CJK SC" font-size="13.00">abs path, version=local</text>
+<text text-anchor="middle" x="1241" y="-2125.6" font-family="Noto Sans CJK SC" font-size="13.00">no network, no tree sync</text>
+</g>
+<!-- local&#45;&gt;local_ret -->
+<g id="edge7" class="edge">
+<title>local&#45;&gt;local_ret</title>
+<path fill="none" stroke="#d97706" stroke-width="1.15" d="M849.66,-2234.77C917.4,-2221.89 1025.12,-2200.16 1117,-2176 1135.86,-2171.04 1156.11,-2164.99 1174.66,-2159.15"/>
+<polygon fill="#d97706" stroke="#d97706" stroke-width="1.15" points="1175.49,-2161.46 1181.42,-2157 1174,-2156.78 1175.49,-2161.46"/>
+<text text-anchor="middle" x="1053" y="-2195.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">yes</text>
+</g>
+<!-- marker -->
+<g id="node9" class="node">
+<title>marker</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="783,-2176 464,-2136 783,-2096 1102,-2136 783,-2176"/>
+<text text-anchor="middle" x="783" y="-2139.4" font-family="Noto Sans CJK SC" font-size="12.00">FlashHub marker present?</text>
+<text text-anchor="middle" x="783" y="-2126.4" font-family="Noto Sans CJK SC" font-size="12.00">bundles/&lt;name&gt;/&lt;ver&gt;/.flashcli_bundle.json</text>
+</g>
+<!-- local&#45;&gt;marker -->
+<g id="edge8" class="edge">
+<title>local&#45;&gt;marker</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M783,-2220.93C783,-2209.67 783,-2196.16 783,-2183.29"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="785.45,-2183.23 783,-2176.23 780.55,-2183.23 785.45,-2183.23"/>
+<text text-anchor="middle" x="790" y="-2195.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">no</text>
+</g>
+<!-- load -->
+<g id="node12" class="node">
+<title>load</title>
+<path fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.3" d="M1169.5,-1904C1169.5,-1904 892.5,-1904 892.5,-1904 886.5,-1904 880.5,-1898 880.5,-1892 880.5,-1892 880.5,-1860 880.5,-1860 880.5,-1854 886.5,-1848 892.5,-1848 892.5,-1848 1169.5,-1848 1169.5,-1848 1175.5,-1848 1181.5,-1854 1181.5,-1860 1181.5,-1860 1181.5,-1892 1181.5,-1892 1181.5,-1898 1175.5,-1904 1169.5,-1904"/>
+<text text-anchor="middle" x="1031" y="-1886.6" font-family="Noto Sans CJK SC" font-size="13.00">manifest.Load → ApplyEnv</text>
+<text text-anchor="middle" x="1031" y="-1872.6" font-family="Noto Sans CJK SC" font-size="13.00">merge v4 defaults + environments</text>
+<text text-anchor="middle" x="1031" y="-1858.6" font-family="Noto Sans CJK SC" font-size="13.00">ResolveVariant · EntryFor(capability)</text>
+</g>
+<!-- local_ret&#45;&gt;load -->
+<g id="edge13" class="edge">
+<title>local_ret&#45;&gt;load</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M1243.01,-2114.78C1245.33,-2080.24 1245.16,-2009.21 1211,-1964 1191.74,-1938.51 1163.06,-1920.11 1134.23,-1906.98"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="1135.08,-1904.68 1127.69,-1904.1 1133.1,-1909.17 1135.08,-1904.68"/>
+</g>
+<!-- reuse -->
+<g id="node10" class="node">
+<title>reuse</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.3" d="M824,-2038C824,-2038 600,-2038 600,-2038 594,-2038 588,-2032 588,-2026 588,-2026 588,-2008 588,-2008 588,-2002 594,-1996 600,-1996 600,-1996 824,-1996 824,-1996 830,-1996 836,-2002 836,-2008 836,-2008 836,-2026 836,-2026 836,-2032 830,-2038 824,-2038"/>
+<text text-anchor="middle" x="712" y="-2020.6" font-family="Noto Sans CJK SC" font-size="13.00">reuse bundle tree (offline)</text>
+<text text-anchor="middle" x="712" y="-2006.6" font-family="Noto Sans CJK SC" font-size="13.00">no file validation, no network</text>
+</g>
+<!-- marker&#45;&gt;reuse -->
+<g id="edge9" class="edge">
+<title>marker&#45;&gt;reuse</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M760.92,-2098.62C750.22,-2080.97 737.59,-2060.18 727.85,-2044.13"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="729.86,-2042.72 724.14,-2038 725.68,-2045.26 729.86,-2042.72"/>
+<text text-anchor="middle" x="756" y="-2071.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">yes</text>
+</g>
+<!-- sync -->
+<g id="node11" class="node">
+<title>sync</title>
+<path fill="#ffedd5" stroke="#f97316" stroke-width="1.3" d="M1184.5,-2052C1184.5,-2052 877.5,-2052 877.5,-2052 871.5,-2052 865.5,-2046 865.5,-2040 865.5,-2040 865.5,-1994 865.5,-1994 865.5,-1988 871.5,-1982 877.5,-1982 877.5,-1982 1184.5,-1982 1184.5,-1982 1190.5,-1982 1196.5,-1988 1196.5,-1994 1196.5,-1994 1196.5,-2040 1196.5,-2040 1196.5,-2046 1190.5,-2052 1184.5,-2052"/>
+<text text-anchor="middle" x="1031" y="-2034.6" font-family="Noto Sans CJK SC" font-size="13.00">DownloadManifest + SyncBundle</text>
+<text text-anchor="middle" x="1031" y="-2020.6" font-family="Noto Sans CJK SC" font-size="13.00">repo index → manifest</text>
+<text text-anchor="middle" x="1031" y="-2006.6" font-family="Noto Sans CJK SC" font-size="13.00">selected runtime cell + common files only</text>
+<text text-anchor="middle" x="1031" y="-1992.6" font-family="Noto Sans CJK SC" font-size="13.00">MD5 verify; write runtime / bundle markers</text>
+</g>
+<!-- marker&#45;&gt;sync -->
+<g id="edge10" class="edge">
+<title>marker&#45;&gt;sync</title>
+<path fill="none" stroke="#ea580c" stroke-width="1.15" d="M848.48,-2104.11C880.23,-2089.13 918.63,-2071.01 951.99,-2055.27"/>
+<polygon fill="#ea580c" stroke="#ea580c" stroke-width="1.15" points="953.31,-2057.36 958.59,-2052.16 951.22,-2052.93 953.31,-2057.36"/>
+<text text-anchor="middle" x="928" y="-2071.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">no</text>
+</g>
+<!-- reuse&#45;&gt;load -->
+<g id="edge12" class="edge">
+<title>reuse&#45;&gt;load</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M758.04,-1995.94C811.57,-1972.62 900.43,-1933.9 962.16,-1907"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="963.36,-1909.15 968.8,-1904.1 961.4,-1904.65 963.36,-1909.15"/>
+</g>
+<!-- sync&#45;&gt;load -->
+<g id="edge11" class="edge">
+<title>sync&#45;&gt;load</title>
+<path fill="none" stroke="#ea580c" stroke-width="1.15" d="M1031,-1982C1031,-1960.48 1031,-1932.75 1031,-1911.2"/>
+<polygon fill="#ea580c" stroke="#ea580c" stroke-width="1.15" points="1033.45,-1911.14 1031,-1904.14 1028.55,-1911.14 1033.45,-1911.14"/>
+</g>
+<!-- valid -->
+<g id="node13" class="node">
+<title>valid</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="1031,-1815 808,-1788 1031,-1761 1254,-1788 1031,-1815"/>
+<text text-anchor="middle" x="1031" y="-1784.9" font-family="Noto Sans CJK SC" font-size="12.00">manifest / env / entry valid?</text>
+</g>
+<!-- load&#45;&gt;valid -->
+<g id="edge14" class="edge">
+<title>load&#45;&gt;valid</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M1031,-1847.79C1031,-1839.72 1031,-1830.79 1031,-1822.38"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="1033.45,-1822.15 1031,-1815.15 1028.55,-1822.15 1033.45,-1822.15"/>
+</g>
+<!-- err_manifest -->
+<g id="node14" class="node">
+<title>err_manifest</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M1145.5,-1712C1145.5,-1712 820.5,-1712 820.5,-1712 814.5,-1712 808.5,-1706 808.5,-1700 808.5,-1700 808.5,-1680 808.5,-1680 808.5,-1674 814.5,-1668 820.5,-1668 820.5,-1668 1145.5,-1668 1145.5,-1668 1151.5,-1668 1157.5,-1674 1157.5,-1680 1157.5,-1680 1157.5,-1700 1157.5,-1700 1157.5,-1706 1151.5,-1712 1145.5,-1712"/>
+<text text-anchor="middle" x="983" y="-1693.8" font-family="Noto Sans CJK SC" font-size="14.00">error exit 1 / 2</text>
+<text text-anchor="middle" x="983" y="-1678.8" font-family="Noto Sans CJK SC" font-size="14.00">missing file, protocol, env key, variant, entry</text>
+</g>
+<!-- valid&#45;&gt;err_manifest -->
+<g id="edge15" class="edge">
+<title>valid&#45;&gt;err_manifest</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M1018.64,-1762.28C1011.95,-1748.91 1003.68,-1732.36 996.79,-1718.58"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="998.85,-1717.23 993.53,-1712.06 994.47,-1719.42 998.85,-1717.23"/>
+<text text-anchor="middle" x="1016" y="-1736.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">no</text>
+</g>
+<!-- markers -->
+<g id="node15" class="node">
+<title>markers</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="1347,-1717 1187,-1690 1347,-1663 1507,-1690 1347,-1717"/>
+<text text-anchor="middle" x="1347" y="-1686.9" font-family="Noto Sans CJK SC" font-size="12.00">version == local?</text>
+</g>
+<!-- valid&#45;&gt;markers -->
+<g id="edge16" class="edge">
+<title>valid&#45;&gt;markers</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M1092.3,-1768.38C1147.81,-1751.51 1229.19,-1726.79 1284.94,-1709.85"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="1285.96,-1712.1 1291.94,-1707.73 1284.53,-1707.42 1285.96,-1712.1"/>
+<text text-anchor="middle" x="1216" y="-1736.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">yes</text>
+</g>
+<!-- write_markers -->
+<g id="node16" class="node">
+<title>write_markers</title>
+<path fill="#fef3c7" stroke="#f59e0b" stroke-width="1.3" d="M1284.5,-1619C1284.5,-1619 989.5,-1619 989.5,-1619 983.5,-1619 977.5,-1613 977.5,-1607 977.5,-1607 977.5,-1575 977.5,-1575 977.5,-1569 983.5,-1563 989.5,-1563 989.5,-1563 1284.5,-1563 1284.5,-1563 1290.5,-1563 1296.5,-1569 1296.5,-1575 1296.5,-1575 1296.5,-1607 1296.5,-1607 1296.5,-1613 1290.5,-1619 1284.5,-1619"/>
+<text text-anchor="middle" x="1137" y="-1601.6" font-family="Noto Sans CJK SC" font-size="13.00">writeLocalMarkers</text>
+<text text-anchor="middle" x="1137" y="-1587.6" font-family="Noto Sans CJK SC" font-size="13.00">runtimes/&lt;id&gt;/.runtime.json</text>
+<text text-anchor="middle" x="1137" y="-1573.6" font-family="Noto Sans CJK SC" font-size="13.00">bundles/&lt;id&gt;/local/.flashcli_bundle.json</text>
+</g>
+<!-- markers&#45;&gt;write_markers -->
+<g id="edge17" class="edge">
+<title>markers&#45;&gt;write_markers</title>
+<path fill="none" stroke="#d97706" stroke-width="1.15" d="M1305.76,-1669.95C1276.31,-1656.35 1236.09,-1637.77 1202.3,-1622.16"/>
+<polygon fill="#d97706" stroke="#d97706" stroke-width="1.15" points="1203.01,-1619.79 1195.63,-1619.08 1200.96,-1624.24 1203.01,-1619.79"/>
+<text text-anchor="middle" x="1263" y="-1638.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">yes</text>
+</g>
+<!-- preflight -->
+<g id="node17" class="node">
+<title>preflight</title>
+<path fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.3" d="M1373,-1530C1373,-1530 1067,-1530 1067,-1530 1061,-1530 1055,-1524 1055,-1518 1055,-1518 1055,-1458 1055,-1458 1055,-1452 1061,-1446 1067,-1446 1067,-1446 1373,-1446 1373,-1446 1379,-1446 1385,-1452 1385,-1458 1385,-1458 1385,-1518 1385,-1518 1385,-1524 1379,-1530 1373,-1530"/>
+<text text-anchor="middle" x="1220" y="-1512.6" font-family="Noto Sans CJK SC" font-size="13.00">host.PreflightBundle</text>
+<text text-anchor="middle" x="1220" y="-1498.6" font-family="Noto Sans CJK SC" font-size="13.00">HostEnvKey = SM + CUDA + Python ABI</text>
+<text text-anchor="middle" x="1220" y="-1484.6" font-family="Noto Sans CJK SC" font-size="13.00">recognize native .so in the runtime cell</text>
+<text text-anchor="middle" x="1220" y="-1470.6" font-family="Noto Sans CJK SC" font-size="13.00">host glibc / GLIBCXX / CXXABI check</text>
+<text text-anchor="middle" x="1220" y="-1456.6" font-family="Noto Sans CJK SC" font-size="13.00">skippable with FLASHCLI_SKIP_PREFLIGHT</text>
+</g>
+<!-- markers&#45;&gt;preflight -->
+<g id="edge18" class="edge">
+<title>markers&#45;&gt;preflight</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M1344.28,-1663.45C1340.43,-1636.57 1331.42,-1593.95 1311,-1563 1304.34,-1552.91 1295.88,-1543.52 1286.81,-1535.05"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="1288.25,-1533.05 1281.41,-1530.17 1284.96,-1536.68 1288.25,-1533.05"/>
+<text text-anchor="middle" x="1341" y="-1588.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">no</text>
+</g>
+<!-- write_markers&#45;&gt;preflight -->
+<g id="edge19" class="edge">
+<title>write_markers&#45;&gt;preflight</title>
+<path fill="none" stroke="#d97706" stroke-width="1.15" d="M1159.24,-1562.93C1166.15,-1554.53 1173.96,-1545.02 1181.64,-1535.68"/>
+<polygon fill="#d97706" stroke="#d97706" stroke-width="1.15" points="1183.58,-1537.18 1186.13,-1530.21 1179.8,-1534.07 1183.58,-1537.18"/>
+</g>
+<!-- env_ok -->
+<g id="node18" class="node">
+<title>env_ok</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="1220,-1413 1003,-1386 1220,-1359 1437,-1386 1220,-1413"/>
+<text text-anchor="middle" x="1220" y="-1382.9" font-family="Noto Sans CJK SC" font-size="12.00">runtime env key matched?</text>
+</g>
+<!-- preflight&#45;&gt;env_ok -->
+<g id="edge20" class="edge">
+<title>preflight&#45;&gt;env_ok</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M1220,-1445.75C1220,-1437.35 1220,-1428.6 1220,-1420.51"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="1222.45,-1420.29 1220,-1413.29 1217.55,-1420.29 1222.45,-1420.29"/>
+</g>
+<!-- err_env -->
+<g id="node19" class="node">
+<title>err_env</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M1091,-1310C1091,-1310 829,-1310 829,-1310 823,-1310 817,-1304 817,-1298 817,-1298 817,-1278 817,-1278 817,-1272 823,-1266 829,-1266 829,-1266 1091,-1266 1091,-1266 1097,-1266 1103,-1272 1103,-1278 1103,-1278 1103,-1298 1103,-1298 1103,-1304 1097,-1310 1091,-1310"/>
+<text text-anchor="middle" x="960" y="-1291.8" font-family="Noto Sans CJK SC" font-size="14.00">environment mismatch, exit 2</text>
+<text text-anchor="middle" x="960" y="-1276.8" font-family="Noto Sans CJK SC" font-size="14.00">no NVIDIA GPU or no matching cell</text>
+</g>
+<!-- env_ok&#45;&gt;err_env -->
+<g id="edge21" class="edge">
+<title>env_ok&#45;&gt;err_env</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M1167.07,-1365.46C1125.55,-1350.13 1067.61,-1328.73 1023.58,-1312.48"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="1024.33,-1310.14 1016.91,-1310.01 1022.63,-1314.74 1024.33,-1310.14"/>
+<text text-anchor="middle" x="1112" y="-1334.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">no</text>
+</g>
+<!-- kind -->
+<g id="node20" class="node">
+<title>kind</title>
+<polygon fill="#dcfce7" stroke="#22c55e" stroke-width="1.45" points="1262,-1315 1132,-1288 1262,-1261 1392,-1288 1262,-1315"/>
+<text text-anchor="middle" x="1262" y="-1284.9" font-family="Noto Sans CJK SC" font-size="12.00">entry.kind?</text>
+</g>
+<!-- env_ok&#45;&gt;kind -->
+<g id="edge22" class="edge">
+<title>env_ok&#45;&gt;kind</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M1230.82,-1360.28C1236.24,-1347.88 1242.86,-1332.76 1248.6,-1319.63"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="1250.95,-1320.37 1251.51,-1312.98 1246.46,-1318.41 1250.95,-1320.37"/>
+<text text-anchor="middle" x="1252" y="-1334.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">yes</text>
+</g>
+<!-- weights -->
+<g id="node21" class="node">
+<title>weights</title>
+<path fill="#fef3c7" stroke="#f59e0b" stroke-width="1.3" d="M746,-1172C746,-1172 400,-1172 400,-1172 394,-1172 388,-1166 388,-1160 388,-1160 388,-1086 388,-1086 388,-1080 394,-1074 400,-1074 400,-1074 746,-1074 746,-1074 752,-1074 758,-1080 758,-1086 758,-1086 758,-1160 758,-1160 758,-1166 752,-1172 746,-1172"/>
+<text text-anchor="middle" x="573" y="-1154.6" font-family="Noto Sans CJK SC" font-size="13.00">host.ResolveWeights → PrepareBundle</text>
+<text text-anchor="middle" x="573" y="-1140.6" font-family="Noto Sans CJK SC" font-size="13.00">&#45;&#45;checkpoint override / FLASHCLI_SKIP_WEIGHTS</text>
+<text text-anchor="middle" x="573" y="-1126.6" font-family="Noto Sans CJK SC" font-size="13.00">store/&lt;source&gt;/&lt;repo&gt;@&lt;rev&gt;&#45;&lt;hash&gt;</text>
+<text text-anchor="middle" x="573" y="-1112.6" font-family="Noto Sans CJK SC" font-size="13.00">extra_weights · extra_pull · post_pull</text>
+<text text-anchor="middle" x="573" y="-1098.6" font-family="Noto Sans CJK SC" font-size="13.00">allow / require patterns + norm stats readiness</text>
+<text text-anchor="middle" x="573" y="-1084.6" font-family="Noto Sans CJK SC" font-size="13.00">host download manifest + resume</text>
+</g>
+<!-- kind&#45;&gt;weights -->
+<g id="edge23" class="edge">
+<title>kind&#45;&gt;weights</title>
+<path fill="none" stroke="#db2777" stroke-width="1.15" d="M1216.59,-1270.38C1188.55,-1260.81 1151.63,-1249.44 1118,-1243 968.65,-1214.4 924.31,-1252.73 777,-1215 740.72,-1205.71 702.79,-1190.48 669.61,-1175.11"/>
+<polygon fill="#db2777" stroke="#db2777" stroke-width="1.15" points="670.42,-1172.79 663.04,-1172.04 668.34,-1177.22 670.42,-1172.79"/>
+<text text-anchor="middle" x="1079" y="-1226.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">python</text>
+</g>
+<!-- native_exec -->
+<g id="node36" class="node">
+<title>native_exec</title>
+<path fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.3" d="M1409.5,-1144C1409.5,-1144 1114.5,-1144 1114.5,-1144 1108.5,-1144 1102.5,-1138 1102.5,-1132 1102.5,-1132 1102.5,-1114 1102.5,-1114 1102.5,-1108 1108.5,-1102 1114.5,-1102 1114.5,-1102 1409.5,-1102 1409.5,-1102 1415.5,-1102 1421.5,-1108 1421.5,-1114 1421.5,-1114 1421.5,-1132 1421.5,-1132 1421.5,-1138 1415.5,-1144 1409.5,-1144"/>
+<text text-anchor="middle" x="1262" y="-1126.6" font-family="Noto Sans CJK SC" font-size="13.00">native&#45;exec</text>
+<text text-anchor="middle" x="1262" y="-1112.6" font-family="Noto Sans CJK SC" font-size="13.00">start the bundle executable after weights</text>
+</g>
+<!-- kind&#45;&gt;native_exec -->
+<g id="edge24" class="edge">
+<title>kind&#45;&gt;native_exec</title>
+<path fill="none" stroke="#0284c7" stroke-width="1.15" d="M1262,-1260.81C1262,-1230.94 1262,-1182.31 1262,-1151.79"/>
+<polygon fill="#0284c7" stroke="#0284c7" stroke-width="1.15" points="1264.45,-1151.45 1262,-1144.45 1259.55,-1151.45 1264.45,-1151.45"/>
+<text text-anchor="middle" x="1291.5" y="-1226.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">native&#45;exec</text>
+</g>
+<!-- native_abi -->
+<g id="node40" class="node">
+<title>native_abi</title>
+<path fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.3" d="M1739.5,-1151C1739.5,-1151 1478.5,-1151 1478.5,-1151 1472.5,-1151 1466.5,-1145 1466.5,-1139 1466.5,-1139 1466.5,-1107 1466.5,-1107 1466.5,-1101 1472.5,-1095 1478.5,-1095 1478.5,-1095 1739.5,-1095 1739.5,-1095 1745.5,-1095 1751.5,-1101 1751.5,-1107 1751.5,-1107 1751.5,-1139 1751.5,-1139 1751.5,-1145 1745.5,-1151 1739.5,-1151"/>
+<text text-anchor="middle" x="1609" y="-1133.6" font-family="Noto Sans CJK SC" font-size="13.00">native&#45;abi</text>
+<text text-anchor="middle" x="1609" y="-1119.6" font-family="Noto Sans CJK SC" font-size="13.00">Open(preload, library, config)</text>
+<text text-anchor="middle" x="1609" y="-1105.6" font-family="Noto Sans CJK SC" font-size="13.00">validate abi_version=1 / struct_size</text>
+</g>
+<!-- kind&#45;&gt;native_abi -->
+<g id="edge25" class="edge">
+<title>kind&#45;&gt;native_abi</title>
+<path fill="none" stroke="#0284c7" stroke-width="1.15" d="M1306.1,-1270.05C1341.57,-1256.11 1392.48,-1235.4 1436,-1215 1476.21,-1196.15 1520.51,-1172.8 1554.22,-1154.47"/>
+<polygon fill="#0284c7" stroke="#0284c7" stroke-width="1.15" points="1555.41,-1156.61 1560.39,-1151.1 1553.07,-1152.3 1555.41,-1156.61"/>
+<text text-anchor="middle" x="1443" y="-1226.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">native&#45;abi</text>
+</g>
+<!-- w_ok -->
+<g id="node22" class="node">
+<title>w_ok</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="573,-1041 422,-1014 573,-987 724,-1014 573,-1041"/>
+<text text-anchor="middle" x="573" y="-1010.9" font-family="Noto Sans CJK SC" font-size="12.00">weights ready?</text>
+</g>
+<!-- weights&#45;&gt;w_ok -->
+<g id="edge26" class="edge">
+<title>weights&#45;&gt;w_ok</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M573,-1073.82C573,-1065.24 573,-1056.48 573,-1048.43"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="575.45,-1048.26 573,-1041.26 570.55,-1048.26 575.45,-1048.26"/>
+</g>
+<!-- err_w -->
+<g id="node23" class="node">
+<title>err_w</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M372.5,-931.5C372.5,-931.5 211.5,-931.5 211.5,-931.5 205.5,-931.5 199.5,-925.5 199.5,-919.5 199.5,-919.5 199.5,-907.5 199.5,-907.5 199.5,-901.5 205.5,-895.5 211.5,-895.5 211.5,-895.5 372.5,-895.5 372.5,-895.5 378.5,-895.5 384.5,-901.5 384.5,-907.5 384.5,-907.5 384.5,-919.5 384.5,-919.5 384.5,-925.5 378.5,-931.5 372.5,-931.5"/>
+<text text-anchor="middle" x="292" y="-909.8" font-family="Noto Sans CJK SC" font-size="14.00">weight error, exit 1</text>
+</g>
+<!-- w_ok&#45;&gt;err_w -->
+<g id="edge27" class="edge">
+<title>w_ok&#45;&gt;err_w</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M523.73,-995.73C474.47,-978.46 398.86,-951.96 347.51,-933.96"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="348.16,-931.59 340.74,-931.59 346.54,-936.21 348.16,-931.59"/>
+<text text-anchor="middle" x="456" y="-962.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">no</text>
+</g>
+<!-- sys1 -->
+<g id="node24" class="node">
+<title>sys1</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.3" d="M746,-934.5C746,-934.5 426,-934.5 426,-934.5 420,-934.5 414,-928.5 414,-922.5 414,-922.5 414,-904.5 414,-904.5 414,-898.5 420,-892.5 426,-892.5 426,-892.5 746,-892.5 746,-892.5 752,-892.5 758,-898.5 758,-904.5 758,-904.5 758,-922.5 758,-922.5 758,-928.5 752,-934.5 746,-934.5"/>
+<text text-anchor="middle" x="586" y="-917.1" font-family="Noto Sans CJK SC" font-size="13.00">EnsureSystemRequirements(m, &quot;&quot;)</text>
+<text text-anchor="middle" x="586" y="-903.1" font-family="Noto Sans CJK SC" font-size="13.00">c/cxx compiler, Python headers (before venv)</text>
+</g>
+<!-- w_ok&#45;&gt;sys1 -->
+<g id="edge28" class="edge">
+<title>w_ok&#45;&gt;sys1</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M576.38,-987.38C578.23,-973.4 580.51,-956.09 582.39,-941.85"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="584.84,-941.98 583.33,-934.72 579.99,-941.33 584.84,-941.98"/>
+<text text-anchor="middle" x="588" y="-962.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">yes</text>
+</g>
+<!-- venv -->
+<g id="node25" class="node">
+<title>venv</title>
+<path fill="#fce7f3" stroke="#f472b6" stroke-width="1.3" d="M735.5,-841C735.5,-841 408.5,-841 408.5,-841 402.5,-841 396.5,-835 396.5,-829 396.5,-829 396.5,-769 396.5,-769 396.5,-763 402.5,-757 408.5,-757 408.5,-757 735.5,-757 735.5,-757 741.5,-757 747.5,-763 747.5,-769 747.5,-769 747.5,-829 747.5,-829 747.5,-835 741.5,-841 735.5,-841"/>
+<text text-anchor="middle" x="572" y="-823.6" font-family="Noto Sans CJK SC" font-size="13.00">venv.Ensure(runtimeID, manifest)</text>
+<text text-anchor="middle" x="572" y="-809.6" font-family="Noto Sans CJK SC" font-size="13.00">fingerprint = python_abi + torch index + deps</text>
+<text text-anchor="middle" x="572" y="-795.6" font-family="Noto Sans CJK SC" font-size="13.00">uv by default / pip fallback</text>
+<text text-anchor="middle" x="572" y="-781.6" font-family="Noto Sans CJK SC" font-size="13.00">flashcli&#45;bundle[infer] + python_dependencies</text>
+<text text-anchor="middle" x="572" y="-767.6" font-family="Noto Sans CJK SC" font-size="13.00">shared UV cache; hardlink torch/CUDA</text>
+</g>
+<!-- sys1&#45;&gt;venv -->
+<g id="edge29" class="edge">
+<title>sys1&#45;&gt;venv</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M583.5,-892.39C581.97,-880.11 579.95,-863.85 578.02,-848.4"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="580.44,-848.02 577.15,-841.37 575.58,-848.62 580.44,-848.02"/>
+</g>
+<!-- schema -->
+<g id="node26" class="node">
+<title>schema</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.3" d="M746,-724C746,-724 342,-724 342,-724 336,-724 330,-718 330,-712 330,-712 330,-694 330,-694 330,-688 336,-682 342,-682 342,-682 746,-682 746,-682 752,-682 758,-688 758,-694 758,-694 758,-712 758,-712 758,-718 752,-724 746,-724"/>
+<text text-anchor="middle" x="544" y="-706.6" font-family="Noto Sans CJK SC" font-size="13.00">EnsureProtocolCacheSchema</text>
+<text text-anchor="middle" x="544" y="-692.6" font-family="Noto Sans CJK SC" font-size="13.00">in&#45;place upgrade when CACHE_SCHEMA_VERSION changes</text>
+</g>
+<!-- venv&#45;&gt;schema -->
+<g id="edge30" class="edge">
+<title>venv&#45;&gt;schema</title>
+<path fill="none" stroke="#db2777" stroke-width="1.15" d="M559.72,-756.77C557.15,-748.16 554.51,-739.29 552.14,-731.33"/>
+<polygon fill="#db2777" stroke="#db2777" stroke-width="1.15" points="554.4,-730.32 550.05,-724.32 549.7,-731.72 554.4,-730.32"/>
+</g>
+<!-- cuda -->
+<g id="node27" class="node">
+<title>cuda</title>
+<path fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.3" d="M742.5,-649C742.5,-649 363.5,-649 363.5,-649 357.5,-649 351.5,-643 351.5,-637 351.5,-637 351.5,-591 351.5,-591 351.5,-585 357.5,-579 363.5,-579 363.5,-579 742.5,-579 742.5,-579 748.5,-579 754.5,-585 754.5,-591 754.5,-591 754.5,-637 754.5,-637 754.5,-643 748.5,-649 742.5,-649"/>
+<text text-anchor="middle" x="553" y="-631.6" font-family="Noto Sans CJK SC" font-size="13.00">EnsureSystemRequirements(m, python) + cuda.Ensure</text>
+<text text-anchor="middle" x="553" y="-617.6" font-family="Noto Sans CJK SC" font-size="13.00">headers rechecked with the real interpreter</text>
+<text text-anchor="middle" x="553" y="-603.6" font-family="Noto Sans CJK SC" font-size="13.00">CUDA SONAME present and dlopen&#45;able</text>
+<text text-anchor="middle" x="553" y="-589.6" font-family="Noto Sans CJK SC" font-size="13.00">may install nvidia&#45;cublas / cuda&#45;runtime</text>
+</g>
+<!-- schema&#45;&gt;cuda -->
+<g id="edge31" class="edge">
+<title>schema&#45;&gt;cuda</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M546.09,-681.82C546.88,-674.14 547.82,-665.08 548.74,-656.15"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="551.2,-656.26 549.48,-649.04 546.32,-655.75 551.2,-656.26"/>
+</g>
+<!-- exec -->
+<g id="node28" class="node">
+<title>exec</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.8" d="M722.5,-546C722.5,-546 383.5,-546 383.5,-546 377.5,-546 371.5,-540 371.5,-534 371.5,-534 371.5,-484 371.5,-484 371.5,-478 377.5,-472 383.5,-472 383.5,-472 722.5,-472 722.5,-472 728.5,-472 734.5,-478 734.5,-484 734.5,-484 734.5,-534 734.5,-534 734.5,-540 728.5,-546 722.5,-546"/>
+<text text-anchor="middle" x="553" y="-527.8" font-family="Noto Sans CJK SC" font-size="14.00">inferexec.Exec → syscall.Exec</text>
+<text text-anchor="middle" x="553" y="-512.8" font-family="Noto Sans CJK SC" font-size="14.00">python &#45;m flashcli_bundle.infer &lt;cap&gt; &lt;ref&gt; ...</text>
+<text text-anchor="middle" x="553" y="-497.8" font-family="Noto Sans CJK SC" font-size="14.00">HF_HUB_OFFLINE=1 + FLASHCLI_RUNTIME_ID</text>
+<text text-anchor="middle" x="553" y="-482.8" font-family="Noto Sans CJK SC" font-size="14.00">FLASHCLI_BUNDLE_ROOT + VIRTUAL_ENV</text>
+</g>
+<!-- cuda&#45;&gt;exec -->
+<g id="edge32" class="edge">
+<title>cuda&#45;&gt;exec</title>
+<path fill="none" stroke="#0284c7" stroke-width="1.15" d="M553,-578.99C553,-570.75 553,-561.83 553,-553.23"/>
+<polygon fill="#0284c7" stroke="#0284c7" stroke-width="1.15" points="555.45,-553.1 553,-546.1 550.55,-553.1 555.45,-553.1"/>
+</g>
+<!-- offline -->
+<g id="node44" class="node">
+<title>offline</title>
+<polygon fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.3" points="1439.5,-535.5 794.5,-535.5 794.5,-482.5 1445.5,-482.5 1445.5,-529.5 1439.5,-535.5"/>
+<polyline fill="none" stroke="#cbd5e1" stroke-width="1.3" points="1439.5,-535.5 1439.5,-529.5 "/>
+<polyline fill="none" stroke="#cbd5e1" stroke-width="1.3" points="1445.5,-529.5 1439.5,-529.5 "/>
+<text text-anchor="middle" x="1120" y="-519.3" font-family="Noto Sans CJK SC" font-size="11.50">Offline guarantee</text>
+<text text-anchor="middle" x="1120" y="-506.3" font-family="Noto Sans CJK SC" font-size="11.50">run/serve are local&#45;first: no network when the bundle marker, complete weights and venv fingerprint all match</text>
+<text text-anchor="middle" x="1120" y="-493.3" font-family="Noto Sans CJK SC" font-size="11.50">network only for missing artifacts, explicit pull, or a schema upgrade</text>
+</g>
+<!-- cuda&#45;&gt;offline -->
+<g id="edge46" class="edge">
+<title>cuda&#45;&gt;offline</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" stroke-dasharray="1,5" d="M740.23,-578.99C815.54,-565.31 901.14,-549.76 971.98,-536.89"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="972.78,-539.23 979.23,-535.57 971.9,-534.41 972.78,-539.23"/>
+</g>
+<!-- infer -->
+<g id="node29" class="node">
+<title>infer</title>
+<path fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.3" d="M717,-394C717,-394 389,-394 389,-394 383,-394 377,-388 377,-382 377,-382 377,-350 377,-350 377,-344 383,-338 389,-338 389,-338 717,-338 717,-338 723,-338 729,-344 729,-350 729,-350 729,-382 729,-382 729,-388 723,-394 717,-394"/>
+<text text-anchor="middle" x="553" y="-376.6" font-family="Noto Sans CJK SC" font-size="13.00">flashcli_bundle.infer child</text>
+<text text-anchor="middle" x="553" y="-362.6" font-family="Noto Sans CJK SC" font-size="13.00">activate_for_preset: env key, layout, CUDA, .so</text>
+<text text-anchor="middle" x="553" y="-348.6" font-family="Noto Sans CJK SC" font-size="13.00">ensure_model_cached(download=False)</text>
+</g>
+<!-- exec&#45;&gt;infer -->
+<g id="edge33" class="edge">
+<title>exec&#45;&gt;infer</title>
+<path fill="none" stroke="#7c3aed" stroke-width="1.15" d="M553,-471.69C553,-450.08 553,-422.83 553,-401.54"/>
+<polygon fill="#7c3aed" stroke="#7c3aed" stroke-width="1.15" points="555.45,-401.28 553,-394.28 550.55,-401.28 555.45,-401.28"/>
+</g>
+<!-- mode -->
+<g id="node30" class="node">
+<title>mode</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="360,-294 221,-267 360,-240 499,-267 360,-294"/>
+<text text-anchor="middle" x="360" y="-263.9" font-family="Noto Sans CJK SC" font-size="12.00">entry mode?</text>
+</g>
+<!-- infer&#45;&gt;mode -->
+<g id="edge34" class="edge">
+<title>infer&#45;&gt;mode</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M499.24,-337.98C469.17,-322.87 432.16,-304.27 403.85,-290.04"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="404.94,-287.85 397.59,-286.89 402.74,-292.22 404.94,-287.85"/>
+</g>
+<!-- flashrt -->
+<g id="node35" class="node">
+<title>flashrt</title>
+<polygon fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.3" points="727.5,-293.5 528.5,-293.5 528.5,-240.5 733.5,-240.5 733.5,-287.5 727.5,-293.5"/>
+<polyline fill="none" stroke="#cbd5e1" stroke-width="1.3" points="727.5,-293.5 727.5,-287.5 "/>
+<polyline fill="none" stroke="#cbd5e1" stroke-width="1.3" points="733.5,-287.5 727.5,-287.5 "/>
+<text text-anchor="middle" x="631" y="-277.3" font-family="Noto Sans CJK SC" font-size="11.50">FlashRT</text>
+<text text-anchor="middle" x="631" y="-264.3" font-family="Noto Sans CJK SC" font-size="11.50">bundle ships flash_rt + .so</text>
+<text text-anchor="middle" x="631" y="-251.3" font-family="Noto Sans CJK SC" font-size="11.50">host never installs FlashRT</text>
+</g>
+<!-- infer&#45;&gt;flashrt -->
+<g id="edge39" class="edge">
+<title>infer&#45;&gt;flashrt</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" stroke-dasharray="1,5" d="M574.73,-337.98C584.42,-325.92 595.9,-311.65 605.95,-299.15"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="607.98,-300.53 610.46,-293.54 604.17,-297.46 607.98,-300.53"/>
+<text text-anchor="middle" x="637" y="-313.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">import / dlopen</text>
+</g>
+<!-- engine -->
+<g id="node31" class="node">
+<title>engine</title>
+<path fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.3" d="M397.5,-189C397.5,-189 102.5,-189 102.5,-189 96.5,-189 90.5,-183 90.5,-177 90.5,-177 90.5,-159 90.5,-159 90.5,-153 96.5,-147 102.5,-147 102.5,-147 397.5,-147 397.5,-147 403.5,-147 409.5,-153 409.5,-159 409.5,-159 409.5,-177 409.5,-177 409.5,-183 403.5,-189 397.5,-189"/>
+<text text-anchor="middle" x="250" y="-171.6" font-family="Noto Sans CJK SC" font-size="13.00">engine.load(checkpoint, preset, options)</text>
+<text text-anchor="middle" x="250" y="-157.6" font-family="Noto Sans CJK SC" font-size="13.00">RunEngine or ServeEngine</text>
+</g>
+<!-- mode&#45;&gt;engine -->
+<g id="edge35" class="edge">
+<title>mode&#45;&gt;engine</title>
+<path fill="none" stroke="#7c3aed" stroke-width="1.15" d="M335.59,-244.47C318.61,-229.5 295.93,-209.5 278.18,-193.85"/>
+<polygon fill="#7c3aed" stroke="#7c3aed" stroke-width="1.15" points="279.71,-191.93 272.84,-189.14 276.47,-195.61 279.71,-191.93"/>
+<text text-anchor="middle" x="329.5" y="-215.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">engine</text>
+</g>
+<!-- script -->
+<g id="node34" class="node">
+<title>script</title>
+<path fill="#ffedd5" stroke="#f97316" stroke-width="1.3" d="M757,-196C757,-196 451,-196 451,-196 445,-196 439,-190 439,-184 439,-184 439,-152 439,-152 439,-146 445,-140 451,-140 451,-140 757,-140 757,-140 763,-140 769,-146 769,-152 769,-152 769,-184 769,-184 769,-190 763,-196 757,-196"/>
+<text text-anchor="middle" x="604" y="-178.6" font-family="Noto Sans CJK SC" font-size="13.00">script mode</text>
+<text text-anchor="middle" x="604" y="-164.6" font-family="Noto Sans CJK SC" font-size="13.00">main(argv) owns everything</text>
+<text text-anchor="middle" x="604" y="-150.6" font-family="Noto Sans CJK SC" font-size="13.00">no host routes; manifest env is not applied</text>
+</g>
+<!-- mode&#45;&gt;script -->
+<g id="edge36" class="edge">
+<title>mode&#45;&gt;script</title>
+<path fill="none" stroke="#ea580c" stroke-width="1.15" d="M404.19,-248.43C438.92,-234.63 488.1,-215.08 528.97,-198.83"/>
+<polygon fill="#ea580c" stroke="#ea580c" stroke-width="1.15" points="530.12,-201.01 535.72,-196.15 528.31,-196.45 530.12,-201.01"/>
+<text text-anchor="middle" x="504" y="-215.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">script</text>
+</g>
+<!-- runp -->
+<g id="node32" class="node">
+<title>runp</title>
+<path fill="#dbeafe" stroke="#3b82f6" stroke-width="1.3" d="M322,-82C322,-82 96,-82 96,-82 90,-82 84,-76 84,-70 84,-70 84,-52 84,-52 84,-46 90,-40 96,-40 96,-40 322,-40 322,-40 328,-40 334,-46 334,-52 334,-52 334,-70 334,-70 334,-76 328,-82 322,-82"/>
+<text text-anchor="middle" x="209" y="-64.6" font-family="Noto Sans CJK SC" font-size="13.00">run → predict()</text>
+<text text-anchor="middle" x="209" y="-50.6" font-family="Noto Sans CJK SC" font-size="13.00">result on stdout, process exits</text>
+</g>
+<!-- engine&#45;&gt;runp -->
+<g id="edge37" class="edge">
+<title>engine&#45;&gt;runp</title>
+<path fill="none" stroke="#2563eb" stroke-width="1.15" d="M242.09,-146.75C235.69,-130.34 226.59,-107.06 219.56,-89.05"/>
+<polygon fill="#2563eb" stroke="#2563eb" stroke-width="1.15" points="221.71,-87.81 216.88,-82.18 217.14,-89.59 221.71,-87.81"/>
+<text text-anchor="middle" x="243.5" y="-115.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">run</text>
+</g>
+<!-- servep -->
+<g id="node33" class="node">
+<title>servep</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.3" d="M763,-96C763,-96 375,-96 375,-96 369,-96 363,-90 363,-84 363,-84 363,-38 363,-38 363,-32 369,-26 375,-26 375,-26 763,-26 763,-26 769,-26 775,-32 775,-38 775,-38 775,-84 775,-84 775,-90 769,-96 763,-96"/>
+<text text-anchor="middle" x="569" y="-78.6" font-family="Noto Sans CJK SC" font-size="13.00">serve → warmup() + build_app()</text>
+<text text-anchor="middle" x="569" y="-64.6" font-family="Noto Sans CJK SC" font-size="13.00">capabilities decide the standard routes</text>
+<text text-anchor="middle" x="569" y="-50.6" font-family="Noto Sans CJK SC" font-size="13.00">register_routes() mounts before host routes</text>
+<text text-anchor="middle" x="569" y="-36.6" font-family="Noto Sans CJK SC" font-size="13.00">uvicorn binds &#45;&#45;host/&#45;&#45;port (127.0.0.1 under flashserver)</text>
+</g>
+<!-- engine&#45;&gt;servep -->
+<g id="edge38" class="edge">
+<title>engine&#45;&gt;servep</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M311.13,-146.88C352.77,-133.17 409.09,-114.64 458.47,-98.38"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="459.51,-100.62 465.39,-96.1 457.97,-95.97 459.51,-100.62"/>
+<text text-anchor="middle" x="423" y="-115.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">serve</text>
+</g>
+<!-- ne_transport -->
+<g id="node37" class="node">
+<title>ne_transport</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="1262,-1041 1137,-1014 1262,-987 1387,-1014 1262,-1041"/>
+<text text-anchor="middle" x="1262" y="-1010.9" font-family="Noto Sans CJK SC" font-size="12.00">transport?</text>
+</g>
+<!-- native_exec&#45;&gt;ne_transport -->
+<g id="edge40" class="edge">
+<title>native_exec&#45;&gt;ne_transport</title>
+<path fill="none" stroke="#0284c7" stroke-width="1.15" d="M1262,-1101.87C1262,-1086.83 1262,-1065.93 1262,-1048.39"/>
+<polygon fill="#0284c7" stroke="#0284c7" stroke-width="1.15" points="1264.45,-1048.11 1262,-1041.11 1259.55,-1048.11 1264.45,-1048.11"/>
+</g>
+<!-- ne_http -->
+<g id="node38" class="node">
+<title>ne_http</title>
+<path fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.3" d="M1130,-934.5C1130,-934.5 814,-934.5 814,-934.5 808,-934.5 802,-928.5 802,-922.5 802,-922.5 802,-904.5 802,-904.5 802,-898.5 808,-892.5 814,-892.5 814,-892.5 1130,-892.5 1130,-892.5 1136,-892.5 1142,-898.5 1142,-904.5 1142,-904.5 1142,-922.5 1142,-922.5 1142,-928.5 1136,-934.5 1130,-934.5"/>
+<text text-anchor="middle" x="972" y="-917.1" font-family="Noto Sans CJK SC" font-size="13.00">http: print endpoint, wait for signal</text>
+<text text-anchor="middle" x="972" y="-903.1" font-family="Noto Sans CJK SC" font-size="13.00">host does not proxy; clients connect directly</text>
+</g>
+<!-- ne_transport&#45;&gt;ne_http -->
+<g id="edge41" class="edge">
+<title>ne_transport&#45;&gt;ne_http</title>
+<path fill="none" stroke="#0284c7" stroke-width="1.15" d="M1215.08,-997.06C1167.04,-980.75 1091.96,-955.25 1037.95,-936.9"/>
+<polygon fill="#0284c7" stroke="#0284c7" stroke-width="1.15" points="1038.56,-934.52 1031.14,-934.59 1036.98,-939.16 1038.56,-934.52"/>
+<text text-anchor="middle" x="1145" y="-962.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">http</text>
+</g>
+<!-- ne_stdio -->
+<g id="node39" class="node">
+<title>ne_stdio</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M1479,-935.5C1479,-935.5 1183,-935.5 1183,-935.5 1177,-935.5 1171,-929.5 1171,-923.5 1171,-923.5 1171,-903.5 1171,-903.5 1171,-897.5 1177,-891.5 1183,-891.5 1183,-891.5 1479,-891.5 1479,-891.5 1485,-891.5 1491,-897.5 1491,-903.5 1491,-903.5 1491,-923.5 1491,-923.5 1491,-929.5 1485,-935.5 1479,-935.5"/>
+<text text-anchor="middle" x="1331" y="-917.3" font-family="Noto Sans CJK SC" font-size="14.00">stdio: serve not implemented</text>
+<text text-anchor="middle" x="1331" y="-902.3" font-family="Noto Sans CJK SC" font-size="14.00">run uses NDJSON run/health/shutdown</text>
+</g>
+<!-- ne_transport&#45;&gt;ne_stdio -->
+<g id="edge42" class="edge">
+<title>ne_transport&#45;&gt;ne_stdio</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M1278,-990.15C1288.2,-975.6 1301.45,-956.69 1312.15,-941.41"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="1314.25,-942.68 1316.26,-935.54 1310.24,-939.87 1314.25,-942.68"/>
+<text text-anchor="middle" x="1311" y="-962.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">stdio</text>
+</g>
+<!-- abi_session -->
+<g id="node41" class="node">
+<title>abi_session</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="1667,-1041 1458,-1014 1667,-987 1876,-1014 1667,-1041"/>
+<text text-anchor="middle" x="1667" y="-1010.9" font-family="Noto Sans CJK SC" font-size="12.00">session_library declared?</text>
+</g>
+<!-- native_abi&#45;&gt;abi_session -->
+<g id="edge43" class="edge">
+<title>native_abi&#45;&gt;abi_session</title>
+<path fill="none" stroke="#0284c7" stroke-width="1.15" d="M1623.64,-1095C1631.74,-1080.05 1641.85,-1061.4 1650.26,-1045.87"/>
+<polygon fill="#0284c7" stroke="#0284c7" stroke-width="1.15" points="1652.58,-1046.75 1653.76,-1039.43 1648.27,-1044.42 1652.58,-1046.75"/>
+</g>
+<!-- abi_plain -->
+<g id="node42" class="node">
+<title>abi_plain</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M1802,-943C1802,-943 1532,-943 1532,-943 1526,-943 1520,-937 1520,-931 1520,-931 1520,-896 1520,-896 1520,-890 1526,-884 1532,-884 1532,-884 1802,-884 1802,-884 1808,-884 1814,-890 1814,-896 1814,-896 1814,-931 1814,-931 1814,-937 1808,-943 1802,-943"/>
+<text text-anchor="middle" x="1667" y="-924.8" font-family="Noto Sans CJK SC" font-size="14.00">plain native&#45;abi</text>
+<text text-anchor="middle" x="1667" y="-909.8" font-family="Noto Sans CJK SC" font-size="14.00">run probes the ABI and prints JSON</text>
+<text text-anchor="middle" x="1667" y="-894.8" font-family="Noto Sans CJK SC" font-size="14.00">serve not implemented</text>
+</g>
+<!-- abi_session&#45;&gt;abi_plain -->
+<g id="edge45" class="edge">
+<title>abi_session&#45;&gt;abi_plain</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M1667,-986.86C1667,-975.72 1667,-962.54 1667,-950.51"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="1669.45,-950.19 1667,-943.19 1664.55,-950.19 1669.45,-950.19"/>
+<text text-anchor="middle" x="1674" y="-962.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">no</text>
+</g>
+<!-- abi_sess -->
+<g id="node43" class="node">
+<title>abi_sess</title>
+<path fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.3" d="M2170.5,-941.5C2170.5,-941.5 1855.5,-941.5 1855.5,-941.5 1849.5,-941.5 1843.5,-935.5 1843.5,-929.5 1843.5,-929.5 1843.5,-897.5 1843.5,-897.5 1843.5,-891.5 1849.5,-885.5 1855.5,-885.5 1855.5,-885.5 2170.5,-885.5 2170.5,-885.5 2176.5,-885.5 2182.5,-891.5 2182.5,-897.5 2182.5,-897.5 2182.5,-929.5 2182.5,-929.5 2182.5,-935.5 2176.5,-941.5 2170.5,-941.5"/>
+<text text-anchor="middle" x="2013" y="-924.1" font-family="Noto Sans CJK SC" font-size="13.00">Nexus session</text>
+<text text-anchor="middle" x="2013" y="-910.1" font-family="Noto Sans CJK SC" font-size="13.00">run: Apply → Tick → GetF32</text>
+<text text-anchor="middle" x="2013" y="-896.1" font-family="Noto Sans CJK SC" font-size="13.00">serve: /healthz /v1/act /v1/chat/completions</text>
+</g>
+<!-- abi_session&#45;&gt;abi_sess -->
+<g id="edge44" class="edge">
+<title>abi_session&#45;&gt;abi_sess</title>
+<path fill="none" stroke="#0284c7" stroke-width="1.15" d="M1730.06,-995.05C1780.54,-980.68 1852.34,-960.24 1910.98,-943.54"/>
+<polygon fill="#0284c7" stroke="#0284c7" stroke-width="1.15" points="1912,-945.8 1918.06,-941.53 1910.66,-941.09 1912,-945.8"/>
+<text text-anchor="middle" x="1859" y="-962.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">yes</text>
+</g>
+</g>
 </svg>

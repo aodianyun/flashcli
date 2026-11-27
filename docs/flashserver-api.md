@@ -74,7 +74,7 @@ Authentication is off by default. With a token, every path except `/health`, `/`
 | Logs | `GET /api/v1/logs`, `GET /api/v1/logs/download` | `?kind=server\|model&ref=…&lines=N` |
 | Catalog | `GET /api/v1/catalog`, `GET /api/v1/catalog/tags`, `GET /api/v1/catalog/{id}` | FlashHub proxy |
 | Settings | `GET /api/v1/settings`, `PATCH /api/v1/settings` | Typed global settings; `writable` lists mutable fields (`mirror.enabled`) |
-| Apps | `GET/POST/DELETE /api/v1/apps/*`, `POST /api/v1/apps/{org}/{name}/setup` | Install/prepare and configure apps; inference always goes through `/v1` |
+| Apps | `GET /api/v1/apps`, `GET /api/v1/apps/installed`, `GET /api/v1/apps/{org}/{name}`, `GET .../status`, `POST .../install`, `POST .../prepare`, `POST .../setup`, `DELETE /api/v1/apps/{org}/{name}` | Install/prepare/configure apps; inference always goes through `/v1`; no app start/stop |
 | Live / UI | `GET /api/v1/ws`, `GET /`, `GET /docs`, `GET /openapi.yaml` | WebSocket state; embedded console |
 
 Model objects in `GET /api/v1/models` include a `capabilities` array. `null`

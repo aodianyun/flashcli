@@ -17,23 +17,24 @@ The system overview is intentionally coarse. The other diagrams are **step-level
 | Diagram | Contents |
 |---|---|
 | [System overview](images/architecture-overview.en.svg) · [PNG](images/architecture-overview.en.png) | Clients (Desktop, installed apps, CLI), flashserver modules (gateway, scheduler, manager, management, apps, system/GPU), flashcli execution, Model Bundle + FlashRT, shared cache, FlashHub, weight sources |
-| [flashcli run/serve flow](images/flashcli-flow.en.svg) · [PNG](images/flashcli-flow.en.png) | Ref resolution, offline cache, preflight, venv, weights, entry, run/serve |
-| [flashserver gateway/scheduler flow](images/flashserver-gateway-flow.en.svg) · [PNG](images/flashserver-gateway-flow.en.png) | `/v1` request path, `/api/v1` management, custom-path passthrough, preload, placement, lease, proxy, release, errors |
-| [Model Bundle / FlashRT stack](images/bundle-runtime-stack.en.svg) · [PNG](images/bundle-runtime-stack.en.png) | FlashHub → bundle manifest/entry/runtime cells → venv/weights → FlashRT |
-| [Go host module map](images/go-module-map.en.svg) · [PNG](images/go-module-map.en.png) | Commands → CLI/server frontends → shared host services → execution backends |
-| [FlashHub flow](images/flashhub-flow.en.svg) · [PNG](images/flashhub-flow.en.png) | Publish → catalog/versions → CLI/flashserver/desktop sync |
-| [App lifecycle](images/app-lifecycle.en.svg) · [PNG](images/app-lifecycle.en.png) | install → prepare → setup → ready; no app-owned model start/stop |
+| [flashcli run/serve flow](images/flashcli-flow.en.svg) · [PNG](images/flashcli-flow.en.png) | Command parsing, `EnsureBundle` (marker vs sync), manifest/env/variant, local markers, preflight, weights, system checks, venv, CUDA userland, `inferexec`, bundle `load`/`predict`/`build_app`, native entries |
+| [flashserver gateway request flow](images/flashserver-gateway-flow.en.svg) · [PNG](images/flashserver-gateway-flow.en.png) | Auth, route ownership, standard/custom/reserved paths, body/form/query model selection, conflict/required/invalid errors, disk + capability gates, lease, endpoint lookup, proxy, SSE/JSON rewrite, release, idle stop |
+| [flashserver scheduler flow](images/flashserver-scheduler-flow.en.svg) · [PNG](images/flashserver-scheduler-flow.en.png) | `Acquire`, resident hit, `max_loaded=0`, runtime cells, free VRAM + headroom, GPU count, CPU fallback, LRU eviction, bounded queue, background start + health, stop race, release, idle reap, dead-child reconcile |
+| [Model Bundle / FlashRT stack](images/bundle-runtime-stack.en.svg) · [PNG](images/bundle-runtime-stack.en.png) | Manifest version axes, v4 defaults/environments, entry kinds/modes, resources/capabilities/options, dependencies, weights metadata, host bundle/venv/weights preparation, execution lanes, FlashRT registration, completeness vs readiness |
+| [Go host module map](images/go-module-map.en.svg) · [PNG](images/go-module-map.en.png) | Commands → CLI/server frontends → shared host services → execution backends; mechanical boundary guards |
+| [FlashHub flow](images/flashhub-flow.en.svg) · [PNG](images/flashhub-flow.en.png) | Build → pack → validate → manual upload; repo/catalog/app APIs; CLI pull/run, flashserver preload/catalog/app install, desktop; local cache and offline rules |
+| [App lifecycle](images/app-lifecycle.en.svg) · [PNG](images/app-lifecycle.en.png) | `planned → preparing → prepared → ready`, failure/retry, prepare-only, setup scripts and `setup_error`, uninstall/purge, desktop role; no app-owned model start/stop |
 
-All diagrams in [`images/`](images/) are hand-laid SVG. The SVG is authoritative; render PNGs with `rsvg-convert -w 1600 -h 900 -o <name>.<lang>.png <name>.<lang>.svg`. Style requirements: [CONTRIBUTING.md → Architecture and flow diagrams](../CONTRIBUTING.md#architecture-and-flow-diagrams).
+The overview is a hand-laid SVG. Every flow diagram is generated from a Graphviz source at `images/<name>.<lang>.dot`; the `.dot` file is authoritative. Rebuild with `python scripts/gen_architecture_diagrams.py`, then `dot -Tsvg <name>.<lang>.dot -o <name>.<lang>.svg` and `dot -Tpng -Gdpi=110 <name>.<lang>.dot -o <name>.<lang>.png`. Style requirements: [CONTRIBUTING.md → Architecture and flow diagrams](../CONTRIBUTING.md#architecture-and-flow-diagrams).
 
 ## Core principles
 
 1. **Inference lives in the bundle** — the bundle owns **all model-specific logic**: the forward pass, preprocessing/postprocessing, modality shapes and dtypes, input/output semantics, and option→port mapping/defaults. flashcli is a **generic, model-agnostic driver**: it resolves the ref, prepares the environment, and invokes the bundle-provided interface — `entry` for `kind=python`, or the declared model-runtime ABI + manifest `native` block for `native-exec`/`native-abi`. **No model-specific constants, shapes, or preprocessing may live in the host** (`go/`).
 2. **Preset ref** — users pass `namespace/bundle:version`; `FLASHCLI_FLASHHUB_API` sets the API base.
-3. **Manifest-first + split download** — fetch manifest → preflight against `environments` → download common files plus only the selected environment's declared runtime directory.
+3. **Manifest-first + split download** — fetch manifest → resolve the environment for this host → download common files plus only that environment's declared runtime directory → preflight the selected cell.
 4. **Fixed Python ABI** — one venv per bundle (`python_abi`); CLI **re-execs** into that venv after prepare.
 5. **Single Go host** — the host is a static Go binary; bundle venvs pip-install **`flashcli-bundle[infer]`** (never a host `flashcli` package).
-6. **One command** — `flashcli run <ref>` chains sync → deps → weights (host download if missing) → `post_pull` → offline inference in bundle venv.
+6. **One command** — `flashcli run <ref>` chains sync → weights (host download if missing, including `post_pull`) → venv/deps → CUDA userland → offline inference in the bundle venv.
 7. **One host cache layer** — `go/internal/host` is the single implementation of cache discovery, weights key/readiness, runtime IDs/paths, disk accounting, ref-path resolution, and cleanup. `flashcli` and `flashserver` are frontends: they parse input, call `host`, and format/transport results. They must not reimplement these checks.
 
 ### Where modules live (required reading)
@@ -79,7 +80,7 @@ Rules:
 - Add the behavior once in the shared package, then expose it through both frontends. Presentation-only helpers (tables, colors, prompts) stay in the frontend.
 - **Pull/prepare is one pipeline:** `host.Pull` is used by `flashcli pull`, `/api/v1/models/preload` and app preparation; `host.EnsureRuntime` is the runtime/venv preparation used by pull, and must stay aligned with `flashcli serve` (system requirements, protocol cache schema, CUDA).
 - **Serve children** use `modelrun.LogName`/`modelrun.TailLines` for log file naming/tailing and `modelrun.WaitHealthy` for readiness. Serve logs live under the canonical `~/.flashcli/logs/serve` (config `log_dir` overrides); both `flashcli app logs` and `/api/v1/logs` read the same name.
-- **App state predicates** (running/restore) live in `apps` (`apps.WasRunning`); the daemon restore and the desktop must not re-derive them.
+- **App install/setup/state predicates** live in `apps` (`Service.Status`, `Registry`); the daemon and the desktop must not re-derive them.
 - **Isolation:** the daemon may wrap a shared service with a Launcher/Stopper (for example owner-aware Manager admission), but the lifecycle logic itself stays in `apps`; the CLI must not grow a parallel copy.
 - **Scope — only genuinely common behavior is shared.** Do **not** force frontend-specific behavior into a shared package or make one frontend emulate the other. Keep the following in the respective frontend:
   - CLI: flags, prompts, human-readable tables/colors, single-process launch behavior.
@@ -200,21 +201,23 @@ sequenceDiagram
   participant Pre as preflight
   participant W as weights
   participant Venv as venv
+  participant CUDA as cuda.Ensure
   participant Infer as flashcli_bundle.infer
 
   U->>CLI: flashcli run flashcli-bundle/pi05_libero:1.0.5
   CLI->>FH: fetch repo index (if not synced)
   FH-->>CLI: files[] + download_url
   CLI->>FH: sync common files + declared runtime dir
-  CLI->>Pre: env key + native cell + host ABI + CUDA userland
+  CLI->>Pre: env key + native cell + host ABI
   CLI->>W: ensure weights (+ post_pull/extra_pull)
   CLI->>Venv: create bundle venv + torch deps
+  CLI->>CUDA: CUDA userland (SONAME + dlopen)
   CLI->>Infer: re-exec: bundle python -m flashcli_bundle.infer
   Note over Infer: bundle venv: flashcli-bundle[infer] only
   Infer->>Infer: activate + local checkpoint + RunEngine/ServeEngine/script
 ```
 
-**Entry modes**: `engine` (default) loads `RunEngine`/`ServeEngine` and parses manifest CLI options; `script` passes argv through to the bundle entry script; the host only uses `--checkpoint` for weight pull.
+**Entry modes**: `engine` (default) loads `RunEngine`/`ServeEngine` and parses manifest CLI options; `script` passes argv through to the bundle entry script. The host consumes `--checkpoint` to override weight resolution and does not inject it into the engine argv.
 
 **Backends**: `entry.kind` selects `python` (re-exec, above), `native-exec` (host spawns), or `native-abi` (host `dlopen`s). See [bundle_execution_abi.md](bundle_execution_abi.md).
 

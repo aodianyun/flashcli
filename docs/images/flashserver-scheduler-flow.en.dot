@@ -1,0 +1,86 @@
+digraph flashserver_scheduler_flow {
+  graph [rankdir=TB, bgcolor="#F7F9FC", pad=0.4, nodesep=0.4, ranksep=0.45, fontname="Noto Sans CJK SC", fontsize=30, labelloc=t, label=<<B>flashserver scheduler and resident lifecycle</B><BR/><FONT POINT-SIZE="14" COLOR="#64748B">max_loaded=0 means no slot limit; admission is driven by runtime cells, free VRAM and CPU policy</FONT>>];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC", fontsize=13, margin="0.46,0.10", penwidth=1.3, color="#94A3B8"];
+  edge [fontname="Noto Sans CJK SC", fontsize=11, color="#64748B", fontcolor="#475569", arrowsize=0.7, penwidth=1.15];
+  subgraph cluster_1 {
+    label=<<B>A. Acquire loop</B>>;
+    style="rounded,filled"; color="#3B82F6"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  acquire [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.8, fontsize=14, width=4.32, label="Scheduler.Acquire(ctx, ref)\ndeadline = now + queue_timeout_seconds\nInspect + Inventory outside the lock on every loop"];
+  state [shape=diamond, style="filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.45, fontsize=12, width=1.52, label="resident state?"];
+  lease_hit [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=2.48, label="leases++; ready → busy\nlast_used=now; return Lease"];
+  wait_call [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=2.80, label="wait for starting / stopping\nshares one startCall / stopCall"];
+  plan [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=2.88, label="planLocked(ref, info, inventory)"];
+  }
+  subgraph cluster_2 {
+    label=<<B>B. Admission</B>>;
+    style="rounded,filled"; color="#F59E0B"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  active [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=3.04, label="active = residents + manager slots\nstarting / ready / busy all count"];
+  slot [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=2.96, label="max_loaded > 0 and active >= max?"];
+  idle [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=2.00, label="Idle resident exists?"];
+  evict [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=13, width=3.60, label="evictIdle → LRU\nonly ready residents with leases=0\nwait 300ms for the driver to release VRAM\ndisk assets are kept"];
+  no_slot [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=2.88, label="no_placement: resource_exhausted"];
+  place [shape=box, style="rounded,filled", fillcolor="#E0F2FE", color="#38BDF8", penwidth=1.3, fontsize=13, width=4.72, label="placementFor(manifest, inventory)\nruntime cell: SM + CUDA + Python ABI\nfree VRAM per GPU ≥ min_vram_mib + headroom\nsatisfies gpu_count; legacy bundles use a 6144MiB floor\nVRAM of starting residents is reserved first"];
+  cpu [shape=box, style="rounded,filled", fillcolor="#CCFBF1", color="#14B8A6", penwidth=1.3, fontsize=13, width=6.16, label="No GPU cell → CPU fallback\nrequires a CPU runtime cell; checks free RAM when min_ram_mib is declared\nforbidden when cpu_fallback=disabled"];
+  place_result [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=1.60, label="Placement result"];
+  plan_ok [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=4.88, label="plan: GPU list + CUDA_VISIBLE_DEVICES\nno manifest (legacy/test) leaves the device unconstrained"];
+  no_runtime [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=3.12, label="no_placement: no_compatible_runtime\npermanent error, never queued"];
+  queue [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=4.40, label="enqueue (QueueMax default 16)\nonly for resource_exhausted with an active resident\nwait for notify / deadline / ctx"];
+  queue_full [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=1.44, label="429 queue_full"];
+  queue_timeout [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=2.80, label="deadline → return no_placement"];
+  }
+  subgraph cluster_3 {
+    label=<<B>C. Start resident</B>>;
+    style="rounded,filled"; color="#22C55E"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  start [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=3.52, label="startResident (background context)\na client timeout does not cancel loading"];
+  loadsched [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=4.24, label="Manager.LoadScheduled(ref, env)\nskips admin slot/VRAM checks (scheduler admitted)\nowner=scheduler; never persisted to models.json"];
+  child [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=13, width=3.84, label="flashcli serve <ref>\n--host 127.0.0.1 --port <free>\nlog ~/.flashcli/logs/serve/<ref>.log\nWaitHealthy up to 120s (/health → /healthz)"];
+  start_result [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=1.28, label="Start result"];
+  ready [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=3.92, label="resident = ready\nbroadcast resident_started; wait for requests"];
+  failed [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=3.68, label="delete resident; broadcast failure\nOOM without min_vram → hint to declare it"];
+  race [shape=diamond, style="filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.45, fontsize=12, width=3.60, label="Force stop raced?\nunload the new process; wake both waiters"];
+  }
+  subgraph cluster_4 {
+    label=<<B>D. Release / reap / external state</B>>;
+    style="rounded,filled"; color="#F59E0B"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  release [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=3.60, label="lease.Release (idempotent)\nonly affects the same resident generation\nleases=0 and busy → ready"];
+  reap [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=3.84, label="reap (every second)\nready + leases=0 + last_used < now-idle_stop\nstopResident → Manager.Unload"];
+  force [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.3, fontsize=13, width=4.56, label="Scheduler.Stop / force unload\nzero leases; active requests are treated as cancelled"];
+  reconcile [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=5.44, label="reconcileLocked\nManager reports a dead process → drop the resident\nthe next request starts fresh instead of reusing a dead endpoint"];
+  telemetry [shape=cylinder, style="filled", fillcolor="#F1F5F9", color="#CBD5E1", penwidth=1.3, fontsize=12, width=4.32, label="States / Snapshot\nGET /api/v1/scheduler: reservations, queue, leases"];
+  }
+  acquire -> state [color="#64748B", style="solid"];
+  state -> lease_hit [color="#16A34A", style="solid", label="ready / busy"];
+  state -> wait_call [color="#D97706", style="solid", label="starting / stopping"];
+  wait_call -> acquire [color="#64748B", style="dashed", label="done"];
+  state -> plan [color="#64748B", style="solid", label="absent"];
+  plan -> active [color="#64748B", style="solid"];
+  active -> slot [color="#64748B", style="solid"];
+  slot -> idle [color="#D97706", style="solid", label="yes"];
+  idle -> evict [color="#EA580C", style="solid", label="yes"];
+  idle -> no_slot [color="#DC2626", style="dashed", label="no"];
+  evict -> plan [color="#64748B", style="dashed", label="retry"];
+  slot -> place [color="#16A34A", style="solid", label="no"];
+  place -> cpu [color="#0D9488", style="solid", label="no GPU cell"];
+  place -> place_result [color="#0284C7", style="solid"];
+  cpu -> place_result [color="#0D9488", style="solid"];
+  place_result -> plan_ok [color="#16A34A", style="solid", label="GPU / CPU"];
+  place_result -> no_runtime [color="#DC2626", style="dashed", label="no compatible cell"];
+  place_result -> queue [color="#D97706", style="solid", label="VRAM short"];
+  queue -> queue_full [color="#DC2626", style="dashed", label="full"];
+  queue -> queue_timeout [color="#DC2626", style="dashed", label="timeout"];
+  queue -> acquire [color="#64748B", style="dashed", label="notify"];
+  plan_ok -> start [color="#64748B", style="solid"];
+  start -> loadsched [color="#64748B", style="solid"];
+  loadsched -> child [color="#EA580C", style="solid"];
+  child -> start_result [color="#64748B", style="solid"];
+  start_result -> ready [color="#16A34A", style="solid", label="healthy"];
+  start_result -> failed [color="#DC2626", style="dashed", label="fail"];
+  start -> race [color="#DC2626", style="dotted", label="stop request"];
+  race -> failed [color="#DC2626", style="dashed", label="yes"];
+  ready -> release [color="#16A34A", style="solid", label="request ends"];
+  release -> reap [color="#64748B", style="dotted"];
+  force -> reap [color="#64748B", style="dotted"];
+  reap -> reconcile [color="#64748B", style="dotted"];
+  ready -> telemetry [color="#64748B", style="dotted"];
+  queue -> telemetry [color="#64748B", style="dotted"];
+}

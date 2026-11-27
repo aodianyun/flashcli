@@ -1,0 +1,86 @@
+digraph flashserver_scheduler_flow {
+  graph [rankdir=TB, bgcolor="#F7F9FC", pad=0.4, nodesep=0.4, ranksep=0.45, fontname="Noto Sans CJK SC", fontsize=30, labelloc=t, label=<<B>flashserver 调度与 resident 生命周期</B><BR/><FONT POINT-SIZE="14" COLOR="#64748B">max_loaded=0 表示不限制槽位；准入由 runtime cell、空闲显存和 CPU 策略决定</FONT>>];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC", fontsize=13, margin="0.46,0.10", penwidth=1.3, color="#94A3B8"];
+  edge [fontname="Noto Sans CJK SC", fontsize=11, color="#64748B", fontcolor="#475569", arrowsize=0.7, penwidth=1.15];
+  subgraph cluster_1 {
+    label=<<B>A. Acquire 循环</B>>;
+    style="rounded,filled"; color="#3B82F6"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  acquire [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.8, fontsize=14, width=3.52, label="Scheduler.Acquire(ctx, ref)\ndeadline = now + queue_timeout_seconds\n每次循环重新 Inspect + Inventory（锁外）"];
+  state [shape=diamond, style="filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.45, fontsize=12, width=1.52, label="resident 状态？"];
+  lease_hit [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=2.32, label="leases++；ready → busy\nlast_used=now；返回 Lease"];
+  wait_call [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=2.80, label="等待 starting / stopping 完成\n共享同一个 startCall / stopCall"];
+  plan [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=2.88, label="planLocked(ref, info, inventory)"];
+  }
+  subgraph cluster_2 {
+    label=<<B>B. 准入判断</B>>;
+    style="rounded,filled"; color="#F59E0B"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  active [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=3.04, label="active = residents + manager slots\nstarting / ready / busy 都算占用"];
+  slot [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=2.96, label="max_loaded > 0 且 active >= max？"];
+  idle [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=1.92, label="存在 idle resident？"];
+  evict [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=13, width=2.24, label="evictIdle → LRU\n只淘汰 ready 且 leases=0\n等 300ms 让驱动释放显存\n磁盘资产保留"];
+  no_slot [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=2.88, label="no_placement: resource_exhausted"];
+  place [shape=box, style="rounded,filled", fillcolor="#E0F2FE", color="#38BDF8", penwidth=1.3, fontsize=13, width=3.84, label="placementFor(manifest, inventory)\nruntime cell：SM + CUDA + Python ABI\n每 GPU 空闲显存 ≥ min_vram_mib + headroom\n满足 gpu_count；legacy 无声明用 6144MiB 下限\nstarting resident 的显存先扣减"];
+  cpu [shape=box, style="rounded,filled", fillcolor="#CCFBF1", color="#14B8A6", penwidth=1.3, fontsize=13, width=4.64, label="无 GPU cell → CPU 兜底\n需有 CPU runtime cell；声明 min_ram_mib 时检查空闲内存\ncpu_fallback=disabled 时禁止"];
+  place_result [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=1.44, label="placement 结果"];
+  plan_ok [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=3.28, label="plan：GPU 列表 + CUDA_VISIBLE_DEVICES\n无 manifest（legacy/测试）不限制设备"];
+  no_runtime [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=3.12, label="no_placement: no_compatible_runtime\n永久错误，不排队"];
+  queue [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=3.76, label="enqueue（QueueMax 默认 16）\n只对 resource_exhausted 且已有活动 resident\n等待 notify / deadline / ctx"];
+  queue_full [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=1.44, label="429 queue_full"];
+  queue_timeout [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=2.64, label="deadline → 返回 no_placement"];
+  }
+  subgraph cluster_3 {
+    label=<<B>C. 启动 resident</B>>;
+    style="rounded,filled"; color="#22C55E"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  start [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=2.64, label="startResident（后台 context）\n客户端超时不会取消加载"];
+  loadsched [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=3.60, label="Manager.LoadScheduled(ref, env)\n跳过管理面 slot/VRAM 检查（调度器已准入）\nowner=scheduler，不持久化到 models.json"];
+  child [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=13, width=3.84, label="flashcli serve <ref>\n--host 127.0.0.1 --port <free>\n日志 ~/.flashcli/logs/serve/<ref>.log\nWaitHealthy 最多 120s（/health → /healthz）"];
+  start_result [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=1.00, label="启动结果"];
+  ready [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=2.80, label="resident = ready\n广播 resident_started；等待请求"];
+  failed [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=3.12, label="删除 resident；广播失败\nOOM 且未声明 min_vram → 提示补声明"];
+  race [shape=diamond, style="filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.45, fontsize=12, width=3.04, label="force stop 抢先？\n卸载新进程，唤醒 start/stop 等待者"];
+  }
+  subgraph cluster_4 {
+    label=<<B>D. 释放 / 回收 / 外部状态</B>>;
+    style="rounded,filled"; color="#F59E0B"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  release [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=2.96, label="lease.Release（幂等）\n只对同一 resident generation 生效\nleases=0 且 busy → ready"];
+  reap [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=3.84, label="reap（每秒）\nready + leases=0 + last_used < now-idle_stop\nstopResident → Manager.Unload"];
+  force [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.3, fontsize=13, width=2.80, label="Scheduler.Stop / force unload\nleases 清零；活动请求按取消处理"];
+  reconcile [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=3.28, label="reconcileLocked\nManager 报告进程已死 → 丢弃 resident\n下一个请求重新启动，不复用死端点"];
+  telemetry [shape=cylinder, style="filled", fillcolor="#F1F5F9", color="#CBD5E1", penwidth=1.3, fontsize=12, width=4.32, label="States / Snapshot\nGET /api/v1/scheduler：reservations、queue、leases"];
+  }
+  acquire -> state [color="#64748B", style="solid"];
+  state -> lease_hit [color="#16A34A", style="solid", label="ready / busy"];
+  state -> wait_call [color="#D97706", style="solid", label="starting / stopping"];
+  wait_call -> acquire [color="#64748B", style="dashed", label="done"];
+  state -> plan [color="#64748B", style="solid", label="无 resident"];
+  plan -> active [color="#64748B", style="solid"];
+  active -> slot [color="#64748B", style="solid"];
+  slot -> idle [color="#D97706", style="solid", label="是"];
+  idle -> evict [color="#EA580C", style="solid", label="是"];
+  idle -> no_slot [color="#DC2626", style="dashed", label="否"];
+  evict -> plan [color="#64748B", style="dashed", label="重试"];
+  slot -> place [color="#16A34A", style="solid", label="否"];
+  place -> cpu [color="#0D9488", style="solid", label="无 GPU cell"];
+  place -> place_result [color="#0284C7", style="solid"];
+  cpu -> place_result [color="#0D9488", style="solid"];
+  place_result -> plan_ok [color="#16A34A", style="solid", label="GPU / CPU"];
+  place_result -> no_runtime [color="#DC2626", style="dashed", label="无兼容 cell"];
+  place_result -> queue [color="#D97706", style="solid", label="显存不足"];
+  queue -> queue_full [color="#DC2626", style="dashed", label="满"];
+  queue -> queue_timeout [color="#DC2626", style="dashed", label="超时"];
+  queue -> acquire [color="#64748B", style="dashed", label="notify"];
+  plan_ok -> start [color="#64748B", style="solid"];
+  start -> loadsched [color="#64748B", style="solid"];
+  loadsched -> child [color="#EA580C", style="solid"];
+  child -> start_result [color="#64748B", style="solid"];
+  start_result -> ready [color="#16A34A", style="solid", label="healthy"];
+  start_result -> failed [color="#DC2626", style="dashed", label="失败"];
+  start -> race [color="#DC2626", style="dotted", label="stop 请求"];
+  race -> failed [color="#DC2626", style="dashed", label="是"];
+  ready -> release [color="#16A34A", style="solid", label="请求结束"];
+  release -> reap [color="#64748B", style="dotted"];
+  force -> reap [color="#64748B", style="dotted"];
+  reap -> reconcile [color="#64748B", style="dotted"];
+  ready -> telemetry [color="#64748B", style="dotted"];
+  queue -> telemetry [color="#64748B", style="dotted"];
+}

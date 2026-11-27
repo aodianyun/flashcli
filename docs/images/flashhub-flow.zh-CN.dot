@@ -1,0 +1,62 @@
+digraph flashhub_flow {
+  graph [rankdir=TB, bgcolor="#F7F9FC", pad=0.4, nodesep=0.4, ranksep=0.45, fontname="Noto Sans CJK SC", fontsize=30, labelloc=t, label=<<B>FlashHub 发布与消费流程</B><BR/><FONT POINT-SIZE="14" COLOR="#64748B">仓库内只负责 build / pack / validate；上传是人工步骤，消费端通过 HTTP 解析与同步</FONT>>];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC", fontsize=13, margin="0.46,0.10", penwidth=1.3, color="#94A3B8"];
+  edge [fontname="Noto Sans CJK SC", fontsize=11, color="#64748B", fontcolor="#475569", arrowsize=0.7, penwidth=1.15];
+  subgraph cluster_1 {
+    label=<<B>A. 发布方（Bundle / App）</B>>;
+    style="rounded,filled"; color="#F97316"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  build [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=13, width=2.80, label="bundles/<name>/build.sh\n编译 FlashRT，组装 runtime cell\n本地当前环境或 Docker 矩阵"];
+  pack [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=4.24, label="scripts/pack_bundle.sh\n只复制 RELEASE_PACK_FILES\n选择 runtime cell，重写 dist/flashcli-bundle.json\n写入 build 来源；不打包权重"];
+  validate [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=3.44, label="flashcli bundle validate\n协议 / entry / capabilities / resources\nruntime cell 与 .so ABI 探测\n校验的是源目录，不是 dist"];
+  upload [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=2.24, label="人工上传 dist/\n仓库内没有上传客户端\n保留相对路径；版本即 ref"];
+  app_author [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=3.20, label="App 作者\napp manifest + install/setup scripts"];
+  }
+  subgraph cluster_2 {
+    label=<<B>B. FlashHub 服务</B>>;
+    style="rounded,filled"; color="#EF4444"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  repo_api [shape=cylinder, style="filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.3, fontsize=12, width=3.12, label="Repo index\nGET /api/v1/repos/{ns}/{name}:{ver}\n返回 files[] + download_url + md5"];
+  catalog_api [shape=cylinder, style="filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=12, width=3.20, label="Catalog API\n/repositories · /repositories/{id}\n/repositories/{id}/versions · /tags\nrelease_status 只读展示"];
+  app_api [shape=cylinder, style="filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=12, width=4.00, label="App registry\nGET /api/v1/apps/{org}/{name}[:ver]\napp manifest + setup scripts + default bundles"];
+  }
+  subgraph cluster_3 {
+    label=<<B>C. CLI 消费</B>>;
+    style="rounded,filled"; color="#22C55E"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  pull [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=3.76, label="flashcli pull\nhost.EnsureBundle → host.EnsureRuntime\n→ weights.PrepareBundle(verifyRemote=true)"];
+  runserve [shape=box, style="rounded,filled", fillcolor="#CCFBF1", color="#14B8A6", penwidth=1.3, fontsize=13, width=3.60, label="flashcli run / serve\nEnsureBundle + ResolveWeights（本地优先）\n不调用 host.Pull"];
+  }
+  subgraph cluster_4 {
+    label=<<B>D. flashserver / Desktop 消费</B>>;
+    style="rounded,filled"; color="#8B5CF6"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  srv_catalog [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=4.48, label="flashserver /api/v1/catalog\n代理 ListRepositories / GetRepository / ListVersions\n每次请求实时访问，无 5 分钟缓存"];
+  srv_preload [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=3.76, label="POST /api/v1/models/preload\njob → host.Pull（bundle + venv + weights）\n只准备磁盘；resident 由调度器按需启动"];
+  srv_app [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=2.96, label="POST /api/v1/apps/.../install\nFetchAppManifest → 平台/脚本决策\ndefault bundles → host.Pull\nsetup 只写 Connection，不启动模型"];
+  desktop [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.3, fontsize=13, width=3.44, label="Desktop\n只访问 flashserver，不直连 FlashHub API\n安装器/封面图可直接访问第三方 URL\n推理只走 /v1"];
+  }
+  subgraph cluster_5 {
+    label=<<B>E. 本地缓存</B>>;
+    style="rounded,filled"; color="#F59E0B"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  cache_bundle [shape=cylinder, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=12, width=3.44, label="bundles/<name>/<version>\n.flashcli_bundle.json（标记存在即离线）"];
+  cache_weights [shape=cylinder, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=12, width=3.60, label="models/store/<source>/<repo>@<rev>-<hash>\n.flashcli_download.json + .incomplete\nallow / require / norm stats 就绪"];
+  cache_runtime [shape=cylinder, style="filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=12, width=3.52, label="runtimes/<runtime_id>\nvenv + .venv-fingerprint + .runtime.json"];
+  }
+  build -> pack [color="#EA580C", style="solid"];
+  pack -> validate [color="#D97706", style="solid"];
+  validate -> upload [color="#DC2626", style="solid", label="通过"];
+  upload -> repo_api [color="#DC2626", style="solid", label="发布版本"];
+  app_author -> app_api [color="#7C3AED", style="solid", label="发布应用"];
+  repo_api -> catalog_api [color="#64748B", style="dashed", label="索引"];
+  repo_api -> pull [color="#16A34A", style="solid", label="index + files"];
+  catalog_api -> srv_catalog [color="#7C3AED", style="solid", label="catalog"];
+  repo_api -> srv_preload [color="#7C3AED", style="dashed", label="bundle + weights"];
+  app_api -> srv_app [color="#7C3AED", style="solid", label="app manifest"];
+  repo_api -> runserve [color="#0D9488", style="dashed", label="bundle 树"];
+  srv_catalog -> desktop [color="#2563EB", style="solid"];
+  srv_preload -> desktop [color="#2563EB", style="solid"];
+  srv_app -> desktop [color="#2563EB", style="solid"];
+  pull -> cache_bundle [color="#D97706", style="solid", label="树"];
+  pull -> cache_weights [color="#D97706", style="solid", label="权重"];
+  pull -> cache_runtime [color="#16A34A", style="solid", label="venv"];
+  runserve -> cache_bundle [color="#64748B", style="dotted"];
+  srv_preload -> cache_bundle [color="#64748B", style="dotted"];
+  srv_app -> cache_bundle [color="#64748B", style="dotted"];
+}

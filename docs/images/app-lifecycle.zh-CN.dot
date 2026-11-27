@@ -1,0 +1,56 @@
+digraph app_lifecycle {
+  graph [rankdir=TB, bgcolor="#F7F9FC", pad=0.4, nodesep=0.4, ranksep=0.45, fontname="Noto Sans CJK SC", fontsize=30, labelloc=t, label=<<B>flashserver 应用生命周期</B><BR/><FONT POINT-SIZE="14" COLOR="#64748B">planned → preparing → prepared → ready；应用只调用 /v1，不启动/停止模型</FONT>>];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC", fontsize=13, margin="0.46,0.10", penwidth=1.3, color="#94A3B8"];
+  edge [fontname="Noto Sans CJK SC", fontsize=11, color="#64748B", fontcolor="#475569", arrowsize=0.7, penwidth=1.15];
+  subgraph cluster_1 {
+    label=<<B>安装与准备</B>>;
+    style="rounded,filled"; color="#F97316"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  resolve [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=13, width=3.36, label="FetchAppManifest + Validate + Platform\n平台命令 / default bundles / 版本固定"];
+  already [shape=diamond, style="filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.45, fontsize=12, width=3.20, label="已 prepared / ready 且 force=false？"];
+  noop [shape=box, style="rounded,filled", fillcolor="#F1F5F9", color="#CBD5E1", penwidth=1.8, fontsize=14, width=2.08, label="AlreadyReady（无操作）"];
+  planned [shape=box, style="rounded,filled", fillcolor="#E0E7FF", color="#6366F1", penwidth=1.8, fontsize=14, width=2.88, label="planned\ninstall 命令执行前写入 apps.json\n持久化，跨进程锁"];
+  install_cmd [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=13, width=3.28, label="install.command\nrun：daemon 执行 shell\nclient：桌面端本地执行，daemon 只记录\nURL：只展示下载页，不抓取\nskip：不执行"];
+  preparing [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=2.80, label="preparing\n对 default bundles 串行 Prepare\nPrepare = host.Pull"];
+  prepared [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=4.96, label="prepared\n所有选中 bundle 的 Prepared=true\nConnection = {base_url, api_key=local, models, model_refs}"];
+  failed [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=2.96, label="failed\n安装命令或 Prepare 失败；保留日志\n可重试；已缓存的 bundle 保留"];
+  }
+  subgraph cluster_2 {
+    label=<<B>配置与激活</B>>;
+    style="rounded,filled"; color="#8B5CF6"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  setup [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=3.20, label="POST /api/v1/apps/{org}/{name}/setup\n可同步返回 AppState 或 ?async=1 job\nbody: setup_scripts[] + client_home"];
+  set_ready [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=3.68, label="先把 state=ready 并清 error\n然后才执行 setup scripts\nsetup 失败只写 setup_error，状态仍是 ready"];
+  scripts [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=3.36, label="applySetupScripts\n有已保存 plan 且未显式选择 → 离线重放\n否则按 manifest 顺序固定脚本 + SHA-256\n脚本缓存 setup-cache/<sha256>.py\n第一个失败停止后续"];
+  ready [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.8, fontsize=14, width=3.84, label="ready\n应用已配置，可接收请求\nConnection 仅在 apps.json；APIKey 固定 local"];
+  }
+  subgraph cluster_3 {
+    label=<<B>运行时与卸载</B>>;
+    style="rounded,filled"; color="#14B8A6"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  infer [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.3, fontsize=13, width=3.28, label="推理只走 /v1\ngateway → scheduler → resident\n应用没有 PID / child endpoint\n应用不能 start / stop / load / unload"];
+  status [shape=box, style="rounded,filled", fillcolor="#F1F5F9", color="#CBD5E1", penwidth=1.3, fontsize=13, width=4.00, label="GET .../status\n读 apps.json；transitional 超过 ~10m → failed"];
+  uninstall [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=13, width=3.04, label="DELETE /api/v1/apps/{org}/{name}\n默认只删 registry 条目\n?purge_models=1 再 RemoveCachedRef\n共享资产保留；未缓存会中断 purge"];
+  uninstalled [shape=box, style="rounded,filled", fillcolor="#F1F5F9", color="#CBD5E1", penwidth=1.8, fontsize=14, width=3.36, label="uninstalled\n模型缓存 / 日志 / setup-cache 默认保留\n不会自动停止 resident"];
+  prepare_only [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=2.88, label="POST .../prepare\nNoInstall + PrepareOnly + Force\n可给未安装应用创建 prepared 状态"];
+  desktop_note [shape=note, style="filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.3, fontsize=11.5, width=2.96, label="Desktop 的角色\nclient 命令 / 安装器在本地执行\n随后 POST install；配置走 /setup\n不直接启动/停止模型，推理只走 /v1"];
+  }
+  resolve -> already [color="#64748B", style="solid"];
+  already -> noop [color="#64748B", style="solid", label="是"];
+  already -> planned [color="#4F46E5", style="solid", label="否"];
+  planned -> install_cmd [color="#64748B", style="solid"];
+  install_cmd -> failed [color="#DC2626", style="dashed", label="失败"];
+  install_cmd -> preparing [color="#D97706", style="solid", label="成功 + 有模型"];
+  install_cmd -> prepared [color="#16A34A", style="dashed", label="成功 + 无模型"];
+  preparing -> prepared [color="#16A34A", style="solid", label="全部拉取完成"];
+  preparing -> failed [color="#DC2626", style="dashed", label="失败"];
+  prepared -> setup [color="#7C3AED", style="solid", label="激活"];
+  setup -> set_ready [color="#16A34A", style="solid"];
+  set_ready -> scripts [color="#D97706", style="solid"];
+  scripts -> ready [color="#16A34A", style="solid", label="完成 / 失败都 ready"];
+  ready -> infer [color="#2563EB", style="solid", label="请求"];
+  ready -> setup [color="#7C3AED", style="dashed", label="重新配置"];
+  ready -> status [color="#64748B", style="dotted"];
+  ready -> uninstall [color="#EA580C", style="solid", label="卸载"];
+  uninstall -> uninstalled [color="#64748B", style="solid"];
+  prepare_only -> prepared [color="#D97706", style="dashed", label="只准备"];
+  failed -> resolve [color="#DC2626", style="dashed", label="重试"];
+  install_cmd -> desktop_note [color="#64748B", style="dotted"];
+}

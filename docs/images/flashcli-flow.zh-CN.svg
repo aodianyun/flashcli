@@ -1,153 +1,676 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
-<defs>
-<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1.5" stdDeviation="3" flood-color="#0F172A" flood-opacity="0.05"/></filter>
-<marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#2563EB"/></marker>
-<marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#0F766E"/></marker>
-<marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#B45309"/></marker>
-<marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#DC2626"/></marker>
-</defs>
-<rect width="1600" height="900" fill="#F7F9FC"/>
-<path d="M 48 100 L 1552 100" stroke="#E2E8F0" stroke-width="1"/>
-<text x="48" y="64" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="34" font-weight="700" fill="#0F172A">flashcli 运行 / 服务流程</text>
-<text x="1552" y="64" text-anchor="end" font-family="JetBrains Mono, Consolas, monospace" font-size="12" font-weight="400" fill="#94A3B8">v1</text>
-<text x="48" y="132" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">CLI / 输入</text>
-<rect x="48" y="150" width="330" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="48" y="150" width="330" height="3" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="418" y="132" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">解析 / 缓存</text>
-<rect x="418" y="150" width="330" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="418" y="150" width="330" height="3" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="788" y="132" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">准备 / 权重 / VENV</text>
-<rect x="788" y="150" width="330" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="788" y="150" width="330" height="3" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="1158" y="132" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">入口 / 执行</text>
-<rect x="1158" y="150" width="330" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="1158" y="150" width="330" height="3" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<rect x="68" y="180" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="68" y="190" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="82" y="199" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">flashcli run|serve &lt;ref&gt;</text>
-<text x="82" y="214" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">本地目录或 FlashHub ref</text>
-<text x="82" y="228" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">pull / models show / bundle validate</text>
-<rect x="68" y="260" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="68" y="270" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="82" y="279" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">环境</text>
-<text x="82" y="294" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">FLASHCLI_HOME / RUNTIME_ENV_KEY</text>
-<text x="82" y="308" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">mirror / CUDA userland</text>
-<rect x="68" y="340" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="68" y="350" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="82" y="359" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">解析 ref / variant</text>
-<text x="82" y="374" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">namespace/name:version[:variant]</text>
-<text x="82" y="388" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">cache key = source/repo@revision</text>
-<polygon points="213,420 308.7,457 213,494 117.3,457" fill="#FFF9F0" stroke="#DC2626" stroke-width="1.3"/>
-<text x="213" y="455" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">输入有效？</text>
-<text x="213" y="471" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.3" font-weight="400" fill="#475569">完整 ref / manifest</text>
-<text x="213" y="483" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.3" font-weight="400" fill="#475569">否 -&gt; 明确报错退出</text>
-<rect x="438" y="180" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="438" y="190" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="452" y="199" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Bundle 树</text>
-<text x="452" y="214" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">manifest + entry + runtime</text>
-<text x="452" y="228" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">FLASHCLI_HOME/bundles/&lt;name&gt;/&lt;ver&gt;</text>
-<rect x="438" y="260" width="290" height="62" rx="8" fill="#F8FAFC" stroke="#B8C4D4" stroke-width="1.15" stroke-dasharray="6 4"/>
-<rect x="438" y="270" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="452" y="279" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">下载清单</text>
-<text x="452" y="294" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">.flashcli_download.json</text>
-<text x="452" y="308" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">预期 path + size</text>
-<polygon points="583,340 678.7,377 583,414 487.3,377" fill="#FFF9F0" stroke="#B45309" stroke-width="1.3"/>
-<text x="583" y="375" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">缓存完整？</text>
-<text x="583" y="391" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.3" font-weight="400" fill="#475569">manifest + 标记</text>
-<text x="583" y="403" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.3" font-weight="400" fill="#475569">否 -&gt; 续传 / pull</text>
-<polygon points="583,432 678.7,469 583,506 487.3,469" fill="#FFF9F0" stroke="#0F766E" stroke-width="1.3"/>
-<text x="583" y="467" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">bundle 就绪？</text>
-<text x="583" y="483" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.3" font-weight="400" fill="#475569">allow / require + norm stats</text>
-<text x="583" y="495" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.3" font-weight="400" fill="#475569">legacy cache 也接受</text>
-<rect x="438" y="524" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="438" y="534" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="452" y="543" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Pull job</text>
-<text x="452" y="558" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">index -&gt; manifest -&gt; files</text>
-<text x="452" y="572" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">校验 size / md5</text>
-<rect x="808" y="180" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="808" y="190" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="822" y="199" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Preflight</text>
-<text x="822" y="214" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">env key: SM/CUDA/Python ABI</text>
-<text x="822" y="228" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">device / driver / CPU fallback</text>
-<rect x="808" y="260" width="290" height="62" rx="8" fill="#F8FAFC" stroke="#B8C4D4" stroke-width="1.15" stroke-dasharray="6 4"/>
-<rect x="808" y="270" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="822" y="279" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">权重</text>
-<text x="822" y="294" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">source/repo@revision</text>
-<text x="822" y="308" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">allow / require + extra</text>
-<rect x="808" y="340" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="808" y="350" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="822" y="359" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">传输 / 续传</text>
-<text x="822" y="374" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">download manifest + resume</text>
-<text x="822" y="388" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">post_pull / norm stats</text>
-<rect x="808" y="420" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="808" y="430" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="822" y="439" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">创建 / 复用 venv</text>
-<text x="822" y="454" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">uv / pip fallback</text>
-<text x="822" y="468" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">flashcli-bundle[infer]</text>
-<rect x="808" y="500" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="808" y="510" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="822" y="519" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Python deps</text>
-<text x="822" y="534" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">manifest python_dependencies</text>
-<text x="822" y="548" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">UV cache / hardlinks</text>
-<polygon points="1323,180 1418.7,217 1323,254 1227.3,217" fill="#FFF9F0" stroke="#0F766E" stroke-width="1.3"/>
-<text x="1323" y="215" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Entry kind</text>
-<text x="1323" y="231" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.3" font-weight="400" fill="#475569">python engine / script</text>
-<text x="1323" y="243" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.3" font-weight="400" fill="#475569">native-exec / native-abi</text>
-<rect x="1178" y="272" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="1178" y="282" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="1192" y="291" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">加载</text>
-<text x="1192" y="306" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">ServeEngine / RunEngine</text>
-<text x="1192" y="320" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">load(checkpoint, preset)</text>
-<rect x="1178" y="352" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="1178" y="362" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="1192" y="371" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">预热</text>
-<text x="1192" y="386" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">warmup(spec)</text>
-<text x="1192" y="400" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">CUDA graph / engine init</text>
-<rect x="1178" y="432" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="1178" y="442" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="1192" y="451" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">run / serve</text>
-<text x="1192" y="466" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">run: predict -&gt; stdout / exit</text>
-<text x="1192" y="480" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">serve: build_app + routes</text>
-<rect x="1178" y="512" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="1178" y="522" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="1192" y="531" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">协议面</text>
-<text x="1192" y="546" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">JSON / SSE / multipart / WS</text>
-<text x="1192" y="560" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">health + /v1/models</text>
-<path d="M 213 242 L 213 260" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 213 322 L 213 340" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 213 402 L 213 420" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 308.7 457 L 398 457 L 398 211 L 438 211" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<text x="398" y="329" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">ok</text>
-<path d="M 583 242 L 583 260" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 583 322 L 583 340" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 583 414 L 583 432" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="591" y="426" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">yes</text>
-<path d="M 583 414 L 583 524" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
-<text x="591" y="472" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">no</text>
-<path d="M 678.7 469 L 768 469 L 768 211 L 808 211" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="768" y="335" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">ready</text>
-<path d="M 728 555 L 768 555 L 768 371 L 808 371" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
-<text x="768" y="458" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">fetch</text>
-<path d="M 953 242 L 953 260" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 953 322 L 953 340" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 953 402 L 953 420" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="961" y="414" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">ready</text>
-<path d="M 953 482 L 953 500" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 1098 531 L 1138 531 L 1138 217 L 1227.3 217" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="1138" y="369" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">launch</text>
-<path d="M 1323 254 L 1323 272" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="1331" y="266" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">engine</text>
-<path d="M 1323 334 L 1323 352" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 1323 414 L 1323 432" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="1331" y="426" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">run/serve</text>
-<path d="M 1323 494 L 1323 512" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<rect x="48" y="838" width="10" height="2" rx="1" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="63" y="842" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">请求 / 数据</text>
-<rect x="141.6" y="838" width="10" height="2" rx="1" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="156.6" y="842" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">本地执行</text>
-<rect x="219.6" y="838" width="10" height="2" rx="1" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="234.6" y="842" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">外部 / 磁盘</text>
-<rect x="313.2" y="838" width="10" height="2" rx="1" fill="#DC2626" stroke="#DC2626" stroke-width="0"/>
-<text x="328.2" y="842" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">失败 / 重试</text>
-<text x="48" y="862" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">虚线：可选 / 重试路径</text>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.43.0 (0)
+ -->
+<!-- Title: flashcli_flow Pages: 1 -->
+<svg width="2012pt" height="2825pt"
+ viewBox="0.00 0.00 2011.60 2824.60" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(28.8 2795.8)">
+<title>flashcli_flow</title>
+<polygon fill="#f7f9fc" stroke="transparent" points="-28.8,28.8 -28.8,-2795.8 1982.8,-2795.8 1982.8,28.8 -28.8,28.8"/>
+<text text-anchor="start" x="778.5" y="-2740" font-family="Noto Sans CJK SC" font-weight="bold" font-size="30.00">flashcli run / serve 执行流程</text>
+<text text-anchor="start" x="745.5" y="-2722.8" font-family="Noto Sans CJK SC" font-size="14.00" fill="#64748b">ref 解析 → 本地缓存 / FlashHub 同步 → 权重 / venv → bundle 进程内推理</text>
+<g id="clust1" class="cluster">
+<title>cluster_1</title>
+<path fill="#ffffff" stroke="#3b82f6" stroke-width="1.3" d="M41,-2212C41,-2212 381,-2212 381,-2212 387,-2212 393,-2218 393,-2224 393,-2224 393,-2695 393,-2695 393,-2701 387,-2707 381,-2707 381,-2707 41,-2707 41,-2707 35,-2707 29,-2701 29,-2695 29,-2695 29,-2224 29,-2224 29,-2218 35,-2212 41,-2212"/>
+<text text-anchor="start" x="180.5" y="-2692" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">命令入口</text>
+</g>
+<g id="clust2" class="cluster">
+<title>cluster_2</title>
+<path fill="#ffffff" stroke="#f97316" stroke-width="1.3" d="M413,-1964C413,-1964 1312,-1964 1312,-1964 1318,-1964 1324,-1970 1324,-1976 1324,-1976 1324,-2381 1324,-2381 1324,-2387 1318,-2393 1312,-2393 1312,-2393 413,-2393 413,-2393 407,-2393 401,-2387 401,-2381 401,-2381 401,-1976 401,-1976 401,-1970 407,-1964 413,-1964"/>
+<text text-anchor="start" x="811" y="-2378" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">Bundle 树解析</text>
+</g>
+<g id="clust3" class="cluster">
+<title>cluster_3</title>
+<path fill="#ffffff" stroke="#8b5cf6" stroke-width="1.3" d="M576,-1243C576,-1243 1289,-1243 1289,-1243 1295,-1243 1301,-1249 1301,-1255 1301,-1255 1301,-1935 1301,-1935 1301,-1941 1295,-1947 1289,-1947 1289,-1947 576,-1947 576,-1947 570,-1947 564,-1941 564,-1935 564,-1935 564,-1255 564,-1255 564,-1249 570,-1243 576,-1243"/>
+<text text-anchor="start" x="876.5" y="-1932" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">Manifest 与环境</text>
+</g>
+<g id="clust4" class="cluster">
+<title>cluster_4</title>
+<path fill="#ffffff" stroke="#f472b6" stroke-width="1.3" d="M104,-454C104,-454 642,-454 642,-454 648,-454 654,-460 654,-466 654,-466 654,-1203 654,-1203 654,-1209 648,-1215 642,-1215 642,-1215 104,-1215 104,-1215 98,-1215 92,-1209 92,-1203 92,-1203 92,-466 92,-466 92,-460 98,-454 104,-454"/>
+<text text-anchor="start" x="306.5" y="-1200" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">Python 运行时准备</text>
+</g>
+<g id="clust5" class="cluster">
+<title>cluster_5</title>
+<path fill="#ffffff" stroke="#8b5cf6" stroke-width="1.3" d="M20,-8C20,-8 665,-8 665,-8 671,-8 677,-14 677,-20 677,-20 677,-425 677,-425 677,-431 671,-437 665,-437 665,-437 20,-437 20,-437 14,-437 8,-431 8,-425 8,-425 8,-20 8,-20 8,-14 14,-8 20,-8"/>
+<text text-anchor="start" x="234" y="-422" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">Bundle 内执行（engine 模式）</text>
+</g>
+<g id="clust6" class="cluster">
+<title>cluster_6</title>
+<path fill="#ffffff" stroke="#38bdf8" stroke-width="1.3" d="M674,-866C674,-866 1934,-866 1934,-866 1940,-866 1946,-872 1946,-878 1946,-878 1946,-1182 1946,-1182 1946,-1188 1940,-1194 1934,-1194 1934,-1194 674,-1194 674,-1194 668,-1194 662,-1188 662,-1182 662,-1182 662,-878 662,-878 662,-872 668,-866 674,-866"/>
+<text text-anchor="start" x="1258.5" y="-1179" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">原生执行入口</text>
+</g>
+<!-- start -->
+<g id="node1" class="node">
+<title>start</title>
+<path fill="#dbeafe" stroke="#3b82f6" stroke-width="1.8" d="M327,-2664C327,-2664 107,-2664 107,-2664 101,-2664 95,-2658 95,-2652 95,-2652 95,-2617 95,-2617 95,-2611 101,-2605 107,-2605 107,-2605 327,-2605 327,-2605 333,-2605 339,-2611 339,-2617 339,-2617 339,-2652 339,-2652 339,-2658 333,-2664 327,-2664"/>
+<text text-anchor="middle" x="217" y="-2645.8" font-family="Noto Sans CJK SC" font-size="14.00">flashcli run | serve</text>
+<text text-anchor="middle" x="217" y="-2630.8" font-family="Noto Sans CJK SC" font-size="14.00">&lt;ref&gt; [OPTIONS]，原始 argv</text>
+<text text-anchor="middle" x="217" y="-2615.8" font-family="Noto Sans CJK SC" font-size="14.00">cobra DisableFlagParsing</text>
+</g>
+<!-- peel -->
+<g id="node2" class="node">
+<title>peel</title>
+<path fill="#e0e7ff" stroke="#6366f1" stroke-width="1.3" d="M360,-2572C360,-2572 74,-2572 74,-2572 68,-2572 62,-2566 62,-2560 62,-2560 62,-2528 62,-2528 62,-2522 68,-2516 74,-2516 74,-2516 360,-2516 360,-2516 366,-2516 372,-2522 372,-2528 372,-2528 372,-2560 372,-2560 372,-2566 366,-2572 360,-2572"/>
+<text text-anchor="middle" x="217" y="-2554.6" font-family="Noto Sans CJK SC" font-size="13.00">peelHostFlags</text>
+<text text-anchor="middle" x="217" y="-2540.6" font-family="Noto Sans CJK SC" font-size="13.00">ref · &#45;&#45;checkpoint · &#45;&#45;mtp&#45;checkpoint</text>
+<text text-anchor="middle" x="217" y="-2526.6" font-family="Noto Sans CJK SC" font-size="13.00">&#45;&#45;quiet · &#45;&#45;no&#45;auto&#45;install · &#45;h</text>
+</g>
+<!-- start&#45;&gt;peel -->
+<g id="edge1" class="edge">
+<title>start&#45;&gt;peel</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M217,-2604.52C217,-2596.49 217,-2587.69 217,-2579.38"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="219.45,-2579.24 217,-2572.24 214.55,-2579.24 219.45,-2579.24"/>
+</g>
+<!-- help -->
+<g id="node3" class="node">
+<title>help</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="217,-2483 89,-2456 217,-2429 345,-2456 217,-2483"/>
+<text text-anchor="middle" x="217" y="-2452.9" font-family="Noto Sans CJK SC" font-size="12.00">仅 &#45;&#45;help？</text>
+</g>
+<!-- peel&#45;&gt;help -->
+<g id="edge2" class="edge">
+<title>peel&#45;&gt;help</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M217,-2515.79C217,-2507.72 217,-2498.79 217,-2490.38"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="219.45,-2490.15 217,-2483.15 214.55,-2490.15 219.45,-2490.15"/>
+</g>
+<!-- manifest -->
+<g id="node4" class="node">
+<title>manifest</title>
+<path fill="#fef3c7" stroke="#f59e0b" stroke-width="1.3" d="M363.5,-2350C363.5,-2350 58.5,-2350 58.5,-2350 52.5,-2350 46.5,-2344 46.5,-2338 46.5,-2338 46.5,-2320 46.5,-2320 46.5,-2314 52.5,-2308 58.5,-2308 58.5,-2308 363.5,-2308 363.5,-2308 369.5,-2308 375.5,-2314 375.5,-2320 375.5,-2320 375.5,-2338 375.5,-2338 375.5,-2344 369.5,-2350 363.5,-2350"/>
+<text text-anchor="middle" x="211" y="-2332.6" font-family="Noto Sans CJK SC" font-size="13.00">resolveManifestOnly</text>
+<text text-anchor="middle" x="211" y="-2318.6" font-family="Noto Sans CJK SC" font-size="13.00">本地 manifest 或只下载 flashcli&#45;bundle.json</text>
+</g>
+<!-- help&#45;&gt;manifest -->
+<g id="edge3" class="edge">
+<title>help&#45;&gt;manifest</title>
+<path fill="none" stroke="#d97706" stroke-width="1.15" d="M215.76,-2429.1C214.75,-2408.12 213.33,-2378.64 212.31,-2357.29"/>
+<polygon fill="#d97706" stroke="#d97706" stroke-width="1.15" points="214.75,-2356.98 211.97,-2350.11 209.85,-2357.22 214.75,-2356.98"/>
+<text text-anchor="middle" x="221" y="-2404.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">是</text>
+</g>
+<!-- ensure -->
+<g id="node6" class="node">
+<title>ensure</title>
+<path fill="#dbeafe" stroke="#3b82f6" stroke-width="1.3" d="M814,-2350C814,-2350 508,-2350 508,-2350 502,-2350 496,-2344 496,-2338 496,-2338 496,-2320 496,-2320 496,-2314 502,-2308 508,-2308 508,-2308 814,-2308 814,-2308 820,-2308 826,-2314 826,-2320 826,-2320 826,-2338 826,-2338 826,-2344 820,-2350 814,-2350"/>
+<text text-anchor="middle" x="661" y="-2332.6" font-family="Noto Sans CJK SC" font-size="13.00">host.EnsureBundle(ref, quiet, force=false)</text>
+<text text-anchor="middle" x="661" y="-2318.6" font-family="Noto Sans CJK SC" font-size="13.00">force 恒为 false；run/serve 不调用 host.Pull</text>
+</g>
+<!-- help&#45;&gt;ensure -->
+<g id="edge5" class="edge">
+<title>help&#45;&gt;ensure</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M270.12,-2440.05C347.85,-2418.16 493.09,-2377.27 582.97,-2351.97"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="583.8,-2354.28 589.88,-2350.02 582.48,-2349.56 583.8,-2354.28"/>
+<text text-anchor="middle" x="405" y="-2404.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">否</text>
+</g>
+<!-- end_help -->
+<g id="node5" class="node">
+<title>end_help</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.8" d="M313.5,-2266C313.5,-2266 108.5,-2266 108.5,-2266 102.5,-2266 96.5,-2260 96.5,-2254 96.5,-2254 96.5,-2242 96.5,-2242 96.5,-2236 102.5,-2230 108.5,-2230 108.5,-2230 313.5,-2230 313.5,-2230 319.5,-2230 325.5,-2236 325.5,-2242 325.5,-2242 325.5,-2254 325.5,-2254 325.5,-2260 319.5,-2266 313.5,-2266"/>
+<text text-anchor="middle" x="211" y="-2244.3" font-family="Noto Sans CJK SC" font-size="14.00">打印 bundle 选项，退出 0</text>
+</g>
+<!-- manifest&#45;&gt;end_help -->
+<g id="edge4" class="edge">
+<title>manifest&#45;&gt;end_help</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M211,-2307.66C211,-2297.18 211,-2284.33 211,-2273.34"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="213.45,-2273.07 211,-2266.07 208.55,-2273.07 213.45,-2273.07"/>
+</g>
+<!-- local -->
+<g id="node7" class="node">
+<title>local</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="738,-2275 611,-2248 738,-2221 865,-2248 738,-2275"/>
+<text text-anchor="middle" x="738" y="-2244.9" font-family="Noto Sans CJK SC" font-size="12.00">本地路径？</text>
+</g>
+<!-- ensure&#45;&gt;local -->
+<g id="edge6" class="edge">
+<title>ensure&#45;&gt;local</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M680.83,-2307.66C690.24,-2298 701.61,-2286.33 711.73,-2275.95"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="713.76,-2277.38 716.89,-2270.66 710.25,-2273.96 713.76,-2277.38"/>
+</g>
+<!-- local_ret -->
+<g id="node8" class="node">
+<title>local_ret</title>
+<path fill="#dbeafe" stroke="#3b82f6" stroke-width="1.3" d="M1293.5,-2157C1293.5,-2157 1098.5,-2157 1098.5,-2157 1092.5,-2157 1086.5,-2151 1086.5,-2145 1086.5,-2145 1086.5,-2127 1086.5,-2127 1086.5,-2121 1092.5,-2115 1098.5,-2115 1098.5,-2115 1293.5,-2115 1293.5,-2115 1299.5,-2115 1305.5,-2121 1305.5,-2127 1305.5,-2127 1305.5,-2145 1305.5,-2145 1305.5,-2151 1299.5,-2157 1293.5,-2157"/>
+<text text-anchor="middle" x="1196" y="-2139.6" font-family="Noto Sans CJK SC" font-size="13.00">abs path, version=local</text>
+<text text-anchor="middle" x="1196" y="-2125.6" font-family="Noto Sans CJK SC" font-size="13.00">无网络，无 bundle 树同步</text>
+</g>
+<!-- local&#45;&gt;local_ret -->
+<g id="edge7" class="edge">
+<title>local&#45;&gt;local_ret</title>
+<path fill="none" stroke="#d97706" stroke-width="1.15" d="M803.71,-2234.95C871.39,-2222.09 979.69,-2200.27 1072,-2176 1090.86,-2171.04 1111.11,-2164.99 1129.66,-2159.15"/>
+<polygon fill="#d97706" stroke="#d97706" stroke-width="1.15" points="1130.49,-2161.46 1136.42,-2157 1129,-2156.78 1130.49,-2161.46"/>
+<text text-anchor="middle" x="1005" y="-2195.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">是</text>
+</g>
+<!-- marker -->
+<g id="node9" class="node">
+<title>marker</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="738,-2176 419,-2136 738,-2096 1057,-2136 738,-2176"/>
+<text text-anchor="middle" x="738" y="-2139.4" font-family="Noto Sans CJK SC" font-size="12.00">FlashHub 标记存在？</text>
+<text text-anchor="middle" x="738" y="-2126.4" font-family="Noto Sans CJK SC" font-size="12.00">bundles/&lt;name&gt;/&lt;ver&gt;/.flashcli_bundle.json</text>
+</g>
+<!-- local&#45;&gt;marker -->
+<g id="edge8" class="edge">
+<title>local&#45;&gt;marker</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M738,-2220.93C738,-2209.67 738,-2196.16 738,-2183.29"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="740.45,-2183.23 738,-2176.23 735.55,-2183.23 740.45,-2183.23"/>
+<text text-anchor="middle" x="744" y="-2195.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">否</text>
+</g>
+<!-- load -->
+<g id="node12" class="node">
+<title>load</title>
+<path fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.3" d="M1147.5,-1904C1147.5,-1904 870.5,-1904 870.5,-1904 864.5,-1904 858.5,-1898 858.5,-1892 858.5,-1892 858.5,-1860 858.5,-1860 858.5,-1854 864.5,-1848 870.5,-1848 870.5,-1848 1147.5,-1848 1147.5,-1848 1153.5,-1848 1159.5,-1854 1159.5,-1860 1159.5,-1860 1159.5,-1892 1159.5,-1892 1159.5,-1898 1153.5,-1904 1147.5,-1904"/>
+<text text-anchor="middle" x="1009" y="-1886.6" font-family="Noto Sans CJK SC" font-size="13.00">manifest.Load → ApplyEnv</text>
+<text text-anchor="middle" x="1009" y="-1872.6" font-family="Noto Sans CJK SC" font-size="13.00">v4 defaults + environments 合并</text>
+<text text-anchor="middle" x="1009" y="-1858.6" font-family="Noto Sans CJK SC" font-size="13.00">ResolveVariant · EntryFor(capability)</text>
+</g>
+<!-- local_ret&#45;&gt;load -->
+<g id="edge13" class="edge">
+<title>local_ret&#45;&gt;load</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M1197.74,-2114.98C1199.65,-2080.74 1198.89,-2010.14 1166,-1964 1148.33,-1939.22 1121.3,-1920.68 1094.61,-1907.23"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="1095.56,-1904.97 1088.2,-1904.09 1093.41,-1909.37 1095.56,-1904.97"/>
+</g>
+<!-- reuse -->
+<g id="node10" class="node">
+<title>reuse</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.3" d="M825.5,-2038C825.5,-2038 642.5,-2038 642.5,-2038 636.5,-2038 630.5,-2032 630.5,-2026 630.5,-2026 630.5,-2008 630.5,-2008 630.5,-2002 636.5,-1996 642.5,-1996 642.5,-1996 825.5,-1996 825.5,-1996 831.5,-1996 837.5,-2002 837.5,-2008 837.5,-2008 837.5,-2026 837.5,-2026 837.5,-2032 831.5,-2038 825.5,-2038"/>
+<text text-anchor="middle" x="734" y="-2020.6" font-family="Noto Sans CJK SC" font-size="13.00">复用 bundle 树（离线）</text>
+<text text-anchor="middle" x="734" y="-2006.6" font-family="Noto Sans CJK SC" font-size="13.00">不校验文件、不访问网络</text>
+</g>
+<!-- marker&#45;&gt;reuse -->
+<g id="edge9" class="edge">
+<title>marker&#45;&gt;reuse</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M736.67,-2096.04C736.1,-2079.36 735.45,-2060.28 734.93,-2045.17"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="737.37,-2045 734.69,-2038.09 732.48,-2045.17 737.37,-2045"/>
+<text text-anchor="middle" x="742" y="-2071.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">是</text>
+</g>
+<!-- sync -->
+<g id="node11" class="node">
+<title>sync</title>
+<path fill="#ffedd5" stroke="#f97316" stroke-width="1.3" d="M1139.5,-2052C1139.5,-2052 878.5,-2052 878.5,-2052 872.5,-2052 866.5,-2046 866.5,-2040 866.5,-2040 866.5,-1994 866.5,-1994 866.5,-1988 872.5,-1982 878.5,-1982 878.5,-1982 1139.5,-1982 1139.5,-1982 1145.5,-1982 1151.5,-1988 1151.5,-1994 1151.5,-1994 1151.5,-2040 1151.5,-2040 1151.5,-2046 1145.5,-2052 1139.5,-2052"/>
+<text text-anchor="middle" x="1009" y="-2034.6" font-family="Noto Sans CJK SC" font-size="13.00">DownloadManifest + SyncBundle</text>
+<text text-anchor="middle" x="1009" y="-2020.6" font-family="Noto Sans CJK SC" font-size="13.00">repo index → manifest</text>
+<text text-anchor="middle" x="1009" y="-2006.6" font-family="Noto Sans CJK SC" font-size="13.00">只下载选中的 runtime cell + 公共文件</text>
+<text text-anchor="middle" x="1009" y="-1992.6" font-family="Noto Sans CJK SC" font-size="13.00">MD5 校验；写 runtime / bundle 标记</text>
+</g>
+<!-- marker&#45;&gt;sync -->
+<g id="edge10" class="edge">
+<title>marker&#45;&gt;sync</title>
+<path fill="none" stroke="#ea580c" stroke-width="1.15" d="M808.14,-2104.72C843.28,-2089.55 886.13,-2071.05 923.21,-2055.04"/>
+<polygon fill="#ea580c" stroke="#ea580c" stroke-width="1.15" points="924.61,-2057.1 930.07,-2052.08 922.67,-2052.6 924.61,-2057.1"/>
+<text text-anchor="middle" x="895" y="-2071.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">否</text>
+</g>
+<!-- reuse&#45;&gt;load -->
+<g id="edge12" class="edge">
+<title>reuse&#45;&gt;load</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M773.69,-1995.94C819.57,-1972.75 895.58,-1934.33 948.76,-1907.45"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="949.98,-1909.57 955.13,-1904.23 947.77,-1905.2 949.98,-1909.57"/>
+</g>
+<!-- sync&#45;&gt;load -->
+<g id="edge11" class="edge">
+<title>sync&#45;&gt;load</title>
+<path fill="none" stroke="#ea580c" stroke-width="1.15" d="M1009,-1982C1009,-1960.48 1009,-1932.75 1009,-1911.2"/>
+<polygon fill="#ea580c" stroke="#ea580c" stroke-width="1.15" points="1011.45,-1911.14 1009,-1904.14 1006.55,-1911.14 1011.45,-1911.14"/>
+</g>
+<!-- valid -->
+<g id="node13" class="node">
+<title>valid</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="1009,-1815 783,-1788 1009,-1761 1235,-1788 1009,-1815"/>
+<text text-anchor="middle" x="1009" y="-1784.9" font-family="Noto Sans CJK SC" font-size="12.00">manifest / env / entry 有效？</text>
+</g>
+<!-- load&#45;&gt;valid -->
+<g id="edge14" class="edge">
+<title>load&#45;&gt;valid</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M1009,-1847.79C1009,-1839.72 1009,-1830.79 1009,-1822.38"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="1011.45,-1822.15 1009,-1815.15 1006.55,-1822.15 1011.45,-1822.15"/>
+</g>
+<!-- err_manifest -->
+<g id="node14" class="node">
+<title>err_manifest</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M910,-1712C910,-1712 594,-1712 594,-1712 588,-1712 582,-1706 582,-1700 582,-1700 582,-1680 582,-1680 582,-1674 588,-1668 594,-1668 594,-1668 910,-1668 910,-1668 916,-1668 922,-1674 922,-1680 922,-1680 922,-1700 922,-1700 922,-1706 916,-1712 910,-1712"/>
+<text text-anchor="middle" x="752" y="-1693.8" font-family="Noto Sans CJK SC" font-size="14.00">报错退出 1 / 2</text>
+<text text-anchor="middle" x="752" y="-1678.8" font-family="Noto Sans CJK SC" font-size="14.00">缺文件、协议版本、环境 key、变体、entry</text>
+</g>
+<!-- valid&#45;&gt;err_manifest -->
+<g id="edge15" class="edge">
+<title>valid&#45;&gt;err_manifest</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M956.06,-1767.23C915.19,-1751.96 858.51,-1730.79 815.26,-1714.63"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="815.85,-1712.23 808.43,-1712.08 814.13,-1716.83 815.85,-1712.23"/>
+<text text-anchor="middle" x="901" y="-1736.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">否</text>
+</g>
+<!-- markers -->
+<g id="node15" class="node">
+<title>markers</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="1117,-1717 951,-1690 1117,-1663 1283,-1690 1117,-1717"/>
+<text text-anchor="middle" x="1117" y="-1686.9" font-family="Noto Sans CJK SC" font-size="12.00">version == local？</text>
+</g>
+<!-- valid&#45;&gt;markers -->
+<g id="edge16" class="edge">
+<title>valid&#45;&gt;markers</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M1034.87,-1764.01C1050.46,-1750.15 1070.38,-1732.44 1086.7,-1717.93"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="1088.48,-1719.63 1092.09,-1713.15 1085.23,-1715.97 1088.48,-1719.63"/>
+<text text-anchor="middle" x="1075" y="-1736.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">是</text>
+</g>
+<!-- write_markers -->
+<g id="node16" class="node">
+<title>write_markers</title>
+<path fill="#fef3c7" stroke="#f59e0b" stroke-width="1.3" d="M1066.5,-1619C1066.5,-1619 771.5,-1619 771.5,-1619 765.5,-1619 759.5,-1613 759.5,-1607 759.5,-1607 759.5,-1575 759.5,-1575 759.5,-1569 765.5,-1563 771.5,-1563 771.5,-1563 1066.5,-1563 1066.5,-1563 1072.5,-1563 1078.5,-1569 1078.5,-1575 1078.5,-1575 1078.5,-1607 1078.5,-1607 1078.5,-1613 1072.5,-1619 1066.5,-1619"/>
+<text text-anchor="middle" x="919" y="-1601.6" font-family="Noto Sans CJK SC" font-size="13.00">writeLocalMarkers</text>
+<text text-anchor="middle" x="919" y="-1587.6" font-family="Noto Sans CJK SC" font-size="13.00">runtimes/&lt;id&gt;/.runtime.json</text>
+<text text-anchor="middle" x="919" y="-1573.6" font-family="Noto Sans CJK SC" font-size="13.00">bundles/&lt;id&gt;/local/.flashcli_bundle.json</text>
+</g>
+<!-- markers&#45;&gt;write_markers -->
+<g id="edge17" class="edge">
+<title>markers&#45;&gt;write_markers</title>
+<path fill="none" stroke="#d97706" stroke-width="1.15" d="M1076.93,-1669.37C1049.4,-1655.88 1012.3,-1637.71 980.98,-1622.36"/>
+<polygon fill="#d97706" stroke="#d97706" stroke-width="1.15" points="981.75,-1620.01 974.39,-1619.13 979.6,-1624.41 981.75,-1620.01"/>
+<text text-anchor="middle" x="1035" y="-1638.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">是</text>
+</g>
+<!-- preflight -->
+<g id="node17" class="node">
+<title>preflight</title>
+<path fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.3" d="M1175,-1530C1175,-1530 897,-1530 897,-1530 891,-1530 885,-1524 885,-1518 885,-1518 885,-1458 885,-1458 885,-1452 891,-1446 897,-1446 897,-1446 1175,-1446 1175,-1446 1181,-1446 1187,-1452 1187,-1458 1187,-1458 1187,-1518 1187,-1518 1187,-1524 1181,-1530 1175,-1530"/>
+<text text-anchor="middle" x="1036" y="-1512.6" font-family="Noto Sans CJK SC" font-size="13.00">host.PreflightBundle</text>
+<text text-anchor="middle" x="1036" y="-1498.6" font-family="Noto Sans CJK SC" font-size="13.00">HostEnvKey = SM + CUDA + Python ABI</text>
+<text text-anchor="middle" x="1036" y="-1484.6" font-family="Noto Sans CJK SC" font-size="13.00">识别 runtime cell 的原生 .so</text>
+<text text-anchor="middle" x="1036" y="-1470.6" font-family="Noto Sans CJK SC" font-size="13.00">host glibc / GLIBCXX / CXXABI 检查</text>
+<text text-anchor="middle" x="1036" y="-1456.6" font-family="Noto Sans CJK SC" font-size="13.00">FLASHCLI_SKIP_PREFLIGHT 可跳过</text>
+</g>
+<!-- markers&#45;&gt;preflight -->
+<g id="edge18" class="edge">
+<title>markers&#45;&gt;preflight</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M1115.57,-1662.84C1113.33,-1636.59 1107.6,-1595.5 1093,-1563 1088.84,-1553.75 1083.31,-1544.6 1077.33,-1536.05"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="1079.21,-1534.47 1073.13,-1530.24 1075.24,-1537.35 1079.21,-1534.47"/>
+<text text-anchor="middle" x="1115" y="-1588.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">否</text>
+</g>
+<!-- write_markers&#45;&gt;preflight -->
+<g id="edge19" class="edge">
+<title>write_markers&#45;&gt;preflight</title>
+<path fill="none" stroke="#d97706" stroke-width="1.15" d="M950.35,-1562.93C960.36,-1554.3 971.73,-1544.48 982.83,-1534.9"/>
+<polygon fill="#d97706" stroke="#d97706" stroke-width="1.15" points="984.56,-1536.64 988.26,-1530.21 981.36,-1532.93 984.56,-1536.64"/>
+</g>
+<!-- env_ok -->
+<g id="node18" class="node">
+<title>env_ok</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="1036,-1413 840,-1386 1036,-1359 1232,-1386 1036,-1413"/>
+<text text-anchor="middle" x="1036" y="-1382.9" font-family="Noto Sans CJK SC" font-size="12.00">runtime env key 匹配？</text>
+</g>
+<!-- preflight&#45;&gt;env_ok -->
+<g id="edge20" class="edge">
+<title>preflight&#45;&gt;env_ok</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M1036,-1445.75C1036,-1437.35 1036,-1428.6 1036,-1420.51"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="1038.45,-1420.29 1036,-1413.29 1033.55,-1420.29 1038.45,-1420.29"/>
+</g>
+<!-- err_env -->
+<g id="node19" class="node">
+<title>err_env</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M907.5,-1310C907.5,-1310 630.5,-1310 630.5,-1310 624.5,-1310 618.5,-1304 618.5,-1298 618.5,-1298 618.5,-1278 618.5,-1278 618.5,-1272 624.5,-1266 630.5,-1266 630.5,-1266 907.5,-1266 907.5,-1266 913.5,-1266 919.5,-1272 919.5,-1278 919.5,-1278 919.5,-1298 919.5,-1298 919.5,-1304 913.5,-1310 907.5,-1310"/>
+<text text-anchor="middle" x="769" y="-1291.8" font-family="Noto Sans CJK SC" font-size="14.00">环境不匹配，退出 2</text>
+<text text-anchor="middle" x="769" y="-1276.8" font-family="Noto Sans CJK SC" font-size="14.00">无 NVIDIA GPU 或该机器没有对应 cell</text>
+</g>
+<!-- env_ok&#45;&gt;err_env -->
+<g id="edge21" class="edge">
+<title>env_ok&#45;&gt;err_env</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M983.57,-1366.15C940.87,-1350.79 880.36,-1329.04 834.47,-1312.54"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="835.23,-1310.21 827.81,-1310.15 833.57,-1314.82 835.23,-1310.21"/>
+<text text-anchor="middle" x="924" y="-1334.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">否</text>
+</g>
+<!-- kind -->
+<g id="node20" class="node">
+<title>kind</title>
+<polygon fill="#dcfce7" stroke="#22c55e" stroke-width="1.45" points="1079,-1315 949,-1288 1079,-1261 1209,-1288 1079,-1315"/>
+<text text-anchor="middle" x="1079" y="-1284.9" font-family="Noto Sans CJK SC" font-size="12.00">entry.kind?</text>
+</g>
+<!-- env_ok&#45;&gt;kind -->
+<g id="edge22" class="edge">
+<title>env_ok&#45;&gt;kind</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M1047.07,-1360.28C1052.63,-1347.88 1059.4,-1332.76 1065.28,-1319.63"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="1067.64,-1320.37 1068.26,-1312.98 1063.16,-1318.36 1067.64,-1320.37"/>
+<text text-anchor="middle" x="1066" y="-1334.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">是</text>
+</g>
+<!-- weights -->
+<g id="node21" class="node">
+<title>weights</title>
+<path fill="#fef3c7" stroke="#f59e0b" stroke-width="1.3" d="M624.5,-1172C624.5,-1172 305.5,-1172 305.5,-1172 299.5,-1172 293.5,-1166 293.5,-1160 293.5,-1160 293.5,-1086 293.5,-1086 293.5,-1080 299.5,-1074 305.5,-1074 305.5,-1074 624.5,-1074 624.5,-1074 630.5,-1074 636.5,-1080 636.5,-1086 636.5,-1086 636.5,-1160 636.5,-1160 636.5,-1166 630.5,-1172 624.5,-1172"/>
+<text text-anchor="middle" x="465" y="-1154.6" font-family="Noto Sans CJK SC" font-size="13.00">host.ResolveWeights → PrepareBundle</text>
+<text text-anchor="middle" x="465" y="-1140.6" font-family="Noto Sans CJK SC" font-size="13.00">&#45;&#45;checkpoint 覆盖 / FLASHCLI_SKIP_WEIGHTS</text>
+<text text-anchor="middle" x="465" y="-1126.6" font-family="Noto Sans CJK SC" font-size="13.00">store/&lt;source&gt;/&lt;repo&gt;@&lt;rev&gt;&#45;&lt;hash&gt;</text>
+<text text-anchor="middle" x="465" y="-1112.6" font-family="Noto Sans CJK SC" font-size="13.00">extra_weights · extra_pull · post_pull</text>
+<text text-anchor="middle" x="465" y="-1098.6" font-family="Noto Sans CJK SC" font-size="13.00">allow / require 模式 + norm stats 就绪</text>
+<text text-anchor="middle" x="465" y="-1084.6" font-family="Noto Sans CJK SC" font-size="13.00">host 下载清单 + 断点续传</text>
+</g>
+<!-- kind&#45;&gt;weights -->
+<g id="edge23" class="edge">
+<title>kind&#45;&gt;weights</title>
+<path fill="none" stroke="#db2777" stroke-width="1.15" d="M1032.9,-1270.5C1004.69,-1261.03 967.66,-1249.73 934,-1243 811.8,-1218.57 775,-1248.64 655,-1215 621.3,-1205.55 586.25,-1190.45 555.56,-1175.25"/>
+<polygon fill="#db2777" stroke="#db2777" stroke-width="1.15" points="556.44,-1172.94 549.08,-1172 554.24,-1177.33 556.44,-1172.94"/>
+<text text-anchor="middle" x="900" y="-1226.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">python</text>
+</g>
+<!-- native_exec -->
+<g id="node36" class="node">
+<title>native_exec</title>
+<path fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.3" d="M1202,-1144C1202,-1144 956,-1144 956,-1144 950,-1144 944,-1138 944,-1132 944,-1132 944,-1114 944,-1114 944,-1108 950,-1102 956,-1102 956,-1102 1202,-1102 1202,-1102 1208,-1102 1214,-1108 1214,-1114 1214,-1114 1214,-1132 1214,-1132 1214,-1138 1208,-1144 1202,-1144"/>
+<text text-anchor="middle" x="1079" y="-1126.6" font-family="Noto Sans CJK SC" font-size="13.00">native&#45;exec</text>
+<text text-anchor="middle" x="1079" y="-1112.6" font-family="Noto Sans CJK SC" font-size="13.00">权重准备后启动 bundle 可执行文件</text>
+</g>
+<!-- kind&#45;&gt;native_exec -->
+<g id="edge24" class="edge">
+<title>kind&#45;&gt;native_exec</title>
+<path fill="none" stroke="#0284c7" stroke-width="1.15" d="M1079,-1260.81C1079,-1230.94 1079,-1182.31 1079,-1151.79"/>
+<polygon fill="#0284c7" stroke="#0284c7" stroke-width="1.15" points="1081.45,-1151.45 1079,-1144.45 1076.55,-1151.45 1081.45,-1151.45"/>
+<text text-anchor="middle" x="1108.5" y="-1226.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">native&#45;exec</text>
+</g>
+<!-- native_abi -->
+<g id="node40" class="node">
+<title>native_abi</title>
+<path fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.3" d="M1514,-1151C1514,-1151 1276,-1151 1276,-1151 1270,-1151 1264,-1145 1264,-1139 1264,-1139 1264,-1107 1264,-1107 1264,-1101 1270,-1095 1276,-1095 1276,-1095 1514,-1095 1514,-1095 1520,-1095 1526,-1101 1526,-1107 1526,-1107 1526,-1139 1526,-1139 1526,-1145 1520,-1151 1514,-1151"/>
+<text text-anchor="middle" x="1395" y="-1133.6" font-family="Noto Sans CJK SC" font-size="13.00">native&#45;abi</text>
+<text text-anchor="middle" x="1395" y="-1119.6" font-family="Noto Sans CJK SC" font-size="13.00">Open(preload, library, config)</text>
+<text text-anchor="middle" x="1395" y="-1105.6" font-family="Noto Sans CJK SC" font-size="13.00">校验 abi_version=1 / struct_size</text>
+</g>
+<!-- kind&#45;&gt;native_abi -->
+<g id="edge25" class="edge">
+<title>kind&#45;&gt;native_abi</title>
+<path fill="none" stroke="#0284c7" stroke-width="1.15" d="M1118.13,-1268.92C1148.57,-1254.69 1191.74,-1234.14 1229,-1215 1266.69,-1195.64 1308.51,-1172.71 1340.75,-1154.7"/>
+<polygon fill="#0284c7" stroke="#0284c7" stroke-width="1.15" points="1342.15,-1156.73 1347.06,-1151.17 1339.76,-1152.45 1342.15,-1156.73"/>
+<text text-anchor="middle" x="1238" y="-1226.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">native&#45;abi</text>
+</g>
+<!-- w_ok -->
+<g id="node22" class="node">
+<title>w_ok</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="465,-1041 338,-1014 465,-987 592,-1014 465,-1041"/>
+<text text-anchor="middle" x="465" y="-1010.9" font-family="Noto Sans CJK SC" font-size="12.00">权重就绪？</text>
+</g>
+<!-- weights&#45;&gt;w_ok -->
+<g id="edge26" class="edge">
+<title>weights&#45;&gt;w_ok</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M465,-1073.82C465,-1065.24 465,-1056.48 465,-1048.43"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="467.45,-1048.26 465,-1041.26 462.55,-1048.26 467.45,-1048.26"/>
+</g>
+<!-- err_w -->
+<g id="node23" class="node">
+<title>err_w</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M274.5,-931.5C274.5,-931.5 121.5,-931.5 121.5,-931.5 115.5,-931.5 109.5,-925.5 109.5,-919.5 109.5,-919.5 109.5,-907.5 109.5,-907.5 109.5,-901.5 115.5,-895.5 121.5,-895.5 121.5,-895.5 274.5,-895.5 274.5,-895.5 280.5,-895.5 286.5,-901.5 286.5,-907.5 286.5,-907.5 286.5,-919.5 286.5,-919.5 286.5,-925.5 280.5,-931.5 274.5,-931.5"/>
+<text text-anchor="middle" x="198" y="-909.8" font-family="Noto Sans CJK SC" font-size="14.00">权重错误，退出 1</text>
+</g>
+<!-- w_ok&#45;&gt;err_w -->
+<g id="edge27" class="edge">
+<title>w_ok&#45;&gt;err_w</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M420.01,-996.4C373.45,-979.23 300.76,-952.41 251.34,-934.18"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="251.94,-931.79 244.52,-931.66 250.24,-936.38 251.94,-931.79"/>
+<text text-anchor="middle" x="353" y="-962.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">否</text>
+</g>
+<!-- sys1 -->
+<g id="node24" class="node">
+<title>sys1</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.3" d="M624,-934.5C624,-934.5 328,-934.5 328,-934.5 322,-934.5 316,-928.5 316,-922.5 316,-922.5 316,-904.5 316,-904.5 316,-898.5 322,-892.5 328,-892.5 328,-892.5 624,-892.5 624,-892.5 630,-892.5 636,-898.5 636,-904.5 636,-904.5 636,-922.5 636,-922.5 636,-928.5 630,-934.5 624,-934.5"/>
+<text text-anchor="middle" x="476" y="-917.1" font-family="Noto Sans CJK SC" font-size="13.00">EnsureSystemRequirements(m, &quot;&quot;)</text>
+<text text-anchor="middle" x="476" y="-903.1" font-family="Noto Sans CJK SC" font-size="13.00">c/cxx 编译器、Python headers（venv 前）</text>
+</g>
+<!-- w_ok&#45;&gt;sys1 -->
+<g id="edge28" class="edge">
+<title>w_ok&#45;&gt;sys1</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M467.86,-987.38C469.42,-973.4 471.36,-956.09 472.95,-941.85"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="475.4,-941.94 473.74,-934.72 470.53,-941.4 475.4,-941.94"/>
+<text text-anchor="middle" x="476" y="-962.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">是</text>
+</g>
+<!-- venv -->
+<g id="node25" class="node">
+<title>venv</title>
+<path fill="#fce7f3" stroke="#f472b6" stroke-width="1.3" d="M621.5,-841C621.5,-841 294.5,-841 294.5,-841 288.5,-841 282.5,-835 282.5,-829 282.5,-829 282.5,-769 282.5,-769 282.5,-763 288.5,-757 294.5,-757 294.5,-757 621.5,-757 621.5,-757 627.5,-757 633.5,-763 633.5,-769 633.5,-769 633.5,-829 633.5,-829 633.5,-835 627.5,-841 621.5,-841"/>
+<text text-anchor="middle" x="458" y="-823.6" font-family="Noto Sans CJK SC" font-size="13.00">venv.Ensure(runtimeID, manifest)</text>
+<text text-anchor="middle" x="458" y="-809.6" font-family="Noto Sans CJK SC" font-size="13.00">fingerprint = python_abi + torch index + deps</text>
+<text text-anchor="middle" x="458" y="-795.6" font-family="Noto Sans CJK SC" font-size="13.00">uv 默认 / pip 兜底</text>
+<text text-anchor="middle" x="458" y="-781.6" font-family="Noto Sans CJK SC" font-size="13.00">flashcli&#45;bundle[infer] + python_dependencies</text>
+<text text-anchor="middle" x="458" y="-767.6" font-family="Noto Sans CJK SC" font-size="13.00">共享 UV cache，hardlink 复用 torch/CUDA</text>
+</g>
+<!-- sys1&#45;&gt;venv -->
+<g id="edge29" class="edge">
+<title>sys1&#45;&gt;venv</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M472.78,-892.39C470.82,-880.11 468.22,-863.85 465.74,-848.4"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="468.14,-847.9 464.62,-841.37 463.31,-848.67 468.14,-847.9"/>
+</g>
+<!-- schema -->
+<g id="node26" class="node">
+<title>schema</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.3" d="M591.5,-724C591.5,-724 294.5,-724 294.5,-724 288.5,-724 282.5,-718 282.5,-712 282.5,-712 282.5,-694 282.5,-694 282.5,-688 288.5,-682 294.5,-682 294.5,-682 591.5,-682 591.5,-682 597.5,-682 603.5,-688 603.5,-694 603.5,-694 603.5,-712 603.5,-712 603.5,-718 597.5,-724 591.5,-724"/>
+<text text-anchor="middle" x="443" y="-706.6" font-family="Noto Sans CJK SC" font-size="13.00">EnsureProtocolCacheSchema</text>
+<text text-anchor="middle" x="443" y="-692.6" font-family="Noto Sans CJK SC" font-size="13.00">CACHE_SCHEMA_VERSION 变化时原地升级</text>
+</g>
+<!-- venv&#45;&gt;schema -->
+<g id="edge30" class="edge">
+<title>venv&#45;&gt;schema</title>
+<path fill="none" stroke="#db2777" stroke-width="1.15" d="M451.42,-756.77C450.05,-748.16 448.63,-739.29 447.36,-731.33"/>
+<polygon fill="#db2777" stroke="#db2777" stroke-width="1.15" points="449.76,-730.84 446.24,-724.32 444.93,-731.61 449.76,-730.84"/>
+</g>
+<!-- cuda -->
+<g id="node27" class="node">
+<title>cuda</title>
+<path fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.3" d="M623.5,-649C623.5,-649 244.5,-649 244.5,-649 238.5,-649 232.5,-643 232.5,-637 232.5,-637 232.5,-591 232.5,-591 232.5,-585 238.5,-579 244.5,-579 244.5,-579 623.5,-579 623.5,-579 629.5,-579 635.5,-585 635.5,-591 635.5,-591 635.5,-637 635.5,-637 635.5,-643 629.5,-649 623.5,-649"/>
+<text text-anchor="middle" x="434" y="-631.6" font-family="Noto Sans CJK SC" font-size="13.00">EnsureSystemRequirements(m, python) + cuda.Ensure</text>
+<text text-anchor="middle" x="434" y="-617.6" font-family="Noto Sans CJK SC" font-size="13.00">headers 用实际解释器复查</text>
+<text text-anchor="middle" x="434" y="-603.6" font-family="Noto Sans CJK SC" font-size="13.00">CUDA SONAME 存在且可 dlopen</text>
+<text text-anchor="middle" x="434" y="-589.6" font-family="Noto Sans CJK SC" font-size="13.00">缺失时可装 nvidia&#45;cublas / cuda&#45;runtime</text>
+</g>
+<!-- schema&#45;&gt;cuda -->
+<g id="edge31" class="edge">
+<title>schema&#45;&gt;cuda</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M440.91,-681.82C440.12,-674.14 439.18,-665.08 438.26,-656.15"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="440.68,-655.75 437.52,-649.04 435.8,-656.26 440.68,-655.75"/>
+</g>
+<!-- exec -->
+<g id="node28" class="node">
+<title>exec</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.8" d="M603.5,-546C603.5,-546 264.5,-546 264.5,-546 258.5,-546 252.5,-540 252.5,-534 252.5,-534 252.5,-484 252.5,-484 252.5,-478 258.5,-472 264.5,-472 264.5,-472 603.5,-472 603.5,-472 609.5,-472 615.5,-478 615.5,-484 615.5,-484 615.5,-534 615.5,-534 615.5,-540 609.5,-546 603.5,-546"/>
+<text text-anchor="middle" x="434" y="-527.8" font-family="Noto Sans CJK SC" font-size="14.00">inferexec.Exec → syscall.Exec</text>
+<text text-anchor="middle" x="434" y="-512.8" font-family="Noto Sans CJK SC" font-size="14.00">python &#45;m flashcli_bundle.infer &lt;cap&gt; &lt;ref&gt; ...</text>
+<text text-anchor="middle" x="434" y="-497.8" font-family="Noto Sans CJK SC" font-size="14.00">HF_HUB_OFFLINE=1 + FLASHCLI_RUNTIME_ID</text>
+<text text-anchor="middle" x="434" y="-482.8" font-family="Noto Sans CJK SC" font-size="14.00">FLASHCLI_BUNDLE_ROOT + VIRTUAL_ENV</text>
+</g>
+<!-- cuda&#45;&gt;exec -->
+<g id="edge32" class="edge">
+<title>cuda&#45;&gt;exec</title>
+<path fill="none" stroke="#0284c7" stroke-width="1.15" d="M434,-578.99C434,-570.75 434,-561.83 434,-553.23"/>
+<polygon fill="#0284c7" stroke="#0284c7" stroke-width="1.15" points="436.45,-553.1 434,-546.1 431.55,-553.1 436.45,-553.1"/>
+</g>
+<!-- offline -->
+<g id="node44" class="node">
+<title>offline</title>
+<polygon fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.3" points="1122.5,-535.5 671.5,-535.5 671.5,-482.5 1128.5,-482.5 1128.5,-529.5 1122.5,-535.5"/>
+<polyline fill="none" stroke="#cbd5e1" stroke-width="1.3" points="1122.5,-535.5 1122.5,-529.5 "/>
+<polyline fill="none" stroke="#cbd5e1" stroke-width="1.3" points="1128.5,-529.5 1122.5,-529.5 "/>
+<text text-anchor="middle" x="900" y="-519.3" font-family="Noto Sans CJK SC" font-size="11.50">离线保证</text>
+<text text-anchor="middle" x="900" y="-506.3" font-family="Noto Sans CJK SC" font-size="11.50">run/serve 本地优先：bundle 标记 + 完整权重 + venv fingerprint 命中时不联网</text>
+<text text-anchor="middle" x="900" y="-493.3" font-family="Noto Sans CJK SC" font-size="11.50">只有缺失资产、显式 pull 或 schema 升级才联网</text>
+</g>
+<!-- cuda&#45;&gt;offline -->
+<g id="edge46" class="edge">
+<title>cuda&#45;&gt;offline</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" stroke-dasharray="1,5" d="M587.88,-578.99C649.4,-565.39 719.27,-549.95 777.29,-537.12"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="778,-539.48 784.31,-535.57 776.94,-534.69 778,-539.48"/>
+</g>
+<!-- infer -->
+<g id="node29" class="node">
+<title>infer</title>
+<path fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.3" d="M600,-394C600,-394 268,-394 268,-394 262,-394 256,-388 256,-382 256,-382 256,-350 256,-350 256,-344 262,-338 268,-338 268,-338 600,-338 600,-338 606,-338 612,-344 612,-350 612,-350 612,-382 612,-382 612,-388 606,-394 600,-394"/>
+<text text-anchor="middle" x="434" y="-376.6" font-family="Noto Sans CJK SC" font-size="13.00">flashcli_bundle.infer 子进程</text>
+<text text-anchor="middle" x="434" y="-362.6" font-family="Noto Sans CJK SC" font-size="13.00">activate_for_preset: env key、布局、CUDA、.so</text>
+<text text-anchor="middle" x="434" y="-348.6" font-family="Noto Sans CJK SC" font-size="13.00">ensure_model_cached(download=False)</text>
+</g>
+<!-- exec&#45;&gt;infer -->
+<g id="edge33" class="edge">
+<title>exec&#45;&gt;infer</title>
+<path fill="none" stroke="#7c3aed" stroke-width="1.15" d="M434,-471.69C434,-450.08 434,-422.83 434,-401.54"/>
+<polygon fill="#7c3aed" stroke="#7c3aed" stroke-width="1.15" points="436.45,-401.28 434,-394.28 431.55,-401.28 436.45,-401.28"/>
+</g>
+<!-- mode -->
+<g id="node30" class="node">
+<title>mode</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="284,-294 145,-267 284,-240 423,-267 284,-294"/>
+<text text-anchor="middle" x="284" y="-263.9" font-family="Noto Sans CJK SC" font-size="12.00">entry mode?</text>
+</g>
+<!-- infer&#45;&gt;mode -->
+<g id="edge34" class="edge">
+<title>infer&#45;&gt;mode</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M392.22,-337.98C369.87,-323.53 342.6,-305.89 321.02,-291.94"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="322.3,-289.85 315.09,-288.11 319.64,-293.97 322.3,-289.85"/>
+</g>
+<!-- flashrt -->
+<g id="node35" class="node">
+<title>flashrt</title>
+<polygon fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.3" points="644,-293.5 452,-293.5 452,-240.5 650,-240.5 650,-287.5 644,-293.5"/>
+<polyline fill="none" stroke="#cbd5e1" stroke-width="1.3" points="644,-293.5 644,-287.5 "/>
+<polyline fill="none" stroke="#cbd5e1" stroke-width="1.3" points="650,-287.5 644,-287.5 "/>
+<text text-anchor="middle" x="551" y="-277.3" font-family="Noto Sans CJK SC" font-size="11.50">FlashRT</text>
+<text text-anchor="middle" x="551" y="-264.3" font-family="Noto Sans CJK SC" font-size="11.50">bundle 自带 flash_rt + .so</text>
+<text text-anchor="middle" x="551" y="-251.3" font-family="Noto Sans CJK SC" font-size="11.50">host 从不安装 FlashRT</text>
+</g>
+<!-- infer&#45;&gt;flashrt -->
+<g id="edge39" class="edge">
+<title>infer&#45;&gt;flashrt</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" stroke-dasharray="1,5" d="M466.59,-337.98C481.53,-325.6 499.28,-310.88 514.65,-298.14"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="516.37,-299.89 520.19,-293.54 513.24,-296.12 516.37,-299.89"/>
+<text text-anchor="middle" x="540" y="-313.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">import / dlopen</text>
+</g>
+<!-- engine -->
+<g id="node31" class="node">
+<title>engine</title>
+<path fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.3" d="M334.5,-189C334.5,-189 39.5,-189 39.5,-189 33.5,-189 27.5,-183 27.5,-177 27.5,-177 27.5,-159 27.5,-159 27.5,-153 33.5,-147 39.5,-147 39.5,-147 334.5,-147 334.5,-147 340.5,-147 346.5,-153 346.5,-159 346.5,-159 346.5,-177 346.5,-177 346.5,-183 340.5,-189 334.5,-189"/>
+<text text-anchor="middle" x="187" y="-171.6" font-family="Noto Sans CJK SC" font-size="13.00">engine.load(checkpoint, preset, options)</text>
+<text text-anchor="middle" x="187" y="-157.6" font-family="Noto Sans CJK SC" font-size="13.00">RunEngine 或 ServeEngine</text>
+</g>
+<!-- mode&#45;&gt;engine -->
+<g id="edge35" class="edge">
+<title>mode&#45;&gt;engine</title>
+<path fill="none" stroke="#7c3aed" stroke-width="1.15" d="M261.99,-243.99C247.22,-229.22 227.74,-209.74 212.33,-194.33"/>
+<polygon fill="#7c3aed" stroke="#7c3aed" stroke-width="1.15" points="213.95,-192.49 207.27,-189.27 210.49,-195.95 213.95,-192.49"/>
+<text text-anchor="middle" x="258.5" y="-215.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">engine</text>
+</g>
+<!-- script -->
+<g id="node34" class="node">
+<title>script</title>
+<path fill="#ffedd5" stroke="#f97316" stroke-width="1.3" d="M646,-196C646,-196 388,-196 388,-196 382,-196 376,-190 376,-184 376,-184 376,-152 376,-152 376,-146 382,-140 388,-140 388,-140 646,-140 646,-140 652,-140 658,-146 658,-152 658,-152 658,-184 658,-184 658,-190 652,-196 646,-196"/>
+<text text-anchor="middle" x="517" y="-178.6" font-family="Noto Sans CJK SC" font-size="13.00">script 模式</text>
+<text text-anchor="middle" x="517" y="-164.6" font-family="Noto Sans CJK SC" font-size="13.00">main(argv) 自己处理一切</text>
+<text text-anchor="middle" x="517" y="-150.6" font-family="Noto Sans CJK SC" font-size="13.00">host 不挂路由；manifest env 不生效</text>
+</g>
+<!-- mode&#45;&gt;script -->
+<g id="edge36" class="edge">
+<title>mode&#45;&gt;script</title>
+<path fill="none" stroke="#ea580c" stroke-width="1.15" d="M326.74,-248.21C359.9,-234.4 406.6,-214.96 445.43,-198.79"/>
+<polygon fill="#ea580c" stroke="#ea580c" stroke-width="1.15" points="446.57,-200.97 452.09,-196.02 444.69,-196.45 446.57,-200.97"/>
+<text text-anchor="middle" x="422" y="-215.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">script</text>
+</g>
+<!-- runp -->
+<g id="node32" class="node">
+<title>runp</title>
+<path fill="#dbeafe" stroke="#3b82f6" stroke-width="1.3" d="M226,-82C226,-82 38,-82 38,-82 32,-82 26,-76 26,-70 26,-70 26,-52 26,-52 26,-46 32,-40 38,-40 38,-40 226,-40 226,-40 232,-40 238,-46 238,-52 238,-52 238,-70 238,-70 238,-76 232,-82 226,-82"/>
+<text text-anchor="middle" x="132" y="-64.6" font-family="Noto Sans CJK SC" font-size="13.00">run → predict()</text>
+<text text-anchor="middle" x="132" y="-50.6" font-family="Noto Sans CJK SC" font-size="13.00">结果写 stdout，进程退出</text>
+</g>
+<!-- engine&#45;&gt;runp -->
+<g id="edge37" class="edge">
+<title>engine&#45;&gt;runp</title>
+<path fill="none" stroke="#2563eb" stroke-width="1.15" d="M176.4,-146.75C167.72,-130.2 155.39,-106.65 145.92,-88.57"/>
+<polygon fill="#2563eb" stroke="#2563eb" stroke-width="1.15" points="147.99,-87.25 142.57,-82.18 143.65,-89.52 147.99,-87.25"/>
+<text text-anchor="middle" x="174.5" y="-115.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">run</text>
+</g>
+<!-- servep -->
+<g id="node33" class="node">
+<title>servep</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.3" d="M646.5,-96C646.5,-96 279.5,-96 279.5,-96 273.5,-96 267.5,-90 267.5,-84 267.5,-84 267.5,-38 267.5,-38 267.5,-32 273.5,-26 279.5,-26 279.5,-26 646.5,-26 646.5,-26 652.5,-26 658.5,-32 658.5,-38 658.5,-38 658.5,-84 658.5,-84 658.5,-90 652.5,-96 646.5,-96"/>
+<text text-anchor="middle" x="463" y="-78.6" font-family="Noto Sans CJK SC" font-size="13.00">serve → warmup() + build_app()</text>
+<text text-anchor="middle" x="463" y="-64.6" font-family="Noto Sans CJK SC" font-size="13.00">capabilities 决定挂载哪些标准路由</text>
+<text text-anchor="middle" x="463" y="-50.6" font-family="Noto Sans CJK SC" font-size="13.00">register_routes() 先于 host 路由挂载</text>
+<text text-anchor="middle" x="463" y="-36.6" font-family="Noto Sans CJK SC" font-size="13.00">uvicorn 绑定 &#45;&#45;host/&#45;&#45;port（flashserver 用 127.0.0.1）</text>
+</g>
+<!-- engine&#45;&gt;servep -->
+<g id="edge38" class="edge">
+<title>engine&#45;&gt;servep</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M239.89,-146.88C275.7,-133.26 324.05,-114.86 366.58,-98.68"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="367.68,-100.88 373.36,-96.1 365.94,-96.3 367.68,-100.88"/>
+<text text-anchor="middle" x="339" y="-115.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">serve</text>
+</g>
+<!-- ne_transport -->
+<g id="node37" class="node">
+<title>ne_transport</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="1079,-1041 954,-1014 1079,-987 1204,-1014 1079,-1041"/>
+<text text-anchor="middle" x="1079" y="-1010.9" font-family="Noto Sans CJK SC" font-size="12.00">transport?</text>
+</g>
+<!-- native_exec&#45;&gt;ne_transport -->
+<g id="edge40" class="edge">
+<title>native_exec&#45;&gt;ne_transport</title>
+<path fill="none" stroke="#0284c7" stroke-width="1.15" d="M1079,-1101.87C1079,-1086.83 1079,-1065.93 1079,-1048.39"/>
+<polygon fill="#0284c7" stroke="#0284c7" stroke-width="1.15" points="1081.45,-1048.11 1079,-1041.11 1076.55,-1048.11 1081.45,-1048.11"/>
+</g>
+<!-- ne_http -->
+<g id="node38" class="node">
+<title>ne_http</title>
+<path fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.3" d="M927.5,-934.5C927.5,-934.5 692.5,-934.5 692.5,-934.5 686.5,-934.5 680.5,-928.5 680.5,-922.5 680.5,-922.5 680.5,-904.5 680.5,-904.5 680.5,-898.5 686.5,-892.5 692.5,-892.5 692.5,-892.5 927.5,-892.5 927.5,-892.5 933.5,-892.5 939.5,-898.5 939.5,-904.5 939.5,-904.5 939.5,-922.5 939.5,-922.5 939.5,-928.5 933.5,-934.5 927.5,-934.5"/>
+<text text-anchor="middle" x="810" y="-917.1" font-family="Noto Sans CJK SC" font-size="13.00">http：输出 endpoint 后等待信号</text>
+<text text-anchor="middle" x="810" y="-903.1" font-family="Noto Sans CJK SC" font-size="13.00">host 不代理；客户端直连</text>
+</g>
+<!-- ne_transport&#45;&gt;ne_http -->
+<g id="edge41" class="edge">
+<title>ne_transport&#45;&gt;ne_http</title>
+<path fill="none" stroke="#0284c7" stroke-width="1.15" d="M1034.28,-996.62C989.9,-980.38 921.53,-955.34 871.94,-937.18"/>
+<polygon fill="#0284c7" stroke="#0284c7" stroke-width="1.15" points="872.49,-934.77 865.07,-934.67 870.81,-939.37 872.49,-934.77"/>
+<text text-anchor="middle" x="971" y="-962.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">http</text>
+</g>
+<!-- ne_stdio -->
+<g id="node39" class="node">
+<title>ne_stdio</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M1261.5,-935.5C1261.5,-935.5 980.5,-935.5 980.5,-935.5 974.5,-935.5 968.5,-929.5 968.5,-923.5 968.5,-923.5 968.5,-903.5 968.5,-903.5 968.5,-897.5 974.5,-891.5 980.5,-891.5 980.5,-891.5 1261.5,-891.5 1261.5,-891.5 1267.5,-891.5 1273.5,-897.5 1273.5,-903.5 1273.5,-903.5 1273.5,-923.5 1273.5,-923.5 1273.5,-929.5 1267.5,-935.5 1261.5,-935.5"/>
+<text text-anchor="middle" x="1121" y="-917.3" font-family="Noto Sans CJK SC" font-size="14.00">stdio：serve 未实现</text>
+<text text-anchor="middle" x="1121" y="-902.3" font-family="Noto Sans CJK SC" font-size="14.00">run 用 NDJSON run/health/shutdown</text>
+</g>
+<!-- ne_transport&#45;&gt;ne_stdio -->
+<g id="edge42" class="edge">
+<title>ne_transport&#45;&gt;ne_stdio</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M1089.17,-989.16C1095.19,-975.03 1102.85,-957.08 1109.14,-942.31"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="1111.44,-943.18 1111.93,-935.78 1106.93,-941.26 1111.44,-943.18"/>
+<text text-anchor="middle" x="1114" y="-962.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">stdio</text>
+</g>
+<!-- abi_session -->
+<g id="node41" class="node">
+<title>abi_session</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="1431,-1041 1247,-1014 1431,-987 1615,-1014 1431,-1041"/>
+<text text-anchor="middle" x="1431" y="-1010.9" font-family="Noto Sans CJK SC" font-size="12.00">声明 session_library?</text>
+</g>
+<!-- native_abi&#45;&gt;abi_session -->
+<g id="edge43" class="edge">
+<title>native_abi&#45;&gt;abi_session</title>
+<path fill="none" stroke="#0284c7" stroke-width="1.15" d="M1404.08,-1095C1409.03,-1080.29 1415.19,-1062 1420.36,-1046.63"/>
+<polygon fill="#0284c7" stroke="#0284c7" stroke-width="1.15" points="1422.75,-1047.21 1422.66,-1039.79 1418.1,-1045.64 1422.75,-1047.21"/>
+</g>
+<!-- abi_plain -->
+<g id="node42" class="node">
+<title>abi_plain</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M1547.5,-943C1547.5,-943 1314.5,-943 1314.5,-943 1308.5,-943 1302.5,-937 1302.5,-931 1302.5,-931 1302.5,-896 1302.5,-896 1302.5,-890 1308.5,-884 1314.5,-884 1314.5,-884 1547.5,-884 1547.5,-884 1553.5,-884 1559.5,-890 1559.5,-896 1559.5,-896 1559.5,-931 1559.5,-931 1559.5,-937 1553.5,-943 1547.5,-943"/>
+<text text-anchor="middle" x="1431" y="-924.8" font-family="Noto Sans CJK SC" font-size="14.00">普通 native&#45;abi</text>
+<text text-anchor="middle" x="1431" y="-909.8" font-family="Noto Sans CJK SC" font-size="14.00">run 只做 ABI 探测并打印 JSON</text>
+<text text-anchor="middle" x="1431" y="-894.8" font-family="Noto Sans CJK SC" font-size="14.00">serve 未实现</text>
+</g>
+<!-- abi_session&#45;&gt;abi_plain -->
+<g id="edge45" class="edge">
+<title>abi_session&#45;&gt;abi_plain</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M1431,-986.86C1431,-975.72 1431,-962.54 1431,-950.51"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="1433.45,-950.19 1431,-943.19 1428.55,-950.19 1433.45,-950.19"/>
+<text text-anchor="middle" x="1437" y="-962.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">否</text>
+</g>
+<!-- abi_sess -->
+<g id="node43" class="node">
+<title>abi_sess</title>
+<path fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.3" d="M1915.5,-941.5C1915.5,-941.5 1600.5,-941.5 1600.5,-941.5 1594.5,-941.5 1588.5,-935.5 1588.5,-929.5 1588.5,-929.5 1588.5,-897.5 1588.5,-897.5 1588.5,-891.5 1594.5,-885.5 1600.5,-885.5 1600.5,-885.5 1915.5,-885.5 1915.5,-885.5 1921.5,-885.5 1927.5,-891.5 1927.5,-897.5 1927.5,-897.5 1927.5,-929.5 1927.5,-929.5 1927.5,-935.5 1921.5,-941.5 1915.5,-941.5"/>
+<text text-anchor="middle" x="1758" y="-924.1" font-family="Noto Sans CJK SC" font-size="13.00">Nexus session</text>
+<text text-anchor="middle" x="1758" y="-910.1" font-family="Noto Sans CJK SC" font-size="13.00">run: Apply → Tick → GetF32</text>
+<text text-anchor="middle" x="1758" y="-896.1" font-family="Noto Sans CJK SC" font-size="13.00">serve: /healthz /v1/act /v1/chat/completions</text>
+</g>
+<!-- abi_session&#45;&gt;abi_sess -->
+<g id="edge44" class="edge">
+<title>abi_session&#45;&gt;abi_sess</title>
+<path fill="none" stroke="#0284c7" stroke-width="1.15" d="M1489.08,-995.5C1536.79,-981.13 1605.37,-960.48 1661.33,-943.62"/>
+<polygon fill="#0284c7" stroke="#0284c7" stroke-width="1.15" points="1662.09,-945.95 1668.09,-941.58 1660.68,-941.26 1662.09,-945.95"/>
+<text text-anchor="middle" x="1610" y="-962.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">是</text>
+</g>
+</g>
 </svg>

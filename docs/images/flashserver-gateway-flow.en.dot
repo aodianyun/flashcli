@@ -1,0 +1,92 @@
+digraph flashserver_gateway_flow {
+  graph [rankdir=TB, bgcolor="#F7F9FC", pad=0.4, nodesep=0.4, ranksep=0.45, fontname="Noto Sans CJK SC", fontsize=30, labelloc=t, label=<<B>flashserver gateway request flow</B><BR/><FONT POINT-SIZE="14" COLOR="#64748B">auth → route and model selection → disk and capability gates → schedule → proxy / release</FONT>>];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC", fontsize=13, margin="0.46,0.10", penwidth=1.3, color="#94A3B8"];
+  edge [fontname="Noto Sans CJK SC", fontsize=11, color="#64748B", fontcolor="#475569", arrowsize=0.7, penwidth=1.15];
+  subgraph cluster_1 {
+    label=<<B>A. Request and model selection</B>>;
+    style="rounded,filled"; color="#3B82F6"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  client [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.8, fontsize=14, width=4.96, label="Client\nOpenAI SDK / Anthropic / App / Desktop\ninference uses /v1 only; child endpoints are never exposed"];
+  auth [shape=diamond, style="filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.45, fontsize=12, width=2.32, label="token configured?\nBearer / X-Flashcli-Token\nWS may use ?token="];
+  auth_ok [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=3.28, label="Authorized\n/health / / /docs /openapi /ui exempt"];
+  e401 [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=1.60, label="401 unauthorized"];
+  classify [shape=diamond, style="filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.45, fontsize=12, width=3.52, label="Route owner?\nhost standard / bundle custom / reserved"];
+  models_ep [shape=box, style="rounded,filled", fillcolor="#F1F5F9", color="#CBD5E1", penwidth=1.3, fontsize=13, width=3.36, label="GET /v1/models · /v1/models/{id}\nlocal registry; no model selection\nAnthropic shape with anthropic-version"];
+  std_sel [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.3, fontsize=13, width=5.28, label="Standard inference route model source\nJSON body: chat/completions/responses/...\nmultipart form: audio/images/videos (videos also accepts JSON)\nquery: realtime / video jobs / response jobs"];
+  custom_sel [shape=box, style="rounded,filled", fillcolor="#E0F2FE", color="#38BDF8", penwidth=1.3, fontsize=13, width=4.56, label="Custom /v1/* model source\nJSON object model / multipart form / ?model=\nother content types: ?model=, body streamed unchanged"];
+  reserved [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=13, width=3.52, label="Unknown reserved path\n/v1/models* /v1/responses/* /v1/videos/*"];
+  e405 [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=4.08, label="405 method_not_allowed\nor 404 route not found; never treated as custom"];
+  resolve [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=3.60, label="resolveGatewayModel\nbody / query must be a full ref\nbody and query must match when both exist"];
+  e400 [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=4.00, label="400 model_conflict / required / invalid\nempty value, short name and alias are rejected"];
+  ref [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=4.24, label="ref = namespace/name:version\nthe same value keys cache, scheduler and resident"];
+  }
+  subgraph cluster_2 {
+    label=<<B>B. Disk and contract gates (prepareGateway)</B>>;
+    style="rounded,filled"; color="#F59E0B"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  assets [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=4.96, label="Assets ready or preloadReady?\nbundle + weights + runtime come from the shared host cache"];
+  no_pull [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=4.00, label="404 model_not_found\nauto_pull=false and the model is not preloaded"];
+  ensure_preload [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=13, width=5.20, label="ensurePreload\nassetsReady → preloaded\notherwise start a host.Pull job shared by concurrent requests"];
+  e503prep [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=3.20, label="503 model_preparing\nRetry-After + X-Flashcli-Preload-Job"];
+  inspect [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=2.96, label="inspectRef → inspectBundle\nhost.EnsureBundle + manifest.Load\nResources + ServeCapabilities"];
+  e404 [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=3.04, label="404 model_not_found\nbundle or manifest is not readable"];
+  runonly [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=1.76, label="Has a serve entry?"];
+  e_runonly [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=2.08, label="400 model_not_servable"];
+  capability [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=3.12, label="Standard-route capability declared?\ncustom routes skip this gate"];
+  e_cap [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=2.40, label="400 unsupported_capability"];
+  sched_ok [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=2.00, label="Scheduler configured?"];
+  e_nosched [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=1.60, label="503 no_placement"];
+  }
+  subgraph cluster_3 {
+    label=<<B>C. Schedule and lease (details in the scheduler diagram)</B>>;
+    style="rounded,filled"; color="#22C55E"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  acquire [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=4.16, label="Scheduler.Acquire(ref)\nwait for start / queue; default 10s + 30s\nplacement, LRU and queue are in the next diagram"];
+  lease [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=4.08, label="Lease (active_requests++)\nblocks LRU eviction, idle stop and force unload"];
+  e_queue [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=2.72, label="429 / 503 / 499\nqueue_full / no_placement\nmodel_starting / client_closed"];
+  }
+  subgraph cluster_4 {
+    label=<<B>D. Proxy and release</B>>;
+    style="rounded,filled"; color="#38BDF8"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  endpoint [shape=box, style="rounded,filled", fillcolor="#E0F2FE", color="#38BDF8", penwidth=1.3, fontsize=13, width=4.96, label="Manager.Endpoint(ref)\nexact full-ref match; never guesses from a single resident"];
+  e_endpoint [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=1.76, label="503 model_starting"];
+  proxy [shape=box, style="rounded,filled", fillcolor="#E0F2FE", color="#38BDF8", penwidth=1.3, fontsize=13, width=4.56, label="proxyGateway\nmethod / path / query / body forwarded unchanged\nstrips host / auth / token / cookie / accept-encoding\nclient close → cancel upstream"];
+  rewrite [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.3, fontsize=13, width=3.84, label="Response model rewrite\nSSE: rewrite each data: line\nJSON ≤32MiB: rewrite top-level string model\nother / oversized: stream bytes"];
+  release [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=3.36, label="lease.Release\nleases--; busy → ready; last_used=now"];
+  idle [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=4.08, label="idle reaper (1s)\nready + leases=0 past idle_stop_seconds → stop"];
+  }
+  mgmt_note [shape=note, style="filled", fillcolor="#F1F5F9", color="#CBD5E1", penwidth=1.3, fontsize=11.5, width=8.48, label="Control plane is not the inference path\n/api/v1/models/preload prepares disk only: inspectRef → checkPreloadVRAM(total VRAM) → host.Pull job\n/api/v1/models/unload: force / wait when busy → stopResident → RemoveCachedRef"];
+  client -> auth [color="#64748B", style="solid"];
+  auth -> auth_ok [color="#16A34A", style="solid", label="yes / unset"];
+  auth -> e401 [color="#DC2626", style="dashed", label="no"];
+  auth_ok -> classify [color="#64748B", style="solid"];
+  classify -> models_ep [color="#64748B", style="solid", label="models"];
+  classify -> std_sel [color="#64748B", style="solid", label="host standard"];
+  classify -> custom_sel [color="#0284C7", style="solid", label="custom"];
+  classify -> reserved [color="#EA580C", style="solid", label="reserved"];
+  reserved -> e405 [color="#DC2626", style="dashed"];
+  std_sel -> resolve [color="#64748B", style="solid"];
+  custom_sel -> resolve [color="#0284C7", style="solid"];
+  resolve -> ref [color="#16A34A", style="solid", label="ok"];
+  resolve -> e400 [color="#DC2626", style="dashed", label="fail"];
+  ref -> assets [color="#64748B", style="solid"];
+  assets -> no_pull [color="#DC2626", style="dashed", label="no + auto-pull off"];
+  assets -> ensure_preload [color="#EA580C", style="solid", label="no + auto_pull"];
+  ensure_preload -> e503prep [color="#EA580C", style="dashed", label="job"];
+  assets -> inspect [color="#16A34A", style="solid", label="yes"];
+  ensure_preload -> inspect [color="#16A34A", style="dashed", label="ready"];
+  inspect -> e404 [color="#DC2626", style="dashed", label="error"];
+  inspect -> runonly [color="#64748B", style="solid"];
+  runonly -> e_runonly [color="#DC2626", style="dashed", label="no"];
+  runonly -> capability [color="#16A34A", style="solid", label="yes"];
+  capability -> e_cap [color="#DC2626", style="dashed", label="no"];
+  capability -> sched_ok [color="#16A34A", style="solid", label="yes / custom"];
+  sched_ok -> e_nosched [color="#DC2626", style="dashed", label="no"];
+  sched_ok -> acquire [color="#16A34A", style="solid", label="yes"];
+  acquire -> lease [color="#16A34A", style="solid", label="ok"];
+  acquire -> e_queue [color="#DC2626", style="dashed", label="fail"];
+  lease -> endpoint [color="#64748B", style="solid"];
+  endpoint -> e_endpoint [color="#DC2626", style="dashed", label="missing"];
+  endpoint -> proxy [color="#0284C7", style="solid", label="ok"];
+  proxy -> rewrite [color="#64748B", style="solid"];
+  proxy -> release [color="#16A34A", style="solid", label="done / closed"];
+  release -> idle [color="#64748B", style="dotted"];
+  idle -> mgmt_note [color="#64748B", style="invis"];
+}

@@ -17,23 +17,24 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 | 图 | 内容 |
 |---|---|
 | [系统总览](images/architecture-overview.zh-CN.svg) · [PNG](images/architecture-overview.zh-CN.png) | 客户端（桌面端、已安装应用、CLI）、flashserver 模块（网关、调度、管理、应用、系统/GPU）、flashcli 执行、Model Bundle + FlashRT、共享缓存、FlashHub、权重源 |
-| [flashcli run/serve 流程](images/flashcli-flow.zh-CN.svg) · [PNG](images/flashcli-flow.zh-CN.png) | ref 解析、离线缓存、preflight、venv、权重、entry、run/serve |
-| [flashserver 网关/调度流程](images/flashserver-gateway-flow.zh-CN.svg) · [PNG](images/flashserver-gateway-flow.zh-CN.png) | `/v1` 请求、`/api/v1` 管理、custom path 透传、preload、placement、lease、proxy、释放、错误 |
-| [Model Bundle / FlashRT 运行时栈](images/bundle-runtime-stack.zh-CN.svg) · [PNG](images/bundle-runtime-stack.zh-CN.png) | FlashHub → manifest/entry/runtime cells → venv/权重 → FlashRT |
-| [Go host 模块地图](images/go-module-map.zh-CN.svg) · [PNG](images/go-module-map.zh-CN.png) | 命令 → CLI/server 前端 → 共享 host 服务 → 执行 backend |
-| [FlashHub 流程](images/flashhub-flow.zh-CN.svg) · [PNG](images/flashhub-flow.zh-CN.png) | 发布 → 目录/版本 → CLI/flashserver/desktop 同步 |
-| [应用生命周期](images/app-lifecycle.zh-CN.svg) · [PNG](images/app-lifecycle.zh-CN.png) | install → prepare → setup → ready；应用不拥有模型启停 |
+| [flashcli run/serve 流程](images/flashcli-flow.zh-CN.svg) · [PNG](images/flashcli-flow.zh-CN.png) | 命令解析、`EnsureBundle`（标记复用 vs 同步）、manifest/环境/变体、本地标记、preflight、权重、系统检查、venv、CUDA userland、`inferexec`、bundle 内 `load`/`predict`/`build_app`、原生入口 |
+| [flashserver 网关请求流程](images/flashserver-gateway-flow.zh-CN.svg) · [PNG](images/flashserver-gateway-flow.zh-CN.png) | 认证、路由归属、标准/自定义/保留路径、body/form/query 选择 model、冲突/缺失/非法错误、磁盘与 capability 门禁、lease、endpoint、代理、SSE/JSON 重写、释放、idle stop |
+| [flashserver 调度流程](images/flashserver-scheduler-flow.zh-CN.svg) · [PNG](images/flashserver-scheduler-flow.zh-CN.png) | `Acquire`、resident 命中、`max_loaded=0`、runtime cell、空闲显存 + headroom、GPU 数量、CPU 兜底、LRU 淘汰、有界队列、后台启动 + 健康检查、stop 竞争、释放、idle 回收、死进程对账 |
+| [Model Bundle / FlashRT 运行时栈](images/bundle-runtime-stack.zh-CN.svg) · [PNG](images/bundle-runtime-stack.zh-CN.png) | manifest 版本轴、v4 defaults/environments、entry 类型/模式、resources/capabilities/options、依赖、权重元数据、host 准备 bundle/venv/权重、三种执行入口、FlashRT 注册、完整性与就绪的区别 |
+| [Go host 模块地图](images/go-module-map.zh-CN.svg) · [PNG](images/go-module-map.zh-CN.png) | 命令 → CLI/server 前端 → 共享 host 服务 → 执行 backend；机械边界门禁 |
+| [FlashHub 流程](images/flashhub-flow.zh-CN.svg) · [PNG](images/flashhub-flow.zh-CN.png) | build → pack → validate → 人工上传；repo/catalog/app API；CLI pull/run、flashserver preload/catalog/app install、desktop；本地缓存与离线规则 |
+| [应用生命周期](images/app-lifecycle.zh-CN.svg) · [PNG](images/app-lifecycle.zh-CN.png) | `planned → preparing → prepared → ready`、失败/重试、仅准备、setup 脚本与 `setup_error`、卸载/清理模型、桌面端角色；应用不拥有模型启停 |
 
-[`images/`](images/) 下的所有图都是手工排版 SVG，SVG 是权威源文件；PNG 用 `rsvg-convert -w 1600 -h 900 -o <name>.<lang>.png <name>.<lang>.svg` 渲染。样式要求见 [CONTRIBUTING.md → Architecture and flow diagrams](../CONTRIBUTING.md#architecture-and-flow-diagrams)。
+总览是手工排版 SVG；所有流程图由 `images/<name>.<lang>.dot` 的 Graphviz 源生成，`.dot` 是权威源文件。重建命令：`python scripts/gen_architecture_diagrams.py`，然后 `dot -Tsvg <name>.<lang>.dot -o <name>.<lang>.svg`、`dot -Tpng -Gdpi=110 <name>.<lang>.dot -o <name>.<lang>.png`。样式要求见 [CONTRIBUTING.md → Architecture and flow diagrams](../CONTRIBUTING.md#architecture-and-flow-diagrams)。
 
 ## 核心原则
 
 1. **推理在 bundle 内** — bundle 拥有**全部模型专属逻辑**：前向、预处理/后处理、模态形状与 dtype、输入/输出语义、option→端口映射与默认值。flashcli 只是**通用、与模型无关的驱动器**：解析 ref、准备环境、调用 bundle 提供的接口——`kind=python` 用 `entry`，`native-exec`/`native-abi` 用声明的 model-runtime ABI + manifest `native` 块。**host（`go/`）中不得出现任何模型专属常量、形状或预处理。**
 2. **Preset ref** — 用户使用 `namespace/bundle:version`；`FLASHCLI_FLASHHUB_API` 配置 API 基址。
-3. **manifest-first + 分包下载** — 先拉 manifest → preflight 匹配 `environments` → 下载公共文件，以及只下载选中 environment 声明的 runtime 目录。
+3. **manifest-first + 分包下载** — 先拉 manifest → 解析本机对应的 environment → 下载公共文件，以及只下载该 environment 声明的 runtime 目录 → 再 preflight 选中的 cell。
 4. **固定 Python ABI** — 每个 bundle 一个 venv（`python_abi`）；CLI 准备完成后 **re-exec** 进 bundle venv。
 5. **单一 Go 主机** — 主机为 `go/` 静态二进制；bundle venv 仅 pip **`flashcli-bundle[infer]`**（protocol + infer）。
-6. **一条命令** — `flashcli run <preset>` 串联：sync → 依赖 → 权重（主机缺失则下载）→ `post_pull` → bundle venv 内离线推理。
+6. **一条命令** — `flashcli run <preset>` 串联：sync → 权重（主机缺失则下载，含 `post_pull`）→ venv/依赖 → CUDA userland → bundle venv 内离线推理。
 7. **单一 host 缓存层** — `go/internal/host` 是缓存发现、权重 key/就绪判断、runtime ID/路径、磁盘统计、ref 路径解析和清理的唯一实现。`flashcli` 与 `flashserver` 只是前端：解析输入、调用 `host`、格式化/传输结果；不得各自重写这些检查。
 
 ### 模块放哪（必读）
@@ -78,7 +79,7 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 - 新行为只在共享包实现一次，再由两个前端暴露；表格、颜色、提示等纯展示逻辑留在前端。
 - **Pull/准备只有一条流水线**：`flashcli pull`、`/api/v1/models/preload`、应用准备都走 `host.Pull`；`host.EnsureRuntime` 负责运行时/venv 准备，必须与 `flashcli serve` 保持一致（系统能力、协议缓存 schema、CUDA）。
 - **Serve 子进程**的日志命名/尾部读取统一用 `modelrun.LogName`/`modelrun.TailLines`，就绪等待统一用 `modelrun.WaitHealthy`。日志目录固定为 `~/.flashcli/logs/serve`（配置 `log_dir` 可覆盖），`flashcli app logs` 与 `/api/v1/logs` 读同一路径。
-- **应用状态判定**（是否在运行/是否恢复）只在 `apps`（`apps.WasRunning`）实现，daemon 恢复和桌面端不得各自推导。
+- **应用安装/配置/状态判定**只在 `apps`（`Service.Status`、`Registry`）实现，daemon 和桌面端不得各自推导。
 - **隔离**：daemon 可以用 Launcher/Stopper 包装共享服务（例如带 owner 的 Manager 准入），但生命周期逻辑仍在 `apps`；CLI 不得另写一份。
 - **范围——只共享真正公共的行为。** 不要把前端特有的行为硬塞进共享包，也不要让一个前端去模拟另一个：
   - CLI：参数、交互提示、人类可读表格/颜色、单进程启动行为。
@@ -187,21 +188,23 @@ sequenceDiagram
   participant Pre as preflight
   participant W as weights
   participant Venv as venv
+  participant CUDA as cuda.Ensure
   participant Infer as flashcli_bundle.infer
 
   U->>CLI: flashcli run flashcli-bundle/pi05_libero:1.0.5
   CLI->>FH: 拉取 repo index（若未 sync）
   FH-->>CLI: files[] + download_url
   CLI->>FH: 同步公共文件 + 声明的 runtime 目录
-  CLI->>Pre: env key + native cell + host ABI + CUDA userland
+  CLI->>Pre: env key + native cell + host ABI
   CLI->>W: ensure 权重（+ post_pull/extra_pull）
   CLI->>Venv: 创建 bundle venv + torch 依赖
+  CLI->>CUDA: CUDA userland（SONAME + dlopen）
   CLI->>Infer: re-exec: bundle python -m flashcli_bundle.infer
   Note over Infer: bundle venv: flashcli-bundle[infer] only
   Infer->>Infer: activate + 本地 checkpoint + RunEngine/ServeEngine/script
 ```
 
-**Entry modes**: `engine`（默认）加载 `RunEngine`/`ServeEngine` 并解析 manifest CLI 选项；`script` 将 argv 透传给 bundle 入口脚本，主机侧仅根据 `--checkpoint` 决定权重拉取。
+**Entry modes**: `engine`（默认）加载 `RunEngine`/`ServeEngine` 并解析 manifest CLI 选项；`script` 将 argv 透传给 bundle 入口脚本。主机侧消费 `--checkpoint` 覆盖权重解析，但不会把它注入 engine argv。
 
 **Backends**：`entry.kind` 选择 `python`（re-exec，如上）、`native-exec`（主机 spawn）或 `native-abi`（主机 `dlopen`）。见 [bundle_execution_abi.zh-CN.md](bundle_execution_abi.zh-CN.md)。
 

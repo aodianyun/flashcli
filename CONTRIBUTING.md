@@ -246,7 +246,7 @@ Any behavior needed by both `go/internal/cli` and `go/internal/server` **must be
 | Pull / runtime+venv preparation / weights | `host.Pull`, `host.EnsureRuntime`, `host.ResolveWeights` |
 | Cache discovery, keys, sizes, cleanup | `host.*` |
 | Serve log name / tail / readiness | `modelrun.LogName`, `modelrun.TailLines`, `modelrun.WaitHealthy` |
-| App install/start/stop/state/restore predicate | `apps.Service`, `apps.WasRunning` |
+| App install/setup/state | `apps.Service`, `apps.Registry` |
 | Manifest/env/variant/entry resolution | `manifest.*`, `host.ApplyEnv` |
 | GPU / system probes | `gpu.*`, `preflight.*`, `host.EnsureSystemRequirements` |
 
@@ -295,16 +295,14 @@ Docs are part of the product and this is a **public repository** — treat them 
 
 `docs/images/` is the only home for diagrams. A stale or inconsistent diagram is a documentation bug, not decoration.
 
-- **Pairing and naming.** Every diagram ships as `<name>.en.svg` + `<name>.en.png` and `<name>.zh-CN.svg` + `<name>.zh-CN.png`. Both languages must show the same boxes, arrows, and labels; only the text changes. Update [docs/architecture.md](docs/architecture.md) and its zh-CN mirror in the same change.
-- **Canvas and hierarchy.** 1600×900, light background (`#F7F9FC`), 48 px outer margins. Title 34 px/700 at the top left, `v1` at the top right, a 1 px divider at y=100, uppercase column labels at y=132. Use at most four columns.
-- **Two layouts.** Overview/module maps use the reference card style: white group cards (16 px radius, soft shadow, `#E2E8F0` border) with a 4 px accent dot and an 18.5 px title, plus `#F8FAFC` item cards (9 px radius). Flow/detail diagrams use **swimlanes and process nodes**: light lane backgrounds, 8 px process boxes with the same 12.1 px title / 10.3 px detail text, decision diamonds, dashed stores, and orthogonal edges. Do not wrap a detailed flow in one large card or nest cards inside cards.
-- **Palette.** Ink `#0F172A`, body `#475569`, muted `#94A3B8`, lines `#E2E8F0`, card `#FFFFFF`, item `#F8FAFC`. Accents: blue `#2563EB` (data/request), green `#0F766E` (local execution), amber `#B45309` (external/disk), red `#DC2626` (failure). No gradients or pastel fills.
-- **Arrows.** 1.4 px straight or orthogonal lines with one semantic accent color. Labels are optional, 10.5 px muted, and must fit the gap; omit the label rather than clipping it. Do not cross cards; route around them.
-- **Content.** One concept per diagram: overview, run/serve, gateway/scheduler, bundle/runtime stack, Go module map, FlashHub flow, or app lifecycle. Match the authoritative spec; do not invent routes or states. Show the gateway split (`/v1` vs `/api/v1`), scheduler ownership, and custom-path passthrough where relevant.
-- **Overview vs detail.** The system overview is the only coarse view. Every other diagram is **step-level**: show inputs, decisions, branches, state transitions, error/retry paths, and the component each step touches. Do not collapse a multi-step flow into one card.
-- **Flow clarity.** Use orthogonal arrows in reading order, label branches, and never route a line across a card. Use dashed lines for failure/retry paths. Every arrow must have an unambiguous source and target.
-- **Source and rendering.** The SVG is authoritative; never hand-edit a PNG. Render with `rsvg-convert -w 1600 -h 900 -o docs/images/<name>.<lang>.png docs/images/<name>.<lang>.svg`. Check at 100% and 50% for clipped text, CJK glyphs, arrow labels, and both languages before committing.
-- **No second source of truth.** Hand-laid SVG replaces Graphviz `.dot`; delete stale `.dot` files instead of keeping both.
+- **Pairing and naming.** Every diagram ships as `<name>.en.svg` + `<name>.en.png` and `<name>.zh-CN.svg` + `<name>.zh-CN.png`. Flow diagrams also ship their Graphviz source `<name>.<lang>.dot`. Both languages must show the same nodes, arrows, and labels; only the text changes. Update [docs/architecture.md](docs/architecture.md) and its zh-CN mirror in the same change.
+- **Two layouts.** Only the system overview uses the card layout: 1600×900, white group cards (16 px radius, soft shadow, `#E2E8F0` border), `#F8FAFC` item cards, and a 4 px accent dot. Every flow/detail diagram is a **Graphviz flowchart**: clusters by phase or role, process boxes, decision diamonds, store cylinders, notes, and directed edges. Do not wrap a detailed flow in one large card or nest cards inside cards.
+- **Flow content.** One concept per diagram: overview, run/serve, gateway request, scheduler/resident lifecycle, bundle/runtime stack, Go module map, FlashHub flow, or app lifecycle. Match the implementation and the authoritative spec; do not invent routes, states, or ordering. Show the real error/retry branches and the function or component that owns each step.
+- **Overview vs detail.** The overview is the only coarse view. Every other diagram is **step-level**: inputs, decisions, branches, state transitions, failure paths, and the component each step touches. If a flow grows past roughly 30 nodes, split it (for example gateway request path vs scheduler placement) instead of shrinking the text.
+- **Graphviz layout.** Prefer `rankdir=TB` for request, decision, and state flows; use `rankdir=LR` for dependency maps or a linear state chain that stays readable. Put the main path in reading order; attach failures beside the decision that raises them. Label branches (`yes`/`no`, `ready`/`failed`) and use dashed edges for failure, retry, or optional paths. Keep one edge direction per phase; do not draw a line that implies a reverse dependency.
+- **Palette and shapes.** Background `#F7F9FC`; process fill/border blue `#DBEAFE`/`#3B82F6`, green `#DCFCE7`/`#22C55E`, amber `#FEF3C7`/`#F59E0B`, violet `#EDE9FE`/`#8B5CF6`, cyan `#E0F2FE`/`#38BDF8`, red failure `#FEE2E2`/`#EF4444`. Use diamonds only for short yes/no questions; put multi-line detail in a process box. Stores are cylinders, external/legacy notes are notes. No gradients.
+- **Source and rendering.** Flow `.dot` files are authoritative; never hand-edit a generated SVG or PNG. The overview remains a hand-laid SVG. Regenerate flows with `python scripts/gen_architecture_diagrams.py`, then `dot -Tsvg <name>.<lang>.dot -o <name>.<lang>.svg` and `dot -Tpng -Gdpi=110 <name>.<lang>.dot -o <name>.<lang>.png`. Check both languages for clipped CJK text, unreadable nodes at fit-to-width, and arrow labels before committing.
+- **No second source of truth.** Keep exactly one source per diagram: hand-laid SVG for the overview, `.dot` for every flow. Delete stale `.dot`/`.svg` variants instead of keeping both layouts.
 
 ## Reporting issues
 

@@ -11,7 +11,7 @@
 | `docs/` | 权威规范、标准、用户指南和架构文档；一个文件只讲一个概念。 |
 | `docs/plans/` | 交付计划与里程碑清单；计划**不是**行为契约。 |
 | `docs/README.md` / `docs/README.zh-CN.md` | 文档索引；每个文档都必须登记。 |
-| `docs/images/` | 架构图/流程图：权威 `.svg` 源文件 + 渲染后的 `.png`。要求见 [CONTRIBUTING.md → Architecture and flow diagrams](../CONTRIBUTING.md#architecture-and-flow-diagrams)。 |
+| `docs/images/` | 架构图/流程图：手工排版总览 SVG、权威 Graphviz `.dot` 流程源文件、渲染后的 `.svg`/`.png`。要求见 [CONTRIBUTING.md → Architecture and flow diagrams](../CONTRIBUTING.md#architecture-and-flow-diagrams)。 |
 | 根目录 `README.md`、`AGENTS.md`、`CONTRIBUTING.md` | 项目概览与贡献规则（不是功能规范）。 |
 
 未经本规范与索引更新，不要在 `docs/` 下新增子目录。

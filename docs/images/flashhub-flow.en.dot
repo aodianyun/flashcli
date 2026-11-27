@@ -1,0 +1,62 @@
+digraph flashhub_flow {
+  graph [rankdir=TB, bgcolor="#F7F9FC", pad=0.4, nodesep=0.4, ranksep=0.45, fontname="Noto Sans CJK SC", fontsize=30, labelloc=t, label=<<B>FlashHub publish and consume flow</B><BR/><FONT POINT-SIZE="14" COLOR="#64748B">this repo builds, packs and validates; upload is manual, consumers resolve and sync over HTTP</FONT>>];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC", fontsize=13, margin="0.46,0.10", penwidth=1.3, color="#94A3B8"];
+  edge [fontname="Noto Sans CJK SC", fontsize=11, color="#64748B", fontcolor="#475569", arrowsize=0.7, penwidth=1.15];
+  subgraph cluster_1 {
+    label=<<B>A. Publishers (bundle / app)</B>>;
+    style="rounded,filled"; color="#F97316"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  build [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=13, width=3.44, label="bundles/<name>/build.sh\ncompile FlashRT, assemble runtime cells\ncurrent host or Docker matrix"];
+  pack [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=4.88, label="scripts/pack_bundle.sh\ncopies only RELEASE_PACK_FILES\nselects runtime cells, rewrites dist/flashcli-bundle.json\nwrites build provenance; never packages weights"];
+  validate [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=3.76, label="flashcli bundle validate\nprotocol / entry / capabilities / resources\nruntime cell and .so ABI probe\nvalidates the source tree, not dist"];
+  upload [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=4.08, label="manual dist/ upload\nno upload client in this repo\npreserve relative paths; the version is the ref"];
+  app_author [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=3.20, label="App author\napp manifest + install/setup scripts"];
+  }
+  subgraph cluster_2 {
+    label=<<B>B. FlashHub service</B>>;
+    style="rounded,filled"; color="#EF4444"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  repo_api [shape=cylinder, style="filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.3, fontsize=12, width=3.20, label="Repo index\nGET /api/v1/repos/{ns}/{name}:{ver}\nreturns files[] + download_url + md5"];
+  catalog_api [shape=cylinder, style="filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=12, width=3.20, label="Catalog API\n/repositories · /repositories/{id}\n/repositories/{id}/versions · /tags\nrelease_status is read-only"];
+  app_api [shape=cylinder, style="filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=12, width=4.00, label="App registry\nGET /api/v1/apps/{org}/{name}[:ver]\napp manifest + setup scripts + default bundles"];
+  }
+  subgraph cluster_3 {
+    label=<<B>C. CLI consumers</B>>;
+    style="rounded,filled"; color="#22C55E"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  pull [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=3.76, label="flashcli pull\nhost.EnsureBundle → host.EnsureRuntime\n→ weights.PrepareBundle(verifyRemote=true)"];
+  runserve [shape=box, style="rounded,filled", fillcolor="#CCFBF1", color="#14B8A6", penwidth=1.3, fontsize=13, width=3.76, label="flashcli run / serve\nEnsureBundle + ResolveWeights (local-first)\ndoes not call host.Pull"];
+  }
+  subgraph cluster_4 {
+    label=<<B>D. flashserver / Desktop consumers</B>>;
+    style="rounded,filled"; color="#8B5CF6"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  srv_catalog [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=4.72, label="flashserver /api/v1/catalog\nproxies ListRepositories / GetRepository / ListVersions\nlive request every time; no 5-minute cache"];
+  srv_preload [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=4.40, label="POST /api/v1/models/preload\njob → host.Pull (bundle + venv + weights)\ndisk only; the scheduler starts residents on demand"];
+  srv_app [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=4.24, label="POST /api/v1/apps/.../install\nFetchAppManifest → platform/script decision\ndefault bundles → host.Pull\nsetup writes Connection only; never starts models"];
+  desktop [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.3, fontsize=13, width=4.24, label="Desktop\ntalks to flashserver only, never the FlashHub API\ninstaller/cover URLs may be fetched directly\ninference uses /v1 only"];
+  }
+  subgraph cluster_5 {
+    label=<<B>E. Local cache</B>>;
+    style="rounded,filled"; color="#F59E0B"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  cache_bundle [shape=cylinder, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=12, width=4.16, label="bundles/<name>/<version>\n.flashcli_bundle.json (marker present = offline)"];
+  cache_weights [shape=cylinder, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=12, width=3.60, label="models/store/<source>/<repo>@<rev>-<hash>\n.flashcli_download.json + .incomplete\nallow / require / norm stats readiness"];
+  cache_runtime [shape=cylinder, style="filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=12, width=3.52, label="runtimes/<runtime_id>\nvenv + .venv-fingerprint + .runtime.json"];
+  }
+  build -> pack [color="#EA580C", style="solid"];
+  pack -> validate [color="#D97706", style="solid"];
+  validate -> upload [color="#DC2626", style="solid", label="pass"];
+  upload -> repo_api [color="#DC2626", style="solid", label="publish version"];
+  app_author -> app_api [color="#7C3AED", style="solid", label="publish app"];
+  repo_api -> catalog_api [color="#64748B", style="dashed", label="index"];
+  repo_api -> pull [color="#16A34A", style="solid", label="index + files"];
+  catalog_api -> srv_catalog [color="#7C3AED", style="solid", label="catalog"];
+  repo_api -> srv_preload [color="#7C3AED", style="dashed", label="bundle + weights"];
+  app_api -> srv_app [color="#7C3AED", style="solid", label="app manifest"];
+  repo_api -> runserve [color="#0D9488", style="dashed", label="bundle tree"];
+  srv_catalog -> desktop [color="#2563EB", style="solid"];
+  srv_preload -> desktop [color="#2563EB", style="solid"];
+  srv_app -> desktop [color="#2563EB", style="solid"];
+  pull -> cache_bundle [color="#D97706", style="solid", label="tree"];
+  pull -> cache_weights [color="#D97706", style="solid", label="weights"];
+  pull -> cache_runtime [color="#16A34A", style="solid", label="venv"];
+  runserve -> cache_bundle [color="#64748B", style="dotted"];
+  srv_preload -> cache_bundle [color="#64748B", style="dotted"];
+  srv_app -> cache_bundle [color="#64748B", style="dotted"];
+}

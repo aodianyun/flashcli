@@ -15,7 +15,7 @@ every file to its audience and content.
 | [documentation_standard.md](documentation_standard.md) | contributors | **Authoritative** doc directories, naming, mirrors, index, and review checklist |
 | [development_verification_standard.md](development_verification_standard.md) | contributors | **Authoritative** pre-merge tiers, test binaries, contract checks, PR definition of done |
 | [release_verification_standard.md](release_verification_standard.md) | maintainers | **Authoritative** release gate, versioning, artifacts, publish, notes, post-release checks |
-| [images/](images/) | everyone | Architecture and flow diagrams: authoritative SVG sources + rendered PNGs |
+| [images/](images/) | everyone | Architecture and flow diagrams: hand-laid overview SVG, Graphviz `.dot` flow sources, rendered SVG/PNG |
 | [flashserver.md](flashserver.md) | users | **Start here** for the local service: overview, diagram, quick start, doc index |
 | [flashserver-install.md](flashserver-install.md) | users / admins | Install, config, ports, disk, lifecycle, uninstall, troubleshooting |
 | [flashserver-desktop.md](flashserver-desktop.md) | users | Desktop client features, model lifecycle, startup parameters, LAN access |

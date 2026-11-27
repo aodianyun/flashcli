@@ -190,7 +190,7 @@ GET  /api/v1/jobs/{id}
 GET  /api/v1/ws
 GET  /api/v1/settings               类型化全局设置
 PATCH /api/v1/settings              {"mirror":{"enabled":true}}
-GET  /api/v1/apps/*                 应用 install/prepare/setup/status
+GET/POST/DELETE /api/v1/apps/*      应用 install/prepare/setup/status
 GET  /api/v1/logs
 ```
 
@@ -395,7 +395,9 @@ GPU runtime 必填：
 ## 10. 应用与桌面契约
 
 - 应用只 install/preload 完整 ref；不 start/stop/load/unload 模型，不接收 child endpoint。
-- setup 脚本获得 `FLASHCLI_API_BASE=http://<host>:8790/v1`。
+- setup 脚本通过命令行参数获得 `{base_url}`、`{model}`（第一个完整 bundle ref）和
+  `{api_key}`；`HOME`/`USERPROFILE` 指向配置的客户端 home。daemon 不导出
+  `FLASHCLI_API_BASE`。
 - AppState 不再把 `pid`/child `endpoint` 作为推理入口。
 - 桌面管理调用 `/api/v1/*`，推理示例使用 `/v1/*`。
 - 桌面可显示 preload/unload（磁盘）和 resident 状态，但不提供应用级模型启停。

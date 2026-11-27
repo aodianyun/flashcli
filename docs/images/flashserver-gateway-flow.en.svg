@@ -1,156 +1,527 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
-<defs>
-<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1.5" stdDeviation="3" flood-color="#0F172A" flood-opacity="0.05"/></filter>
-<marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#2563EB"/></marker>
-<marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#0F766E"/></marker>
-<marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#B45309"/></marker>
-<marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#DC2626"/></marker>
-</defs>
-<rect width="1600" height="900" fill="#F7F9FC"/>
-<path d="M 48 100 L 1552 100" stroke="#E2E8F0" stroke-width="1"/>
-<text x="48" y="64" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="34" font-weight="700" fill="#0F172A">flashserver gateway / scheduler flow</text>
-<text x="1552" y="64" text-anchor="end" font-family="JetBrains Mono, Consolas, monospace" font-size="12" font-weight="400" fill="#94A3B8">v1</text>
-<text x="48" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">CLIENT</text>
-<rect x="48" y="150" width="330" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="48" y="150" width="330" height="3" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="418" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">GATEWAY</text>
-<rect x="418" y="150" width="330" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="418" y="150" width="330" height="3" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="788" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">SCHEDULER / MANAGER</text>
-<rect x="788" y="150" width="330" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="788" y="150" width="330" height="3" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="1158" y="132" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">PROXY / STATE</text>
-<rect x="1158" y="150" width="330" height="700" rx="12" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="1158" y="150" width="330" height="3" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<rect x="68" y="180" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="68" y="190" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="82" y="199" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Inference request</text>
-<text x="82" y="214" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">OpenAI / Anthropic / custom</text>
-<text x="82" y="228" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">model in body / form / query</text>
-<rect x="68" y="260" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="68" y="270" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="82" y="279" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Health / docs</text>
-<text x="82" y="294" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">/health / docs / openapi</text>
-<text x="82" y="308" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">auth exempt</text>
-<rect x="68" y="340" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="68" y="350" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="82" y="359" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Management request</text>
-<text x="82" y="374" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">/api/v1 preload / unload</text>
-<text x="82" y="388" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">jobs / settings / devices / ws</text>
-<polygon points="583,180 678.7,217 583,254 487.3,217" fill="#FFF9F0" stroke="#2563EB" stroke-width="1.3"/>
-<text x="583" y="215" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Auth</text>
-<text x="583" y="231" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">token checked first</text>
-<text x="583" y="243" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">fail -&gt; 401</text>
-<polygon points="583,272 678.7,309 583,346 487.3,309" fill="#FFF9F0" stroke="#2563EB" stroke-width="1.3"/>
-<text x="583" y="307" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Route class</text>
-<text x="583" y="323" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">standard / custom / reserved</text>
-<text x="583" y="335" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">reserved -&gt; 405/404</text>
-<rect x="438" y="364" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="438" y="374" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="452" y="383" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Select model</text>
-<text x="452" y="398" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">body / form / query</text>
-<text x="452" y="412" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">full ref / conflict -&gt; 400</text>
-<polygon points="583,444 678.7,481 583,518 487.3,481" fill="#FFF9F0" stroke="#B45309" stroke-width="1.3"/>
-<text x="583" y="479" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Disk ready?</text>
-<text x="583" y="495" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">manifest / incomplete</text>
-<text x="583" y="507" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">auto-pull / 503 preparing</text>
-<polygon points="583,536 678.7,573 583,610 487.3,573" fill="#FFF9F0" stroke="#2563EB" stroke-width="1.3"/>
-<text x="583" y="571" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Capability?</text>
-<text x="583" y="587" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">standard routes only</text>
-<text x="583" y="599" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">undeclared -&gt; 400</text>
-<rect x="808" y="180" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="808" y="190" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="822" y="199" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Preload</text>
-<text x="822" y="214" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">start / reuse job</text>
-<text x="822" y="228" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">Retry-After + job id</text>
-<rect x="808" y="260" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="808" y="270" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="822" y="279" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Acquire</text>
-<text x="822" y="294" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">max_loaded / queue</text>
-<text x="822" y="308" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">queue full -&gt; 429</text>
-<polygon points="953,340 1048.7,377 953,414 857.3,377" fill="#FFF9F0" stroke="#0F766E" stroke-width="1.3"/>
-<text x="953" y="375" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">Placement?</text>
-<text x="953" y="391" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">free VRAM + headroom</text>
-<text x="953" y="403" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.3" font-weight="400" fill="#475569">gpu_count / CPU fallback</text>
-<rect x="808" y="432" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="808" y="442" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="822" y="451" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">LRU evict</text>
-<text x="822" y="466" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">idle residents only</text>
-<text x="822" y="480" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">disk assets kept</text>
-<rect x="808" y="512" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="808" y="522" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="822" y="531" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Start child</text>
-<text x="822" y="546" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">spawn + health</text>
-<text x="822" y="560" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">not ready -&gt; 503 starting</text>
-<rect x="808" y="592" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="808" y="602" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="822" y="611" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Lease</text>
-<text x="822" y="626" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">active_requests++</text>
-<text x="822" y="640" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">blocks evict / unload</text>
-<rect x="1178" y="180" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="1178" y="190" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="1192" y="199" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Proxy</text>
-<text x="1192" y="214" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">JSON / SSE / multipart / WS</text>
-<text x="1192" y="228" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">rewrite model / strip token</text>
-<rect x="1178" y="260" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="1178" y="270" width="3" height="42" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="1192" y="279" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Client cancel</text>
-<text x="1192" y="294" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">cancel upstream</text>
-<text x="1192" y="308" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">release lease</text>
-<rect x="1178" y="340" width="290" height="62" rx="8" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.15" filter="url(#shadow)"/>
-<rect x="1178" y="350" width="3" height="42" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="1192" y="359" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Release</text>
-<text x="1192" y="374" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">lease-- / last_used</text>
-<text x="1192" y="388" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">idle stop later</text>
-<rect x="1178" y="420" width="290" height="62" rx="8" fill="#F8FAFC" stroke="#B8C4D4" stroke-width="1.15" stroke-dasharray="6 4"/>
-<rect x="1178" y="430" width="3" height="42" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="1192" y="439" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">State</text>
-<text x="1192" y="454" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">disk / resident</text>
-<text x="1192" y="468" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">unload / evict / restart</text>
-<rect x="1178" y="500" width="290" height="62" rx="8" fill="#F8FAFC" stroke="#B8C4D4" stroke-width="1.15" stroke-dasharray="6 4"/>
-<rect x="1178" y="510" width="3" height="42" rx="1.5" fill="#DC2626" stroke="#DC2626" stroke-width="0"/>
-<text x="1192" y="519" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="12.1" font-weight="600" fill="#0F172A">Error map</text>
-<text x="1192" y="534" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">400/401/404/405/409/413</text>
-<text x="1192" y="548" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">429/499/501/502/503</text>
-<path d="M 358 211 L 398 211 L 398 217 L 487.3 217" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<text x="398" y="209" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">request</text>
-<path d="M 358 291 L 398 291 L 398 217 L 487.3 217" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<text x="398" y="249" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">ok</text>
-<path d="M 583 254 L 583 272" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<text x="591" y="266" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">ok</text>
-<path d="M 583 346 L 583 364" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<text x="591" y="358" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">std/custom</text>
-<path d="M 583 426 L 583 444" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 678.7 481 L 768 481 L 768 211 L 808 211" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
-<text x="768" y="341" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">no</text>
-<path d="M 583 518 L 583 536" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="591" y="530" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">yes</text>
-<path d="M 678.7 573 L 768 573 L 768 291 L 808 291" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="768" y="427" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">ready</text>
-<path d="M 953 322 L 953 340" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 953 414 L 953 432" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
-<text x="961" y="426" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">no</text>
-<path d="M 953 494 L 953 340" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" stroke-dasharray="6 5" marker-end="url(#arrow-amber)"/>
-<text x="961" y="420" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">retry</text>
-<path d="M 953 414 L 953 512" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="961" y="466" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">yes</text>
-<path d="M 953 574 L 953 592" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 1098 623 L 1138 623 L 1138 211 L 1178 211" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="1138" y="412" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">lease</text>
-<path d="M 1323 242 L 1323 260" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<text x="1331" y="254" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">close</text>
-<path d="M 1323 242 L 1323 340" fill="none" stroke="#0F766E" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
-<text x="1331" y="294" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">done</text>
-<path d="M 1323 402 L 1323 420" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 1323 322 L 1323 500" fill="none" stroke="#DC2626" stroke-width="1.4" stroke-linejoin="round" stroke-dasharray="6 5" marker-end="url(#arrow-red)"/>
-<text x="1331" y="414" text-anchor="middle" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">499</text>
-<rect x="48" y="838" width="10" height="2" rx="1" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="63" y="842" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">request / data</text>
-<rect x="158.8" y="838" width="10" height="2" rx="1" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="173.8" y="842" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">local execution</text>
-<rect x="274.8" y="838" width="10" height="2" rx="1" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="289.8" y="842" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">external / disk</text>
-<rect x="390.8" y="838" width="10" height="2" rx="1" fill="#DC2626" stroke="#DC2626" stroke-width="0"/>
-<text x="405.8" y="842" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">failure / retry</text>
-<text x="48" y="862" text-anchor="start" font-family="Inter, Segoe UI, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">dashed: optional / retry path</text>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.43.0 (0)
+ -->
+<!-- Title: flashserver_gateway_flow Pages: 1 -->
+<svg width="1971pt" height="2284pt"
+ viewBox="0.00 0.00 1971.10 2283.60" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(28.8 2254.8)">
+<title>flashserver_gateway_flow</title>
+<polygon fill="#f7f9fc" stroke="transparent" points="-28.8,28.8 -28.8,-2254.8 1942.3,-2254.8 1942.3,28.8 -28.8,28.8"/>
+<text text-anchor="start" x="712.25" y="-2199" font-family="Noto Sans CJK SC" font-weight="bold" font-size="30.00">flashserver gateway request flow</text>
+<text text-anchor="start" x="660.25" y="-2181.8" font-family="Noto Sans CJK SC" font-size="14.00" fill="#64748b">auth → route and model selection → disk and capability gates → schedule → proxy / release</text>
+<g id="clust1" class="cluster">
+<title>cluster_1</title>
+<path fill="#ffffff" stroke="#3b82f6" stroke-width="1.3" d="M20,-1417C20,-1417 1640,-1417 1640,-1417 1646,-1417 1652,-1423 1652,-1429 1652,-1429 1652,-2154 1652,-2154 1652,-2160 1646,-2166 1640,-2166 1640,-2166 20,-2166 20,-2166 14,-2166 8,-2160 8,-2154 8,-2154 8,-1429 8,-1429 8,-1423 14,-1417 20,-1417"/>
+<text text-anchor="start" x="713" y="-2151" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">A. Request and model selection</text>
+</g>
+<g id="clust2" class="cluster">
+<title>cluster_2</title>
+<path fill="#ffffff" stroke="#f59e0b" stroke-width="1.3" d="M266,-614C266,-614 1201,-614 1201,-614 1207,-614 1213,-620 1213,-626 1213,-626 1213,-1388 1213,-1388 1213,-1394 1207,-1400 1201,-1400 1201,-1400 266,-1400 266,-1400 260,-1400 254,-1394 254,-1388 254,-1388 254,-626 254,-626 254,-620 260,-614 266,-614"/>
+<text text-anchor="start" x="568" y="-1385" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">B. Disk and contract gates (prepareGateway)</text>
+</g>
+<g id="clust3" class="cluster">
+<title>cluster_3</title>
+<path fill="#ffffff" stroke="#22c55e" stroke-width="1.3" d="M1233,-501C1233,-501 1893,-501 1893,-501 1899,-501 1905,-507 1905,-513 1905,-513 1905,-709 1905,-709 1905,-715 1899,-721 1893,-721 1893,-721 1233,-721 1233,-721 1227,-721 1221,-715 1221,-709 1221,-709 1221,-513 1221,-513 1221,-507 1227,-501 1233,-501"/>
+<text text-anchor="start" x="1354" y="-706" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">C. Schedule and lease (details in the scheduler diagram)</text>
+</g>
+<g id="clust4" class="cluster">
+<title>cluster_4</title>
+<path fill="#ffffff" stroke="#38bdf8" stroke-width="1.3" d="M1101,-78C1101,-78 1790,-78 1790,-78 1796,-78 1802,-84 1802,-90 1802,-90 1802,-472 1802,-472 1802,-478 1796,-484 1790,-484 1790,-484 1101,-484 1101,-484 1095,-484 1089,-478 1089,-472 1089,-472 1089,-90 1089,-90 1089,-84 1095,-78 1101,-78"/>
+<text text-anchor="start" x="1370" y="-469" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">D. Proxy and release</text>
+</g>
+<!-- client -->
+<g id="node1" class="node">
+<title>client</title>
+<path fill="#dbeafe" stroke="#3b82f6" stroke-width="1.8" d="M1084.5,-2123C1084.5,-2123 667.5,-2123 667.5,-2123 661.5,-2123 655.5,-2117 655.5,-2111 655.5,-2111 655.5,-2076 655.5,-2076 655.5,-2070 661.5,-2064 667.5,-2064 667.5,-2064 1084.5,-2064 1084.5,-2064 1090.5,-2064 1096.5,-2070 1096.5,-2076 1096.5,-2076 1096.5,-2111 1096.5,-2111 1096.5,-2117 1090.5,-2123 1084.5,-2123"/>
+<text text-anchor="middle" x="876" y="-2104.8" font-family="Noto Sans CJK SC" font-size="14.00">Client</text>
+<text text-anchor="middle" x="876" y="-2089.8" font-family="Noto Sans CJK SC" font-size="14.00">OpenAI SDK / Anthropic / App / Desktop</text>
+<text text-anchor="middle" x="876" y="-2074.8" font-family="Noto Sans CJK SC" font-size="14.00">inference uses /v1 only; child endpoints are never exposed</text>
+</g>
+<!-- auth -->
+<g id="node2" class="node">
+<title>auth</title>
+<polygon fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.45" points="876,-2031 669,-1978 876,-1925 1083,-1978 876,-2031"/>
+<text text-anchor="middle" x="876" y="-1987.9" font-family="Noto Sans CJK SC" font-size="12.00">token configured?</text>
+<text text-anchor="middle" x="876" y="-1974.9" font-family="Noto Sans CJK SC" font-size="12.00">Bearer / X&#45;Flashcli&#45;Token</text>
+<text text-anchor="middle" x="876" y="-1961.9" font-family="Noto Sans CJK SC" font-size="12.00">WS may use ?token=</text>
+</g>
+<!-- client&#45;&gt;auth -->
+<g id="edge1" class="edge">
+<title>client&#45;&gt;auth</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M876,-2063.86C876,-2055.98 876,-2047.14 876,-2038.22"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="878.45,-2038.06 876,-2031.06 873.55,-2038.06 878.45,-2038.06"/>
+</g>
+<!-- auth_ok -->
+<g id="node3" class="node">
+<title>auth_ok</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.3" d="M878,-1881C878,-1881 610,-1881 610,-1881 604,-1881 598,-1875 598,-1869 598,-1869 598,-1851 598,-1851 598,-1845 604,-1839 610,-1839 610,-1839 878,-1839 878,-1839 884,-1839 890,-1845 890,-1851 890,-1851 890,-1869 890,-1869 890,-1875 884,-1881 878,-1881"/>
+<text text-anchor="middle" x="744" y="-1863.6" font-family="Noto Sans CJK SC" font-size="13.00">Authorized</text>
+<text text-anchor="middle" x="744" y="-1849.6" font-family="Noto Sans CJK SC" font-size="13.00">/health / / /docs /openapi /ui exempt</text>
+</g>
+<!-- auth&#45;&gt;auth_ok -->
+<g id="edge2" class="edge">
+<title>auth&#45;&gt;auth_ok</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M829.83,-1936.43C810.73,-1919.64 789.18,-1900.71 772.46,-1886.01"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="773.85,-1883.97 766.98,-1881.19 770.62,-1887.65 773.85,-1883.97"/>
+<text text-anchor="middle" x="826" y="-1900.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">yes / unset</text>
+</g>
+<!-- e401 -->
+<g id="node4" class="node">
+<title>e401</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M1086.5,-1878C1086.5,-1878 931.5,-1878 931.5,-1878 925.5,-1878 919.5,-1872 919.5,-1866 919.5,-1866 919.5,-1854 919.5,-1854 919.5,-1848 925.5,-1842 931.5,-1842 931.5,-1842 1086.5,-1842 1086.5,-1842 1092.5,-1842 1098.5,-1848 1098.5,-1854 1098.5,-1854 1098.5,-1866 1098.5,-1866 1098.5,-1872 1092.5,-1878 1086.5,-1878"/>
+<text text-anchor="middle" x="1009" y="-1856.3" font-family="Noto Sans CJK SC" font-size="14.00">401 unauthorized</text>
+</g>
+<!-- auth&#45;&gt;e401 -->
+<g id="edge3" class="edge">
+<title>auth&#45;&gt;e401</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M922.14,-1936.75C942.77,-1918.76 966.29,-1898.25 983.65,-1883.11"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="985.62,-1884.64 989.28,-1878.2 982.4,-1880.95 985.62,-1884.64"/>
+<text text-anchor="middle" x="972" y="-1900.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">no</text>
+</g>
+<!-- classify -->
+<g id="node5" class="node">
+<title>classify</title>
+<polygon fill="#dbeafe" stroke="#3b82f6" stroke-width="1.45" points="744,-1806 444,-1766 744,-1726 1044,-1766 744,-1806"/>
+<text text-anchor="middle" x="744" y="-1769.4" font-family="Noto Sans CJK SC" font-size="12.00">Route owner?</text>
+<text text-anchor="middle" x="744" y="-1756.4" font-family="Noto Sans CJK SC" font-size="12.00">host standard / bundle custom / reserved</text>
+</g>
+<!-- auth_ok&#45;&gt;classify -->
+<g id="edge4" class="edge">
+<title>auth_ok&#45;&gt;classify</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M744,-1838.58C744,-1831.06 744,-1822.21 744,-1813.34"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="746.45,-1813.24 744,-1806.24 741.55,-1813.24 746.45,-1813.24"/>
+</g>
+<!-- models_ep -->
+<g id="node6" class="node">
+<title>models_ep</title>
+<path fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.3" d="M328,-1675C328,-1675 38,-1675 38,-1675 32,-1675 26,-1669 26,-1663 26,-1663 26,-1631 26,-1631 26,-1625 32,-1619 38,-1619 38,-1619 328,-1619 328,-1619 334,-1619 340,-1625 340,-1631 340,-1631 340,-1663 340,-1663 340,-1669 334,-1675 328,-1675"/>
+<text text-anchor="middle" x="183" y="-1657.6" font-family="Noto Sans CJK SC" font-size="13.00">GET /v1/models · /v1/models/{id}</text>
+<text text-anchor="middle" x="183" y="-1643.6" font-family="Noto Sans CJK SC" font-size="13.00">local registry; no model selection</text>
+<text text-anchor="middle" x="183" y="-1629.6" font-family="Noto Sans CJK SC" font-size="13.00">Anthropic shape with anthropic&#45;version</text>
+</g>
+<!-- classify&#45;&gt;models_ep -->
+<g id="edge5" class="edge">
+<title>classify&#45;&gt;models_ep</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M629.8,-1741.18C540.02,-1722.46 414.67,-1696.32 319.58,-1676.48"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="319.85,-1674.04 312.5,-1675.01 318.85,-1678.84 319.85,-1674.04"/>
+<text text-anchor="middle" x="482.5" y="-1701.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">models</text>
+</g>
+<!-- std_sel -->
+<g id="node7" class="node">
+<title>std_sel</title>
+<path fill="#dbeafe" stroke="#3b82f6" stroke-width="1.3" d="M818.5,-1682C818.5,-1682 381.5,-1682 381.5,-1682 375.5,-1682 369.5,-1676 369.5,-1670 369.5,-1670 369.5,-1624 369.5,-1624 369.5,-1618 375.5,-1612 381.5,-1612 381.5,-1612 818.5,-1612 818.5,-1612 824.5,-1612 830.5,-1618 830.5,-1624 830.5,-1624 830.5,-1670 830.5,-1670 830.5,-1676 824.5,-1682 818.5,-1682"/>
+<text text-anchor="middle" x="600" y="-1664.6" font-family="Noto Sans CJK SC" font-size="13.00">Standard inference route model source</text>
+<text text-anchor="middle" x="600" y="-1650.6" font-family="Noto Sans CJK SC" font-size="13.00">JSON body: chat/completions/responses/...</text>
+<text text-anchor="middle" x="600" y="-1636.6" font-family="Noto Sans CJK SC" font-size="13.00">multipart form: audio/images/videos (videos also accepts JSON)</text>
+<text text-anchor="middle" x="600" y="-1622.6" font-family="Noto Sans CJK SC" font-size="13.00">query: realtime / video jobs / response jobs</text>
+</g>
+<!-- classify&#45;&gt;std_sel -->
+<g id="edge6" class="edge">
+<title>classify&#45;&gt;std_sel</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M702.74,-1731.47C685.49,-1717.46 665.34,-1701.09 647.48,-1686.58"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="649,-1684.65 642.02,-1682.14 645.91,-1688.46 649,-1684.65"/>
+<text text-anchor="middle" x="708" y="-1701.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">host standard</text>
+</g>
+<!-- custom_sel -->
+<g id="node8" class="node">
+<title>custom_sel</title>
+<path fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.3" d="M1268.5,-1675C1268.5,-1675 871.5,-1675 871.5,-1675 865.5,-1675 859.5,-1669 859.5,-1663 859.5,-1663 859.5,-1631 859.5,-1631 859.5,-1625 865.5,-1619 871.5,-1619 871.5,-1619 1268.5,-1619 1268.5,-1619 1274.5,-1619 1280.5,-1625 1280.5,-1631 1280.5,-1631 1280.5,-1663 1280.5,-1663 1280.5,-1669 1274.5,-1675 1268.5,-1675"/>
+<text text-anchor="middle" x="1070" y="-1657.6" font-family="Noto Sans CJK SC" font-size="13.00">Custom /v1/* model source</text>
+<text text-anchor="middle" x="1070" y="-1643.6" font-family="Noto Sans CJK SC" font-size="13.00">JSON object model / multipart form / ?model=</text>
+<text text-anchor="middle" x="1070" y="-1629.6" font-family="Noto Sans CJK SC" font-size="13.00">other content types: ?model=, body streamed unchanged</text>
+</g>
+<!-- classify&#45;&gt;custom_sel -->
+<g id="edge7" class="edge">
+<title>classify&#45;&gt;custom_sel</title>
+<path fill="none" stroke="#0284c7" stroke-width="1.15" d="M823.33,-1736.53C873.2,-1718.63 937.41,-1695.58 987.82,-1677.49"/>
+<polygon fill="#0284c7" stroke="#0284c7" stroke-width="1.15" points="988.76,-1679.76 994.52,-1675.09 987.11,-1675.15 988.76,-1679.76"/>
+<text text-anchor="middle" x="945.5" y="-1701.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">custom</text>
+</g>
+<!-- reserved -->
+<g id="node9" class="node">
+<title>reserved</title>
+<path fill="#ffedd5" stroke="#f97316" stroke-width="1.3" d="M1622,-1668C1622,-1668 1322,-1668 1322,-1668 1316,-1668 1310,-1662 1310,-1656 1310,-1656 1310,-1638 1310,-1638 1310,-1632 1316,-1626 1322,-1626 1322,-1626 1622,-1626 1622,-1626 1628,-1626 1634,-1632 1634,-1638 1634,-1638 1634,-1656 1634,-1656 1634,-1662 1628,-1668 1622,-1668"/>
+<text text-anchor="middle" x="1472" y="-1650.6" font-family="Noto Sans CJK SC" font-size="13.00">Unknown reserved path</text>
+<text text-anchor="middle" x="1472" y="-1636.6" font-family="Noto Sans CJK SC" font-size="13.00">/v1/models* /v1/responses/* /v1/videos/*</text>
+</g>
+<!-- classify&#45;&gt;reserved -->
+<g id="edge8" class="edge">
+<title>classify&#45;&gt;reserved</title>
+<path fill="none" stroke="#ea580c" stroke-width="1.15" d="M887.25,-1745.03C998.61,-1729.12 1156.86,-1705.66 1295,-1682 1317.5,-1678.15 1341.55,-1673.73 1364.44,-1669.38"/>
+<polygon fill="#ea580c" stroke="#ea580c" stroke-width="1.15" points="1365.09,-1671.75 1371.5,-1668.03 1364.17,-1666.94 1365.09,-1671.75"/>
+<text text-anchor="middle" x="1212" y="-1701.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">reserved</text>
+</g>
+<!-- resolve -->
+<g id="node11" class="node">
+<title>resolve</title>
+<path fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.3" d="M827.5,-1579C827.5,-1579 510.5,-1579 510.5,-1579 504.5,-1579 498.5,-1573 498.5,-1567 498.5,-1567 498.5,-1535 498.5,-1535 498.5,-1529 504.5,-1523 510.5,-1523 510.5,-1523 827.5,-1523 827.5,-1523 833.5,-1523 839.5,-1529 839.5,-1535 839.5,-1535 839.5,-1567 839.5,-1567 839.5,-1573 833.5,-1579 827.5,-1579"/>
+<text text-anchor="middle" x="669" y="-1561.6" font-family="Noto Sans CJK SC" font-size="13.00">resolveGatewayModel</text>
+<text text-anchor="middle" x="669" y="-1547.6" font-family="Noto Sans CJK SC" font-size="13.00">body / query must be a full ref</text>
+<text text-anchor="middle" x="669" y="-1533.6" font-family="Noto Sans CJK SC" font-size="13.00">body and query must match when both exist</text>
+</g>
+<!-- std_sel&#45;&gt;resolve -->
+<g id="edge10" class="edge">
+<title>std_sel&#45;&gt;resolve</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M625.11,-1611.8C631.49,-1603.1 638.34,-1593.76 644.69,-1585.12"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="646.82,-1586.35 648.99,-1579.26 642.87,-1583.45 646.82,-1586.35"/>
+</g>
+<!-- custom_sel&#45;&gt;resolve -->
+<g id="edge11" class="edge">
+<title>custom_sel&#45;&gt;resolve</title>
+<path fill="none" stroke="#0284c7" stroke-width="1.15" d="M954.55,-1618.94C903.4,-1606.95 843.18,-1592.83 791.27,-1580.66"/>
+<polygon fill="#0284c7" stroke="#0284c7" stroke-width="1.15" points="791.7,-1578.25 784.33,-1579.03 790.58,-1583.02 791.7,-1578.25"/>
+</g>
+<!-- e405 -->
+<g id="node10" class="node">
+<title>e405</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M1621.5,-1573C1621.5,-1573 1274.5,-1573 1274.5,-1573 1268.5,-1573 1262.5,-1567 1262.5,-1561 1262.5,-1561 1262.5,-1541 1262.5,-1541 1262.5,-1535 1268.5,-1529 1274.5,-1529 1274.5,-1529 1621.5,-1529 1621.5,-1529 1627.5,-1529 1633.5,-1535 1633.5,-1541 1633.5,-1541 1633.5,-1561 1633.5,-1561 1633.5,-1567 1627.5,-1573 1621.5,-1573"/>
+<text text-anchor="middle" x="1448" y="-1554.8" font-family="Noto Sans CJK SC" font-size="14.00">405 method_not_allowed</text>
+<text text-anchor="middle" x="1448" y="-1539.8" font-family="Noto Sans CJK SC" font-size="14.00">or 404 route not found; never treated as custom</text>
+</g>
+<!-- reserved&#45;&gt;e405 -->
+<g id="edge9" class="edge">
+<title>reserved&#45;&gt;e405</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M1466.79,-1625.6C1463.38,-1612.24 1458.88,-1594.6 1455.13,-1579.93"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="1457.47,-1579.18 1453.36,-1573.01 1452.72,-1580.4 1457.47,-1579.18"/>
+</g>
+<!-- e400 -->
+<g id="node12" class="node">
+<title>e400</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M551.5,-1479C551.5,-1479 208.5,-1479 208.5,-1479 202.5,-1479 196.5,-1473 196.5,-1467 196.5,-1467 196.5,-1447 196.5,-1447 196.5,-1441 202.5,-1435 208.5,-1435 208.5,-1435 551.5,-1435 551.5,-1435 557.5,-1435 563.5,-1441 563.5,-1447 563.5,-1447 563.5,-1467 563.5,-1467 563.5,-1473 557.5,-1479 551.5,-1479"/>
+<text text-anchor="middle" x="380" y="-1460.8" font-family="Noto Sans CJK SC" font-size="14.00">400 model_conflict / required / invalid</text>
+<text text-anchor="middle" x="380" y="-1445.8" font-family="Noto Sans CJK SC" font-size="14.00">empty value, short name and alias are rejected</text>
+</g>
+<!-- resolve&#45;&gt;e400 -->
+<g id="edge13" class="edge">
+<title>resolve&#45;&gt;e400</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M583.85,-1522.89C542.3,-1509.67 492.82,-1493.92 453.02,-1481.24"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="453.63,-1478.87 446.21,-1479.08 452.14,-1483.54 453.63,-1478.87"/>
+<text text-anchor="middle" x="541" y="-1498.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">fail</text>
+</g>
+<!-- ref -->
+<g id="node13" class="node">
+<title>ref</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.3" d="M961,-1478C961,-1478 605,-1478 605,-1478 599,-1478 593,-1472 593,-1466 593,-1466 593,-1448 593,-1448 593,-1442 599,-1436 605,-1436 605,-1436 961,-1436 961,-1436 967,-1436 973,-1442 973,-1448 973,-1448 973,-1466 973,-1466 973,-1472 967,-1478 961,-1478"/>
+<text text-anchor="middle" x="783" y="-1460.6" font-family="Noto Sans CJK SC" font-size="13.00">ref = namespace/name:version</text>
+<text text-anchor="middle" x="783" y="-1446.6" font-family="Noto Sans CJK SC" font-size="13.00">the same value keys cache, scheduler and resident</text>
+</g>
+<!-- resolve&#45;&gt;ref -->
+<g id="edge12" class="edge">
+<title>resolve&#45;&gt;ref</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M702.59,-1522.89C718.38,-1510.15 737.08,-1495.06 752.47,-1482.64"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="754.06,-1484.5 757.97,-1478.2 750.99,-1480.69 754.06,-1484.5"/>
+<text text-anchor="middle" x="742.5" y="-1498.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">ok</text>
+</g>
+<!-- assets -->
+<g id="node14" class="node">
+<title>assets</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="783,-1357 371,-1317 783,-1277 1195,-1317 783,-1357"/>
+<text text-anchor="middle" x="783" y="-1320.4" font-family="Noto Sans CJK SC" font-size="12.00">Assets ready or preloadReady?</text>
+<text text-anchor="middle" x="783" y="-1307.4" font-family="Noto Sans CJK SC" font-size="12.00">bundle + weights + runtime come from the shared host cache</text>
+</g>
+<!-- ref&#45;&gt;assets -->
+<g id="edge14" class="edge">
+<title>ref&#45;&gt;assets</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M783,-1435.93C783,-1417.22 783,-1388.62 783,-1364.27"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="785.45,-1364.2 783,-1357.2 780.55,-1364.2 785.45,-1364.2"/>
+</g>
+<!-- no_pull -->
+<g id="node15" class="node">
+<title>no_pull</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M633.5,-1227C633.5,-1227 284.5,-1227 284.5,-1227 278.5,-1227 272.5,-1221 272.5,-1215 272.5,-1215 272.5,-1195 272.5,-1195 272.5,-1189 278.5,-1183 284.5,-1183 284.5,-1183 633.5,-1183 633.5,-1183 639.5,-1183 645.5,-1189 645.5,-1195 645.5,-1195 645.5,-1215 645.5,-1215 645.5,-1221 639.5,-1227 633.5,-1227"/>
+<text text-anchor="middle" x="459" y="-1208.8" font-family="Noto Sans CJK SC" font-size="14.00">404 model_not_found</text>
+<text text-anchor="middle" x="459" y="-1193.8" font-family="Noto Sans CJK SC" font-size="14.00">auto_pull=false and the model is not preloaded</text>
+</g>
+<!-- assets&#45;&gt;no_pull -->
+<g id="edge15" class="edge">
+<title>assets&#45;&gt;no_pull</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M693.61,-1285.65C641.19,-1267.86 575.99,-1245.72 527.64,-1229.3"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="528.34,-1226.96 520.93,-1227.02 526.77,-1231.6 528.34,-1226.96"/>
+<text text-anchor="middle" x="664.5" y="-1252.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">no + auto&#45;pull off</text>
+</g>
+<!-- ensure_preload -->
+<g id="node16" class="node">
+<title>ensure_preload</title>
+<path fill="#ffedd5" stroke="#f97316" stroke-width="1.3" d="M1107,-1233C1107,-1233 687,-1233 687,-1233 681,-1233 675,-1227 675,-1221 675,-1221 675,-1189 675,-1189 675,-1183 681,-1177 687,-1177 687,-1177 1107,-1177 1107,-1177 1113,-1177 1119,-1183 1119,-1189 1119,-1189 1119,-1221 1119,-1221 1119,-1227 1113,-1233 1107,-1233"/>
+<text text-anchor="middle" x="897" y="-1215.6" font-family="Noto Sans CJK SC" font-size="13.00">ensurePreload</text>
+<text text-anchor="middle" x="897" y="-1201.6" font-family="Noto Sans CJK SC" font-size="13.00">assetsReady → preloaded</text>
+<text text-anchor="middle" x="897" y="-1187.6" font-family="Noto Sans CJK SC" font-size="13.00">otherwise start a host.Pull job shared by concurrent requests</text>
+</g>
+<!-- assets&#45;&gt;ensure_preload -->
+<g id="edge16" class="edge">
+<title>assets&#45;&gt;ensure_preload</title>
+<path fill="none" stroke="#ea580c" stroke-width="1.15" d="M820.01,-1280.29C834.02,-1266.77 849.86,-1251.48 863.53,-1238.3"/>
+<polygon fill="#ea580c" stroke="#ea580c" stroke-width="1.15" points="865.5,-1239.79 868.84,-1233.17 862.1,-1236.27 865.5,-1239.79"/>
+<text text-anchor="middle" x="886.5" y="-1252.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">no + auto_pull</text>
+</g>
+<!-- inspect -->
+<g id="node18" class="node">
+<title>inspect</title>
+<path fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.3" d="M1056,-1133C1056,-1133 794,-1133 794,-1133 788,-1133 782,-1127 782,-1121 782,-1121 782,-1089 782,-1089 782,-1083 788,-1077 794,-1077 794,-1077 1056,-1077 1056,-1077 1062,-1077 1068,-1083 1068,-1089 1068,-1089 1068,-1121 1068,-1121 1068,-1127 1062,-1133 1056,-1133"/>
+<text text-anchor="middle" x="925" y="-1115.6" font-family="Noto Sans CJK SC" font-size="13.00">inspectRef → inspectBundle</text>
+<text text-anchor="middle" x="925" y="-1101.6" font-family="Noto Sans CJK SC" font-size="13.00">host.EnsureBundle + manifest.Load</text>
+<text text-anchor="middle" x="925" y="-1087.6" font-family="Noto Sans CJK SC" font-size="13.00">Resources + ServeCapabilities</text>
+</g>
+<!-- assets&#45;&gt;inspect -->
+<g id="edge18" class="edge">
+<title>assets&#45;&gt;inspect</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M962.41,-1294.32C1036.97,-1281.28 1111.42,-1261.54 1134,-1233 1149.44,-1213.48 1148.49,-1197.23 1134,-1177 1119.21,-1156.36 1098.07,-1141.64 1074.86,-1131.17"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="1075.66,-1128.85 1068.27,-1128.33 1073.73,-1133.35 1075.66,-1128.85"/>
+<text text-anchor="middle" x="1154" y="-1202.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">yes</text>
+</g>
+<!-- e503prep -->
+<g id="node17" class="node">
+<title>e503prep</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M740.5,-1127C740.5,-1127 467.5,-1127 467.5,-1127 461.5,-1127 455.5,-1121 455.5,-1115 455.5,-1115 455.5,-1095 455.5,-1095 455.5,-1089 461.5,-1083 467.5,-1083 467.5,-1083 740.5,-1083 740.5,-1083 746.5,-1083 752.5,-1089 752.5,-1095 752.5,-1095 752.5,-1115 752.5,-1115 752.5,-1121 746.5,-1127 740.5,-1127"/>
+<text text-anchor="middle" x="604" y="-1108.8" font-family="Noto Sans CJK SC" font-size="14.00">503 model_preparing</text>
+<text text-anchor="middle" x="604" y="-1093.8" font-family="Noto Sans CJK SC" font-size="14.00">Retry&#45;After + X&#45;Flashcli&#45;Preload&#45;Job</text>
+</g>
+<!-- ensure_preload&#45;&gt;e503prep -->
+<g id="edge17" class="edge">
+<title>ensure_preload&#45;&gt;e503prep</title>
+<path fill="none" stroke="#ea580c" stroke-width="1.15" stroke-dasharray="5,2" d="M816.16,-1176.96C771.46,-1162.01 716.48,-1143.62 673.69,-1129.31"/>
+<polygon fill="#ea580c" stroke="#ea580c" stroke-width="1.15" points="674.35,-1126.95 666.93,-1127.05 672.79,-1131.59 674.35,-1126.95"/>
+<text text-anchor="middle" x="776.5" y="-1152.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">job</text>
+</g>
+<!-- ensure_preload&#45;&gt;inspect -->
+<g id="edge19" class="edge">
+<title>ensure_preload&#45;&gt;inspect</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" stroke-dasharray="5,2" d="M904.73,-1176.96C907.97,-1165.6 911.79,-1152.24 915.23,-1140.2"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="917.64,-1140.69 917.2,-1133.29 912.92,-1139.35 917.64,-1140.69"/>
+<text text-anchor="middle" x="927" y="-1152.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">ready</text>
+</g>
+<!-- e404 -->
+<g id="node19" class="node">
+<title>e404</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M715,-1028C715,-1028 451,-1028 451,-1028 445,-1028 439,-1022 439,-1016 439,-1016 439,-996 439,-996 439,-990 445,-984 451,-984 451,-984 715,-984 715,-984 721,-984 727,-990 727,-996 727,-996 727,-1016 727,-1016 727,-1022 721,-1028 715,-1028"/>
+<text text-anchor="middle" x="583" y="-1009.8" font-family="Noto Sans CJK SC" font-size="14.00">404 model_not_found</text>
+<text text-anchor="middle" x="583" y="-994.8" font-family="Noto Sans CJK SC" font-size="14.00">bundle or manifest is not readable</text>
+</g>
+<!-- inspect&#45;&gt;e404 -->
+<g id="edge20" class="edge">
+<title>inspect&#45;&gt;e404</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M829.73,-1076.98C777.63,-1062.2 713.78,-1044.09 664.08,-1030"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="664.57,-1027.59 657.17,-1028.04 663.24,-1032.3 664.57,-1027.59"/>
+<text text-anchor="middle" x="777.5" y="-1052.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">error</text>
+</g>
+<!-- runonly -->
+<g id="node20" class="node">
+<title>runonly</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="925,-1033 756,-1006 925,-979 1094,-1006 925,-1033"/>
+<text text-anchor="middle" x="925" y="-1002.9" font-family="Noto Sans CJK SC" font-size="12.00">Has a serve entry?</text>
+</g>
+<!-- inspect&#45;&gt;runonly -->
+<g id="edge21" class="edge">
+<title>inspect&#45;&gt;runonly</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M925,-1076.98C925,-1065.65 925,-1052.37 925,-1040.43"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="927.45,-1040.21 925,-1033.21 922.55,-1040.21 927.45,-1040.21"/>
+</g>
+<!-- e_runonly -->
+<g id="node21" class="node">
+<title>e_runonly</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M614,-913C614,-913 412,-913 412,-913 406,-913 400,-907 400,-901 400,-901 400,-889 400,-889 400,-883 406,-877 412,-877 412,-877 614,-877 614,-877 620,-877 626,-883 626,-889 626,-889 626,-901 626,-901 626,-907 620,-913 614,-913"/>
+<text text-anchor="middle" x="513" y="-891.3" font-family="Noto Sans CJK SC" font-size="14.00">400 model_not_servable</text>
+</g>
+<!-- runonly&#45;&gt;e_runonly -->
+<g id="edge22" class="edge">
+<title>runonly&#45;&gt;e_runonly</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M858.17,-989.61C800.45,-976.05 714.93,-955.36 641,-935 618.87,-928.91 594.75,-921.71 573.48,-915.16"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="574.09,-912.79 566.68,-913.06 572.65,-917.47 574.09,-912.79"/>
+<text text-anchor="middle" x="749" y="-954.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">no</text>
+</g>
+<!-- capability -->
+<g id="node22" class="node">
+<title>capability</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="925,-935 655,-895 925,-855 1195,-895 925,-935"/>
+<text text-anchor="middle" x="925" y="-898.4" font-family="Noto Sans CJK SC" font-size="12.00">Standard&#45;route capability declared?</text>
+<text text-anchor="middle" x="925" y="-885.4" font-family="Noto Sans CJK SC" font-size="12.00">custom routes skip this gate</text>
+</g>
+<!-- runonly&#45;&gt;capability -->
+<g id="edge23" class="edge">
+<title>runonly&#45;&gt;capability</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M925,-978.89C925,-967.94 925,-954.87 925,-942.38"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="927.45,-942.11 925,-935.11 922.55,-942.11 927.45,-942.11"/>
+<text text-anchor="middle" x="934" y="-954.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">yes</text>
+</g>
+<!-- e_cap -->
+<g id="node23" class="node">
+<title>e_cap</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M763.5,-802C763.5,-802 538.5,-802 538.5,-802 532.5,-802 526.5,-796 526.5,-790 526.5,-790 526.5,-778 526.5,-778 526.5,-772 532.5,-766 538.5,-766 538.5,-766 763.5,-766 763.5,-766 769.5,-766 775.5,-772 775.5,-778 775.5,-778 775.5,-790 775.5,-790 775.5,-796 769.5,-802 763.5,-802"/>
+<text text-anchor="middle" x="651" y="-780.3" font-family="Noto Sans CJK SC" font-size="14.00">400 unsupported_capability</text>
+</g>
+<!-- capability&#45;&gt;e_cap -->
+<g id="edge24" class="edge">
+<title>capability&#45;&gt;e_cap</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M853.37,-865.5C805.35,-846.4 743.35,-821.74 700.7,-804.77"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="701.43,-802.43 694.02,-802.12 699.62,-806.98 701.43,-802.43"/>
+<text text-anchor="middle" x="786" y="-830.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">no</text>
+</g>
+<!-- sched_ok -->
+<g id="node24" class="node">
+<title>sched_ok</title>
+<polygon fill="#fef3c7" stroke="#f59e0b" stroke-width="1.45" points="1000,-811 805,-784 1000,-757 1195,-784 1000,-811"/>
+<text text-anchor="middle" x="1000" y="-780.9" font-family="Noto Sans CJK SC" font-size="12.00">Scheduler configured?</text>
+</g>
+<!-- capability&#45;&gt;sched_ok -->
+<g id="edge25" class="edge">
+<title>capability&#45;&gt;sched_ok</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M949.56,-858.31C959.19,-844.31 970.12,-828.42 979.34,-815.03"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="981.49,-816.22 983.44,-809.06 977.46,-813.44 981.49,-816.22"/>
+<text text-anchor="middle" x="1001.5" y="-830.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">yes / custom</text>
+</g>
+<!-- e_nosched -->
+<g id="node25" class="node">
+<title>e_nosched</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M1080.5,-668C1080.5,-668 919.5,-668 919.5,-668 913.5,-668 907.5,-662 907.5,-656 907.5,-656 907.5,-644 907.5,-644 907.5,-638 913.5,-632 919.5,-632 919.5,-632 1080.5,-632 1080.5,-632 1086.5,-632 1092.5,-638 1092.5,-644 1092.5,-644 1092.5,-656 1092.5,-656 1092.5,-662 1086.5,-668 1080.5,-668"/>
+<text text-anchor="middle" x="1000" y="-646.3" font-family="Noto Sans CJK SC" font-size="14.00">503 no_placement</text>
+</g>
+<!-- sched_ok&#45;&gt;e_nosched -->
+<g id="edge26" class="edge">
+<title>sched_ok&#45;&gt;e_nosched</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M1000,-756.92C1000,-733.19 1000,-698.44 1000,-675.28"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="1002.45,-675.2 1000,-668.2 997.55,-675.2 1002.45,-675.2"/>
+<text text-anchor="middle" x="1007" y="-732.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">no</text>
+</g>
+<!-- acquire -->
+<g id="node26" class="node">
+<title>acquire</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.3" d="M1605.5,-678C1605.5,-678 1250.5,-678 1250.5,-678 1244.5,-678 1238.5,-672 1238.5,-666 1238.5,-666 1238.5,-634 1238.5,-634 1238.5,-628 1244.5,-622 1250.5,-622 1250.5,-622 1605.5,-622 1605.5,-622 1611.5,-622 1617.5,-628 1617.5,-634 1617.5,-634 1617.5,-666 1617.5,-666 1617.5,-672 1611.5,-678 1605.5,-678"/>
+<text text-anchor="middle" x="1428" y="-660.6" font-family="Noto Sans CJK SC" font-size="13.00">Scheduler.Acquire(ref)</text>
+<text text-anchor="middle" x="1428" y="-646.6" font-family="Noto Sans CJK SC" font-size="13.00">wait for start / queue; default 10s + 30s</text>
+<text text-anchor="middle" x="1428" y="-632.6" font-family="Noto Sans CJK SC" font-size="13.00">placement, LRU and queue are in the next diagram</text>
+</g>
+<!-- sched_ok&#45;&gt;acquire -->
+<g id="edge27" class="edge">
+<title>sched_ok&#45;&gt;acquire</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M1064.27,-765.8C1108.27,-753.8 1167.87,-737.11 1220,-721 1260.95,-708.35 1306.08,-693.3 1343.8,-680.4"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="1344.93,-682.6 1350.76,-678.02 1343.34,-677.97 1344.93,-682.6"/>
+<text text-anchor="middle" x="1199" y="-732.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">yes</text>
+</g>
+<!-- lease -->
+<g id="node27" class="node">
+<title>lease</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.3" d="M1582.5,-569.5C1582.5,-569.5 1251.5,-569.5 1251.5,-569.5 1245.5,-569.5 1239.5,-563.5 1239.5,-557.5 1239.5,-557.5 1239.5,-539.5 1239.5,-539.5 1239.5,-533.5 1245.5,-527.5 1251.5,-527.5 1251.5,-527.5 1582.5,-527.5 1582.5,-527.5 1588.5,-527.5 1594.5,-533.5 1594.5,-539.5 1594.5,-539.5 1594.5,-557.5 1594.5,-557.5 1594.5,-563.5 1588.5,-569.5 1582.5,-569.5"/>
+<text text-anchor="middle" x="1417" y="-552.1" font-family="Noto Sans CJK SC" font-size="13.00">Lease (active_requests++)</text>
+<text text-anchor="middle" x="1417" y="-538.1" font-family="Noto Sans CJK SC" font-size="13.00">blocks LRU eviction, idle stop and force unload</text>
+</g>
+<!-- acquire&#45;&gt;lease -->
+<g id="edge28" class="edge">
+<title>acquire&#45;&gt;lease</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M1424.99,-621.81C1423.44,-607.8 1421.56,-590.75 1420.01,-576.73"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="1422.44,-576.4 1419.23,-569.71 1417.57,-576.94 1422.44,-576.4"/>
+<text text-anchor="middle" x="1429.5" y="-597.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">ok</text>
+</g>
+<!-- e_queue -->
+<g id="node28" class="node">
+<title>e_queue</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M1874.5,-578C1874.5,-578 1635.5,-578 1635.5,-578 1629.5,-578 1623.5,-572 1623.5,-566 1623.5,-566 1623.5,-531 1623.5,-531 1623.5,-525 1629.5,-519 1635.5,-519 1635.5,-519 1874.5,-519 1874.5,-519 1880.5,-519 1886.5,-525 1886.5,-531 1886.5,-531 1886.5,-566 1886.5,-566 1886.5,-572 1880.5,-578 1874.5,-578"/>
+<text text-anchor="middle" x="1755" y="-559.8" font-family="Noto Sans CJK SC" font-size="14.00">429 / 503 / 499</text>
+<text text-anchor="middle" x="1755" y="-544.8" font-family="Noto Sans CJK SC" font-size="14.00">queue_full / no_placement</text>
+<text text-anchor="middle" x="1755" y="-529.8" font-family="Noto Sans CJK SC" font-size="14.00">model_starting / client_closed</text>
+</g>
+<!-- acquire&#45;&gt;e_queue -->
+<g id="edge29" class="edge">
+<title>acquire&#45;&gt;e_queue</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M1516.92,-621.94C1559.47,-609 1610.58,-593.44 1654.53,-580.07"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="1655.25,-582.41 1661.24,-578.03 1653.83,-577.72 1655.25,-582.41"/>
+<text text-anchor="middle" x="1609" y="-597.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">fail</text>
+</g>
+<!-- endpoint -->
+<g id="node29" class="node">
+<title>endpoint</title>
+<path fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.3" d="M1613.5,-441C1613.5,-441 1220.5,-441 1220.5,-441 1214.5,-441 1208.5,-435 1208.5,-429 1208.5,-429 1208.5,-411 1208.5,-411 1208.5,-405 1214.5,-399 1220.5,-399 1220.5,-399 1613.5,-399 1613.5,-399 1619.5,-399 1625.5,-405 1625.5,-411 1625.5,-411 1625.5,-429 1625.5,-429 1625.5,-435 1619.5,-441 1613.5,-441"/>
+<text text-anchor="middle" x="1417" y="-423.6" font-family="Noto Sans CJK SC" font-size="13.00">Manager.Endpoint(ref)</text>
+<text text-anchor="middle" x="1417" y="-409.6" font-family="Noto Sans CJK SC" font-size="13.00">exact full&#45;ref match; never guesses from a single resident</text>
+</g>
+<!-- lease&#45;&gt;endpoint -->
+<g id="edge30" class="edge">
+<title>lease&#45;&gt;endpoint</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M1417,-527.46C1417,-506.12 1417,-472.21 1417,-448.41"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="1419.45,-448.37 1417,-441.37 1414.55,-448.37 1419.45,-448.37"/>
+</g>
+<!-- e_endpoint -->
+<g id="node30" class="node">
+<title>e_endpoint</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M1321.5,-338C1321.5,-338 1154.5,-338 1154.5,-338 1148.5,-338 1142.5,-332 1142.5,-326 1142.5,-326 1142.5,-314 1142.5,-314 1142.5,-308 1148.5,-302 1154.5,-302 1154.5,-302 1321.5,-302 1321.5,-302 1327.5,-302 1333.5,-308 1333.5,-314 1333.5,-314 1333.5,-326 1333.5,-326 1333.5,-332 1327.5,-338 1321.5,-338"/>
+<text text-anchor="middle" x="1238" y="-316.3" font-family="Noto Sans CJK SC" font-size="14.00">503 model_starting</text>
+</g>
+<!-- endpoint&#45;&gt;e_endpoint -->
+<g id="edge31" class="edge">
+<title>endpoint&#45;&gt;e_endpoint</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M1380.34,-398.93C1349.79,-382.2 1306.43,-358.46 1275.61,-341.59"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="1276.55,-339.31 1269.23,-338.1 1274.19,-343.61 1276.55,-339.31"/>
+<text text-anchor="middle" x="1368" y="-374.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">missing</text>
+</g>
+<!-- proxy -->
+<g id="node31" class="node">
+<title>proxy</title>
+<path fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.3" d="M1735.5,-355C1735.5,-355 1374.5,-355 1374.5,-355 1368.5,-355 1362.5,-349 1362.5,-343 1362.5,-343 1362.5,-297 1362.5,-297 1362.5,-291 1368.5,-285 1374.5,-285 1374.5,-285 1735.5,-285 1735.5,-285 1741.5,-285 1747.5,-291 1747.5,-297 1747.5,-297 1747.5,-343 1747.5,-343 1747.5,-349 1741.5,-355 1735.5,-355"/>
+<text text-anchor="middle" x="1555" y="-337.6" font-family="Noto Sans CJK SC" font-size="13.00">proxyGateway</text>
+<text text-anchor="middle" x="1555" y="-323.6" font-family="Noto Sans CJK SC" font-size="13.00">method / path / query / body forwarded unchanged</text>
+<text text-anchor="middle" x="1555" y="-309.6" font-family="Noto Sans CJK SC" font-size="13.00">strips host / auth / token / cookie / accept&#45;encoding</text>
+<text text-anchor="middle" x="1555" y="-295.6" font-family="Noto Sans CJK SC" font-size="13.00">client close → cancel upstream</text>
+</g>
+<!-- endpoint&#45;&gt;proxy -->
+<g id="edge32" class="edge">
+<title>endpoint&#45;&gt;proxy</title>
+<path fill="none" stroke="#0284c7" stroke-width="1.15" d="M1445.26,-398.93C1461.34,-387.51 1482.02,-372.83 1501.08,-359.29"/>
+<polygon fill="#0284c7" stroke="#0284c7" stroke-width="1.15" points="1502.65,-361.18 1506.94,-355.13 1499.81,-357.19 1502.65,-361.18"/>
+<text text-anchor="middle" x="1487.5" y="-374.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">ok</text>
+</g>
+<!-- rewrite -->
+<g id="node32" class="node">
+<title>rewrite</title>
+<path fill="#dbeafe" stroke="#3b82f6" stroke-width="1.3" d="M1439,-241C1439,-241 1119,-241 1119,-241 1113,-241 1107,-235 1107,-229 1107,-229 1107,-183 1107,-183 1107,-177 1113,-171 1119,-171 1119,-171 1439,-171 1439,-171 1445,-171 1451,-177 1451,-183 1451,-183 1451,-229 1451,-229 1451,-235 1445,-241 1439,-241"/>
+<text text-anchor="middle" x="1279" y="-223.6" font-family="Noto Sans CJK SC" font-size="13.00">Response model rewrite</text>
+<text text-anchor="middle" x="1279" y="-209.6" font-family="Noto Sans CJK SC" font-size="13.00">SSE: rewrite each data: line</text>
+<text text-anchor="middle" x="1279" y="-195.6" font-family="Noto Sans CJK SC" font-size="13.00">JSON ≤32MiB: rewrite top&#45;level string model</text>
+<text text-anchor="middle" x="1279" y="-181.6" font-family="Noto Sans CJK SC" font-size="13.00">other / oversized: stream bytes</text>
+</g>
+<!-- proxy&#45;&gt;rewrite -->
+<g id="edge33" class="edge">
+<title>proxy&#45;&gt;rewrite</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M1471.07,-284.94C1439.09,-271.96 1402.5,-257.12 1369.9,-243.89"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="1370.42,-241.45 1363.01,-241.09 1368.57,-245.99 1370.42,-241.45"/>
+</g>
+<!-- release -->
+<g id="node33" class="node">
+<title>release</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.3" d="M1771.5,-227C1771.5,-227 1492.5,-227 1492.5,-227 1486.5,-227 1480.5,-221 1480.5,-215 1480.5,-215 1480.5,-197 1480.5,-197 1480.5,-191 1486.5,-185 1492.5,-185 1492.5,-185 1771.5,-185 1771.5,-185 1777.5,-185 1783.5,-191 1783.5,-197 1783.5,-197 1783.5,-215 1783.5,-215 1783.5,-221 1777.5,-227 1771.5,-227"/>
+<text text-anchor="middle" x="1632" y="-209.6" font-family="Noto Sans CJK SC" font-size="13.00">lease.Release</text>
+<text text-anchor="middle" x="1632" y="-195.6" font-family="Noto Sans CJK SC" font-size="13.00">leases&#45;&#45;; busy → ready; last_used=now</text>
+</g>
+<!-- proxy&#45;&gt;release -->
+<g id="edge34" class="edge">
+<title>proxy&#45;&gt;release</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M1578.52,-284.79C1590,-268.09 1603.58,-248.33 1614.19,-232.91"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="1616.3,-234.17 1618.24,-227.01 1612.26,-231.39 1616.3,-234.17"/>
+<text text-anchor="middle" x="1629.5" y="-260.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">done / closed</text>
+</g>
+<!-- idle -->
+<g id="node34" class="node">
+<title>idle</title>
+<path fill="#fef3c7" stroke="#f59e0b" stroke-width="1.3" d="M1772.5,-138C1772.5,-138 1435.5,-138 1435.5,-138 1429.5,-138 1423.5,-132 1423.5,-126 1423.5,-126 1423.5,-108 1423.5,-108 1423.5,-102 1429.5,-96 1435.5,-96 1435.5,-96 1772.5,-96 1772.5,-96 1778.5,-96 1784.5,-102 1784.5,-108 1784.5,-108 1784.5,-126 1784.5,-126 1784.5,-132 1778.5,-138 1772.5,-138"/>
+<text text-anchor="middle" x="1604" y="-120.6" font-family="Noto Sans CJK SC" font-size="13.00">idle reaper (1s)</text>
+<text text-anchor="middle" x="1604" y="-106.6" font-family="Noto Sans CJK SC" font-size="13.00">ready + leases=0 past idle_stop_seconds → stop</text>
+</g>
+<!-- release&#45;&gt;idle -->
+<g id="edge35" class="edge">
+<title>release&#45;&gt;idle</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" stroke-dasharray="1,5" d="M1625.51,-184.82C1621.69,-172.96 1616.82,-157.82 1612.67,-144.95"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="1614.94,-143.98 1610.46,-138.07 1610.27,-145.48 1614.94,-143.98"/>
+</g>
+<!-- mgmt_note -->
+<g id="node35" class="node">
+<title>mgmt_note</title>
+<polygon fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.3" points="1907.5,-53 1294.5,-53 1294.5,0 1913.5,0 1913.5,-47 1907.5,-53"/>
+<polyline fill="none" stroke="#cbd5e1" stroke-width="1.3" points="1907.5,-53 1907.5,-47 "/>
+<polyline fill="none" stroke="#cbd5e1" stroke-width="1.3" points="1913.5,-47 1907.5,-47 "/>
+<text text-anchor="middle" x="1604" y="-36.8" font-family="Noto Sans CJK SC" font-size="11.50">Control plane is not the inference path</text>
+<text text-anchor="middle" x="1604" y="-23.8" font-family="Noto Sans CJK SC" font-size="11.50">/api/v1/models/preload prepares disk only: inspectRef → checkPreloadVRAM(total VRAM) → host.Pull job</text>
+<text text-anchor="middle" x="1604" y="-10.8" font-family="Noto Sans CJK SC" font-size="11.50">/api/v1/models/unload: force / wait when busy → stopResident → RemoveCachedRef</text>
+</g>
+<!-- idle&#45;&gt;mgmt_note -->
+</g>
 </svg>

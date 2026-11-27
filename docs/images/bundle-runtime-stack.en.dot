@@ -1,0 +1,69 @@
+digraph bundle_runtime_stack {
+  graph [rankdir=TB, bgcolor="#F7F9FC", pad=0.4, nodesep=0.4, ranksep=0.45, fontname="Noto Sans CJK SC", fontsize=30, labelloc=t, label=<<B>Model Bundle and FlashRT runtime stack</B><BR/><FONT POINT-SIZE="14" COLOR="#64748B">manifest contract → host prepares bundle / venv / weights → three entry kinds → bundle ships FlashRT</FONT>>];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC", fontsize=13, margin="0.46,0.10", penwidth=1.3, color="#94A3B8"];
+  edge [fontname="Noto Sans CJK SC", fontsize=11, color="#64748B", fontcolor="#475569", arrowsize=0.7, penwidth=1.15];
+  subgraph cluster_1 {
+    label=<<B>A. FlashHub artifacts and weight sources</B>>;
+    style="rounded,filled"; color="#F97316"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  repo [shape=cylinder, style="filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=12, width=4.48, label="Bundle version\nnamespace/name:version\nflashcli-bundle.json + runtime cells\nweights record their source; they are never packaged"];
+  weights_src [shape=cylinder, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=12, width=3.04, label="Weight source\nHuggingFace / ModelScope / bundled\nrepo + revision + allow patterns"];
+  }
+  subgraph cluster_2 {
+    label=<<B>B. Manifest contract (v4)</B>>;
+    style="rounded,filled"; color="#EF4444"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  identity [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.3, fontsize=13, width=3.44, label="Version axes\nformat_version 3 / 4\nprotocol_version = 1\nruntime_abi_version = 1 (native-abi)\nexec_protocol_version = 1 (native-exec)"];
+  env [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=3.52, label="defaults + environments\nselect env key by SM / CUDA / Python ABI\nexact key first, then match fallback\nmerge into the effective manifest"];
+  entry [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=3.44, label="entry.run / entry.serve\nkind: python | native-exec | native-abi\nmode: engine | script (python only)\ncapabilities + concurrency"];
+  resources [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=3.52, label="resources / system / options\nmin_vram_mib · gpu_count · min_ram_mib\nc/cxx compiler · python headers\nrun_options / serve_options defaults"];
+  deps [shape=box, style="rounded,filled", fillcolor="#FCE7F3", color="#F472B6", penwidth=1.3, fontsize=13, width=3.36, label="python_dependencies\ntorch index + pip list\nmust match the runtime cell's -py<abi>"];
+  weights_meta [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=3.36, label="weights / extra_weights\nsource · repo · revision\nallow_patterns · require_any_patterns\nrequire_norm_stats · weights_dir\npost_pull / extra_pull"];
+  }
+  subgraph cluster_3 {
+    label=<<B>C. Host preparation (shared cache layer)</B>>;
+    style="rounded,filled"; color="#22C55E"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  ensure_bundle [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.3, fontsize=13, width=4.40, label="host.EnsureBundle\nlocal paths are used directly\nFlashHub: marker or index → manifest → SyncBundle\nonly the selected runtime cell is fetched\nwrites .flashcli_bundle.json + .runtime.json"];
+  preflight [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=3.84, label="PreflightBundle\nenv key must match this host\nrecognize .so; host glibc / GLIBCXX / CXXABI"];
+  venv [shape=box, style="rounded,filled", fillcolor="#FCE7F3", color="#F472B6", penwidth=1.3, fontsize=13, width=3.76, label="venv.Ensure\nruntimes/<runtime_id>/venv\nuv by default; pip is a deprecated fallback\noffline reuse when the fingerprint matches"];
+  weights [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=3.84, label="weights.PrepareBundle\nmodels/store/<source>/<repo>@<rev>-<hash>\nmain weights + extra_weights + extra_pull\nhost completeness: .flashcli_download.json\nbundle readiness: allow/require + norm stats\npost_pull: paligemma and similar"];
+  protocol [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=3.84, label="Protocol schema\non CACHE_SCHEMA_VERSION change, upgrade only\nflashcli-bundle; torch remains"];
+  }
+  subgraph cluster_4 {
+    label=<<B>D. Execution entries</B>>;
+    style="rounded,filled"; color="#38BDF8"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
+  py_engine [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=4.64, label="python + engine\nimport bundle.entry; instantiate RunEngine/ServeEngine\nload(checkpoint, preset, options)"];
+  py_run [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.3, fontsize=13, width=1.60, label="run → predict()"];
+  py_serve [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=4.00, label="serve → warmup() + build_app()\nstandard routes are mounted by flashcli-bundle\nregister_routes() may override or add routes"];
+  script [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=13, width=3.76, label="python + script\nmain(argv) creates its own server/protocol\nno host routes; manifest env is not applied"];
+  native_exec [shape=box, style="rounded,filled", fillcolor="#E0F2FE", color="#38BDF8", penwidth=1.3, fontsize=13, width=4.00, label="native-exec\nexecutable + NDJSON or HTTP\nserve over stdio is not implemented; run works"];
+  native_abi [shape=box, style="rounded,filled", fillcolor="#E0F2FE", color="#38BDF8", penwidth=1.3, fontsize=13, width=4.56, label="native-abi\ndlopen producer library + config JSON\nplain run only probes the ABI; sessions run inference"];
+  flashrt [shape=note, style="filled", fillcolor="#F1F5F9", color="#CBD5E1", penwidth=1.3, fontsize=11.5, width=4.08, label="FlashRT\nbundle's flash_rt/ and .so under runtime/<env>/\nregister_native_modules runs before import\nhost checks the ABI; it never installs kernels"];
+  }
+  readiness [shape=note, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=11.5, width=7.76, label="Completeness ≠ readiness\nhost owns download completeness; the bundle owns allow/require/norm-stats readiness\na present-but-incomplete manifest is never accepted; a ready legacy cache is accepted offline"];
+  repo -> env [color="#64748B", style="solid", label="parse"];
+  repo -> identity [color="#DC2626", style="solid", label="validate"];
+  identity -> env [color="#64748B", style="solid"];
+  env -> entry [color="#64748B", style="solid"];
+  env -> resources [color="#64748B", style="solid"];
+  env -> deps [color="#64748B", style="solid"];
+  env -> weights_meta [color="#64748B", style="solid"];
+  repo -> ensure_bundle [color="#EA580C", style="solid", label="sync"];
+  ensure_bundle -> preflight [color="#64748B", style="solid"];
+  preflight -> venv [color="#DB2777", style="solid", label="Python cell"];
+  preflight -> weights [color="#D97706", style="dashed", label="native cell"];
+  venv -> protocol [color="#64748B", style="solid"];
+  weights -> protocol [color="#64748B", style="dotted"];
+  preflight -> py_engine [color="#7C3AED", style="solid", label="entry.kind"];
+  preflight -> native_exec [color="#0284C7", style="solid", label="native-exec"];
+  preflight -> native_abi [color="#0284C7", style="solid", label="native-abi"];
+  entry -> py_engine [color="#7C3AED", style="dotted", label="engine"];
+  entry -> script [color="#EA580C", style="dotted", label="script"];
+  py_engine -> py_run [color="#2563EB", style="solid", label="run"];
+  py_engine -> py_serve [color="#16A34A", style="solid", label="serve"];
+  py_engine -> flashrt [color="#64748B", style="dotted", label="import / dlopen"];
+  native_exec -> flashrt [color="#64748B", style="dotted"];
+  native_abi -> flashrt [color="#64748B", style="dotted"];
+  deps -> venv [color="#DB2777", style="dashed", label="install"];
+  weights_src -> weights_meta [color="#D97706", style="dashed", label="declare"];
+  weights_meta -> weights [color="#D97706", style="dashed", label="patterns / download / readiness"];
+  weights -> readiness [color="#64748B", style="dotted"];
+}

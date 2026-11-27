@@ -1,115 +1,317 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
-<defs>
-<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1.5" stdDeviation="3" flood-color="#0F172A" flood-opacity="0.05"/></filter>
-<marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#2563EB"/></marker>
-<marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#0F766E"/></marker>
-<marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#B45309"/></marker>
-<marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#DC2626"/></marker>
-</defs>
-<rect width="1600" height="900" fill="#F7F9FC"/>
-<path d="M 48 100 L 1552 100" stroke="#E2E8F0" stroke-width="1"/>
-<text x="48" y="64" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="34" font-weight="700" fill="#0F172A">flashserver 应用生命周期</text>
-<text x="1552" y="64" text-anchor="end" font-family="JetBrains Mono, Consolas, monospace" font-size="12" font-weight="400" fill="#94A3B8">v1</text>
-<text x="48" y="132" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">计划 / 安装</text>
-<text x="408" y="132" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">准备</text>
-<text x="818" y="132" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">配置</text>
-<text x="1178" y="132" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">就绪 / 运维</text>
-<rect x="80" y="230" width="210" height="100" rx="10" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.2" filter="url(#shadow)"/>
-<rect x="80" y="240" width="3" height="80" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="96" y="258" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#0F172A">PLANNED</text>
-<text x="96" y="280" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">manifest 合法</text>
-<text x="96" y="296" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">平台支持</text>
-<rect x="350" y="230" width="210" height="100" rx="10" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.2" filter="url(#shadow)"/>
-<rect x="350" y="240" width="3" height="80" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="366" y="258" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#0F172A">INSTALL</text>
-<text x="366" y="280" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">client / daemon</text>
-<text x="366" y="296" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">installer / skip</text>
-<rect x="620" y="230" width="210" height="100" rx="10" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.2" filter="url(#shadow)"/>
-<rect x="620" y="240" width="3" height="80" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="636" y="258" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#0F172A">PREPARED</text>
-<text x="636" y="280" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">default bundles</text>
-<text x="636" y="296" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">preload 完成</text>
-<rect x="890" y="230" width="210" height="100" rx="10" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.2" filter="url(#shadow)"/>
-<rect x="890" y="240" width="3" height="80" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="906" y="258" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#0F172A">SETUP</text>
-<text x="906" y="280" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">执行 setup scripts</text>
-<text x="906" y="296" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">写入网关连接</text>
-<rect x="1160" y="230" width="210" height="100" rx="10" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.2" filter="url(#shadow)"/>
-<rect x="1160" y="240" width="3" height="80" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="1176" y="258" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#0F172A">READY</text>
-<text x="1176" y="280" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">应用已配置</text>
-<text x="1176" y="296" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">推理走 /v1</text>
-<path d="M 290 280 L 350 280" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 560 280 L 620 280" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 830 280 L 890 280" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<path d="M 1100 280 L 1160 280" fill="none" stroke="#2563EB" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
-<rect x="350" y="410" width="210" height="100" rx="10" fill="#FFF5F5" stroke="#F3C4C4" stroke-width="1.2"/>
-<text x="366" y="438" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#0F172A">FAILED</text>
-<text x="366" y="462" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#475569">安装/准备失败</text>
-<text x="366" y="480" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">保留日志，可重试</text>
-<path d="M 455 330 L 455 410" fill="none" stroke="#DC2626" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-red)"/>
-<text x="468" y="374" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">fail</text>
-<rect x="1160" y="410" width="210" height="100" rx="10" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1.2"/>
-<text x="1176" y="438" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#0F172A">UNINSTALL</text>
-<text x="1176" y="462" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#475569">删除应用记录</text>
-<text x="1176" y="480" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="10" font-weight="400" fill="#94A3B8">保留模型缓存</text>
-<path d="M 1265 330 L 1265 410" fill="none" stroke="#B45309" stroke-width="1.4" stroke-linejoin="round" marker-end="url(#arrow-amber)"/>
-<text x="1278" y="374" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">remove</text>
-<text x="48" y="570" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">安装命令</text>
-<text x="408" y="570" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">准备详情</text>
-<text x="818" y="570" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">SETUP 详情</text>
-<text x="1178" y="570" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748B" letter-spacing="1.2">边界 / 持久化</text>
-<rect x="48" y="590" width="330" height="250" rx="10" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="408" y="590" width="360" height="250" rx="10" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="818" y="590" width="330" height="250" rx="10" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="1178" y="590" width="374" height="250" rx="10" fill="#FBFCFE" stroke="#EEF2F7" stroke-width="1"/>
-<rect x="64" y="610" width="298" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="64" y="618" width="3" height="34" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="78" y="627" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">client / daemon / installer</text>
-<text x="78" y="643" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">或 skip（仅准备模型）</text>
-<rect x="64" y="674" width="298" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="64" y="682" width="3" height="34" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="78" y="691" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">idempotent</text>
-<text x="78" y="707" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">重复安装复用状态</text>
-<rect x="64" y="738" width="298" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="64" y="746" width="3" height="34" rx="1.5" fill="#DC2626" stroke="#DC2626" stroke-width="0"/>
-<text x="78" y="755" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">日志 / 重试</text>
-<text x="78" y="771" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">失败可重试</text>
-<rect x="424" y="610" width="328" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="424" y="618" width="3" height="34" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="438" y="627" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">default bundles</text>
-<text x="438" y="643" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">preload jobs</text>
-<rect x="424" y="674" width="328" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="424" y="682" width="3" height="34" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="438" y="691" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">就绪判断</text>
-<text x="438" y="707" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">manifest / weights / offline</text>
-<rect x="424" y="738" width="328" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="424" y="746" width="3" height="34" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="438" y="755" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">失败续传</text>
-<text x="438" y="771" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">preload 可续传</text>
-<rect x="834" y="610" width="298" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="834" y="618" width="3" height="34" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="848" y="627" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">脚本</text>
-<text x="848" y="643" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">install / setup / errors</text>
-<rect x="834" y="674" width="298" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="834" y="682" width="3" height="34" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="848" y="691" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">网关连接</text>
-<text x="848" y="707" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">base URL / token</text>
-<rect x="834" y="738" width="298" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="834" y="746" width="3" height="34" rx="1.5" fill="#2563EB" stroke="#2563EB" stroke-width="0"/>
-<text x="848" y="755" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">可重试</text>
-<text x="848" y="771" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">SETUP 失败不破坏 READY</text>
-<rect x="1194" y="610" width="342" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="1194" y="618" width="3" height="34" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="1208" y="627" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">调度器</text>
-<text x="1208" y="643" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">拥有 resident 生命周期</text>
-<rect x="1194" y="674" width="342" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="1194" y="682" width="3" height="34" rx="1.5" fill="#0F766E" stroke="#0F766E" stroke-width="0"/>
-<text x="1208" y="691" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">应用</text>
-<text x="1208" y="707" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">只调用 /v1，无 PID/endpoint</text>
-<rect x="1194" y="738" width="342" height="50" rx="7" fill="#FFFFFF" stroke="#DCE5F0" stroke-width="1"/>
-<rect x="1194" y="746" width="3" height="34" rx="1.5" fill="#B45309" stroke="#B45309" stroke-width="0"/>
-<text x="1208" y="755" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="11.5" font-weight="600" fill="#0F172A">卸载保留</text>
-<text x="1208" y="771" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">模型缓存保留，显式清理才删</text>
-<text x="48" y="862" text-anchor="start" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="9.5" font-weight="400" fill="#94A3B8">蓝：状态推进  橙：外部操作  红：失败  虚线：可选 / 重试路径</text>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.43.0 (0)
+ -->
+<!-- Title: app_lifecycle Pages: 1 -->
+<svg width="2489pt" height="840pt"
+ viewBox="0.00 0.00 2488.60 839.60" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(28.8 810.8)">
+<title>app_lifecycle</title>
+<polygon fill="#f7f9fc" stroke="transparent" points="-28.8,28.8 -28.8,-810.8 2459.8,-810.8 2459.8,28.8 -28.8,28.8"/>
+<text text-anchor="start" x="1039" y="-755" font-family="Noto Sans CJK SC" font-weight="bold" font-size="30.00">flashserver 应用生命周期</text>
+<text text-anchor="start" x="963" y="-737.8" font-family="Noto Sans CJK SC" font-size="14.00" fill="#64748b">planned → preparing → prepared → ready；应用只调用 /v1，不启动/停止模型</text>
+<g id="clust1" class="cluster">
+<title>cluster_1</title>
+<path fill="#ffffff" stroke="#f97316" stroke-width="1.3" d="M20,-8C20,-8 793,-8 793,-8 799,-8 805,-14 805,-20 805,-20 805,-703 805,-703 805,-709 799,-715 793,-715 793,-715 20,-715 20,-715 14,-715 8,-709 8,-703 8,-703 8,-20 8,-20 8,-14 14,-8 20,-8"/>
+<text text-anchor="start" x="368.5" y="-700" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">安装与准备</text>
+</g>
+<g id="clust2" class="cluster">
+<title>cluster_2</title>
+<path fill="#ffffff" stroke="#8b5cf6" stroke-width="1.3" d="M1529,-272.5C1529,-272.5 1906,-272.5 1906,-272.5 1912,-272.5 1918,-278.5 1918,-284.5 1918,-284.5 1918,-710 1918,-710 1918,-716 1912,-722 1906,-722 1906,-722 1529,-722 1529,-722 1523,-722 1517,-716 1517,-710 1517,-710 1517,-284.5 1517,-284.5 1517,-278.5 1523,-272.5 1529,-272.5"/>
+<text text-anchor="start" x="1679.5" y="-707" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">配置与激活</text>
+</g>
+<g id="clust3" class="cluster">
+<title>cluster_3</title>
+<path fill="#ffffff" stroke="#14b8a6" stroke-width="1.3" d="M825,-8C825,-8 2411,-8 2411,-8 2417,-8 2423,-14 2423,-20 2423,-20 2423,-230 2423,-230 2423,-236 2417,-242 2411,-242 2411,-242 825,-242 825,-242 819,-242 813,-236 813,-230 813,-230 813,-20 813,-20 813,-14 819,-8 825,-8"/>
+<text text-anchor="start" x="1572.5" y="-227" font-family="Noto Sans CJK SC" font-weight="bold" font-size="15.00" fill="#334155">运行时与卸载</text>
+</g>
+<!-- resolve -->
+<g id="node1" class="node">
+<title>resolve</title>
+<path fill="#ffedd5" stroke="#f97316" stroke-width="1.3" d="M449.5,-672C449.5,-672 166.5,-672 166.5,-672 160.5,-672 154.5,-666 154.5,-660 154.5,-660 154.5,-642 154.5,-642 154.5,-636 160.5,-630 166.5,-630 166.5,-630 449.5,-630 449.5,-630 455.5,-630 461.5,-636 461.5,-642 461.5,-642 461.5,-660 461.5,-660 461.5,-666 455.5,-672 449.5,-672"/>
+<text text-anchor="middle" x="308" y="-654.6" font-family="Noto Sans CJK SC" font-size="13.00">FetchAppManifest + Validate + Platform</text>
+<text text-anchor="middle" x="308" y="-640.6" font-family="Noto Sans CJK SC" font-size="13.00">平台命令 / default bundles / 版本固定</text>
+</g>
+<!-- already -->
+<g id="node2" class="node">
+<title>already</title>
+<polygon fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.45" points="437,-589 170,-562 437,-535 704,-562 437,-589"/>
+<text text-anchor="middle" x="437" y="-558.9" font-family="Noto Sans CJK SC" font-size="12.00">已 prepared / ready 且 force=false？</text>
+</g>
+<!-- resolve&#45;&gt;already -->
+<g id="edge1" class="edge">
+<title>resolve&#45;&gt;already</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M337.92,-629.82C355.59,-617.9 378.18,-602.67 397.33,-589.76"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="398.72,-591.78 403.15,-585.83 395.98,-587.71 398.72,-591.78"/>
+</g>
+<!-- noop -->
+<g id="node3" class="node">
+<title>noop</title>
+<path fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.8" d="M723.5,-466C723.5,-466 518.5,-466 518.5,-466 512.5,-466 506.5,-460 506.5,-454 506.5,-454 506.5,-442 506.5,-442 506.5,-436 512.5,-430 518.5,-430 518.5,-430 723.5,-430 723.5,-430 729.5,-430 735.5,-436 735.5,-442 735.5,-442 735.5,-454 735.5,-454 735.5,-460 729.5,-466 723.5,-466"/>
+<text text-anchor="middle" x="621" y="-444.3" font-family="Noto Sans CJK SC" font-size="14.00">AlreadyReady（无操作）</text>
+</g>
+<!-- already&#45;&gt;noop -->
+<g id="edge2" class="edge">
+<title>already&#45;&gt;noop</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M473.79,-538.6C506.73,-518.56 554.65,-489.39 586.78,-469.83"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="588.28,-471.79 592.98,-466.05 585.73,-467.6 588.28,-471.79"/>
+<text text-anchor="middle" x="530" y="-509.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">是</text>
+</g>
+<!-- planned -->
+<g id="node4" class="node">
+<title>planned</title>
+<path fill="#e0e7ff" stroke="#6366f1" stroke-width="1.8" d="M465,-477.5C465,-477.5 213,-477.5 213,-477.5 207,-477.5 201,-471.5 201,-465.5 201,-465.5 201,-430.5 201,-430.5 201,-424.5 207,-418.5 213,-418.5 213,-418.5 465,-418.5 465,-418.5 471,-418.5 477,-424.5 477,-430.5 477,-430.5 477,-465.5 477,-465.5 477,-471.5 471,-477.5 465,-477.5"/>
+<text text-anchor="middle" x="339" y="-459.3" font-family="Noto Sans CJK SC" font-size="14.00">planned</text>
+<text text-anchor="middle" x="339" y="-444.3" font-family="Noto Sans CJK SC" font-size="14.00">install 命令执行前写入 apps.json</text>
+<text text-anchor="middle" x="339" y="-429.3" font-family="Noto Sans CJK SC" font-size="14.00">持久化，跨进程锁</text>
+</g>
+<!-- already&#45;&gt;planned -->
+<g id="edge3" class="edge">
+<title>already&#45;&gt;planned</title>
+<path fill="none" stroke="#4f46e5" stroke-width="1.15" d="M415.98,-536.97C402.21,-521.25 384.03,-500.46 368.78,-483.04"/>
+<polygon fill="#4f46e5" stroke="#4f46e5" stroke-width="1.15" points="370.61,-481.41 364.16,-477.75 366.92,-484.63 370.61,-481.41"/>
+<text text-anchor="middle" x="403" y="-509.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">否</text>
+</g>
+<!-- install_cmd -->
+<g id="node5" class="node">
+<title>install_cmd</title>
+<path fill="#ffedd5" stroke="#f97316" stroke-width="1.3" d="M524,-362C524,-362 238,-362 238,-362 232,-362 226,-356 226,-350 226,-350 226,-290 226,-290 226,-284 232,-278 238,-278 238,-278 524,-278 524,-278 530,-278 536,-284 536,-290 536,-290 536,-350 536,-350 536,-356 530,-362 524,-362"/>
+<text text-anchor="middle" x="381" y="-344.6" font-family="Noto Sans CJK SC" font-size="13.00">install.command</text>
+<text text-anchor="middle" x="381" y="-330.6" font-family="Noto Sans CJK SC" font-size="13.00">run：daemon 执行 shell</text>
+<text text-anchor="middle" x="381" y="-316.6" font-family="Noto Sans CJK SC" font-size="13.00">client：桌面端本地执行，daemon 只记录</text>
+<text text-anchor="middle" x="381" y="-302.6" font-family="Noto Sans CJK SC" font-size="13.00">URL：只展示下载页，不抓取</text>
+<text text-anchor="middle" x="381" y="-288.6" font-family="Noto Sans CJK SC" font-size="13.00">skip：不执行</text>
+</g>
+<!-- planned&#45;&gt;install_cmd -->
+<g id="edge4" class="edge">
+<title>planned&#45;&gt;install_cmd</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M348.53,-418.41C353.36,-403.92 359.35,-385.94 364.87,-369.38"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="367.32,-369.8 367.21,-362.38 362.67,-368.25 367.32,-369.8"/>
+</g>
+<!-- preparing -->
+<g id="node6" class="node">
+<title>preparing</title>
+<path fill="#fef3c7" stroke="#f59e0b" stroke-width="1.3" d="M499,-192C499,-192 263,-192 263,-192 257,-192 251,-186 251,-180 251,-180 251,-148 251,-148 251,-142 257,-136 263,-136 263,-136 499,-136 499,-136 505,-136 511,-142 511,-148 511,-148 511,-180 511,-180 511,-186 505,-192 499,-192"/>
+<text text-anchor="middle" x="381" y="-174.6" font-family="Noto Sans CJK SC" font-size="13.00">preparing</text>
+<text text-anchor="middle" x="381" y="-160.6" font-family="Noto Sans CJK SC" font-size="13.00">对 default bundles 串行 Prepare</text>
+<text text-anchor="middle" x="381" y="-146.6" font-family="Noto Sans CJK SC" font-size="13.00">Prepare = host.Pull</text>
+</g>
+<!-- install_cmd&#45;&gt;preparing -->
+<g id="edge6" class="edge">
+<title>install_cmd&#45;&gt;preparing</title>
+<path fill="none" stroke="#d97706" stroke-width="1.15" d="M381,-277.73C381,-253.29 381,-222.68 381,-199.53"/>
+<polygon fill="#d97706" stroke="#d97706" stroke-width="1.15" points="383.45,-199.29 381,-192.29 378.55,-199.29 383.45,-199.29"/>
+<text text-anchor="middle" x="414.5" y="-253.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">成功 + 有模型</text>
+</g>
+<!-- prepared -->
+<g id="node7" class="node">
+<title>prepared</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.3" d="M775.5,-83.5C775.5,-83.5 362.5,-83.5 362.5,-83.5 356.5,-83.5 350.5,-77.5 350.5,-71.5 350.5,-71.5 350.5,-39.5 350.5,-39.5 350.5,-33.5 356.5,-27.5 362.5,-27.5 362.5,-27.5 775.5,-27.5 775.5,-27.5 781.5,-27.5 787.5,-33.5 787.5,-39.5 787.5,-39.5 787.5,-71.5 787.5,-71.5 787.5,-77.5 781.5,-83.5 775.5,-83.5"/>
+<text text-anchor="middle" x="569" y="-66.1" font-family="Noto Sans CJK SC" font-size="13.00">prepared</text>
+<text text-anchor="middle" x="569" y="-52.1" font-family="Noto Sans CJK SC" font-size="13.00">所有选中 bundle 的 Prepared=true</text>
+<text text-anchor="middle" x="569" y="-38.1" font-family="Noto Sans CJK SC" font-size="13.00">Connection = {base_url, api_key=local, models, model_refs}</text>
+</g>
+<!-- install_cmd&#45;&gt;prepared -->
+<g id="edge7" class="edge">
+<title>install_cmd&#45;&gt;prepared</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" stroke-dasharray="5,2" d="M483.26,-277.85C498.9,-267.98 513.6,-256.11 525,-242 560.25,-198.37 568.11,-131.23 569.4,-90.81"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="571.85,-90.64 569.57,-83.59 566.95,-90.53 571.85,-90.64"/>
+<text text-anchor="middle" x="600.5" y="-161.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">成功 + 无模型</text>
+</g>
+<!-- failed -->
+<g id="node8" class="node">
+<title>failed</title>
+<path fill="#fee2e2" stroke="#ef4444" stroke-width="1.8" d="M309.5,-85C309.5,-85 38.5,-85 38.5,-85 32.5,-85 26.5,-79 26.5,-73 26.5,-73 26.5,-38 26.5,-38 26.5,-32 32.5,-26 38.5,-26 38.5,-26 309.5,-26 309.5,-26 315.5,-26 321.5,-32 321.5,-38 321.5,-38 321.5,-73 321.5,-73 321.5,-79 315.5,-85 309.5,-85"/>
+<text text-anchor="middle" x="174" y="-66.8" font-family="Noto Sans CJK SC" font-size="14.00">failed</text>
+<text text-anchor="middle" x="174" y="-51.8" font-family="Noto Sans CJK SC" font-size="14.00">安装命令或 Prepare 失败；保留日志</text>
+<text text-anchor="middle" x="174" y="-36.8" font-family="Noto Sans CJK SC" font-size="14.00">可重试；已缓存的 bundle 保留</text>
+</g>
+<!-- install_cmd&#45;&gt;failed -->
+<g id="edge5" class="edge">
+<title>install_cmd&#45;&gt;failed</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M255.39,-277.91C239.33,-268.24 224.52,-256.41 213,-242 178.6,-198.95 172.52,-132.85 172.42,-92.28"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="174.87,-92.27 172.47,-85.26 169.97,-92.24 174.87,-92.27"/>
+<text text-anchor="middle" x="224.5" y="-161.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">失败</text>
+</g>
+<!-- desktop_note -->
+<g id="node18" class="node">
+<title>desktop_note</title>
+<polygon fill="#dbeafe" stroke="#3b82f6" stroke-width="1.3" points="1073,-197 831,-197 831,-131 1079,-131 1079,-191 1073,-197"/>
+<polyline fill="none" stroke="#3b82f6" stroke-width="1.3" points="1073,-197 1073,-191 "/>
+<polyline fill="none" stroke="#3b82f6" stroke-width="1.3" points="1079,-191 1073,-191 "/>
+<text text-anchor="middle" x="955" y="-180.8" font-family="Noto Sans CJK SC" font-size="11.50">Desktop 的角色</text>
+<text text-anchor="middle" x="955" y="-167.8" font-family="Noto Sans CJK SC" font-size="11.50">client 命令 / 安装器在本地执行</text>
+<text text-anchor="middle" x="955" y="-154.8" font-family="Noto Sans CJK SC" font-size="11.50">随后 POST install；配置走 /setup</text>
+<text text-anchor="middle" x="955" y="-141.8" font-family="Noto Sans CJK SC" font-size="11.50">不直接启动/停止模型，推理只走 /v1</text>
+</g>
+<!-- install_cmd&#45;&gt;desktop_note -->
+<g id="edge21" class="edge">
+<title>install_cmd&#45;&gt;desktop_note</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" stroke-dasharray="1,5" d="M536.11,-303.37C619.51,-291.98 723.18,-272.96 812,-242 841.95,-231.56 873.19,-215.43 898.8,-200.62"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="900.04,-202.74 904.85,-197.09 897.57,-198.51 900.04,-202.74"/>
+</g>
+<!-- preparing&#45;&gt;prepared -->
+<g id="edge8" class="edge">
+<title>preparing&#45;&gt;prepared</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M428.93,-135.85C455.11,-121.02 487.64,-102.59 514.75,-87.23"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="516.28,-89.18 521.16,-83.6 513.86,-84.92 516.28,-89.18"/>
+<text text-anchor="middle" x="521" y="-104.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">全部拉取完成</text>
+</g>
+<!-- preparing&#45;&gt;failed -->
+<g id="edge9" class="edge">
+<title>preparing&#45;&gt;failed</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M328.5,-135.99C300.44,-121.55 265.71,-103.68 236.29,-88.55"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="237.05,-86.19 229.71,-85.16 234.81,-90.54 237.05,-86.19"/>
+<text text-anchor="middle" x="295.5" y="-104.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">失败</text>
+</g>
+<!-- setup -->
+<g id="node9" class="node">
+<title>setup</title>
+<path fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.3" d="M1842.5,-679C1842.5,-679 1561.5,-679 1561.5,-679 1555.5,-679 1549.5,-673 1549.5,-667 1549.5,-667 1549.5,-635 1549.5,-635 1549.5,-629 1555.5,-623 1561.5,-623 1561.5,-623 1842.5,-623 1842.5,-623 1848.5,-623 1854.5,-629 1854.5,-635 1854.5,-635 1854.5,-667 1854.5,-667 1854.5,-673 1848.5,-679 1842.5,-679"/>
+<text text-anchor="middle" x="1702" y="-661.6" font-family="Noto Sans CJK SC" font-size="13.00">POST /api/v1/apps/{org}/{name}/setup</text>
+<text text-anchor="middle" x="1702" y="-647.6" font-family="Noto Sans CJK SC" font-size="13.00">可同步返回 AppState 或 ?async=1 job</text>
+<text text-anchor="middle" x="1702" y="-633.6" font-family="Noto Sans CJK SC" font-size="13.00">body: setup_scripts[] + client_home</text>
+</g>
+<!-- prepared&#45;&gt;setup -->
+<g id="edge10" class="edge">
+<title>prepared&#45;&gt;setup</title>
+<path fill="none" stroke="#7c3aed" stroke-width="1.15" d="M714.11,-83.51C750.79,-99.17 780,-123.92 780,-163 780,-563 780,-563 780,-563 780,-638.64 1278.17,-650.09 1542.14,-650.84"/>
+<polygon fill="#7c3aed" stroke="#7c3aed" stroke-width="1.15" points="1542.49,-653.29 1549.49,-650.86 1542.5,-648.39 1542.49,-653.29"/>
+<text text-anchor="middle" x="791.5" y="-381.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">激活</text>
+</g>
+<!-- failed&#45;&gt;resolve -->
+<g id="edge20" class="edge">
+<title>failed&#45;&gt;resolve</title>
+<path fill="none" stroke="#dc2626" stroke-width="1.15" stroke-dasharray="5,2" d="M159.58,-85.1C150.31,-106.1 140,-135.63 140,-163 140,-563 140,-563 140,-563 140,-594.3 163.28,-614.35 192.5,-627.19"/>
+<polygon fill="#dc2626" stroke="#dc2626" stroke-width="1.15" points="191.83,-629.56 199.23,-629.99 193.7,-625.04 191.83,-629.56"/>
+<text text-anchor="middle" x="151.5" y="-381.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">重试</text>
+</g>
+<!-- set_ready -->
+<g id="node10" class="node">
+<title>set_ready</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.3" d="M1856.5,-590C1856.5,-590 1547.5,-590 1547.5,-590 1541.5,-590 1535.5,-584 1535.5,-578 1535.5,-578 1535.5,-546 1535.5,-546 1535.5,-540 1541.5,-534 1547.5,-534 1547.5,-534 1856.5,-534 1856.5,-534 1862.5,-534 1868.5,-540 1868.5,-546 1868.5,-546 1868.5,-578 1868.5,-578 1868.5,-584 1862.5,-590 1856.5,-590"/>
+<text text-anchor="middle" x="1702" y="-572.6" font-family="Noto Sans CJK SC" font-size="13.00">先把 state=ready 并清 error</text>
+<text text-anchor="middle" x="1702" y="-558.6" font-family="Noto Sans CJK SC" font-size="13.00">然后才执行 setup scripts</text>
+<text text-anchor="middle" x="1702" y="-544.6" font-family="Noto Sans CJK SC" font-size="13.00">setup 失败只写 setup_error，状态仍是 ready</text>
+</g>
+<!-- setup&#45;&gt;set_ready -->
+<g id="edge11" class="edge">
+<title>setup&#45;&gt;set_ready</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M1702,-622.95C1702,-614.77 1702,-605.67 1702,-597.09"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="1704.45,-597.03 1702,-590.03 1699.55,-597.03 1704.45,-597.03"/>
+</g>
+<!-- scripts -->
+<g id="node11" class="node">
+<title>scripts</title>
+<path fill="#fef3c7" stroke="#f59e0b" stroke-width="1.3" d="M1829.5,-490C1829.5,-490 1546.5,-490 1546.5,-490 1540.5,-490 1534.5,-484 1534.5,-478 1534.5,-478 1534.5,-418 1534.5,-418 1534.5,-412 1540.5,-406 1546.5,-406 1546.5,-406 1829.5,-406 1829.5,-406 1835.5,-406 1841.5,-412 1841.5,-418 1841.5,-418 1841.5,-478 1841.5,-478 1841.5,-484 1835.5,-490 1829.5,-490"/>
+<text text-anchor="middle" x="1688" y="-472.6" font-family="Noto Sans CJK SC" font-size="13.00">applySetupScripts</text>
+<text text-anchor="middle" x="1688" y="-458.6" font-family="Noto Sans CJK SC" font-size="13.00">有已保存 plan 且未显式选择 → 离线重放</text>
+<text text-anchor="middle" x="1688" y="-444.6" font-family="Noto Sans CJK SC" font-size="13.00">否则按 manifest 顺序固定脚本 + SHA&#45;256</text>
+<text text-anchor="middle" x="1688" y="-430.6" font-family="Noto Sans CJK SC" font-size="13.00">脚本缓存 setup&#45;cache/&lt;sha256&gt;.py</text>
+<text text-anchor="middle" x="1688" y="-416.6" font-family="Noto Sans CJK SC" font-size="13.00">第一个失败停止后续</text>
+</g>
+<!-- set_ready&#45;&gt;scripts -->
+<g id="edge12" class="edge">
+<title>set_ready&#45;&gt;scripts</title>
+<path fill="none" stroke="#d97706" stroke-width="1.15" d="M1698.61,-533.89C1697.24,-522.96 1695.63,-510 1694.07,-497.55"/>
+<polygon fill="#d97706" stroke="#d97706" stroke-width="1.15" points="1696.46,-496.93 1693.16,-490.29 1691.6,-497.54 1696.46,-496.93"/>
+</g>
+<!-- ready -->
+<g id="node12" class="node">
+<title>ready</title>
+<path fill="#dcfce7" stroke="#22c55e" stroke-width="1.8" d="M1888,-349.5C1888,-349.5 1548,-349.5 1548,-349.5 1542,-349.5 1536,-343.5 1536,-337.5 1536,-337.5 1536,-302.5 1536,-302.5 1536,-296.5 1542,-290.5 1548,-290.5 1548,-290.5 1888,-290.5 1888,-290.5 1894,-290.5 1900,-296.5 1900,-302.5 1900,-302.5 1900,-337.5 1900,-337.5 1900,-343.5 1894,-349.5 1888,-349.5"/>
+<text text-anchor="middle" x="1718" y="-331.3" font-family="Noto Sans CJK SC" font-size="14.00">ready</text>
+<text text-anchor="middle" x="1718" y="-316.3" font-family="Noto Sans CJK SC" font-size="14.00">应用已配置，可接收请求</text>
+<text text-anchor="middle" x="1718" y="-301.3" font-family="Noto Sans CJK SC" font-size="14.00">Connection 仅在 apps.json；APIKey 固定 local</text>
+</g>
+<!-- scripts&#45;&gt;ready -->
+<g id="edge13" class="edge">
+<title>scripts&#45;&gt;ready</title>
+<path fill="none" stroke="#16a34a" stroke-width="1.15" d="M1697.82,-405.74C1701.62,-389.81 1705.91,-371.76 1709.56,-356.43"/>
+<polygon fill="#16a34a" stroke="#16a34a" stroke-width="1.15" points="1711.95,-356.97 1711.19,-349.59 1707.19,-355.83 1711.95,-356.97"/>
+<text text-anchor="middle" x="1751.5" y="-381.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">完成 / 失败都 ready</text>
+</g>
+<!-- ready&#45;&gt;setup -->
+<g id="edge15" class="edge">
+<title>ready&#45;&gt;setup</title>
+<path fill="none" stroke="#7c3aed" stroke-width="1.15" stroke-dasharray="5,2" d="M1787.65,-349.61C1812.72,-363.2 1838.99,-381.84 1856,-406 1876.76,-435.49 1909.5,-553.3 1883,-590 1874.42,-601.88 1863.4,-611.44 1851.04,-619.14"/>
+<polygon fill="#7c3aed" stroke="#7c3aed" stroke-width="1.15" points="1849.66,-617.11 1844.87,-622.77 1852.14,-621.33 1849.66,-617.11"/>
+<text text-anchor="middle" x="1913" y="-509.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">重新配置</text>
+</g>
+<!-- infer -->
+<g id="node13" class="node">
+<title>infer</title>
+<path fill="#dbeafe" stroke="#3b82f6" stroke-width="1.3" d="M1675,-199C1675,-199 1419,-199 1419,-199 1413,-199 1407,-193 1407,-187 1407,-187 1407,-141 1407,-141 1407,-135 1413,-129 1419,-129 1419,-129 1675,-129 1675,-129 1681,-129 1687,-135 1687,-141 1687,-141 1687,-187 1687,-187 1687,-193 1681,-199 1675,-199"/>
+<text text-anchor="middle" x="1547" y="-181.6" font-family="Noto Sans CJK SC" font-size="13.00">推理只走 /v1</text>
+<text text-anchor="middle" x="1547" y="-167.6" font-family="Noto Sans CJK SC" font-size="13.00">gateway → scheduler → resident</text>
+<text text-anchor="middle" x="1547" y="-153.6" font-family="Noto Sans CJK SC" font-size="13.00">应用没有 PID / child endpoint</text>
+<text text-anchor="middle" x="1547" y="-139.6" font-family="Noto Sans CJK SC" font-size="13.00">应用不能 start / stop / load / unload</text>
+</g>
+<!-- ready&#45;&gt;infer -->
+<g id="edge14" class="edge">
+<title>ready&#45;&gt;infer</title>
+<path fill="none" stroke="#2563eb" stroke-width="1.15" d="M1686.24,-290.39C1659.23,-266.07 1620.2,-230.92 1590.33,-204.02"/>
+<polygon fill="#2563eb" stroke="#2563eb" stroke-width="1.15" points="1591.7,-201.96 1584.86,-199.1 1588.42,-205.6 1591.7,-201.96"/>
+<text text-anchor="middle" x="1663.5" y="-253.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">请求</text>
+</g>
+<!-- status -->
+<g id="node14" class="node">
+<title>status</title>
+<path fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.3" d="M2050,-185C2050,-185 1728,-185 1728,-185 1722,-185 1716,-179 1716,-173 1716,-173 1716,-155 1716,-155 1716,-149 1722,-143 1728,-143 1728,-143 2050,-143 2050,-143 2056,-143 2062,-149 2062,-155 2062,-155 2062,-173 2062,-173 2062,-179 2056,-185 2050,-185"/>
+<text text-anchor="middle" x="1889" y="-167.6" font-family="Noto Sans CJK SC" font-size="13.00">GET .../status</text>
+<text text-anchor="middle" x="1889" y="-153.6" font-family="Noto Sans CJK SC" font-size="13.00">读 apps.json；transitional 超过 ~10m → failed</text>
+</g>
+<!-- ready&#45;&gt;status -->
+<g id="edge16" class="edge">
+<title>ready&#45;&gt;status</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" stroke-dasharray="1,5" d="M1749.76,-290.39C1781.77,-261.57 1830.67,-217.53 1861.19,-190.05"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="1863.1,-191.62 1866.67,-185.11 1859.83,-187.98 1863.1,-191.62"/>
+</g>
+<!-- uninstall -->
+<g id="node15" class="node">
+<title>uninstall</title>
+<path fill="#ffedd5" stroke="#f97316" stroke-width="1.3" d="M2392.5,-199C2392.5,-199 2103.5,-199 2103.5,-199 2097.5,-199 2091.5,-193 2091.5,-187 2091.5,-187 2091.5,-141 2091.5,-141 2091.5,-135 2097.5,-129 2103.5,-129 2103.5,-129 2392.5,-129 2392.5,-129 2398.5,-129 2404.5,-135 2404.5,-141 2404.5,-141 2404.5,-187 2404.5,-187 2404.5,-193 2398.5,-199 2392.5,-199"/>
+<text text-anchor="middle" x="2248" y="-181.6" font-family="Noto Sans CJK SC" font-size="13.00">DELETE /api/v1/apps/{org}/{name}</text>
+<text text-anchor="middle" x="2248" y="-167.6" font-family="Noto Sans CJK SC" font-size="13.00">默认只删 registry 条目</text>
+<text text-anchor="middle" x="2248" y="-153.6" font-family="Noto Sans CJK SC" font-size="13.00">?purge_models=1 再 RemoveCachedRef</text>
+<text text-anchor="middle" x="2248" y="-139.6" font-family="Noto Sans CJK SC" font-size="13.00">共享资产保留；未缓存会中断 purge</text>
+</g>
+<!-- ready&#45;&gt;uninstall -->
+<g id="edge17" class="edge">
+<title>ready&#45;&gt;uninstall</title>
+<path fill="none" stroke="#ea580c" stroke-width="1.15" d="M1886.63,-290.49C1947.39,-278.22 2015.98,-262.03 2077,-242 2109.79,-231.24 2144.73,-216.19 2174.43,-202.25"/>
+<polygon fill="#ea580c" stroke="#ea580c" stroke-width="1.15" points="2175.8,-204.31 2181.08,-199.11 2173.7,-199.88 2175.8,-204.31"/>
+<text text-anchor="middle" x="2059.5" y="-253.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">卸载</text>
+</g>
+<!-- uninstalled -->
+<g id="node16" class="node">
+<title>uninstalled</title>
+<path fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.8" d="M2393,-85C2393,-85 2103,-85 2103,-85 2097,-85 2091,-79 2091,-73 2091,-73 2091,-38 2091,-38 2091,-32 2097,-26 2103,-26 2103,-26 2393,-26 2393,-26 2399,-26 2405,-32 2405,-38 2405,-38 2405,-73 2405,-73 2405,-79 2399,-85 2393,-85"/>
+<text text-anchor="middle" x="2248" y="-66.8" font-family="Noto Sans CJK SC" font-size="14.00">uninstalled</text>
+<text text-anchor="middle" x="2248" y="-51.8" font-family="Noto Sans CJK SC" font-size="14.00">模型缓存 / 日志 / setup&#45;cache 默认保留</text>
+<text text-anchor="middle" x="2248" y="-36.8" font-family="Noto Sans CJK SC" font-size="14.00">不会自动停止 resident</text>
+</g>
+<!-- uninstall&#45;&gt;uninstalled -->
+<g id="edge18" class="edge">
+<title>uninstall&#45;&gt;uninstalled</title>
+<path fill="none" stroke="#64748b" stroke-width="1.15" d="M2248,-128.72C2248,-117.03 2248,-103.95 2248,-92.16"/>
+<polygon fill="#64748b" stroke="#64748b" stroke-width="1.15" points="2250.45,-92.01 2248,-85.01 2245.55,-92.01 2250.45,-92.01"/>
+</g>
+<!-- prepare_only -->
+<g id="node17" class="node">
+<title>prepare_only</title>
+<path fill="#fef3c7" stroke="#f59e0b" stroke-width="1.3" d="M1366,-192C1366,-192 1120,-192 1120,-192 1114,-192 1108,-186 1108,-180 1108,-180 1108,-148 1108,-148 1108,-142 1114,-136 1120,-136 1120,-136 1366,-136 1366,-136 1372,-136 1378,-142 1378,-148 1378,-148 1378,-180 1378,-180 1378,-186 1372,-192 1366,-192"/>
+<text text-anchor="middle" x="1243" y="-174.6" font-family="Noto Sans CJK SC" font-size="13.00">POST .../prepare</text>
+<text text-anchor="middle" x="1243" y="-160.6" font-family="Noto Sans CJK SC" font-size="13.00">NoInstall + PrepareOnly + Force</text>
+<text text-anchor="middle" x="1243" y="-146.6" font-family="Noto Sans CJK SC" font-size="13.00">可给未安装应用创建 prepared 状态</text>
+</g>
+<!-- prepare_only&#45;&gt;prepared -->
+<g id="edge19" class="edge">
+<title>prepare_only&#45;&gt;prepared</title>
+<path fill="none" stroke="#d97706" stroke-width="1.15" stroke-dasharray="5,2" d="M1129.32,-135.99C1117.42,-133.48 1105.48,-131.1 1094,-129 1035.6,-118.32 902.66,-99.99 785.17,-84.43"/>
+<polygon fill="#d97706" stroke="#d97706" stroke-width="1.15" points="785.43,-81.99 778.17,-83.5 784.79,-86.85 785.43,-81.99"/>
+<text text-anchor="middle" x="999" y="-104.2" font-family="Noto Sans CJK SC" font-size="11.00" fill="#475569">只准备</text>
+</g>
+</g>
 </svg>

@@ -64,7 +64,7 @@
 | 日志 | `GET /api/v1/logs`、`GET /api/v1/logs/download` | `?kind=server\|model&ref=…&lines=N` |
 | 目录 | `GET /api/v1/catalog`、`GET /api/v1/catalog/tags`、`GET /api/v1/catalog/{id}` | FlashHub 代理 |
 | 设置 | `GET /api/v1/settings`、`PATCH /api/v1/settings` | 类型化全局设置；`writable` 列出可写字段（`mirror.enabled`） |
-| 应用 | `GET/POST/DELETE /api/v1/apps/*`、`POST /api/v1/apps/{org}/{name}/setup` | 安装/准备/配置应用；推理一律走 `/v1` |
+| 应用 | `GET /api/v1/apps`、`GET /api/v1/apps/installed`、`GET /api/v1/apps/{org}/{name}`、`GET .../status`、`POST .../install`、`POST .../prepare`、`POST .../setup`、`DELETE /api/v1/apps/{org}/{name}` | 安装/准备/配置应用；推理一律走 `/v1`；没有应用级启停 |
 | 实时 / 界面 | `GET /api/v1/ws`、`GET /`、`GET /docs`、`GET /openapi.yaml` | WebSocket 状态与内置控制台 |
 
 `GET /api/v1/models` 的模型对象包含 `capabilities` 数组。`null` 表示 host 不拥有该

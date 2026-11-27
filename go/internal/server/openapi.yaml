@@ -759,7 +759,7 @@ paths:
   /api/v1/apps:
     get:
       summary: List FlashHub applications with local state
-      description: Proxies FlashHub `/api/v1/apps` (5 min cache) and overlays installed state from the shared app registry.
+      description: Proxies FlashHub `/api/v1/apps` on every request and overlays installed state from the shared app registry.
       parameters:
         - { name: search, in: query, schema: { type: string } }
         - { name: domain, in: query, schema: { type: string } }
@@ -851,8 +851,8 @@ paths:
         used for the manifest platform check and command selection (default: the
         daemon's own platform). URL commands are never fetched — they are
         reported as a download page. Install only prepares every
-        `default: true` bundle; it never starts the models. Use the start
-        endpoint for that (and for `setup.scripts`).
+        `default: true` bundle; it never starts the models. Use the setup
+        endpoint to run `setup.scripts` and record the gateway connection.
       requestBody:
         required: true
         content:

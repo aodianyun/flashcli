@@ -200,7 +200,7 @@ GET  /api/v1/jobs/{id}              job state/events
 GET  /api/v1/ws                     management events
 GET  /api/v1/settings               typed global settings
 PATCH /api/v1/settings              {"mirror":{"enabled":true}}
-GET  /api/v1/apps/*                 application install/prepare/setup/status
+GET/POST/DELETE /api/v1/apps/*      application install/prepare/setup/status
 GET  /api/v1/logs                   logs
 ```
 
@@ -430,7 +430,9 @@ Telemetry is exposed at `/api/v1/devices` and `/api/v1/scheduler`.
 
 - Applications install or preload full refs; they never start/stop/load/unload
   models or receive child endpoints.
-- Setup scripts receive `FLASHCLI_API_BASE=http://<host>:8790/v1`.
+- Setup scripts receive `{base_url}`, `{model}` (the first full bundle ref) and
+  `{api_key}` as command-line arguments; `HOME`/`USERPROFILE` point at the
+  configured client home. The daemon does not export `FLASHCLI_API_BASE`.
 - App state does not persist `pid`/child `endpoint` as an inference entry.
 - Desktop management calls use `/api/v1/*`; inference examples use `/v1/*`.
 - Desktop may show preload/unload (disk) and resident status, but offers no
