@@ -414,6 +414,31 @@ Integration/acceptance:
 - CPU fallback only when no compatible GPU runtime exists.
 - App install/preload + inference through `/v1` only; no endpoint usage.
 
+Real-GPU public acceptance (opt-in, reproducible):
+
+```bash
+bash scripts/build_dev_bins.sh
+python3 scripts/verify_scheduler_public.py
+```
+
+The script uses `xym/hunyuan_05b_instruct_rtx:1.0.0` and
+`xym/ernie45_0p3b_rtx:1.0.0` by default (override with
+`FLASHCLI_SCHEDULER_MODEL_A/B`) and covers, on one 8 GiB GPU:
+
+- default `max_loaded=0` with two real residents on the same device;
+- idle stop keeps disk preload; the next request restarts;
+- a killed serve child is replaced once on the next request;
+- real free-VRAM admission rejects a start while a VRAM hog holds the card;
+- `max_loaded=1`: a second model queues and returns `no_placement` on timeout;
+- after the first model goes idle, LRU eviction starts the second model;
+- a daemon restart with an active stream cuts the client, keeps the disk
+  preload, and serves the next request with a fresh resident;
+- busy unload returns 409, `wait_seconds` returns 409, `force` stops the stream
+  and releases the lease.
+
+It requires network access on the first run and keeps its home/cache so reruns
+are fast (`FLASHCLI_SCHEDULER_HOME`, `FLASHCLI_SCHEDULER_FRESH=1` to reset).
+
 ## 13. Out of scope
 
 - Short model names, aliases, latest-version resolution, FlashHub catalog lookup.

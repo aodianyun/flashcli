@@ -384,6 +384,30 @@ GPU runtime 必填：
 - 只有无兼容 GPU runtime 时才 CPU 回退。
 - 应用 install/preload + 只通过 `/v1` 推理，不使用 endpoint。
 
+真实 GPU + 公开模型验收（可选、可复现）：
+
+```bash
+bash scripts/build_dev_bins.sh
+python3 scripts/verify_scheduler_public.py
+```
+
+脚本默认使用 `xym/hunyuan_05b_instruct_rtx:1.0.0` 和
+`xym/ernie45_0p3b_rtx:1.0.0`（可用 `FLASHCLI_SCHEDULER_MODEL_A/B` 覆盖），在单张
+8 GiB GPU 上覆盖：
+
+- 默认 `max_loaded=0`，两个真实模型同时驻留同一张卡；
+- 空闲 stop 保留磁盘 preload，下一次请求重新启动；
+- 杀死 serve 子进程后，下一次请求只重启一次；
+- VRAM hog 占用显存时，真实空闲显存准入拒绝启动；
+- `max_loaded=1`：第二个模型排队并在超时后返回 `no_placement`；
+- 第一个模型空闲后，LRU 淘汰并启动第二个模型；
+- 活跃流进行中重启 daemon：客户端流被中断，磁盘 preload 保留，下一次请求用新的
+  resident 服务；
+- busy unload 返回 409，`wait_seconds` 返回 409，`force` 中断流并释放 lease。
+
+首次运行需要网络；脚本保留 home/cache，后续运行更快
+（`FLASHCLI_SCHEDULER_HOME`，`FLASHCLI_SCHEDULER_FRESH=1` 可重置）。
+
 ## 13. 不在范围内
 
 - 短模型名、alias、latest 解析、FlashHub 目录查询。
