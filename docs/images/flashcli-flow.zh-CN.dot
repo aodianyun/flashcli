@@ -1,119 +1,35 @@
 digraph flashcli_flow {
-  graph [rankdir=TB, bgcolor="#F7F9FC", pad=0.4, nodesep=0.4, ranksep=0.45, fontname="Noto Sans CJK SC", fontsize=30, labelloc=t, label=<<B>flashcli run / serve 执行流程</B><BR/><FONT POINT-SIZE="14" COLOR="#64748B">ref 解析 → 本地缓存 / FlashHub 同步 → 权重 / venv → bundle 进程内推理</FONT>>];
-  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC", fontsize=13, margin="0.46,0.10", penwidth=1.3, color="#94A3B8"];
-  edge [fontname="Noto Sans CJK SC", fontsize=11, color="#64748B", fontcolor="#475569", arrowsize=0.7, penwidth=1.15];
-  subgraph cluster_1 {
-    label=<<B>命令入口</B>>;
-    style="rounded,filled"; color="#3B82F6"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
-  start [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.8, fontsize=14, width=2.40, label="flashcli run | serve\n<ref> [OPTIONS]，原始 argv\ncobra DisableFlagParsing"];
-  peel [shape=box, style="rounded,filled", fillcolor="#E0E7FF", color="#6366F1", penwidth=1.3, fontsize=13, width=3.44, label="peelHostFlags\nref · --checkpoint · --mtp-checkpoint\n--quiet · --no-auto-install · -h"];
-  help [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=1.20, label="仅 --help？"];
-  manifest [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=3.76, label="resolveManifestOnly\n本地 manifest 或只下载 flashcli-bundle.json"];
-  end_help [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.8, fontsize=14, width=2.24, label="打印 bundle 选项，退出 0"];
-  }
-  subgraph cluster_2 {
-    label=<<B>Bundle 树解析</B>>;
-    style="rounded,filled"; color="#F97316"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
-  ensure [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.3, fontsize=13, width=3.84, label="host.EnsureBundle(ref, quiet, force=false)\nforce 恒为 false；run/serve 不调用 host.Pull"];
-  local [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=1.12, label="本地路径？"];
-  local_ret [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.3, fontsize=13, width=2.24, label="abs path, version=local\n无网络，无 bundle 树同步"];
-  marker [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=3.68, label="FlashHub 标记存在？\nbundles/<name>/<ver>/.flashcli_bundle.json"];
-  reuse [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=2.08, label="复用 bundle 树（离线）\n不校验文件、不访问网络"];
-  sync [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=13, width=3.20, label="DownloadManifest + SyncBundle\nrepo index → manifest\n只下载选中的 runtime cell + 公共文件\nMD5 校验；写 runtime / bundle 标记"];
-  }
-  subgraph cluster_3 {
-    label=<<B>Manifest 与环境</B>>;
-    style="rounded,filled"; color="#8B5CF6"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
-  load [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=3.36, label="manifest.Load → ApplyEnv\nv4 defaults + environments 合并\nResolveVariant · EntryFor(capability)"];
-  valid [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=2.64, label="manifest / env / entry 有效？"];
-  err_manifest [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=3.44, label="报错退出 1 / 2\n缺文件、协议版本、环境 key、变体、entry"];
-  markers [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=1.76, label="version == local？"];
-  write_markers [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=3.52, label="writeLocalMarkers\nruntimes/<id>/.runtime.json\nbundles/<id>/local/.flashcli_bundle.json"];
-  preflight [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=3.12, label="host.PreflightBundle\nHostEnvKey = SM + CUDA + Python ABI\n识别 runtime cell 的原生 .so\nhost glibc / GLIBCXX / CXXABI 检查\nFLASHCLI_SKIP_PREFLIGHT 可跳过"];
-  env_ok [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=2.08, label="runtime env key 匹配？"];
-  err_env [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=3.12, label="环境不匹配，退出 2\n无 NVIDIA GPU 或该机器没有对应 cell"];
-  kind [shape=diamond, style="filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.45, fontsize=12, width=1.20, label="entry.kind?"];
-  }
-  subgraph cluster_4 {
-    label=<<B>Python 运行时准备</B>>;
-    style="rounded,filled"; color="#F472B6"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
-  weights [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=3.60, label="host.ResolveWeights → PrepareBundle\n--checkpoint 覆盖 / FLASHCLI_SKIP_WEIGHTS\nstore/<source>/<repo>@<rev>-<hash>\nextra_weights · extra_pull · post_pull\nallow / require 模式 + norm stats 就绪\nhost 下载清单 + 断点续传"];
-  w_ok [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=1.12, label="权重就绪？"];
-  err_w [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=1.60, label="权重错误，退出 1"];
-  sys1 [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=3.44, label="EnsureSystemRequirements(m, \"\")\nc/cxx 编译器、Python headers（venv 前）"];
-  venv [shape=box, style="rounded,filled", fillcolor="#FCE7F3", color="#F472B6", penwidth=1.3, fontsize=13, width=3.92, label="venv.Ensure(runtimeID, manifest)\nfingerprint = python_abi + torch index + deps\nuv 默认 / pip 兜底\nflashcli-bundle[infer] + python_dependencies\n共享 UV cache，hardlink 复用 torch/CUDA"];
-  schema [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=3.12, label="EnsureProtocolCacheSchema\nCACHE_SCHEMA_VERSION 变化时原地升级"];
-  cuda [shape=box, style="rounded,filled", fillcolor="#E0F2FE", color="#38BDF8", penwidth=1.3, fontsize=13, width=4.24, label="EnsureSystemRequirements(m, python) + cuda.Ensure\nheaders 用实际解释器复查\nCUDA SONAME 存在且可 dlopen\n缺失时可装 nvidia-cublas / cuda-runtime"];
-  exec [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.8, fontsize=14, width=4.08, label="inferexec.Exec → syscall.Exec\npython -m flashcli_bundle.infer <cap> <ref> ...\nHF_HUB_OFFLINE=1 + FLASHCLI_RUNTIME_ID\nFLASHCLI_BUNDLE_ROOT + VIRTUAL_ENV"];
-  }
-  subgraph cluster_5 {
-    label=<<B>Bundle 内执行（engine 模式）</B>>;
-    style="rounded,filled"; color="#8B5CF6"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
-  infer [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=3.92, label="flashcli_bundle.infer 子进程\nactivate_for_preset: env key、布局、CUDA、.so\nensure_model_cached(download=False)"];
-  mode [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=1.20, label="entry mode?"];
-  engine [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=3.52, label="engine.load(checkpoint, preset, options)\nRunEngine 或 ServeEngine"];
-  runp [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.3, fontsize=13, width=2.16, label="run → predict()\n结果写 stdout，进程退出"];
-  servep [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=4.64, label="serve → warmup() + build_app()\ncapabilities 决定挂载哪些标准路由\nregister_routes() 先于 host 路由挂载\nuvicorn 绑定 --host/--port（flashserver 用 127.0.0.1）"];
-  script [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=13, width=3.04, label="script 模式\nmain(argv) 自己处理一切\nhost 不挂路由；manifest env 不生效"];
-  flashrt [shape=note, style="filled", fillcolor="#F1F5F9", color="#CBD5E1", penwidth=1.3, fontsize=11.5, width=2.40, label="FlashRT\nbundle 自带 flash_rt + .so\nhost 从不安装 FlashRT"];
-  }
-  subgraph cluster_6 {
-    label=<<B>原生执行入口</B>>;
-    style="rounded,filled"; color="#38BDF8"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
-  native_exec [shape=box, style="rounded,filled", fillcolor="#E0F2FE", color="#38BDF8", penwidth=1.3, fontsize=13, width=2.88, label="native-exec\n权重准备后启动 bundle 可执行文件"];
-  ne_transport [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=1.12, label="transport?"];
-  ne_http [shape=box, style="rounded,filled", fillcolor="#E0F2FE", color="#38BDF8", penwidth=1.3, fontsize=13, width=2.72, label="http：输出 endpoint 后等待信号\nhost 不代理；客户端直连"];
-  ne_stdio [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=2.96, label="stdio：serve 未实现\nrun 用 NDJSON run/health/shutdown"];
-  native_abi [shape=box, style="rounded,filled", fillcolor="#E0F2FE", color="#38BDF8", penwidth=1.3, fontsize=13, width=2.88, label="native-abi\nOpen(preload, library, config)\n校验 abi_version=1 / struct_size"];
-  abi_session [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=2.00, label="声明 session_library?"];
-  abi_plain [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=2.56, label="普通 native-abi\nrun 只做 ABI 探测并打印 JSON\nserve 未实现"];
-  abi_sess [shape=box, style="rounded,filled", fillcolor="#E0F2FE", color="#38BDF8", penwidth=1.3, fontsize=13, width=3.84, label="Nexus session\nrun: Apply → Tick → GetF32\nserve: /healthz /v1/act /v1/chat/completions"];
-  }
-  offline [shape=note, style="filled", fillcolor="#F1F5F9", color="#CBD5E1", penwidth=1.3, fontsize=11.5, width=6.24, label="离线保证\nrun/serve 本地优先：bundle 标记 + 完整权重 + venv fingerprint 命中时不联网\n只有缺失资产、显式 pull 或 schema 升级才联网"];
+  graph [rankdir=TB, bgcolor="#F7F9FC", pad=0.4, nodesep=0.45, ranksep=0.5, fontname="Noto Sans CJK SC", fontsize=28, labelloc=t, label=<<B>flashcli 模型推理流程</B><BR/><FONT POINT-SIZE="14" COLOR="#64748B">ref → bundle 树 → 权重 / venv / CUDA → bundle 进程内推理</FONT>>];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC", fontsize=12.5, margin="0.30,0.10", penwidth=1.3, color="#94A3B8"];
+  edge [fontname="Noto Sans CJK SC", fontsize=10.5, color="#64748B", fontcolor="#475569", arrowsize=0.7, penwidth=1.15];
+  start [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", fontsize=13.5, label=<<B>flashcli run | serve</B><BR/><FONT POINT-SIZE="10.5">&lt;ref&gt; [OPTIONS] · 原始 argv</FONT><BR/><FONT POINT-SIZE="10.5">cobra DisableFlagParsing</FONT>>];
+  peel [shape=box, style="rounded,filled", fillcolor="#E0E7FF", color="#6366F1", fontsize=12.5, label=<<B>peelHostFlags</B><BR/><FONT POINT-SIZE="10.5">ref · --checkpoint · --mtp-checkpoint</FONT><BR/><FONT POINT-SIZE="10.5">--quiet · --no-auto-install · -h</FONT>>];
+  ensure [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", fontsize=12.5, label=<<B>host.EnsureBundle</B><BR/><FONT POINT-SIZE="10.5">force=false；run/serve 不调用 host.Pull</FONT>>];
+  source [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", fontsize=12, label=<<B>bundle 来源？</B><BR/><FONT POINT-SIZE="10.5">本地路径 / FlashHub 标记 / 需要同步</FONT>>];
+  sync [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", fontsize=12.5, label=<<B>DownloadManifest + SyncBundle</B><BR/><FONT POINT-SIZE="10.5">repo index → manifest</FONT><BR/><FONT POINT-SIZE="10.5">选中 runtime cell + 公共文件 + 标记</FONT>>];
+  root [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", fontsize=12.5, label=<<B>bundle 树就绪</B><BR/><FONT POINT-SIZE="10.5">local / reuse / sync 汇合</FONT>>];
+  manifest [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", fontsize=12.5, label=<<B>manifest.Load → ApplyEnv → PreflightBundle</B><BR/><FONT POINT-SIZE="10.5">ResolveVariant · EntryFor(capability)</FONT><BR/><FONT POINT-SIZE="10.5">HostEnvKey = SM + CUDA + Python ABI</FONT><BR/><FONT POINT-SIZE="10.5">识别 native .so + host ABI</FONT>>];
+  valid [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", fontsize=12, label=<<B>manifest / env / entry 有效？</B><BR/><FONT POINT-SIZE="10.5">无效 → exit 1/2</FONT>>];
+  weights [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", fontsize=12.5, label=<<B>weights.PrepareBundle</B><BR/><FONT POINT-SIZE="10.5">store key · 下载清单 · 断点续传</FONT><BR/><FONT POINT-SIZE="10.5">extra_weights · extra_pull · post_pull</FONT><BR/><FONT POINT-SIZE="10.5">allow / require + norm stats 就绪</FONT>>];
+  venv [shape=box, style="rounded,filled", fillcolor="#FCE7F3", color="#F472B6", fontsize=12.5, label=<<B>venv.Ensure + protocol schema</B><BR/><FONT POINT-SIZE="10.5">venv 前：EnsureSystemRequirements</FONT><BR/><FONT POINT-SIZE="10.5">uv · flashcli-bundle[infer] · python_dependencies</FONT><BR/><FONT POINT-SIZE="10.5">fingerprint 命中即离线复用</FONT>>];
+  cuda [shape=box, style="rounded,filled", fillcolor="#E0F2FE", color="#38BDF8", fontsize=12.5, label=<<B>cuda.Ensure</B><BR/><FONT POINT-SIZE="10.5">CUDA SONAME 存在且可 dlopen</FONT><BR/><FONT POINT-SIZE="10.5">缺失时可装 nvidia-cublas / cuda-runtime</FONT>>];
+  exec [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", fontsize=13.5, label=<<B>inferexec.Exec</B><BR/><FONT POINT-SIZE="10.5">syscall.Exec 替换 host 进程</FONT><BR/><FONT POINT-SIZE="10.5">python -m flashcli_bundle.infer &lt;cap&gt; &lt;ref&gt;</FONT>>];
+  infer [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", fontsize=12.5, label=<<B>flashcli_bundle.infer</B><BR/><FONT POINT-SIZE="10.5">activate_for_preset</FONT><BR/><FONT POINT-SIZE="10.5">ensure_model_cached(download=False)</FONT>>];
+  engine [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", fontsize=12.5, label=<<B>RunEngine / ServeEngine</B><BR/><FONT POINT-SIZE="10.5">run：load → predict() → stdout</FONT><BR/><FONT POINT-SIZE="10.5">serve：load → warmup() → build_app()</FONT><BR/><FONT POINT-SIZE="10.5">register_routes 先于标准路由</FONT>>];
+  note [shape=note, style="filled", fillcolor="#F1F5F9", color="#CBD5E1", fontsize=10.5, label=<<B>其他入口与边界</B><BR/><FONT POINT-SIZE="10.5">script：main(argv) 自己创建协议/服务器</FONT><BR/><FONT POINT-SIZE="10.5">native-exec：http serve 可用；stdio serve 未实现</FONT><BR/><FONT POINT-SIZE="10.5">native-abi：普通 run 只探测 ABI；session 才推理</FONT><BR/><FONT POINT-SIZE="10.5">离线：标记 + 权重 + fingerprint 命中则不联网</FONT>>];
   start -> peel [color="#64748B", style="solid"];
-  peel -> help [color="#64748B", style="solid"];
-  help -> manifest [color="#D97706", style="solid", label="是"];
-  manifest -> end_help [color="#16A34A", style="solid"];
-  help -> ensure [color="#64748B", style="solid", label="否"];
-  ensure -> local [color="#64748B", style="solid"];
-  local -> local_ret [color="#D97706", style="solid", label="是"];
-  local -> marker [color="#64748B", style="solid", label="否"];
-  marker -> reuse [color="#16A34A", style="solid", label="是"];
-  marker -> sync [color="#EA580C", style="solid", label="否"];
-  sync -> load [color="#EA580C", style="solid"];
-  reuse -> load [color="#16A34A", style="solid"];
-  local_ret -> load [color="#64748B", style="solid"];
-  load -> valid [color="#64748B", style="solid"];
-  valid -> err_manifest [color="#DC2626", style="dashed", label="否"];
-  valid -> markers [color="#16A34A", style="solid", label="是"];
-  markers -> write_markers [color="#D97706", style="solid", label="是"];
-  markers -> preflight [color="#64748B", style="solid", label="否"];
-  write_markers -> preflight [color="#D97706", style="solid"];
-  preflight -> env_ok [color="#64748B", style="solid"];
-  env_ok -> err_env [color="#DC2626", style="dashed", label="否"];
-  env_ok -> kind [color="#16A34A", style="solid", label="是"];
-  kind -> weights [color="#DB2777", style="solid", label="python"];
-  kind -> native_exec [color="#0284C7", style="solid", label="native-exec"];
-  kind -> native_abi [color="#0284C7", style="solid", label="native-abi"];
-  weights -> w_ok [color="#64748B", style="solid"];
-  w_ok -> err_w [color="#DC2626", style="dashed", label="否"];
-  w_ok -> sys1 [color="#16A34A", style="solid", label="是"];
-  sys1 -> venv [color="#16A34A", style="solid"];
-  venv -> schema [color="#DB2777", style="solid"];
-  schema -> cuda [color="#16A34A", style="solid"];
+  peel -> ensure [color="#64748B", style="solid"];
+  ensure -> source [color="#64748B", style="solid"];
+  source -> sync [color="#EA580C", style="solid", label="FlashHub / 无标记"];
+  source -> root [color="#16A34A", style="dashed", label="local / 标记存在"];
+  sync -> root [color="#EA580C", style="solid"];
+  root -> manifest [color="#64748B", style="solid"];
+  manifest -> valid [color="#64748B", style="solid"];
+  valid -> weights [color="#16A34A", style="solid", label="是"];
+  weights -> venv [color="#D97706", style="solid"];
+  venv -> cuda [color="#DB2777", style="solid"];
   cuda -> exec [color="#0284C7", style="solid"];
-  exec -> infer [color="#7C3AED", style="solid"];
-  infer -> mode [color="#64748B", style="solid"];
-  mode -> engine [color="#7C3AED", style="solid", label="engine"];
-  mode -> script [color="#EA580C", style="solid", label="script"];
-  engine -> runp [color="#2563EB", style="solid", label="run"];
-  engine -> servep [color="#16A34A", style="solid", label="serve"];
-  infer -> flashrt [color="#64748B", style="dotted", label="import / dlopen"];
-  native_exec -> ne_transport [color="#0284C7", style="solid"];
-  ne_transport -> ne_http [color="#0284C7", style="solid", label="http"];
-  ne_transport -> ne_stdio [color="#DC2626", style="dashed", label="stdio"];
-  native_abi -> abi_session [color="#0284C7", style="solid"];
-  abi_session -> abi_sess [color="#0284C7", style="solid", label="是"];
-  abi_session -> abi_plain [color="#DC2626", style="dashed", label="否"];
-  cuda -> offline [color="#64748B", style="dotted"];
+  exec -> infer [color="#16A34A", style="solid"];
+  infer -> engine [color="#7C3AED", style="solid"];
+  engine -> note [color="#64748B", style="dotted"];
 }

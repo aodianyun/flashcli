@@ -1,119 +1,35 @@
 digraph flashcli_flow {
-  graph [rankdir=TB, bgcolor="#F7F9FC", pad=0.4, nodesep=0.4, ranksep=0.45, fontname="Noto Sans CJK SC", fontsize=30, labelloc=t, label=<<B>flashcli run / serve execution flow</B><BR/><FONT POINT-SIZE="14" COLOR="#64748B">resolve ref → local cache / FlashHub sync → weights / venv → inference inside the bundle</FONT>>];
-  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC", fontsize=13, margin="0.46,0.10", penwidth=1.3, color="#94A3B8"];
-  edge [fontname="Noto Sans CJK SC", fontsize=11, color="#64748B", fontcolor="#475569", arrowsize=0.7, penwidth=1.15];
-  subgraph cluster_1 {
-    label=<<B>Command entry</B>>;
-    style="rounded,filled"; color="#3B82F6"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
-  start [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.8, fontsize=14, width=2.32, label="flashcli run | serve\n<ref> [OPTIONS], raw argv\ncobra DisableFlagParsing"];
-  peel [shape=box, style="rounded,filled", fillcolor="#E0E7FF", color="#6366F1", penwidth=1.3, fontsize=13, width=3.44, label="peelHostFlags\nref · --checkpoint · --mtp-checkpoint\n--quiet · --no-auto-install · -h"];
-  help [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=1.12, label="help only?"];
-  manifest [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=4.56, label="resolveManifestOnly\nlocal manifest, or download only flashcli-bundle.json"];
-  end_help [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.8, fontsize=14, width=2.32, label="print bundle help, exit 0"];
-  }
-  subgraph cluster_2 {
-    label=<<B>Bundle tree resolution</B>>;
-    style="rounded,filled"; color="#F97316"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
-  ensure [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.3, fontsize=13, width=4.56, label="host.EnsureBundle(ref, quiet, force=false)\nforce is always false; run/serve never call host.Pull"];
-  local [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=1.20, label="local path?"];
-  local_ret [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.3, fontsize=13, width=2.24, label="abs path, version=local\nno network, no tree sync"];
-  marker [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=3.68, label="FlashHub marker present?\nbundles/<name>/<ver>/.flashcli_bundle.json"];
-  reuse [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=2.72, label="reuse bundle tree (offline)\nno file validation, no network"];
-  sync [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=13, width=3.68, label="DownloadManifest + SyncBundle\nrepo index → manifest\nselected runtime cell + common files only\nMD5 verify; write runtime / bundle markers"];
-  }
-  subgraph cluster_3 {
-    label=<<B>Manifest and environment</B>>;
-    style="rounded,filled"; color="#8B5CF6"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
-  load [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=3.36, label="manifest.Load → ApplyEnv\nmerge v4 defaults + environments\nResolveVariant · EntryFor(capability)"];
-  valid [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=2.64, label="manifest / env / entry valid?"];
-  err_manifest [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=4.08, label="error exit 1 / 2\nmissing file, protocol, env key, variant, entry"];
-  markers [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=1.68, label="version == local?"];
-  write_markers [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=3.52, label="writeLocalMarkers\nruntimes/<id>/.runtime.json\nbundles/<id>/local/.flashcli_bundle.json"];
-  preflight [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=3.52, label="host.PreflightBundle\nHostEnvKey = SM + CUDA + Python ABI\nrecognize native .so in the runtime cell\nhost glibc / GLIBCXX / CXXABI check\nskippable with FLASHCLI_SKIP_PREFLIGHT"];
-  env_ok [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=2.24, label="runtime env key matched?"];
-  err_env [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=2.96, label="environment mismatch, exit 2\nno NVIDIA GPU or no matching cell"];
-  kind [shape=diamond, style="filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.45, fontsize=12, width=1.20, label="entry.kind?"];
-  }
-  subgraph cluster_4 {
-    label=<<B>Python runtime preparation</B>>;
-    style="rounded,filled"; color="#F472B6"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
-  weights [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.3, fontsize=13, width=4.08, label="host.ResolveWeights → PrepareBundle\n--checkpoint override / FLASHCLI_SKIP_WEIGHTS\nstore/<source>/<repo>@<rev>-<hash>\nextra_weights · extra_pull · post_pull\nallow / require patterns + norm stats readiness\nhost download manifest + resume"];
-  w_ok [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=1.44, label="weights ready?"];
-  err_w [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=1.92, label="weight error, exit 1"];
-  sys1 [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=3.84, label="EnsureSystemRequirements(m, \"\")\nc/cxx compiler, Python headers (before venv)"];
-  venv [shape=box, style="rounded,filled", fillcolor="#FCE7F3", color="#F472B6", penwidth=1.3, fontsize=13, width=3.92, label="venv.Ensure(runtimeID, manifest)\nfingerprint = python_abi + torch index + deps\nuv by default / pip fallback\nflashcli-bundle[infer] + python_dependencies\nshared UV cache; hardlink torch/CUDA"];
-  schema [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=4.32, label="EnsureProtocolCacheSchema\nin-place upgrade when CACHE_SCHEMA_VERSION changes"];
-  cuda [shape=box, style="rounded,filled", fillcolor="#E0F2FE", color="#38BDF8", penwidth=1.3, fontsize=13, width=4.24, label="EnsureSystemRequirements(m, python) + cuda.Ensure\nheaders rechecked with the real interpreter\nCUDA SONAME present and dlopen-able\nmay install nvidia-cublas / cuda-runtime"];
-  exec [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.8, fontsize=14, width=4.08, label="inferexec.Exec → syscall.Exec\npython -m flashcli_bundle.infer <cap> <ref> ...\nHF_HUB_OFFLINE=1 + FLASHCLI_RUNTIME_ID\nFLASHCLI_BUNDLE_ROOT + VIRTUAL_ENV"];
-  }
-  subgraph cluster_5 {
-    label=<<B>Inside the bundle (engine mode)</B>>;
-    style="rounded,filled"; color="#8B5CF6"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
-  infer [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=4.08, label="flashcli_bundle.infer child\nactivate_for_preset: env key, layout, CUDA, .so\nensure_model_cached(download=False)"];
-  mode [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=1.20, label="entry mode?"];
-  engine [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", penwidth=1.3, fontsize=13, width=3.52, label="engine.load(checkpoint, preset, options)\nRunEngine or ServeEngine"];
-  runp [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", penwidth=1.3, fontsize=13, width=2.80, label="run → predict()\nresult on stdout, process exits"];
-  servep [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", penwidth=1.3, fontsize=13, width=4.88, label="serve → warmup() + build_app()\ncapabilities decide the standard routes\nregister_routes() mounts before host routes\nuvicorn binds --host/--port (127.0.0.1 under flashserver)"];
-  script [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", penwidth=1.3, fontsize=13, width=3.76, label="script mode\nmain(argv) owns everything\nno host routes; manifest env is not applied"];
-  flashrt [shape=note, style="filled", fillcolor="#F1F5F9", color="#CBD5E1", penwidth=1.3, fontsize=11.5, width=2.48, label="FlashRT\nbundle ships flash_rt + .so\nhost never installs FlashRT"];
-  }
-  subgraph cluster_6 {
-    label=<<B>Native execution entries</B>>;
-    style="rounded,filled"; color="#38BDF8"; fillcolor="#FFFFFF"; penwidth=1.3; fontcolor="#334155"; fontsize=15; margin=18;
-  native_exec [shape=box, style="rounded,filled", fillcolor="#E0F2FE", color="#38BDF8", penwidth=1.3, fontsize=13, width=3.60, label="native-exec\nstart the bundle executable after weights"];
-  ne_transport [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=1.12, label="transport?"];
-  ne_http [shape=box, style="rounded,filled", fillcolor="#E0F2FE", color="#38BDF8", penwidth=1.3, fontsize=13, width=3.92, label="http: print endpoint, wait for signal\nhost does not proxy; clients connect directly"];
-  ne_stdio [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=3.12, label="stdio: serve not implemented\nrun uses NDJSON run/health/shutdown"];
-  native_abi [shape=box, style="rounded,filled", fillcolor="#E0F2FE", color="#38BDF8", penwidth=1.3, fontsize=13, width=3.20, label="native-abi\nOpen(preload, library, config)\nvalidate abi_version=1 / struct_size"];
-  abi_session [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", penwidth=1.45, fontsize=12, width=2.32, label="session_library declared?"];
-  abi_plain [shape=box, style="rounded,filled", fillcolor="#FEE2E2", color="#EF4444", penwidth=1.8, fontsize=14, width=3.04, label="plain native-abi\nrun probes the ABI and prints JSON\nserve not implemented"];
-  abi_sess [shape=box, style="rounded,filled", fillcolor="#E0F2FE", color="#38BDF8", penwidth=1.3, fontsize=13, width=3.84, label="Nexus session\nrun: Apply → Tick → GetF32\nserve: /healthz /v1/act /v1/chat/completions"];
-  }
-  offline [shape=note, style="filled", fillcolor="#F1F5F9", color="#CBD5E1", penwidth=1.3, fontsize=11.5, width=9.04, label="Offline guarantee\nrun/serve are local-first: no network when the bundle marker, complete weights and venv fingerprint all match\nnetwork only for missing artifacts, explicit pull, or a schema upgrade"];
+  graph [rankdir=TB, bgcolor="#F7F9FC", pad=0.4, nodesep=0.45, ranksep=0.5, fontname="Noto Sans CJK SC", fontsize=28, labelloc=t, label=<<B>flashcli model inference flow</B><BR/><FONT POINT-SIZE="14" COLOR="#64748B">ref → bundle tree → weights / venv / CUDA → inference inside the bundle</FONT>>];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC", fontsize=12.5, margin="0.30,0.10", penwidth=1.3, color="#94A3B8"];
+  edge [fontname="Noto Sans CJK SC", fontsize=10.5, color="#64748B", fontcolor="#475569", arrowsize=0.7, penwidth=1.15];
+  start [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", fontsize=13.5, label=<<B>flashcli run | serve</B><BR/><FONT POINT-SIZE="10.5">&lt;ref&gt; [OPTIONS] · raw argv</FONT><BR/><FONT POINT-SIZE="10.5">cobra DisableFlagParsing</FONT>>];
+  peel [shape=box, style="rounded,filled", fillcolor="#E0E7FF", color="#6366F1", fontsize=12.5, label=<<B>peelHostFlags</B><BR/><FONT POINT-SIZE="10.5">ref · --checkpoint · --mtp-checkpoint</FONT><BR/><FONT POINT-SIZE="10.5">--quiet · --no-auto-install · -h</FONT>>];
+  ensure [shape=box, style="rounded,filled", fillcolor="#DBEAFE", color="#3B82F6", fontsize=12.5, label=<<B>host.EnsureBundle</B><BR/><FONT POINT-SIZE="10.5">force=false; run/serve never call host.Pull</FONT>>];
+  source [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", fontsize=12, label=<<B>bundle source?</B><BR/><FONT POINT-SIZE="10.5">local path / FlashHub marker / sync</FONT>>];
+  sync [shape=box, style="rounded,filled", fillcolor="#FFEDD5", color="#F97316", fontsize=12.5, label=<<B>DownloadManifest + SyncBundle</B><BR/><FONT POINT-SIZE="10.5">repo index → manifest</FONT><BR/><FONT POINT-SIZE="10.5">selected runtime cell + common files + markers</FONT>>];
+  root [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", fontsize=12.5, label=<<B>bundle tree ready</B><BR/><FONT POINT-SIZE="10.5">local / reuse / sync converge</FONT>>];
+  manifest [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", fontsize=12.5, label=<<B>manifest.Load → ApplyEnv → PreflightBundle</B><BR/><FONT POINT-SIZE="10.5">ResolveVariant · EntryFor(capability)</FONT><BR/><FONT POINT-SIZE="10.5">HostEnvKey = SM + CUDA + Python ABI</FONT><BR/><FONT POINT-SIZE="10.5">recognize native .so + host ABI</FONT>>];
+  valid [shape=diamond, style="filled", fillcolor="#FEF3C7", color="#F59E0B", fontsize=12, label=<<B>manifest / env / entry valid?</B><BR/><FONT POINT-SIZE="10.5">invalid → exit 1/2</FONT>>];
+  weights [shape=box, style="rounded,filled", fillcolor="#FEF3C7", color="#F59E0B", fontsize=12.5, label=<<B>weights.PrepareBundle</B><BR/><FONT POINT-SIZE="10.5">store key · download manifest · resume</FONT><BR/><FONT POINT-SIZE="10.5">extra_weights · extra_pull · post_pull</FONT><BR/><FONT POINT-SIZE="10.5">allow / require + norm stats readiness</FONT>>];
+  venv [shape=box, style="rounded,filled", fillcolor="#FCE7F3", color="#F472B6", fontsize=12.5, label=<<B>venv.Ensure + protocol schema</B><BR/><FONT POINT-SIZE="10.5">before venv: EnsureSystemRequirements</FONT><BR/><FONT POINT-SIZE="10.5">uv · flashcli-bundle[infer] · python_dependencies</FONT><BR/><FONT POINT-SIZE="10.5">offline reuse when the fingerprint matches</FONT>>];
+  cuda [shape=box, style="rounded,filled", fillcolor="#E0F2FE", color="#38BDF8", fontsize=12.5, label=<<B>cuda.Ensure</B><BR/><FONT POINT-SIZE="10.5">CUDA SONAME present and dlopen-able</FONT><BR/><FONT POINT-SIZE="10.5">may install nvidia-cublas / cuda-runtime</FONT>>];
+  exec [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", fontsize=13.5, label=<<B>inferexec.Exec</B><BR/><FONT POINT-SIZE="10.5">syscall.Exec replaces the host process</FONT><BR/><FONT POINT-SIZE="10.5">python -m flashcli_bundle.infer &lt;cap&gt; &lt;ref&gt;</FONT>>];
+  infer [shape=box, style="rounded,filled", fillcolor="#EDE9FE", color="#8B5CF6", fontsize=12.5, label=<<B>flashcli_bundle.infer</B><BR/><FONT POINT-SIZE="10.5">activate_for_preset</FONT><BR/><FONT POINT-SIZE="10.5">ensure_model_cached(download=False)</FONT>>];
+  engine [shape=box, style="rounded,filled", fillcolor="#DCFCE7", color="#22C55E", fontsize=12.5, label=<<B>RunEngine / ServeEngine</B><BR/><FONT POINT-SIZE="10.5">run: load → predict() → stdout</FONT><BR/><FONT POINT-SIZE="10.5">serve: load → warmup() → build_app()</FONT><BR/><FONT POINT-SIZE="10.5">register_routes before standard routes</FONT>>];
+  note [shape=note, style="filled", fillcolor="#F1F5F9", color="#CBD5E1", fontsize=10.5, label=<<B>Other entries and boundaries</B><BR/><FONT POINT-SIZE="10.5">script: main(argv) creates its own protocol/server</FONT><BR/><FONT POINT-SIZE="10.5">native-exec: http serve works; stdio serve not implemented</FONT><BR/><FONT POINT-SIZE="10.5">native-abi: plain run probes the ABI; sessions run inference</FONT><BR/><FONT POINT-SIZE="10.5">offline: no network when marker + weights + fingerprint match</FONT>>];
   start -> peel [color="#64748B", style="solid"];
-  peel -> help [color="#64748B", style="solid"];
-  help -> manifest [color="#D97706", style="solid", label="yes"];
-  manifest -> end_help [color="#16A34A", style="solid"];
-  help -> ensure [color="#64748B", style="solid", label="no"];
-  ensure -> local [color="#64748B", style="solid"];
-  local -> local_ret [color="#D97706", style="solid", label="yes"];
-  local -> marker [color="#64748B", style="solid", label="no"];
-  marker -> reuse [color="#16A34A", style="solid", label="yes"];
-  marker -> sync [color="#EA580C", style="solid", label="no"];
-  sync -> load [color="#EA580C", style="solid"];
-  reuse -> load [color="#16A34A", style="solid"];
-  local_ret -> load [color="#64748B", style="solid"];
-  load -> valid [color="#64748B", style="solid"];
-  valid -> err_manifest [color="#DC2626", style="dashed", label="no"];
-  valid -> markers [color="#16A34A", style="solid", label="yes"];
-  markers -> write_markers [color="#D97706", style="solid", label="yes"];
-  markers -> preflight [color="#64748B", style="solid", label="no"];
-  write_markers -> preflight [color="#D97706", style="solid"];
-  preflight -> env_ok [color="#64748B", style="solid"];
-  env_ok -> err_env [color="#DC2626", style="dashed", label="no"];
-  env_ok -> kind [color="#16A34A", style="solid", label="yes"];
-  kind -> weights [color="#DB2777", style="solid", label="python"];
-  kind -> native_exec [color="#0284C7", style="solid", label="native-exec"];
-  kind -> native_abi [color="#0284C7", style="solid", label="native-abi"];
-  weights -> w_ok [color="#64748B", style="solid"];
-  w_ok -> err_w [color="#DC2626", style="dashed", label="no"];
-  w_ok -> sys1 [color="#16A34A", style="solid", label="yes"];
-  sys1 -> venv [color="#16A34A", style="solid"];
-  venv -> schema [color="#DB2777", style="solid"];
-  schema -> cuda [color="#16A34A", style="solid"];
+  peel -> ensure [color="#64748B", style="solid"];
+  ensure -> source [color="#64748B", style="solid"];
+  source -> sync [color="#EA580C", style="solid", label="FlashHub / no marker"];
+  source -> root [color="#16A34A", style="dashed", label="local / marker present"];
+  sync -> root [color="#EA580C", style="solid"];
+  root -> manifest [color="#64748B", style="solid"];
+  manifest -> valid [color="#64748B", style="solid"];
+  valid -> weights [color="#16A34A", style="solid", label="yes"];
+  weights -> venv [color="#D97706", style="solid"];
+  venv -> cuda [color="#DB2777", style="solid"];
   cuda -> exec [color="#0284C7", style="solid"];
-  exec -> infer [color="#7C3AED", style="solid"];
-  infer -> mode [color="#64748B", style="solid"];
-  mode -> engine [color="#7C3AED", style="solid", label="engine"];
-  mode -> script [color="#EA580C", style="solid", label="script"];
-  engine -> runp [color="#2563EB", style="solid", label="run"];
-  engine -> servep [color="#16A34A", style="solid", label="serve"];
-  infer -> flashrt [color="#64748B", style="dotted", label="import / dlopen"];
-  native_exec -> ne_transport [color="#0284C7", style="solid"];
-  ne_transport -> ne_http [color="#0284C7", style="solid", label="http"];
-  ne_transport -> ne_stdio [color="#DC2626", style="dashed", label="stdio"];
-  native_abi -> abi_session [color="#0284C7", style="solid"];
-  abi_session -> abi_sess [color="#0284C7", style="solid", label="yes"];
-  abi_session -> abi_plain [color="#DC2626", style="dashed", label="no"];
-  cuda -> offline [color="#64748B", style="dotted"];
+  exec -> infer [color="#16A34A", style="solid"];
+  infer -> engine [color="#7C3AED", style="solid"];
+  engine -> note [color="#64748B", style="dotted"];
 }

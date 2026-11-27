@@ -17,13 +17,10 @@ flashcli 是 FlashRT 的**分发与运行宿主**：解析 preset、从 FlashHub
 | 图 | 内容 |
 |---|---|
 | [系统总览](images/architecture-overview.zh-CN.svg) · [PNG](images/architecture-overview.zh-CN.png) | 客户端（桌面端、已安装应用、CLI）、flashserver 模块（网关、调度、管理、应用、系统/GPU）、flashcli 执行、Model Bundle + FlashRT、共享缓存、FlashHub、权重源 |
-| [flashcli run/serve 流程](images/flashcli-flow.zh-CN.svg) · [PNG](images/flashcli-flow.zh-CN.png) | 命令解析、`EnsureBundle`（标记复用 vs 同步）、manifest/环境/变体、本地标记、preflight、权重、系统检查、venv、CUDA userland、`inferexec`、bundle 内 `load`/`predict`/`build_app`、原生入口 |
-| [flashserver 网关请求流程](images/flashserver-gateway-flow.zh-CN.svg) · [PNG](images/flashserver-gateway-flow.zh-CN.png) | 认证、路由归属、标准/自定义/保留路径、body/form/query 选择 model、冲突/缺失/非法错误、磁盘与 capability 门禁、lease、endpoint、代理、SSE/JSON 重写、释放、idle stop |
-| [flashserver 调度流程](images/flashserver-scheduler-flow.zh-CN.svg) · [PNG](images/flashserver-scheduler-flow.zh-CN.png) | `Acquire`、resident 命中、`max_loaded=0`、runtime cell、空闲显存 + headroom、GPU 数量、CPU 兜底、LRU 淘汰、有界队列、后台启动 + 健康检查、stop 竞争、释放、idle 回收、死进程对账 |
-| [Model Bundle / FlashRT 运行时栈](images/bundle-runtime-stack.zh-CN.svg) · [PNG](images/bundle-runtime-stack.zh-CN.png) | manifest 版本轴、v4 defaults/environments、entry 类型/模式、resources/capabilities/options、依赖、权重元数据、host 准备 bundle/venv/权重、三种执行入口、FlashRT 注册、完整性与就绪的区别 |
-| [Go host 模块地图](images/go-module-map.zh-CN.svg) · [PNG](images/go-module-map.zh-CN.png) | 命令 → CLI/server 前端 → 共享 host 服务 → 执行 backend；机械边界门禁 |
-| [FlashHub 流程](images/flashhub-flow.zh-CN.svg) · [PNG](images/flashhub-flow.zh-CN.png) | build → pack → validate → 人工上传；repo/catalog/app API；CLI pull/run、flashserver preload/catalog/app install、desktop；本地缓存与离线规则 |
-| [应用生命周期](images/app-lifecycle.zh-CN.svg) · [PNG](images/app-lifecycle.zh-CN.png) | `planned → preparing → prepared → ready`、失败/重试、仅准备、setup 脚本与 `setup_error`、卸载/清理模型、桌面端角色；应用不拥有模型启停 |
+| [flashcli 模型推理流程](images/flashcli-flow.zh-CN.svg) · [PNG](images/flashcli-flow.zh-CN.png) | `EnsureBundle`（本地 / 标记 / 同步）、manifest + preflight、权重、venv、CUDA userland、`inferexec`、bundle 内 `load`/`predict`/`build_app`；原生与 script 入口见侧注 |
+| [应用安装与配置流程](images/app-lifecycle.zh-CN.svg) · [PNG](images/app-lifecycle.zh-CN.png) | manifest/平台、AlreadyReady、`planned → install 命令 → preparing → prepared → setup → ready`、`setup_error`、卸载/清理模型、桌面端角色；应用不拥有模型启停 |
+| [flashserver 网关与模型调度](images/flashserver-gateway-flow.zh-CN.svg) · [PNG](images/flashserver-gateway-flow.zh-CN.png) | 认证、路由归属、模型选择、磁盘/preload 与 capability 门禁、`Acquire`、`planLocked`/`placementFor`（`max_loaded=0`、runtime cell、显存 + headroom、GPU 数量、CPU 兜底、LRU/队列）、resident 启动/健康、lease、代理、释放 |
+| [FlashHub bundle 与权重获取/缓存](images/flashhub-flow.zh-CN.svg) · [PNG](images/flashhub-flow.zh-CN.png) | build → pack → validate → 人工上传、repo index、`EnsureBundle`（标记复用 vs 同步）、venv/preflight、权重下载/就绪、本地缓存与离线规则 |
 
 总览是手工排版 SVG；所有流程图由 `images/<name>.<lang>.dot` 的 Graphviz 源生成，`.dot` 是权威源文件。重建命令：`python scripts/gen_architecture_diagrams.py`，然后 `dot -Tsvg <name>.<lang>.dot -o <name>.<lang>.svg`、`dot -Tpng -Gdpi=110 <name>.<lang>.dot -o <name>.<lang>.png`。样式要求见 [CONTRIBUTING.md → Architecture and flow diagrams](../CONTRIBUTING.md#architecture-and-flow-diagrams)。
 
