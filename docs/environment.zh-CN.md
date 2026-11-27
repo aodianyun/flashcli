@@ -115,7 +115,7 @@ Standalone Python 自动供给（当 bundle `python_abi` 缺失）：
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `FLASHCLI_QUIET` | `0` | 减少 `run`/`serve`/`pull`/`sync` 输出。 |
-| `FLASHCLI_VRAM_HEADROOM_MIB` | `6144` | flashserver 调度器在 bundle `resources.min_vram_mib` 之上额外预留的空闲显存。配置文件中正数 `vram_headroom_mib` 优先。 |
+| `FLASHCLI_VRAM_HEADROOM_MIB` | `512` | flashserver 调度器在 bundle `resources.min_vram_mib` 之上额外预留的空闲显存。未声明 `min_vram_mib` 的 bundle 至少预留 6144 MiB；显式设为 `0` 可关闭预留。配置文件中正数 `vram_headroom_mib` 优先。 |
 | `FLASHCLI_GO_RELEASE_BASE` / `FLASHCLI_GO_RELEASE_API` | GitHub releases；镜像模式开启时为 Gitee | `flashcli upgrade` 覆盖（如 Gitee）。 |
 
 ## 镜像（国内友好）

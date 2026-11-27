@@ -304,9 +304,9 @@ GPU id、`CUDA_VISIBLE_DEVICES` 或 placement 策略，这些由 host 决定。
 ```
 
 - `min_vram_mib` — **每张 GPU** 需要的空闲显存（MiB）。按实测峰值填写；host 会额外
-  预留 `vram_headroom_mib`。声明了 `resources` 块即进入严格校验：GPU runtime 必须包含
-  `min_vram_mib`，否则 `bundle validate` 失败。没有 `resources` 块的 legacy bundle 只
-  产生警告，并按未声明显存要求准入，保证已发布 bundle 仍可运行。
+  预留较小的 `vram_headroom_mib` 余量（默认 512 MiB）。声明了 `resources` 块即进入严格
+  校验：GPU runtime 必须包含 `min_vram_mib`，否则 `bundle validate` 失败。没有
+  `resources` 块的 legacy bundle 只产生警告，并按保守的 6144 MiB placement 下限继续运行。
 - `gpu_count` — 可选，默认 `1`。一个模型跨多少张 GPU；调度器按全有或全无预留。
 - `min_ram_mib` — 可选，仅 CPU runtime。CPU placement 需要的空闲内存。只有不存在
   兼容 GPU runtime 时才使用 CPU。

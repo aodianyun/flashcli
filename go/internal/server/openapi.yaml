@@ -1181,8 +1181,14 @@ components:
         scheduler:
           type: object
           properties:
-            vram_headroom_mib: { type: integer, format: int64 }
-            max_loaded: { type: integer }
+            vram_headroom_mib:
+              type: integer
+              format: int64
+              description: VRAM reserved above a declared min_vram_mib; legacy bundles without a declaration use a 6144 MiB floor. 0 disables the reservation.
+            max_loaded:
+              type: integer
+              default: 0
+              description: 0 means no slot limit; admission is driven by compatible GPU/CPU resources and free memory.
             idle_stop_seconds: { type: integer }
             resident_start_wait_seconds: { type: integer }
             queue_timeout_seconds: { type: integer }

@@ -68,7 +68,7 @@ checks `/health`.
   "serve_host": "127.0.0.1",
   "log_dir": "/home/me/.flashcli/logs/serve",
   "max_loaded": 0,
-  "vram_headroom_mib": 6144,
+  "vram_headroom_mib": 512,
   "idle_stop_seconds": 600,
   "resident_start_wait_seconds": 10,
   "queue_timeout_seconds": 30,
@@ -78,14 +78,15 @@ checks `/health`.
 }
 ```
 
-- `max_loaded=0` means no slot limit. VRAM admission uses each bundle's
-  `resources.min_vram_mib` per GPU plus `vram_headroom_mib` (default 6144,
-  override with `FLASHCLI_VRAM_HEADROOM_MIB`): a
-  start is admitted when a compatible GPU has that much free VRAM. Bundles with
-  a `resources` block must declare `min_vram_mib` for a GPU runtime; legacy
-  bundles without the block validate with a warning and are admitted without a
-  declared VRAM requirement. The slot limit still counts starting models.
-  Applications call the gateway and share the same scheduler.
+- `max_loaded=0` (the default) means no slot limit: admission is driven by GPU
+  and CPU resources. A start is admitted when a compatible GPU has
+  `resources.min_vram_mib` plus `vram_headroom_mib` (default 512,
+  override with `FLASHCLI_VRAM_HEADROOM_MIB`) free. Bundles with a `resources`
+  block must declare `min_vram_mib` for a GPU runtime; legacy bundles without a
+  declaration reserve a conservative 6144 MiB instead
+  (`FLASHCLI_VRAM_HEADROOM_MIB=0` disables the reservation). The slot limit,
+  when configured, still counts starting models. Applications call the gateway
+  and share the same scheduler.
 - `idle_stop_seconds` (default 600) stops residents with no leases;
   `queue_timeout_seconds`/`queue_max` bound waiting; `auto_pull` (default true)
   preloads an absent model in the background; `cpu_fallback` is

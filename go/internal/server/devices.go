@@ -83,7 +83,32 @@ type schedulerResponse struct {
 	Requirements    []ResourceRequirement `json:"requirements"`
 }
 
-const defaultVRAMHeadroomMiB int64 = 6144
+const (
+	// defaultVRAMHeadroomMiB is the safety margin added to a declared
+	// resources.min_vram_mib (which is the measured peak VRAM).
+	defaultVRAMHeadroomMiB int64 = 512
+	// legacyVRAMFloorMiB is the conservative requirement used when a bundle
+	// does not declare resources.min_vram_mib at all. Legacy bundles are only
+	// admitted when a GPU has this much free memory.
+	legacyVRAMFloorMiB int64 = 6144
+)
+
+// vramNeedMiB returns the free VRAM a placement needs per GPU. A declared
+// min_vram_mib is the measured peak, so only the small headroom is added. A
+// legacy bundle without a declaration falls back to the conservative floor
+// (an explicit headroom of 0 disables the reservation).
+func vramNeedMiB(minVRAMMiB, headroomMiB int64) int64 {
+	if minVRAMMiB > 0 {
+		return minVRAMMiB + headroomMiB
+	}
+	if headroomMiB <= 0 {
+		return 0
+	}
+	if headroomMiB < legacyVRAMFloorMiB {
+		return legacyVRAMFloorMiB
+	}
+	return headroomMiB
+}
 
 func (s *Server) vramHeadroomMiB() int64 {
 	if s.VRAMHeadroomMiB > 0 {
@@ -186,7 +211,7 @@ func placementFor(refStr string, m *manifest.Manifest, inv DeviceInventory, cuda
 		req.GPUCount = 1
 	}
 	abi := m.PythonABIOrEmpty()
-	needBytes := (res.MinVRAMMiB + headroomMiB) * 1024 * 1024
+	needBytes := vramNeedMiB(res.MinVRAMMiB, headroomMiB) * 1024 * 1024
 
 	var compatible []DeviceInfo
 	for _, d := range inv.Devices {

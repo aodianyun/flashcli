@@ -42,3 +42,34 @@ func TestBuildSchedulerUsesConfigDefaults(t *testing.T) {
 		t.Fatalf("defaults = cpu=%q auto_pull=%t", s.CPUFallback, s.AutoPull)
 	}
 }
+
+func TestConfigDefaultMaxLoadedIsUnlimited(t *testing.T) {
+	t.Setenv("FLASHCLI_HOME", t.TempDir())
+	cfg := Config{Addr: "127.0.0.1:8790"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("default config rejected: %v", err)
+	}
+	s := NewFromConfig(cfg)
+	if s.Manager == nil || s.Scheduler == nil {
+		t.Fatal("manager/scheduler not built")
+	}
+	if s.Manager.opts.MaxLoaded != 0 {
+		t.Fatalf("manager max_loaded = %d, want 0 (unlimited)", s.Manager.opts.MaxLoaded)
+	}
+	if s.Scheduler.opts.MaxLoaded != 0 {
+		t.Fatalf("scheduler max_loaded = %d, want 0 (unlimited)", s.Scheduler.opts.MaxLoaded)
+	}
+	if used, max := s.Manager.Slots(); used != 0 || max != 0 {
+		t.Fatalf("slots = %d/%d, want 0/0", used, max)
+	}
+	if m := NewManager(nil); m.opts.MaxLoaded != 0 {
+		t.Fatalf("NewManager default max_loaded = %d, want 0", m.opts.MaxLoaded)
+	}
+
+	// An explicit positive limit is still honored.
+	limited := NewFromConfig(Config{Addr: "127.0.0.1:8790", MaxLoaded: 2})
+	if limited.Manager.opts.MaxLoaded != 2 || limited.Scheduler.opts.MaxLoaded != 2 {
+		t.Fatalf("configured limit = manager %d scheduler %d, want 2",
+			limited.Manager.opts.MaxLoaded, limited.Scheduler.opts.MaxLoaded)
+	}
+}

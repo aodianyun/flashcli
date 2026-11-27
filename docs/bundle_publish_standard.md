@@ -313,11 +313,12 @@ policy; the host decides those.
 ```
 
 - `min_vram_mib` — free GPU memory (MiB) required **per GPU**. Set it from the
-  measured peak usage; the host additionally reserves `vram_headroom_mib`.
+  measured peak usage; the host additionally reserves the small
+  `vram_headroom_mib` margin (default 512 MiB).
   Declaring a `resources` block opts into strict validation: a GPU runtime must
   include `min_vram_mib`, otherwise `bundle validate` fails. Legacy bundles with
-  no `resources` block validate with a warning and are admitted without a
-  declared VRAM requirement, so already-published bundles keep running.
+  no `resources` block validate with a warning and keep running with a
+  conservative 6144 MiB placement floor instead.
 - `gpu_count` — optional, default `1`. Number of GPUs one model spans. The
   scheduler reserves that many GPUs all-or-nothing.
 - `min_ram_mib` — optional, CPU runtime only. Free RAM required for CPU

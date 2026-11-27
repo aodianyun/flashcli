@@ -84,9 +84,10 @@ restart. Per-model host/port/serve options stay under `/models/options`.
   devices are out of scope.
 - `GET /api/v1/scheduler` returns resident models, slot counts,
   queue/reservations, and one `ResourceRequirement` per cached serve bundle:
-  which GPU runtime cells match, which devices satisfy `gpu_count` and
-  `min_vram_mib + vram_headroom_mib`, whether a CPU runtime exists, and the
-  no-placement reason (`no_compatible_runtime` / `resource_exhausted`).
+  which GPU runtime cells match, which devices satisfy `gpu_count` and the
+  VRAM need (`min_vram_mib + vram_headroom_mib`, or the legacy 6144 MiB floor),
+  whether a CPU runtime exists, and the no-placement reason
+  (`no_compatible_runtime` / `resource_exhausted`).
 - Placement is host-only. Bundles declare `min_vram_mib`, optional `gpu_count`,
   and optional `min_ram_mib`; they never select devices.
 - CPU is a candidate only when no compatible GPU runtime exists, never because

@@ -208,8 +208,8 @@ func TestSchedulerEndpointReportsPlacement(t *testing.T) {
 
 func TestVRAMHeadroomDefaultAndEnv(t *testing.T) {
 	s := &Server{}
-	if got := s.vramHeadroomMiB(); got != 6144 {
-		t.Fatalf("default headroom = %d, want 6144", got)
+	if got := s.vramHeadroomMiB(); got != 512 {
+		t.Fatalf("default headroom = %d, want 512", got)
 	}
 	t.Setenv("FLASHCLI_VRAM_HEADROOM_MIB", "4096")
 	if got := s.vramHeadroomMiB(); got != 4096 {
@@ -222,5 +222,46 @@ func TestVRAMHeadroomDefaultAndEnv(t *testing.T) {
 	s.VRAMHeadroomMiB = 1024
 	if got := s.vramHeadroomMiB(); got != 1024 {
 		t.Fatalf("config headroom = %d, want 1024", got)
+	}
+}
+
+func TestVRAMNeedUsesDeclaredPeakAndLegacyFloor(t *testing.T) {
+	cases := []struct {
+		name     string
+		minVRAM  int64
+		headroom int64
+		want     int64
+	}{
+		{"declared plus default headroom", 4096, 512, 4608},
+		{"declared explicit zero headroom", 4096, 0, 4096},
+		{"legacy gets conservative floor", 0, 512, 6144},
+		{"legacy explicit zero disables floor", 0, 0, 0},
+		{"legacy larger headroom wins", 0, 8192, 8192},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := vramNeedMiB(tc.minVRAM, tc.headroom); got != tc.want {
+				t.Fatalf("vramNeedMiB(%d, %d) = %d, want %d", tc.minVRAM, tc.headroom, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestPlacementFitsDeclaredModelOnEightGBCard(t *testing.T) {
+	inv := inventoryFrom([]gpu.Device{{
+		Index: 0, Name: "RTX 4060", MemoryTotal: 8188 << 20, MemoryFree: 6 << 30,
+		ComputeCap: "8.9",
+	}}, "")
+	m := placementManifest(t, []string{"sm89-cu124-linux-x86_64-py312"}, map[string]any{"min_vram_mib": 4096})
+	req := placementFor("demo:1", m, inv, inv.CUDATag, 512)
+	if len(req.GPUs) != 1 || req.GPUs[0] != "0" {
+		t.Fatalf("8 GiB placement = %+v", req)
+	}
+
+	// A legacy bundle without min_vram_mib still uses the conservative floor.
+	legacy := placementManifest(t, []string{"sm89-cu124-linux-x86_64-py312"}, nil)
+	req = placementFor("demo:1", legacy, inv, inv.CUDATag, 512)
+	if len(req.GPUs) != 1 {
+		t.Fatalf("legacy 6 GiB placement = %+v", req)
 	}
 }

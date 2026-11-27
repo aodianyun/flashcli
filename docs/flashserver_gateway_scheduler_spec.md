@@ -327,7 +327,9 @@ Optional:
 2. Build runtime-compatible candidates for each device and the CPU.
 3. Prefer a GPU placement when a compatible GPU runtime exists.
 4. For `gpu_count > 1`, reserve that many GPUs each satisfying
-   `min_vram_mib + vram_headroom_mib`; reservation is all-or-nothing.
+   `vramNeedMiB`: `min_vram_mib + vram_headroom_mib` for declared bundles, or a
+   conservative 6144 MiB floor when `min_vram_mib` is absent (an explicit
+   headroom of `0` disables the reservation). Reservation is all-or-nothing.
 5. If no compatible GPU runtime exists and the bundle has a CPU runtime cell,
    CPU is a candidate. CPU uses `min_ram_mib` when declared, otherwise a
    configurable RAM headroom and best-effort admission.
@@ -344,8 +346,8 @@ Telemetry is exposed at `/api/v1/devices` and `/api/v1/scheduler`.
 
 ```json
 {
-  "max_loaded": 2,
-  "vram_headroom_mib": 6144,
+  "max_loaded": 0,
+  "vram_headroom_mib": 512,
   "idle_stop_seconds": 600,
   "resident_start_wait_seconds": 10,
   "queue_timeout_seconds": 30,
@@ -355,8 +357,12 @@ Telemetry is exposed at `/api/v1/devices` and `/api/v1/scheduler`.
 }
 ```
 
-- `vram_headroom_mib` defaults to 6144 MiB and can be overridden by
-  `FLASHCLI_VRAM_HEADROOM_MIB` (or the config file).
+- `max_loaded` defaults to `0` (no slot limit); placement is limited by
+  compatible GPUs/CPU and available memory, not an arbitrary model count.
+- `vram_headroom_mib` defaults to 512 MiB and can be overridden by
+  `FLASHCLI_VRAM_HEADROOM_MIB` (or the config file). Bundles without
+  `resources.min_vram_mib` reserve at least 6144 MiB instead;
+  `FLASHCLI_VRAM_HEADROOM_MIB=0` disables the reservation.
 - `cpu_fallback` is `no-gpu-runtime` (default) or `disabled`; capacity never
   triggers CPU fallback.
 - Auto-pull returns the standard 503 immediately with `Retry-After`; the

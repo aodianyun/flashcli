@@ -71,9 +71,9 @@ host/port/serve options 仍放在 `/models/options`。
 - `GET /api/v1/devices` 返回 WSL 可见设备：NVIDIA dGPU（`nvidia-smi`）、CPU、内存和
   cgroup 限制。iGPU/AMD/Windows native 不在范围内。
 - `GET /api/v1/scheduler` 返回 resident 模型、槽位、队列/预留，以及每个已缓存 serve
-  bundle 的 `ResourceRequirement`：匹配的 GPU runtime cell、满足 `gpu_count` 与
-  `min_vram_mib + vram_headroom_mib` 的设备、是否存在 CPU runtime，以及无 placement
-  的原因（`no_compatible_runtime` / `resource_exhausted`）。
+  bundle 的 `ResourceRequirement`：匹配的 GPU runtime cell、满足 `gpu_count` 与 VRAM 需求
+  （`min_vram_mib + vram_headroom_mib`，或 legacy 6144 MiB 下限）的设备、是否存在 CPU
+  runtime，以及无 placement 的原因（`no_compatible_runtime` / `resource_exhausted`）。
 - placement 只由 host 决定。bundle 只声明 `min_vram_mib`、可选 `gpu_count` 和可选
   `min_ram_mib`，绝不选择设备。
 - 只有在不存在兼容 GPU runtime 时 CPU 才是候选；显存暂时不足不会触发 CPU 回退。

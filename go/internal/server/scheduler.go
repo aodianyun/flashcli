@@ -70,18 +70,23 @@ type resident struct {
 	ref       string
 	state     string
 	devices   []string
+	vramMiB   int64
 	startedAt time.Time
 	lastUsed  time.Time
 	leases    int
 }
 
 type startCall struct {
-	done chan struct{}
-	err  error
+	done   chan struct{}
+	err    error
+	cancel context.CancelFunc
 }
 
 type placementPlan struct {
 	Devices []string
+	// VRAMMiB is the per-GPU reservation used while the process is starting.
+	// Once ready, the live device inventory reflects the actual usage.
+	VRAMMiB int64
 	Env     []string
 }
 
@@ -115,9 +120,6 @@ func NewScheduler(manager *Manager, opts SchedulerOptions) *Scheduler {
 	if opts.VRAMHeadroomMiB < 0 {
 		opts.VRAMHeadroomMiB = 0
 	}
-	if opts.VRAMHeadroomMiB == 0 {
-		opts.VRAMHeadroomMiB = 512
-	}
 	return &Scheduler{
 		manager:   manager,
 		opts:      opts,
@@ -149,7 +151,11 @@ func (s *Scheduler) Start(ctx context.Context) {
 type Lease struct {
 	Ref   string
 	sched *Scheduler
-	once  sync.Once
+	// res identifies the resident generation this lease was taken on. A crash
+	// and restart replaces the resident, so a stale lease must not decrement the
+	// new generation's count.
+	res  *resident
+	once sync.Once
 }
 
 // Release drops the lease. It is idempotent.
@@ -157,7 +163,7 @@ func (l *Lease) Release() {
 	if l == nil || l.sched == nil {
 		return
 	}
-	l.once.Do(func() { l.sched.release(l.Ref) })
+	l.once.Do(func() { l.sched.release(l.Ref, l.res) })
 }
 
 // Acquire ensures a resident and takes one lease. It waits for an in-flight
@@ -168,6 +174,9 @@ func (s *Scheduler) Acquire(ctx context.Context, refStr string) (*Lease, error) 
 	}
 	deadline := time.Now().Add(time.Duration(s.opts.QueueTimeoutSeconds) * time.Second)
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		// Inspect and probe outside the scheduler lock: both can touch the
 		// network or block on device telemetry.
 		info, err := s.opts.Inspect(refStr)
@@ -185,7 +194,7 @@ func (s *Scheduler) Acquire(ctx context.Context, refStr string) (*Lease, error) 
 				r.state = residentBusy
 				r.lastUsed = time.Now().UTC()
 				s.mu.Unlock()
-				return &Lease{Ref: refStr, sched: s}, nil
+				return &Lease{Ref: refStr, sched: s, res: r}, nil
 			case residentStarting, residentStopping:
 				calls := s.starting
 				if r.state == residentStopping {
@@ -221,7 +230,10 @@ func (s *Scheduler) Acquire(ctx context.Context, refStr string) (*Lease, error) 
 		}
 		if err != nil {
 			var pe *PlacementError
-			canQueue := errors.As(err, &pe) && s.hasActiveLocked() && s.opts.QueueTimeoutSeconds > 0
+			// Only a temporary resource shortage can be resolved by waiting.
+			// No runtime compatibility is permanent, so fail immediately.
+			canQueue := errors.As(err, &pe) && pe.Reason == reasonResourceExhausted &&
+				s.hasActiveLocked() && s.opts.QueueTimeoutSeconds > 0
 			if !canQueue {
 				s.mu.Unlock()
 				return nil, err
@@ -252,17 +264,18 @@ func (s *Scheduler) Acquire(ctx context.Context, refStr string) (*Lease, error) 
 			continue
 		}
 
-		call := &startCall{done: make(chan struct{})}
+		startCtx, cancel := context.WithCancel(context.Background())
+		call := &startCall{done: make(chan struct{}), cancel: cancel}
 		s.starting[refStr] = call
 		s.residents[refStr] = &resident{
-			ref: refStr, state: residentStarting, devices: plan.Devices,
+			ref: refStr, state: residentStarting, devices: plan.Devices, vramMiB: plan.VRAMMiB,
 			startedAt: time.Now().UTC(), lastUsed: time.Now().UTC(),
 		}
 		s.mu.Unlock()
 
 		// Start in the background so the caller's deadline returns
 		// model_starting while the resident continues to load.
-		go s.startResident(refStr, plan, call)
+		go s.startResident(startCtx, refStr, plan, call)
 		select {
 		case <-call.done:
 			if call.err != nil {
@@ -277,26 +290,43 @@ func (s *Scheduler) Acquire(ctx context.Context, refStr string) (*Lease, error) 
 
 // startResident performs the actual serve start and publishes the result. It
 // runs with a background context so a client deadline does not cancel it.
-func (s *Scheduler) startResident(refStr string, plan placementPlan, call *startCall) {
-	_, startErr := s.manager.LoadScheduled(context.Background(), refStr, plan.Env)
+func (s *Scheduler) startResident(ctx context.Context, refStr string, plan placementPlan, call *startCall) {
+	if call.cancel != nil {
+		defer call.cancel()
+	}
+	_, startErr := s.manager.LoadScheduled(ctx, refStr, plan.Env)
 
 	s.mu.Lock()
 	delete(s.starting, refStr)
 	call.err = startErr
+	stopCall := s.stopping[refStr]
 	if startErr != nil {
 		delete(s.residents, refStr)
+		if stopCall != nil {
+			delete(s.stopping, refStr)
+		}
 		s.broadcastLocked()
 		s.mu.Unlock()
 		close(call.done)
+		if stopCall != nil {
+			close(stopCall.done)
+		}
 		s.emit("resident_start_failed", map[string]any{"ref": refStr, "error": startErr.Error()})
 		return
 	}
-	if s.stopping[refStr] != nil {
-		// A force stop/eviction raced the start. Do not resurrect it.
+	if stopCall != nil {
+		// A force stop raced the start. Stop the freshly started process and
+		// wake both the start waiter and the stop waiter instead of leaving an
+		// orphan resident behind.
+		delete(s.stopping, refStr)
+		delete(s.residents, refStr)
+		s.broadcastLocked()
 		s.mu.Unlock()
 		_ = s.manager.Unload(context.Background(), refStr)
 		call.err = errors.New("model was stopped during start")
 		close(call.done)
+		close(stopCall.done)
+		s.emit("resident_stopped", map[string]any{"ref": refStr})
 		return
 	}
 	r := s.residents[refStr]
@@ -306,11 +336,42 @@ func (s *Scheduler) startResident(refStr string, plan placementPlan, call *start
 	}
 	r.state = residentReady
 	r.devices = plan.Devices
+	r.vramMiB = plan.VRAMMiB
 	r.lastUsed = time.Now().UTC()
 	s.broadcastLocked()
 	s.mu.Unlock()
 	close(call.done)
 	s.emit("resident_started", map[string]any{"ref": refStr, "devices": plan.Devices})
+}
+
+// reservedInventoryLocked subtracts VRAM reservations for residents that are
+// still starting. Ready residents are already visible in the live inventory, so
+// subtracting them again would double count. The caller holds s.mu.
+func (s *Scheduler) reservedInventoryLocked(inv DeviceInventory) DeviceInventory {
+	reserved := map[string]int64{}
+	for _, r := range s.residents {
+		if r.state != residentStarting || r.vramMiB <= 0 {
+			continue
+		}
+		for _, id := range r.devices {
+			reserved[id] += r.vramMiB
+		}
+	}
+	if len(reserved) == 0 {
+		return inv
+	}
+	devices := make([]DeviceInfo, len(inv.Devices))
+	copy(devices, inv.Devices)
+	for i := range devices {
+		if add := reserved[devices[i].ID]; add > 0 {
+			devices[i].MemoryFreeBytes -= add * 1024 * 1024
+			if devices[i].MemoryFreeBytes < 0 {
+				devices[i].MemoryFreeBytes = 0
+			}
+		}
+	}
+	inv.Devices = devices
+	return inv
 }
 
 // planLocked answers whether ref can start now. The caller holds s.mu.
@@ -332,7 +393,8 @@ func (s *Scheduler) planLocked(refStr string, info BundleInfo, inv DeviceInvento
 		// without a device constraint rather than inventing placement.
 		return placementPlan{}, nil
 	}
-	req := placementFor(refStr, info.Manifest, inv, inv.CUDATag, s.opts.VRAMHeadroomMiB)
+	effInv := s.reservedInventoryLocked(inv)
+	req := placementFor(refStr, info.Manifest, effInv, effInv.CUDATag, s.opts.VRAMHeadroomMiB)
 	applyCPUPolicy(&req, s.opts.CPUDisabled)
 	if len(req.GPUs) == 0 && !req.CPUAdmitted {
 		if s.hasIdleLocked() {
@@ -343,6 +405,7 @@ func (s *Scheduler) planLocked(refStr string, info BundleInfo, inv DeviceInvento
 	plan := placementPlan{Devices: req.GPUs}
 	if len(req.GPUs) > 0 {
 		plan.Env = append(plan.Env, "CUDA_VISIBLE_DEVICES="+strings.Join(req.GPUs, ","))
+		plan.VRAMMiB = vramNeedMiB(info.Manifest.Resources().MinVRAMMiB, s.opts.VRAMHeadroomMiB)
 	}
 	return plan, nil
 }
@@ -411,11 +474,24 @@ func (s *Scheduler) stopResident(refStr string) {
 		s.mu.Unlock()
 		return
 	}
+	wasStarting := r.state == residentStarting
+	startingCall := s.starting[refStr]
 	call := &startCall{done: make(chan struct{})}
 	r.state = residentStopping
 	s.stopping[refStr] = call
 	s.broadcastLocked()
 	s.mu.Unlock()
+
+	if wasStarting {
+		// Cancel the in-flight load, then wait for startResident to unload the
+		// freshly created process. Waiting here keeps unload from deleting assets
+		// while the child is still loading them.
+		if startingCall != nil && startingCall.cancel != nil {
+			startingCall.cancel()
+		}
+		<-call.done
+		return
+	}
 
 	if s.manager != nil {
 		_ = s.manager.Unload(context.Background(), refStr)
@@ -430,10 +506,11 @@ func (s *Scheduler) stopResident(refStr string) {
 	s.emit("resident_stopped", map[string]any{"ref": refStr})
 }
 
-// release ends one lease.
-func (s *Scheduler) release(refStr string) {
+// release ends one lease. A lease from a resident generation that was
+// reconciled away (crash/OOM) or stopped must not affect its replacement.
+func (s *Scheduler) release(refStr string, res *resident) {
 	s.mu.Lock()
-	if r := s.residents[refStr]; r != nil {
+	if r := s.residents[refStr]; r != nil && r == res {
 		if r.leases > 0 {
 			r.leases--
 		}

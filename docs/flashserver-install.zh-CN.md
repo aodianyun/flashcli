@@ -63,7 +63,7 @@ sudo flashserver-setup
   "serve_host": "127.0.0.1",
   "log_dir": "/home/me/.flashcli/logs/serve",
   "max_loaded": 0,
-  "vram_headroom_mib": 6144,
+  "vram_headroom_mib": 512,
   "idle_stop_seconds": 600,
   "resident_start_wait_seconds": 10,
   "queue_timeout_seconds": 30,
@@ -73,12 +73,12 @@ sudo flashserver-setup
 }
 ```
 
-- `max_loaded=0` 表示不限制槽位。显存准入按每个 bundle 的
-  `resources.min_vram_mib`（每张 GPU）加 `vram_headroom_mib`（默认 6144，可用
-  `FLASHCLI_VRAM_HEADROOM_MIB` 覆盖）：某张兼容
-  GPU 的空闲显存足够时准入。声明了 `resources` 块的 bundle 若为 GPU runtime 必须声明
-  `min_vram_mib`；没有该块的 legacy bundle 只产生校验警告，按未声明显存要求准入。
-  槽位上限仍把正在启动的模型计入。应用调用网关，与模型页共享同一调度器。
+- `max_loaded=0`（默认）表示不限制槽位：准入由 GPU/CPU 资源决定。某张兼容 GPU 的空闲
+  显存达到 `resources.min_vram_mib` 加 `vram_headroom_mib`（默认 512，可用
+  `FLASHCLI_VRAM_HEADROOM_MIB` 覆盖）时准入。声明了 `resources` 块的 bundle 若为 GPU
+  runtime 必须声明 `min_vram_mib`；没有该块的 legacy bundle 改为预留保守的 6144 MiB
+  （`FLASHCLI_VRAM_HEADROOM_MIB=0` 可关闭预留）。若配置了槽位上限，正在启动的模型仍
+  计入。应用调用网关，与模型页共享同一调度器。
 - `idle_stop_seconds`（默认 600）停止无 lease 的 resident；
   `queue_timeout_seconds`/`queue_max` 限制排队；`auto_pull`（默认 true）在后台准备
   缺失模型；`cpu_fallback` 为 `no-gpu-runtime`（默认）或 `disabled`。

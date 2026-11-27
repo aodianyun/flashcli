@@ -309,8 +309,9 @@ GPU runtime 必填：
    iGPU/AMD/Windows native 暂不支持。
 2. 为每个设备和 CPU 构造 runtime 兼容候选。
 3. 有兼容 GPU runtime 时优先 GPU。
-4. `gpu_count > 1` 时预留同样数量的 GPU，每张都要满足
-   `min_vram_mib + vram_headroom_mib`；全部成功或全部失败。
+4. `gpu_count > 1` 时预留同样数量的 GPU，每张都要满足 VRAM 需求：已声明的 bundle 为
+   `min_vram_mib + vram_headroom_mib`，未声明 `min_vram_mib` 的 legacy bundle 使用保守的
+   6144 MiB 下限（显式 headroom `0` 可关闭预留）；全部成功或全部失败。
 5. 没有兼容 GPU runtime 且 bundle 有 CPU runtime cell 时，CPU 才是候选。
    CPU 用 `min_ram_mib`（如果声明），否则使用可配置 RAM headroom，best-effort 准入。
 6. **有 GPU runtime 但显存暂时不足时，不降级 CPU**；先淘汰空闲 resident、排队或 503。
@@ -323,8 +324,8 @@ GPU runtime 必填：
 
 ```json
 {
-  "max_loaded": 2,
-  "vram_headroom_mib": 6144,
+  "max_loaded": 0,
+  "vram_headroom_mib": 512,
   "idle_stop_seconds": 600,
   "resident_start_wait_seconds": 10,
   "queue_timeout_seconds": 30,
@@ -334,7 +335,11 @@ GPU runtime 必填：
 }
 ```
 
-- `vram_headroom_mib` 默认 6144 MiB，可用 `FLASHCLI_VRAM_HEADROOM_MIB`（或配置文件）覆盖。
+- `max_loaded` 默认 `0`（不限制槽位）；placement 由兼容 GPU/CPU 和可用内存决定，而不是
+  任意模型数量。
+- `vram_headroom_mib` 默认 512 MiB，可用 `FLASHCLI_VRAM_HEADROOM_MIB`（或配置文件）覆盖。
+  未声明 `resources.min_vram_mib` 的 bundle 改为至少预留 6144 MiB；
+  `FLASHCLI_VRAM_HEADROOM_MIB=0` 可关闭预留。
 - `cpu_fallback` 默认 `no-gpu-runtime`，或 `disabled`；容量不足永不触发 CPU 回退。
 - auto-pull 立即返回标准 503 + `Retry-After`；网关不会阻塞等待 preload。
 - 启动时校验配置，非法值直接失败。

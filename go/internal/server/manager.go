@@ -89,9 +89,10 @@ type loadMode struct {
 	skipCapacity bool
 }
 
-// NewManager creates a manager with a conservative single-model default.
+// NewManager creates a manager with the default admission policy: no slot
+// limit, so placement is driven by GPU/CPU resources (max_loaded=0).
 func NewManager(l Launcher) *Manager {
-	return NewManagerWithOptions(l, ManagerOptions{MaxLoaded: 1})
+	return NewManagerWithOptions(l, ManagerOptions{})
 }
 
 // NewManagerWithOptions creates a manager with explicit admission policy.
