@@ -232,8 +232,11 @@ func TestInferEndpointRemoved(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/infer", strings.NewReader(`{}`))
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusNotFound && rec.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("status = %d", rec.Code)
+	// `/v1/infer` is not a host endpoint anymore. Unknown `/v1/*` paths are now
+	// custom passthrough, so the request fails model selection before any child
+	// is started.
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "model_required") {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

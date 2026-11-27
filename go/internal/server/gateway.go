@@ -89,8 +89,43 @@ func (s *Server) gatewayMultipartHandler(capability, upstream string) http.Handl
 // gatewayModels serves GET /v1/models for the OpenAI gateway. It lists the
 // models whose assets are locally available (preloaded or resident), using the
 // OpenAI list shape. FlashHub catalog browsing stays on the management API
-// (/api/v1/catalog).
+// (/api/v1/catalog). An Anthropic client (anthropic-version header) gets the
+// Anthropic list shape instead.
 func (s *Server) gatewayModels(w http.ResponseWriter, r *http.Request) {
+	entries := s.gatewayModelEntries(r.Context())
+	if r.Header.Get("anthropic-version") != "" {
+		writeAnthropicModelList(w, r, entries)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": entries})
+}
+
+// gatewayModel serves GET /v1/models/{id} from the same local registry as the
+// list endpoint. The id is a full bundle ref, which contains slashes, so the
+// route uses a trailing wildcard.
+func (s *Server) gatewayModel(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(r.PathValue("id"))
+	for _, m := range s.gatewayModelEntries(r.Context()) {
+		if m.ID != id {
+			continue
+		}
+		if r.Header.Get("anthropic-version") != "" {
+			writeJSON(w, http.StatusOK, anthropicModel(m))
+			return
+		}
+		writeJSON(w, http.StatusOK, m)
+		return
+	}
+	if r.Header.Get("anthropic-version") != "" {
+		writeAnthropicError(w, http.StatusNotFound, "not_found_error", "model not found")
+		return
+	}
+	writeGatewayError(w, http.StatusNotFound, "model_not_found", "invalid_request_error", "model not found", id, "", 0)
+}
+
+// gatewayModelEntries builds the local model list shared by the list and detail
+// endpoints.
+func (s *Server) gatewayModelEntries(ctx context.Context) []OpenAIModel {
 	now := time.Now().Unix()
 	seen := map[string]bool{}
 	data := make([]OpenAIModel, 0)
@@ -115,7 +150,7 @@ func (s *Server) gatewayModels(w http.ResponseWriter, r *http.Request) {
 	}
 	states := s.preloads().snapshot()
 	if s.Source != nil {
-		if models, err := s.Source.Models(r.Context()); err == nil {
+		if models, err := s.Source.Models(ctx); err == nil {
 			for _, m := range models {
 				state := ""
 				if e, ok := states[m.Ref]; ok {
@@ -136,7 +171,89 @@ func (s *Server) gatewayModels(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sort.Slice(data, func(i, j int) bool { return data[i].ID < data[j].ID })
-	writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": data})
+	return data
+}
+
+func anthropicModel(m OpenAIModel) map[string]any {
+	created := m.Created
+	if created == 0 {
+		created = time.Now().Unix()
+	}
+	return map[string]any{
+		"type": "model", "id": m.ID, "display_name": m.ID,
+		"created_at": time.Unix(created, 0).UTC().Format(time.RFC3339),
+	}
+}
+
+// writeAnthropicModelList implements the Anthropic list shape and cursor
+// pagination. The gateway registry is small, so an unknown cursor returns an
+// empty page instead of an error.
+func writeAnthropicModelList(w http.ResponseWriter, r *http.Request, entries []OpenAIModel) {
+	limit := 20
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 1000 {
+			writeAnthropicError(w, http.StatusBadRequest, "invalid_request_error",
+				"limit must be an integer between 1 and 1000")
+			return
+		}
+		limit = n
+	}
+
+	start, end := 0, len(entries)
+	before := false
+	switch {
+	case r.URL.Query().Get("after_id") != "":
+		if idx := modelIndex(entries, r.URL.Query().Get("after_id")); idx >= 0 {
+			start = idx + 1
+		} else {
+			start, end = 0, 0
+		}
+	case r.URL.Query().Get("before_id") != "":
+		before = true
+		if idx := modelIndex(entries, r.URL.Query().Get("before_id")); idx >= 0 {
+			end = idx
+		} else {
+			start, end = 0, 0
+		}
+	}
+
+	if end > start && end-start > limit {
+		if before {
+			start = end - limit
+		} else {
+			end = start + limit
+		}
+	}
+	page := entries[start:end]
+	data := make([]any, 0, len(page))
+	for _, m := range page {
+		data = append(data, anthropicModel(m))
+	}
+	first, last := "", ""
+	if len(page) > 0 {
+		first, last = page[0].ID, page[len(page)-1].ID
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": data, "has_more": end < len(entries),
+		"first_id": first, "last_id": last,
+	})
+}
+
+func modelIndex(entries []OpenAIModel, id string) int {
+	for i, m := range entries {
+		if m.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func writeAnthropicError(w http.ResponseWriter, status int, typ, message string) {
+	writeJSON(w, status, map[string]any{
+		"type":  "error",
+		"error": map[string]any{"type": typ, "message": message},
+	})
 }
 
 // inspectRef resolves bundle admission metadata through the scheduler's
@@ -163,29 +280,55 @@ func (s *Server) serveGateway(w http.ResponseWriter, r *http.Request, capability
 		return
 	}
 	var parsed struct {
-		Model  string `json:"model"`
-		Stream bool   `json:"stream"`
+		Model string `json:"model"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
 		writeGatewayError(w, http.StatusBadRequest, "invalid_json", "invalid_request_error", "request body must be valid JSON", "", "", 0)
 		return
 	}
-	refStr := strings.TrimSpace(parsed.Model)
-	if refStr == "" {
-		writeGatewayError(w, http.StatusBadRequest, "model_required", "invalid_request_error", "model is required", "", "", 0)
+	refStr, fail := resolveGatewayModel(parsed.Model, "")
+	if fail != nil {
+		fail.write(w)
 		return
+	}
+	if r.Header.Get("Content-Type") == "" {
+		r.Header.Set("Content-Type", "application/json")
+	}
+	s.serveModelRequest(w, r, capability, upstreamPath, "", refStr, bytes.NewReader(body), int64(len(body)))
+}
+
+// resolveGatewayModel applies the shared model-selection rules. The body is
+// authoritative for routes that carry one; query selection is used by
+// GET/DELETE custom paths and bodies that intentionally omit `model`.
+func resolveGatewayModel(bodyRef, queryRef string) (string, *gatewayFailure) {
+	bodyRef = strings.TrimSpace(bodyRef)
+	queryRef = strings.TrimSpace(queryRef)
+	if bodyRef != "" && queryRef != "" && bodyRef != queryRef {
+		return "", &gatewayFailure{Status: http.StatusBadRequest, Code: "model_conflict", Type: "invalid_request_error",
+			Message: "model in the request body and the model query parameter must match", Ref: bodyRef}
+	}
+	refStr := bodyRef
+	if refStr == "" {
+		refStr = queryRef
+	}
+	if refStr == "" {
+		return "", &gatewayFailure{Status: http.StatusBadRequest, Code: "model_required", Type: "invalid_request_error",
+			Message: "model is required"}
 	}
 	if !ref.IsFlashHub(refStr) {
-		writeGatewayError(w, http.StatusBadRequest, "invalid_model", "invalid_request_error",
-			"model must be a full bundle ref (namespace/name:version)", refStr, "", 0)
-		return
+		return "", &gatewayFailure{Status: http.StatusBadRequest, Code: "invalid_model", Type: "invalid_request_error",
+			Message: "model must be a full bundle ref (namespace/name:version)", Ref: refStr}
 	}
+	return refStr, nil
+}
 
+// serveModelRequest runs the shared preload/resident/lease/proxy pipeline for
+// a request whose model has already been selected.
+func (s *Server) serveModelRequest(w http.ResponseWriter, r *http.Request, capability, upstreamPath, rawQuery, refStr string, body io.Reader, contentLength int64) {
 	if fail := s.prepareGateway(r.Context(), refStr, capability); fail != nil {
 		fail.write(w)
 		return
 	}
-
 	lease, gerr := s.acquireForRequest(r.Context(), refStr)
 	if gerr != nil {
 		gerr.write(w)
@@ -199,7 +342,7 @@ func (s *Server) serveGateway(w http.ResponseWriter, r *http.Request, capability
 			"model endpoint is not ready", refStr, "", 2)
 		return
 	}
-	s.proxyGateway(w, r, endpoint, upstreamPath, refStr, body, parsed.Stream)
+	s.proxyGateway(w, r, endpoint, r.Method, upstreamPath, rawQuery, refStr, body, contentLength)
 }
 
 // prepareGateway applies the auto-pull, serve and capability gates shared by
@@ -227,7 +370,7 @@ func (s *Server) prepareGateway(ctx context.Context, refStr, capability string) 
 		return &gatewayFailure{Status: http.StatusBadRequest, Code: "model_not_servable", Type: "invalid_request_error",
 			Message: "bundle has no serve entry", Ref: refStr}
 	}
-	if !hasCapability(info.Capabilities, capability) {
+	if capability != "" && !hasCapability(info.Capabilities, capability) {
 		return &gatewayFailure{Status: http.StatusBadRequest, Code: "unsupported_capability", Type: "invalid_request_error",
 			Message: fmt.Sprintf("model does not declare %s", capability), Ref: refStr}
 	}
@@ -308,9 +451,14 @@ func (s *Server) acquireForRequest(ctx context.Context, refStr string) (*Lease, 
 }
 
 // proxyGateway forwards the request to the child serve endpoint and streams the
-// response. The child endpoint is never exposed to the caller.
-func (s *Server) proxyGateway(w http.ResponseWriter, r *http.Request, endpoint, upstreamPath, refStr string, body []byte, stream bool) {
+// response. The child endpoint is never exposed to the caller. The method,
+// upstream path, and query are preserved so bundle-owned custom routes work
+// unchanged.
+func (s *Server) proxyGateway(w http.ResponseWriter, r *http.Request, endpoint, method, upstreamPath, rawQuery, refStr string, body io.Reader, contentLength int64) {
 	target := strings.TrimRight(endpoint, "/") + upstreamPath
+	if rawQuery != "" {
+		target += "?" + rawQuery
+	}
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 	if cn, ok := w.(http.CloseNotifier); ok {
@@ -322,19 +470,15 @@ func (s *Server) proxyGateway(w http.ResponseWriter, r *http.Request, endpoint, 
 			}
 		}()
 	}
-	up, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(body))
+	up, err := http.NewRequestWithContext(ctx, method, target, body)
 	if err != nil {
 		writeGatewayError(w, http.StatusInternalServerError, "proxy_error", "server_error", err.Error(), refStr, "", 0)
 		return
 	}
-	for _, name := range []string{"Content-Type", "Accept", "OpenAI-Organization", "OpenAI-Project", "Anthropic-Version"} {
-		if v := r.Header.Get(name); v != "" {
-			up.Header.Set(name, v)
-		}
+	if contentLength >= 0 {
+		up.ContentLength = contentLength
 	}
-	if up.Header.Get("Content-Type") == "" {
-		up.Header.Set("Content-Type", "application/json")
-	}
+	copyGatewayRequestHeaders(up.Header, r.Header)
 	client := &http.Client{}
 	resp, err := client.Do(up)
 	if err != nil {
@@ -358,9 +502,26 @@ func (s *Server) proxyGateway(w http.ResponseWriter, r *http.Request, endpoint, 
 	case strings.Contains(contentType, "text/event-stream"):
 		rewriteSSEModel(resp.Body, w, refStr, flusher, hintOOM)
 	case strings.Contains(contentType, "application/json"):
-		rewriteJSONModel(resp.Body, w, refStr, hintOOM)
+		rewriteJSONModel(resp.Body, w, refStr, hintOOM, resp.ContentLength)
 	default:
 		_, _ = io.Copy(w, resp.Body)
+	}
+}
+
+// copyGatewayRequestHeaders forwards the client request surface to the child
+// while stripping hop-by-hop headers, the gateway credentials, cookies, and
+// Accept-Encoding (so the Go client negotiates and decompresses the response).
+func copyGatewayRequestHeaders(dst, src http.Header) {
+	for name, values := range src {
+		switch strings.ToLower(name) {
+		case "host", "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+			"te", "trailer", "transfer-encoding", "upgrade", "content-length", "accept-encoding",
+			"authorization", "x-flashcli-token", "cookie":
+			continue
+		}
+		for _, v := range values {
+			dst.Add(name, v)
+		}
 	}
 }
 
@@ -475,11 +636,27 @@ func copyGatewayHeaders(dst, src http.Header) {
 	}
 }
 
-func rewriteJSONModel(src io.Reader, w io.Writer, refStr string, hintOOM bool) {
-	blob, err := io.ReadAll(io.LimitReader(src, gatewayMaxBody))
-	if err != nil {
+// rewriteJSONModel rewrites the top-level `model` field when the payload is
+// small enough to buffer. Larger payloads are streamed unchanged so a custom
+// route's JSON result is never truncated.
+func rewriteJSONModel(src io.Reader, w io.Writer, refStr string, hintOOM bool, contentLength int64) {
+	const limit = gatewayMaxBody
+	if contentLength > limit {
+		_, _ = io.Copy(w, src)
 		return
 	}
+	var buf bytes.Buffer
+	n, err := io.CopyN(&buf, src, limit+1)
+	if err != nil && !errors.Is(err, io.EOF) {
+		_, _ = w.Write(buf.Bytes())
+		return
+	}
+	if n > limit {
+		_, _ = w.Write(buf.Bytes())
+		_, _ = io.Copy(w, src)
+		return
+	}
+	blob := buf.Bytes()
 	if hintOOM && looksLikeOOM(string(blob)) {
 		blob = addOOMHint(blob)
 	}
@@ -522,7 +699,9 @@ func rewriteModelBlob(blob []byte, refStr string) ([]byte, bool) {
 	if err := json.Unmarshal(blob, &v); err != nil {
 		return nil, false
 	}
-	if _, ok := v["model"]; !ok {
+	// Only rewrite a string model id. Custom routes may use `model` for a
+	// structured object; leaving it untouched avoids corrupting their payload.
+	if _, ok := v["model"].(string); !ok {
 		return nil, false
 	}
 	v["model"] = refStr
@@ -561,11 +740,26 @@ func rewriteSSEModel(src io.Reader, w io.Writer, refStr string, flusher http.Flu
 // serveMultipart buffers a bounded multipart body, extracts `model`, and
 // forwards the exact body to the child.
 func (s *Server) serveMultipart(w http.ResponseWriter, r *http.Request, capability, upstreamPath string) {
+	refStr, body, fail := s.readMultipartModel(w, r)
+	if fail != nil {
+		fail.write(w)
+		return
+	}
+	refStr, fail = resolveGatewayModel(refStr, "")
+	if fail != nil {
+		fail.write(w)
+		return
+	}
+	s.serveModelRequest(w, r, capability, upstreamPath, "", refStr, bytes.NewReader(body), int64(len(body)))
+}
+
+// readMultipartModel buffers the multipart body (up to the upload limit) and
+// extracts the `model` part without consuming the body the child must receive.
+func (s *Server) readMultipartModel(w http.ResponseWriter, r *http.Request) (string, []byte, *gatewayFailure) {
 	mediaType, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || mediaType != "multipart/form-data" || params["boundary"] == "" {
-		writeGatewayError(w, http.StatusBadRequest, "invalid_multipart", "invalid_request_error",
-			"expected multipart/form-data with a boundary", "", "", 0)
-		return
+		return "", nil, &gatewayFailure{Status: http.StatusBadRequest, Code: "invalid_multipart", Type: "invalid_request_error",
+			Message: "expected multipart/form-data with a boundary"}
 	}
 	limit := s.maxUploadBytes()
 	var buf bytes.Buffer
@@ -579,13 +773,11 @@ func (s *Server) serveMultipart(w http.ResponseWriter, r *http.Request, capabili
 		if perr != nil {
 			var maxErr *http.MaxBytesError
 			if errors.As(perr, &maxErr) {
-				writeGatewayError(w, http.StatusRequestEntityTooLarge, "request_too_large", "invalid_request_error",
-					"multipart body is too large", "", "", 0)
-				return
+				return "", nil, &gatewayFailure{Status: http.StatusRequestEntityTooLarge, Code: "request_too_large", Type: "invalid_request_error",
+					Message: "multipart body is too large"}
 			}
-			writeGatewayError(w, http.StatusBadRequest, "invalid_multipart", "invalid_request_error",
-				"cannot parse multipart body: "+perr.Error(), "", "", 0)
-			return
+			return "", nil, &gatewayFailure{Status: http.StatusBadRequest, Code: "invalid_multipart", Type: "invalid_request_error",
+				Message: "cannot parse multipart body: " + perr.Error()}
 		}
 		if part.FormName() == "model" {
 			value, _ := io.ReadAll(io.LimitReader(part, 512))
@@ -595,32 +787,7 @@ func (s *Server) serveMultipart(w http.ResponseWriter, r *http.Request, capabili
 		}
 		_ = part.Close()
 	}
-	if refStr == "" {
-		writeGatewayError(w, http.StatusBadRequest, "model_required", "invalid_request_error", "model is required", "", "", 0)
-		return
-	}
-	if !ref.IsFlashHub(refStr) {
-		writeGatewayError(w, http.StatusBadRequest, "invalid_model", "invalid_request_error",
-			"model must be a full bundle ref (namespace/name:version)", refStr, "", 0)
-		return
-	}
-	if fail := s.prepareGateway(r.Context(), refStr, capability); fail != nil {
-		fail.write(w)
-		return
-	}
-	lease, gerr := s.acquireForRequest(r.Context(), refStr)
-	if gerr != nil {
-		gerr.write(w)
-		return
-	}
-	defer lease.Release()
-	endpoint, ok := s.Manager.Endpoint(refStr)
-	if !ok {
-		writeGatewayError(w, http.StatusServiceUnavailable, "model_starting", "server_busy",
-			"model endpoint is not ready", refStr, "", 2)
-		return
-	}
-	s.proxyGateway(w, r, endpoint, upstreamPath, refStr, buf.Bytes(), false)
+	return refStr, buf.Bytes(), nil
 }
 
 func (s *Server) maxUploadBytes() int64 {

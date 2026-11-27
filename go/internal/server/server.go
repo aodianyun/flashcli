@@ -162,6 +162,7 @@ func (s *Server) Handler() http.Handler {
 	// Data plane: OpenAI-compatible gateway. Applications and the desktop use
 	// only these routes for inference; they never see child serve endpoints.
 	mux.HandleFunc("GET /v1/models", s.gatewayModels)
+	mux.HandleFunc("GET /v1/models/{id...}", s.gatewayModel)
 	for path, route := range gatewayJSONRoutes {
 		mux.HandleFunc("POST "+path, s.gatewayJSONHandler(route.Capability, route.Upstream))
 	}
@@ -169,6 +170,15 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("POST "+path, s.gatewayMultipartHandler(route.Capability, route.Upstream))
 	}
 	mux.HandleFunc("GET /v1/realtime", s.serveRealtime)
+	// Standard video job routes. The model that owns the job is selected with
+	// ?model=<full-ref> because these requests have no JSON body.
+	mux.HandleFunc("GET /v1/videos", s.gatewayVideoList)
+	mux.HandleFunc("GET /v1/videos/{id}", s.gatewayVideo)
+	mux.HandleFunc("DELETE /v1/videos/{id}", s.gatewayVideo)
+	mux.HandleFunc("GET /v1/videos/{id}/content", s.gatewayVideoContent)
+	// Custom bundle-owned routes. ServeMux prefers the more specific host
+	// routes above; only undefined /v1/* paths reach this handler.
+	mux.HandleFunc("/v1/", s.gatewayCustom)
 
 	// Control plane: management API. Resident start/stop stays internal; these
 	// routes configure disk state, applications, telemetry, and jobs.
