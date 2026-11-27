@@ -69,6 +69,51 @@ func TestRunSetupScriptUsesExplicitArgs(t *testing.T) {
 	}
 }
 
+func TestRunSetupScriptPrefersFullModelRef(t *testing.T) {
+	if _, err := setupPython(); err != nil {
+		t.Skip(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(setupScriptBody))
+	}))
+	defer srv.Close()
+	sum := sha256.Sum256([]byte(setupScriptBody))
+	home := t.TempDir()
+	svc := &Service{Out: os.Stdout}
+	conn := Connection{
+		BaseURL:   "http://127.0.0.1:4567/v1",
+		APIKey:    "local",
+		Models:    []string{"hunyuan_05b_instruct_rtx"},
+		ModelRefs: []string{"xym/hunyuan_05b_instruct_rtx:1.0.0"},
+	}
+	script := SetupScript{
+		Key: "workbuddy", Kind: "python", URL: srv.URL,
+		SHA256: hex.EncodeToString(sum[:]),
+		Args:   []string{"{base_url}", "{model}", "--api-key {api_key}"},
+	}
+	if err := svc.runSetupScript(context.Background(), script, conn, home); err != nil {
+		t.Fatal(err)
+	}
+	blob, err := os.ReadFile(filepath.Join(home, "setup.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Args []string `json:"args"`
+	}
+	if err := json.Unmarshal(blob, &got); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"http://127.0.0.1:4567/v1",
+		"xym/hunyuan_05b_instruct_rtx:1.0.0",
+		"--api-key", "local",
+	}
+	if strings.Join(got.Args, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("args = %#v, want %#v", got.Args, want)
+	}
+}
+
 func TestRunSetupScriptRejectsHashMismatch(t *testing.T) {
 	if _, err := setupPython(); err != nil {
 		t.Skip(err)

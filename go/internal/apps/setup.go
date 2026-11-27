@@ -168,7 +168,11 @@ func downloadSetupScript(ctx context.Context, url string) ([]byte, error) {
 // split into argv tokens (v1 values must not contain spaces).
 func setupArgs(template []string, conn Connection) ([]string, error) {
 	model := ""
-	if len(conn.Models) > 0 {
+	// Setup scripts must configure the app with the gateway's full bundle ref.
+	// Connection.Models is the short display id; ModelRefs is authoritative.
+	if len(conn.ModelRefs) > 0 {
+		model = conn.ModelRefs[0]
+	} else if len(conn.Models) > 0 {
 		model = conn.Models[0]
 	}
 	apiKey := conn.APIKey
