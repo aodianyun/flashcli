@@ -140,29 +140,49 @@ Rules:
 ### 4.1 Gateway `/v1/*`
 
 ```text
-GET  /v1/models
-POST /v1/chat/completions
-POST /v1/completions
-POST /v1/responses
-POST /v1/embeddings
-POST /v1/moderations
-POST /v1/audio/transcriptions
-POST /v1/audio/translations
-POST /v1/audio/speech
-POST /v1/images/generations
-POST /v1/images/edits
-POST /v1/images/variations
-POST /v1/videos
-POST /v1/messages
-POST /v1/messages/count_tokens
-WS   /v1/realtime
+GET    /v1/models
+GET    /v1/models/{id}
+POST   /v1/chat/completions
+POST   /v1/completions
+POST   /v1/responses
+POST   /v1/embeddings
+POST   /v1/moderations
+POST   /v1/audio/transcriptions
+POST   /v1/audio/translations
+POST   /v1/audio/speech
+POST   /v1/images/generations
+POST   /v1/images/edits
+POST   /v1/images/variations
+POST   /v1/videos
+GET    /v1/videos
+GET    /v1/videos/{id}
+DELETE /v1/videos/{id}
+GET    /v1/videos/{id}/content
+POST   /v1/messages
+POST   /v1/messages/count_tokens
+WS     /v1/realtime
+*      /v1/<custom-path>
 ```
 
-- `GET /v1/models` returns the OpenAI list shape for **preloaded or resident**
-  models. It does not enumerate the whole FlashHub catalog.
-- A route is available only when the model declares the corresponding
-  capability. Unsupported routes return the gateway's capability error; they
-  are never silently forwarded.
+- `GET /v1/models` and `GET /v1/models/{id}` are host-owned and list only
+  **preloaded or resident** models; they do not enumerate the FlashHub catalog.
+  The Anthropic shape is returned when `anthropic-version` is present.
+- Standard routes are available only when the model declares the corresponding
+  capability. Unsupported standard routes return the gateway's capability error;
+  they are never silently forwarded.
+- Any other `/v1/*` path is a **custom path** owned by the bundle's
+  `register_routes`. The gateway forwards the method, path, remaining query,
+  body, SSE, and binary response unchanged. Custom paths are **not**
+  capability-gated; the bundle decides whether the route exists.
+- Custom requests select the model with body `model` (JSON/multipart) or
+  `?model=<full-ref>` (GET/DELETE/HEAD and bodies that omit `model`). The
+  gateway strips the `model` query before forwarding and rejects conflicting
+  selectors with `400 model_conflict`.
+- `/v1/models*`, `/v1/responses/*`, and `/v1/videos/*` are reserved for host
+  routes and are never forwarded as custom paths. A known standard path with a
+  wrong method returns `405` with `Allow`; a malformed reserved path returns
+  `404`.
+- Custom WebSocket routes are not supported; use `/v1/realtime`.
 - Child serve endpoints are internal and are never returned to applications.
 
 ### 4.2 Management `/api/v1/*`
@@ -242,8 +262,11 @@ client -> /v1/<route> {model: full-ref}
 - `n` choices, prompt arrays, and other work inside one request are sequential.
   Concurrency is across requests.
 - Client disconnect cancels the upstream request and releases the lease.
+- Standard routes validate the route capability; custom paths skip that check
+  but still take a lease so the model cannot be evicted mid-request.
 - The response `model` field is rewritten to the requested full ref for JSON and
-  SSE payloads.
+  SSE payloads when it is a string. JSON responses above the gateway body limit
+  are streamed unchanged instead of being buffered or truncated.
 
 ## 7. Auto-pull and Retry-After
 
@@ -397,6 +420,11 @@ Telemetry is exposed at `/api/v1/devices` and `/api/v1/scheduler`.
 Unit tests:
 
 - Full-ref validation, capability routing, error mapping.
+- Custom `/v1/*` passthrough: body/query model selection, `model_conflict`,
+  stripped selector, method/path/query/body preservation, capability bypass,
+  lease release, and custom WebSocket rejection.
+- Reserved host paths keep `405`/`Allow` semantics; `/v1/models/{id}` is
+  host-owned and never forwarded.
 - Client cancel and upstream stream cut both release the lease and preserve partial output.
 - Preload/unload idempotency, active lease wait/409/force, shared asset retention.
 - Auto-pull job dedupe, Retry-After policy, retry after completion.

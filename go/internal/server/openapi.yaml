@@ -10,6 +10,13 @@ info:
     start, stop, load, unload, or receive child serve endpoints. Preload and
     unload are disk operations; resident start/stop is scheduler-owned.
 
+    Standard `/v1` routes are capability-gated. Any other `/v1/*` path is a
+    bundle-owned custom route: JSON/multipart bodies select the model with
+    `model`; GET/DELETE/HEAD and bodies without `model` use
+    `?model=<full-ref>`. The gateway strips that query and forwards the
+    method, path, body, SSE, and binary response unchanged. `/v1/models*`,
+    `/v1/responses/*`, and `/v1/videos/*` remain host-owned.
+
     Authentication is disabled by default. When the configuration contains a
     `token`, every endpoint except `/health`, `/`, `/ui/*`, `/openapi.yaml`
     requires `X-Flashcli-Token: <token>` or `Authorization: Bearer <token>`.
@@ -71,6 +78,25 @@ paths:
                         capabilities:
                           type: array
                           items: { type: string }
+  /v1/models/{id}:
+    get:
+      summary: Model detail (gateway)
+      description: |
+        Returns one locally available model. `id` is a full bundle ref; clients
+        may URL-encode the slashes so it is one path segment. The OpenAI shape
+        is returned by default; an `anthropic-version` header returns the
+        Anthropic shape. Unknown ids return `404`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: anthropic-version
+          in: header
+          schema: { type: string }
+      responses:
+        '200': { description: Model object (OpenAI or Anthropic shape) }
+        '404': { $ref: '#/components/responses/Error' }
   /v1/chat/completions:
     post:
       summary: Chat completions (gateway)
@@ -288,6 +314,125 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '413': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+    get:
+      summary: List video jobs (gateway)
+      description: Requires capability `openai.videos`; `model` selects the resident model and is stripped before forwarding.
+      parameters:
+        - name: model
+          in: query
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200': { description: Video job list }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/videos/{id}:
+    get:
+      summary: Video job detail (gateway)
+      description: Requires capability `openai.videos`; `model` selects the resident model.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: model
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Video job }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+    delete:
+      summary: Delete a video job (gateway)
+      description: Requires capability `openai.videos`; `model` selects the resident model.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: model
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Deletion result }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/videos/{id}/content:
+    get:
+      summary: Download video content (gateway)
+      description: Requires capability `openai.videos`; `model` selects the resident model.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: model
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Video bytes
+          content:
+            video/mp4: { schema: { type: string, format: binary } }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/{path}:
+    x-flashcli-passthrough: true
+    x-flashcli-path-prefix: /v1/
+    parameters:
+      - name: path
+        in: path
+        required: true
+        description: Remaining `/v1/*` custom path; may contain further slashes.
+        schema: { type: string }
+      - name: model
+        in: query
+        required: false
+        description: Full bundle ref. Required for GET/DELETE/HEAD and bodies without `model`; stripped before forwarding.
+        schema: { type: string }
+    get:
+      summary: Bundle-owned custom GET route
+      responses:
+        '200': { description: Bundle-defined response }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+    post:
+      summary: Bundle-owned custom POST route
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GatewayRequest' }
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/GatewayMultipart' }
+      responses:
+        '200': { description: Bundle-defined response (JSON, SSE, or binary) }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '501': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+    delete:
+      summary: Bundle-owned custom DELETE route
+      responses:
+        '200': { description: Bundle-defined response }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
         '503': { $ref: '#/components/responses/Error' }
   /v1/realtime:
     get:

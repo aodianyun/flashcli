@@ -135,28 +135,44 @@ Resident:
 ### 4.1 网关 `/v1/*`
 
 ```text
-GET  /v1/models
-POST /v1/chat/completions
-POST /v1/completions
-POST /v1/responses
-POST /v1/embeddings
-POST /v1/moderations
-POST /v1/audio/transcriptions
-POST /v1/audio/translations
-POST /v1/audio/speech
-POST /v1/images/generations
-POST /v1/images/edits
-POST /v1/images/variations
-POST /v1/videos
-POST /v1/messages
-POST /v1/messages/count_tokens
-WS   /v1/realtime
+GET    /v1/models
+GET    /v1/models/{id}
+POST   /v1/chat/completions
+POST   /v1/completions
+POST   /v1/responses
+POST   /v1/embeddings
+POST   /v1/moderations
+POST   /v1/audio/transcriptions
+POST   /v1/audio/translations
+POST   /v1/audio/speech
+POST   /v1/images/generations
+POST   /v1/images/edits
+POST   /v1/images/variations
+POST   /v1/videos
+GET    /v1/videos
+GET    /v1/videos/{id}
+DELETE /v1/videos/{id}
+GET    /v1/videos/{id}/content
+POST   /v1/messages
+POST   /v1/messages/count_tokens
+WS     /v1/realtime
+*      /v1/<custom-path>
 ```
 
-- `/v1/models` 返回 OpenAI list 结构，只列 **preloaded 或 resident** 的模型，不返回
-  整个 FlashHub 目录。
-- 只有模型声明了对应 capability，路由才可用；未声明的路由返回 capability 错误，
-  不会静默转发。
+- `/v1/models` 和 `/v1/models/{id}` 由 host 拥有，只列 **preloaded 或 resident** 的
+  模型，不返回整个 FlashHub 目录。带 `anthropic-version` 时返回 Anthropic 结构。
+- 标准路由只有在模型声明了对应 capability 时才可用；未声明时返回 capability
+  错误，不会静默转发。
+- 其他 `/v1/*` 路径都是 **custom path**，由 bundle 的 `register_routes` 拥有。
+  网关原样转发 method、path、剩余 query、body、SSE 和二进制响应。custom path
+  **不**做 capability 门控，由 bundle 决定路由是否存在。
+- custom 请求用 body `model`（JSON/multipart）或 `?model=<full-ref>`
+  （GET/DELETE/HEAD 以及 body 不带 `model` 的请求）选择模型。网关转发前会剥离
+  `model` query；两个选择器不一致时返回 `400 model_conflict`。
+- `/v1/models*`、`/v1/responses/*`、`/v1/videos/*` 保留给 host 路由，永远不会作为
+  custom path 转发。已知标准路径的 method 不匹配返回 `405` + `Allow`；保留命名空间
+  下的非法路径返回 `404`。
+- 不支持 custom WebSocket 路由；实时场景使用 `/v1/realtime`。
 - child serve endpoint 只在内部使用，绝不返回给应用。
 
 ### 4.2 管理 `/api/v1/*`
@@ -233,7 +249,10 @@ client -> /v1/<route> {model: full-ref}
 
 - 单请求内部的 `n`、prompt 数组等仍是串行；并发发生在请求之间。
 - 客户端断开时取消上游并释放 lease。
-- JSON 和 SSE 响应中的 `model` 字段重写为请求的完整 ref。
+- 标准路由校验路由 capability；custom path 跳过该检查，但仍然获取 lease，
+  避免请求进行中模型被驱逐。
+- JSON 和 SSE 响应中的 `model` 为字符串时重写为请求的完整 ref。超过网关 body
+  上限的 JSON 响应会直接流式透传，不再缓冲或截断。
 
 ## 7. auto-pull 与 Retry-After
 
@@ -367,6 +386,10 @@ GPU runtime 必填：
 单元测试：
 
 - 完整 ref 校验、capability 路由、错误映射。
+- custom `/v1/*` 透传：body/query 选模型、`model_conflict`、剥离选择器、
+  method/path/query/body 保持、跳过 capability 门控、lease 释放、拒绝 custom
+  WebSocket。
+- 保留的 host 路径保持 `405`/`Allow` 语义；`/v1/models/{id}` 由 host 拥有，不转发。
 - 客户端取消或上游流中断都会释放 lease，并保留已输出的部分内容。
 - preload/unload 幂等、active lease 等待/409/force、共享资产保留。
 - auto-pull job 去重、Retry-After 策略、完成后重试成功。

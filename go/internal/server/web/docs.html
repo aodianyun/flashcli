@@ -363,6 +363,15 @@ data: {"time":"2026-11-10T02:31:26Z","phase":"done"}</pre>
 }]}</pre>
     </div>
     <div class="api">
+      <h2><span class="method get">GET</span><span class="path">/v1/models/{id}</span></h2>
+      <p class="desc">单个模型详情。<code>id</code> 是完整 bundle ref（斜杠可 URL 编码）；带 <code>anthropic-version</code> 时返回 Anthropic 结构。</p>
+    </div>
+    <div class="api">
+      <h2><span class="method post">POST</span><span class="path">/v1/&lt;custom-path&gt;</span></h2>
+      <p class="desc">bundle 通过 <code>register_routes</code> 注册的自定义路径（如 <code>/v1/ocr</code>、<code>/v1/audio/spec</code>、<code>/v1/video/erase</code>）。JSON/multipart body 用 <code>model</code> 选模型；GET/DELETE/HEAD 用 <code>?model=&lt;full-ref&gt;</code>。网关剥离 <code>model</code> query 后原样转发 method/path/body。</p>
+      <div class="note">自定义路径不做 capability 门控，由 bundle 决定路由是否存在。<code>/v1/models*</code>、<code>/v1/responses/*</code>、<code>/v1/videos/*</code> 保留给网关，不会透传；自定义 WebSocket 暂不支持。</div>
+    </div>
+    <div class="api">
       <h2><span class="method post">POST</span><span class="path">/v1/chat/completions</span></h2>
       <p class="desc">应用只通过 <code>/v1</code> 推理。<code>model</code> 必须是完整 bundle ref；flashserver 自动准备磁盘资产、调度 resident 启停并代理请求。</p>
       <pre>curl http://localhost:8790/v1/chat/completions \
@@ -382,6 +391,8 @@ data: {"time":"2026-11-10T02:31:26Z","phase":"done"}</pre>
       <tr><th>方法</th><th>路径</th><th>说明</th></tr>
       <tr><td><span class="tag">GET</span></td><td><code>/health</code></td><td>存活检查</td></tr>
       <tr><td><span class="tag">GET</span></td><td><code>/v1/models</code></td><td>OpenAI 网关：已准备/已加载模型列表</td></tr>
+      <tr><td><span class="tag">GET</span></td><td><code>/v1/models/{id}</code></td><td>网关：单个模型详情（OpenAI/Anthropic 结构）</td></tr>
+      <tr><td><span class="tag">POST</span></td><td><code>/v1/&lt;custom-path&gt;</code></td><td>网关：bundle 自定义路由透传（按 model 选择模型）</td></tr>
       <tr><td><span class="tag">GET</span></td><td><code>/api/v1/system</code></td><td>系统、GPU/CPU/内存、CUDA/SM/torch、开机启动</td></tr>
       <tr><td><span class="tag">GET</span></td><td><code>/api/v1/models</code></td><td>管理面：缓存模型、bundle/权重状态、serve 能力、已加载实例</td></tr>
       <tr><td><span class="tag">GET</span></td><td><code>/api/v1/storage</code></td><td>缓存目录占用</td></tr>

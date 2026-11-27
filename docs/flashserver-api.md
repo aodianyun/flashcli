@@ -25,9 +25,11 @@ Authentication is off by default. With a token, every path except `/health`, `/`
 
 | Endpoints | Notes |
 |---|---|
-| `GET /v1/models` | OpenAI list of locally available (preloaded or resident) bundle refs |
+| `GET /v1/models`, `GET /v1/models/{id}` | OpenAI list/detail of locally available (preloaded or resident) bundle refs; Anthropic shape with `anthropic-version` |
 | `POST /v1/chat/completions`, `/completions`, `/responses`, `/embeddings`, `/moderations` | Mounted when the requested bundle declares the capability |
 | `POST /v1/audio/*`, `/images/*`, `/videos`, `/messages`, `/messages/count_tokens` | Capability-gated |
+| `GET /v1/videos`, `GET/DELETE /v1/videos/{id}`, `GET /v1/videos/{id}/content` | `openai.videos` job metadata/download; select the model with `?model=` |
+| `<method> /v1/<custom-path>` | Bundle-owned `register_routes` passthrough |
 | `WS /v1/realtime` | Capability-gated realtime session |
 
 - `model` must be a **full bundle ref** (`flashcli-bundle/<name>:<version>`).
@@ -48,8 +50,16 @@ Authentication is off by default. With a token, every path except `/health`, `/`
 - `WS /v1/realtime` takes `model` as a query parameter and upgrades only after
   validation, preload, and admission. Anthropic `messages`/`count_tokens`
   follow the same ref and capability rules.
-- Unsupported routes for a model's capabilities return an explicit error; they
-  are never forwarded blindly.
+- Standard routes are capability-gated. Every other `/v1/*` path is a
+  **custom path** owned by the bundle's `register_routes`: JSON/multipart bodies
+  select the model with `model`; GET/DELETE/HEAD and bodies without `model` use
+  `?model=<full-ref>`. The gateway strips that query and forwards the method,
+  path, remaining query, body, SSE, and binary response unchanged. Custom paths
+  are not capability-gated; the bundle decides whether the route exists.
+- `/v1/models*`, `/v1/responses/*`, and `/v1/videos/*` are host-owned and are
+  never forwarded as custom paths. A known standard path with the wrong method
+  returns `405` with `Allow`. Custom WebSocket routes are not supported; use
+  `/v1/realtime`.
 
 ## Management (`/api/v1`)
 

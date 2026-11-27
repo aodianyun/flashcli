@@ -22,9 +22,11 @@
 
 | 端点 | 说明 |
 |---|---|
-| `GET /v1/models` | OpenAI list，只返回本地已准备（preloaded 或 resident）的 bundle ref |
+| `GET /v1/models`、`GET /v1/models/{id}` | 本地已准备（preloaded 或 resident）的 bundle ref 列表/详情；带 `anthropic-version` 时返回 Anthropic 结构 |
 | `POST /v1/chat/completions`、`/completions`、`/responses`、`/embeddings`、`/moderations` | 模型声明对应 capability 时才开放 |
 | `POST /v1/audio/*`、`/images/*`、`/videos`、`/messages`、`/messages/count_tokens` | 按 capability 开放 |
+| `GET /v1/videos`、`GET/DELETE /v1/videos/{id}`、`GET /v1/videos/{id}/content` | `openai.videos` 的任务元数据/下载；用 `?model=` 选择模型 |
+| `<method> /v1/<custom-path>` | bundle `register_routes` 自定义路由透传 |
 | `WS /v1/realtime` | 按 capability 开放 |
 
 - `model` 必须是**完整 bundle ref**（`flashcli-bundle/<name>:<version>`），
@@ -40,7 +42,14 @@
   `max_upload_bytes`（默认 256 MiB）限制并缓冲。
 - `WS /v1/realtime` 通过 query 参数传 `model`，只有校验、preload、准入都成功后才升级。
   Anthropic `messages`/`count_tokens` 使用相同的 ref 与 capability 规则。
-- 模型未声明对应能力时返回明确错误，不会静默转发。
+- 标准路由按 capability 门控。其他 `/v1/*` 路径都是 bundle `register_routes` 拥有的
+  **custom path**：JSON/multipart body 用 `model` 选择模型；GET/DELETE/HEAD 以及
+  body 不带 `model` 的请求用 `?model=<full-ref>`。网关剥离该 query 后原样转发
+  method、path、剩余 query、body、SSE 和二进制响应。custom path 不做 capability
+  门控，由 bundle 决定路由是否存在。
+- `/v1/models*`、`/v1/responses/*`、`/v1/videos/*` 由 host 拥有，永远不会作为 custom
+  path 转发。已知标准路径的 method 不匹配返回 `405` + `Allow`。不支持 custom
+  WebSocket，实时场景使用 `/v1/realtime`。
 
 ## 管理（`/api/v1`）
 
