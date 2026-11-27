@@ -242,6 +242,7 @@ Concise; **Features** and **Fixes** only. Bold the key terms. Same text on GitHu
 - **<area>**: <what changed, user-visible>
 
 ## Fixes
+<!-- optional: only behavior broken in vPREV; omit this section when empty -->
 - **<area>**: <what was broken â†’ fixed>
 
 **Full Changelog**: <compare or commits link>
@@ -252,7 +253,9 @@ Rules: short bullets, no raw commit dump, no extra sections; **English only** â€
 **Write against the previous release, not against the commits.** The body is a
 comparison: every bullet must be traceable to a difference between the previous
 published tag (`vPREV`) and the new one (`vNEW`). Commit messages are raw
-material only.
+material only. **Omit `## Fixes` entirely when no `vPREV` behavior was broken**;
+fixes made while building a feature introduced in `vNEW` belong inside that
+Feature bullet.
 
 Procedure:
 

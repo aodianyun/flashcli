@@ -24,6 +24,11 @@ every file to its audience and content.
 | [application_install_plan.md](application_install_plan.md) | maintainers | `flashcli app` install flow, state machine, rollback, commands, milestones |
 | [bundle_execution_abi.md](bundle_execution_abi.md) | bundle authors | `entry.kind` backends, native process / `.so` contracts, conformance |
 | [bundle_serve_protocols.md](bundle_serve_protocols.md) | bundle authors | **Authoritative** OpenAI/Anthropic serve integration: capabilities, `ServeEngine`, endpoint I/O |
+| [bundle_asr_standard.md](bundle_asr_standard.md) | bundle authors | ASR category supplement: OpenAI-shaped transcription, capability declarations, diarization, limits |
+| [bundle_tts_standard.md](bundle_tts_standard.md) | bundle authors | TTS category supplement: `ServeEngine.speech`, reference-audio extras, audio encoding |
+| [bundle_ocr_standard.md](bundle_ocr_standard.md) | bundle authors | OCR category supplement: `ocr_serve`, multi-image/batch, `/v1/ocr*` routes |
+| [bundle_audio_separation_standard.md](bundle_audio_separation_standard.md) | bundle authors | Audio-separation supplement: `voice`/`ambience` stems, file/URL/path input, local outputs |
+| [bundle_video_erase_standard.md](bundle_video_erase_standard.md) | bundle authors | Video-erase category supplement: `/v1/video/erase*`, jobs, mask-guided inpainting |
 | [architecture.md](architecture.md) | contributors | Runtime flow, local service stack, host vs bundle, caches, directory layout |
 | [module_layers.md](module_layers.md) | contributors | Host / infer / protocol ownership and the Go package map |
 | [bundle_builder_guide.md](bundle_builder_guide.md) | maintainers | Bundle build, multi-CUDA matrix release, FlashHub upload |
@@ -46,6 +51,10 @@ Chinese mirrors use the same names with a `.zh-CN.md` suffix.
 - **Bundle author** — [bundle_publish_standard.md](bundle_publish_standard.md) →
   [bundle_execution_abi.md](bundle_execution_abi.md) →
   [bundle_serve_protocols.md](bundle_serve_protocols.md) (LLM/audio/image/video serve) →
+  the matching category standard ([ASR](bundle_asr_standard.md),
+  [TTS](bundle_tts_standard.md), [OCR](bundle_ocr_standard.md),
+  [audio separation](bundle_audio_separation_standard.md),
+  [video erase](bundle_video_erase_standard.md)) when applicable →
   [bundle_builder_guide.md](bundle_builder_guide.md).
 - **Maintainer / contributor** — [architecture.md](architecture.md) →
   [module_layers.md](module_layers.md) → [../CONTRIBUTING.md](../CONTRIBUTING.md).

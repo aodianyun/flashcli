@@ -45,6 +45,48 @@ proxy, so the bundle owns the entire protocol. `native-exec` over stdio and
 
 The remainder of this document describes **only Python engine mode**.
 
+### 1.1 Category supplements
+
+ASR, TTS, OCR, audio-separation, and video-erase bundles have additional serving requirements. Follow the matching supplement in addition to this document:
+
+- [bundle_asr_standard.md](bundle_asr_standard.md)
+- [bundle_tts_standard.md](bundle_tts_standard.md)
+- [bundle_ocr_standard.md](bundle_ocr_standard.md)
+- [bundle_audio_separation_standard.md](bundle_audio_separation_standard.md)
+- [bundle_video_erase_standard.md](bundle_video_erase_standard.md)
+
+These categories may expose native routes through `register_routes` (for example `/v1/ocr*`, `/v1/audio/spec`, `/v1/audio/separations`, `/v1/video/erase*`). The flashserver `/v1` gateway forwards these custom paths and methods to the model's serve endpoint; no per-route gateway allowlist is required.
+
+### 1.2 Custom paths and model selection
+
+The gateway owns `/v1/models` and the standard OpenAI/Anthropic routes. Any other `/v1/*` path is a **custom path** and is forwarded to the selected model's serve endpoint.
+
+The gateway is multi-model, so a custom request must select the resident model:
+
+- if the JSON/multipart body has a `model` field, that full bundle ref selects the model;
+- otherwise pass the selector as a query parameter: `?model=<namespace/name:version>` (used by GET/DELETE and by bodies that intentionally omit `model`, such as audio separation).
+
+The gateway resolves the resident model, strips the `model` query before forwarding, and leaves the path/body unchanged. Direct `flashcli serve` ignores the query. `/v1/models` is **not** a custom path: it remains the host-owned gateway model list and is never passed through.
+
+### 1.3 Engine-mode defaults (host-owned)
+
+In engine mode the host always provides the following; bundles do not implement them and category standards must link here instead of repeating them.
+
+| Area | Provided by the host |
+|---|---|
+| Base routes | `GET /health`, `GET /v1/models`, `GET /v1/models/{id}` |
+| Capability routes | OpenAI/Anthropic routes enabled by `serve.capabilities` (chat, completions, responses, embeddings, moderations, audio, images, videos, realtime) |
+| Request handling | JSON/multipart parsing and validation, SSE and WebSocket transport, OpenAI/Anthropic error envelopes, request logging |
+| Access control | Token/auth (when configured), capability gating, model selection |
+| Concurrency | `serve.concurrency` inference slots (default `1`); sync gated methods are rejected when `N > 1` |
+| Engine surface | `model_id`, `load(checkpoint, preset, **options)`, `warmup(spec)`, the capability methods in §4, and optional `register_routes(app)` |
+
+`serve.capabilities` absent keeps the legacy `["openai.chat"]`; `[]` exposes no inference routes. `register_routes(app)` custom routes are mounted before host routes and keep priority; they do not replace the host-owned health/model/base routes. The exact request fields for each capability are in §5.
+
+A bundle may register a standard path through `register_routes` to **override** the host default (for example OCR chat/responses with an `ocr` extension, ASR transcription with richer response shapes, or video chat/responses with an `erase` extension). The override owns that path's request parsing, SSE and error shape; host auth/logging middleware still applies. The host base routes remain host-owned.
+
+Error envelopes are protocol-specific: chat/completions/responses and Anthropic routes use their protocol error shapes; audio speech/transcription surface FastAPI's `{"detail": ...}` for `HTTPException`; a custom `register_routes` route owns its own error shape.
+
 ## 2. Ownership (engine mode)
 
 | Layer | Owns |

@@ -39,6 +39,48 @@ host 打印 bundle 端点且不做反向代理，协议完全由 bundle 拥有�
 
 本文以下内容**仅描述 Python engine 模式**。
 
+### 1.1 分类补充规范
+
+ASR、TTS、OCR、音频分离、视频擦除 bundle 还有额外的服务要求，需同时遵循对应分类规范：
+
+- [bundle_asr_standard.zh-CN.md](bundle_asr_standard.zh-CN.md)
+- [bundle_tts_standard.zh-CN.md](bundle_tts_standard.zh-CN.md)
+- [bundle_ocr_standard.zh-CN.md](bundle_ocr_standard.zh-CN.md)
+- [bundle_audio_separation_standard.zh-CN.md](bundle_audio_separation_standard.zh-CN.md)
+- [bundle_video_erase_standard.zh-CN.md](bundle_video_erase_standard.zh-CN.md)
+
+这些分类可通过 `register_routes` 暴露原生路由（如 `/v1/ocr*`、`/v1/audio/spec`、`/v1/audio/separations`、`/v1/video/erase*`）。flashserver `/v1` 网关会把这些自定义路径和方法透传到模型 serve 端点，不需要网关侧逐路由白名单。
+
+### 1.2 自定义路径与模型选择
+
+`/v1/models` 和标准 OpenAI/Anthropic 路由由网关持有；其他 `/v1/*` 路径都是**自定义路径**，会透传到所选模型的 serve 端点。
+
+网关是多模型服务，自定义请求必须选择 resident 模型：
+
+- JSON/multipart body 中有 `model` 字段时，用完整 bundle ref 选择模型；
+- 否则通过 query 选择：`?model=<namespace/name:version>`（GET/DELETE，以及像音频分离这种 body 故意不带 `model` 的 POST）。
+
+网关解析 resident 模型后，在转发前去掉 `model` query，路径和 body 保持不变。直连 `flashcli serve` 会忽略该 query。`/v1/models` **不是**自定义路径：它始终是网关持有的模型列表，不会透传。
+
+### 1.3 engine 模式默认能力（host 持有）
+
+engine 模式下 host 始终提供以下能力；bundle 不实现，分类规范应链接到这里而不是重复。
+
+| 范围 | host 提供 |
+|---|---|
+| 基础路由 | `GET /health`、`GET /v1/models`、`GET /v1/models/{id}` |
+| 能力路由 | 由 `serve.capabilities` 开启的 OpenAI/Anthropic 路由（chat、completions、responses、embeddings、moderations、audio、images、videos、realtime） |
+| 请求处理 | JSON/multipart 解析与校验、SSE/WebSocket 传输、OpenAI/Anthropic 错误信封、请求日志 |
+| 访问控制 | 配置后的 token/鉴权、能力门、模型选择 |
+| 并发 | `serve.concurrency` 推理槽（默认 `1`）；`N > 1` 时同步 gated 方法被拒绝 |
+| Engine 接口 | `model_id`、`load(checkpoint, preset, **options)`、`warmup(spec)`、§4 的能力方法，以及可选的 `register_routes(app)` |
+
+`serve.capabilities` 缺省保持 legacy `["openai.chat"]`；`[]` 不暴露推理路由。`register_routes(app)` 自定义路由挂载在 host 路由之前并保持优先级；它们不替代 host 持有的 health/model/基础路由。各能力的精确请求字段见 §5。
+
+bundle 可通过 `register_routes` 注册标准路径来**覆盖** host 默认路由（例如 OCR 的 chat/responses 加 `ocr` 扩展、ASR 的转写返回更丰富形状、视频 chat/responses 加 `erase` 扩展）。覆盖路由自行负责该路径的请求解析、SSE 和错误形状；host 的鉴权/日志中间件仍然生效。host 基础路由仍由 host 持有。
+
+错误信封按协议区分：chat/completions/responses 和 Anthropic 路由使用各自协议的错误形状；audio speech/transcription 的 `HTTPException` 返回 FastAPI 的 `{"detail": ...}`；`register_routes` 自定义路由自行决定错误形状。
+
 ## 2. 职责归属（engine 模式）
 
 | 层 | 负责 |
