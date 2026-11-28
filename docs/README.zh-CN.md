@@ -27,6 +27,7 @@
 | [bundle_video_erase_standard.zh-CN.md](bundle_video_erase_standard.zh-CN.md) | bundle 作者 | 视频擦除分类补充：`/v1/video/erase*`、任务、掩码引导修复 |
 | [architecture.zh-CN.md](architecture.zh-CN.md) | 贡献者 | 运行时流程、本地服务栈、host 与 bundle、缓存、目录布局 |
 | [module_layers.zh-CN.md](module_layers.zh-CN.md) | 贡献者 | host / infer / protocol 归属与 Go 包地图 |
+| [plans/flashhub-download-reliability.zh-CN.md](plans/flashhub-download-reliability.zh-CN.md) | 贡献者 | FlashHub Bundle 校验、重试、临时文件清理及其限制 |
 | [bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md) | 维护者 | bundle 构建、多 CUDA 矩阵发布、FlashHub 上传 |
 | [runtime-matrix.zh-CN.md](runtime-matrix.zh-CN.md) | 维护者 | SM × CUDA × Python 发布矩阵 |
 
@@ -51,4 +52,6 @@
   [视频擦除](bundle_video_erase_standard.zh-CN.md)）→
   [bundle_builder_guide.zh-CN.md](bundle_builder_guide.zh-CN.md)。
 - **维护者 / 贡献者** —— [architecture.zh-CN.md](architecture.zh-CN.md) →
-  [module_layers.zh-CN.md](module_layers.zh-CN.md) → [../CONTRIBUTING.md](../CONTRIBUTING.md)。
+  [module_layers.zh-CN.md](module_layers.zh-CN.md) →
+  [FlashHub 下载可靠性](plans/flashhub-download-reliability.zh-CN.md) →
+  [../CONTRIBUTING.md](../CONTRIBUTING.md)。

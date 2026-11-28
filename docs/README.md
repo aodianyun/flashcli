@@ -31,6 +31,7 @@ every file to its audience and content.
 | [bundle_video_erase_standard.md](bundle_video_erase_standard.md) | bundle authors | Video-erase category supplement: `/v1/video/erase*`, jobs, mask-guided inpainting |
 | [architecture.md](architecture.md) | contributors | Runtime flow, local service stack, host vs bundle, caches, directory layout |
 | [module_layers.md](module_layers.md) | contributors | Host / infer / protocol ownership and the Go package map |
+| [plans/flashhub-download-reliability.md](plans/flashhub-download-reliability.md) | contributors | FlashHub Bundle validation, retries, temporary-file cleanup, and limitations |
 | [bundle_builder_guide.md](bundle_builder_guide.md) | maintainers | Bundle build, multi-CUDA matrix release, FlashHub upload |
 | [runtime-matrix.md](runtime-matrix.md) | maintainers | SM × CUDA × Python release matrix |
 
@@ -57,4 +58,6 @@ Chinese mirrors use the same names with a `.zh-CN.md` suffix.
   [video erase](bundle_video_erase_standard.md)) when applicable →
   [bundle_builder_guide.md](bundle_builder_guide.md).
 - **Maintainer / contributor** — [architecture.md](architecture.md) →
-  [module_layers.md](module_layers.md) → [../CONTRIBUTING.md](../CONTRIBUTING.md).
+  [module_layers.md](module_layers.md) →
+  [FlashHub download reliability](plans/flashhub-download-reliability.md) →
+  [../CONTRIBUTING.md](../CONTRIBUTING.md).
